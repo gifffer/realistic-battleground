@@ -16,6 +16,10 @@ return table.freeze({
 		MAX_HEALTH = 100,
 		WALK_SPEED = 16, -- studs per second (Roblox default)
 		SPRINT_SPEED = 24,
+		CROUCH_SPEED = 8,
+		-- R6: distance from the center of the HumanoidRootPart down to the feet
+		-- (legs 2 studs + half of the root part 1 stud).
+		ROOT_TO_FEET = 3,
 		-- Below this horizontal speed (studs/s) the player counts as standing
 		-- still: holding Shift without moving doesn't drain stamina.
 		MOVING_THRESHOLD = 2,
@@ -39,6 +43,35 @@ return table.freeze({
 		-- In third person the cursor is locked in the middle of the screen
 		-- (to aim). This key frees it to click the menus, and locks it again.
 		FREE_CURSOR = Enum.KeyCode.LeftControl,
+		-- Toggle crouch. Pressed while sprinting = slide.
+		-- (Climbing uses the normal jump key: jump in front of a ledge.)
+		CROUCH = Enum.KeyCode.C,
+	}),
+
+	-- Slide: press CROUCH while sprinting. A burst of speed that fades,
+	-- then you end up crouched.
+	Slide = table.freeze({
+		STAMINA_COST = 15,
+		COOLDOWN = 1.2, -- seconds between two slides (counted from the start)
+		DURATION = 0.75,
+		START_SPEED = 34, -- studs/s at the start...
+		END_SPEED = 10, -- ...slowing down to this at the end
+		-- You must already be running at least this fast (studs/s) to slide.
+		MIN_SPEED = 14,
+	}),
+
+	-- Ledge climb: jump in front of a wall whose top is reachable → you pull
+	-- yourself up onto it. Heights are measured from the FEET.
+	Climb = table.freeze({
+		STAMINA_COST = 10,
+		COOLDOWN = 0.6,
+		DURATION = 0.5,
+		MIN_HEIGHT = 2.5, -- lower than this: just walk / jump over it
+		MAX_HEIGHT = 5.5, -- higher than this: out of reach
+		REACH = 2.5, -- max distance (studs) from the character to the wall
+		-- Extra margin when the SERVER checks the ledge: its copy of your
+		-- position is slightly behind (network delay).
+		SERVER_TOLERANCE = 2,
 	}),
 
 	Camera = table.freeze({
@@ -50,5 +83,8 @@ return table.freeze({
 		DEFAULT_ZOOM = 10,
 		DEFAULT_FOV = 70,
 		SPRINT_FOV = 78, -- slightly wider view while sprinting = feeling of speed
+		-- How far the camera goes down (studs), matching the body's animation.
+		CROUCH_DROP = 0.8,
+		SLIDE_DROP = 2.2,
 	}),
 })

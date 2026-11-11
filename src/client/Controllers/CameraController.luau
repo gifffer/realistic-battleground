@@ -14,6 +14,13 @@
 -- Config.Controls.FREE_CURSOR ("key"). Other controllers call
 -- CameraController.setCursorFree(reason, true/false).
 --
+-- Crouching / sliding lowers the camera (Config.Camera.CROUCH_DROP), read
+-- from the "MoveState" attribute the server sets.
+--
+-- Rotation hold: during a slide or a climb the body must keep its direction,
+-- so ParkourController calls CameraController.holdRotation(reason, true) and
+-- the character stops turning with the camera.
+--
 -- The choice first/third person is saved: SettingsController calls
 -- CameraController.setFirstPerson() when the save arrives or the player
 -- clicks the toggle.
@@ -32,7 +39,10 @@ local CameraController = {}
 
 local firstPerson = false
 local cursorFreeReasons: { [string]: boolean } = {}
+local rotationHoldReasons: { [string]: boolean } = {}
 local humanoid: Humanoid? = nil
+-- Current camera drop (studs), smoothed toward the target every frame.
+local currentDrop = 0
 
 -- In first person, Roblox keeps the mouse locked UNLESS a visible GuiButton
 -- has Modal = true. This invisible button is that "key".
@@ -64,19 +74,44 @@ end
 
 -- Runs every frame, right AFTER Roblox's camera script (priority Camera + 1),
 -- so our choices win.
-local function updateShoulderCamera()
+-- Frame-rate independent smoothing: same feel at 30 or 240 FPS.
+local DROP_SMOOTHING = 12
+
+local function updateCrouchDrop(dt: number): Vector3
+	local moveState = player:GetAttribute("MoveState")
+	local target = if moveState == "Slide"
+		then Config.Camera.SLIDE_DROP
+		elseif moveState == "Crouch" then Config.Camera.CROUCH_DROP
+		else 0
+	currentDrop += (target - currentDrop) * (1 - math.exp(-DROP_SMOOTHING * dt))
+	return Vector3.new(0, -currentDrop, 0)
+end
+
+local function updateShoulderCamera(dt: number)
 	local current = humanoid
 	if current == nil or current.Health <= 0 then
 		return
 	end
 
+	local drop = updateCrouchDrop(dt)
+	local rotationHeld = next(rotationHoldReasons) ~= nil
+
 	if firstPerson then
-		current.CameraOffset = Vector3.zero
-		current.AutoRotate = true
+		current.CameraOffset = drop
+		current.AutoRotate = not rotationHeld
 		return
 	end
 
-	current.CameraOffset = Config.Camera.SHOULDER_OFFSET
+	current.CameraOffset = Config.Camera.SHOULDER_OFFSET + drop
+
+	-- Slide / climb in progress: ParkourController steers the body.
+	if rotationHeld then
+		current.AutoRotate = false
+		if not isCursorFree() then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		end
+		return
+	end
 
 	-- Cursor free (menu open...) or sitting: behave like a normal Roblox game.
 	if isCursorFree() or current.Sit then
@@ -121,6 +156,16 @@ function CameraController.setFirstPerson(enabled: boolean)
 	end
 	firstPerson = enabled
 	applyCameraMode()
+end
+
+-- `reason` is a short name ("slide", "climb"...). The character stops
+-- turning with the camera as long as at least one reason is active.
+function CameraController.holdRotation(reason: string, hold: boolean)
+	if hold then
+		rotationHoldReasons[reason] = true
+	else
+		rotationHoldReasons[reason] = nil
+	end
 end
 
 function CameraController.isFirstPerson(): boolean

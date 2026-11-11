@@ -35,9 +35,11 @@ On se bat en **arène libre**, et on peut **défier quelqu'un en duel** (best of
 ## 3. Modes de jeu
 
 ### 3.1 Arène libre (mode principal)
-- Tout le monde se bat en continu dans le quartier. À la mort → ragdoll → réapparition après **5 s**
-  à un point d'apparition éloigné des ennemis.
-- **Pas de régénération passive.** Un **kill rend +35 PV** (et soigne les blessures, voir §6.3).
+- Tout le monde se bat en continu dans le quartier.
+- **KO puis achever** : à 0 PV le joueur tombe **KO** au sol (ragdoll) pendant quelques secondes.
+  Un adversaire peut l'**achever** (finisher animé) ; sinon il **se relève** avec peu de PV.
+  Achevé → réapparition après **5 s** à un point d'apparition éloigné des ennemis.
+- **Pas de régénération passive.** Un **kill (achèvement) rend +35 PV** (et soigne les blessures, voir §6.3).
 - **Protection d'apparition** : 3 s d'invincibilité (annulée si le joueur attaque).
 
 ### 3.2 Duels 1v1 (best of 3)
@@ -52,6 +54,12 @@ On se bat en **arène libre**, et on peut **défier quelqu'un en duel** (best of
 - Anti-spam : 1 défi toutes les 10 s, on ne peut pas défier quelqu'un déjà en duel ou en combat
   (touché il y a moins de 5 s). Option « Block duel requests » dans les paramètres.
 - Si toutes les arènes de duel sont occupées : file d'attente, message « *Waiting for a free arena…* ».
+- Les duels par **défi** sont **non classés** (évite qu'on « farme » ses amis).
+
+### 3.3 Duels classés (Ranked)
+- Bouton **Ranked** dans la fenêtre Duel → **matchmaking automatique** contre un joueur de niveau
+  proche, même déroulement (best of 3).
+- Classement **ELO** sauvegardé ; quitter un match Ranked = **défaite**.
 
 ## 4. Interface : peu de touches, des menus
 
@@ -83,6 +91,9 @@ ou en cliquant le même bouton.
 | 1, 2, 3, 4 | Attaques spéciales du kit |
 | G (une fois la jauge pleine) | **Ultime** |
 | Shift (maintenu) | Courir |
+| C | **S'accroupir** / se relever |
+| C pendant la course | **Glissade** (finit accroupi) |
+| Espace face à un rebord | **Escalade** (se hisser sur un muret, un conteneur…) |
 | Ctrl | Libérer / verrouiller le curseur (pour cliquer les menus en 3ᵉ personne) |
 
 > Ouvrir/fermer les menus : à la souris. En 3ᵉ personne le curseur est bloqué au centre (pour viser) :
@@ -95,9 +106,11 @@ ou en cliquant le même bouton.
 - **Parade** : fenêtre de 0,2 s après l'appui sur F → l'attaquant est **étourdi 1 s**.
   Spammer F fait perdre la fenêtre de parade (pénalité).
 - **Esquive** : coûte 25 d'endurance, cooldown 2 s, quelques frames d'invincibilité.
-- **Courir** : consomme de l'endurance en continu.
-- **Ultime** : jauge remplie en **infligeant** des dégâts (un peu en en recevant). Pleine = attaque
-  ou mode spécial propre au kit.
+- **Courir** : consomme de l'endurance en continu. **Glissade** et **escalade** coûtent un peu
+  d'endurance (cooldown court). Accroupi = plus lent.
+- **Ultime = mode Awakening** (commun à tous les kits) : jauge remplie en **infligeant** des dégâts
+  (un peu en en recevant). Pleine → **G** active l'**Awakening** pendant un temps limité : les
+  4 attaques du kit sont **remplacées par des versions améliorées** propres au kit.
 - **Étourdissement (stun)** : impossible d'attaquer/bloquer pendant la durée.
 
 ### 5.3 Sécurité (anti-triche)
@@ -146,7 +159,7 @@ Style sale et imprévisible, armes improvisées.
 | 2 | **Headbutt** — courte portée, étourdit |
 | 3 | **Tackle** — charge en avant, fait tomber (ragdoll) |
 | 4 | **Dirty Kick** — coup bas qui ralentit |
-| G | **Ultime « Street Fury »** — 10 s : dégâts +20 %, coups impossibles à interrompre |
+| G | **Awakening « Street Fury »** — 10 s : dégâts +20 %, coups impossibles à interrompre, 4 attaques améliorées |
 
 ### Boxer (kit de base, gratuit)
 Rapide, mobile, esquives, combos.
@@ -156,7 +169,7 @@ Rapide, mobile, esquives, combos.
 | 2 | **Uppercut** — projette en l'air |
 | 3 | **Slip** — esquive latérale + contre automatique si un coup arrive |
 | 4 | **Liver Shot** — coup au corps, réduit l'endurance adverse |
-| G | **Ultime « Knockout Combo »** — combo cinématique, fait tomber en ragdoll |
+| G | **Awakening « Knockout Mode »** — 4 attaques améliorées, dont le **Knockout Combo** (combo cinématique, ragdoll) |
 
 ## 8. Progression & économie
 
@@ -202,16 +215,20 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 
 1. ✅ **Base personnage** : R6, caméra 3ᵉ personne épaule, course + endurance, HUD vie/endurance,
    menu latéral (squelette) + fenêtre Settings (1ʳᵉ/3ᵉ personne).
+1 bis. **Mouvements** : accroupi, glissade, escalade de rebord. ← en cours
 2. **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur.
-3. **Dégâts & mort** : dégâts localisés, ragdoll, mort/réapparition, kill feed, kill = +35 PV.
-4. **Système de kits** + **Street Brawler** (4 attaques + ultime).
+3. **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV.
+4. **Système de kits** + **Street Brawler** (4 attaques + Awakening).
 5. **Blessures** : saignement, boiterie, effets faible vie.
 6. **Boxer** + fenêtre **Kits** (choisir entre les deux kits de base).
 7. **Progression** : XP, niveaux, coins sur kill/assist (déblocage des futurs kits).
-8. **Duels** : défi, arènes, best of 3, récompenses.
+8. **Duels** : défi (non classé), arènes, best of 3, récompenses, puis **Ranked** (matchmaking + ELO).
 9. **Quêtes quotidiennes**.
 10. **Boutique** : cosmétiques, achats Robux.
 11. **Polish** : map finale, sons, VFX, équilibrage, optimisation, tests à 16 joueurs.
 
 ## 12. Questions encore ouvertes
 - Nom/visuel des cosmétiques et prix exacts (étape 10).
+- KO : durée au sol, touche du finisher, PV au relevé (étape 3).
+- Awakening : durée, et les 4 attaques améliorées de chaque kit (étapes 4 et 6).
+- Ranked : ELO de départ, gains/pertes, récompenses de saison (étape 8).

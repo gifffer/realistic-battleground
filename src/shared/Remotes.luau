@@ -55,6 +55,17 @@ return table.freeze({
 	-- actually sprint (stamina) and sets their speed.
 	SetSprinting = event("SetSprinting"),
 
+	-- client → server  (crouching: boolean)
+	-- "C pressed": crouch / stand up. Only a wish, like SetSprinting.
+	SetCrouching = event("SetCrouching"),
+
+	-- client → server  (action: Types.MoveAction)
+	-- "I start a slide / a ledge climb" (or "Cancel"). The client starts the
+	-- move right away so it feels instant; the server checks it (stamina,
+	-- cooldown, is there really a ledge?) and confirms it through the
+	-- "MoveState" attribute. No confirmation = the client stops the move.
+	RequestMoveAction = event("RequestMoveAction"),
+
 	-- client → server  (name: string, value: any)
 	-- Change one setting from the Settings window. The server checks the name
 	-- and the type of the value (see Server/Systems/Settings).
