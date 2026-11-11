@@ -29,6 +29,11 @@
 --
 --   Movement.setSpeedModifier(player, "Limp", 0.75)  -- 25 % slower
 --   Movement.setSpeedModifier(player, "Limp", nil)   -- remove it
+--
+-- Sprint locks: some actions forbid sprinting (blocking, attacking, being
+-- stunned). Same idea, by name:
+--   Movement.setSprintLock(player, "Block", true)   -- can't sprint
+--   Movement.setSprintLock(player, "Block", false)  -- lock removed
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -55,6 +60,8 @@ type State = {
 	lastClimbAt: number,
 	-- Was the player really sprinting last frame? (a slide needs it)
 	wasSprinting: boolean,
+	-- Reasons that forbid sprinting right now (blocking, stunned...).
+	sprintLocks: { [string]: boolean },
 }
 
 local Movement = {}
@@ -73,6 +80,7 @@ local function getState(player: Player): State
 			lastSlideAt = -math.huge,
 			lastClimbAt = -math.huge,
 			wasSprinting = false,
+			sprintLocks = {},
 		}
 		states[player] = state
 	end
@@ -128,6 +136,7 @@ local function updatePlayer(player: Player, state: State, now: number, dt: numbe
 			moveState = "Crouch"
 		elseif
 			state.wantsToSprint
+			and next(state.sprintLocks) == nil
 			and not Stamina.isExhausted(player)
 			and horizontalSpeed(humanoid) > Config.Character.MOVING_THRESHOLD
 		then
@@ -167,10 +176,23 @@ end
 -- Actions (slide / climb): checked here, then confirmed via "MoveState"
 ------------------------------------------------------------------------------
 
+-- Blocking or stunned (Server/Systems/Combat): no slide, no climb.
+-- (Read from the attributes Combat sets on the character, because Combat
+-- itself depends on this module.)
+local function isFightLocked(player: Player): boolean
+	local character = player.Character
+	return character ~= nil
+		and (
+			character:GetAttribute("Stunned") == true
+			or character:GetAttribute("Blocking") == true
+		)
+end
+
 local function tryStartSlide(player: Player, state: State, humanoid: Humanoid, now: number)
 	local slide = Config.Slide
 	if
-		not state.wasSprinting
+		isFightLocked(player)
+		or not state.wasSprinting
 		or not isOnGround(humanoid)
 		or horizontalSpeed(humanoid) < slide.MIN_SPEED
 		or now - state.lastSlideAt < slide.COOLDOWN
@@ -193,7 +215,7 @@ end
 local function tryStartClimb(player: Player, state: State, kind: Action, now: number)
 	local climb = Config.Climb
 	local character = player.Character
-	if character == nil or now - state.lastClimbAt < climb.COOLDOWN then
+	if character == nil or now - state.lastClimbAt < climb.COOLDOWN or isFightLocked(player) then
 		return
 	end
 	-- The server looks for the ledge ITSELF (with a tolerance for lag).
@@ -235,6 +257,17 @@ end
 function Movement.getMoveState(player: Player): Types.MoveState
 	local value = player:GetAttribute("MoveState")
 	return if typeof(value) == "string" then value :: Types.MoveState else "Walk"
+end
+
+-- Forbids sprinting while `locked` (combat: blocking, attacking, stunned).
+-- `key` names the reason; sprint is allowed again when every lock is gone.
+function Movement.setSprintLock(player: Player, key: string, locked: boolean)
+	local locks = getState(player).sprintLocks
+	if locked then
+		locks[key] = true
+	else
+		locks[key] = nil
+	end
 end
 
 ------------------------------------------------------------------------------

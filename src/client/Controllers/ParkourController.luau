@@ -101,6 +101,16 @@ local function horizontalVelocity(part: BasePart): Vector3
 	return Vector3.new(velocity.X, 0, velocity.Z)
 end
 
+-- Blocking or stunned (combat): no slide, no climb (same rule as the server).
+local function isFightLocked(): boolean
+	local character = player.Character
+	return character ~= nil
+		and (
+			character:GetAttribute("Stunned") == true
+			or character:GetAttribute("Blocking") == true
+		)
+end
+
 local function staminaAtLeast(cost: number): boolean
 	local stamina = player:GetAttribute("Stamina")
 	return typeof(stamina) == "number" and stamina >= cost
@@ -170,7 +180,7 @@ end
 
 local function canSlide(now: number): boolean
 	local current, part = humanoid, root
-	if current == nil or part == nil or action ~= nil then
+	if current == nil or part == nil or action ~= nil or isFightLocked() then
 		return false
 	end
 	return player:GetAttribute("Sprinting") == true
@@ -257,7 +267,7 @@ end
 local function tryStartClimb(now: number)
 	local character = player.Character
 	local part = root
-	if character == nil or part == nil or action ~= nil then
+	if character == nil or part == nil or action ~= nil or isFightLocked() then
 		return
 	end
 	if

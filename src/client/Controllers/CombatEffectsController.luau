@@ -1,0 +1,340 @@
+--!strict
+-- CombatEffectsController: everything you SEE during a fight (no gameplay).
+--
+--   • Outline on every fighter: blue = blocking, yellow = stunned.
+--   • Flash when hit: red = hit, blue = blocked, white = parry,
+--     orange = guard break.
+--   • Floating text: "PARRY!", "GUARD BREAK!", "DODGE".
+--   • Small camera shake when YOU hit or get hit.
+--   • Reaction animations and sounds on EVERY fighter. The reaction depends
+--     on the punch received (jab, cross, hook, finisher, or from behind),
+--     with a hit-stop (both fighters freeze an instant) and a physical
+--     head flinch on top.
+--   • Other fighters' punches and dashes (Remotes.CombatAction): animation
+--     + sound. Ours already played when we pressed the key.
+--
+-- Data comes from the server: the Config.Combat.TAG tag + "Blocking" /
+-- "Stunned" attributes on each fighter (the block / stunned animations
+-- follow them, see CharacterAnimationController), Remotes.CombatEvent and
+-- Remotes.CombatAction.
+
+local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local Config = require(ReplicatedStorage.Shared.Config)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Types = require(ReplicatedStorage.Shared.Types)
+local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local SoundController = require(script.Parent.SoundController)
+local Theme = require(script.Parent.Parent.UI.Theme)
+
+local player = Players.LocalPlayer
+
+local COLORS = table.freeze({
+	Blocking = Color3.fromRGB(80, 160, 255),
+	Stunned = Color3.fromRGB(255, 215, 60),
+	Hit = Color3.fromRGB(255, 40, 40),
+	Blocked = Color3.fromRGB(80, 160, 255),
+	Parry = Color3.fromRGB(255, 255, 255),
+	GuardBreak = Color3.fromRGB(255, 140, 30),
+})
+
+local FLASH_TIME = 0.15
+
+-- Which reaction the victim plays, from the punch the attacker threw.
+-- (A jab snaps the head back, a cross throws it to one side, a hook to the other.)
+local REACTION_BY_PUNCH: { [string]: string } = {
+	Brawler_M1_1 = "HitJab",
+	Brawler_M1_2 = "HitCross",
+	Brawler_M1_3 = "HitHook",
+	Brawler_M1_4 = "HitHeavy",
+}
+-- Hit-stop: both fighters freeze this long when a punch lands (seconds).
+local HIT_STOP = 0.055
+local HEAVY_HIT_STOP = 0.11
+local BLOCK_HIT_STOP = 0.035
+local PARRY_HIT_STOP = 0.09
+-- Flinch: how hard a hit kicks the head's spring (degrees per second; see
+-- CharacterAnimationController.flinch). Sideways part = the hook / the cross.
+local FLINCH_KICK = 130
+local HEAVY_FLINCH_KICK = 230
+local BLOCK_FLINCH_KICK = 45
+
+type Visual = {
+	model: Model,
+	highlight: Highlight,
+	flashUntil: number,
+}
+
+local CombatEffectsController = {}
+
+local visuals: { [Model]: Visual } = {}
+local random = Random.new()
+local shakeUntil = 0
+local shakeStrength = 0
+
+------------------------------------------------------------------------------
+-- Outline (blocking / stunned) and flashes
+------------------------------------------------------------------------------
+
+-- Shows the lasting state of a fighter (unless a flash is playing).
+local function refreshOutline(visual: Visual)
+	if os.clock() < visual.flashUntil then
+		return
+	end
+	local highlight = visual.highlight
+	highlight.FillTransparency = 1
+	if visual.model:GetAttribute("Stunned") == true then
+		highlight.OutlineColor = COLORS.Stunned
+		highlight.Enabled = true
+	elseif visual.model:GetAttribute("Blocking") == true then
+		highlight.OutlineColor = COLORS.Blocking
+		highlight.Enabled = true
+	else
+		highlight.Enabled = false
+	end
+end
+
+local function flash(model: Model, color: Color3)
+	local visual = visuals[model]
+	if visual == nil then
+		return
+	end
+	local highlight = visual.highlight
+	visual.flashUntil = os.clock() + FLASH_TIME
+	highlight.Enabled = true
+	highlight.FillColor = color
+	highlight.OutlineColor = color
+	highlight.FillTransparency = 0.3
+	TweenService:Create(highlight, TweenInfo.new(FLASH_TIME), { FillTransparency = 1 }):Play()
+	task.delay(FLASH_TIME + 0.01, function()
+		if visuals[model] == visual then
+			refreshOutline(visual)
+		end
+	end)
+end
+
+local function onCombatantAdded(instance: Instance)
+	if not instance:IsA("Model") or visuals[instance] then
+		return
+	end
+	local model = instance
+	local highlight = Theme.make("Highlight", {
+		Name = "CombatHighlight",
+		DepthMode = Enum.HighlightDepthMode.Occluded, -- not visible through walls
+		FillTransparency = 1,
+		OutlineTransparency = 0,
+		Enabled = false,
+		Parent = model,
+	}) :: Highlight
+
+	local visual: Visual = { model = model, highlight = highlight, flashUntil = 0 }
+	visuals[model] = visual
+	model:GetAttributeChangedSignal("Blocking"):Connect(function()
+		refreshOutline(visual)
+	end)
+	model:GetAttributeChangedSignal("Stunned"):Connect(function()
+		refreshOutline(visual)
+	end)
+	refreshOutline(visual)
+end
+
+local function onCombatantRemoved(instance: Instance)
+	if instance:IsA("Model") then
+		visuals[instance] = nil
+	end
+end
+
+------------------------------------------------------------------------------
+-- Floating text and camera shake
+------------------------------------------------------------------------------
+
+local function floatingText(model: Model, text: string, color: Color3)
+	local head = model:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") then
+		return
+	end
+	local billboard = Theme.make("BillboardGui", {
+		Name = "CombatText",
+		Size = UDim2.fromOffset(220, 40),
+		StudsOffset = Vector3.new(0, 2.5, 0),
+		AlwaysOnTop = true,
+		MaxDistance = 80,
+		Adornee = head,
+		Parent = head,
+	}, {
+		Theme.make("TextLabel", {
+			Name = "Label",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Font = Theme.Fonts.Title,
+			TextSize = 26,
+			TextColor3 = color,
+			TextStrokeTransparency = 0.3,
+			Text = text,
+		}),
+	}) :: BillboardGui
+
+	local info = TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(billboard, info, { StudsOffset = Vector3.new(0, 4, 0) }):Play()
+	TweenService
+		:Create(
+			(billboard :: any).Label,
+			info,
+			{ TextTransparency = 1, TextStrokeTransparency = 1 }
+		)
+		:Play()
+	Debris:AddItem(billboard, 0.75)
+end
+
+local function shake(strength: number, duration: number)
+	shakeStrength = math.max(if os.clock() < shakeUntil then shakeStrength else 0, strength)
+	shakeUntil = os.clock() + duration
+end
+
+-- Runs right after the camera scripts: moves the camera a tiny bit sideways
+-- / up-down. (Only the POSITION: Roblox's camera reads back its rotation
+-- every frame, so a shaking rotation would slowly shift where you aim.)
+local function updateShake()
+	if os.clock() >= shakeUntil then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	if camera then
+		local s = shakeStrength * 0.1 -- strength 1 = up to 0.1 stud
+		local offset = Vector3.new(random:NextNumber(-s, s), random:NextNumber(-s, s), 0)
+		camera.CFrame += camera.CFrame:VectorToWorldSpace(offset)
+	end
+end
+
+------------------------------------------------------------------------------
+-- Combat events from the server
+------------------------------------------------------------------------------
+
+-- Was `attacker` in front of `victim`? (picks the right hit animation)
+local function isInFront(victim: Model, attacker: Model): boolean
+	local offset = attacker:GetPivot().Position - victim:GetPivot().Position
+	return offset:Dot(victim:GetPivot().LookVector) >= 0
+end
+
+local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacker: Model)
+	if typeof(victim) ~= "Instance" or typeof(attacker) ~= "Instance" then
+		return -- a model that doesn't exist on this client (streamed out...)
+	end
+	local character = player.Character
+	local iAmVictim = victim == character
+	local iAmAttacker = attacker == character
+
+	if kind == "Hit" or kind == "Finisher" then
+		flash(victim, COLORS.Hit)
+		local strong = kind == "Finisher"
+		local fromFront = isInFront(victim, attacker)
+		local punch = CharacterAnimationController.getLastAction(attacker)
+
+		-- The reaction matches the punch (from behind: always thrown forward).
+		local reaction = "HitBack"
+		if fromFront then
+			reaction = if strong
+				then "HitHeavy"
+				else (if punch then REACTION_BY_PUNCH[punch] else nil) or "HitJab"
+		end
+		CharacterAnimationController.playAction(victim, reaction)
+
+		-- Physical kick on top: back (or forward if hit from behind), plus
+		-- sideways for the punches that come from the side.
+		local kick = if strong then HEAVY_FLINCH_KICK else FLINCH_KICK
+		local side = if punch == "Brawler_M1_2"
+			then -0.6 -- right cross → the head goes to the victim's right
+			elseif punch == "Brawler_M1_3" then 0.6 -- left hook → to its left
+			else 0
+		local pitch = if fromFront then 1 else -1
+		CharacterAnimationController.flinch(
+			victim,
+			Vector3.new(kick * pitch, kick * side, kick * side * 0.5)
+		)
+
+		-- Hit-stop on both fighters: the instant of contact is held.
+		local stop = if strong then HEAVY_HIT_STOP else HIT_STOP
+		CharacterAnimationController.hitStop(victim, stop)
+		CharacterAnimationController.hitStop(attacker, stop)
+
+		SoundController.play(if strong then "HeavyHit" else "Hit", victim)
+		if iAmVictim then
+			shake(if strong then 1.6 else 0.8, if strong then 0.25 else 0.15)
+		elseif iAmAttacker then
+			shake(if strong then 0.8 else 0.35, 0.1)
+		end
+	elseif kind == "Blocked" then
+		flash(victim, COLORS.Blocked)
+		CharacterAnimationController.playAction(victim, "BlockHit")
+		CharacterAnimationController.flinch(victim, Vector3.new(BLOCK_FLINCH_KICK, 0, 0))
+		CharacterAnimationController.hitStop(victim, BLOCK_HIT_STOP)
+		CharacterAnimationController.hitStop(attacker, BLOCK_HIT_STOP)
+		SoundController.play("Block", victim)
+		if iAmVictim then
+			shake(0.3, 0.1)
+		end
+	elseif kind == "Parried" then
+		flash(attacker, COLORS.Parry)
+		floatingText(victim, "PARRY!", COLORS.Parry)
+		CharacterAnimationController.playAction(victim, "Parry")
+		CharacterAnimationController.hitStop(victim, PARRY_HIT_STOP)
+		CharacterAnimationController.hitStop(attacker, PARRY_HIT_STOP)
+		SoundController.play("Parry", victim)
+		if iAmVictim or iAmAttacker then
+			shake(0.6, 0.15)
+		end
+	elseif kind == "GuardBreak" then
+		flash(victim, COLORS.GuardBreak)
+		floatingText(victim, "GUARD BREAK!", COLORS.GuardBreak)
+		CharacterAnimationController.playAction(victim, "GuardBreak")
+		SoundController.play("GuardBreak", victim)
+		if iAmVictim then
+			shake(1.2, 0.2)
+		end
+	elseif kind == "Dodged" then
+		floatingText(victim, "DODGE", Theme.Colors.Text)
+		SoundController.play("Dodge", victim)
+	end
+end
+
+-- Another fighter started a punch or a dash (ours already played locally).
+local function onCombatAction(model: Model, action: string)
+	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
+		return
+	end
+	if model == player.Character then
+		return
+	end
+	CharacterAnimationController.playAction(model, action)
+	if action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
+		SoundController.play("HeavySwing", model)
+	elseif string.sub(action, 1, 4) == "Dash" then
+		SoundController.play("Dash", model)
+	else
+		SoundController.play("Swing", model)
+	end
+end
+
+------------------------------------------------------------------------------
+-- Lifecycle
+------------------------------------------------------------------------------
+
+function CombatEffectsController.start()
+	local tag = Config.Combat.TAG
+	CollectionService:GetInstanceAddedSignal(tag):Connect(onCombatantAdded)
+	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)
+	for _, instance in CollectionService:GetTagged(tag) do
+		onCombatantAdded(instance)
+	end
+
+	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)
+	Remotes.CombatAction.OnClientEvent:Connect(onCombatAction)
+	RunService:BindToRenderStep("CombatShake", Enum.RenderPriority.Camera.Value + 2, updateShake)
+end
+
+return CombatEffectsController
