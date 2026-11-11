@@ -282,6 +282,9 @@ local function injure(victim: CombatState, zone: Types.HitZone, damage: number, 
 end
 
 -- A kill (or nothing at all, see onKill): every injury is healed.
+-- Sides of the head that glass can tear open ("HeadTorn_<side>" attributes).
+local HEAD_TEAR_SIDES = table.freeze({ "Front", "Left", "Right" })
+
 local function healInjuries(state: CombatState)
 	state.legDamage = 0
 	state.limping = false
@@ -289,7 +292,9 @@ local function healInjuries(state: CombatState)
 	for part in state.wounds do
 		setAttribute(state.model, woundAttribute(part), nil)
 	end
-	setAttribute(state.model, "SkinTorn", nil)
+	for _, headSide in HEAD_TEAR_SIDES do
+		setAttribute(state.model, "HeadTorn_" .. headSide, nil)
+	end
 	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
 end
@@ -459,8 +464,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	-- on the head may open a cut (then it bleeds, see below).
 	local critCut = false
 	local bloodChance: number = 0
-	if spec.bloodChance ~= nil then
-		bloodChance = spec.bloodChance
+	local chances = spec.bloodChance
+	if chances ~= nil then
+		bloodChance = chances[zone] or 0
 	elseif spec.moveId ~= nil then
 		bloodChance = 0 -- a kit move that doesn't say it cuts: no blood
 	elseif spec.kind == "Finisher" and zone == "Head" then
@@ -470,13 +476,15 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		bloodChance = INJ.PUNCH_BLOOD_CHANCE[zone] or 0
 	end
 	blood = random:NextNumber() < bloodChance
-	-- Glass in the face (not from behind): skin tears off. Even on the blow
-	-- that knocks them out.
-	if spec.tearsSkin and INJ.SKIN_TEAR and zone == "Head" and side ~= "Back" then
+	-- Glass that really landed on the HEAD (where the attacker aimed), not from
+	-- behind: that side of the head is torn open a bit more (face, left or
+	-- right side). Even on the blow that knocks them out.
+	if spec.tearsSkin and INJ.HEAD_TEAR and zone == "Head" and side ~= "Back" then
 		skinTearSeed = random:NextInteger(1, 2 ^ 30)
-		local torn = victim.model:GetAttribute("SkinTorn")
-		local count = if typeof(torn) == "number" then torn else 0
-		setAttribute(victim.model, "SkinTorn", math.min(INJ.SKIN_TEAR_MAX, count + 1))
+		local attribute = "HeadTorn_" .. side
+		local torn = victim.model:GetAttribute(attribute)
+		local level = if typeof(torn) == "number" then torn else 0
+		setAttribute(victim.model, attribute, math.min(INJ.HEAD_TEAR_MAX, level + 1))
 	end
 
 	if Knockout.isKnockedOut(victim.model) then

@@ -99,7 +99,7 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		bleed = hit.bleed,
 		slow = hit.slow,
 		unblockable = hit.unblockable,
-		bloodChance = hit.bloodChance or 0, -- a move without it never bleeds visibly
+		bloodChance = hit.bloodChance or {}, -- a move without it never bleeds visibly
 		tearsSkin = hit.tearsSkin,
 		attackId = nil,
 		moveId = moveId,

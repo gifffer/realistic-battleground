@@ -455,8 +455,9 @@ end
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
 	SoundController.play(HIT_SOUNDS[moveId] or "Hit", victim)
-	local head = victim:FindFirstChild("Head")
-	local headPosition = if head and head:IsA("BasePart") then head.Position else nil
+	-- Where it landed (the bottle goes where it's aimed: head or torso).
+	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
+	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil
 	local move = moveById[moveId]
 	local breaks = false
 	if move then
@@ -534,8 +535,8 @@ end
 -- Glass in the face: pieces of skin (and raw flesh) torn off, thrown away
 -- from the blow, with a heavy spray of blood. `seed` comes from the server:
 -- every client throws exactly the same pieces. They fall and lie on the
--- floor for a few seconds. The raw wound that stays on the face is drawn
--- by Wounds (the "SkinTorn" attribute).
+-- floor for a few seconds. The opened head that stays is drawn by Wounds
+-- (the "HeadTorn_<side>" attributes).
 function KitEffects.skinTear(victim: Model, attacker: Model, seed: number)
 	local head = victim:FindFirstChild("Head")
 	if head == nil or not head:IsA("BasePart") then

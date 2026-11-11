@@ -227,11 +227,13 @@ return table.freeze({
 		-- rarely cut: blood is mostly for the bottle (its moves set their own
 		-- `bloodChance` in the kit). Decided by the server: everyone sees the same.
 		PUNCH_BLOOD_CHANCE = table.freeze({ Head = 0.12, Torso = 0.03, Legs = 0 }),
-		-- Glass in the face tears skin off (moves with `tearsSkin`, on a head hit
-		-- that isn't from behind). Realistic gore: on Roblox, set the experience's
-		-- maturity questionnaire accordingly, or turn this off (false).
-		SKIN_TEAR = true,
-		SKIN_TEAR_MAX = 3, -- raw wounds left on the face, at most
+		-- Glass on the head (moves with `tearsSkin`, landing on the HEAD, not from
+		-- behind) tears it open on that side (face / left / right): skin torn
+		-- away, then the skull shows, then a hole / the jaw and teeth. Levels
+		-- 1 to HEAD_TEAR_MAX per side. Realistic gore: on Roblox, fill in the
+		-- experience's maturity questionnaire accordingly, or turn this off.
+		HEAD_TEAR = true,
+		HEAD_TEAR_MAX = 3,
 		-- Visible marks (bruises, cuts) on a body part: at most this many.
 		MAX_WOUNDS_PER_PART = 3,
 		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).

@@ -34,15 +34,16 @@ local kit: KitTypes.KitDef = {
 				{
 					at = 0.32,
 					damage = 9,
-					zone = "Head",
+					-- No fixed zone: it lands where the attacker aims (head or
+					-- torso), like a punch. Only a head hit tears the head open.
 					stun = 0.7,
 					hitbox = HEAD,
 					forward = 3,
-					-- A bottle broken on the head: it always cuts, bleeds hard, and the
-					-- glass tears the skin of the face.
+					-- Glass: it cuts (always on the head, often on the body) and
+					-- bleeds hard; on the head it tears it open.
 					bleed = { perSecond = 3, duration = 6 },
 					breaksProp = true,
-					bloodChance = 1,
+					bloodChance = { Head = 1, Torso = 0.6 },
 					tearsSkin = true,
 				},
 			},
@@ -127,22 +128,20 @@ local kit: KitTypes.KitDef = {
 					{
 						at = 0.2,
 						damage = 6,
-						zone = "Head",
-						stun = 0.5,
+						stun = 0.5, -- (no fixed zone: where the attacker aims)
 						hitbox = WIDE,
 						forward = 3,
-						bloodChance = 0.85, -- jagged glass
+						bloodChance = { Head = 0.85, Torso = 0.5 }, -- jagged glass
 						tearsSkin = true,
 					},
 					{
 						at = 0.45,
 						damage = 8,
-						zone = "Head",
 						stun = 0.7,
 						hitbox = WIDE,
 						forward = 3,
 						bleed = { perSecond = 4, duration = 5 },
-						bloodChance = 1,
+						bloodChance = { Head = 1, Torso = 0.6 },
 						tearsSkin = true,
 					},
 				},

@@ -10,9 +10,8 @@
 -- Discreet on purpose. Same positions on every client (they come from a
 -- fixed list, not from random numbers).
 --
--- Torn skin (glass in the face, "SkinTorn" attribute, up to
--- Config.Injuries.SKIN_TEAR_MAX): raw, wet wounds on the face: a dark rim
--- (the torn edge) with the bright flesh inside, slightly raised.
+-- Glass on the head tears it open on that side, in 3 levels (raw muscle,
+-- then the skull, then the bone broken open / the jaw): see below.
 --
 --   Wounds.watch(model)   start drawing the marks of this fighter
 
@@ -134,101 +133,211 @@ local function refresh(model: Model, partName: string)
 	end
 end
 
--- Torn skin on the face: where each raw wound goes (1st, 2nd, 3rd).
-type Tear = { at: Vector2, width: number, height: number, tilt: number }
-local TEARS: { Tear } = {
-	{ at = Vector2.new(-0.18, 0.05), width = 0.42, height = 0.26, tilt = 18 }, -- cheekbone
-	{ at = Vector2.new(0.22, 0.28), width = 0.34, height = 0.18, tilt = -25 }, -- brow
-	{ at = Vector2.new(0.05, -0.3), width = 0.3, height = 0.22, tilt = 8 }, -- jaw
-}
-local TEAR_RIM = Color3.fromRGB(58, 8, 8)
-local TEAR_FLESH = Color3.fromRGB(150, 30, 32)
+------------------------------------------------------------------------------
+-- Head torn open by glass ("HeadTorn_Front" / "HeadTorn_Left" /
+-- "HeadTorn_Right" attributes, level 1 to Config.Injuries.HEAD_TEAR_MAX)
+------------------------------------------------------------------------------
+-- Each bottle that lands on the head (where it was aimed, not from behind)
+-- opens that side a bit more:
+--   1  the skin is torn away: raw muscle, ragged flaps of skin peeling off;
+--   2  the hole widens and the SKULL shows through (pale bone);
+--   3  the bone is broken open (a dark hole); on the face, the cheek is gone
+--      and the jaw and TEETH show.
+-- What you see of an R6 head is round (~1.2 studs): every piece is placed ON
+-- that curve (several small pieces, not one big flat one that would float).
+-- Fixed shapes and positions: the same on every client.
 
-local function newPatch(
+local MUSCLE = Color3.fromRGB(118, 20, 22)
+local DEEP = Color3.fromRGB(64, 8, 9) -- dried blood, the deep edge of the wound
+local BONE = Color3.fromRGB(222, 210, 184)
+local CAVITY = Color3.fromRGB(24, 5, 5)
+local TOOTH = Color3.fromRGB(236, 230, 214)
+
+local HEAD_SIDES: { [string]: Vector3 } = {
+	Front = FRONT,
+	Left = Vector3.new(-1, 0, 0),
+	Right = Vector3.new(1, 0, 0),
+}
+-- Where each side's wound is centred (fractions, see markOffset): on the
+-- face, toward a cheek; on a side of the head, toward the face (temple).
+local CENTER: { [string]: Vector2 } = {
+	Front = Vector2.new(-0.12, -0.02),
+	Left = Vector2.new(-0.14, 0.04),
+	Right = Vector2.new(-0.14, 0.04),
+}
+
+-- Overall size of the opened area (1 = the sizes below). Big enough to SEE a
+-- part of the head open; each piece stays small enough to follow the curve.
+local TEAR_SCALE = 1.45
+
+type Piece = { at: Vector2, w: number, h: number, color: Color3, lift: number, wet: boolean? }
+-- What each level ADDS (level 2 shows the pieces of levels 1 and 2...).
+-- `lift` stacks the layers: deep edge, then flesh, then bone, then the hole.
+local LEVEL_PIECES: { { Piece } } = {
+	{ -- 1: skin torn away, raw muscle
+		{ at = Vector2.new(0, 0), w = 0.36, h = 0.28, color = DEEP, lift = 0.004 },
+		{ at = Vector2.new(0, 0), w = 0.3, h = 0.22, color = MUSCLE, lift = 0.012, wet = true },
+		{
+			at = Vector2.new(0.09, 0.06),
+			w = 0.2,
+			h = 0.16,
+			color = MUSCLE,
+			lift = 0.012,
+			wet = true,
+		},
+	},
+	{ -- 2: wider, the skull shows
+		{ at = Vector2.new(-0.1, -0.06), w = 0.3, h = 0.24, color = DEEP, lift = 0.004 },
+		{ at = Vector2.new(0.14, 0.02), w = 0.28, h = 0.22, color = DEEP, lift = 0.004 },
+		{
+			at = Vector2.new(-0.1, -0.06),
+			w = 0.24,
+			h = 0.18,
+			color = MUSCLE,
+			lift = 0.012,
+			wet = true,
+		},
+		{
+			at = Vector2.new(0.14, 0.02),
+			w = 0.22,
+			h = 0.16,
+			color = MUSCLE,
+			lift = 0.012,
+			wet = true,
+		},
+		{ at = Vector2.new(0.03, 0.04), w = 0.2, h = 0.15, color = BONE, lift = 0.02 },
+	},
+	{ -- 3: the bone broken open, deeper
+		{ at = Vector2.new(0.02, -0.16), w = 0.34, h = 0.22, color = DEEP, lift = 0.004 },
+		{
+			at = Vector2.new(0.02, -0.16),
+			w = 0.28,
+			h = 0.17,
+			color = MUSCLE,
+			lift = 0.012,
+			wet = true,
+		},
+		{ at = Vector2.new(0.08, 0.07), w = 0.16, h = 0.12, color = BONE, lift = 0.022 },
+		{ at = Vector2.new(0.03, 0.04), w = 0.09, h = 0.07, color = CAVITY, lift = 0.026 },
+	},
+}
+-- Ragged flaps of skin peeling off at the edge of the wound (per level).
+local FLAPS: { { Vector2 } } = {
+	{ Vector2.new(0.16, 0.1), Vector2.new(-0.15, -0.05), Vector2.new(0.02, -0.14) },
+	{ Vector2.new(0.28, 0.1), Vector2.new(-0.24, -0.12) },
+	{ Vector2.new(0.1, -0.3), Vector2.new(-0.2, -0.24) },
+}
+
+local function weldTo(head: BasePart, part: BasePart, parent: Instance)
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Massless = true
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = head
+	weld.Part1 = part
+	weld.Parent = part
+	part.Parent = parent
+end
+
+-- The CFrame (relative to the head) of a point of the head's surface.
+local function onHead(head: BasePart, normal: Vector3, at: Vector2, lift: number): CFrame
+	local spot: Spot = { normal = normal, at = at, size = 0, color = DEEP }
+	return markOffset(head, spot) * CFrame.new(lift, 0, 0)
+end
+
+-- A flat ellipse lying on the head: a thin block shaped by a sphere mesh.
+local function patch(
 	head: BasePart,
 	offset: CFrame,
-	size: Vector3,
+	w: number,
+	h: number,
 	color: Color3,
 	parent: Instance
 )
-	-- A flat ellipse: a thin block shaped by a sphere mesh (a Cylinder's face
-	-- would always be round, losing the torn shape and its tilt).
-	local patch = Instance.new("Part")
-	patch.Shape = Enum.PartType.Block
-	patch.Size = size
+	local part = Instance.new("Part")
+	part.Size = Vector3.new(0.03, w, h)
+	part.Material = Enum.Material.SmoothPlastic
+	part.Color = color
+	part.CFrame = head.CFrame * offset
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Parent = patch
-	patch.Material = Enum.Material.SmoothPlastic
-	patch.Color = color
-	patch.CanCollide = false
-	patch.CanQuery = false
-	patch.CanTouch = false
-	patch.CastShadow = false
-	patch.Massless = true
-	patch.CFrame = head.CFrame * offset
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = head
-	weld.Part1 = patch
-	weld.Parent = patch
-	patch.Parent = parent
-	return patch
+	mesh.Parent = part
+	weldTo(head, part, parent)
+	return part
 end
 
-local function refreshTears(model: Model)
+local function drawHeadTear(head: BasePart, sideName: string, level: number, parent: Instance)
+	local normal = HEAD_SIDES[sideName]
+	local center = CENTER[sideName]
+	for current = 1, level do
+		for _, piece in LEVEL_PIECES[current] do
+			local part = patch(
+				head,
+				onHead(head, normal, center + piece.at * TEAR_SCALE, piece.lift),
+				piece.w * TEAR_SCALE,
+				piece.h * TEAR_SCALE,
+				piece.color,
+				parent
+			)
+			if piece.wet then
+				part.Reflectance = 0.15
+			end
+		end
+		-- Flaps of torn skin, peeling outward from the edge.
+		for index, at in FLAPS[current] do
+			local flap = Instance.new("Part")
+			flap.Size = Vector3.new(0.025, 0.13, 0.09)
+			flap.Material = Enum.Material.SmoothPlastic
+			flap.Color = head.Color
+			local peel = CFrame.Angles(math.rad(index * 47), math.rad(-38), 0)
+			flap.CFrame = head.CFrame * onHead(head, normal, center + at * TEAR_SCALE, 0.03) * peel
+			weldTo(head, flap, parent)
+		end
+	end
+	-- The cheek gone: the jaw and the teeth show.
+	if level >= 3 and sideName == "Front" then
+		for index = -2, 2 do
+			local tooth = Instance.new("Part")
+			tooth.Size = Vector3.new(0.04, 0.065, 0.08)
+			tooth.Material = Enum.Material.SmoothPlastic
+			tooth.Color = TOOTH
+			local at = center + Vector2.new(0.02 + index * 0.05, -0.17) * TEAR_SCALE
+			tooth.CFrame = head.CFrame * onHead(head, normal, at, 0.03)
+			weldTo(head, tooth, parent)
+		end
+	end
+end
+
+local function refreshHeadTear(model: Model, sideName: string)
 	local head = model:FindFirstChild("Head")
 	if head == nil or not head:IsA("BasePart") then
 		return
 	end
-	local value = model:GetAttribute("SkinTorn")
-	local count = if typeof(value) == "number" then math.clamp(value, 0, #TEARS) else 0
-	local existing = head:FindFirstChild("TornSkin")
-	if count == 0 then
-		if existing then
-			existing:Destroy()
-		end
+	local value = model:GetAttribute("HeadTorn_" .. sideName)
+	local level = if typeof(value) == "number" then math.clamp(value, 0, #LEVEL_PIECES) else 0
+	local folderName = "HeadTorn_" .. sideName
+	local old = head:FindFirstChild(folderName)
+	if old then
+		old:Destroy() -- rebuilt from scratch: a few parts, only when it changes
+	end
+	if level == 0 then
 		return
 	end
-	local folder: Instance
-	if existing then
-		folder = existing
-	else
-		folder = Instance.new("Folder")
-		folder.Name = "TornSkin"
-		folder.Parent = head
-	end
-	local drawn = #folder:GetChildren()
-	for index = drawn + 1, count do
-		local tear = TEARS[index]
-		local wound = Instance.new("Model")
-		wound.Name = `Tear{index}`
-		-- On the rounded face (same curve as the marks), turned by `tilt`.
-		local base =
-			markOffset(head, { normal = FRONT, at = tear.at, size = tear.width, color = TEAR_RIM })
-		local turn = CFrame.Angles(math.rad(tear.tilt), 0, 0)
-		-- Torn edge: a dark rim, a bit bigger; the flesh inside, raised and wet.
-		newPatch(head, base * turn, Vector3.new(0.03, tear.width, tear.height), TEAR_RIM, wound)
-		local flesh = newPatch(
-			head,
-			base * CFrame.new(0.012, 0, 0) * turn,
-			Vector3.new(0.035, tear.width * 0.78, tear.height * 0.72),
-			TEAR_FLESH,
-			wound
-		)
-		flesh.Reflectance = 0.15
-		wound.Parent = folder
-	end
-	local children = folder:GetChildren()
-	for index = #children, count + 1, -1 do
-		children[index]:Destroy()
-	end
+	local folder = Instance.new("Folder")
+	folder.Name = folderName
+	drawHeadTear(head, sideName, level, folder)
+	folder.Parent = head
 end
 
 function Wounds.watch(model: Model)
-	model:GetAttributeChangedSignal("SkinTorn"):Connect(function()
-		refreshTears(model)
-	end)
-	refreshTears(model)
+	for sideName in HEAD_SIDES do
+		model:GetAttributeChangedSignal("HeadTorn_" .. sideName):Connect(function()
+			refreshHeadTear(model, sideName)
+		end)
+		refreshHeadTear(model, sideName)
+	end
 	for partName in SPOTS do
 		local attribute = attributeOf(partName)
 		model:GetAttributeChangedSignal(attribute):Connect(function()
