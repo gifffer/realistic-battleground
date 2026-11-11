@@ -14,7 +14,7 @@
 --
 -- Also draws the crosshair while the mouse is locked: four short arms with
 -- a thin dark outline (readable on bright scenes), off-white normally, RED
--- on an opponent's head.
+-- on an opponent's head. The system mouse arrow is hidden meanwhile.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -105,7 +105,14 @@ local function updateAim()
 	if frame then
 		local character = player.Character
 		local down = character ~= nil and character:GetAttribute("KnockedOut") == true
-		frame.Visible = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter and not down
+		local locked = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+		frame.Visible = locked and not down
+		-- The system arrow must not sit on top of the crosshair: hide it
+		-- whenever the mouse is locked in the centre (shown again when the
+		-- cursor is freed for the menu, LeftControl...).
+		if UserInputService.MouseIconEnabled == locked then
+			UserInputService.MouseIconEnabled = not locked
+		end
 		local head = onOpponent and currentZone == "Head"
 		if head ~= onHead then
 			onHead = head

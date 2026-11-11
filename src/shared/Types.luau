@@ -22,6 +22,7 @@ export type PlayerProfile = {
 	coins: number,
 	stats: PlayerStats,
 	settings: PlayerSettings,
+	equippedKit: string, -- id of the kit used in fights (Shared/Kits)
 }
 
 -- What the server sends to the owning client.

@@ -26,6 +26,8 @@ local template: Types.PlayerProfile = {
 	settings = {
 		firstPerson = false,
 	},
+	-- Added with the kits (step 4): Reconcile() adds it to older saves.
+	equippedKit = "StreetBrawler",
 }
 
 return template

@@ -13,6 +13,9 @@
 --   WINDED. While blocking it reads GUARD.
 -- • Full health and stamina for a few seconds: the whole block fades back,
 --   any change brings it back.
+-- • Bleeding (a bottle cut...): the label reads BLEEDING, the part of
+--   the bar the cut will still take is drawn red and shrinks with each tick,
+--   and the left edge of the screen darkens a little at each tick.
 -- • Soft dark gradients at the screen edges keep text readable on bright
 --   scenes. Everything hides while you're knocked out or a menu is open.
 --
@@ -46,6 +49,12 @@ local hpFill: Frame
 local hpGhost: Frame
 local stFill: Frame
 local stLabel: TextLabel
+local hpLabel: TextLabel
+local bleedSeg: Frame
+local bleedEdge: Frame
+local bleedShade: Frame
+local bleeding = false
+local bleedTweenUntil = 0 -- the per-tick shrink is playing until then
 local texts: { TextLabel } = {} -- every text of the block (for the idle fade)
 
 local humanoidConnections: { RBXScriptConnection } = {}
@@ -118,7 +127,7 @@ local function build()
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = "100",
 	})
-	label({
+	hpLabel = label({
 		Name = "HpLabel",
 		Position = UDim2.fromOffset(56, 15),
 		Size = UDim2.fromOffset(120, 12),
@@ -160,6 +169,32 @@ local function build()
 		ZIndex = 3,
 		Parent = hpTrack,
 	})
+	-- Bleeding: the health the cut will still take, over the end of the bar.
+	bleedSeg = Theme.make("Frame", {
+		Name = "BleedSeg",
+		Size = UDim2.fromScale(0, 1),
+		BackgroundColor3 = C.BloodHi,
+		ZIndex = 4,
+		Visible = false,
+		Parent = hpTrack,
+	})
+	-- Left edge while bleeding: a dark shade with a dark red on top.
+	bleedShade = Theme.make("Frame", {
+		Name = "BleedShade",
+		Size = UDim2.new(0, 220, 1, 0),
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = 1,
+		ZIndex = 0,
+		Parent = gui,
+	}, { Theme.gradient(0, { { 0, 0.72 }, { 1, 1 } }) })
+	bleedEdge = Theme.make("Frame", {
+		Name = "BleedEdge",
+		Size = UDim2.new(0, 220, 1, 0),
+		BackgroundColor3 = C.BloodDeep,
+		BackgroundTransparency = 1,
+		ZIndex = 0,
+		Parent = gui,
+	}, { Theme.gradient(0, { { 0, 0.72 }, { 1, 1 } }) })
 	local stTrack = Theme.make("Frame", {
 		Name = "StTrack",
 		Position = UDim2.fromOffset(0, 48),
@@ -242,6 +277,73 @@ local function setHealth(health: number, maxHealth: number)
 	Theme.tween(hpFill, 0.2, { BackgroundColor3 = if low then C.BloodHi else C.Ink })
 	if low then
 		hpNum.TextColor3 = C.BloodHi
+	end
+end
+
+-- Bleeding: label, red segment and edge. Called every frame (cheap) and
+-- after each health change.
+local function updateBleeding(tick: boolean)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local now = character ~= nil and character:GetAttribute("Bleeding") == true
+	if now ~= bleeding then
+		bleeding = now
+		touched()
+		if now then
+			-- Brighter, not red (small red caps don't read on a light floor):
+			-- the red is in the bar and at the edge.
+			hpLabel.Text = Theme.track("BLEEDING", "three")
+			hpLabel.TextColor3 = C.Ink
+			bleedSeg.Visible = true
+			bleedEdge.BackgroundTransparency = 0.15
+			Theme.tween(bleedShade, 0.2, { BackgroundTransparency = 0 })
+		else
+			hpLabel.Text = Theme.track("HEALTH", "three")
+			Theme.tween(hpLabel, 0.3, { TextColor3 = C.Ink2 })
+			bleedSeg.Visible = false
+			task.delay(0.4, function()
+				if not bleeding then
+					Theme.tween(bleedEdge, 0.4, { BackgroundTransparency = 1 })
+					Theme.tween(bleedShade, 0.4, { BackgroundTransparency = 1 })
+				end
+			end)
+		end
+	end
+	if not now or character == nil or humanoid == nil or humanoid.MaxHealth <= 0 then
+		return
+	end
+	local perSecond = character:GetAttribute("BleedPerSecond")
+	local untilTime = character:GetAttribute("BleedUntil")
+	local left = if typeof(untilTime) == "number"
+		then math.max(0, untilTime - workspace:GetServerTimeNow())
+		else 0
+	local remaining = if typeof(perSecond) == "number"
+		then math.min(humanoid.Health, perSecond * left)
+		else 0
+	local maxHealth = humanoid.MaxHealth
+	local goal = {
+		Position = UDim2.fromScale((humanoid.Health - remaining) / maxHealth, 0),
+		Size = UDim2.fromScale(remaining / maxHealth, 1),
+	}
+	if tick then
+		bleedTweenUntil = os.clock() + 0.12
+		Theme.tween(bleedSeg, 0.12, goal)
+		-- The edge breathes once per tick.
+		Theme.tween(bleedEdge, 0.12, { BackgroundTransparency = 0 })
+		task.delay(0.12, function()
+			if bleeding then
+				Theme.tween(
+					bleedEdge,
+					0.6,
+					{ BackgroundTransparency = 0.15 },
+					Enum.EasingStyle.Quad,
+					Enum.EasingDirection.In
+				)
+			end
+		end)
+	elseif os.clock() >= bleedTweenUntil then
+		bleedSeg.Position = goal.Position
+		bleedSeg.Size = goal.Size
 	end
 end
 
@@ -330,7 +432,9 @@ local function onCharacterAdded(character: Model)
 		return
 	end
 	local function refreshHealth()
+		local dropped = shownHealth >= 0 and humanoid.Health < shownHealth
 		setHealth(humanoid.Health, humanoid.MaxHealth)
+		updateBleeding(dropped)
 	end
 	table.insert(humanoidConnections, humanoid.HealthChanged:Connect(refreshHealth))
 	table.insert(
@@ -344,6 +448,12 @@ local function onCharacterAdded(character: Model)
 	table.insert(
 		humanoidConnections,
 		character:GetAttributeChangedSignal("KnockedOut"):Connect(updateVisibility)
+	)
+	table.insert(
+		humanoidConnections,
+		character:GetAttributeChangedSignal("Bleeding"):Connect(function()
+			updateBleeding(false)
+		end)
 	)
 	refreshHealth()
 	refreshStamina()
@@ -366,7 +476,12 @@ function HudController.start()
 	player:GetAttributeChangedSignal("Stamina"):Connect(refreshStamina)
 	player:GetAttributeChangedSignal("StaminaExhausted"):Connect(refreshStamina)
 	MenuController.onOpenChanged(updateVisibility)
-	RunService.Heartbeat:Connect(updateIdle)
+	RunService.Heartbeat:Connect(function()
+		updateIdle()
+		if bleeding then
+			updateBleeding(false)
+		end
+	end)
 
 	player.CharacterAdded:Connect(onCharacterAdded)
 	if player.Character then

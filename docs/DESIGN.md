@@ -162,6 +162,11 @@ Style sale et imprévisible, armes improvisées.
 | 4 | **Dirty Kick** — coup bas qui ralentit |
 | G | **Awakening « Street Fury »** — 10 s : dégâts +20 %, coups impossibles à interrompre, 4 attaques améliorées |
 
+Street Fury remplace les 4 attaques : **Broken Bottle** (2 entailles, gros saignement), **Double
+Headbutt** (attrape le col + 2 coups de tête), **Tackle Slam** (tackle + frappe au sol), **Kick
+Combo** (tibia puis visage, projette). La jauge se remplit en frappant (et un peu en encaissant).
+Les chiffres de chaque attaque sont dans `src/shared/Kits/StreetBrawler.luau`.
+
 ### Boxer (kit de base, gratuit)
 Rapide, mobile, esquives, combos.
 | Touche | Attaque (proposition) |
@@ -221,8 +226,9 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 1 bis. ✅ **Mouvements** : accroupi, glissade, vault, mantle (+ animations en code).
 2. ✅ **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur,
    animations de combat en code, sons.
-3. **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV. ← en cours
-4. **Système de kits** + **Street Brawler** (4 attaques + Awakening).
+3. ✅ **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV.
+4. **Système de kits** + **Street Brawler** (4 attaques + Awakening « Street Fury »), saignement
+   simple, fenêtre **Kits** (Boxer affiché « bientôt »). ← en cours
 5. **Blessures** : saignement, boiterie, effets faible vie.
 6. **Boxer** + fenêtre **Kits** (choisir entre les deux kits de base).
 7. **Progression** : XP, niveaux, coins sur kill/assist (déblocage des futurs kits).
