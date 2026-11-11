@@ -41,7 +41,7 @@ On se bat en **arène libre**, et on peut **défier quelqu'un en duel** (best of
 - **Protection d'apparition** : 3 s d'invincibilité (annulée si le joueur attaque).
 
 ### 3.2 Duels 1v1 (best of 3)
-1. Dans l'arène, je vise un joueur (curseur dessus, à moins de 30 studs) et j'appuie sur **G**
+1. Dans l'arène, je vise un joueur (curseur dessus, à moins de 30 studs) et j'appuie sur **H**
    → il reçoit une fenêtre « *PlayerX challenges you to a duel!* » **Accept / Decline** (15 s).
 2. S'il accepte : les deux sont téléportés dans une **arène de duel libre** (dans le même serveur,
    pas de changement de serveur). Le kit est verrouillé pendant le duel.
@@ -65,10 +65,9 @@ On se bat en **arène libre**, et on peut **défier quelqu'un en duel** (best of
 | G (une fois la jauge pleine) | **Ultime** |
 | Shift | Courir |
 | V | Basculer 1ʳᵉ / 3ᵉ personne |
-| G (en visant un joueur, hors combat) | Défier en duel |
+| H (en visant un joueur, hors combat) | Défier en duel |
 
-> G sert à l'ultime **et** au défi : le défi n'est possible que hors combat et en visant un joueur,
-> donc pas de conflit. À rediscuter si c'est gênant en test (alternative : touche **H**).
+> Le défi n'est possible que hors combat (pas touché depuis 5 s) et en visant un joueur.
 
 ### 4.2 Règles de base
 - **Vie** : 100 PV. **Endurance** : 100, se recharge après 1 s sans la dépenser.
@@ -120,7 +119,7 @@ Voir §4.2 : courir, esquiver et bloquer coûtent de l'endurance → pas de spam
 Système prévu pour ajouter facilement d'autres kits (un fichier de config par kit).
 Noms visibles en jeu en anglais.
 
-### Street Brawler (gratuit)
+### Street Brawler (kit de base, gratuit)
 Style sale et imprévisible, armes improvisées.
 | Touche | Attaque (proposition) |
 |---|---|
@@ -130,7 +129,7 @@ Style sale et imprévisible, armes improvisées.
 | 4 | **Dirty Kick** — coup bas qui ralentit |
 | G | **Ultime « Street Fury »** — 10 s : dégâts +20 %, coups impossibles à interrompre |
 
-### Boxer (débloqué au niveau 5)
+### Boxer (kit de base, gratuit)
 Rapide, mobile, esquives, combos.
 | Touche | Attaque (proposition) |
 |---|---|
@@ -159,9 +158,9 @@ Rapide, mobile, esquives, combos.
 *Win 2 duels*, *Land 5 perfect blocks*, *Deal 1000 damage with Street Brawler*.
 
 ### 7.3 Déblocage des kits
-- Certains kits se débloquent avec le **niveau** (ex. Boxer : niveau 5), d'autres avec des **coins**.
+- **Kits de base** (Street Brawler, Boxer) : disponibles dès le départ pour tout le monde.
+- Les futurs kits se débloqueront soit avec le **niveau**, soit avec des **coins**.
 - Les kits « coins » sont aussi achetables en **Robux** (Developer Product / Game Pass).
-- Les kits « niveau » pourront aussi être achetés en Robux pour aller plus vite (à décider).
 
 ### 7.4 Boutique (plus tard)
 - **Cosmétiques** (coins et/ou Robux) : skins de kit, effets de kill, émotes, titres.
@@ -187,14 +186,12 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 3. **Dégâts & mort** : dégâts localisés, ragdoll, mort/réapparition, kill feed, kill = +35 PV.
 4. **Système de kits** + **Street Brawler** (4 attaques + ultime).
 5. **Blessures** : saignement, boiterie, effets faible vie.
-6. **Boxer** + écran de sélection de kit.
-7. **Progression** : XP, niveaux, coins sur kill/assist, déblocage des kits.
+6. **Boxer** + écran de sélection de kit (les deux kits de base).
+7. **Progression** : XP, niveaux, coins sur kill/assist (déblocage des futurs kits).
 8. **Duels** : défi, arènes, best of 3, récompenses.
 9. **Quêtes quotidiennes**.
 10. **Boutique** : cosmétiques, achats Robux.
 11. **Polish** : map finale, sons, VFX, équilibrage, optimisation, tests à 16 joueurs.
 
 ## 11. Questions encore ouvertes
-- Touche de défi : G partagé avec l'ultime, ou H ?
-- Les kits « niveau » sont-ils aussi achetables en Robux ?
 - Nom/visuel des cosmétiques et prix exacts (étape 10).
