@@ -140,6 +140,10 @@ local predictions: { [Model]: { [number]: Prediction } } = {}
 -- When each fighter last started a dash: it may be in its dodge frames,
 -- which only the server knows, so we don't predict hits on it.
 local dashedAt: { [Model]: number } = {}
+-- Hurt groans: at most one every GRUNT_INTERVAL seconds per fighter (a
+-- combo would otherwise stack them).
+local GRUNT_INTERVAL = 0.6
+local nextGruntAt: { [Model]: number } = {}
 local random = Random.new()
 local shakeUntil = 0
 local shakeStrength = 0
@@ -208,6 +212,7 @@ local function onCombatantRemoved(instance: Instance)
 		visuals[instance] = nil
 		predictions[instance] = nil
 		dashedAt[instance] = nil
+		nextGruntAt[instance] = nil
 	end
 end
 
@@ -603,11 +608,14 @@ local function onCombatEvent(
 		-- server's new health has reached us).
 		task.delay(0.05, function()
 			local humanoid = victim:FindFirstChildOfClass("Humanoid")
+			local time = os.clock()
 			if
 				humanoid
 				and humanoid.Health > 0
 				and humanoid.Health <= Config.Injuries.HURT_SOUND_HEALTH
+				and time >= (nextGruntAt[victim] or 0)
 			then
+				nextGruntAt[victim] = time + GRUNT_INTERVAL
 				SoundController.play("HurtGrunt", victim)
 			end
 		end)
