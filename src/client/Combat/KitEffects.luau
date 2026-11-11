@@ -532,13 +532,28 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
 	stain(point, if zone == "Head" then 1.1 else 0.8)
 end
 
--- Glass in the face: pieces of skin (and raw flesh) torn off, thrown away
--- from the blow, with a heavy spray of blood. `seed` comes from the server:
--- every client throws exactly the same pieces. They fall and lie on the
--- floor for a few seconds. The opened head that stays is drawn by Wounds
--- (the "HeadTorn_<side>" attributes).
-function KitEffects.skinTear(victim: Model, attacker: Model, seed: number)
-	local head = victim:FindFirstChild("Head")
+-- Glass tearing the skin (face, torso or leg, from `zone`): pieces of skin
+-- (and raw flesh) torn off, thrown away from the blow, with a heavy spray of
+-- blood. `seed` comes from the server: every client throws exactly the same
+-- pieces. They fall and lie on the floor for a few seconds. The opened wound
+-- that stays is drawn by Wounds / Anatomy (the "Torn_<Part>_<Side>" attributes).
+function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone: string?)
+	local partName = "Head"
+	if zone == "Torso" then
+		partName = "Torso"
+	elseif zone == "Legs" then
+		-- the leg closest to the attacker
+		local left = victim:FindFirstChild("Left Leg")
+		local right = victim:FindFirstChild("Right Leg")
+		local from = attacker:GetPivot().Position
+		partName = "Right Leg"
+		if left and right and left:IsA("BasePart") and right:IsA("BasePart") then
+			if (left.Position - from).Magnitude < (right.Position - from).Magnitude then
+				partName = "Left Leg"
+			end
+		end
+	end
+	local head = victim:FindFirstChild(partName) -- the torn part
 	if head == nil or not head:IsA("BasePart") then
 		return
 	end

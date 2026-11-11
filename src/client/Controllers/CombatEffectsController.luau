@@ -634,7 +634,7 @@ local function onCombatEvent(
 			KitEffects.bloodSpray(victim, attacker, zone)
 		end
 		if typeof(skinTearSeedArg) == "number" then
-			KitEffects.skinTear(victim, attacker, skinTearSeedArg)
+			KitEffects.skinTear(victim, attacker, skinTearSeedArg, zone)
 		end
 		if iAmVictim then
 			drainColour()

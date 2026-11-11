@@ -1,0 +1,6 @@
+These meshes are derived from Z-Anatomy (https://www.z-anatomy.com,
+https://github.com/Z-Anatomy/The-blend), licensed CC BY-SA 4.0, itself based on
+BodyParts3D (c) The Database Center for Life Science, CC BY-SA 2.1 JP.
+Modified (merged, remeshed, simplified, scaled to R6 body parts) by
+tools/anatomy/build_anatomy.py. These files are under CC BY-SA 4.0.
+Kidneys and inner ear (NonCommercial licenses) are not included.

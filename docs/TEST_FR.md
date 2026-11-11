@@ -245,13 +245,25 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | G2 | G en gardant F (garde) ou pendant un coup | Rien ne se passe (ni son ni activation), comme le serveur. |
 | G3 | Frapper au poing 20 fois (tête et corps) | Le sang est **rare** : quelques giclées à la tête, presque jamais au corps. Le 4ᵉ coup à la tête n'ouvre une coupure qu'environ 1 fois sur 3. |
 | G4 | **Bouteille** (touche 1) en visant la **tête** | Giclée de sang **à chaque fois**, saignement plus long. |
-| G4b | Bouteille en visant le **corps** | Le verre se brise sur le torse, sang souvent (pas toujours), **rien d'arraché** à la tête. |
+| G4b | Bouteille en visant le **corps** | Le verre se brise sur le torse, sang souvent (pas toujours). Sans les modèles d'anatomie, rien ne s'ouvre ; avec les modèles, voir A2. |
 | G5 | Bouteille à la tête, **de face**, 3 fois | Des morceaux de peau et de chair volent à chaque coup. Le visage s'**ouvre** de plus en plus : 1) peau arrachée, chair à vif et lambeaux de peau ; 2) plus grand, **l'os du crâne** apparaît ; 3) l'os est ouvert (trou sombre), la joue est partie : **mâchoire et dents** visibles. |
 | G5b | Bouteille à la tête **par le côté** (gauche / droite) | C'est **ce côté-là** de la tête qui s'ouvre (tempe), pas le visage. |
-| G6 | Bouteille **dans le dos** | Pas de tête ouverte (juste le sang). |
+| G6 | Bouteille **dans le dos** | Sans les modèles d'anatomie : pas de tête ouverte (juste le sang). Avec les modèles : l'arrière s'ouvre (voir A1). |
 | G7 | 2 joueurs | Les deux écrans voient **les mêmes** morceaux, au même endroit. |
 | G8 | Mourir / réapparaître | La tête redevient intacte. |
 
 Note : le sang réaliste et la peau arrachée demandent de remplir honnêtement le **questionnaire de
 maturité** de l'expérience (Creator Dashboard). Pour un public plus jeune, mettre
-`HEAD_TEAR = false` dans `src/shared/Config.luau` (section `Injuries`).
+`SKIN_TEAR = false` dans `src/shared/Config.luau` (section `Injuries`).
+
+### Anatomie réaliste (après avoir importé les modèles, voir `docs/ANATOMY_FR.md`)
+
+| # | Action | Résultat attendu |
+|---|---|---|
+| A0 | Lancer le jeu sans blessure | Le personnage est **exactement comme d'habitude** (rien ne dépasse). |
+| A1 | Bouteille à la tête de face : 1, 2 puis 3 coups | 1) un trou dans la peau du visage : **muscles** du visage ; 2) le muscle part : **crâne, orbite, dents** ; 3) un morceau du crâne part : le **cerveau**. Le reste du visage (decal) reste en place. |
+| A2 | Bouteille au **torse** de face, 3 coups | Peau du torse ouverte (le t-shirt reste dessiné autour) : pectoraux, puis **côtes**, puis plus large (poumons / cœur entre les côtes). |
+| A3 | Bouteille aux **jambes** par la gauche | La jambe **gauche** s'ouvre sur le côté : muscles de la cuisse, puis le **fémur**. |
+| A4 | Regarder le t-shirt / pantalon autour du trou | Les vêtements sont dessinés **aux bons endroits** sur la peau autour du trou. Si le motif est décalé ou à l'envers, envoie-moi une capture : c'est un réglage (`OffsetStudsU/V` dans `Anatomy.luau`). |
+| A5 | Ta propre tête ouverte, en 1re personne | Rien ne gêne la vue (la tête reste cachée comme d'habitude). |
+| A6 | Mourir / réapparaître | Le corps redevient normal. |

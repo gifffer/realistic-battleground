@@ -10,10 +10,15 @@
 -- Discreet on purpose. Same positions on every client (they come from a
 -- fixed list, not from random numbers).
 --
--- Glass on the head tears it open on that side, in 3 levels (raw muscle,
--- then the skull, then the bone broken open / the jaw): see below.
+-- Glass tears the skin open ("Torn_<Part>_<Side>" attributes). When the
+-- anatomy models are imported, Anatomy shows the real inside of the body
+-- (all parts). Without them, the head gets a simple drawn version, in 3
+-- levels (raw muscle, then the skull, then the bone broken open / the jaw):
+-- see below.
 --
 --   Wounds.watch(model)   start drawing the marks of this fighter
+
+local Anatomy = require(script.Parent.Anatomy)
 
 local Wounds = {}
 
@@ -134,8 +139,8 @@ local function refresh(model: Model, partName: string)
 end
 
 ------------------------------------------------------------------------------
--- Head torn open by glass ("HeadTorn_Front" / "HeadTorn_Left" /
--- "HeadTorn_Right" attributes, level 1 to Config.Injuries.HEAD_TEAR_MAX)
+-- Head torn open by glass, simple version ("Torn_Head_Front" / "_Left" /
+-- "_Right" attributes, level 1 to Config.Injuries.SKIN_TEAR_MAX)
 ------------------------------------------------------------------------------
 -- Each bottle that lands on the head (where it was aimed, not from behind)
 -- opens that side a bit more:
@@ -335,9 +340,9 @@ local function refreshHeadTear(model: Model, sideName: string)
 	if head == nil or not head:IsA("BasePart") then
 		return
 	end
-	local value = model:GetAttribute("HeadTorn_" .. sideName)
+	local value = model:GetAttribute("Torn_Head_" .. sideName)
 	local level = if typeof(value) == "number" then math.clamp(value, 0, #LEVEL_PIECES) else 0
-	local folderName = "HeadTorn_" .. sideName
+	local folderName = "Torn_Head_" .. sideName
 	local old = head:FindFirstChild(folderName)
 	if old then
 		old:Destroy() -- rebuilt from scratch: a few parts, only when it changes
@@ -352,11 +357,14 @@ local function refreshHeadTear(model: Model, sideName: string)
 end
 
 function Wounds.watch(model: Model)
-	for sideName in HEAD_SIDES do
-		model:GetAttributeChangedSignal("HeadTorn_" .. sideName):Connect(function()
+	Anatomy.watch(model) -- the real inside of the body, if the models are imported
+	if not Anatomy.available("Head") then
+		for sideName in HEAD_SIDES do
+			model:GetAttributeChangedSignal("Torn_Head_" .. sideName):Connect(function()
+				refreshHeadTear(model, sideName)
+			end)
 			refreshHeadTear(model, sideName)
-		end)
-		refreshHeadTear(model, sideName)
+		end
 	end
 	for partName in SPOTS do
 		local attribute = attributeOf(partName)

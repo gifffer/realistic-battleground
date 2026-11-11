@@ -282,9 +282,6 @@ local function injure(victim: CombatState, zone: Types.HitZone, damage: number, 
 end
 
 -- A kill (or nothing at all, see onKill): every injury is healed.
--- Sides of the head that glass can tear open ("HeadTorn_<side>" attributes).
-local HEAD_TEAR_SIDES = table.freeze({ "Front", "Left", "Right" })
-
 local function healInjuries(state: CombatState)
 	state.legDamage = 0
 	state.limping = false
@@ -292,8 +289,11 @@ local function healInjuries(state: CombatState)
 	for part in state.wounds do
 		setAttribute(state.model, woundAttribute(part), nil)
 	end
-	for _, headSide in HEAD_TEAR_SIDES do
-		setAttribute(state.model, "HeadTorn_" .. headSide, nil)
+	-- Torn skin ("Torn_<Part>_<Side>"): a new body.
+	for name in state.model:GetAttributes() do
+		if string.sub(name, 1, 5) == "Torn_" then
+			setAttribute(state.model, name, nil)
+		end
 	end
 	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
@@ -476,15 +476,26 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		bloodChance = INJ.PUNCH_BLOOD_CHANCE[zone] or 0
 	end
 	blood = random:NextNumber() < bloodChance
-	-- Glass that really landed on the HEAD (where the attacker aimed), not from
-	-- behind: that side of the head is torn open a bit more (face, left or
-	-- right side). Even on the blow that knocks them out.
-	if spec.tearsSkin and INJ.HEAD_TEAR and zone == "Head" and side ~= "Back" then
+	-- Glass tears the skin open where it really landed (the zone the attacker
+	-- aimed at), on the side it came from: "Torn_<Part>_<Side>" goes up one
+	-- level. On the legs: the leg on that side (from the front or the back:
+	-- one of the two). Even on the blow that knocks them out.
+	if spec.tearsSkin and INJ.SKIN_TEAR then
+		local partKey: string
+		if zone == "Legs" then
+			if side == "Left" or side == "Right" then
+				partKey = side .. "Leg"
+			else
+				partKey = if random:NextInteger(0, 1) == 0 then "LeftLeg" else "RightLeg"
+			end
+		else
+			partKey = zone -- "Head" / "Torso"
+		end
 		skinTearSeed = random:NextInteger(1, 2 ^ 30)
-		local attribute = "HeadTorn_" .. side
+		local attribute = `Torn_{partKey}_{side}`
 		local torn = victim.model:GetAttribute(attribute)
 		local level = if typeof(torn) == "number" then torn else 0
-		setAttribute(victim.model, attribute, math.min(INJ.HEAD_TEAR_MAX, level + 1))
+		setAttribute(victim.model, attribute, math.min(INJ.SKIN_TEAR_MAX, level + 1))
 	end
 
 	if Knockout.isKnockedOut(victim.model) then
