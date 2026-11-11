@@ -283,6 +283,26 @@ local function drawHeadTear(head: BasePart, sideName: string, level: number, par
 			)
 			if piece.wet then
 				part.Reflectance = 0.15
+				-- The torn edge left and right of the flesh: the head curves away
+				-- there, so a bigger flat piece under the flesh would sink into
+				-- the head. Small dark pieces on their own point of the curve
+				-- instead, sticking out past the flesh's edge.
+				local edge = Vector2.new(piece.w * TEAR_SCALE * 0.5 / 1.2, 0)
+				for _, direction in { -1, 1 } do
+					patch(
+						head,
+						onHead(
+							head,
+							normal,
+							center + piece.at * TEAR_SCALE + edge * direction,
+							0.004
+						),
+						0.1 * TEAR_SCALE,
+						piece.h * TEAR_SCALE * 1.1,
+						DEEP,
+						parent
+					)
+				end
 			end
 		end
 		-- Flaps of torn skin, peeling outward from the edge.
