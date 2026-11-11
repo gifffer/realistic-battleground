@@ -33,9 +33,14 @@ local function showDebugBox(cframe: CFrame, size: Vector3)
 	Debris:AddItem(part, 0.15)
 end
 
--- Returns the models (with a living Humanoid) inside the box.
--- `ignore` = the attacker's own model.
-function Hitbox.query(cframe: CFrame, size: Vector3, ignore: Model): { Model }
+-- Returns the models (with a living Humanoid) inside the box, and for each
+-- one the names of its body parts that are inside ("Head", "Torso"...),
+-- used to decide where the hit lands. `ignore` = the attacker's own model.
+function Hitbox.query(
+	cframe: CFrame,
+	size: Vector3,
+	ignore: Model
+): ({ Model }, { [Model]: { [string]: boolean } })
 	if SHOW_DEBUG then
 		showDebugBox(cframe, size)
 	end
@@ -44,19 +49,26 @@ function Hitbox.query(cframe: CFrame, size: Vector3, ignore: Model): { Model }
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { ignore }
 
-	local found: { [Model]: boolean } = {}
 	local result: { Model } = {}
+	local partsByModel: { [Model]: { [string]: boolean } } = {}
 	for _, part in workspace:GetPartBoundsInBox(cframe, size, params) do
 		local model = part:FindFirstAncestorOfClass("Model")
-		if model and not found[model] then
-			local humanoid = model:FindFirstChildOfClass("Humanoid")
-			if humanoid and humanoid.Health > 0 then
-				found[model] = true
-				table.insert(result, model)
+		if model then
+			local parts = partsByModel[model]
+			if parts == nil then
+				local humanoid = model:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.Health > 0 then
+					parts = {}
+					partsByModel[model] = parts
+					table.insert(result, model)
+				end
+			end
+			if parts then
+				parts[part.Name] = true
 			end
 		end
 	end
-	return result
+	return result, partsByModel
 end
 
 return table.freeze(Hitbox)

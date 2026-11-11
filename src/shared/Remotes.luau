@@ -71,8 +71,11 @@ return table.freeze({
 	-- and the type of the value (see Server/Systems/Settings).
 	UpdateSetting = event("UpdateSetting"),
 
-	-- client → server  ()
-	-- "I want to M1". The server checks timing, then finds who is hit.
+	-- client → server  (zone: Types.HitZone)
+	-- "I want to M1", aiming at the opponent's head or torso (centre of the
+	-- screen). The server checks timing, finds who is hit, and only accepts
+	-- the zone if that body part really is inside the hitbox.
+	-- (Near a knocked-out fighter, an M1 finishes them instead.)
 	Attack = event("Attack"),
 
 	-- client → server  (wantsToBlock: boolean)
@@ -92,7 +95,12 @@ return table.freeze({
 	-- (The fighter's own client already did, the moment the key was pressed.)
 	CombatAction = event("CombatAction"),
 
-	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model)
+	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model,
+	--                        zone: Types.HitZone?)
 	-- Something happened in a fight; clients show effects (flash, text, shake).
 	CombatEvent = event("CombatEvent"),
+
+	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)
+	-- A fighter was eliminated: one line in the kill feed (top right).
+	KillFeed = event("KillFeed"),
 })

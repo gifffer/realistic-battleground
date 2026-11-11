@@ -69,6 +69,8 @@ local store: any = nil
 local profiles: { [Player]: Profile } = {}
 local pushQueued: { [Player]: boolean } = {}
 local loaded = Signal.new() :: Signal.Signal<Player>
+-- Called (synchronously) when a player leaves, BEFORE the final save.
+local leavingCallbacks: { (Player) -> () } = {}
 
 local function profileKey(player: Player): string
 	return `Player_{player.UserId}`
@@ -160,6 +162,14 @@ local function onPlayerAdded(player: Player)
 end
 
 local function onPlayerRemoving(player: Player)
+	-- Last changes to the save (e.g. Knockout: leaving mid-fight = a death).
+	for _, callback in leavingCallbacks do
+		local ok, problem = pcall(callback, player)
+		if not ok then
+			warn(`[PlayerData] onLeaving callback failed for {player.Name}: {problem}`)
+		end
+	end
+
 	local profile = profiles[player]
 	profiles[player] = nil
 	pushQueued[player] = nil
@@ -224,6 +234,13 @@ function PlayerData.spendCoins(player: Player, amount: number): boolean
 	return PlayerData.update(player, function(current)
 		current.coins -= amount
 	end)
+end
+
+-- Calls `callback(player)` when a player leaves, just BEFORE their save is
+-- written for the last time: the right moment for a final PlayerData.update().
+-- `callback` must NOT yield (no task.wait, no WaitForChild...).
+function PlayerData.onLeaving(callback: (Player) -> ())
+	table.insert(leavingCallbacks, callback)
 end
 
 -- Calls `callback(player)` for every player whose save is loaded, now and later.

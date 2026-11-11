@@ -14,6 +14,7 @@
 -- simulate its own character). The server checks the cooldown/stamina and
 -- grants the dodge frames.
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -22,11 +23,13 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local ParkourController = require(script.Parent.ParkourController)
 local SoundController = require(script.Parent.SoundController)
 
 local C = Config.Combat
+local K = Config.Knockout
 local player = Players.LocalPlayer
 
 local CombatController = {}
@@ -56,6 +59,10 @@ local function getCharacterParts(): (Model?, Humanoid?, BasePart?)
 	if humanoid == nil or humanoid.Health <= 0 or root == nil or not root:IsA("BasePart") then
 		return nil, nil, nil
 	end
+	-- Knocked out: can't do anything until we get up.
+	if character:GetAttribute("KnockedOut") == true then
+		return nil, nil, nil
+	end
 	return character, humanoid, root
 end
 
@@ -69,16 +76,50 @@ local function isBusyMoving(): boolean
 	return state == "Slide" or state == "Climb" or state == "Vault"
 end
 
+-- A knocked-out opponent we can finish: close, in front (same rule as the
+-- server's Knockout.findFinishTarget; the server decides for real).
+local function findFinishTarget(root: BasePart): Model?
+	local look = root.CFrame.LookVector
+	local forward = Vector3.new(look.X, 0, look.Z).Unit
+	for _, instance in CollectionService:GetTagged(C.TAG) do
+		if instance:IsA("Model") and instance ~= player.Character then
+			local torso = instance:FindFirstChild("Torso")
+			if instance:GetAttribute("KnockedOut") == true and torso and torso:IsA("BasePart") then
+				local offset = torso.Position - root.Position
+				local flat = Vector3.new(offset.X, 0, offset.Z)
+				local distance = flat.Magnitude
+				local inFront = distance < 1.5 or flat.Unit:Dot(forward) > 0.35
+				if distance <= K.FINISH_RANGE and inFront and math.abs(offset.Y) < 6 then
+					return instance
+				end
+			end
+		end
+	end
+	return nil
+end
+
 local function tryAttack()
-	local character = getCharacterParts()
+	local character, _, root = getCharacterParts()
 	local time = os.clock()
 	if
 		character == nil
+		or root == nil
 		or blocking
 		or isStunned(character)
 		or isBusyMoving()
 		or time < nextAttackAt
 	then
+		return
+	end
+
+	-- Opponent down in front of us: finish them (the server confirms).
+	if findFinishTarget(root) then
+		combo = 0
+		nextAttackAt = time + K.FINISH_DURATION
+		lastAttackAt = time
+		CharacterAnimationController.playAction(character, "Finisher")
+		SoundController.play("HeavySwing", character)
+		Remotes.Attack:FireServer(AimController.getZone())
 		return
 	end
 
@@ -92,7 +133,7 @@ local function tryAttack()
 
 	CharacterAnimationController.playAction(character, `Brawler_M1_{combo}`)
 	SoundController.play(if isFinisher then "HeavySwing" else "Swing", character)
-	Remotes.Attack:FireServer()
+	Remotes.Attack:FireServer(AimController.getZone())
 end
 
 local function setBlocking(value: boolean)

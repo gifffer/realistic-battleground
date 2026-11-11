@@ -24,7 +24,16 @@
 --
 -- API for other server systems:
 --   Combat.register(model, player?)    makes a model able to fight
---   Combat.tryAttack(model)            M1 (used by remotes and dummies)
+--   Combat.tryAttack(model, zone?)     M1 (used by remotes and dummies);
+--                                      near a KO'd fighter it finishes them
+--
+-- Hit zones: the attacker aims at the head or the torso (Remotes.Attack
+-- sends the zone). The server only accepts it if that body part of the
+-- victim really is inside the hitbox; otherwise it uses a part that is.
+-- Damage × Config.Combat.ZONE_DAMAGE, a head hit stuns a bit longer, a
+-- leg hit slows down.
+--
+-- 0 HP is not death: Knockout takes over (KO, finisher, respawn).
 --   Combat.setBlocking(model, bool)
 --   Combat.onDamaged(callback)         every damage dealt (for kills, step 3)
 
@@ -39,6 +48,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
+local Knockout = require(script.Parent.Knockout)
 local Movement = require(script.Parent.Movement)
 local Stamina = require(script.Parent.Stamina)
 local Hitbox = require(script.Hitbox)
@@ -54,6 +64,14 @@ local DASH_ANIMATIONS = table.freeze({
 })
 -- Movement states during which a player can't fight (Server/Systems/Movement).
 local BUSY_MOVE_STATES = table.freeze({ Slide = true, Climb = true, Vault = true })
+-- Body parts (R6 names) of each hit zone.
+local ZONE_PARTS: { [Types.HitZone]: { string } } = {
+	Head = { "Head" },
+	Torso = { "Torso", "HumanoidRootPart", "Right Arm", "Left Arm" },
+	Legs = { "Right Leg", "Left Leg" },
+}
+local VALID_ZONES = table.freeze({ Head = true, Torso = true, Legs = true })
+local random = Random.new()
 
 type CombatState = {
 	model: Model,
@@ -73,6 +91,8 @@ type CombatState = {
 	parryReady: boolean, -- this block got a parry window (anti-spam)
 
 	stunnedUntil: number,
+	legSlowUntil: number, -- slowed by a leg hit until then
+	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
 	nextDashAt: number,
 }
@@ -106,14 +126,24 @@ local function isBusyMoving(state: CombatState): boolean
 	return player ~= nil and BUSY_MOVE_STATES[Movement.getMoveState(player)] == true
 end
 
+-- Can't fight: knocked out, sliding / climbing, or in the middle of a finisher.
+local function isBusy(state: CombatState): boolean
+	return Knockout.isKnockedOut(state.model) or isBusyMoving(state) or now() < state.finishingUntil
+end
+
 local function setAttribute(model: Model, name: string, value: boolean)
 	if model:GetAttribute(name) ~= value then
 		model:SetAttribute(name, value)
 	end
 end
 
-local function fireEvent(kind: Types.CombatEventKind, victim: Model, attacker: Model)
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker)
+local function fireEvent(
+	kind: Types.CombatEventKind,
+	victim: Model,
+	attacker: Model,
+	zone: Types.HitZone?
+)
+	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone)
 end
 
 local function stopBlocking(state: CombatState)
@@ -131,9 +161,48 @@ local function stun(state: CombatState, duration: number)
 	setAttribute(state.model, "Stunned", true)
 end
 
+-- Damage that would bring the victim to 0 HP knocks them out instead
+-- (Knockout), it never kills directly.
 local function dealDamage(victim: CombatState, attacker: CombatState, amount: number)
-	victim.humanoid:TakeDamage(amount)
+	Knockout.noteHit(victim.model, attacker.model)
+	if victim.humanoid.Health - amount <= 0 then
+		stopBlocking(victim)
+		victim.attackToken += 1 -- cancels a punch they were winding up
+		Knockout.knockOut(victim.model, attacker.model)
+	else
+		victim.humanoid.Health -= amount
+	end
 	damaged.fire({ victim = victim.model, attacker = attacker.model, amount = amount })
+end
+
+-- The zone a hit lands on: the one aimed at, if that body part of the
+-- victim is inside the hitbox (and a punch can reach it); else the first
+-- allowed zone that is (torso first).
+local function landingZone(
+	requested: Types.HitZone,
+	partsInBox: { [string]: boolean },
+	allowed: { string }
+): Types.HitZone
+	local function inBox(zone: Types.HitZone): boolean
+		for _, partName in ZONE_PARTS[zone] do
+			if partsInBox[partName] then
+				return true
+			end
+		end
+		return false
+	end
+	if table.find(allowed, requested) and inBox(requested) then
+		return requested
+	end
+	if table.find(allowed, "Torso") and inBox("Torso") then
+		return "Torso" :: Types.HitZone
+	end
+	for _, zone in allowed do
+		if inBox(zone :: Types.HitZone) then
+			return zone :: Types.HitZone
+		end
+	end
+	return "Torso" :: Types.HitZone
 end
 
 -- Is `attacker` in front of `victim`? (You can't block a hit in the back.)
@@ -148,10 +217,24 @@ local function isInFront(victim: CombatState, attacker: CombatState): boolean
 end
 
 -- Decides what a hit does to `victim`. The heart of the combat rules.
-local function resolveHit(attacker: CombatState, victim: CombatState, combo: number)
+local function resolveHit(
+	attacker: CombatState,
+	victim: CombatState,
+	combo: number,
+	zone: Types.HitZone
+)
 	local isFinisher = combo == #C.M1_DAMAGE
-	local damage = C.M1_DAMAGE[combo]
+	local damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[zone]
 	local time = now()
+
+	-- 0. On the ground (finish them instead), or just spawned (protected).
+	if Knockout.isKnockedOut(victim.model) then
+		return
+	end
+	if Knockout.isProtected(victim.model) then
+		fireEvent("Protected", victim.model, attacker.model)
+		return
+	end
 
 	-- 1. Dash dodge frames: the hit misses.
 	if time < victim.invulnerableUntil then
@@ -183,18 +266,27 @@ local function resolveHit(attacker: CombatState, victim: CombatState, combo: num
 
 	-- 4. Normal hit.
 	dealDamage(victim, attacker, damage)
+	if Knockout.isKnockedOut(victim.model) then
+		-- That hit knocked them out: no stun or knockback on a limp body.
+		fireEvent(if isFinisher then "Finisher" else "Hit", victim.model, attacker.model, zone)
+		return
+	end
+	if zone == "Legs" then
+		victim.legSlowUntil = time + C.LEG_HIT_SLOW_TIME
+	end
+	local extraStun = if zone == "Head" then C.HEAD_EXTRA_STUN else 0
 	if isFinisher then
-		stun(victim, C.FINISHER_STUN)
+		stun(victim, C.FINISHER_STUN + extraStun)
 		local away = victim.root.Position - attacker.root.Position
 		local flat = Vector3.new(away.X, 0, away.Z)
 		local direction = if flat.Magnitude > 1e-3
 			then flat.Unit
 			else attacker.root.CFrame.LookVector
 		Push.apply(victim.root, direction * C.KNOCKBACK_SPEED, C.KNOCKBACK_TIME)
-		fireEvent("Finisher", victim.model, attacker.model)
+		fireEvent("Finisher", victim.model, attacker.model, zone)
 	else
-		stun(victim, C.HIT_STUN)
-		fireEvent("Hit", victim.model, attacker.model)
+		stun(victim, C.HIT_STUN + extraStun)
+		fireEvent("Hit", victim.model, attacker.model, zone)
 	end
 end
 
@@ -227,12 +319,15 @@ function Combat.register(model: Model, player: Player?)
 		blockEndedAt = -math.huge,
 		parryReady = false,
 		stunnedUntil = 0,
+		legSlowUntil = 0,
+		finishingUntil = 0,
 		invulnerableUntil = 0,
 		nextDashAt = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
 	CollectionService:AddTag(model, C.TAG)
+	Knockout.register(model, player)
 
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
@@ -241,15 +336,47 @@ function Combat.register(model: Model, player: Player?)
 	end)
 end
 
--- M1. Returns true if the attack started.
-function Combat.tryAttack(model: Model): boolean
+-- Finisher on a KO'd fighter: kneel and strike; the victim dies at impact
+-- unless the attacker is stunned (or dies) before.
+local function startFinisher(state: CombatState, target: Model): boolean
+	if not Knockout.reserve(target, state.model) then
+		return false
+	end
+	local time = now()
+	local K = Config.Knockout
+	state.nextAttackAt = time + K.FINISH_DURATION
+	state.finishingUntil = time + K.FINISH_DURATION
+	state.attackingUntil = time + K.FINISH_DURATION
+	state.combo = 0
+	state.attackToken += 1
+	local token = state.attackToken
+	Remotes.CombatAction:FireAllClients(state.model, "Finisher")
+
+	task.delay(K.FINISH_IMPACT, function()
+		local targetRoot = target:FindFirstChild("HumanoidRootPart")
+		local stillThere = targetRoot ~= nil
+			and targetRoot:IsA("BasePart")
+			and (targetRoot.Position - state.root.Position).Magnitude <= K.FINISH_RANGE + 2
+		if state.attackToken ~= token or not isAlive(state) or not stillThere then
+			Knockout.release(target) -- interrupted: someone else can finish them
+			state.finishingUntil = 0
+			return
+		end
+		Knockout.finish(target, state.model)
+	end)
+	return true
+end
+
+-- M1. Returns true if the attack started. `zone` = where the attacker aims
+-- (nil for dummies: random head / torso).
+function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
 	local state = states[model]
 	if
 		state == nil
 		or not isAlive(state)
 		or isStunned(state)
 		or state.blocking
-		or isBusyMoving(state)
+		or isBusy(state)
 	then
 		return false
 	end
@@ -257,6 +384,18 @@ function Combat.tryAttack(model: Model): boolean
 	if time < state.nextAttackAt then
 		return false
 	end
+	-- Attacking ends the spawn protection.
+	Knockout.endProtection(model)
+
+	-- A KO'd fighter right in front: finish them instead of punching.
+	-- (Players only: training dummies never finish anyone.)
+	local finishTarget = if state.player then Knockout.findFinishTarget(model) else nil
+	if finishTarget and startFinisher(state, finishTarget) then
+		return true
+	end
+
+	local aimed: Types.HitZone = zone
+		or (if random:NextNumber() < 0.5 then "Head" else "Torso") :: Types.HitZone
 
 	-- Advance the combo (or start over if the last M1 was too long ago).
 	if time - state.lastAttackAt > C.COMBO_RESET then
@@ -280,10 +419,13 @@ function Combat.tryAttack(model: Model): boolean
 			return
 		end
 		local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -C.HITBOX_FORWARD)
-		for _, victimModel in Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model) do
+		local victims, partsByModel = Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model)
+		for _, victimModel in victims do
 			local victim = states[victimModel]
 			if victim and isAlive(victim) then
-				resolveHit(state, victim, combo)
+				local landed: Types.HitZone =
+					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
+				resolveHit(state, victim, combo, landed)
 			end
 		end
 	end)
@@ -299,7 +441,7 @@ function Combat.setBlocking(model: Model, wantsToBlock: boolean)
 		stopBlocking(state)
 		return
 	end
-	if state.blocking or not isAlive(state) or isStunned(state) or isBusyMoving(state) then
+	if state.blocking or not isAlive(state) or isStunned(state) or isBusy(state) then
 		return
 	end
 	local time = now()
@@ -322,7 +464,7 @@ local function tryDash(model: Model, player: Player): boolean
 		or not isAlive(state)
 		or isStunned(state)
 		or state.blocking
-		or isBusyMoving(state)
+		or isBusy(state)
 	then
 		return false
 	end
@@ -367,6 +509,17 @@ local function update()
 				"Attack",
 				if attacking then C.SPEED_WHILE_ATTACKING else nil
 			)
+			Movement.setSpeedModifier(
+				player,
+				"LegHit",
+				if time < state.legSlowUntil then C.LEG_HIT_SLOW else nil
+			)
+			-- Kneeling for a finisher: stay in place.
+			Movement.setSpeedModifier(
+				player,
+				"Finishing",
+				if time < state.finishingUntil then 0 else nil
+			)
 			Movement.setSprintLock(player, "Combat", stunned or state.blocking or attacking)
 		end
 	end
@@ -381,11 +534,16 @@ local attackLimiter = RateLimiter.new(6, 5)
 local blockLimiter = RateLimiter.new(10, 6)
 local dashLimiter = RateLimiter.new(3, 1)
 
-local function onAttack(player: Player)
+local function onAttack(player: Player, zone: unknown)
 	local character = player.Character
-	if character and attackLimiter.allow(player) then
-		Combat.tryAttack(character)
+	if character == nil or not attackLimiter.allow(player) then
+		return
 	end
+	-- Only the 3 known zone names; anything else = no preference.
+	local aimed: Types.HitZone? = if typeof(zone) == "string" and VALID_ZONES[zone]
+		then zone :: Types.HitZone
+		else nil
+	Combat.tryAttack(character, aimed or "Torso")
 end
 
 local function onSetBlocking(player: Player, wantsToBlock: unknown)
@@ -438,7 +596,20 @@ local function onPlayerAdded(player: Player)
 	end
 end
 
+-- Back on their feet after a KO: dazed for a moment, everyone sees the get-up.
+local function onGetUp(model: Model)
+	local state = states[model]
+	if state == nil then
+		return
+	end
+	state.combo = 0
+	stopBlocking(state)
+	stun(state, Config.Knockout.GETUP_STUN)
+	Remotes.CombatAction:FireAllClients(model, "GetUp")
+end
+
 function Combat.start()
+	Knockout.onGetUp(onGetUp)
 	Remotes.Attack.OnServerEvent:Connect(onAttack)
 	Remotes.SetBlocking.OnServerEvent:Connect(onSetBlocking)
 	Remotes.Dash.OnServerEvent:Connect(onDash)

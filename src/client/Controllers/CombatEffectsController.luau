@@ -221,7 +221,36 @@ local function isInFront(victim: Model, attacker: Model): boolean
 	return offset:Dot(victim:GetPivot().LookVector) >= 0
 end
 
-local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacker: Model)
+-- Head hit on us: the vision blurs for an instant.
+local HEAD_BLUR_SIZE = 12
+local HEAD_BLUR_TIME = 0.45
+
+local function headBlur()
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local blur = Instance.new("BlurEffect")
+	blur.Name = "HeadHitBlur"
+	blur.Size = HEAD_BLUR_SIZE
+	blur.Parent = camera
+	local fade = TweenService:Create(
+		blur,
+		TweenInfo.new(HEAD_BLUR_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ Size = 0 }
+	)
+	fade.Completed:Connect(function()
+		blur:Destroy()
+	end)
+	fade:Play()
+end
+
+local function onCombatEvent(
+	kind: Types.CombatEventKind,
+	victim: Model,
+	attacker: Model,
+	zone: Types.HitZone?
+)
 	if typeof(victim) ~= "Instance" or typeof(attacker) ~= "Instance" then
 		return -- a model that doesn't exist on this client (streamed out...)
 	end
@@ -235,23 +264,37 @@ local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacke
 		local fromFront = isInFront(victim, attacker)
 		local punch = CharacterAnimationController.getLastAction(attacker)
 
-		-- The reaction matches the punch (from behind: always thrown forward).
+		local toBody = zone == "Torso" or zone == "Legs"
+
+		-- The reaction matches where it landed and the punch thrown:
+		-- body shot → folds forward; to the face → head snapped the way the
+		-- punch came from; from behind → thrown forward; finisher → heavy.
 		local reaction = "HitBack"
 		if fromFront then
-			reaction = if strong
-				then "HitHeavy"
-				else (if punch then REACTION_BY_PUNCH[punch] else nil) or "HitJab"
+			if strong then
+				reaction = "HitHeavy"
+			elseif toBody then
+				reaction = "HitBody"
+			else
+				reaction = (if punch then REACTION_BY_PUNCH[punch] else nil) or "HitJab"
+			end
 		end
 		CharacterAnimationController.playAction(victim, reaction)
 
-		-- Physical kick on top: back (or forward if hit from behind), plus
-		-- sideways for the punches that come from the side.
+		-- Physical kick on top: the head back (face) or the body folding
+		-- (body shot), plus sideways for the punches that come from the side.
 		local kick = if strong then HEAVY_FLINCH_KICK else FLINCH_KICK
-		local side = if punch == "Brawler_M1_2"
+		local side = if toBody
+			then 0
+			elseif
+				punch == "Brawler_M1_2"
 			then -0.6 -- right cross → the head goes to the victim's right
 			elseif punch == "Brawler_M1_3" then 0.6 -- left hook → to its left
 			else 0
-		local pitch = if fromFront then 1 else -1
+		local pitch = if not fromFront then -1 elseif toBody then -0.7 else 1
+		if iAmVictim and zone == "Head" then
+			headBlur()
+		end
 		CharacterAnimationController.flinch(
 			victim,
 			Vector3.new(kick * pitch, kick * side, kick * side * 0.5)
@@ -299,19 +342,30 @@ local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacke
 	elseif kind == "Dodged" then
 		floatingText(victim, "DODGE", Theme.Colors.Text)
 		SoundController.play("Dodge", victim)
+	elseif kind == "Protected" then
+		floatingText(victim, "PROTECTED", Theme.Colors.TextDim)
 	end
 end
 
--- Another fighter started a punch or a dash (ours already played locally).
+-- Server actions that are NOT predicted by our own client (we must play
+-- them on our character too): getting up after a KO.
+local SERVER_ONLY_ACTIONS = table.freeze({ GetUp = true })
+
+-- A fighter started a punch, a dash, a finisher, or got up after a KO.
+-- (Our own punches / dashes / finishers already played locally.)
 local function onCombatAction(model: Model, action: string)
 	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
 		return
 	end
-	if model == player.Character then
+	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
 		return
 	end
 	CharacterAnimationController.playAction(model, action)
-	if action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
+	if action == "GetUp" then
+		return
+	elseif action == "Finisher" then
+		SoundController.play("HeavySwing", model)
+	elseif action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model)
 	elseif string.sub(action, 1, 4) == "Dash" then
 		SoundController.play("Dash", model)
