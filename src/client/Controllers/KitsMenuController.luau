@@ -25,6 +25,12 @@ local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
 
 local C = Theme.Colors
+-- The detail column starts at x 200 of the content. Its canvas starts a bit
+-- before (16 px left for the red rail, 8 px up for the kit name), with the
+-- content inset by the same amount, so nothing gets cut.
+local DETAIL_INSET = Vector2.new(16, 8)
+local DETAIL_X = 200 - DETAIL_INSET.X
+local DETAIL_Y = -DETAIL_INSET.Y
 
 local KitsMenuController = {}
 
@@ -40,7 +46,8 @@ type RosterItem = {
 
 local rosterItems: { RosterItem } = {}
 local rosterMarker: Frame
-local detail: CanvasGroup
+local detail: CanvasGroup -- fades / slides as one when switching kits
+local body: Frame -- its content (inset: the canvas cuts what sticks out)
 local renderDetail: (animate: boolean) -> ()
 
 ------------------------------------------------------------------------------
@@ -348,7 +355,7 @@ local function equipArea(parent: Instance, kit: Kits.KitDef)
 end
 
 local function fillDetail(kit: Kits.KitDef)
-	for _, child in detail:GetChildren() do
+	for _, child in body:GetChildren() do
 		child:Destroy()
 	end
 	Theme.text({
@@ -359,9 +366,9 @@ local function fillDetail(kit: Kits.KitDef)
 		TextSize = 26,
 		TextStrokeTransparency = 1,
 		Text = Theme.track(kit.name, "thin"),
-		Parent = detail,
+		Parent = body,
 	})
-	equipArea(detail, kit)
+	equipArea(body, kit)
 	Theme.text({
 		Name = "Desc",
 		Position = UDim2.fromOffset(0, 36),
@@ -370,24 +377,24 @@ local function fillDetail(kit: Kits.KitDef)
 		TextSize = 15,
 		TextStrokeTransparency = 1,
 		Text = kit.description,
-		Parent = detail,
+		Parent = body,
 	})
 	if #kit.moves == 0 then
 		caption("THIS FIGHTING STYLE IS NOT AVAILABLE YET", {
 			Position = UDim2.fromOffset(0, 84),
 			Size = UDim2.new(1, 0, 0, 12),
-			Parent = detail,
+			Parent = body,
 		})
 		return
 	end
 
-	sectionHead(detail, 80, "MOVES", { "COOLDOWN", "STAMINA" })
+	sectionHead(body, 80, "MOVES", { "COOLDOWN", "STAMINA" })
 	local list = Theme.make("Frame", {
 		Name = "Moves",
 		Position = UDim2.fromOffset(0, 99),
 		Size = UDim2.new(1, 0, 0, 4 * 42),
 		BackgroundTransparency = 1,
-		Parent = detail,
+		Parent = body,
 	}, {
 		Theme.make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
@@ -397,13 +404,13 @@ local function fillDetail(kit: Kits.KitDef)
 	end
 
 	if awakening then
-		sectionHead(detail, 291, "AWAKENING", { "LASTS" })
+		sectionHead(body, 291, "AWAKENING", { "LASTS" })
 		local row = Theme.make("Frame", {
 			Name = "AwakeningRow",
 			Position = UDim2.fromOffset(0, 309),
 			Size = UDim2.new(1, 0, 0, 60),
 			BackgroundTransparency = 1,
-			Parent = detail,
+			Parent = body,
 		})
 		Theme.make("Frame", {
 			Name = "Rail",
@@ -453,17 +460,17 @@ renderDetail = function(animate: boolean)
 	Theme.tween(
 		detail,
 		0.1,
-		{ GroupTransparency = 1, Position = UDim2.fromOffset(194, 0) },
+		{ GroupTransparency = 1, Position = UDim2.fromOffset(DETAIL_X - 6, DETAIL_Y) },
 		Enum.EasingStyle.Quad,
 		Enum.EasingDirection.In
 	)
 	task.delay(0.1, function()
 		fillDetail(selectedKit)
-		detail.Position = UDim2.fromOffset(208, 0)
+		detail.Position = UDim2.fromOffset(DETAIL_X + 8, DETAIL_Y)
 		Theme.tween(
 			detail,
 			0.2,
-			{ GroupTransparency = 0, Position = UDim2.fromOffset(200, 0) },
+			{ GroupTransparency = 0, Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y) },
 			Enum.EasingStyle.Quart
 		)
 	end)
@@ -584,10 +591,17 @@ local function build(content: Frame)
 	})
 	detail = Theme.make("CanvasGroup", {
 		Name = "Detail",
-		Position = UDim2.fromOffset(200, 0),
-		Size = UDim2.fromOffset(360, 380),
+		Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y),
+		Size = UDim2.fromOffset(360 + DETAIL_INSET.X + 2, 380 + DETAIL_INSET.Y),
 		BackgroundTransparency = 1,
 		Parent = content,
+	})
+	body = Theme.make("Frame", {
+		Name = "Body",
+		Position = UDim2.fromOffset(DETAIL_INSET.X, DETAIL_INSET.Y),
+		Size = UDim2.fromOffset(360, 380),
+		BackgroundTransparency = 1,
+		Parent = detail,
 	})
 	refreshRoster()
 	renderDetail(false)

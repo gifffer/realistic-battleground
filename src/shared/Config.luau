@@ -183,6 +183,8 @@ return table.freeze({
 			Enum.KeyCode.Four,
 		}),
 		AWAKEN_KEY = Enum.KeyCode.G,
+		-- The Awakening's activation animation: no attacking during it (seconds).
+		AWAKEN_TIME = 1.0,
 
 		-- Awakening gauge ("Fury"), 0 → FURY_MAX. It fills by fighting:
 		FURY_MAX = 100,

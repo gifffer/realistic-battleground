@@ -54,6 +54,7 @@ local bleedSeg: Frame
 local bleedEdge: Frame
 local bleedShade: Frame
 local bleeding = false
+local bleedTweenUntil = 0 -- the per-tick shrink is playing until then
 local texts: { TextLabel } = {} -- every text of the block (for the idle fade)
 
 local humanoidConnections: { RBXScriptConnection } = {}
@@ -325,6 +326,7 @@ local function updateBleeding(tick: boolean)
 		Size = UDim2.fromScale(remaining / maxHealth, 1),
 	}
 	if tick then
+		bleedTweenUntil = os.clock() + 0.12
 		Theme.tween(bleedSeg, 0.12, goal)
 		-- The edge breathes once per tick.
 		Theme.tween(bleedEdge, 0.12, { BackgroundTransparency = 0 })
@@ -339,7 +341,7 @@ local function updateBleeding(tick: boolean)
 				)
 			end
 		end)
-	else
+	elseif os.clock() >= bleedTweenUntil then
 		bleedSeg.Position = goal.Position
 		bleedSeg.Size = goal.Size
 	end

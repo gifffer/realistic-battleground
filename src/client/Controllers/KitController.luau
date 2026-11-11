@@ -18,6 +18,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -51,6 +52,10 @@ for _, kit in Kits.list() do
 	end
 end
 
+-- Our last move request (to match a refusal with it).
+local requestSeq = 0
+local pending: { id: number, animation: string }? = nil
+
 -- +1 cancels the charge push of the move in progress (refused / landed).
 local chargeToken = 0
 
@@ -62,6 +67,16 @@ end
 
 local function isAwakened(character: Model): boolean
 	return character:GetAttribute("Awakened") == true
+end
+
+-- Seconds of Street Fury left, from the server's end time (the "Awakened"
+-- attribute only changes a moment AFTER the end, it lags).
+local function awakenedLeft(character: Model): number
+	local untilTime = character:GetAttribute("AwakenedUntil")
+	if not isAwakened(character) or typeof(untilTime) ~= "number" then
+		return 0
+	end
+	return untilTime - workspace:GetServerTimeNow()
 end
 
 -- The move on `slot` right now (the Awakening version while awakened).
@@ -83,27 +98,17 @@ function KitController.cooldownLeft(character: Model, move: Kits.MoveDef): numbe
 	return math.max(0, readyAt - workspace:GetServerTimeNow())
 end
 
--- Charge: push our character forward during the charge window.
-local function startCharge(move: Kits.MoveDef, root: BasePart)
-	local charge = move.charge
-	if charge == nil then
-		return
-	end
-	chargeToken += 1
-	local token = chargeToken
-	task.delay(charge.from, function()
-		if chargeToken ~= token or root.Parent == nil then
-			return
-		end
-		local look = root.CFrame.LookVector
-		local forward = Vector3.new(look.X, 0, look.Z).Unit
-		Push.apply(root, forward * charge.speed, charge.to - charge.from)
-	end)
-end
+-- Our charge in progress: until when its push runs (0 = no charge).
+local chargeUntil = 0
 
--- Stops the charge: a short brake instead of an instant stop.
+-- Stops the charge: a short brake instead of an instant stop. Does nothing
+-- if we aren't charging (so it never cancels a knockback the server gave us).
 local function brake()
 	chargeToken += 1
+	if os.clock() >= chargeUntil then
+		return
+	end
+	chargeUntil = 0
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
@@ -112,10 +117,60 @@ local function brake()
 	end
 end
 
+-- The server stops a move when we get stunned, knocked down or knocked out:
+-- the charge must stop too, or we'd keep sliding forward.
+local function chargeInterrupted(character: Model): boolean
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	return humanoid == nil
+		or humanoid.Health <= 0
+		or character:GetAttribute("Stunned") == true
+		or character:GetAttribute("Ragdolled") == true
+		or character:GetAttribute("KnockedOut") == true
+end
+
+-- Charge: push our character forward during the charge window.
+local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
+	local charge = move.charge
+	if charge == nil then
+		return
+	end
+	chargeToken += 1
+	local token = chargeToken
+	local startedAt = os.clock()
+	chargeUntil = startedAt + charge.to
+	local pushing = false
+	local connection: RBXScriptConnection? = nil
+	connection = RunService.Heartbeat:Connect(function()
+		local elapsed = os.clock() - startedAt
+		if chargeToken ~= token or elapsed > charge.to or root.Parent == nil then
+			if connection then
+				connection:Disconnect()
+			end
+			return
+		end
+		if chargeInterrupted(character) then
+			brake()
+			return
+		end
+		if not pushing and elapsed >= charge.from then
+			pushing = true
+			local look = root.CFrame.LookVector
+			local forward = Vector3.new(look.X, 0, look.Z).Unit
+			Push.apply(root, forward * charge.speed, charge.to - elapsed)
+		end
+	end)
+end
+
 local function tryMove(slot: number)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if character == nil or root == nil or not root:IsA("BasePart") then
+		return
+	end
+	-- Street Fury about to end: we can't know which version the server will
+	-- use, so wait a moment instead of guessing wrong.
+	local left = awakenedLeft(character)
+	if isAwakened(character) and left < 0.2 then
 		return
 	end
 	local move = KitController.getMove(slot)
@@ -134,8 +189,11 @@ local function tryMove(slot: number)
 	CombatController.holdAttacks(move.duration)
 	CharacterAnimationController.playAction(character, move.animation)
 	KitEffects.onAction(character, move.animation)
-	startCharge(move, root)
-	Remotes.UseMove:FireServer(slot, AimController.getAimDirection())
+	startCharge(move, character, root)
+	-- Each request gets a number: a refusal names it (see onMoveRefused).
+	requestSeq += 1
+	pending = { id = requestSeq, animation = move.animation }
+	Remotes.UseMove:FireServer(slot, AimController.getAimDirection(), requestSeq)
 end
 
 -- Uses the move on `slot` (a key, or a click on the move bar).
@@ -161,14 +219,17 @@ local function tryAwaken()
 	Remotes.Awaken:FireServer()
 end
 
--- The server refused our move: undo what we showed.
-local function onMoveRefused(_slot: unknown)
+-- The server refused our move: undo what we showed. Only if it's the move
+-- still playing (a late refusal must not cancel a newer, accepted one).
+local function onMoveRefused(_slot: unknown, requestId: unknown)
 	local character = player.Character
-	if character == nil then
+	local current = pending
+	if character == nil or current == nil or requestId ~= current.id then
 		return
 	end
+	pending = nil
 	brake()
-	CharacterAnimationController.stopAction(character)
+	CharacterAnimationController.stopAction(character, current.animation)
 	KitEffects.stopAction(character)
 	CombatController.releaseAttacks()
 end
@@ -194,6 +255,8 @@ function KitController.start()
 	end)
 	player.CharacterAdded:Connect(function()
 		chargeToken += 1
+		chargeUntil = 0
+		pending = nil
 	end)
 end
 

@@ -21,10 +21,12 @@
 --   KitEffects.isHeavy(moveId)               big reaction (HitHeavy) for it?
 --   KitEffects.watch(model)                  bleeding / fury visuals
 
+local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
@@ -258,7 +260,8 @@ local stains: { BasePart } = {}
 local function stain(position: Vector3, size: number)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {}
+	-- Through every fighter (the bleeding one first of all): only the floor.
+	params.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
 	params.RespectCanCollide = true
 	local hit = workspace:Raycast(position, Vector3.new(0, -12, 0), params)
 	if
@@ -313,7 +316,7 @@ local function drip(model: Model)
 		return
 	end
 	local random = Random.new()
-	local start = (head.CFrame * CFrame.new(random:NextNumber(-0.3, 0.3), -0.2, -0.45)).Position
+	local start = (head.CFrame * CFrame.new(random:NextNumber(-0.3, 0.3), -0.2, -0.8)).Position
 	local drop = Instance.new("Part")
 	drop.Name = "BloodDrop"
 	drop.Shape = Enum.PartType.Ball

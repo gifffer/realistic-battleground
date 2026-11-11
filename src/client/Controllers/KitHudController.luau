@@ -159,8 +159,8 @@ end
 local function buildSlot(index: number, holder: GuiObject): Slot
 	local button = Theme.make("TextButton", {
 		Name = `Slot{index}`,
-		Position = UDim2.fromOffset(0, (index - 1) * SLOT_HEIGHT),
-		Size = UDim2.new(1, 0, 0, SLOT_HEIGHT),
+		Position = UDim2.fromOffset(2, 2 + (index - 1) * SLOT_HEIGHT),
+		Size = UDim2.new(1, -4, 0, SLOT_HEIGHT),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
 		Text = "",
@@ -295,9 +295,12 @@ local function build()
 		Parent = gui,
 	})
 	-- One CanvasGroup per half so the idle fade dims everything at once.
+	-- (A CanvasGroup cuts what sticks out of it, outlines included: each
+	-- group has a 2 px margin all around, so positions inside are +2.)
 	local movesGroup = Theme.make("CanvasGroup", {
 		Name = "Moves",
-		Size = UDim2.new(1, 0, 0, 4 * SLOT_HEIGHT + 2),
+		Position = UDim2.fromOffset(-2, -2),
+		Size = UDim2.new(1, 4, 0, 4 * SLOT_HEIGHT + 6),
 		BackgroundTransparency = 1,
 		Parent = block,
 	}) :: CanvasGroup
@@ -308,12 +311,13 @@ local function build()
 	local furyGroup = Theme.make("CanvasGroup", {
 		Name = "Fury",
 		Position = UDim2.fromOffset(-16, 0),
-		Size = UDim2.new(1, 16, 1, 0),
+		Size = UDim2.new(1, 18, 1, 0),
 		BackgroundTransparency = 1,
 		Parent = block,
 	}) :: CanvasGroup
-	-- (The fury group is 16 px wider on the left, for the rail: positions
-	-- below add 16 to the spec's x.)
+	-- (The fury group is 16 px wider on the left, for the rail, and 2 px on
+	-- the right for the G key's outline: positions below add 16 to the
+	-- spec's x, and right-anchored ones are 2 px further in.)
 	furyRail = Theme.make("Frame", {
 		Name = "FuryRail",
 		Position = UDim2.fromOffset(2, 3),
@@ -334,7 +338,7 @@ local function build()
 	furyNum = Theme.text({
 		Name = "FuryNum",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -13, 0, 124),
+		Position = UDim2.new(1, -15, 0, 124),
 		Size = UDim2.fromOffset(80, 24),
 		FontFace = Theme.Fonts.NumberLight,
 		TextSize = 22,
@@ -346,7 +350,7 @@ local function build()
 	furyUnit = Theme.text({
 		Name = "FuryUnit",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 135),
+		Position = UDim2.new(1, -2, 0, 135),
 		Size = UDim2.fromOffset(10, 12),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 10,
@@ -358,7 +362,7 @@ local function build()
 	local track = Theme.make("Frame", {
 		Name = "FuryTrack",
 		Position = UDim2.fromOffset(16, 158),
-		Size = UDim2.new(1, -16, 0, 2),
+		Size = UDim2.new(1, -18, 0, 2),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.78,
 		Parent = furyGroup,
@@ -372,7 +376,7 @@ local function build()
 	furyGo = Theme.make("Frame", {
 		Name = "FuryGo",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 130),
+		Position = UDim2.new(1, -2, 0, 130),
 		Size = UDim2.fromOffset(0, 18),
 		AutomaticSize = Enum.AutomaticSize.X,
 		BackgroundTransparency = 1,
@@ -615,8 +619,8 @@ local function setFuryState(state: "Charging" | "Full" | "Active")
 		Theme.tween(furyUnit, 0.12, { TextTransparency = 1 }, Enum.EasingStyle.Linear)
 		Theme.tween(furyLabel, 0.2, { TextColor3 = C.Ink })
 		furyGo.Visible = true
-		furyGo.Position = UDim2.new(1, 8, 0, 130)
-		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, 0, 0, 130) }, Enum.EasingStyle.Quart)
+		furyGo.Position = UDim2.new(1, 6, 0, 130)
+		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, -2, 0, 130) }, Enum.EasingStyle.Quart)
 		local pulse = TweenService:Create(
 			goStroke,
 			TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -785,6 +789,21 @@ function KitHudController.start()
 		furyState = nil
 		fadingOut = false
 		setScreenFury(false)
+		-- Died during Street Fury: put the gauge back to its normal look.
+		furyFill.BackgroundColor3 = C.Ink
+		furyFill.Size = UDim2.fromScale(0, 1)
+		furyRail.Visible = false
+		furyRail.Size = UDim2.fromOffset(2, 0)
+		furyLabel.TextColor3 = C.Ink2
+		furyNum.Text = "0"
+		furyNum.TextTransparency = 0
+		furyUnit.Text = "%"
+		furyUnit.TextTransparency = 0
+		furyGo.Visible = false
+		if goPulse then
+			goPulse:Cancel()
+			goPulse = nil
+		end
 	end)
 end
 

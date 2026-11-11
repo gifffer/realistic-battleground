@@ -113,7 +113,7 @@ return table.freeze({
 	-- the attacker undo a hit it predicted that the server never confirmed.
 	AttackResolved = event("AttackResolved"),
 
-	-- client → server  (slot: number, aim: Vector3?)
+	-- client → server  (slot: number, aim: Vector3?, requestId: number)
 	-- "I use the move on key `slot` (1–4) of my kit" (the Awakening version
 	-- if I'm awakened). The server checks everything (cooldown, stamina,
 	-- stun...) and answers with CombatAction to everyone, or MoveRefused.
@@ -123,9 +123,9 @@ return table.freeze({
 	-- "G pressed": awaken (Street Fury...) if the gauge is full.
 	Awaken = event("Awaken"),
 
-	-- server → ONE client  (slot: number)
-	-- "Your move on key `slot` was refused" (the client had already started
-	-- its animation to feel instant: it stops it).
+	-- server → ONE client  (slot: number, requestId: number?)
+	-- "Your move request `requestId` was refused" (the client had already
+	-- started its animation to feel instant: it stops it).
 	MoveRefused = event("MoveRefused"),
 
 	-- client → server  (kitId: string)

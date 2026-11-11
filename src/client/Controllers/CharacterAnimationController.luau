@@ -502,17 +502,19 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
 end
 
--- Stops the action playing on `model` (our move, refused by the server).
-function CharacterAnimationController.stopAction(model: Model)
+-- Stops the action `name` on `model` (our move, refused by the server).
+-- Anything else playing (a hit reaction that came meanwhile) is kept.
+function CharacterAnimationController.stopAction(model: Model, name: string)
 	local entry = tracked[model]
 	if entry == nil then
 		return
 	end
 	for _, layer in entry.action do
-		layer.target = 0
-		layer.fadeOut = ACTION_FADE_OUT
+		if layer.name == name then
+			layer.target = 0
+			layer.fadeOut = ACTION_FADE_OUT
+		end
 	end
-	entry.freezeUntil = 0
 end
 
 -- The last one-shot clip played on `model` (e.g. which punch it just threw),

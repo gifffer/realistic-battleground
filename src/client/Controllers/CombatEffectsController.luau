@@ -665,6 +665,10 @@ local function onCombatAction(model: Model, action: string)
 	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
 		return
 	end
+	if model == player.Character and action == "Brawler_Awaken" then
+		-- Our Street Fury starts: no attack during the activation (as on the server).
+		CombatController.holdAttacks(Config.Kits.AWAKEN_TIME)
+	end
 	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
 		-- Ours: already played when we clicked, unless the server disagreed.
 		CombatController.onServerAction(action)

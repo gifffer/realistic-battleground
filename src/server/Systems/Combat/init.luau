@@ -289,7 +289,9 @@ end
 
 -- Decides what a hit does to `victim`. The heart of the combat rules.
 -- `spec` = what the hit does (an M1 or a kit move, see State.HitSpec).
-local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitSpec)
+-- Returns true if the hit LANDED on the body (not dodged, parried, blocked,
+-- protected or on someone already knocked out).
+local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitSpec): boolean
 	local time = now()
 	local zone = spec.zone
 	-- Which side of the victim the blow arrives from (picks the reaction).
@@ -314,17 +316,17 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 
 	-- 0. On the ground (finish them instead), or just spawned (protected).
 	if Knockout.isKnockedOut(victim.model) then
-		return
+		return false
 	end
 	if Knockout.isProtected(victim.model) then
 		event("Protected", false, false)
-		return
+		return false
 	end
 
 	-- 1. Dash dodge frames: the hit misses.
 	if time < victim.invulnerableUntil then
 		event("Dodged", false, false)
-		return
+		return false
 	end
 
 	if victim.blocking and isInFront(victim, attacker) then
@@ -332,7 +334,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
 			stun(attacker, C.PARRY_STUN)
 			event("Parried", false, false)
-			return
+			return false
 		end
 
 		if spec.unblockable then
@@ -345,7 +347,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 				Stamina.drain(victimPlayer, Config.Stamina.MAX) -- empty the bar
 				stun(victim, C.GUARD_BREAK_STUN)
 				event("GuardBreak", false, true)
-				return
+				return false
 			end
 			dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
 			-- The guard absorbs the hit but is still shoved back a little.
@@ -357,7 +359,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 				)
 			end
 			event("Blocked", false, true)
-			return
+			return false
 		end
 	end
 
@@ -366,7 +368,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	if Knockout.isKnockedOut(victim.model) then
 		-- That hit knocked them out: no stun or knockback on a limp body.
 		event(spec.kind, true, true)
-		return
+		return true
 	end
 
 	-- Lasting effects (even through the Awakening's armor).
@@ -399,7 +401,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
 		event(spec.kind, true, true)
-		return
+		return true
 	end
 
 	local away = awayFromAttacker(attacker, victim)
@@ -427,6 +429,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		end
 	end
 	event(spec.kind, true, true)
+	return true
 end
 
 ------------------------------------------------------------------------------
@@ -825,7 +828,7 @@ local function onDash(player: Player, animation: unknown)
 	end
 end
 
-local function onUseMove(player: Player, slot: unknown, aim: unknown)
+local function onUseMove(player: Player, slot: unknown, aim: unknown, requestId: unknown)
 	local character = player.Character
 	if character == nil or not moveLimiter.allow(player) then
 		return
@@ -840,7 +843,15 @@ local function onUseMove(player: Player, slot: unknown, aim: unknown)
 	end
 	local direction = AimRule.validate(aim, state.root.CFrame.LookVector)
 	if not Moves.use(state, slot, direction) then
-		Remotes.MoveRefused:FireClient(player, slot)
+		-- Echo the client's number for this request (only sent back, never
+		-- trusted): it undoes THAT move, not a newer one.
+		local id = if typeof(requestId) == "number"
+				and requestId == requestId
+				and requestId % 1 == 0
+				and math.abs(requestId) < 2 ^ 31
+			then requestId
+			else nil
+		Remotes.MoveRefused:FireClient(player, slot, id)
 	end
 end
 

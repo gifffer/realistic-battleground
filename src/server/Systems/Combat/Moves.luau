@@ -54,7 +54,7 @@ export type Context = {
 	isBusy: (state: CombatState) -> boolean,
 	isAwakened: (state: CombatState) -> boolean,
 	setAttribute: (model: Model, name: string, value: any) -> (),
-	resolveHit: (attacker: CombatState, victim: CombatState, spec: HitSpec) -> (),
+	resolveHit: (attacker: CombatState, victim: CombatState, spec: HitSpec) -> boolean,
 	aimZone: (attacker: CombatState, victim: Model, direction: Vector3) -> Types.HitZone?,
 	landingZone: (
 		requested: Types.HitZone,
@@ -126,7 +126,8 @@ local function zoneFor(
 end
 
 -- Checks the hitbox of `hit` in front of the attacker and resolves it on
--- everyone inside. Returns the fighters it reached.
+-- everyone inside. Returns the fighters it really LANDED on (not the ones
+-- who dodged, parried, blocked, were protected or already knocked out).
 local function strike(
 	state: CombatState,
 	hit: Kits.HitDef,
@@ -140,11 +141,13 @@ local function strike(
 	local reached = {}
 	for _, victimModel in victims do
 		local victim = c.getState(victimModel)
-		if victim and c.isAlive(victim) then
+		-- (A knocked-out body on the floor is not a target: walk over it.)
+		if victim and c.isAlive(victim) and not Knockout.isKnockedOut(victimModel) then
 			local zone: Types.HitZone =
 				zoneFor(state, hit, victimModel, partsByModel[victimModel], aim)
-			c.resolveHit(state, victim, specFor(hit, zone, moveId))
-			table.insert(reached, victim)
+			if c.resolveHit(state, victim, specFor(hit, zone, moveId)) then
+				table.insert(reached, victim)
+			end
 		end
 	end
 	return reached
@@ -158,8 +161,17 @@ local function followUp(state: CombatState, move: Kits.MoveDef, victim: CombatSt
 	if follow == nil then
 		return
 	end
+	-- Only on someone the tackle really put on the ground.
+	local function victimDown(): boolean
+		return c.isAlive(victim)
+			and c.now() < victim.knockedDownUntil
+			and not Knockout.isKnockedOut(victim.model)
+	end
+	if not victimDown() then
+		return
+	end
 	task.delay(follow.delay, function()
-		if state.attackToken ~= token or not c.isAlive(state) or not c.isAlive(victim) then
+		if state.attackToken ~= token or not c.isAlive(state) or not victimDown() then
 			return
 		end
 		local time = c.now()
@@ -170,7 +182,7 @@ local function followUp(state: CombatState, move: Kits.MoveDef, victim: CombatSt
 		state.nextAttackAt = math.max(state.nextAttackAt, time + busy)
 		Remotes.CombatAction:FireAllClients(state.model, follow.animation)
 		task.delay(follow.at, function()
-			if state.attackToken ~= token or not c.isAlive(state) or not c.isAlive(victim) then
+			if state.attackToken ~= token or not c.isAlive(state) or not victimDown() then
 				return
 			end
 			local distance = (victim.root.Position - state.root.Position).Magnitude
@@ -301,7 +313,7 @@ function Moves.awaken(state: CombatState): boolean
 	c.setAttribute(state.model, "Awakened", true)
 	c.setAttribute(state.model, "AwakenedUntil", serverTime(awakening.duration))
 	-- The activation is a short animation: no attacking during it.
-	local activation = 1.0
+	local activation = KC.AWAKEN_TIME
 	state.combo = 0
 	state.nextAttackAt = time + activation
 	state.attackingUntil = time + activation
