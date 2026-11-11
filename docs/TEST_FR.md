@@ -167,3 +167,13 @@ réticule : **tête** ou **corps**.
 À 2 joueurs : les deux écrans doivent montrer **la même** réaction (le côté est décidé par le serveur).
 Aucune ligne rouge ni jaune ne doit apparaître dans l'Output. Un avertissement jaune
 `no clip named "..."` signale une animation demandée qui n'existe pas : envoie-le-moi.
+
+## Marche et course réalistes (`feature/realistic-locomotion`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L1 | Marcher (sans Shift), filmer **de côté** | 4 temps par pas : jambes écartées (contact), le corps descend (down), la jambe passe sous le corps pied levé (pass), le corps remonte jambe tendue (up). La tête ondule légèrement. Bras le long du corps qui se balancent à l'opposé des jambes. |
+| L2 | Courir (Shift) | Foulées plus longues, talon qui remonte derrière, genou devant, un instant les deux pieds en l'air, torse penché, bras qui battent. |
+| L3 | Passer de marche à course et inversement | Transition douce, pas de clignotement entre les deux. |
+| L4 | Sauter en marchant | L'animation de saut de Roblox (pas de marche dans les airs). |
+| L5 | Vitesse | Marche plus lente qu'avant (10), sprint 22 : réglable dans `src/shared/Config.luau` (`WALK_SPEED`, `SPRINT_SPEED`). |
