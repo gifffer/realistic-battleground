@@ -189,7 +189,8 @@ local function compose(entry: Tracked)
 		end
 		if sprint > 0 and sampled[joint] then
 			local lean = R6Pose.toTransform(motor, sampled[joint])
-			result = result * CFrame.identity:Lerp(lean, sprint)
+			-- Partial lean: blend from "no rotation" (CFrame.new()) to the full lean.
+			result = result * CFrame.new():Lerp(lean, sprint)
 			touched = true
 		end
 
