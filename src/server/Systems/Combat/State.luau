@@ -44,6 +44,13 @@ export type CombatState = {
 	slowMultiplier: number, -- ...by this much
 	knockdownToken: number, -- +1 cancels the pending get-up of a knockdown
 	knockedDownUntil: number, -- on the ground after a tackle / launch
+
+	-- Injuries (step 5), cleared by a kill or a new life.
+	legDamage: number, -- damage taken on the legs
+	limping: boolean, -- legDamage reached Config.Injuries.LIMP_LEG_DAMAGE
+	wounds: { [string]: number }, -- body part name → visible marks on it
+	lastDamagedAt: number, -- for the out-of-combat regeneration
+	regenCarry: number, -- fraction of HP regenerated, not given yet
 }
 
 -- What one hit does. An M1 builds one, every kit move hit builds one

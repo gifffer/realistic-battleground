@@ -95,6 +95,29 @@ function SoundController.play(name: string, model: Model?)
 	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
 end
 
+-- A looping sound heard only by this player, not placed in the world (the
+-- heartbeat when you're hurt...). Returns it stopped, volume from Sounds;
+-- nil if the sound has no id yet. The caller plays / stops / fades it.
+function SoundController.loop(name: string): Sound?
+	local info = Sounds[name]
+	if info == nil then
+		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
+		return nil
+	end
+	local ids = resolveIds(name)
+	if #ids == 0 then
+		return nil
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = name
+	sound.SoundId = assetUrl(ids[1])
+	sound.Volume = info.volume
+	sound.PlaybackSpeed = info.pitch
+	sound.Looped = true
+	sound.Parent = game:GetService("SoundService")
+	return sound
+end
+
 -- Downloads every sound in the background at startup.
 local function preloadAll()
 	local urls: { any } = {}

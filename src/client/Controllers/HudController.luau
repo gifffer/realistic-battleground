@@ -10,7 +10,7 @@
 --   drains away a moment later; the number flashes red.
 -- • Low health (≤ 30): the bar and the number stay red.
 -- • Out of stamina: the stamina line turns red and pulses, its label reads
---   WINDED. While blocking it reads GUARD.
+--   WINDED. While blocking it reads GUARD, while limping LIMPING.
 -- • Full health and stamina for a few seconds: the whole block fades back,
 --   any change brings it back.
 -- • Bleeding (a bottle cut...): the label reads BLEEDING, the part of
@@ -376,8 +376,15 @@ local function refreshStamina()
 		Theme.tween(stFill, 0.15, { BackgroundColor3 = C.Ink2 })
 		stLabel.TextColor3 = C.Ink2
 	end
-	stLabel.Text =
-		Theme.track(if exhausted then "WINDED" elseif blocking then "GUARD" else "STAMINA", "three")
+	local limping = character ~= nil and character:GetAttribute("Limping") == true
+	stLabel.Text = Theme.track(
+		if exhausted
+			then "WINDED"
+			elseif blocking then "GUARD"
+			elseif limping then "LIMPING" -- legs injured: slower, no sprint
+			else "STAMINA",
+		"three"
+	)
 end
 
 -- Fades the block back after a while at full health and stamina.
@@ -444,6 +451,10 @@ local function onCharacterAdded(character: Model)
 	table.insert(
 		humanoidConnections,
 		character:GetAttributeChangedSignal("Blocking"):Connect(refreshStamina)
+	)
+	table.insert(
+		humanoidConnections,
+		character:GetAttributeChangedSignal("Limping"):Connect(refreshStamina)
 	)
 	table.insert(
 		humanoidConnections,

@@ -55,6 +55,11 @@ local FADE_IN: { [string]: number } = {
 	Block = 0.08,
 	Stunned = 0.12,
 	Guard = 0.12,
+	-- Injuries: the tired posture settles in slowly.
+	HurtGuard = 0.3,
+	HurtIdle = 0.4,
+	LimpWalk = 0.2,
+	LimpIdle = 0.3,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
@@ -212,7 +217,14 @@ local function movementState(entry: Tracked): string?
 end
 
 -- Movement clip for this state ("Crouch" splits into idle / walk), nil = none.
+-- A limping fighter (legs injured) walks and stands on its good leg.
 local function movementClip(entry: Tracked, state: string?): string?
+	if (state == nil or state == "Walk") and entry.model:GetAttribute("Limping") == true then
+		local current = entry.movement[#entry.movement]
+		local walking = current ~= nil and current.target == 1 and current.name == "LimpWalk"
+		local threshold = if walking then CROUCH_WALK_STOP else CROUCH_WALK_START
+		return if horizontalSpeed(entry.root) > threshold then "LimpWalk" else "LimpIdle"
+	end
 	if state == "Crouch" then
 		local current = entry.movement[#entry.movement]
 		local walking = current ~= nil and current.target == 1 and current.name == "CrouchWalk"
@@ -243,15 +255,25 @@ local function stanceClip(entry: Tracked, state: string?): string?
 	if model:GetAttribute("Blocking") == true or (isLocal(entry) and predictedBlock) then
 		return "Block"
 	end
+	-- Low health (step 5): a tired, lower guard in a fight, a hunched,
+	-- hurting posture otherwise.
+	local health = entry.humanoid.Health
+	local hurt = health > 0
+		and health < Config.Injuries.LOW_HEALTH
+		and model:GetAttribute("KnockedOut") ~= true
 	if os.clock() < entry.combatUntil then
-		return "Guard" -- still in a fight: fists up
+		-- Still in a fight: fists up.
+		return if hurt then "HurtGuard" else "Guard"
 	end
-	return nil
+	return if hurt then "HurtIdle" else nil
 end
 
 -- Playback speed of a clip.
 local function playbackRate(entry: Tracked, name: string): number
-	if name == "CrouchWalk" then
+	if name == "LimpWalk" then
+		-- Authored for 12 studs/s (walking speed × the limp's slowdown).
+		return math.clamp(horizontalSpeed(entry.root) / 12, 0.6, 1.6)
+	elseif name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
 	elseif name == "Vault" then

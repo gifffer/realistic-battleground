@@ -111,6 +111,11 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "HeavySwing",
 	},
 
+	-- Injuries (step 5) -----------------------------------------------------
+	-- Loops heard only by you while your health is low.
+	Heartbeat = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0 },
+	Breathing = { ids = {}, volume = 0.45, pitch = 1, pitchVariation = 0 },
+
 	-- Movement -------------------------------------------------------------
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
 	Vault = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },

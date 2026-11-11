@@ -44,6 +44,7 @@ local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
@@ -195,6 +196,7 @@ local function onCombatantAdded(instance: Instance)
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
 	KitEffects.watch(model) -- bleeding drips, Street Fury
+	Wounds.watch(model) -- bruises and cuts where they were hit
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
 	end)
