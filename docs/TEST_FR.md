@@ -222,7 +222,6 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 | B5 | Descendre **sous 25 PV** | Bords de l'écran qui s'assombrissent et **respirent**, image un peu floue et moins colorée ; plus tu es bas, plus c'est fort. Ton perso est **voûté** (main sur les côtes) hors combat, **garde basse et fatiguée** en combat — les autres le voient. |
 | B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
 | B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
-
 | B8 | Se faire frapper **à 70 PV ou moins** | Le perso pousse un **cri de douleur** (3 sons au hasard), entendu par tout le monde. |
 
 Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seulement toi).
