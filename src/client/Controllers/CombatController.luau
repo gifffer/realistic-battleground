@@ -252,6 +252,41 @@ function CombatController.onServerAction(action: string)
 	end
 end
 
+-- For KitController (keys 1–4): can we start a move right now? Same rules
+-- as an M1 (not blocking, not stunned, not sliding, not mid-attack).
+function CombatController.canStartMove(): boolean
+	local character = getCharacterParts()
+	return character ~= nil
+		and not blocking
+		and not isStunned(character)
+		and not isBusyMoving()
+		and os.clock() >= nextAttackAt
+end
+
+-- A move started (KitController): no M1 / other move until it's over, and
+-- the next M1 starts a new combo.
+function CombatController.holdAttacks(seconds: number)
+	local time = os.clock()
+	nextAttackAt = math.max(nextAttackAt, time + seconds)
+	lastAttackAt = time
+	combo = 0
+end
+
+-- Our move was refused by the server: we can attack again right away.
+function CombatController.releaseAttacks()
+	nextAttackAt = os.clock()
+end
+
+-- One of OUR kit moves just landed on someone (CombatEffectsController
+-- tells us; KitController listens, e.g. to brake a tackle on contact).
+local moveLanded = Signal.new() :: Signal.Signal<string>
+function CombatController.notifyMoveLanded(moveId: string)
+	moveLanded.fire(moveId)
+end
+function CombatController.onMoveLanded(callback: (string) -> ()): Signal.Connection
+	return moveLanded.connect(callback)
+end
+
 -- Calls `callback` each time one of our M1 starts (see AttackInfo).
 function CombatController.onAttackStarted(callback: (AttackInfo) -> ()): Signal.Connection
 	return attackStarted.connect(callback)

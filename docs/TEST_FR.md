@@ -167,3 +167,46 @@ réticule : **tête** ou **corps**.
 À 2 joueurs : les deux écrans doivent montrer **la même** réaction (le côté est décidé par le serveur).
 Aucune ligne rouge ni jaune ne doit apparaître dans l'Output. Un avertissement jaune
 `no clip named "..."` signale une animation demandée qui n'existe pas : envoie-le-moi.
+
+## Étape 4 — Kits : Street Brawler (`feature/kits-street-brawler`)
+
+Teste sur le **Dummy gris** (il ne bouge pas) et l'**Attacking Dummy** rouge (il frappe).
+Les touches **1 2 3 4** lancent les attaques du kit, **G** l'Awakening quand la jauge est pleine.
+
+### Attaques
+| # | Test | Résultat attendu |
+|---|---|---|
+| K1 | **1 — Bottle Smash** sur le Dummy | Une **bouteille** apparaît dans la main droite, levée au-dessus de l'épaule, fracassée sur la tête : **éclats de verre**, il ne reste que le goulot. Le Dummy **saigne** (gouttes depuis la tête, petites taches au sol qui s'effacent) pendant 4 s. |
+| K2 | **2 — Headbutt** | Mains au col, recul, coup de tête. Le Dummy reste **étourdi ~1 s**. |
+| K3 | **3 — Tackle** | Tu fonces en avant, très bas. Le premier touché **tombe au sol** (ragdoll) puis se **relève** (~1,4 s). La charge s'arrête au contact. Passe à travers une garde (F). |
+| K4 | **4 — Dirty Kick** | Coup de pied bas dans le tibia : la jambe du Dummy **plie** ; un joueur touché est **ralenti** 3 s. |
+| K5 | Rappuyer tout de suite sur la même touche | Rien ne part : la ligne du move est **grisée** avec les secondes restantes, le chiffre **clignote rouge**. |
+| K6 | Endurance trop basse | Le move indique **LOW STAMINA** et ne part pas. |
+| K7 | À 2 joueurs : l'autre garde (F) | Les moves peuvent être **parés** (tu es étourdi) ou **bloqués** (sauf la Tackle, qui passe à travers). |
+
+### Street Fury (Awakening)
+| # | Test | Résultat attendu |
+|---|---|---|
+| A1 | Frapper (M1 et moves) | La jauge **STREET FURY** (en bas à droite) se remplit (%). Prendre des coups la remplit un peu aussi. |
+| A2 | Jauge pleine | Le pourcentage laisse place à **[G] AWAKEN** qui pulse doucement. |
+| A3 | Appuyer sur **G** | Animation (nuque qui craque, épaules, garde plus basse). L'image perd un peu de couleur, bords **rouge sombre** sur les côtés, souffle visible, légère lueur rouge sur le perso. La ligne devient **rouge** et se vide en 10 s. |
+| A4 | Pendant Street Fury | Les 4 noms changent : **BROKEN BOTTLE** (2 entailles, gros saignement), **DOUBLE HEADBUTT** (attrape + 2 coups de tête), **TACKLE SLAM** (tackle puis frappe au sol), **KICK COMBO** (tibia puis visage : **projette** l'adversaire). Un trait rouge marque la barre. |
+| A5 | Se faire frapper pendant Street Fury | Tu perds de la vie mais tu **n'es pas interrompu** (pas d'étourdissement). |
+| A6 | Fin des 10 s | Les couleurs reviennent doucement sur les 2 dernières secondes, les noms reviennent. |
+
+### Saignement (toi)
+| # | Test | Résultat attendu |
+|---|---|---|
+| S1 | Se faire saigner (à 2 joueurs, Bottle Smash) | Le mot **BLEEDING** remplace HEALTH, la partie de la vie que le saignement va encore prendre est **rouge** au bout de la ligne et rétrécit à chaque tick ; le bord gauche de l'écran s'assombrit un peu à chaque tick. |
+
+### Menu Kits
+| # | Test | Résultat attendu |
+|---|---|---|
+| M1 | « — MENU » | La liste montre **01 KITS**, **02 SETTINGS** ; le menu s'ouvre sur KITS. |
+| M2 | KITS | À gauche **STREET BRAWLER** (EQUIPPED) et **BOXER** (NOT AVAILABLE YET). À droite : les 4 moves avec endurance, recharge et leur version Street Fury (petit tiret rouge), puis la ligne **G STREET FURY 10 s**. |
+| M3 | Cliquer BOXER | Sa fiche s'affiche (pas encore jouable, pas de bouton EQUIP). |
+| M4 | Cliquer une ligne de la barre de moves (curseur libre : Ctrl gauche) | Le move part, comme avec la touche. |
+
+Pas de son dédié encore pour la bouteille / coup de tête / tackle / tibia / Awakening : ils
+utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes IDs dans
+`src/shared/Sounds.luau` : **BottleBreak, Slash, Headbutt, Tackle, KickLow, Awaken**.

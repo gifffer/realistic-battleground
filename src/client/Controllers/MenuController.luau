@@ -16,6 +16,8 @@
 --       subtitle = "CAMERA · CONTROLS",
 --       order = 100,                  -- position in the list (small = top)
 --       build = function(content: Frame) ... end, -- fills the panel, once
+--       size = Vector2.new(560, 480), -- optional: a bigger panel (default 440 × 280)
+--       scrimWidth = 1100,            -- optional: a wider dark backdrop (default 900)
 --   })
 --
 -- While the menu is open the mouse cursor is free
@@ -33,6 +35,9 @@ local player = Players.LocalPlayer
 local C = Theme.Colors
 
 local ITEM_HEIGHT = 34
+local DEFAULT_SIZE = Vector2.new(440, 280)
+local DEFAULT_SCRIM_WIDTH = 900
+local PANEL_TOP = 168
 local OPEN_TIME = 0.25
 local CLOSE_TIME = 0.15
 
@@ -42,6 +47,8 @@ export type MenuEntry = {
 	subtitle: string?,
 	order: number,
 	build: (content: Frame) -> (),
+	size: Vector2?,
+	scrimWidth: number?,
 }
 
 type EntryUi = {
@@ -61,6 +68,8 @@ local fadeToken = 0
 local nav: Frame
 local marker: Frame
 local panels: Frame
+local scrimFrame: Frame
+local closeButton: TextButton
 local blur: BlurEffect
 local grade: ColorCorrectionEffect
 local entries: { [string]: EntryUi } = {}
@@ -288,6 +297,21 @@ function MenuController.open(id: string)
 			)
 		end)
 	end
+	-- This section's size: the panel, the backdrop and the CLOSE button follow.
+	local size = ui.entry.size or DEFAULT_SIZE
+	panels.Size = UDim2.fromOffset(size.X, size.Y)
+	closeButton.Position = UDim2.fromOffset(300, PANEL_TOP + size.Y + 12)
+	local scrimWidth = ui.entry.scrimWidth or DEFAULT_SCRIM_WIDTH
+	if wasClosed then
+		scrimFrame.Size = UDim2.new(0, scrimWidth, 1, 0)
+	else
+		Theme.tween(
+			scrimFrame,
+			0.2,
+			{ Size = UDim2.new(0, scrimWidth, 1, 0) },
+			Enum.EasingStyle.Quart
+		)
+	end
 	(ui.panel :: Frame).Visible = true
 	-- Wait a frame so the item has its position before moving the marker.
 	task.defer(setItemActive, ui, true)
@@ -449,13 +473,14 @@ function MenuController.init()
 		Parent = openLayer,
 	})
 
-	local close = lineButton("CLOSE", {
+	closeButton = lineButton("CLOSE", {
 		Name = "Close",
-		Position = UDim2.fromOffset(300, 460),
+		Position = UDim2.fromOffset(300, PANEL_TOP + DEFAULT_SIZE.Y + 12),
 		Size = UDim2.fromOffset(120, 16),
 		Parent = openLayer,
 	})
-	close.Activated:Connect(MenuController.close)
+	closeButton.Activated:Connect(MenuController.close)
+	scrimFrame = openLayer:FindFirstChild("Scrim") :: Frame
 
 	-- World effects, local to this player (they live in Lighting on the client).
 	blur = Theme.make("BlurEffect", { Name = "MenuBlur", Size = 0, Parent = Lighting })

@@ -43,6 +43,7 @@ local CharacterAnimationController = require(script.Parent.CharacterAnimationCon
 local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
+local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
@@ -193,6 +194,7 @@ local function onCombatantAdded(instance: Instance)
 
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
+	KitEffects.watch(model) -- bleeding drips, Street Fury
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
 	end)
@@ -352,6 +354,9 @@ local function chooseReaction(
 ): string
 	if strong then
 		return if side == "Back" then "HitBack" else "HitHeavy"
+	end
+	if zone == "Legs" then
+		return "HitLeg" -- kicked in the shin: the leg buckles
 	end
 	if zone == "Head" then
 		if side == "Front" then
@@ -553,7 +558,8 @@ local function onCombatEvent(
 	attacker: Model,
 	zoneArg: unknown,
 	sideArg: unknown,
-	attackIdArg: unknown
+	attackIdArg: unknown,
+	moveIdArg: unknown
 )
 	if typeof(victim) ~= "Instance" or typeof(attacker) ~= "Instance" then
 		return -- a model that doesn't exist on this client (streamed out...)
@@ -570,9 +576,12 @@ local function onCombatEvent(
 		CharacterAnimationController.clearHitStop(attacker)
 	end
 
+	-- A kit move (Bottle Smash...) rather than an M1.
+	local moveId: string? = if typeof(moveIdArg) == "string" then moveIdArg else nil
+
 	if kind == "Hit" or kind == "Finisher" then
 		flick(victim)
-		local strong = kind == "Finisher"
+		local strong = kind == "Finisher" or (moveId ~= nil and KitEffects.isHeavy(moveId))
 		local zone: Types.HitZone = resolveZone(zoneArg)
 		local side: Types.HitSide = resolveSide(sideArg, victim, attacker)
 		-- Already shown exactly like this by our prediction? Otherwise the
@@ -588,7 +597,14 @@ local function onCombatEvent(
 			headBlur()
 		end
 
-		SoundController.play(if strong then "HeavyHit" else "Hit", victim)
+		if moveId then
+			KitEffects.onHit(victim, attacker, moveId, zone)
+			if iAmAttacker then
+				CombatController.notifyMoveLanded(moveId)
+			end
+		else
+			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
+		end
 		if iAmVictim then
 			drainColour()
 			shake(if strong then 1.6 else 0.8, if strong then 0.25 else 0.15)
@@ -640,13 +656,18 @@ end
 
 -- Server actions that are NOT predicted by our own client (we must play
 -- them on our character too): getting up after a KO.
-local SERVER_ONLY_ACTIONS = table.freeze({ GetUp = true })
+-- (Street Fury's activation is never predicted: only the server knows the gauge.)
+local SERVER_ONLY_ACTIONS = table.freeze({ GetUp = true, Brawler_Awaken = true })
 
 -- A fighter started a punch, a dash, a finisher, or got up after a KO.
 -- (Our own punches / dashes / finishers already played locally.)
 local function onCombatAction(model: Model, action: string)
 	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
 		return
+	end
+	if model == player.Character and action == "Brawler_Awaken" then
+		-- Our Street Fury starts: no attack during the activation (as on the server).
+		CombatController.holdAttacks(Config.Kits.AWAKEN_TIME)
 	end
 	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
 		-- Ours: already played when we clicked, unless the server disagreed.
@@ -659,6 +680,8 @@ local function onCombatAction(model: Model, action: string)
 	CharacterAnimationController.playAction(model, action)
 	if action == "GetUp" then
 		return
+	elseif KitEffects.isMoveAnimation(action) then
+		KitEffects.onAction(model, action) -- prop in hand + its own sound
 	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model) -- the heavy blows
 	elseif string.sub(action, 1, 4) == "Dash" then

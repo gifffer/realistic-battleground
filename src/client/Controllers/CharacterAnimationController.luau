@@ -85,6 +85,7 @@ local REACTIONS = table.freeze({
 	HitBodyRight = true,
 	HitHeavy = true,
 	HitBack = true,
+	HitLeg = true,
 	GetUp = true,
 })
 local ACTION_FADE_OUT = 0.12
@@ -516,6 +517,21 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	table.insert(entry.action, newLayer(name, clip, fadeIn, ACTION_FADE_OUT))
 	entry.lastAction = name
 	entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
+end
+
+-- Stops the action `name` on `model` (our move, refused by the server).
+-- Anything else playing (a hit reaction that came meanwhile) is kept.
+function CharacterAnimationController.stopAction(model: Model, name: string)
+	local entry = tracked[model]
+	if entry == nil then
+		return
+	end
+	for _, layer in entry.action do
+		if layer.name == name then
+			layer.target = 0
+			layer.fadeOut = ACTION_FADE_OUT
+		end
+	end
 end
 
 -- The last one-shot clip played on `model` (e.g. which punch it just threw),

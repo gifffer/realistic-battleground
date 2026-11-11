@@ -65,6 +65,52 @@ local sounds: { [string]: SoundInfo } = {
 	Dash = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },
 	Dodge = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 }, -- hit dodged by a dash
 
+	-- Kits (Street Brawler) -----------------------------------------------
+	-- Until they have their own ids, each one borrows a combat sound with
+	-- its own pitch (so it still sounds different).
+	BottleBreak = { -- glass shattering on a head
+		ids = { 94487606893742 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.06,
+		fallback = "Hit",
+	},
+	Slash = { -- the broken bottle cutting the air
+		ids = {},
+		volume = 0.55,
+		pitch = 1.3,
+		pitchVariation = 0.08,
+		fallback = "Swing",
+	},
+	Headbutt = { -- skull on skull, dull and heavy
+		ids = {},
+		volume = 0.9,
+		pitch = 0.7,
+		pitchVariation = 0.05,
+		fallback = "Hit",
+	},
+	Tackle = { -- a body slammed into another
+		ids = {},
+		volume = 1,
+		pitch = 0.65,
+		pitchVariation = 0.05,
+		fallback = "Hit",
+	},
+	KickLow = { -- a shin kick lands
+		ids = {},
+		volume = 0.75,
+		pitch = 0.9,
+		pitchVariation = 0.08,
+		fallback = "Hit",
+	},
+	Awaken = { -- Street Fury starts (a neck crack, a low growl...)
+		ids = { 101404702795772 },
+		volume = 0.8,
+		pitch = 1,
+		pitchVariation = 0.03,
+		fallback = "HeavySwing",
+	},
+
 	-- Movement -------------------------------------------------------------
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
 	Vault = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },
