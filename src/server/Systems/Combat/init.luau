@@ -599,15 +599,17 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	end
 	local time = now()
 	local K = Config.Knockout
-	state.nextAttackAt = time + K.FINISH_DURATION
-	state.finishingUntil = time + K.FINISH_DURATION
-	state.attackingUntil = time + K.FINISH_DURATION
+	-- Each kit can have its own finisher (the Street Brawler stomps).
+	local finisher = Kits.finisher(state.kitId)
+	state.nextAttackAt = time + finisher.duration
+	state.finishingUntil = time + finisher.duration
+	state.attackingUntil = time + finisher.duration
 	state.combo = 0
 	state.attackToken += 1
 	local token = state.attackToken
-	Remotes.CombatAction:FireAllClients(state.model, "Finisher")
+	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
 
-	task.delay(K.FINISH_IMPACT, function()
+	task.delay(finisher.impact, function()
 		local targetRoot = target:FindFirstChild("HumanoidRootPart")
 		local stillThere = targetRoot ~= nil
 			and targetRoot:IsA("BasePart")

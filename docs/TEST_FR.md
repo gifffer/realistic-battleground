@@ -252,3 +252,5 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | X5 | Remplir la jauge, **G** | **KNOCKOUT MODE** : le boxeur sautille, touche ses gants, garde plus serrée. Mêmes effets d'écran que Street Fury. |
 | X6 | Pendant Knockout Mode | 1 = **JAB FLURRY** (6 coups, dont un direct du droit), 2 = **RISING UPPERCUT** (décolle plus haut), 3 = **SLIP & HOOK** (fenêtre plus longue, contre plus fort), 4 = **KNOCKOUT COMBO** : corps, tête, tête, gros uppercut — si le 1ᵉʳ coup touche, les suivants ne ratent pas, le dernier met au sol. |
 | X7 | Menu KITS | « 2 OF 2 AVAILABLE », Boxer **EQUIPPED** une fois choisi, le choix reste au prochain lancement. |
+| X8 | Kit **Street Brawler**, adversaire KO devant toi, clic gauche | Finisher propre au kit : **écrasement du pied** sur la tête, rapide (~0,75 s, coup à 0,3 s). Le Boxer garde le finisher normal (genou au sol). |
+| X9 | Touche **W** (AZERTY) / **Z** (QWERTY) | Bascule **1ʳᵉ ↔ 3ᵉ personne**, le choix est sauvegardé (même réglage que dans SETTINGS, où la touche est rappelée). |

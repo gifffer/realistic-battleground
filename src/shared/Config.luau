@@ -52,6 +52,10 @@ return table.freeze({
 		-- Attack = left mouse button (hold to keep attacking).
 		BLOCK = Enum.KeyCode.F, -- hold; press right before a hit = parry
 		DASH = Enum.KeyCode.Q,
+		-- Switch first / third person. Roblox key codes follow the key's
+		-- POSITION (US layout): KeyCode.Z is the key left of X, labelled
+		-- W on an AZERTY keyboard and Z on a QWERTY one.
+		CAMERA_TOGGLE = Enum.KeyCode.Z,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,

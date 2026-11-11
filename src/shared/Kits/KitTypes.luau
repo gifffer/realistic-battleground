@@ -51,6 +51,14 @@ export type MoveDef = {
 	chain: boolean?,
 }
 
+-- The kit's own way to finish a knocked-out opponent (M1 on them). Kits
+-- without one use the default finisher (Config.Knockout).
+export type FinisherDef = {
+	animation: string,
+	impact: number, -- seconds from the click to the killing blow
+	duration: number, -- can't do anything else until then
+}
+
 export type AwakeningDef = {
 	name: string,
 	description: string,
@@ -68,6 +76,7 @@ export type KitDef = {
 	available: boolean, -- false = shown as "coming soon", can't be equipped
 	moves: { MoveDef },
 	awakening: AwakeningDef?,
+	finisher: FinisherDef?,
 }
 
 return nil

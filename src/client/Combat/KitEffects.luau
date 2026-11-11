@@ -116,6 +116,7 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
+	Brawler_FinisherStomp = "HeavySwing",
 }
 
 function KitEffects.isMoveAnimation(animation: string): boolean

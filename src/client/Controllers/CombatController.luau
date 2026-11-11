@@ -21,6 +21,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
@@ -119,6 +120,12 @@ local function findFinishTarget(root: BasePart): Model?
 	return nil
 end
 
+-- Our kit's finisher (the Street Brawler stomps, others kneel and strike).
+local function myFinisher(character: Model): Kits.FinisherDef
+	local kitId = character:GetAttribute("Kit")
+	return Kits.finisher(if typeof(kitId) == "string" then kitId else nil)
+end
+
 local function tryAttack()
 	local character, _, root = getCharacterParts()
 	local time = os.clock()
@@ -135,11 +142,12 @@ local function tryAttack()
 
 	-- Opponent down in front of us: finish them (the server confirms).
 	if findFinishTarget(root) then
+		local finisher = myFinisher(character)
 		predictedFinisherAt = time
 		combo = 0
-		nextAttackAt = time + K.FINISH_DURATION
+		nextAttackAt = time + finisher.duration
 		lastAttackAt = time
-		CharacterAnimationController.playAction(character, "Finisher")
+		CharacterAnimationController.playAction(character, finisher.animation)
 		SoundController.play("HeavySwing", character)
 		KnockoutController.onFinishStarted()
 		Remotes.Attack:FireServer(AimController.getAimDirection())
@@ -238,11 +246,12 @@ function CombatController.onServerAction(action: string)
 	end
 	local time = os.clock()
 	local predictedFinisher = time - predictedFinisherAt <= RECONCILE_WINDOW
-	if action == "Finisher" and not predictedFinisher then
+	local finisher = myFinisher(character)
+	if action == finisher.animation and not predictedFinisher then
 		-- The server finished someone we didn't see as finishable: show it.
-		CharacterAnimationController.playAction(character, "Finisher")
+		CharacterAnimationController.playAction(character, finisher.animation)
 		combo = 0
-		nextAttackAt = math.max(nextAttackAt, time + K.FINISH_DURATION)
+		nextAttackAt = math.max(nextAttackAt, time + finisher.duration)
 	elseif string.sub(action, 1, 11) == "Brawler_M1_" and predictedFinisher then
 		-- We predicted a finisher but the server threw a normal punch.
 		predictedFinisherAt = -math.huge

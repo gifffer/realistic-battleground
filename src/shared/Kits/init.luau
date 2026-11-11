@@ -15,12 +15,14 @@
 --   Kits.list()                → every kit, in display order
 --   Kits.DEFAULT               → the kit everybody starts with
 
+local Config = require(script.Parent.Config)
 local KitTypes = require(script.KitTypes)
 
 export type HitDef = KitTypes.HitDef
 export type MoveDef = KitTypes.MoveDef
 export type AwakeningDef = KitTypes.AwakeningDef
 export type KitDef = KitTypes.KitDef
+export type FinisherDef = KitTypes.FinisherDef
 
 local Kits = {}
 
@@ -46,6 +48,19 @@ end
 
 function Kits.list(): { KitDef }
 	return ordered
+end
+
+-- How a fighter with kit `id` finishes a knocked-out opponent: the kit's
+-- own finisher, or the default one (kneel and strike, Config.Knockout).
+local DEFAULT_FINISHER: FinisherDef = table.freeze({
+	animation = "Finisher",
+	impact = Config.Knockout.FINISH_IMPACT,
+	duration = Config.Knockout.FINISH_DURATION,
+})
+
+function Kits.finisher(id: string?): FinisherDef
+	local kit = Kits.get(id)
+	return (if kit then kit.finisher else nil) or DEFAULT_FINISHER
 end
 
 -- The move in `slot` (1–4) of `kit`, the Awakening version if `awakened`.
