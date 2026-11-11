@@ -71,6 +71,18 @@ local FLINCH_TORSO_SHARE = 0.35
 local MAX_SPRING_STEP = 1 / 30
 -- One-shot actions: fast in (a punch must start NOW), smooth out.
 local ACTION_FADE_IN = 0.05
+-- Hit reactions start a bit softer: the body goes from a high guard to the
+-- reaction pose, too far to jump there in 3 frames without a visible pop.
+local REACTION_FADE_IN = 0.08
+local REACTIONS = table.freeze({
+	HitJab = true,
+	HitCross = true,
+	HitHook = true,
+	HitBody = true,
+	HitHeavy = true,
+	HitBack = true,
+	GetUp = true,
+})
 local ACTION_FADE_OUT = 0.12
 -- "Climb" and "Vault" clips are written with times from 0 to 1 and stretched
 -- to the real duration. For OTHER players we don't know the exact duration
@@ -395,6 +407,28 @@ local function onPreSimulation(dt: number)
 		if entry.humanoid.Health <= 0 or model.Parent == nil then
 			continue
 		end
+		-- Limp (knocked out): physics moves the body, not us. Forget what we
+		-- were playing so nothing resumes when it gets up (GetUp plays then).
+		if model:GetAttribute("Ragdolled") == true then
+			-- Give every joint we posed back its last Roblox pose first:
+			-- a pose left in Transform would stay stuck (the root joint
+			-- stays on during the ragdoll, and all of them after it).
+			for motor, written in entry.lastWritten do
+				if motor.Transform == written then
+					motor.Transform = entry.lastBase[motor] or CFrame.new()
+				end
+			end
+			entry.flinch = Vector3.zero
+			entry.flinchSpeed = Vector3.zero
+			entry.sprintWeight = 0
+			entry.freezeUntil = 0
+			table.clear(entry.movement)
+			table.clear(entry.stance)
+			table.clear(entry.action)
+			table.clear(entry.lastWritten)
+			table.clear(entry.lastBase)
+			continue
+		end
 		if (entry.root.Position - cameraPosition).Magnitude > MAX_DISTANCE then
 			continue
 		end
@@ -431,7 +465,8 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 		layer.target = 0
 		layer.fadeOut = ACTION_FADE_IN -- cut the old one fast
 	end
-	table.insert(entry.action, newLayer(name, clip, ACTION_FADE_IN, ACTION_FADE_OUT))
+	local fadeIn = if REACTIONS[name] then REACTION_FADE_IN else ACTION_FADE_IN
+	table.insert(entry.action, newLayer(name, clip, fadeIn, ACTION_FADE_OUT))
 	entry.lastAction = name
 	entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
 end

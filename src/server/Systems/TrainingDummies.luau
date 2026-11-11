@@ -67,7 +67,9 @@ local function findClosestPlayer(position: Vector3): BasePart?
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if humanoid and humanoid.Health > 0 and root and root:IsA("BasePart") then
+		-- A knocked-out player is left alone (training dummies never finish you).
+		local down = character ~= nil and character:GetAttribute("KnockedOut") == true
+		if humanoid and humanoid.Health > 0 and not down and root and root:IsA("BasePart") then
 			local distance = (root.Position - position).Magnitude
 			if distance < closestDistance then
 				closest = root
@@ -112,10 +114,13 @@ local function spawnDummy(kind: DummyKind, position: Vector3)
 	-- Brain: heal when left alone; the attacking one hits nearby players.
 	task.spawn(function()
 		while model.Parent and humanoid.Health > 0 do
-			if os.clock() - lastDamagedAt > HEAL_AFTER then
+			-- Knocked out: lies there (no healing, no attacking) until it
+			-- gets up or someone finishes it.
+			local knockedOut = model:GetAttribute("KnockedOut") == true
+			if not knockedOut and os.clock() - lastDamagedAt > HEAL_AFTER then
 				humanoid.Health = humanoid.MaxHealth
 			end
-			if isAttacker and model:GetAttribute("Stunned") ~= true then
+			if isAttacker and not knockedOut and model:GetAttribute("Stunned") ~= true then
 				local target = findClosestPlayer(root.Position)
 				if target then
 					face(root, target.Position)

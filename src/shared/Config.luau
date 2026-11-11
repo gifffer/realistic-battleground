@@ -145,11 +145,42 @@ return table.freeze({
 		SPEED_WHILE_ATTACKING = 0.7,
 		SPEED_WHILE_STUNNED = 0.3,
 
+		-- Hit zones (where the punch lands). The attacker AIMS (centre of the
+		-- screen on the head / torso of the opponent); the server checks that
+		-- this body part really is inside the hitbox.
+		ZONE_DAMAGE = table.freeze({ Head = 1.25, Torso = 1, Legs = 0.85 }),
+		-- Punches can land on the head or the torso (legs = kicks, later kits).
+		PUNCH_ZONES = table.freeze({ "Head", "Torso" }),
+		HEAD_EXTRA_STUN = 0.15, -- seconds added to the stun of a head hit
+		LEG_HIT_SLOW = 0.8, -- speed multiplier after a leg hit...
+		LEG_HIT_SLOW_TIME = 1.5, -- ...for this long
+
 		-- Studio only: shows hitboxes as red boxes, to check they're right.
 		DEBUG_HITBOXES = true,
 		-- Spawns training dummies near the spawn point (one passive, one that
 		-- attacks you, to practice blocking and parrying).
 		TRAINING_DUMMIES = true,
+	}),
+
+	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish
+	-- you (M1 on you while you're down); otherwise you get back up.
+	Knockout = table.freeze({
+		DURATION = 6, -- seconds on the ground
+		GETUP_HEALTH = 25, -- health when you get back up on your own
+		GETUP_STUN = 0.8, -- dazed for this long after getting up
+		-- Finishing: M1 near a KO'd fighter in front of you.
+		FINISH_RANGE = 6, -- studs between the two characters
+		FINISH_IMPACT = 0.45, -- seconds from the click to the killing blow
+		FINISH_DURATION = 1.1, -- the finisher animation; can't attack meanwhile
+		KILL_HEAL = 35, -- health given to the killer
+		RESPAWN_TIME = 5,
+		SPAWN_PROTECTION = 3, -- invulnerable after spawning (ends if you attack)
+		-- Hit by someone less than this long ago = "in combat": leaving the
+		-- game counts as a death and gives them the kill.
+		COMBAT_TAG_TIME = 10,
+		-- The kill feed (top right) keeps this many lines, each this long.
+		FEED_LINES = 5,
+		FEED_TIME = 6,
 	}),
 
 	Camera = table.freeze({

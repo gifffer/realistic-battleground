@@ -105,3 +105,39 @@ parer entre vous ; chaque joueur voit les contours bleus/jaunes **et les animati
 
 Si un test échoue : copie-moi les lignes rouges de l'Output et dis-moi le numéro du test
 (une vidéo marche très bien aussi).
+
+## Étape 3 — Dégâts & mort (`feature/damage-death`)
+
+Utilise le **Dummy** gris (passif) et l'**Attacking Dummy** rouge. Ils peuvent eux aussi être KO
+et achevés (l'Attacking Dummy ne t'achève jamais, il te laisse te relever).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| 1 | Regarder le centre de l'écran | Un petit **viseur à 4 branches** ; il devient **rouge** sur la tête d'un adversaire (chapeaux et cheveux comptent). |
+| 2 | Frapper le Dummy en visant la **tête** | Sa vie baisse plus (×1,25), il reste étourdi un peu plus longtemps. |
+| 3 | Viser le **torse** | Dégâts normaux ; il se **plie en avant** (coup au corps) au lieu de prendre la tête en arrière. |
+| 4 | Se faire frapper à la tête par l'Attacking Dummy | Ta vision est **floue** un court instant. |
+| 5 | Mettre le Dummy à 0 PV | Il tombe **mou au sol** (ragdoll), il ne meurt pas. |
+| 6 | Le laisser au sol 6 s | Il se **relève** (animation : un genou, une poussée ratée, debout), étourdi, avec 25 PV. |
+| 7 | Le mettre KO puis s'approcher devant lui | Une touche **[M1]** et **FINISH** apparaissent au-dessus de lui, avec une fine ligne qui montre le temps restant. |
+| 8 | Clic gauche | **Finisher** : tu poses un genou, poing levé, coup de marteau au sol ; il meurt. Le kill feed (en haut à droite) affiche « Toi FINISHED Dummy ». Tu gagnes **+35 PV**. |
+| 9 | Pendant ton finisher, l'Attacking Dummy te frappe | Le finisher est **annulé** ; quelqu'un peut encore l'achever. |
+| 10 | Te laisser mettre KO par l'Attacking Dummy | Image désaturée, bandes noires façon film, « YOU ARE DOWN / KNOCKED OUT », une ligne qui se vide (un repère par seconde), « DROPPED BY Attacking Dummy » en bas. Tu ne peux rien faire, puis tu te relèves avec 25 PV. |
+| 11 | Mourir (tomber de la map, ou te faire achever à 2 joueurs) | Réapparition après **5 s**, avec une **bulle** de protection 3 s. |
+| 12 | Frapper pendant ta protection | La bulle **disparaît** dès que tu attaques. |
+| 13 | Frapper un joueur protégé | « **PROTECTED** » : aucun dégât. |
+
+Test à 2 joueurs : met l'autre KO, achève-le → le kill feed s'affiche chez les deux, ton nom en
+orange ; ses **deaths** et tes **kills** augmentent (fenêtre Settings / sauvegarde). Si un joueur
+**quitte en plein combat** (touché il y a moins de 10 s), le kill feed affiche « X FLED » et le
+dernier qui l'a frappé gagne le kill.
+
+### Interface (nouveau style)
+| # | Test | Résultat attendu |
+|---|---|---|
+| U1 | En jeu | En bas à gauche : grand chiffre de vie + lignes fines (vie, endurance). Pas de boîtes arrondies. Après quelques secondes au maximum, le bloc s'estompe. |
+| U2 | Prendre un coup | La ligne de vie baisse, un petit morceau rouge s'efface juste après, le chiffre flashe rouge, l'image perd ses couleurs un instant. |
+| U3 | Courir jusqu'à 0 | La ligne d'endurance devient rouge et pulse, le texte dit **WINDED**. En garde (F) il dit **GUARD**. |
+| U4 | Parer / se faire briser la garde | Petit mot espacé à côté de l'épaule avec un trait (PARRY, GUARD BREAK en rouge si c'est ta garde). Plus de contours bleus/jaunes. |
+| U5 | Cliquer « — MENU » à gauche | Le monde se floute et se désature, liste « 01 SETTINGS », panneau avec grand titre, OFF / ON souligné, touche LEFT CTRL. « — CLOSE » referme. |
+| U6 | Kill feed | Lignes de texte simples en haut à droite sur un léger fond sombre, ton nom en gras blanc avec un petit trait, l'âge de la ligne à droite. |

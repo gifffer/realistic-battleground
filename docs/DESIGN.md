@@ -219,9 +219,9 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 1. ✅ **Base personnage** : R6, caméra 3ᵉ personne épaule, course + endurance, HUD vie/endurance,
    menu latéral (squelette) + fenêtre Settings (1ʳᵉ/3ᵉ personne).
 1 bis. ✅ **Mouvements** : accroupi, glissade, vault, mantle (+ animations en code).
-2. **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur,
-   animations de combat en code, sons. ← en cours
-3. **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV.
+2. ✅ **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur,
+   animations de combat en code, sons.
+3. **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV. ← en cours
 4. **Système de kits** + **Street Brawler** (4 attaques + Awakening).
 5. **Blessures** : saignement, boiterie, effets faible vie.
 6. **Boxer** + fenêtre **Kits** (choisir entre les deux kits de base).
@@ -233,6 +233,10 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 
 ## 12. Questions encore ouvertes
 - Nom/visuel des cosmétiques et prix exacts (étape 10).
-- KO : durée au sol, touche du finisher, PV au relevé (étape 3).
+- ~~KO : durée au sol, touche du finisher, PV au relevé~~ → **6 s au sol, achever = clic gauche
+  sur le joueur KO, relevé à 25 PV** (étape 3).
+- **Zones** : on vise avec le centre de l'écran (tête / torse) ; le serveur vérifie que la partie
+  visée est bien dans la hitbox. Les coups de poing touchent tête ou torse ; les jambes viendront
+  avec les coups de pied (kits, étape 4).
 - Awakening : durée, et les 4 attaques améliorées de chaque kit (étapes 4 et 6).
 - Ranked : ELO de départ, gains/pertes, récompenses de saison (étape 8).

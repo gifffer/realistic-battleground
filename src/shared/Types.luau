@@ -41,6 +41,23 @@ export type MoveAction = "Slide" | "Climb" | "Vault" | "Cancel"
 --   Hit        normal hit          Blocked     hit blocked (chip damage)
 --   Finisher   4th hit, knockback  GuardBreak  block broken (no stamina)
 --   Parried    perfect block       Dodged      hit during dash frames
-export type CombatEventKind = "Hit" | "Finisher" | "Blocked" | "GuardBreak" | "Parried" | "Dodged"
+--   Protected  the victim has spawn protection (nothing happens)
+export type CombatEventKind =
+	"Hit"
+	| "Finisher"
+	| "Blocked"
+	| "GuardBreak"
+	| "Parried"
+	| "Dodged"
+	| "Protected"
+
+-- Where a hit lands (Config.Combat.ZONE_DAMAGE).
+export type HitZone = "Head" | "Torso" | "Legs"
+
+-- A line of the kill feed (Remotes.KillFeed).
+--   Finished  killer finished a KO'd victim
+--   Fled      victim left the game in the middle of a fight (killer gets the kill)
+--   Died      no killer (fell off the map...)
+export type KillFeedKind = "Finished" | "Fled" | "Died"
 
 return nil
