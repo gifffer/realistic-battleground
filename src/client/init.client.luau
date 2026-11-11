@@ -1,5 +1,5 @@
 --!strict
--- doom-roblox client entry point.
+-- Realistic Battleground client entry point.
 
 local Controllers = script:FindFirstChild("Controllers")
 

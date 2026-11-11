@@ -49,4 +49,14 @@ return table.freeze({
 	-- client → server  ()
 	-- "Send me my save again" (the first push can arrive before the client listens).
 	RequestProfile = event("RequestProfile"),
+
+	-- client → server  (wantsToSprint: boolean)
+	-- "Shift pressed / released". The server decides if the player can
+	-- actually sprint (stamina) and sets their speed.
+	SetSprinting = event("SetSprinting"),
+
+	-- client → server  (name: string, value: any)
+	-- Change one setting from the Settings window. The server checks the name
+	-- and the type of the value (see Server/Systems/Settings).
+	UpdateSetting = event("UpdateSetting"),
 })

@@ -16,6 +16,11 @@
       }
     },
     "StarterPlayer": {
+      "$properties": {
+        "EnableMouseLockOption": false,
+        "CameraMinZoomDistance": 6,
+        "CameraMaxZoomDistance": 12
+      },
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"

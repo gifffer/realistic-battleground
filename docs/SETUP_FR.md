@@ -45,6 +45,15 @@ Sans lui, `rojo serve` affiche une erreur « ServerPackages » introuvable.
 - **Enable Studio Access to API Services** : ON → les sauvegardes marchent aussi pendant les tests dans Studio.
   Si c'est OFF, le jeu marche quand même mais rien n'est sauvegardé (message dans l'Output).
 
+### Avatar R6 (obligatoire)
+Le jeu est fait pour des personnages **R6**. Ce réglage appartient à la place (pas au code) :
+
+- Onglet *Avatar* → **Avatar Settings** → *Body* (ou *Rig*) → **Avatar Type : R6**
+  (sur les anciennes versions de Studio : *Home* → *Game Settings* → *Avatar* → **R6**).
+- Puis *File → Publish to Roblox* pour l'enregistrer.
+
+Si c'est oublié, l'Output affiche : `[Characters] Avatars are not R6...`
+
 
 ## 3. Travailler au quotidien
 
@@ -72,6 +81,10 @@ Sans lui, `rojo serve` affiche une erreur « ServerPackages » introuvable.
 git pull
 ```
 Rojo met Studio à jour automatiquement si `rojo serve` tourne.
+
+> Si `default.project.json` a changé (il apparaît dans la liste des fichiers modifiés du commit),
+> **arrête `rojo serve` (Ctrl+C) et relance-le**, puis reconnecte le plugin : sinon certains
+> réglages ne sont pas appliqués dans Studio.
 
 ## 5. Ajouter les images (sprites)
 
