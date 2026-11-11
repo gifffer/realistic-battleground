@@ -238,3 +238,17 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | L4 | Sauter en marchant | L'animation de saut de Roblox (pas de marche dans les airs). |
 | L5 | Vitesse | Marche plus lente qu'avant (10), sprint 22 : réglable dans `src/shared/Config.luau` (`WALK_SPEED`, `SPRINT_SPEED`). |
 >>>>>>> origin/main
+
+## Étape 6 — Kit Boxer (`feature/boxer`)
+
+Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G changent aussitôt.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| X1 | **1 — Jab Rush** sur le Dummy | 4 jabs rapides du gauche en avançant, chacun touche (4 petits coups, le Dummy reste dans la rafale). |
+| X2 | **2 — Uppercut** | Flexion puis montée explosive : le Dummy **décolle** et tombe (ragdoll ~1,2 s), puis se relève. |
+| X3 | **3 — Slip** puis l'Attacking Dummy frappe pendant ~0,5 s | Tu **esquives** (« DODGE »), et tu ripostes tout seul avec un **crochet** qui l'étourdit. Sans coup reçu : juste l'esquive. |
+| X4 | **4 — Liver Shot** (à 2 joueurs) | Crochet au corps : la victime se **plie sur le côté**, est étourdie ~1 s et perd **40 d'endurance**. |
+| X5 | Remplir la jauge, **G** | **KNOCKOUT MODE** : le boxeur sautille, touche ses gants, garde plus serrée. Mêmes effets d'écran que Street Fury. |
+| X6 | Pendant Knockout Mode | 1 = **JAB FLURRY** (6 coups, dont un direct du droit), 2 = **RISING UPPERCUT** (décolle plus haut), 3 = **SLIP & HOOK** (fenêtre plus longue, contre plus fort), 4 = **KNOCKOUT COMBO** : corps, tête, tête, gros uppercut — si le 1ᵉʳ coup touche, les suivants ne ratent pas, le dernier met au sol. |
+| X7 | Menu KITS | « 2 OF 2 AVAILABLE », Boxer **EQUIPPED** une fois choisi, le choix reste au prochain lancement. |

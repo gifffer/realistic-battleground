@@ -406,9 +406,15 @@ local function playHitReaction(
 	attacker: Model,
 	strong: boolean,
 	zone: Types.HitZone,
-	side: Types.HitSide
+	side: Types.HitSide,
+	moveId: string?
 )
-	CharacterAnimationController.playAction(victim, chooseReaction(strong, zone, side, attacker))
+	-- Some kit moves have their own reaction (a liver shot folds the body).
+	local special = if moveId then KitEffects.reactionFor(moveId) else nil
+	CharacterAnimationController.playAction(
+		victim,
+		special or chooseReaction(strong, zone, side, attacker)
+	)
 	CharacterAnimationController.flinch(victim, flinchKick(strong, zone, side, attacker))
 	local stop = if strong then HEAVY_HIT_STOP else HIT_STOP
 	CharacterAnimationController.hitStop(victim, stop)
@@ -598,7 +604,7 @@ local function onCombatEvent(
 			and prediction.zone == zone
 			and prediction.side == side
 		if not alreadyShown then
-			playHitReaction(victim, attacker, strong, zone, side)
+			playHitReaction(victim, attacker, strong, zone, side, moveId)
 		end
 		if iAmVictim and zone == "Head" then
 			headBlur()
@@ -679,7 +685,13 @@ end
 -- Server actions that are NOT predicted by our own client (we must play
 -- them on our character too): getting up after a KO.
 -- (Street Fury's activation is never predicted: only the server knows the gauge.)
-local SERVER_ONLY_ACTIONS = table.freeze({ GetUp = true, Brawler_Awaken = true })
+-- (A slip's counter too: only the server knows a hit was slipped.)
+local SERVER_ONLY_ACTIONS = table.freeze({
+	GetUp = true,
+	Brawler_Awaken = true,
+	Boxer_Awaken = true,
+	Boxer_SlipCounter = true,
+})
 
 -- A fighter started a punch, a dash, a finisher, or got up after a KO.
 -- (Our own punches / dashes / finishers already played locally.)
@@ -687,9 +699,11 @@ local function onCombatAction(model: Model, action: string)
 	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
 		return
 	end
-	if model == player.Character and action == "Brawler_Awaken" then
-		-- Our Street Fury starts: no attack during the activation (as on the server).
+	if model == player.Character and (action == "Brawler_Awaken" or action == "Boxer_Awaken") then
+		-- Our Awakening starts: no attack during the activation (as on the server).
 		CombatController.holdAttacks(Config.Kits.AWAKEN_TIME)
+	elseif model == player.Character and action == "Boxer_SlipCounter" then
+		CombatController.holdAttacks(0.55) -- our counter punch
 	end
 	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
 		-- Ours: already played when we clicked, unless the server disagreed.

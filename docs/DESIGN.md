@@ -227,10 +227,10 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 2. ✅ **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur,
    animations de combat en code, sons.
 3. ✅ **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV.
-4. **Système de kits** + **Street Brawler** (4 attaques + Awakening « Street Fury »), saignement
-   simple, fenêtre **Kits** (Boxer affiché « bientôt »). ← en cours
-5. **Blessures** : saignement, boiterie, effets faible vie.
-6. **Boxer** + fenêtre **Kits** (choisir entre les deux kits de base).
+4. ✅ **Système de kits** + **Street Brawler** (4 attaques + Awakening « Street Fury »), saignement
+   simple, fenêtre **Kits**.
+5. ✅ **Blessures** : saignement, boiterie, marques, effets faible vie, petite régénération.
+6. **Boxer** (Jab Rush, Uppercut, Slip, Liver Shot + Knockout Mode avec le Knockout Combo), gratuit. ← en cours
 7. **Progression** : XP, niveaux, coins sur kill/assist (déblocage des futurs kits).
 8. **Duels** : défi (non classé), arènes, best of 3, récompenses, puis **Ranked** (matchmaking + ELO).
 9. **Quêtes quotidiennes**.

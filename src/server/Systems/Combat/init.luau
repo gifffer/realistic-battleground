@@ -399,6 +399,14 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
+	-- 1b. Slip (Boxer): a hit from the front is slipped, and answered.
+	if time < victim.slipUntil and isInFront(victim, attacker) then
+		victim.slipUntil = 0
+		event("Dodged", false, false)
+		Moves.counter(victim, attacker)
+		return false
+	end
+
 	if victim.blocking and isInFront(victim, attacker) then
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
@@ -450,6 +458,12 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		victim.slowUntil = time + slow.duration
 		victim.slowMultiplier = slow.multiplier
 	end
+	-- Body shot: the breath goes out of them.
+	local drain = spec.staminaDrain
+	local victimPlayer = victim.player
+	if drain and victimPlayer then
+		Stamina.drain(victimPlayer, drain)
+	end
 	local bleed = spec.bleed
 	-- A heavy blow to the head (the 4th M1) opens a cut too.
 	if bleed == nil and spec.kind == "Finisher" and zone == "Head" then
@@ -474,7 +488,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	if knockdown then
 		-- Thrown to the ground (and away, upward if it's a launch).
 		local speed = knockback or 0
-		local up = if speed >= 40 then KC.LAUNCH_UP_SPEED else 4
+		local up = spec.launch or (if speed >= 40 then KC.LAUNCH_UP_SPEED else 4)
 		knockDown(victim, knockdown, away * speed + Vector3.new(0, up, 0))
 	else
 		stun(victim, spec.stun + extraStun)
@@ -545,6 +559,8 @@ function Combat.register(model: Model, player: Player?)
 		wounds = {},
 		lastDamagedAt = -math.huge,
 		regenCarry = 0,
+		slipUntil = 0,
+		slipMoveId = nil,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)

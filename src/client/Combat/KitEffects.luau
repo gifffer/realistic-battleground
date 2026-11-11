@@ -72,7 +72,16 @@ local HEAVY_MOVES = table.freeze({
 	BrokenBottle = true,
 	KickCombo = true,
 	TackleSlam_FollowUp = true,
+	Uppercut = true,
+	UppercutPlus = true,
+	KnockoutCombo = true,
+	Slip_Counter = true,
+	SlipPlus_Counter = true,
 })
+-- Moves with their own victim reaction (instead of the usual one by zone).
+local REACTIONS: { [string]: string } = {
+	LiverShot = "HitLiver",
+}
 -- Sound when the move LANDS.
 local HIT_SOUNDS: { [string]: string } = {
 	BottleSmash = "BottleBreak",
@@ -84,6 +93,10 @@ local HIT_SOUNDS: { [string]: string } = {
 	DirtyKick = "KickLow",
 	KickCombo = "KickLow",
 	BrokenBottle = "Hit",
+	Uppercut = "HeavyHit",
+	UppercutPlus = "HeavyHit",
+	KnockoutCombo = "HeavyHit",
+	SlipPlus_Counter = "HeavyHit",
 }
 -- Sound when the move STARTS (the swing).
 local START_SOUNDS: { [string]: string } = {
@@ -95,6 +108,14 @@ local START_SOUNDS: { [string]: string } = {
 	Brawler_DirtyKick = "Swing",
 	Brawler_KickCombo = "Swing",
 	Brawler_Awaken = "Awaken",
+	Boxer_JabRush = "Swing",
+	Boxer_JabRushPlus = "Swing",
+	Boxer_Uppercut = "HeavySwing",
+	Boxer_Slip = "Dash",
+	Boxer_SlipCounter = "Swing",
+	Boxer_LiverShot = "Swing",
+	Boxer_KnockoutCombo = "HeavySwing",
+	Boxer_Awaken = "Awaken",
 }
 
 function KitEffects.isMoveAnimation(animation: string): boolean
@@ -103,6 +124,11 @@ end
 
 function KitEffects.isHeavy(moveId: string): boolean
 	return HEAVY_MOVES[moveId] == true
+end
+
+-- The victim reaction clip of a move, or nil for the usual one.
+function KitEffects.reactionFor(moveId: string): string?
+	return REACTIONS[moveId]
 end
 
 ------------------------------------------------------------------------------
