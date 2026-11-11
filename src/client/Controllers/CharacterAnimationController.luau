@@ -224,8 +224,18 @@ local function movementClip(entry: Tracked, state: string?): string?
 	return nil
 end
 
+-- Moves that use the arms (and during which nobody can fight): no stance
+-- on top of them, or the guard would keep the fists up while climbing.
+local ARM_MOVES = table.freeze({ Slide = true, Climb = true, Vault = true })
+
 -- Stance clip from the fighter's attributes. Stunned wins over blocking.
-local function stanceClip(entry: Tracked): string?
+local function stanceClip(entry: Tracked, state: string?): string?
+	if state and ARM_MOVES[state] then
+		-- Climbing / sliding ends the fighting posture: it doesn't come back
+		-- when the move is over.
+		entry.combatUntil = 0
+		return nil
+	end
 	local model = entry.model
 	if model:GetAttribute("Stunned") == true then
 		return "Stunned"
@@ -444,8 +454,15 @@ local function onPreSimulation(dt: number)
 			continue
 		end
 		local state = movementState(entry)
+		if state and ARM_MOVES[state] then
+			-- A punch still finishing when the climb / slide starts: fade it
+			-- out so the arms belong to the move.
+			for _, layer in entry.action do
+				layer.target = 0
+			end
+		end
 		setChannelClip(entry.movement, movementClip(entry, state))
-		setChannelClip(entry.stance, stanceClip(entry))
+		setChannelClip(entry.stance, stanceClip(entry, state))
 		advanceChannel(entry, entry.movement, dt, false)
 		advanceChannel(entry, entry.stance, dt, false)
 		advanceChannel(entry, entry.action, dt, true)
