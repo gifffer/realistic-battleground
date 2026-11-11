@@ -16,7 +16,15 @@ local Debris = game:GetService("Debris")
 local Push = {}
 
 -- `velocity`: studs per second, only X and Z are used.
+-- A new push REPLACES the one already running on this body (two pushes at
+-- full force would fight each other, e.g. a hit during a dash).
 function Push.apply(root: BasePart, velocity: Vector3, duration: number)
+	for _, child in root:GetChildren() do
+		if child.Name == "PushAttachment" and child:IsA("Attachment") then
+			child:Destroy()
+		end
+	end
+
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "PushAttachment"
 

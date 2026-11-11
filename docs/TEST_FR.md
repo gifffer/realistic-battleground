@@ -141,3 +141,28 @@ dernier qui l'a frappé gagne le kill.
 | U4 | Parer / se faire briser la garde | Petit mot espacé à côté de l'épaule avec un trait (PARRY, GUARD BREAK en rouge si c'est ta garde). Plus de contours bleus/jaunes. |
 | U5 | Cliquer « — MENU » à gauche | Le monde se floute et se désature, liste « 01 SETTINGS », panneau avec grand titre, OFF / ON souligné, touche LEFT CTRL. « — CLOSE » referme. |
 | U6 | Kill feed | Lignes de texte simples en haut à droite sur un léger fond sombre, ton nom en gras blanc avec un petit trait, l'âge de la ligne à droite. |
+
+## Réactions aux coups (`feature/hit-reactions`)
+
+Teste sur le **Dummy gris**
+(il ne se retourne pas vers toi, donc tu peux le frapper de tous les côtés). Vise avec le
+réticule : **tête** ou **corps**.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Frapper le Dummy **au corps, de face** | Il se **plie en avant autour du poing** (les bras tombent sur le ventre), il ne recule plus « à vide ». |
+| R2 | Au corps, **de dos** | Le dos se cambre, il est projeté vers l'avant. |
+| R3 | Au corps, par **sa gauche** puis par **sa droite** | Il se tord du côté touché (coude qui couvre les côtes) et glisse de l'autre côté. Les deux côtés sont symétriques. |
+| R4 | À la **tête, de face** | Comme avant : jab = tête en arrière, cross et crochet = tête projetée sur le côté. |
+| R5 | À la tête par **sa gauche / sa droite** | La tête part **à l'opposé** du poing (jamais vers le poing). |
+| R6 | N'importe quel coup | Un très court arrêt **au contact** (le corps est encore en place quand le poing touche), puis la réaction ; la victime recule d'environ 1 stud. |
+| R7 | Coup **bloqué** (Attacking Dummy, F) | Tu es repoussé un petit peu en garde. |
+| R8 | 4ᵉ coup (finisher) | Grosse réaction + gros recul (inchangé). |
+| R9 | Pieds | Pendant les réactions, les pieds restent au sol (ni enfoncés, ni en l'air). |
+| R10 | À 2 joueurs : B fait un **dash (Q)** pile quand A frappe | Chez A : « DODGE » et **pas** de réaction de coup sur B (si une réaction a commencé, elle s'arrête aussitôt). |
+| R11 | À 2 joueurs : A frappe B qui **bloque** | Chez A : la réaction de garde (BlockHit), jamais une réaction de coup reçu. |
+| R12 | Garde (F) et garde après un coup, vue de face et de côté | Poings **devant le visage à hauteur des pommettes**, à une main de distance (pas collés à la tête), coudes **bas** qui protègent les côtes, bras **pas croisés**. |
+
+À 2 joueurs : les deux écrans doivent montrer **la même** réaction (le côté est décidé par le serveur).
+Aucune ligne rouge ni jaune ne doit apparaître dans l'Output. Un avertissement jaune
+`no clip named "..."` signale une animation demandée qui n'existe pas : envoie-le-moi.

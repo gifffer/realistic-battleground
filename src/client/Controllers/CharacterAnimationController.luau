@@ -79,6 +79,10 @@ local REACTIONS = table.freeze({
 	HitCross = true,
 	HitHook = true,
 	HitBody = true,
+	HitBodyFront = true,
+	HitBodyBack = true,
+	HitBodyLeft = true,
+	HitBodyRight = true,
 	HitHeavy = true,
 	HitBack = true,
 	GetUp = true,
@@ -253,12 +257,18 @@ end
 
 local function advanceChannel(entry: Tracked, channel: Channel, dt: number, oneShot: boolean)
 	-- Hit-stop: one-shot clips (the punch, the reaction) pause for an instant.
+	-- EVERYTHING pauses, blending included: a reaction that just started
+	-- stays at weight 0, so during the stop the victim is still in the pose
+	-- it had when the fist touched it (the "contact frame"), and only THEN
+	-- reacts. Without this the body would already slide away from the fist
+	-- during the stop, which looks like a dodge.
 	local frozen = oneShot and os.clock() < entry.freezeUntil
+	if frozen then
+		return
+	end
 	for index = #channel, 1, -1 do
 		local layer = channel[index]
-		if not frozen then
-			layer.time += dt * playbackRate(entry, layer.name)
-		end
+		layer.time += dt * playbackRate(entry, layer.name)
 
 		-- Our own climb / vault: follow the body's real progress exactly.
 		if layer.target == 1 and isLocal(entry) then
@@ -453,13 +463,33 @@ end
 -- Public API
 ------------------------------------------------------------------------------
 
+-- A clip name that doesn't exist plays nothing. In Studio we say it once per
+-- name, so a typo is found right away instead of silently doing nothing.
+local warnedClips: { [string]: boolean } = {}
+local function warnMissingClip(name: string)
+	if RunService:IsStudio() and not warnedClips[name] then
+		warnedClips[name] = true
+		warn(`[CharacterAnimationController] no clip named "{name}" (CombatClips / MovementClips)`)
+	end
+end
+
 -- Plays a one-shot clip (punch, dash, hit reaction...) on `model`, replacing
 -- the action playing on it. Unknown clip or model: does nothing.
 function CharacterAnimationController.playAction(model: Model, name: string)
 	local entry = tracked[model]
 	local clip = findClip(name)
-	if entry == nil or clip == nil then
+	if clip == nil then
+		warnMissingClip(name)
 		return
+	end
+	if entry == nil then
+		return
+	end
+	-- A punch / dash started during a hit-stop ends it: only a REACTION
+	-- keeps the contact frame (it is followed by hitStop()). Otherwise a dash
+	-- would slide away frozen in the punch pose.
+	if not REACTIONS[name] then
+		entry.freezeUntil = 0
 	end
 	for _, layer in entry.action do
 		layer.target = 0
@@ -476,6 +506,33 @@ end
 function CharacterAnimationController.getLastAction(model: Model): string?
 	local entry = tracked[model]
 	return if entry then entry.lastAction else nil
+end
+
+-- Undoes a reaction shown too early (our prediction, when the server says
+-- the hit was dodged): fades the action out, ends the hit-stop and the flinch.
+function CharacterAnimationController.cancelReaction(model: Model)
+	local entry = tracked[model]
+	if entry == nil then
+		return
+	end
+	for _, layer in entry.action do
+		if REACTIONS[layer.name] then
+			layer.target = 0
+			layer.fadeOut = ACTION_FADE_OUT
+		end
+	end
+	entry.freezeUntil = 0
+	entry.flinch = Vector3.zero
+	entry.flinchSpeed = Vector3.zero
+end
+
+-- Ends the hit-stop of `model` right away (e.g. our own punch, frozen by a
+-- predicted hit that the server says didn't land).
+function CharacterAnimationController.clearHitStop(model: Model)
+	local entry = tracked[model]
+	if entry then
+		entry.freezeUntil = 0
+	end
 end
 
 -- Hit-stop: pauses the model's punch / reaction clip for `duration` seconds.

@@ -102,11 +102,12 @@ local function prepareData(profile: Profile): (Migrations.Result, string?)
 	local copy = TableUtil.deepCopy(profile.Data) :: any
 	local result, problem = Migrations.run(copy)
 	if result ~= "ok" then
-		return result, problem
+		-- The `~= "ok"` check makes the checker forget the exact type: restore it.
+		return result :: Migrations.Result, problem
 	end
 	profile.Data = copy
 	profile:Reconcile() -- adds fields that were added to Template since the last visit
-	return "ok", nil
+	return "ok" :: Migrations.Result, nil
 end
 
 local function onPlayerAdded(player: Player)
@@ -164,7 +165,7 @@ end
 local function onPlayerRemoving(player: Player)
 	-- Last changes to the save (e.g. Knockout: leaving mid-fight = a death).
 	for _, callback in leavingCallbacks do
-		local ok, problem = pcall(callback, player)
+		local ok: boolean, problem: any = pcall(callback, player)
 		if not ok then
 			warn(`[PlayerData] onLeaving callback failed for {player.Name}: {problem}`)
 		end

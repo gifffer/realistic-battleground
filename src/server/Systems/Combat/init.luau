@@ -24,8 +24,10 @@
 --
 -- API for other server systems:
 --   Combat.register(model, player?)    makes a model able to fight
---   Combat.tryAttack(model, aim?)      M1 (used by remotes and dummies);
---                                      near a KO'd fighter it finishes them
+--   Combat.tryAttack(model, aim?, id?) M1 (used by remotes and dummies);
+--                                      near a KO'd fighter it finishes them.
+--                                      `id` = the client's number for this M1,
+--                                      echoed in CombatEvent (prediction)
 --
 -- Hit zones: the client sends where it AIMS (a direction, Remotes.Attack).
 -- The SERVER casts that ray itself from the attacker's head: the body part
@@ -45,6 +47,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
+local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
@@ -82,11 +86,6 @@ local PART_ZONES: { [string]: Types.HitZone } = {
 	["Right Leg"] = "Legs",
 	["Left Leg"] = "Legs",
 }
--- Length of the server's aim ray (studs): a bit more than a punch's reach.
-local AIM_RAY_LENGTH = 14
--- The aim must point roughly where the attacker faces (dot product with
--- its facing; 0.2 ≈ within 78°), else it's ignored.
-local MIN_AIM_FACING = 0.2
 local random = Random.new()
 
 type CombatState = {
@@ -111,6 +110,7 @@ type CombatState = {
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
 	nextDashAt: number,
+	knockbackUntil: number, -- a finisher's knockback is running until then
 }
 
 export type DamageInfo = {
@@ -153,13 +153,19 @@ local function setAttribute(model: Model, name: string, value: boolean)
 	end
 end
 
+-- `zone` and `side` are only sent when a hit reached the body (or the guard):
+-- every client uses them to play the same reaction on the victim.
+-- `attackId` = the number the attacker's client gave this M1 (nil for
+-- dummies): its client uses it to match the result with its prediction.
 local function fireEvent(
 	kind: Types.CombatEventKind,
 	victim: Model,
 	attacker: Model,
-	zone: Types.HitZone?
+	zone: Types.HitZone?,
+	side: Types.HitSide?,
+	attackId: number?
 )
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone)
+	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side, attackId)
 end
 
 local function stopBlocking(state: CombatState)
@@ -232,29 +238,39 @@ local function isInFront(victim: CombatState, attacker: CombatState): boolean
 	return flat.Unit:Dot(Vector3.new(look.X, 0, look.Z).Unit) > 0
 end
 
+-- Flat direction from the attacker to the victim (where a hit pushes).
+local function awayFromAttacker(attacker: CombatState, victim: CombatState): Vector3
+	local away = victim.root.Position - attacker.root.Position
+	local flat = Vector3.new(away.X, 0, away.Z)
+	return if flat.Magnitude > 1e-3 then flat.Unit else attacker.root.CFrame.LookVector
+end
+
 -- Decides what a hit does to `victim`. The heart of the combat rules.
 local function resolveHit(
 	attacker: CombatState,
 	victim: CombatState,
 	combo: number,
-	zone: Types.HitZone
+	zone: Types.HitZone,
+	attackId: number?
 )
 	local isFinisher = combo == #C.M1_DAMAGE
 	local damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[zone]
 	local time = now()
+	-- Which side of the victim the fist arrives from (picks the reaction).
+	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, attacker.root.Position)
 
 	-- 0. On the ground (finish them instead), or just spawned (protected).
 	if Knockout.isKnockedOut(victim.model) then
 		return
 	end
 	if Knockout.isProtected(victim.model) then
-		fireEvent("Protected", victim.model, attacker.model)
+		fireEvent("Protected", victim.model, attacker.model, nil, nil, attackId)
 		return
 	end
 
 	-- 1. Dash dodge frames: the hit misses.
 	if time < victim.invulnerableUntil then
-		fireEvent("Dodged", victim.model, attacker.model)
+		fireEvent("Dodged", victim.model, attacker.model, nil, nil, attackId)
 		return
 	end
 
@@ -262,7 +278,7 @@ local function resolveHit(
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
 			stun(attacker, C.PARRY_STUN)
-			fireEvent("Parried", victim.model, attacker.model)
+			fireEvent("Parried", victim.model, attacker.model, nil, nil, attackId)
 			return
 		end
 
@@ -272,11 +288,19 @@ local function resolveHit(
 		if victimPlayer and not Stamina.trySpend(victimPlayer, cost) then
 			Stamina.drain(victimPlayer, Config.Stamina.MAX) -- empty the bar
 			stun(victim, C.GUARD_BREAK_STUN)
-			fireEvent("GuardBreak", victim.model, attacker.model)
+			fireEvent("GuardBreak", victim.model, attacker.model, nil, side, attackId)
 			return
 		end
 		dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
-		fireEvent("Blocked", victim.model, attacker.model)
+		-- The guard absorbs the hit but is still shoved back a little.
+		if time >= victim.knockbackUntil then
+			Push.apply(
+				victim.root,
+				awayFromAttacker(attacker, victim) * C.BLOCK_PUSH_SPEED,
+				C.HIT_PUSH_TIME
+			)
+		end
+		fireEvent("Blocked", victim.model, attacker.model, nil, side, attackId)
 		return
 	end
 
@@ -284,7 +308,14 @@ local function resolveHit(
 	dealDamage(victim, attacker, damage)
 	if Knockout.isKnockedOut(victim.model) then
 		-- That hit knocked them out: no stun or knockback on a limp body.
-		fireEvent(if isFinisher then "Finisher" else "Hit", victim.model, attacker.model, zone)
+		fireEvent(
+			if isFinisher then "Finisher" else "Hit",
+			victim.model,
+			attacker.model,
+			zone,
+			side,
+			attackId
+		)
 		return
 	end
 	if zone == "Legs" then
@@ -293,16 +324,22 @@ local function resolveHit(
 	local extraStun = if zone == "Head" then C.HEAD_EXTRA_STUN else 0
 	if isFinisher then
 		stun(victim, C.FINISHER_STUN + extraStun)
-		local away = victim.root.Position - attacker.root.Position
-		local flat = Vector3.new(away.X, 0, away.Z)
-		local direction = if flat.Magnitude > 1e-3
-			then flat.Unit
-			else attacker.root.CFrame.LookVector
+		local direction = awayFromAttacker(attacker, victim)
 		Push.apply(victim.root, direction * C.KNOCKBACK_SPEED, C.KNOCKBACK_TIME)
-		fireEvent("Finisher", victim.model, attacker.model, zone)
+		victim.knockbackUntil = time + C.KNOCKBACK_TIME
+		fireEvent("Finisher", victim.model, attacker.model, zone, side, attackId)
 	else
 		stun(victim, C.HIT_STUN + extraStun)
-		fireEvent("Hit", victim.model, attacker.model, zone)
+		-- Small push: the body is moved by the fist (no "punch through it" look).
+		-- Not during a finisher's knockback (a new push replaces the running one).
+		if time >= victim.knockbackUntil then
+			Push.apply(
+				victim.root,
+				awayFromAttacker(attacker, victim) * C.HIT_PUSH_SPEED,
+				C.HIT_PUSH_TIME
+			)
+		end
+		fireEvent("Hit", victim.model, attacker.model, zone, side, attackId)
 	end
 end
 
@@ -339,6 +376,7 @@ function Combat.register(model: Model, player: Player?)
 		finishingUntil = 0,
 		invulnerableUntil = 0,
 		nextDashAt = 0,
+		knockbackUntil = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -390,7 +428,7 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = { victim }
-	local hit = workspace:Raycast(origin, direction * AIM_RAY_LENGTH, params)
+	local hit = workspace:Raycast(origin, direction * C.AIM_RAY_LENGTH, params)
 	if hit == nil then
 		return nil
 	end
@@ -404,19 +442,27 @@ end
 
 -- M1. Returns true if the attack started. `aim` = the direction the player
 -- aims at (validated by onAttack); nil for dummies (random head / torso).
-function Combat.tryAttack(model: Model, aim: Vector3?): boolean
+function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boolean
 	local state = states[model]
-	if
-		state == nil
-		or not isAlive(state)
-		or isStunned(state)
-		or state.blocking
-		or isBusy(state)
-	then
+	if state == nil then
+		return false
+	end
+	-- Tells the attacker's client that this M1 is over: every CombatEvent
+	-- for it was already sent. A hit it predicted that no event confirmed
+	-- didn't happen (punch refused, cancelled or missed): it undoes it.
+	local function resolved()
+		local owner = state.player
+		if owner and attackId then
+			Remotes.AttackResolved:FireClient(owner, attackId)
+		end
+	end
+	if not isAlive(state) or isStunned(state) or state.blocking or isBusy(state) then
+		resolved()
 		return false
 	end
 	local time = now()
 	if time < state.nextAttackAt then
+		resolved()
 		return false
 	end
 	-- Attacking ends the spawn protection.
@@ -426,6 +472,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?): boolean
 	-- (Players only: training dummies never finish anyone.)
 	local finishTarget = if state.player then Knockout.findFinishTarget(model) else nil
 	if finishTarget and startFinisher(state, finishTarget) then
+		resolved() -- a finisher, not this M1
 		return true
 	end
 
@@ -451,6 +498,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?): boolean
 	task.delay(C.HIT_DELAY, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
 		if state.attackToken ~= token or not isAlive(state) then
+			resolved()
 			return
 		end
 		local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -C.HITBOX_FORWARD)
@@ -466,9 +514,10 @@ function Combat.tryAttack(model: Model, aim: Vector3?): boolean
 					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				resolveHit(state, victim, combo, landed)
+				resolveHit(state, victim, combo, landed, attackId)
 			end
 		end
+		resolved()
 	end)
 	return true
 end
@@ -575,34 +624,27 @@ local attackLimiter = RateLimiter.new(6, 5)
 local blockLimiter = RateLimiter.new(10, 6)
 local dashLimiter = RateLimiter.new(3, 1)
 
-local function onAttack(player: Player, aim: unknown)
+local function onAttack(player: Player, aim: unknown, attackId: unknown)
 	local character = player.Character
 	if character == nil or not attackLimiter.allow(player) then
 		return
 	end
 	-- The aim direction: a real, finite, non-zero Vector3, pointing roughly
-	-- where the character faces. Anything else = no aim (a torso hit).
-	local direction: Vector3? = nil
+	-- where the character faces (Shared/Util/AimRule, the same rule the
+	-- client uses to predict). Anything else = no aim (a torso hit).
 	local state = states[character]
-	if typeof(aim) == "Vector3" and state then
-		local finite = aim.X == aim.X
-			and aim.Y == aim.Y
-			and aim.Z == aim.Z
-			and aim.Magnitude < math.huge
-		if finite and aim.Magnitude > 0.1 then
-			local unit = aim.Unit
-			local look = state.root.CFrame.LookVector
-			local flatAim = Vector3.new(unit.X, 0, unit.Z)
-			local flatLook = Vector3.new(look.X, 0, look.Z)
-			local facing = flatAim.Magnitude > 1e-3
-				and flatLook.Magnitude > 1e-3
-				and flatAim.Unit:Dot(flatLook.Unit) >= MIN_AIM_FACING
-			if facing then
-				direction = unit
-			end
-		end
-	end
-	Combat.tryAttack(character, direction)
+	local direction: Vector3? = if state
+		then AimRule.validate(aim, state.root.CFrame.LookVector)
+		else nil
+	-- The M1's number (only echoed back to the clients, never trusted for
+	-- anything else): a whole number, else ignored.
+	local id: number? = if typeof(attackId) == "number"
+			and attackId == attackId
+			and attackId % 1 == 0
+			and math.abs(attackId) < 2 ^ 31
+		then attackId
+		else nil
+	Combat.tryAttack(character, direction, id)
 end
 
 local function onSetBlocking(player: Player, wantsToBlock: unknown)

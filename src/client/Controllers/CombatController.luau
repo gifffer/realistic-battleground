@@ -23,6 +23,7 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local KnockoutController = require(script.Parent.KnockoutController)
@@ -51,6 +52,19 @@ local nextAttackAt = 0
 local nextDashAt = 0
 -- When we last PREDICTED a finisher (to reconcile with the server's choice).
 local predictedFinisherAt = -math.huge
+-- Number of our last M1 (see tryAttack).
+local attackSeq = 0
+
+-- One of our M1 just started (not the KO finisher). CombatEffectsController
+-- listens to it to show the hit the instant our fist lands. (A signal, not a
+-- direct call: CombatEffectsController already requires this module, and two
+-- modules can't require each other.)
+export type AttackInfo = {
+	strong: boolean, -- the 4th hit of the combo
+	aim: Vector3?, -- AimController.getAimDirection(), sent to the server
+	id: number, -- this M1's number, echoed back in Remotes.CombatEvent
+}
+local attackStarted = Signal.new() :: Signal.Signal<AttackInfo>
 -- The server answers within this long (else it's an old action).
 local RECONCILE_WINDOW = 0.6
 
@@ -142,7 +156,13 @@ local function tryAttack()
 
 	CharacterAnimationController.playAction(character, `Brawler_M1_{combo}`)
 	SoundController.play(if isFinisher then "HeavySwing" else "Swing", character)
-	Remotes.Attack:FireServer(AimController.getAimDirection())
+	-- Each M1 gets a number, sent to the server and echoed back with its
+	-- result, so our prediction below is matched with THIS punch only.
+	attackSeq += 1
+	local seq = attackSeq
+	local aim = AimController.getAimDirection()
+	Remotes.Attack:FireServer(aim, seq)
+	attackStarted.fire({ strong = isFinisher, aim = aim, id = seq })
 end
 
 local function setBlocking(value: boolean)
@@ -230,6 +250,11 @@ function CombatController.onServerAction(action: string)
 		combo = tonumber(string.sub(action, 12)) or 1
 		nextAttackAt = lastAttackAt + C.M1_INTERVAL
 	end
+end
+
+-- Calls `callback` each time one of our M1 starts (see AttackInfo).
+function CombatController.onAttackStarted(callback: (AttackInfo) -> ()): Signal.Connection
+	return attackStarted.connect(callback)
 end
 
 function CombatController.start()

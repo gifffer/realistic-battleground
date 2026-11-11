@@ -71,7 +71,9 @@ return table.freeze({
 	-- and the type of the value (see Server/Systems/Settings).
 	UpdateSetting = event("UpdateSetting"),
 
-	-- client → server  (aim: Vector3?)
+	-- client → server  (aim: Vector3?, attackId: number?)
+	-- `attackId` = a number the client gives each M1, sent back in CombatEvent
+	-- so the client can match the result with what it predicted.
 	-- "I want to M1", aiming in this direction (from my head to the point
 	-- under my crosshair). The server checks timing and the direction, finds
 	-- who is hit, then casts the aim ray ITSELF to find the zone (head /
@@ -97,9 +99,17 @@ return table.freeze({
 	CombatAction = event("CombatAction"),
 
 	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model,
-	--                        zone: Types.HitZone?)
-	-- Something happened in a fight; clients show effects (flash, text, shake).
+	--                        zone: Types.HitZone?, side: Types.HitSide?, attackId: number?)
+	-- Something happened in a fight; clients show effects (flash, text, shake)
+	-- and the victim's reaction, chosen from where (zone) and from which side
+	-- of the victim (side) the hit landed. `attackId` = the attacker's number
+	-- for that M1 (see Attack), nil for dummies.
 	CombatEvent = event("CombatEvent"),
+
+	-- server → ONE client  (attackId: number)
+	-- "Your M1 number `attackId` is over" (after all its CombatEvents). Lets
+	-- the attacker undo a hit it predicted that the server never confirmed.
+	AttackResolved = event("AttackResolved"),
 
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)
 	-- A fighter was eliminated: one line in the kill feed (top right).

@@ -36,24 +36,26 @@ function Migrations.run(data: { [string]: any }): (Result, string?)
 	local version = if typeof(data.version) == "number" then data.version else 1
 
 	if version > Migrations.CURRENT_VERSION then
-		return "newer",
+		-- `:: Result` keeps the type checker from widening the text to plain `string`.
+		return "newer" :: Result,
 			`save is version {version}, this server knows up to {Migrations.CURRENT_VERSION}`
 	end
 
 	while version < Migrations.CURRENT_VERSION do
 		local step = STEPS[version]
 		if step == nil then
-			return "failed", `no migration step from version {version}`
+			return "failed" :: Result, `no migration step from version {version}`
 		end
-		local ok, err = pcall(step, data)
+		-- Annotated so the checker knows pcall gives back TWO values (success, error).
+		local ok: boolean, err: any = pcall(step, data)
 		if not ok then
-			return "failed", `migration step {version} errored: {err}`
+			return "failed" :: Result, `migration step {version} errored: {err}`
 		end
 		version += 1
 	end
 
 	data.version = version
-	return "ok", nil
+	return "ok" :: Result, nil
 end
 
 return Migrations
