@@ -102,11 +102,12 @@ local function prepareData(profile: Profile): (Migrations.Result, string?)
 	local copy = TableUtil.deepCopy(profile.Data) :: any
 	local result, problem = Migrations.run(copy)
 	if result ~= "ok" then
-		return result, problem
+		-- The `~= "ok"` check makes the checker forget the exact type: restore it.
+		return result :: Migrations.Result, problem
 	end
 	profile.Data = copy
 	profile:Reconcile() -- adds fields that were added to Template since the last visit
-	return "ok", nil
+	return "ok" :: Migrations.Result, nil
 end
 
 local function onPlayerAdded(player: Player)
