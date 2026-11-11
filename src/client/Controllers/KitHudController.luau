@@ -428,11 +428,10 @@ local function cooldownOf(model: Model, move: Kits.MoveDef): (number, number?)
 end
 
 -- Applies the look of `state` (see the table in the header).
-local function styleSlot(slot: Slot, state: SlotState, awakened: boolean, animate: boolean)
+local function styleSlot(slot: Slot, state: SlotState, animate: boolean)
 	local ready = state == "Ready"
 	-- (Keycaps are never inverted: in Street Fury only the names change.)
 	local inverted = false
-	local _ = awakened
 	local time = if animate then 0.12 else 0
 	local textT = if ready then 0 else DIM
 	if slot.current ~= state or slot.inverted ~= inverted then
@@ -560,7 +559,7 @@ local function updateSlots(model: Model, kit: Kits.KitDef)
 			then "Cooldown"
 			elseif stamina < move.stamina then "LowStamina"
 			else "Ready"
-		styleSlot(slot, state, awakened, true)
+		styleSlot(slot, state, true)
 		if state == "Cooldown" then
 			slot.state.Text = if left < 10
 				then string.format("%.1f", left)

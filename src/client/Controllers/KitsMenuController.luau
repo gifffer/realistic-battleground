@@ -507,7 +507,7 @@ local function refreshRoster()
 	end
 end
 
-local function select(kitId: string)
+local function selectKit(kitId: string)
 	if kitId == selectedId then
 		return
 	end
@@ -577,7 +577,7 @@ local function build(content: Frame)
 			end
 		end)
 		button.Activated:Connect(function()
-			select(kit.id)
+			selectKit(kit.id)
 		end)
 	end
 
