@@ -62,7 +62,8 @@ local function markOffset(part: BasePart, spot: Spot): CFrame
 		local around = normal * math.sqrt(radius * radius - side * side) + u * side
 		local position = around + Vector3.new(0, spot.at.Y * 2 * radius * 0.8, 0)
 		local outward = around.Unit
-		return CFrame.fromMatrix(position + outward * 0.01, outward, Vector3.yAxis:Cross(outward))
+		local up = Vector3.new(0, 1, 0)
+		return CFrame.fromMatrix(position + outward * 0.01, outward, up:Cross(outward))
 	end
 	local half = part.Size / 2
 	local v = u:Cross(normal)
