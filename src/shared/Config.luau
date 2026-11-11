@@ -14,8 +14,11 @@ return table.freeze({
 
 	Character = table.freeze({
 		MAX_HEALTH = 100,
-		WALK_SPEED = 16, -- studs per second (Roblox default)
-		SPRINT_SPEED = 24,
+		-- Studs per second. Roblox's default 16 is really a running pace for an R6
+		-- body: a realistic walk at that speed makes the feet slide. Walk 10,
+		-- sprint 22 match the walk / run animations (MovementClips).
+		WALK_SPEED = 10,
+		SPRINT_SPEED = 22,
 		CROUCH_SPEED = 8,
 		-- R6: distance from the center of the HumanoidRootPart down to the feet
 		-- (legs 2 studs + half of the root part 1 stud).
