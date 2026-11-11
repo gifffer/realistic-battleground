@@ -28,7 +28,11 @@ local player = Players.LocalPlayer
 
 -- Seconds to fade a clip in / out, per clip (default otherwise).
 local DEFAULT_FADE = 0.2
-local FADE_IN: { [string]: number } = { Climb = 0.06, Slide = 0.1 }
+local FADE_IN: { [string]: number } = { Climb = 0.06, Vault = 0.06, Slide = 0.12 }
+-- "Climb" and "Vault" clips are written with times from 0 to 1 and stretched
+-- to the real duration. For OTHER players we don't know the exact duration
+-- of a mantle (it depends on the ledge's height): we use the average.
+local AVERAGE_MANTLE_DURATION = (Config.Climb.MANTLE_MIN_DURATION + Config.Climb.MAX_DURATION) / 2
 -- Speed (studs/s) above which a character counts as moving.
 local MOVING_SPEED = 1
 -- Crouch idle ↔ walk switch with a gap ("hysteresis"), so a speed hovering
@@ -93,7 +97,7 @@ local function wantedClip(entry: Tracked, state: string?): string?
 		local walking = current ~= nil and current.target == 1 and current.name == "CrouchWalk"
 		local threshold = if walking then CROUCH_WALK_STOP else CROUCH_WALK_START
 		return if horizontalSpeed(entry.root) > threshold then "CrouchWalk" else "CrouchIdle"
-	elseif state == "Slide" or state == "Climb" then
+	elseif state == "Slide" or state == "Climb" or state == "Vault" then
 		return state
 	end
 	return nil
@@ -103,6 +107,10 @@ end
 local function playbackRate(entry: Tracked, name: string): number
 	if name == "CrouchWalk" then
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
+	elseif name == "Vault" then
+		return 1 / Config.Climb.VAULT_DURATION
+	elseif name == "Climb" then
+		return 1 / AVERAGE_MANTLE_DURATION
 	end
 	return 1
 end
@@ -137,6 +145,13 @@ local function advanceLayers(entry: Tracked, dt: number)
 	for index = #entry.layers, 1, -1 do
 		local layer = entry.layers[index]
 		layer.time += dt * playbackRate(entry, layer.name)
+		-- Our own climb / vault: follow the body's real progress exactly.
+		if layer.target == 1 and entry.player == player then
+			local progress = ParkourController.getClimbProgress()
+			if progress and (layer.name == "Climb" or layer.name == "Vault") then
+				layer.time = progress
+			end
+		end
 		local step = dt / (if layer.target == 1 then layer.fade else DEFAULT_FADE)
 		if layer.weight < layer.target then
 			layer.weight = math.min(layer.target, layer.weight + step)

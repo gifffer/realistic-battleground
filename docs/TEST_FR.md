@@ -30,34 +30,38 @@ barres, la course de l'un n'affecte pas l'autre.
 
 Si un test échoue : copie-moi les lignes rouges de l'Output et dis-moi le numéro du test.
 
-## Étape 1 bis — Mouvements (`feature/crouch-slide-climb`)
+## Étape 1 bis — Mouvements (`main` ou `feature/better-animations`)
 
-Prépare un terrain de test dans le Workspace (pas dans un dossier Rojo) : des blocs **ancrés**
-(*Anchored*) de **3**, **5** et **8** studs de haut, et un muret fin (0,5 stud d'épaisseur, 3 de haut).
+**Parcours de test automatique** : dans Studio, un parcours apparaît tout seul près du spawn
+(dossier `Workspace > DevTestCourse`, construit par `Server/Systems/DevCourse`). Chaque obstacle a
+une étiquette qui dit ce qui doit se passer. Il n'existe **que dans Studio** (jamais dans le jeu
+publié) ; pour le désactiver : `Config.Dev.TEST_COURSE = false`.
+
+- **Rangée 1** : murs de 2,5 à 9 studs (verts = vault, bleus = mantle, orange = sauter d'abord).
+- **Rangée 2** : muret fin, 4 barrières à enchaîner en courant, bloc « pas de place ».
+- **Rangée 3** : piste de glissade, tour à escalader.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| 1 | **C** | La caméra descend, le perso marche lentement. Re-**C** → debout. |
-| 2 | Accroupi puis **Espace** | Le perso se relève (ne saute pas). |
-| 3 | Accroupi puis **Shift** | Le perso se relève et court. |
-| 4 | Courir puis **C** | Glissade rapide dans la direction de la course, qui ralentit, finit **accroupi**. STAMINA -15. |
-| 5 | Glissade puis **Espace** | La glissade s'arrête, le perso saute. |
-| 6 | Glissade contre un mur | Elle s'arrête net, pas de tremblement. |
-| 7 | Deux glissades d'affilée très vite | La 2ᵉ ne part pas tant que le cooldown (1,2 s) n'est pas fini (C → accroupi à la place). |
-| 8 | Face au bloc de **3** studs, **Espace** | Le perso se hisse dessus (~0,5 s). STAMINA -10. |
-| 9 | Face au bloc de **5** studs, **Espace** | Pareil. |
-| 10 | Face au bloc de **8** studs : sauter, puis **Espace** en l'air près du haut | Le perso attrape le rebord et monte. Depuis le sol : rien (trop haut). |
-| 11 | Le muret fin | On l'escalade et on retombe de l'autre côté. |
-| 12 | Un bloc avec un plafond juste au-dessus | Pas d'escalade (pas la place). |
-| 13 | STAMINA presque vide (< 10) | Pas d'escalade ni de glissade. |
-| 14 | En 1ʳᵉ personne (Settings) | Accroupi, glissade, escalade marchent aussi. |
-| 15 | Accroupi immobile | Garde basse : pied gauche devant, buste penché, poings levés, respiration lente. |
-| 16 | Accroupi en marchant | Pas chassés (le pied avant avance, l'arrière suit), aucun pied dans le sol. |
-| 17 | Glissade | Buste en arrière, jambes devant au ras du sol, une main traîne derrière. |
-| 18 | Escalade | Bras tendus vers le rebord → genou levé → appui sur les mains → debout. |
-| 19 | Course | Le buste se penche un peu en avant ; à l'arrêt il se redresse en douceur. |
-| 20 | Passer d'une animation à l'autre | Toujours un fondu, jamais de « saut » de pose. |
+| 1 | **C** | Accroupi tactique : buste penché en avant, genoux pliés, pied gauche devant, garde haute ; la caméra descend. Re-**C** → debout. |
+| 2 | Accroupi, avancer | Marche accroupie tactique : les jambes **alternent**, le pied qui avance se soulève, aucun pied dans le sol. |
+| 3 | Accroupi puis **Espace** | Le perso se relève (ne saute pas). |
+| 4 | Accroupi puis **Shift** | Le perso se relève et court. |
+| 5 | Courir sur la piste puis **C** | Glissade : buste en arrière et tourné, une jambe tendue devant, un genou levé, une main au sol derrière. Finit **accroupi**. STAMINA -15. |
+| 6 | Glissade puis **Espace** | La glissade s'arrête, le perso saute. |
+| 7 | Glissade contre un mur | Elle s'arrête net, pas de tremblement. |
+| 8 | Mur **vert** (≤ 3,6 studs), **Espace** | **Vault** rapide (~0,4 s) : une main posée, le corps bascule, les jambes passent sur le côté. STAMINA -10. |
+| 9 | Les 4 barrières en sprintant, **Espace** à chacune | On les enchaîne **sans perdre sa vitesse**. |
+| 10 | Muret fin | Vault par-dessus, on retombe de l'autre côté. |
+| 11 | Mur **bleu** (4 à 5,5 studs), **Espace** | **Mantle** (0,7 à 0,9 s) : attrape le rebord → suspendu, les jambes se balancent → traction → genou sur le rebord → debout. Les mains touchent bien le rebord. |
+| 12 | Mur **orange** (7, 9 studs) : sauter, puis **Espace** en l'air | Le perso attrape le rebord en plein saut et monte. Depuis le sol : rien. |
+| 13 | Arriver **de biais** sur un mur, **Espace** | Le perso se remet face au mur en grimpant (pas de travers). |
+| 14 | La tour | On monte les 4 étages en enchaînant les mantles. |
+| 15 | Bloc rouge « NO ROOM » | Pas d'escalade. |
+| 16 | STAMINA presque vide (< 10) | Pas d'escalade ni de glissade. |
+| 17 | Course | Le buste se penche en avant ; à l'arrêt il se redresse en douceur. |
+| 18 | Passer d'une animation à l'autre | Toujours un fondu, jamais de « saut » de pose. |
+| 19 | En 1ʳᵉ personne (Settings) | Tout marche aussi. |
 
-Test à 2 joueurs : le joueur 2 voit les **animations** du joueur 1 (accroupi, glissade, escalade,
-course penchée), avec un petit décalage normal (réseau).
+Test à 2 joueurs : le joueur 2 voit les **animations** du joueur 1, avec un petit décalage normal (réseau).
 Dans l'Output, **aucune ligne rouge**. S'il y en a : copie-les-moi avec le numéro du test.

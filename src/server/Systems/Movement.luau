@@ -9,7 +9,7 @@
 --      enough stamina? cooldown? Then it picks the real state, drains
 --      stamina and sets Humanoid.WalkSpeed.
 --   3. The state is published as Player attributes, read by the client:
---        "MoveState"  — Types.MoveState ("Walk", "Sprint", "Crouch", "Slide", "Climb")
+--        "MoveState"  — Types.MoveState ("Walk", "Sprint", "Crouch", "Slide", "Climb", "Vault")
 --        "Sprinting"  — true/false (camera FOV effect)
 --
 -- Slide and climb are short "actions". The client starts them instantly
@@ -41,7 +41,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
 local Stamina = require(script.Parent.Stamina)
 
-type Action = "Slide" | "Climb"
+type Action = "Slide" | "Climb" | "Vault"
 
 type State = {
 	wantsToSprint: boolean,
@@ -186,7 +186,11 @@ local function tryStartSlide(player: Player, state: State, humanoid: Humanoid, n
 	state.crouching = false
 end
 
-local function tryStartClimb(player: Player, state: State, now: number)
+-- `kind`: "Climb" (mantle) or "Vault". The client picks it from the ledge's
+-- height; it only changes which animation the other players see, so we
+-- accept its choice. What we DO check: cooldown, stamina, and that a
+-- climbable ledge really is in front of the character.
+local function tryStartClimb(player: Player, state: State, kind: Action, now: number)
 	local climb = Config.Climb
 	local character = player.Character
 	if character == nil or now - state.lastClimbAt < climb.COOLDOWN then
@@ -199,8 +203,11 @@ local function tryStartClimb(player: Player, state: State, now: number)
 	if not Stamina.trySpend(player, climb.STAMINA_COST) then
 		return
 	end
-	state.action = "Climb"
-	state.actionEndsAt = now + climb.DURATION
+	state.action = kind
+	-- Longest it can last. The client says "Cancel" when it's really done
+	-- (a low ledge takes less time).
+	state.actionEndsAt = now
+		+ (if kind == "Vault" then climb.VAULT_DURATION else climb.MAX_DURATION)
 	state.lastClimbAt = now
 	state.crouching = false
 end
@@ -281,11 +288,11 @@ local function onRequestMoveAction(player: Player, action: unknown)
 	local now = os.clock()
 
 	if action == "Cancel" then
-		-- Only a slide can be cut short (jumping out of it). Stand up.
-		if state.action == "Slide" then
-			state.action = nil
-			state.crouching = false
-		end
+		-- The client's move is over: jumped out of a slide (stand up), or
+		-- finished a climb. Ending early is always harmless: stamina and
+		-- cooldown were already paid when it started.
+		state.action = nil
+		state.crouching = false
 		return
 	end
 
@@ -294,8 +301,8 @@ local function onRequestMoveAction(player: Player, action: unknown)
 	end
 	if action == "Slide" then
 		tryStartSlide(player, state, humanoid, now)
-	elseif action == "Climb" then
-		tryStartClimb(player, state, now)
+	elseif action == "Climb" or action == "Vault" then
+		tryStartClimb(player, state, action :: Action, now)
 	end
 	-- Anything else (wrong type, unknown name) is ignored.
 end

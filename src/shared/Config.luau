@@ -60,18 +60,35 @@ return table.freeze({
 		MIN_SPEED = 14,
 	}),
 
-	-- Ledge climb: jump in front of a wall whose top is reachable → you pull
-	-- yourself up onto it. Heights are measured from the FEET.
+	-- Ledge climb: jump in front of a wall whose top is reachable. Heights are
+	-- measured from the FEET. Two moves, chosen by the height of the ledge:
+	--   • VAULT  (low obstacle): one hand on top, the body swings over, fast,
+	--     you keep your running speed.
+	--   • MANTLE (high ledge): grab the edge, hang, pull up, step onto it.
 	Climb = table.freeze({
 		STAMINA_COST = 10,
-		COOLDOWN = 0.6,
-		DURATION = 0.5,
+		COOLDOWN = 0.5,
+		-- Ledges up to this height are vaulted; higher ones are mantled.
+		VAULT_MAX_HEIGHT = 3.6,
+		VAULT_DURATION = 0.42,
+		-- Mantle: duration for a ledge just above VAULT_MAX_HEIGHT, plus
+		-- extra time for each stud higher, never more than MAX_DURATION.
+		MANTLE_MIN_DURATION = 0.7,
+		MANTLE_SECONDS_PER_STUD = 0.1,
+		MAX_DURATION = 0.95,
 		MIN_HEIGHT = 2.5, -- lower than this: just walk / jump over it
 		MAX_HEIGHT = 5.5, -- higher than this: out of reach
 		REACH = 2.5, -- max distance (studs) from the character to the wall
 		-- Extra margin when the SERVER checks the ledge: its copy of your
 		-- position is slightly behind (network delay).
 		SERVER_TOLERANCE = 2,
+	}),
+
+	-- Tools for testing in Studio only (never active in the published game).
+	Dev = table.freeze({
+		-- Builds a parkour test course next to the spawn: walls of every
+		-- height, vault rails, a climbing tower... (Server/Systems/DevCourse)
+		TEST_COURSE = true,
 	}),
 
 	Camera = table.freeze({
@@ -84,7 +101,7 @@ return table.freeze({
 		DEFAULT_FOV = 70,
 		SPRINT_FOV = 78, -- slightly wider view while sprinting = feeling of speed
 		-- How far the camera goes down (studs), matching the body's animation.
-		CROUCH_DROP = 0.8,
-		SLIDE_DROP = 2.2,
+		CROUCH_DROP = 1.1,
+		SLIDE_DROP = 2.3,
 	}),
 })
