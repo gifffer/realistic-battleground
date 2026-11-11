@@ -6,8 +6,10 @@
 --     orange = guard break.
 --   • Floating text: "PARRY!", "GUARD BREAK!", "DODGE".
 --   • Small camera shake when YOU hit or get hit.
---   • Reaction animations (hit, block hit, parry, guard break) and sounds,
---     on EVERY fighter.
+--   • Reaction animations and sounds on EVERY fighter. The reaction depends
+--     on the punch received (jab, cross, hook, finisher, or from behind),
+--     with a hit-stop (both fighters freeze an instant) and a physical
+--     head flinch on top.
 --   • Other fighters' punches and dashes (Remotes.CombatAction): animation
 --     + sound. Ours already played when we pressed the key.
 --
@@ -42,6 +44,25 @@ local COLORS = table.freeze({
 })
 
 local FLASH_TIME = 0.15
+
+-- Which reaction the victim plays, from the punch the attacker threw.
+-- (A jab snaps the head back, a cross throws it to one side, a hook to the other.)
+local REACTION_BY_PUNCH: { [string]: string } = {
+	Brawler_M1_1 = "HitJab",
+	Brawler_M1_2 = "HitCross",
+	Brawler_M1_3 = "HitHook",
+	Brawler_M1_4 = "HitHeavy",
+}
+-- Hit-stop: both fighters freeze this long when a punch lands (seconds).
+local HIT_STOP = 0.055
+local HEAVY_HIT_STOP = 0.11
+local BLOCK_HIT_STOP = 0.035
+local PARRY_HIT_STOP = 0.09
+-- Flinch: how hard a hit kicks the head's spring (degrees per second; see
+-- CharacterAnimationController.flinch). Sideways part = the hook / the cross.
+local FLINCH_KICK = 130
+local HEAVY_FLINCH_KICK = 230
+local BLOCK_FLINCH_KICK = 45
 
 type Visual = {
 	model: Model,
@@ -211,10 +232,36 @@ local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacke
 	if kind == "Hit" or kind == "Finisher" then
 		flash(victim, COLORS.Hit)
 		local strong = kind == "Finisher"
-		CharacterAnimationController.playAction(
+		local fromFront = isInFront(victim, attacker)
+		local punch = CharacterAnimationController.getLastAction(attacker)
+
+		-- The reaction matches the punch (from behind: always thrown forward).
+		local reaction = "HitBack"
+		if fromFront then
+			reaction = if strong
+				then "HitHeavy"
+				else (if punch then REACTION_BY_PUNCH[punch] else nil) or "HitJab"
+		end
+		CharacterAnimationController.playAction(victim, reaction)
+
+		-- Physical kick on top: back (or forward if hit from behind), plus
+		-- sideways for the punches that come from the side.
+		local kick = if strong then HEAVY_FLINCH_KICK else FLINCH_KICK
+		local side = if punch == "Brawler_M1_2"
+			then -0.6 -- right cross → the head goes to the victim's right
+			elseif punch == "Brawler_M1_3" then 0.6 -- left hook → to its left
+			else 0
+		local pitch = if fromFront then 1 else -1
+		CharacterAnimationController.flinch(
 			victim,
-			if isInFront(victim, attacker) then "HitFront" else "HitBack"
+			Vector3.new(kick * pitch, kick * side, kick * side * 0.5)
 		)
+
+		-- Hit-stop on both fighters: the instant of contact is held.
+		local stop = if strong then HEAVY_HIT_STOP else HIT_STOP
+		CharacterAnimationController.hitStop(victim, stop)
+		CharacterAnimationController.hitStop(attacker, stop)
+
 		SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		if iAmVictim then
 			shake(if strong then 1.6 else 0.8, if strong then 0.25 else 0.15)
@@ -224,6 +271,9 @@ local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacke
 	elseif kind == "Blocked" then
 		flash(victim, COLORS.Blocked)
 		CharacterAnimationController.playAction(victim, "BlockHit")
+		CharacterAnimationController.flinch(victim, Vector3.new(BLOCK_FLINCH_KICK, 0, 0))
+		CharacterAnimationController.hitStop(victim, BLOCK_HIT_STOP)
+		CharacterAnimationController.hitStop(attacker, BLOCK_HIT_STOP)
 		SoundController.play("Block", victim)
 		if iAmVictim then
 			shake(0.3, 0.1)
@@ -232,6 +282,8 @@ local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacke
 		flash(attacker, COLORS.Parry)
 		floatingText(victim, "PARRY!", COLORS.Parry)
 		CharacterAnimationController.playAction(victim, "Parry")
+		CharacterAnimationController.hitStop(victim, PARRY_HIT_STOP)
+		CharacterAnimationController.hitStop(attacker, PARRY_HIT_STOP)
 		SoundController.play("Parry", victim)
 		if iAmVictim or iAmAttacker then
 			shake(0.6, 0.15)

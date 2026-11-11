@@ -14,8 +14,18 @@
 --
 -- Three channels, blended in this order (later ones win on the joints they use):
 --   1. movement  crouch, slide, climb...      (+ the sprint lean, added on top)
---   2. stance    block, stunned               (loops, upper body)
+--   2. stance    guard, block, stunned        (loops, upper body)
 --   3. action    punch, dash, hit reaction... (plays once)
+--
+-- What makes the fights feel fluid and heavy:
+--   • Clips are sampled with a spline (R6Pose): motion flows through keyframes.
+--   • Combat guard: after a punch or a hit, the fighter keeps its fists up for
+--     a few seconds, so punches start from and return to a fighting stance
+--     instead of arms hanging down.
+--   • Hit-stop: when a punch lands, attacker and victim freeze for a few
+--     hundredths of a second. That tiny pause is what sells the impact.
+--   • Flinch spring: a hit also kicks a small physical spring on the head and
+--     torso, added on top of the animation, so no two hits look identical.
 --
 -- Each frame, right after Roblox's Animator has posed the body (the default
 -- walk / idle / jump animations), we blend our pose on top of it:
@@ -44,7 +54,21 @@ local FADE_IN: { [string]: number } = {
 	Slide = 0.12,
 	Block = 0.08,
 	Stunned = 0.12,
+	Guard = 0.12,
 }
+-- Seconds to fade a looping clip out (default otherwise): the guard is
+-- lowered slowly when the fight is over.
+local FADE_OUT: { [string]: number } = { Guard = 0.5 }
+-- A fighter keeps its guard up this long after its last punch / hit taken.
+local COMBAT_STANCE_TIME = 3.5
+-- Flinch spring (see the header): stiffness and damping. Higher stiffness =
+-- faster wobble; higher damping = it dies out sooner.
+local FLINCH_STIFFNESS = 190
+local FLINCH_DAMPING = 15
+-- How much of the head's flinch the torso takes.
+local FLINCH_TORSO_SHARE = 0.35
+-- Physics step is capped so a lag spike can't make the spring explode.
+local MAX_SPRING_STEP = 1 / 30
 -- One-shot actions: fast in (a punch must start NOW), smooth out.
 local ACTION_FADE_IN = 0.05
 local ACTION_FADE_OUT = 0.12
@@ -87,6 +111,12 @@ type Tracked = {
 	stance: Channel,
 	action: Channel,
 	sprintWeight: number,
+	-- Combat feel (see the header).
+	combatUntil: number, -- os.clock() until which the guard stays up
+	freezeUntil: number, -- hit-stop: the action clip is paused until then
+	lastAction: string?, -- last one-shot clip played (which punch was thrown)
+	flinch: Vector3, -- spring position: extra head rotation, degrees
+	flinchSpeed: Vector3, -- spring speed, degrees per second
 	-- To know if Roblox's Animator rewrote a joint this frame (see compose()).
 	lastWritten: { [Motor6D]: CFrame },
 	lastBase: { [Motor6D]: CFrame },
@@ -141,7 +171,9 @@ local function setChannelClip(channel: Channel, name: string?)
 	end
 	local clip = if name then findClip(name) else nil
 	if name and clip then
-		table.insert(channel, newLayer(name, clip, FADE_IN[name] or DEFAULT_FADE, DEFAULT_FADE))
+		local fadeIn = FADE_IN[name] or DEFAULT_FADE
+		local fadeOut = FADE_OUT[name] or DEFAULT_FADE
+		table.insert(channel, newLayer(name, clip, fadeIn, fadeOut))
 	end
 end
 
@@ -184,6 +216,9 @@ local function stanceClip(entry: Tracked): string?
 	if model:GetAttribute("Blocking") == true or (isLocal(entry) and predictedBlock) then
 		return "Block"
 	end
+	if os.clock() < entry.combatUntil then
+		return "Guard" -- still in a fight: fists up
+	end
 	return nil
 end
 
@@ -205,9 +240,13 @@ end
 ------------------------------------------------------------------------------
 
 local function advanceChannel(entry: Tracked, channel: Channel, dt: number, oneShot: boolean)
+	-- Hit-stop: one-shot clips (the punch, the reaction) pause for an instant.
+	local frozen = oneShot and os.clock() < entry.freezeUntil
 	for index = #channel, 1, -1 do
 		local layer = channel[index]
-		layer.time += dt * playbackRate(entry, layer.name)
+		if not frozen then
+			layer.time += dt * playbackRate(entry, layer.name)
+		end
 
 		-- Our own climb / vault: follow the body's real progress exactly.
 		if layer.target == 1 and isLocal(entry) then
@@ -260,6 +299,27 @@ local function blendChannel(
 	return result, touched
 end
 
+-- Damped spring pulling the flinch back to zero (the head wobbles and settles).
+local function updateFlinch(entry: Tracked, dt: number)
+	if entry.flinch.Magnitude < 0.02 and entry.flinchSpeed.Magnitude < 0.5 then
+		entry.flinch = Vector3.zero
+		entry.flinchSpeed = Vector3.zero
+		return
+	end
+	local step = math.min(dt, MAX_SPRING_STEP)
+	local acceleration = entry.flinch * -FLINCH_STIFFNESS - entry.flinchSpeed * FLINCH_DAMPING
+	entry.flinchSpeed += acceleration * step
+	entry.flinch += entry.flinchSpeed * step
+end
+
+local function flinchRotation(flinch: Vector3, share: number): CFrame
+	return CFrame.Angles(
+		math.rad(flinch.X * share),
+		math.rad(flinch.Y * share),
+		math.rad(flinch.Z * share)
+	)
+end
+
 local function compose(entry: Tracked)
 	sampleChannel(entry.movement)
 	sampleChannel(entry.stance)
@@ -293,6 +353,12 @@ local function compose(entry: Tracked)
 		any = any or touched
 		result, touched = blendChannel(entry.action, motor, joint, result)
 		any = any or touched
+		-- Flinch: added on top of everything, on the head and (less) the torso.
+		if entry.flinch ~= Vector3.zero and (joint == "Neck" or joint == "Root") then
+			local share = if joint == "Neck" then 1 else FLINCH_TORSO_SHARE
+			result = result * R6Pose.toTransform(motor, flinchRotation(entry.flinch, share))
+			any = true
+		end
 
 		if any then
 			motor.Transform = result
@@ -339,9 +405,11 @@ local function onPreSimulation(dt: number)
 		advanceChannel(entry, entry.stance, dt, false)
 		advanceChannel(entry, entry.action, dt, true)
 		updateSprintWeight(entry, state, dt)
+		updateFlinch(entry, dt)
 
 		local busy = #entry.movement > 0 or #entry.stance > 0 or #entry.action > 0
-		if busy or entry.sprintWeight > 0 or next(entry.lastWritten) ~= nil then
+		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero
+		if busy or extras or next(entry.lastWritten) ~= nil then
 			compose(entry)
 		end
 	end
@@ -364,6 +432,34 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 		layer.fadeOut = ACTION_FADE_IN -- cut the old one fast
 	end
 	table.insert(entry.action, newLayer(name, clip, ACTION_FADE_IN, ACTION_FADE_OUT))
+	entry.lastAction = name
+	entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
+end
+
+-- The last one-shot clip played on `model` (e.g. which punch it just threw),
+-- or nil. Used to pick the matching hit reaction.
+function CharacterAnimationController.getLastAction(model: Model): string?
+	local entry = tracked[model]
+	return if entry then entry.lastAction else nil
+end
+
+-- Hit-stop: pauses the model's punch / reaction clip for `duration` seconds.
+function CharacterAnimationController.hitStop(model: Model, duration: number)
+	local entry = tracked[model]
+	if entry then
+		entry.freezeUntil = math.max(entry.freezeUntil, os.clock() + duration)
+	end
+end
+
+-- Kicks the flinch spring of `model`. `kick` = degrees per second, in the
+-- head's own axes: X > 0 throws the head BACK, Y > 0 turns it to its left,
+-- Z > 0 tilts it to its left. (A kick of 150 peaks at roughly 8 degrees.)
+function CharacterAnimationController.flinch(model: Model, kick: Vector3)
+	local entry = tracked[model]
+	if entry then
+		entry.flinchSpeed += kick
+		entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
+	end
 end
 
 -- Our block key: show the guard right away (the server confirms with the
@@ -412,6 +508,11 @@ local function track(model: Model, owner: Player?)
 		stance = {},
 		action = {},
 		sprintWeight = 0,
+		combatUntil = 0,
+		freezeUntil = 0,
+		lastAction = nil,
+		flinch = Vector3.zero,
+		flinchSpeed = Vector3.zero,
 		lastWritten = {},
 		lastBase = {},
 	}

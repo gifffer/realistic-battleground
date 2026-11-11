@@ -18,6 +18,11 @@ export type JointPose = {
 export type Keyframe = {
 	time: number, -- seconds from the start of the clip
 	pose: { [string]: JointPose }, -- joint name (see JOINTS) → pose
+	-- How the motion goes through this keyframe:
+	--   "smooth" (default): it passes THROUGH without stopping (fluid motion),
+	--   "flat": it comes to rest on it (a hold, or a hard stop).
+	-- The first and last keyframes of a non-looped clip are always "flat".
+	tangent: ("smooth" | "flat")?,
 }
 
 export type Clip = {
@@ -29,11 +34,19 @@ export type Clip = {
 	keyframes: { Keyframe },
 }
 
--- A clip turned into ready-to-use CFrames (done once per clip).
+-- One joint of a clip, ready for fast sampling (done once per clip):
+-- value and speed ("tangent") of its rotation and position at every keyframe.
+type Track = {
+	rot: { Vector3 },
+	pos: { Vector3 },
+	rotTangent: { Vector3 }, -- degrees per second
+	posTangent: { Vector3 }, -- studs per second
+}
+
 type Compiled = {
 	times: { number },
-	frames: { { [string]: CFrame } },
 	joints: { string }, -- every joint used by the clip
+	tracks: { [string]: Track },
 }
 
 local R6Pose = {}
@@ -51,10 +64,44 @@ R6Pose.JOINTS = table.freeze(JOINTS)
 
 local compiledCache: { [Clip]: Compiled } = setmetatable({}, { __mode = "k" }) :: any
 
-local function toLocalCFrame(jointPose: JointPose): CFrame
-	local r = jointPose.rot
-	local offset = jointPose.pos or Vector3.zero
-	return CFrame.new(offset) * CFrame.Angles(math.rad(r.X), math.rad(r.Y), math.rad(r.Z))
+-- Interpolation: a cubic "Hermite" spline through the keyframes.
+--
+-- Plain blending between two poses makes the body slow down and stop at
+-- EVERY keyframe (robotic). A spline also knows the SPEED at each keyframe,
+-- so the motion flows through them like a real movement.
+--
+-- Speed at a "smooth" keyframe = slope between its two neighbours
+-- (value after − value before) / (time after − time before).
+-- Speed at a "flat" keyframe = 0.
+local function computeTangents(
+	values: { Vector3 },
+	times: { number },
+	keyframes: { Keyframe },
+	clip: Clip
+): { Vector3 }
+	local count = #values
+	local tangents = table.create(count, Vector3.zero)
+	for index = 1, count do
+		local isEnd = not clip.looped and (index == 1 or index == count)
+		if keyframes[index].tangent == "flat" or isEnd or count < 2 then
+			continue
+		end
+		-- Neighbours; a looped clip wraps around (the key before the first
+		-- one is the last one, one clip-length earlier).
+		local before, beforeTime = index - 1, 0
+		local after, afterTime = index + 1, 0
+		if before < 1 then
+			before, beforeTime = count, -clip.length
+		end
+		if after > count then
+			after, afterTime = 1, clip.length
+		end
+		local span = (times[after] + afterTime) - (times[before] + beforeTime)
+		if span > 0 then
+			tangents[index] = (values[after] - values[before]) / span
+		end
+	end
+	return tangents
 end
 
 local function compile(clip: Clip): Compiled
@@ -62,76 +109,103 @@ local function compile(clip: Clip): Compiled
 	if cached then
 		return cached
 	end
-	local compiled: Compiled = { times = {}, frames = {}, joints = {} }
-	local seen: { [string]: boolean } = {}
-	for _, keyframe in clip.keyframes do
-		local frame: { [string]: CFrame } = {}
-		for joint, jointPose in keyframe.pose do
-			frame[joint] = toLocalCFrame(jointPose)
-			if not seen[joint] then
-				seen[joint] = true
+	local keyframes = clip.keyframes
+	local compiled: Compiled = { times = {}, joints = {}, tracks = {} }
+	for _, keyframe in keyframes do
+		table.insert(compiled.times, keyframe.time)
+		for joint in keyframe.pose do
+			if compiled.tracks[joint] == nil then
+				compiled.tracks[joint] = { rot = {}, pos = {}, rotTangent = {}, posTangent = {} }
 				table.insert(compiled.joints, joint)
 			end
 		end
-		table.insert(compiled.times, keyframe.time)
-		table.insert(compiled.frames, frame)
+	end
+	for _, joint in compiled.joints do
+		local track = compiled.tracks[joint]
+		for index, keyframe in keyframes do
+			-- A joint missing from a keyframe is at rest there (zero).
+			local jointPose = keyframe.pose[joint]
+			track.rot[index] = if jointPose then jointPose.rot else Vector3.zero
+			track.pos[index] = if jointPose and jointPose.pos then jointPose.pos else Vector3.zero
+		end
+		track.rotTangent = computeTangents(track.rot, compiled.times, keyframes, clip)
+		track.posTangent = computeTangents(track.pos, compiled.times, keyframes, clip)
 	end
 	compiledCache[clip] = compiled
 	return compiled
 end
 
--- "Smoothstep": slow in, slow out. Makes keyframe transitions organic.
-local function ease(alpha: number): number
-	return alpha * alpha * (3 - 2 * alpha)
+local function toCFrame(rot: Vector3, pos: Vector3): CFrame
+	return CFrame.new(pos) * CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
 end
 
 -- The pose of `clip` at `time` (seconds), written into `out` (reused every
 -- frame to avoid creating tables): joint name → CFrame in parent space.
--- Looped clips wrap around; others hold their last keyframe.
+-- Looped clips wrap around; others hold their first / last keyframe.
 function R6Pose.sample(clip: Clip, time: number, out: { [string]: CFrame })
 	table.clear(out)
 	local compiled = compile(clip)
-	local times, frames = compiled.times, compiled.frames
+	local times = compiled.times
 	local count = #times
 	if count == 0 then
 		return
 	end
 
-	local t = if clip.looped then time % clip.length else math.clamp(time, 0, clip.length)
+	local looped = clip.looped
+	local length = clip.length
+	local t = if looped then time % length else math.clamp(time, 0, length)
 
-	-- Find the two keyframes around `t`. After the last one, a looped clip
-	-- blends back to the first (at time = length).
-	local fromIndex = count
-	for i = 1, count do
-		if times[i] > t then
-			fromIndex = i - 1
+	-- The two keyframes around `t`: `from` and `to`, with their times.
+	-- (For a looped clip, after the last key we head back to the first one.)
+	local from = count
+	for index = 1, count do
+		if times[index] > t then
+			from = index - 1
 			break
 		end
 	end
-
-	local fromFrame, toFrame, fromTime, toTime
-	if fromIndex == 0 then
-		-- Before the first keyframe: hold it.
-		fromFrame, toFrame, fromTime, toTime = frames[1], frames[1], 0, 1
-	elseif fromIndex == count then
-		if clip.looped and count > 1 then
-			fromFrame, toFrame = frames[count], frames[1]
-			fromTime, toTime = times[count], clip.length + times[1]
+	local to = from + 1
+	local fromTime, toTime
+	if from < 1 then
+		if looped then
+			from, to = count, 1
+			fromTime, toTime = times[count] - length, times[1]
 		else
-			fromFrame, toFrame, fromTime, toTime = frames[count], frames[count], 0, 1
+			from, to = 1, 1 -- before the first keyframe: hold it
+			fromTime, toTime = 0, 0
+		end
+	elseif from >= count then
+		if looped then
+			from, to = count, 1
+			fromTime, toTime = times[count], times[1] + length
+		else
+			from, to = count, count -- after the last keyframe: hold it
+			fromTime, toTime = 0, 0
 		end
 	else
-		fromFrame, toFrame = frames[fromIndex], frames[fromIndex + 1]
-		fromTime, toTime = times[fromIndex], times[fromIndex + 1]
+		fromTime, toTime = times[from], times[to]
 	end
 
 	local span = toTime - fromTime
-	local alpha = if span > 0 then ease(math.clamp((t - fromTime) / span, 0, 1)) else 0
+	local u = if span > 0 then math.clamp((t - fromTime) / span, 0, 1) else 0
+	-- Hermite basis: how much of each value / tangent at this point.
+	local u2, u3 = u * u, u * u * u
+	local h00 = 2 * u3 - 3 * u2 + 1
+	local h10 = (u3 - 2 * u2 + u) * span
+	local h01 = -2 * u3 + 3 * u2
+	local h11 = (u3 - u2) * span
 
 	for _, joint in compiled.joints do
-		local a = fromFrame[joint] or CFrame.identity
-		local b = toFrame[joint] or CFrame.identity
-		out[joint] = a:Lerp(b, alpha)
+		local track = compiled.tracks[joint]
+		local rot = track.rot[from] * h00
+			+ track.rotTangent[from] * h10
+			+ track.rot[to] * h01
+			+ track.rotTangent[to] * h11
+		local pos = track.pos[from] * h00
+			+ track.posTangent[from] * h10
+			+ track.pos[to] * h01
+			+ track.posTangent[to] * h11
+		out[joint] = toCFrame(rot, pos)
 	end
 end
 

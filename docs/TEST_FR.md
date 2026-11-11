@@ -89,9 +89,12 @@ Les **sons** ne jouent que si leurs IDs sont remplis dans `src/shared/Sounds.lua
 | 12 | Q pile quand l'Attacking Dummy frappe | « **DODGE** » : le coup ne fait rien. |
 | 13 | Tuer le Dummy | Il tombe, et revient 3 s plus tard. |
 | 14 | Mourir face à l'Attacking Dummy | Tu réapparais, tout remarche (frapper, bloquer, dash). |
-| 15 | Animations des coups | 1 : direct du gauche ; 2 : direct du droit (le buste tourne) ; 3 : crochet du gauche ; 4 : coup plongeant du droit, bras levé avant. Chaque coup a un petit élan avant l'impact. |
+| 15 | Animations des coups | 1 : direct du gauche ; 2 : direct du droit (le buste tourne) ; 3 : crochet du gauche ; 4 : coup plongeant du droit, bras levé avant. Mouvement **continu** : élan, accélération, le poing dépasse un peu la cible, retour en garde avec un petit rebond. |
+| 15a | Entre deux coups | Les poings **restent levés** (garde de combat) ~3,5 s après le dernier coup donné ou reçu, puis redescendent doucement. |
+| 15b | Un coup qui touche | Micro-pause à l'impact (**hit-stop**) sur toi et la cible : le coup a du poids. Le 4ᵉ : pause plus longue. |
+| 15c | Sons des coups | Un souffle à chaque coup, un impact quand ça touche ; jamais deux fois le même son de suite. Le 4ᵉ coup : plus grave et plus fort. |
 | 16 | Animations de défense | F : avant-bras croisés devant le visage (les jambes continuent de marcher). Coup bloqué : recul. Parade : le bras droit écarte le coup. Guard break : bras qui s'ouvrent, puis titube. |
-| 17 | Étourdi / touché | Tête basse, bras ballants qui se balancent. Touché de face : tête en arrière ; de dos : projeté en avant. |
+| 17 | Touché (laisse l'Attacking Dummy te frapper) | Réaction **différente selon le coup** : 1 → la tête part en arrière ; 2 → tête et buste jetés d'un côté ; 3 → de l'autre côté ; 4 → écrasé, les genoux plient, titube. De dos : projeté en avant. La tête réagit d'abord, le buste suit, puis ça se stabilise, étourdi (tête basse, bras ballants). Deux coups identiques ne donnent jamais exactement la même secousse. |
 | 18 | Dashs (Q) | Avant : penché, bras en arrière. Arrière : buste en arrière, garde levée. Côtés : le corps penche dans la direction. |
 | 19 | L'**Attacking Dummy** | Il joue lui aussi ses coups, ses réactions et son état étourdi. |
 | 20 | Pendant une glissade / escalade : clic gauche, F, Q | Rien ne se passe. Et en garde (F) ou étourdi : pas de glissade ni d'escalade. |
