@@ -27,4 +27,10 @@ export type PlayerProfile = {
 -- What the server sends to the owning client.
 export type ProfileSnapshot = PlayerProfile
 
+-- What happened when an attack reached someone (Remotes.CombatEvent).
+--   Hit        normal hit          Blocked     hit blocked (chip damage)
+--   Finisher   4th hit, knockback  GuardBreak  block broken (no stamina)
+--   Parried    perfect block       Dodged      hit during dash frames
+export type CombatEventKind = "Hit" | "Finisher" | "Blocked" | "GuardBreak" | "Parried" | "Dodged"
+
 return nil

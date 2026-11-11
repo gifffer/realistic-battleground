@@ -40,8 +40,8 @@ que le jeu**. Le jeu est sur ton compte perso → publie les animations sur **to
 2. **Owner / Creator** : ton compte perso (pas un groupe).
 3. Valide, puis copie l'ID (nombre) donné à la fin — tu le retrouves aussi dans
    *Creator Hub → Creations → Development Items → Animations*.
-4. Envoie-moi la liste **nom → ID** (ou ajoute-la toi-même dans
-   `src/shared/Config/Animations.luau` quand ce fichier existera, étape 2 de la feuille de route).
+4. Envoie-moi la liste **nom → ID**, ou remplace toi-même le `0` à côté du nom dans
+   `src/shared/Animations.luau` (ex. `Block = 1234567890,`). Rojo met Studio à jour tout seul.
 5. Pense aussi à **sauvegarder** l'animation dans Studio (menu ⋯ → *Save*) pour pouvoir la
    modifier plus tard. Republier une animation modifiée donne un **nouvel ID** (à me renvoyer).
 

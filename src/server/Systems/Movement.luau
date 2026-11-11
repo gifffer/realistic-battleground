@@ -16,6 +16,11 @@
 --
 --   Movement.setSpeedModifier(player, "Limp", 0.75)  -- 25 % slower
 --   Movement.setSpeedModifier(player, "Limp", nil)   -- remove it
+--
+-- Sprint locks: some actions forbid sprinting (blocking, attacking, being
+-- stunned). Same idea, by name:
+--   Movement.setSprintLock(player, "Block", true)   -- can't sprint
+--   Movement.setSprintLock(player, "Block", false)  -- lock removed
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -29,6 +34,7 @@ local Stamina = require(script.Parent.Stamina)
 type State = {
 	wantsToSprint: boolean,
 	modifiers: { [string]: number },
+	sprintLocks: { [string]: boolean },
 }
 
 local Movement = {}
@@ -38,7 +44,7 @@ local states: { [Player]: State } = {}
 local function getState(player: Player): State
 	local state = states[player]
 	if state == nil then
-		state = { wantsToSprint = false, modifiers = {} }
+		state = { wantsToSprint = false, modifiers = {}, sprintLocks = {} }
 		states[player] = state
 	end
 	return state
@@ -70,7 +76,12 @@ local function update(dt: number)
 		local sprinting = false
 
 		if humanoid then
-			if state.wantsToSprint and not Stamina.isExhausted(player) and isMoving(humanoid) then
+			if
+				state.wantsToSprint
+				and next(state.sprintLocks) == nil
+				and not Stamina.isExhausted(player)
+				and isMoving(humanoid)
+			then
 				sprinting = Stamina.drain(player, Config.Stamina.SPRINT_DRAIN_PER_SECOND * dt)
 			end
 
@@ -107,6 +118,15 @@ function Movement.setSpeedModifier(player: Player, key: string, multiplier: numb
 		`speed multiplier must be between 0 and 2, got {multiplier}`
 	)
 	modifiers[key] = multiplier
+end
+
+function Movement.setSprintLock(player: Player, key: string, locked: boolean)
+	local locks = getState(player).sprintLocks
+	if locked then
+		locks[key] = true
+	else
+		locks[key] = nil
+	end
 end
 
 ------------------------------------------------------------------------------
