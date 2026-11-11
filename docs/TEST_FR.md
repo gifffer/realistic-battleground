@@ -51,6 +51,13 @@ Prépare un terrain de test dans le Workspace (pas dans un dossier Rojo) : des b
 | 12 | Un bloc avec un plafond juste au-dessus | Pas d'escalade (pas la place). |
 | 13 | STAMINA presque vide (< 10) | Pas d'escalade ni de glissade. |
 | 14 | En 1ʳᵉ personne (Settings) | Accroupi, glissade, escalade marchent aussi. |
+| 15 | Accroupi immobile | Garde basse : pied gauche devant, buste penché, poings levés, respiration lente. |
+| 16 | Accroupi en marchant | Pas chassés (le pied avant avance, l'arrière suit), aucun pied dans le sol. |
+| 17 | Glissade | Buste en arrière, jambes devant au ras du sol, une main traîne derrière. |
+| 18 | Escalade | Bras tendus vers le rebord → genou levé → appui sur les mains → debout. |
+| 19 | Course | Le buste se penche un peu en avant ; à l'arrêt il se redresse en douceur. |
+| 20 | Passer d'une animation à l'autre | Toujours un fondu, jamais de « saut » de pose. |
 
-Test à 2 joueurs : le joueur 2 voit le joueur 1 glisser et grimper sans saccade.
+Test à 2 joueurs : le joueur 2 voit les **animations** du joueur 1 (accroupi, glissade, escalade,
+course penchée), avec un petit décalage normal (réseau).
 Dans l'Output, **aucune ligne rouge**. S'il y en a : copie-les-moi avec le numéro du test.

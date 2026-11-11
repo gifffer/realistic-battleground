@@ -7,6 +7,9 @@
 --   • Jump in front of a wall you can reach → climb onto it (Shared/Ledge).
 --   • Jump while crouched → stand up.  Jump during a slide → stop the slide.
 --
+-- The body poses (crouch, slide, climb) are animated by
+-- CharacterAnimationController, which asks us getVisualState().
+--
 -- Who decides what (see Server/Systems/Movement):
 --   • Crouch: we only send the wish (Remotes.SetCrouching). The server sets
 --     the speed.
@@ -23,10 +26,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
-local Animations = require(ReplicatedStorage.Shared.Animations)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Ledge = require(ReplicatedStorage.Shared.Ledge)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Types = require(ReplicatedStorage.Shared.Types)
 local CameraController = require(script.Parent.CameraController)
 
 local player = Players.LocalPlayer
@@ -35,8 +38,6 @@ local player = Players.LocalPlayer
 local CONFIRM_TIMEOUT = 0.4
 -- After this long, a slide that is barely moving has hit a wall → stop it.
 local WALL_CHECK_DELAY = 0.15
--- Speed (studs/s) above which "crouch walk" plays instead of "crouch idle".
-local MOVING_SPEED = 1
 -- Small push forward when a climb ends, so you don't stand on the very edge.
 local CLIMB_EXIT_SPEED = 4
 
@@ -65,8 +66,6 @@ local lastClimbAt = -math.huge
 
 local humanoid: Humanoid? = nil
 local root: BasePart? = nil
-local tracks: { [string]: AnimationTrack } = {}
-local loopTrack: AnimationTrack? = nil -- crouch idle / walk currently playing
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -103,20 +102,6 @@ local function setCrouched(value: boolean, tellServer: boolean)
 	end
 end
 
-local function playTrack(name: string, fade: number)
-	local track = tracks[name]
-	if track then
-		track:Play(fade)
-	end
-end
-
-local function stopTrack(name: string, fade: number)
-	local track = tracks[name]
-	if track and track.IsPlaying then
-		track:Stop(fade)
-	end
-end
-
 ------------------------------------------------------------------------------
 -- Ending an action
 ------------------------------------------------------------------------------
@@ -139,7 +124,6 @@ local function endAction(standUp: boolean)
 	CameraController.holdRotation("parkour", false)
 
 	if current.kind == "Slide" then
-		stopTrack("Slide", 0.25)
 		-- The server makes us crouch when its slide timer ends; we match it.
 		-- (Server ignores crouch changes during the slide, so no need to send.)
 		setCrouched(not standUp, false)
@@ -148,7 +132,6 @@ local function endAction(standUp: boolean)
 			Remotes.SetCrouching:FireServer(false)
 		end
 	else
-		stopTrack("Climb", 0.15)
 		updateJumpAllowed()
 		local part = root
 		if part and not standUp then
@@ -211,7 +194,6 @@ local function startSlide(now: number)
 		to = part.Position,
 	}
 	lastSlideAt = now
-	playTrack("Slide", 0.1)
 	Remotes.RequestMoveAction:FireServer("Slide")
 end
 
@@ -278,7 +260,6 @@ local function tryStartClimb(now: number)
 	}
 	updateJumpAllowed()
 	lastClimbAt = now
-	playTrack("Climb", 0.05)
 	Remotes.RequestMoveAction:FireServer("Climb")
 end
 
@@ -331,26 +312,6 @@ local function onPreSimulation()
 	end
 end
 
--- Crouch animations (idle / walk) follow the crouch state and the speed.
-local function onRenderStep()
-	local part = root
-	local wanted: AnimationTrack? = nil
-	if crouched and action == nil and part and isAlive() then
-		local moving = horizontalVelocity(part).Magnitude > MOVING_SPEED
-		wanted = if moving then tracks.CrouchWalk else tracks.CrouchIdle
-	end
-	if wanted == loopTrack then
-		return
-	end
-	if loopTrack then
-		loopTrack:Stop(0.2)
-	end
-	if wanted then
-		wanted:Play(0.2)
-	end
-	loopTrack = wanted
-end
-
 ------------------------------------------------------------------------------
 -- Input
 ------------------------------------------------------------------------------
@@ -384,32 +345,12 @@ end
 -- Character
 ------------------------------------------------------------------------------
 
-local function loadTracks(animator: Animator)
-	table.clear(tracks)
-	loopTrack = nil
-	for name, id in Animations.MOVEMENT do
-		if id ~= "" then
-			local animation = Instance.new("Animation")
-			animation.AnimationId = id
-			local track = animator:LoadAnimation(animation)
-			local isMovementLoop = name == "CrouchIdle" or name == "CrouchWalk"
-			track.Priority = if isMovementLoop
-				then Enum.AnimationPriority.Movement
-				else Enum.AnimationPriority.Action
-			track.Looped = name ~= "Climb"
-			tracks[name] = track
-		end
-	end
-end
-
 local function onCharacterAdded(character: Model)
 	-- Forget everything about the previous life.
 	endAction(true)
 	humanoid = nil
 	root = nil
 	crouched = false
-	table.clear(tracks)
-	loopTrack = nil
 
 	local foundHumanoid = character:WaitForChild("Humanoid", 10)
 	local foundRoot = character:WaitForChild("HumanoidRootPart", 10)
@@ -425,11 +366,22 @@ local function onCharacterAdded(character: Model)
 	humanoid = foundHumanoid
 	root = foundRoot
 	updateJumpAllowed()
+end
 
-	local animator = foundHumanoid:WaitForChild("Animator", 10)
-	if animator and animator:IsA("Animator") and humanoid == foundHumanoid then
-		loadTracks(animator)
+------------------------------------------------------------------------------
+-- Public API
+------------------------------------------------------------------------------
+
+-- What OUR character is doing right now, as we predict it (no network delay):
+-- "Slide", "Climb", "Crouch", or nil (standing: walk / sprint).
+-- Used by CharacterAnimationController to animate our own character.
+function ParkourController.getVisualState(): Types.MoveState?
+	if action then
+		return action.kind
+	elseif crouched then
+		return "Crouch"
 	end
+	return nil
 end
 
 ------------------------------------------------------------------------------
@@ -455,7 +407,6 @@ function ParkourController.start()
 	end
 
 	RunService.PreSimulation:Connect(onPreSimulation)
-	RunService.RenderStepped:Connect(onRenderStep)
 end
 
 return ParkourController

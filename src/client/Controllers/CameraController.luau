@@ -79,8 +79,10 @@ local DROP_SMOOTHING = 12
 
 local function updateCrouchDrop(dt: number): Vector3
 	local moveState = player:GetAttribute("MoveState")
-	local low = moveState == "Crouch" or moveState == "Slide"
-	local target = if low then Config.Camera.CROUCH_DROP else 0
+	local target = if moveState == "Slide"
+		then Config.Camera.SLIDE_DROP
+		elseif moveState == "Crouch" then Config.Camera.CROUCH_DROP
+		else 0
 	currentDrop += (target - currentDrop) * (1 - math.exp(-DROP_SMOOTHING * dt))
 	return Vector3.new(0, -currentDrop, 0)
 end

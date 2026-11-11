@@ -62,14 +62,12 @@ Tant qu'une animation manque, le code utilisera un ID vide et le combat marchera
 | `Limp` | oui | Marche en boitant (priorité **Movement**) |
 | `GetUp` | non | Se relever après un ragdoll |
 
-### Mouvements
-Ceux-là vont dans **`src/shared/Animations.luau`** (section `MOVEMENT`) dès maintenant.
-| Nom | Boucle | Priorité | Remarque |
-|---|---|---|---|
-| `CrouchIdle` | oui | **Movement** | Accroupi immobile, garde haute |
-| `CrouchWalk` | oui | **Movement** | Marche accroupie |
-| `Slide` | oui | Action | Glissade sur le côté/les fesses, une main au sol |
-| `Climb` | non | Action | Se hisser sur un rebord, **~0,5 s** (même durée que `Config.Climb.DURATION`) |
+### Mouvements — ✅ faits en code (rien à faire dans Studio)
+Accroupi (immobile / en marchant), glissade, escalade et l'inclinaison en course sont animés
+**par le code** : `src/client/Animation/MovementClips.luau` (les poses) et
+`src/client/Controllers/CharacterAnimationController.luau` (lecture + fondu).
+Pour ajuster une pose : change les angles dans `MovementClips.luau` (explications en haut du
+fichier), Rojo synchronise, *Play*.
 
 ### Street Brawler
 | Nom | `Hit` |
