@@ -105,3 +105,29 @@ parer entre vous ; chaque joueur voit les contours bleus/jaunes **et les animati
 
 Si un test échoue : copie-moi les lignes rouges de l'Output et dis-moi le numéro du test
 (une vidéo marche très bien aussi).
+
+## Étape 3 — Dégâts & mort (`feature/damage-death`)
+
+Utilise le **Dummy** gris (passif) et l'**Attacking Dummy** rouge. Ils peuvent eux aussi être KO
+et achevés (l'Attacking Dummy ne t'achève jamais, il te laisse te relever).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| 1 | Regarder le centre de l'écran | Un petit **point de visée** ; il devient **rouge** sur la tête d'un adversaire. |
+| 2 | Frapper le Dummy en visant la **tête** | Sa vie baisse plus (×1,25), il reste étourdi un peu plus longtemps. |
+| 3 | Viser le **torse** | Dégâts normaux ; il se **plie en avant** (coup au corps) au lieu de prendre la tête en arrière. |
+| 4 | Se faire frapper à la tête par l'Attacking Dummy | Ta vision est **floue** un court instant. |
+| 5 | Mettre le Dummy à 0 PV | Il tombe **mou au sol** (ragdoll), il ne meurt pas. |
+| 6 | Le laisser au sol 6 s | Il se **relève** (animation : un genou, une poussée ratée, debout), étourdi, avec 25 PV. |
+| 7 | Le mettre KO puis s'approcher devant lui | « **FINISH [M1]** » apparaît au-dessus de lui. |
+| 8 | Clic gauche | **Finisher** : tu poses un genou, poing levé, coup de marteau au sol ; il meurt. Le kill feed (en haut à droite) affiche « Toi FINISHED Dummy ». Tu gagnes **+35 PV**. |
+| 9 | Pendant ton finisher, l'Attacking Dummy te frappe | Le finisher est **annulé** ; quelqu'un peut encore l'achever. |
+| 10 | Te laisser mettre KO par l'Attacking Dummy | L'écran s'assombrit, « **KNOCKED OUT** » + barre + « Getting up in … s ». Tu ne peux rien faire, puis tu te relèves avec 25 PV. |
+| 11 | Mourir (tomber de la map, ou te faire achever à 2 joueurs) | Réapparition après **5 s**, avec une **bulle** de protection 3 s. |
+| 12 | Frapper pendant ta protection | La bulle **disparaît** dès que tu attaques. |
+| 13 | Frapper un joueur protégé | « **PROTECTED** » : aucun dégât. |
+
+Test à 2 joueurs : met l'autre KO, achève-le → le kill feed s'affiche chez les deux, ton nom en
+orange ; ses **deaths** et tes **kills** augmentent (fenêtre Settings / sauvegarde). Si un joueur
+**quitte en plein combat** (touché il y a moins de 10 s), le kill feed affiche « X FLED » et le
+dernier qui l'a frappé gagne le kill.
