@@ -104,7 +104,7 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "Hit",
 	},
 	Awaken = { -- Street Fury starts (a neck crack, a low growl...)
-		ids = { 101404702795772 },
+		ids = { 120898948780322 },
 		volume = 0.8,
 		pitch = 1,
 		pitchVariation = 0.03,
@@ -113,8 +113,16 @@ local sounds: { [string]: SoundInfo } = {
 
 	-- Injuries (step 5) -----------------------------------------------------
 	-- Loops heard only by you while your health is low.
-	Heartbeat = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0 },
-	Breathing = { ids = {}, volume = 0.45, pitch = 1, pitchVariation = 0 },
+	Heartbeat = { ids = { 7237020278 }, volume = 0.6, pitch = 1, pitchVariation = 0 },
+	Breathing = { ids = { 6814463121 }, volume = 0.45, pitch = 1, pitchVariation = 0 },
+	-- The fighter groans when hit, once their health is at or under
+	-- Config.Injuries.HURT_SOUND_HEALTH (70).
+	HurtGrunt = {
+		ids = { 136844926219636, 135663378635164, 89916929786660 },
+		volume = 0.8,
+		pitch = 1,
+		pitchVariation = 0.06,
+	},
 
 	-- Movement -------------------------------------------------------------
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },

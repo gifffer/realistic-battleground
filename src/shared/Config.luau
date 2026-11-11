@@ -220,6 +220,8 @@ return table.freeze({
 		CRIT_BLEED = table.freeze({ perSecond = 1.5, duration = 3 }),
 		-- Visible marks (bruises, cuts) on a body part: at most this many.
 		MAX_WOUNDS_PER_PART = 3,
+		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).
+		HURT_SOUND_HEALTH = 70,
 	}),
 
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish

@@ -599,6 +599,18 @@ local function onCombatEvent(
 			headBlur()
 		end
 
+		-- Hurt enough: the victim groans (read a moment later, once the
+		-- server's new health has reached us).
+		task.delay(0.05, function()
+			local humanoid = victim:FindFirstChildOfClass("Humanoid")
+			if
+				humanoid
+				and humanoid.Health > 0
+				and humanoid.Health <= Config.Injuries.HURT_SOUND_HEALTH
+			then
+				SoundController.play("HurtGrunt", victim)
+			end
+		end)
 		if moveId then
 			KitEffects.onHit(victim, attacker, moveId, zone)
 			if iAmAttacker then
