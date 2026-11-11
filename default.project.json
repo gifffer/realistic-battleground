@@ -25,12 +25,6 @@
         "Client": {
           "$path": "src/client"
         }
-      },
-      "StarterCharacterScripts": {
-        "$className": "StarterCharacterScripts",
-        "Health": {
-          "$path": "src/character/Health.server.luau"
-        }
       }
     }
   }

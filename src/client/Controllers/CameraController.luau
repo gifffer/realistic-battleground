@@ -57,9 +57,17 @@ local function applyCameraMode()
 		player.CameraMode = Enum.CameraMode.LockFirstPerson
 	else
 		player.CameraMode = Enum.CameraMode.Classic
-		-- Min before max: setting a min above the current max would fail.
-		player.CameraMinZoomDistance = Config.Camera.MIN_ZOOM
-		player.CameraMaxZoomDistance = Config.Camera.MAX_ZOOM
+		-- Coming back from first person, Roblox would leave the camera at the
+		-- closest zoom (too close). Trick: lock the zoom to DEFAULT_ZOOM for
+		-- one frame (the camera jumps there), then allow the normal range again.
+		player.CameraMaxZoomDistance = Config.Camera.DEFAULT_ZOOM
+		player.CameraMinZoomDistance = Config.Camera.DEFAULT_ZOOM
+		task.delay(0.1, function()
+			if not firstPerson then
+				player.CameraMinZoomDistance = Config.Camera.MIN_ZOOM
+				player.CameraMaxZoomDistance = Config.Camera.MAX_ZOOM
+			end
+		end)
 	end
 	cursorUnlocker.Visible = isCursorFree()
 end

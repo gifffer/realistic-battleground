@@ -82,6 +82,10 @@ git pull
 ```
 Rojo met Studio à jour automatiquement si `rojo serve` tourne.
 
+> Si `default.project.json` a changé (il apparaît dans la liste des fichiers modifiés du commit),
+> **arrête `rojo serve` (Ctrl+C) et relance-le**, puis reconnecte le plugin : sinon certains
+> réglages ne sont pas appliqués dans Studio.
+
 ## 5. Ajouter les images (sprites)
 
 1. Dans Studio : *Asset Manager* (ou Creator Hub) → *Import* → ton image `.png`.
