@@ -165,7 +165,7 @@ end
 local function onPlayerRemoving(player: Player)
 	-- Last changes to the save (e.g. Knockout: leaving mid-fight = a death).
 	for _, callback in leavingCallbacks do
-		local ok, problem = pcall(callback, player)
+		local ok: boolean, problem: any = pcall(callback, player)
 		if not ok then
 			warn(`[PlayerData] onLeaving callback failed for {player.Name}: {problem}`)
 		end
