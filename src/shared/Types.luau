@@ -27,4 +27,12 @@ export type PlayerProfile = {
 -- What the server sends to the owning client.
 export type ProfileSnapshot = PlayerProfile
 
+-- How a character is moving right now. Decided by the server
+-- (Server/Systems/Movement), published as the Player attribute "MoveState".
+export type MoveState = "Walk" | "Sprint" | "Crouch" | "Slide" | "Climb"
+
+-- Short movement moves the client can ask for (Remotes.RequestMoveAction).
+-- "Cancel" = stop the current one early (e.g. jumping out of a slide).
+export type MoveAction = "Slide" | "Climb" | "Cancel"
+
 return nil

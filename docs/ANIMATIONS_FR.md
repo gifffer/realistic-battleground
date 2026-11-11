@@ -62,6 +62,15 @@ Tant qu'une animation manque, le code utilisera un ID vide et le combat marchera
 | `Limp` | oui | Marche en boitant (priorité **Movement**) |
 | `GetUp` | non | Se relever après un ragdoll |
 
+### Mouvements
+Ceux-là vont dans **`src/shared/Animations.luau`** (section `MOVEMENT`) dès maintenant.
+| Nom | Boucle | Priorité | Remarque |
+|---|---|---|---|
+| `CrouchIdle` | oui | **Movement** | Accroupi immobile, garde haute |
+| `CrouchWalk` | oui | **Movement** | Marche accroupie |
+| `Slide` | oui | Action | Glissade sur le côté/les fesses, une main au sol |
+| `Climb` | non | Action | Se hisser sur un rebord, **~0,5 s** (même durée que `Config.Climb.DURATION`) |
+
 ### Street Brawler
 | Nom | `Hit` |
 |---|---|
