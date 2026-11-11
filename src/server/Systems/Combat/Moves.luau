@@ -99,6 +99,8 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		bleed = hit.bleed,
 		slow = hit.slow,
 		unblockable = hit.unblockable,
+		launch = hit.launch,
+		staminaDrain = hit.staminaDrain,
 		attackId = nil,
 		moveId = moveId,
 	}
@@ -261,6 +263,7 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	end
 	-- Using a move ends the spawn protection (like attacking).
 	Knockout.endProtection(state.model)
+	state.slipUntil = 0 -- a new move ends the previous slip
 
 	state.cooldowns[move.id] = time + move.cooldown
 	c.setAttribute(state.model, `CD_{move.id}`, serverTime(move.cooldown))
@@ -272,17 +275,102 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	local token = state.attackToken
 	Remotes.CombatAction:FireAllClients(state.model, move.animation)
 
-	for _, hit in move.hits do
+	-- Slip: dodge the next frontal hit during the window (Combat checks
+	-- slipUntil in resolveHit and calls Moves.counter).
+	local counter = move.counter
+	if counter then
+		-- (Never longer than the move itself.)
+		state.slipUntil = time + math.min(counter.window, move.duration)
+		state.slipMoveId = move.id
+	end
+
+	-- A chained combo: the hits after the first land on whoever the first
+	-- one reached (if still close and standing), they can't miss halfway.
+	local chained: { CombatState }? = nil
+	for index, hit in move.hits do
 		task.delay(hit.at, function()
 			-- Cancelled (stunned meanwhile), dead or removed?
 			if state.attackToken ~= token or not c.isAlive(state) then
 				return
 			end
-			strike(state, hit, move.id, aim)
+			if not move.chain or index == 1 then
+				local reached = strike(state, hit, move.id, aim)
+				if move.chain then
+					chained = reached
+				end
+				return
+			end
+			local targets: { CombatState } = chained or {}
+			for _, victim in targets do
+				local distance = (victim.root.Position - state.root.Position).Magnitude
+				if
+					c.isAlive(victim)
+					and not Knockout.isKnockedOut(victim.model)
+					and distance <= KC.FOLLOW_UP_RANGE
+				then
+					local zone: Types.HitZone = hit.zone or "Head"
+					c.resolveHit(state, victim, specFor(hit, zone, move.id))
+				end
+			end
 		end)
 	end
 	runCharge(state, move, token)
 	return true
+end
+
+-- A slip worked: `state` dodged `attacker`'s hit. Answer with the slip
+-- move's counter (its animation for everyone, the hit `at` seconds later
+-- if the attacker is still in reach).
+function Moves.counter(state: CombatState, attacker: CombatState)
+	local c = context()
+	local kit = Kits.get(state.kitId)
+	local slipMoveId = state.slipMoveId
+	state.slipMoveId = nil
+	if
+		kit == nil
+		or slipMoveId == nil
+		or not c.isAlive(state)
+		or c.isStunned(state)
+		or c.isBusy(state)
+	then
+		return
+	end
+	local move: Kits.MoveDef? = nil
+	local lists = { kit.moves }
+	local awakening = kit.awakening
+	if awakening then
+		table.insert(lists, awakening.moves)
+	end
+	for _, list in lists do
+		for _, candidate in list do
+			if candidate.id == slipMoveId then
+				move = candidate
+			end
+		end
+	end
+	local counter = if move then move.counter else nil
+	if move == nil or counter == nil then
+		return
+	end
+	local time = c.now()
+	local busy = counter.at + 0.37 -- the counter animation
+	state.nextAttackAt = time + busy
+	state.attackingUntil = time + busy
+	state.attackToken += 1
+	local token = state.attackToken
+	state.invulnerableUntil = math.max(state.invulnerableUntil, time + counter.at)
+	Remotes.CombatAction:FireAllClients(state.model, counter.animation)
+	task.delay(counter.at, function()
+		if state.attackToken ~= token or not c.isAlive(state) or not c.isAlive(attacker) then
+			return
+		end
+		local distance = (attacker.root.Position - state.root.Position).Magnitude
+		if distance > KC.FOLLOW_UP_RANGE then
+			return -- they backed off
+		end
+		local zone: Types.HitZone = counter.hit.zone or "Head"
+		c.resolveHit(state, attacker, specFor(counter.hit, zone, move.id .. "_Counter"))
+	end)
 end
 
 -- G: awaken if the gauge is full. Returns true if it started.

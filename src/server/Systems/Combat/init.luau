@@ -172,6 +172,7 @@ end
 local function stun(state: CombatState, duration: number)
 	state.stunnedUntil = math.max(state.stunnedUntil, now() + duration)
 	state.attackToken += 1 -- a stunned fighter's wind-up is cancelled
+	state.slipUntil = 0 -- ...and so is a slip
 	stopBlocking(state)
 	setAttribute(state.model, "Stunned", true)
 end
@@ -204,6 +205,7 @@ local function dealDamage(victim: CombatState, attacker: CombatState?, amount: n
 	if victim.humanoid.Health - amount <= 0 then
 		stopBlocking(victim)
 		victim.attackToken += 1 -- cancels a punch they were winding up
+		victim.slipUntil = 0
 		Knockout.knockOut(victim.model, attackerModel)
 	else
 		victim.humanoid.Health -= amount
@@ -399,6 +401,22 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
+	-- 1b. Slip (Boxer): a hit from the front is slipped, and answered. The
+	-- attacker's move is cut (its next hits don't land), and the slipper
+	-- can't be hit by anyone until the counter lands.
+	if
+		time < victim.slipUntil
+		and isInFront(victim, attacker)
+		and not isStunned(victim)
+		and not isBusy(victim)
+	then
+		victim.slipUntil = 0
+		attacker.attackToken += 1
+		event("Dodged", false, false)
+		Moves.counter(victim, attacker)
+		return false
+	end
+
 	if victim.blocking and isInFront(victim, attacker) then
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
@@ -450,6 +468,12 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		victim.slowUntil = time + slow.duration
 		victim.slowMultiplier = slow.multiplier
 	end
+	-- Body shot: the breath goes out of them.
+	local drain = spec.staminaDrain
+	local victimPlayer = victim.player
+	if drain and victimPlayer then
+		Stamina.drain(victimPlayer, drain)
+	end
 	local bleed = spec.bleed
 	-- A heavy blow to the head (the 4th M1) opens a cut too.
 	if bleed == nil and spec.kind == "Finisher" and zone == "Head" then
@@ -474,7 +498,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	if knockdown then
 		-- Thrown to the ground (and away, upward if it's a launch).
 		local speed = knockback or 0
-		local up = if speed >= 40 then KC.LAUNCH_UP_SPEED else 4
+		local up = spec.launch or (if speed >= 40 then KC.LAUNCH_UP_SPEED else 4)
 		knockDown(victim, knockdown, away * speed + Vector3.new(0, up, 0))
 	else
 		stun(victim, spec.stun + extraStun)
@@ -545,6 +569,8 @@ function Combat.register(model: Model, player: Player?)
 		wounds = {},
 		lastDamagedAt = -math.huge,
 		regenCarry = 0,
+		slipUntil = 0,
+		slipMoveId = nil,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -573,15 +599,17 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	end
 	local time = now()
 	local K = Config.Knockout
-	state.nextAttackAt = time + K.FINISH_DURATION
-	state.finishingUntil = time + K.FINISH_DURATION
-	state.attackingUntil = time + K.FINISH_DURATION
+	-- Each kit can have its own finisher (the Street Brawler stomps).
+	local finisher = Kits.finisher(state.kitId)
+	state.nextAttackAt = time + finisher.duration
+	state.finishingUntil = time + finisher.duration
+	state.attackingUntil = time + finisher.duration
 	state.combo = 0
 	state.attackToken += 1
 	local token = state.attackToken
-	Remotes.CombatAction:FireAllClients(state.model, "Finisher")
+	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
 
-	task.delay(K.FINISH_IMPACT, function()
+	task.delay(finisher.impact, function()
 		local targetRoot = target:FindFirstChild("HumanoidRootPart")
 		local stillThere = targetRoot ~= nil
 			and targetRoot:IsA("BasePart")
@@ -642,6 +670,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	end
 	-- Attacking ends the spawn protection.
 	Knockout.endProtection(model)
+	state.slipUntil = 0 -- punching ends a slip
 
 	-- A KO'd fighter right in front: finish them instead of punching.
 	-- (Players only: training dummies never finish anyone.)

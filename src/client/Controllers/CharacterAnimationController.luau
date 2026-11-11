@@ -93,6 +93,7 @@ local REACTIONS = table.freeze({
 	HitHeavy = true,
 	HitBack = true,
 	HitLeg = true,
+	HitLiver = true,
 	GetUp = true,
 })
 local ACTION_FADE_OUT = 0.12

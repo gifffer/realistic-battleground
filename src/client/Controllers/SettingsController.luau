@@ -10,6 +10,7 @@
 --   3. the server sends back the save; it should contain the same value.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -111,6 +112,13 @@ local function setFirstPerson(value: boolean)
 	end
 end
 
+-- Switch camera and save the choice (the toggle, or the camera key).
+local function toggleFirstPerson()
+	lastLocalChange = os.clock()
+	setFirstPerson(not firstPerson)
+	Remotes.UpdateSetting:FireServer("firstPerson", firstPerson)
+end
+
 local function buildWindow(content: Frame)
 	Theme.text({
 		Name = "Section",
@@ -155,11 +163,7 @@ local function buildWindow(content: Frame)
 			BackgroundTransparency = 0.9,
 		}),
 	})
-	firstPersonToggle = createToggle(row, function()
-		lastLocalChange = os.clock()
-		setFirstPerson(not firstPerson)
-		Remotes.UpdateSetting:FireServer("firstPerson", firstPerson)
-	end)
+	firstPersonToggle = createToggle(row, toggleFirstPerson)
 	setFirstPerson(firstPerson) -- show the current value
 
 	-- Hint: the key that frees the mouse cursor.
@@ -188,6 +192,32 @@ local function buildWindow(content: Frame)
 			Text = `Press {Config.Controls.FREE_CURSOR.Name} to free or lock the cursor`,
 		}),
 	})
+	-- Hint: the key that switches the camera (W on AZERTY, Z on QWERTY).
+	Theme.make("Frame", {
+		Name = "CameraHint",
+		Position = UDim2.fromOffset(0, 115),
+		Size = UDim2.new(1, 0, 0, 20),
+		BackgroundTransparency = 1,
+		Parent = content,
+	}, {
+		Theme.make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 10),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		Theme.keyCap("W / Z", { LayoutOrder = 1 }),
+		Theme.text({
+			LayoutOrder = 2,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 20),
+			FontFace = Theme.Fonts.Body,
+			TextSize = 12,
+			TextColor3 = C.Ink2,
+			TextStrokeTransparency = 1,
+			Text = "Switch first / third person (W on AZERTY, Z on QWERTY)",
+		}),
+	})
 end
 
 local function onProfileChanged(snapshot: Types.ProfileSnapshot)
@@ -209,6 +239,11 @@ function SettingsController.start()
 		build = buildWindow,
 	})
 	PlayerDataController.onChanged(onProfileChanged)
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if not gameProcessed and input.KeyCode == Config.Controls.CAMERA_TOGGLE then
+			toggleFirstPerson()
+		end
+	end)
 end
 
 return SettingsController
