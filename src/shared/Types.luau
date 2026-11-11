@@ -23,6 +23,8 @@ export type PlayerProfile = {
 	stats: PlayerStats,
 	settings: PlayerSettings,
 	equippedKit: string, -- id of the kit used in fights (Shared/Kits)
+	xp: number, -- total XP ever earned (the level comes from it: Shared/Progression)
+	ownedKits: { [string]: boolean }, -- kits bought (free kits don't need to be here)
 }
 
 -- What the server sends to the owning client.
@@ -59,6 +61,9 @@ export type HitZone = "Head" | "Torso" | "Legs"
 -- (Shared/Util/HitSide). Picks the hit reaction: a punch on the left
 -- cheek doesn't throw the head the same way as one on the right.
 export type HitSide = "Front" | "Back" | "Left" | "Right"
+
+-- Why a player earned XP / coins (Remotes.Progress, shown in the HUD).
+export type RewardKind = "Kill" | "Assist" | "Damage" | "Playtime"
 
 -- A line of the kill feed (Remotes.KillFeed).
 --   Finished  killer finished a KO'd victim

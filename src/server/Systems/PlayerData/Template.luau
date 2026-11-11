@@ -28,6 +28,9 @@ local template: Types.PlayerProfile = {
 	},
 	-- Added with the kits (step 4): Reconcile() adds it to older saves.
 	equippedKit = "StreetBrawler",
+	-- Added with the progression (step 7).
+	xp = 0,
+	ownedKits = {},
 }
 
 return template
