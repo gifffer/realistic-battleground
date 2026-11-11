@@ -366,10 +366,8 @@ local function onCombatAction(model: Model, action: string)
 	CharacterAnimationController.playAction(model, action)
 	if action == "GetUp" then
 		return
-	elseif action == "Finisher" then
-		SoundController.play("HeavySwing", model)
-	elseif action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
-		SoundController.play("HeavySwing", model)
+	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
+		SoundController.play("HeavySwing", model) -- the heavy blows
 	elseif string.sub(action, 1, 4) == "Dash" then
 		SoundController.play("Dash", model)
 	else
