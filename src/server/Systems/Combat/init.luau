@@ -40,6 +40,10 @@
 -- 0 HP is not death: Knockout takes over (KO, finisher, respawn).
 --   Combat.setBlocking(model, bool)
 --   Combat.onDamaged(callback)         every damage dealt (for kills, step 3)
+--   Combat.setKit(model, kitId)        the kit used by keys 1–4 / G (Kits system)
+--
+-- Kit moves (keys 1–4) and the Awakening (G) are in Combat/Moves.luau. Every
+-- hit, M1 or move, is decided by resolveHit below from a HitSpec (State.luau).
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -52,14 +56,20 @@ local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
 local Knockout = require(script.Parent.Knockout)
 local Movement = require(script.Parent.Movement)
+local PlayerData = require(script.Parent.PlayerData)
+local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
 local Hitbox = require(script.Hitbox)
+local Moves = require(script.Moves)
+local State = require(script.State)
 
 local C = Config.Combat
+local KC = Config.Kits
 
 -- Dash animation names a client may send (anything else is ignored).
 local DASH_ANIMATIONS = table.freeze({
@@ -88,30 +98,8 @@ local PART_ZONES: { [string]: Types.HitZone } = {
 }
 local random = Random.new()
 
-type CombatState = {
-	model: Model,
-	humanoid: Humanoid,
-	root: BasePart,
-	player: Player?, -- nil for dummies
-
-	combo: number, -- last M1 of the combo (0 = none yet)
-	lastAttackAt: number,
-	nextAttackAt: number, -- can't M1 before this time
-	attackingUntil: number, -- slowed while attacking
-	attackToken: number, -- +1 cancels the attack that is winding up
-
-	blocking: boolean,
-	blockStartedAt: number,
-	blockEndedAt: number,
-	parryReady: boolean, -- this block got a parry window (anti-spam)
-
-	stunnedUntil: number,
-	legSlowUntil: number, -- slowed by a leg hit until then
-	finishingUntil: number, -- doing a finisher: can't move until then
-	invulnerableUntil: number, -- dash dodge frames
-	nextDashAt: number,
-	knockbackUntil: number, -- a finisher's knockback is running until then
-}
+type CombatState = State.CombatState
+type HitSpec = State.HitSpec
 
 export type DamageInfo = {
 	victim: Model,
@@ -144,10 +132,13 @@ end
 
 -- Can't fight: knocked out, sliding / climbing, or in the middle of a finisher.
 local function isBusy(state: CombatState): boolean
-	return Knockout.isKnockedOut(state.model) or isBusyMoving(state) or now() < state.finishingUntil
+	return Knockout.isKnockedOut(state.model)
+		or isBusyMoving(state)
+		or now() < state.finishingUntil
+		or now() < state.knockedDownUntil
 end
 
-local function setAttribute(model: Model, name: string, value: boolean)
+local function setAttribute(model: Model, name: string, value: any)
 	if model:GetAttribute(name) ~= value then
 		model:SetAttribute(name, value)
 	end
@@ -163,9 +154,10 @@ local function fireEvent(
 	attacker: Model,
 	zone: Types.HitZone?,
 	side: Types.HitSide?,
-	attackId: number?
+	attackId: number?,
+	moveId: string?
 )
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side, attackId)
+	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side, attackId, moveId)
 end
 
 local function stopBlocking(state: CombatState)
@@ -183,18 +175,68 @@ local function stun(state: CombatState, duration: number)
 	setAttribute(state.model, "Stunned", true)
 end
 
+local function isAwakened(state: CombatState): boolean
+	return now() < state.awakenedUntil
+end
+
+-- Awakening gauge: fills by fighting (not while already awakened).
+local function addFury(state: CombatState, amount: number)
+	if isAwakened(state) or amount <= 0 then
+		return
+	end
+	state.fury = math.min(KC.FURY_MAX, state.fury + amount)
+	-- Whole numbers only: the attribute replicates on every change.
+	setAttribute(state.model, "Fury", math.floor(state.fury))
+end
+
 -- Damage that would bring the victim to 0 HP knocks them out instead
--- (Knockout), it never kills directly.
-local function dealDamage(victim: CombatState, attacker: CombatState, amount: number)
-	Knockout.noteHit(victim.model, attacker.model)
+-- (Knockout), it never kills directly. `attacker` = nil for damage over
+-- time whose author is gone (bleeding).
+local function dealDamage(victim: CombatState, attacker: CombatState?, amount: number)
+	local attackerModel = if attacker then attacker.model else victim.bleedSource
+	if attackerModel then
+		Knockout.noteHit(victim.model, attackerModel)
+	end
 	if victim.humanoid.Health - amount <= 0 then
 		stopBlocking(victim)
 		victim.attackToken += 1 -- cancels a punch they were winding up
-		Knockout.knockOut(victim.model, attacker.model)
+		Knockout.knockOut(victim.model, attackerModel)
 	else
 		victim.humanoid.Health -= amount
 	end
-	damaged.fire({ victim = victim.model, attacker = attacker.model, amount = amount })
+	addFury(victim, amount * KC.FURY_PER_DAMAGE_TAKEN)
+	if attacker then
+		addFury(attacker, amount * KC.FURY_PER_DAMAGE_DEALT)
+		damaged.fire({ victim = victim.model, attacker = attacker.model, amount = amount })
+	end
+end
+
+-- Knocked to the ground (tackle, launch): the body goes limp for `duration`
+-- seconds, then gets back up. A KO meanwhile takes over (Knockout).
+local function knockDown(victim: CombatState, duration: number, velocity: Vector3)
+	if Knockout.isKnockedOut(victim.model) then
+		return
+	end
+	victim.knockdownToken += 1
+	local token = victim.knockdownToken
+	local time = now()
+	victim.knockedDownUntil = time + duration
+	stun(victim, duration + KC.KNOCKDOWN_GETUP_STUN)
+	Ragdoll.enable(victim.model)
+	-- The server owns the limp body now: throw it.
+	victim.root.AssemblyLinearVelocity = velocity
+	task.delay(duration, function()
+		if
+			victim.knockdownToken ~= token
+			or not isAlive(victim)
+			or Knockout.isKnockedOut(victim.model) -- the KO gets them up itself
+		then
+			return
+		end
+		victim.knockedDownUntil = 0
+		Ragdoll.disable(victim.model, victim.player)
+		Remotes.CombatAction:FireAllClients(victim.model, "GetUp")
+	end)
 end
 
 -- The zone a hit lands on: the one aimed at, if that body part of the
@@ -246,31 +288,42 @@ local function awayFromAttacker(attacker: CombatState, victim: CombatState): Vec
 end
 
 -- Decides what a hit does to `victim`. The heart of the combat rules.
-local function resolveHit(
-	attacker: CombatState,
-	victim: CombatState,
-	combo: number,
-	zone: Types.HitZone,
-	attackId: number?
-)
-	local isFinisher = combo == #C.M1_DAMAGE
-	local damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[zone]
+-- `spec` = what the hit does (an M1 or a kit move, see State.HitSpec).
+local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitSpec)
 	local time = now()
-	-- Which side of the victim the fist arrives from (picks the reaction).
+	local zone = spec.zone
+	-- Which side of the victim the blow arrives from (picks the reaction).
 	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, attacker.root.Position)
+	local function event(kind: Types.CombatEventKind, withZone: boolean, withSide: boolean)
+		fireEvent(
+			kind,
+			victim.model,
+			attacker.model,
+			if withZone then zone :: Types.HitZone else nil,
+			if withSide then side else nil,
+			spec.attackId,
+			spec.moveId
+		)
+	end
+	-- Awakened attackers hit harder.
+	local damage = spec.damage
+	local awakening = Kits.get(attacker.kitId)
+	if isAwakened(attacker) and awakening and awakening.awakening then
+		damage *= awakening.awakening.damageMultiplier
+	end
 
 	-- 0. On the ground (finish them instead), or just spawned (protected).
 	if Knockout.isKnockedOut(victim.model) then
 		return
 	end
 	if Knockout.isProtected(victim.model) then
-		fireEvent("Protected", victim.model, attacker.model, nil, nil, attackId)
+		event("Protected", false, false)
 		return
 	end
 
 	-- 1. Dash dodge frames: the hit misses.
 	if time < victim.invulnerableUntil then
-		fireEvent("Dodged", victim.model, attacker.model, nil, nil, attackId)
+		event("Dodged", false, false)
 		return
 	end
 
@@ -278,69 +331,95 @@ local function resolveHit(
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
 			stun(attacker, C.PARRY_STUN)
-			fireEvent("Parried", victim.model, attacker.model, nil, nil, attackId)
+			event("Parried", false, false)
 			return
 		end
 
-		-- 3. Block: costs stamina. Not enough → guard break.
-		local cost = if isFinisher then C.BLOCK_STAMINA_COST * 2 else C.BLOCK_STAMINA_COST
-		local victimPlayer = victim.player
-		if victimPlayer and not Stamina.trySpend(victimPlayer, cost) then
-			Stamina.drain(victimPlayer, Config.Stamina.MAX) -- empty the bar
-			stun(victim, C.GUARD_BREAK_STUN)
-			fireEvent("GuardBreak", victim.model, attacker.model, nil, side, attackId)
+		if spec.unblockable then
+			-- 3a. Unblockable (a tackle): the guard is simply run through.
+			stopBlocking(victim)
+		else
+			-- 3b. Block: costs stamina. Not enough → guard break.
+			local victimPlayer = victim.player
+			if victimPlayer and not Stamina.trySpend(victimPlayer, spec.blockCost) then
+				Stamina.drain(victimPlayer, Config.Stamina.MAX) -- empty the bar
+				stun(victim, C.GUARD_BREAK_STUN)
+				event("GuardBreak", false, true)
+				return
+			end
+			dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
+			-- The guard absorbs the hit but is still shoved back a little.
+			if time >= victim.knockbackUntil then
+				Push.apply(
+					victim.root,
+					awayFromAttacker(attacker, victim) * C.BLOCK_PUSH_SPEED,
+					C.HIT_PUSH_TIME
+				)
+			end
+			event("Blocked", false, true)
 			return
 		end
-		dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
-		-- The guard absorbs the hit but is still shoved back a little.
-		if time >= victim.knockbackUntil then
-			Push.apply(
-				victim.root,
-				awayFromAttacker(attacker, victim) * C.BLOCK_PUSH_SPEED,
-				C.HIT_PUSH_TIME
-			)
-		end
-		fireEvent("Blocked", victim.model, attacker.model, nil, side, attackId)
-		return
 	end
 
 	-- 4. Normal hit.
 	dealDamage(victim, attacker, damage)
 	if Knockout.isKnockedOut(victim.model) then
 		-- That hit knocked them out: no stun or knockback on a limp body.
-		fireEvent(
-			if isFinisher then "Finisher" else "Hit",
-			victim.model,
-			attacker.model,
-			zone,
-			side,
-			attackId
-		)
+		event(spec.kind, true, true)
 		return
 	end
-	if zone == "Legs" then
+
+	-- Lasting effects (even through the Awakening's armor).
+	if spec.legSlow and zone == "Legs" then
 		victim.legSlowUntil = time + C.LEG_HIT_SLOW_TIME
 	end
-	local extraStun = if zone == "Head" then C.HEAD_EXTRA_STUN else 0
-	if isFinisher then
-		stun(victim, C.FINISHER_STUN + extraStun)
-		local direction = awayFromAttacker(attacker, victim)
-		Push.apply(victim.root, direction * C.KNOCKBACK_SPEED, C.KNOCKBACK_TIME)
-		victim.knockbackUntil = time + C.KNOCKBACK_TIME
-		fireEvent("Finisher", victim.model, attacker.model, zone, side, attackId)
-	else
-		stun(victim, C.HIT_STUN + extraStun)
-		-- Small push: the body is moved by the fist (no "punch through it" look).
-		-- Not during a finisher's knockback (a new push replaces the running one).
-		if time >= victim.knockbackUntil then
-			Push.apply(
-				victim.root,
-				awayFromAttacker(attacker, victim) * C.HIT_PUSH_SPEED,
-				C.HIT_PUSH_TIME
-			)
-		end
-		fireEvent("Hit", victim.model, attacker.model, zone, side, attackId)
+	local slow = spec.slow
+	if slow then
+		victim.slowUntil = time + slow.duration
+		victim.slowMultiplier = slow.multiplier
 	end
+	local bleed = spec.bleed
+	if bleed then
+		-- A new cut replaces a weaker one, refreshes a stronger one's time.
+		victim.bleedPerSecond =
+			math.max(bleed.perSecond, if time < victim.bleedUntil then victim.bleedPerSecond else 0)
+		victim.bleedUntil = math.max(victim.bleedUntil, time + bleed.duration)
+		victim.nextBleedTick = math.max(victim.nextBleedTick, time + KC.BLEED_TICK)
+		victim.bleedSource = attacker.model
+		setAttribute(victim.model, "Bleeding", true)
+	end
+
+	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
+	if isAwakened(victim) then
+		event(spec.kind, true, true)
+		return
+	end
+
+	local away = awayFromAttacker(attacker, victim)
+	local extraStun = if spec.headStun and zone == "Head" then C.HEAD_EXTRA_STUN else 0
+	local knockdown = spec.knockdown
+	local knockback = spec.knockback
+	local pull = spec.pull
+	if knockdown then
+		-- Thrown to the ground (and away, upward if it's a launch).
+		local speed = knockback or 0
+		local up = if speed >= 40 then KC.LAUNCH_UP_SPEED else 4
+		knockDown(victim, knockdown, away * speed + Vector3.new(0, up, 0))
+	else
+		stun(victim, spec.stun + extraStun)
+		if knockback then
+			Push.apply(victim.root, away * knockback, C.KNOCKBACK_TIME)
+			victim.knockbackUntil = time + C.KNOCKBACK_TIME
+		elseif pull then
+			-- Grabbed: dragged toward the attacker (stops at arm's length).
+			Push.apply(victim.root, -away * pull, C.HIT_PUSH_TIME)
+		elseif time >= victim.knockbackUntil then
+			-- Small push: the body is moved by the blow (no "punch through it"
+			-- look). Not during a knockback (a new push would replace it).
+			Push.apply(victim.root, away * C.HIT_PUSH_SPEED, C.HIT_PUSH_TIME)
+		end
+	end
+	event(spec.kind, true, true)
 end
 
 ------------------------------------------------------------------------------
@@ -377,9 +456,27 @@ function Combat.register(model: Model, player: Player?)
 		invulnerableUntil = 0,
 		nextDashAt = 0,
 		knockbackUntil = 0,
+		kitId = Kits.DEFAULT,
+		cooldowns = {},
+		fury = 0,
+		awakenedUntil = 0,
+		bleedPerSecond = 0,
+		bleedUntil = 0,
+		nextBleedTick = 0,
+		bleedSource = nil,
+		slowUntil = 0,
+		slowMultiplier = 1,
+		knockdownToken = 0,
+		knockedDownUntil = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
+	model:SetAttribute("Fury", 0)
+	model:SetAttribute("Awakened", false)
+	model:SetAttribute("Bleeding", false)
+	-- A player fights with the kit saved in their profile.
+	local data = if player then PlayerData.getData(player) else nil
+	Combat.setKit(model, if data then data.equippedKit else Kits.DEFAULT)
 	CollectionService:AddTag(model, C.TAG)
 	Knockout.register(model, player)
 
@@ -514,7 +611,19 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				resolveHit(state, victim, combo, landed, attackId)
+				resolveHit(state, victim, {
+					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed],
+					zone = landed,
+					stun = if isFinisher then C.FINISHER_STUN else C.HIT_STUN,
+					headStun = true,
+					legSlow = true,
+					kind = if isFinisher then "Finisher" else "Hit",
+					blockCost = if isFinisher
+						then C.BLOCK_STAMINA_COST * 2
+						else C.BLOCK_STAMINA_COST,
+					knockback = if isFinisher then C.KNOCKBACK_SPEED else nil,
+					attackId = attackId,
+				})
 			end
 		end
 		resolved()
@@ -571,6 +680,19 @@ function Combat.onDamaged(callback: (DamageInfo) -> ()): Signal.Connection
 	return damaged.connect(callback)
 end
 
+-- The kit `model` fights with (keys 1–4, G). Unknown or not yet available
+-- kits fall back to the default one. Visible to clients as the "Kit"
+-- attribute (the HUD shows that kit's moves).
+function Combat.setKit(model: Model, kitId: string)
+	local state = states[model]
+	if state == nil then
+		return
+	end
+	local kit = Kits.get(kitId)
+	state.kitId = if kit and kit.available then kitId else Kits.DEFAULT
+	setAttribute(model, "Kit", state.kitId)
+end
+
 ------------------------------------------------------------------------------
 -- Every frame: end stuns, apply slowdowns to players
 ------------------------------------------------------------------------------
@@ -580,6 +702,21 @@ local function update()
 	for model, state in states do
 		local stunned = time < state.stunnedUntil
 		setAttribute(model, "Stunned", stunned)
+		setAttribute(model, "Awakened", time < state.awakenedUntil)
+
+		-- Bleeding: small ticks of damage until the cut closes.
+		if state.bleedPerSecond > 0 then
+			if time >= state.bleedUntil or not isAlive(state) then
+				state.bleedPerSecond = 0
+				state.bleedSource = nil
+				setAttribute(model, "Bleeding", false)
+			elseif time >= state.nextBleedTick and not Knockout.isKnockedOut(model) then
+				state.nextBleedTick = time + KC.BLEED_TICK
+				local source = state.bleedSource
+				local attacker = if source then states[source] else nil
+				dealDamage(state, attacker, state.bleedPerSecond * KC.BLEED_TICK)
+			end
+		end
 
 		local player = state.player
 		if player then
@@ -604,6 +741,12 @@ local function update()
 				"LegHit",
 				if time < state.legSlowUntil then C.LEG_HIT_SLOW else nil
 			)
+			-- Slowed by a kit move (dirty kick).
+			Movement.setSpeedModifier(
+				player,
+				"MoveSlow",
+				if time < state.slowUntil then state.slowMultiplier else nil
+			)
 			-- Kneeling for a finisher: stay in place.
 			Movement.setSpeedModifier(
 				player,
@@ -623,6 +766,8 @@ end
 local attackLimiter = RateLimiter.new(6, 5)
 local blockLimiter = RateLimiter.new(10, 6)
 local dashLimiter = RateLimiter.new(3, 1)
+local moveLimiter = RateLimiter.new(4, 2)
+local awakenLimiter = RateLimiter.new(2, 0.5)
 
 local function onAttack(player: Player, aim: unknown, attackId: unknown)
 	local character = player.Character
@@ -673,6 +818,36 @@ local function onDash(player: Player, animation: unknown)
 	end
 end
 
+local function onUseMove(player: Player, slot: unknown, aim: unknown)
+	local character = player.Character
+	if character == nil or not moveLimiter.allow(player) then
+		return
+	end
+	-- A slot is a whole number from 1 to 4. Anything else is ignored.
+	if typeof(slot) ~= "number" or slot % 1 ~= 0 or slot < 1 or slot > #KC.MOVE_KEYS then
+		return
+	end
+	local state = states[character]
+	if state == nil then
+		return
+	end
+	local direction = AimRule.validate(aim, state.root.CFrame.LookVector)
+	if not Moves.use(state, slot, direction) then
+		Remotes.MoveRefused:FireClient(player, slot)
+	end
+end
+
+local function onAwaken(player: Player)
+	local character = player.Character
+	if character == nil or not awakenLimiter.allow(player) then
+		return
+	end
+	local state = states[character]
+	if state then
+		Moves.awaken(state)
+	end
+end
+
 ------------------------------------------------------------------------------
 -- Lifecycle
 ------------------------------------------------------------------------------
@@ -710,10 +885,28 @@ local function onGetUp(model: Model)
 end
 
 function Combat.start()
+	-- Kit moves get the tools they need from here (see Combat/Moves.luau).
+	Moves.bind({
+		getState = function(model: Model): CombatState?
+			return states[model]
+		end,
+		now = now,
+		isAlive = isAlive,
+		isStunned = isStunned,
+		isBusy = isBusy,
+		isAwakened = isAwakened,
+		setAttribute = setAttribute,
+		resolveHit = resolveHit,
+		aimZone = aimZone,
+		landingZone = landingZone,
+		addFury = addFury,
+	})
 	Knockout.onGetUp(onGetUp)
 	Remotes.Attack.OnServerEvent:Connect(onAttack)
 	Remotes.SetBlocking.OnServerEvent:Connect(onSetBlocking)
 	Remotes.Dash.OnServerEvent:Connect(onDash)
+	Remotes.UseMove.OnServerEvent:Connect(onUseMove)
+	Remotes.Awaken.OnServerEvent:Connect(onAwaken)
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	for _, player in Players:GetPlayers() do

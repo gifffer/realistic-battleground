@@ -172,6 +172,38 @@ return table.freeze({
 		TRAINING_DUMMIES = true,
 	}),
 
+	-- Kits (Shared/Kits): special moves on keys 1–4 and the Awakening (G).
+	-- Each move's own numbers (damage, cooldown...) are in its kit file.
+	Kits = table.freeze({
+		-- Keys of the 4 move slots, in order.
+		MOVE_KEYS = table.freeze({
+			Enum.KeyCode.One,
+			Enum.KeyCode.Two,
+			Enum.KeyCode.Three,
+			Enum.KeyCode.Four,
+		}),
+		AWAKEN_KEY = Enum.KeyCode.G,
+
+		-- Awakening gauge ("Fury"), 0 → FURY_MAX. It fills by fighting:
+		FURY_MAX = 100,
+		FURY_PER_DAMAGE_DEALT = 1.6, -- per HP of damage you deal
+		FURY_PER_DAMAGE_TAKEN = 0.5, -- per HP you lose (comebacks)
+		-- (It doesn't fill while you are awakened, and resets when you die.)
+
+		-- Bleeding: damage arrives in small ticks this often (seconds).
+		BLEED_TICK = 0.5,
+		-- A knocked-down fighter (tackle, launch) is dazed this long after
+		-- getting back up.
+		KNOCKDOWN_GETUP_STUN = 0.5,
+		-- A launch (knockback + knockdown) throws the body this high (studs/s).
+		LAUNCH_UP_SPEED = 18,
+		-- Tackle: how long the charge pushes are allowed to run after contact
+		-- before the attacker brakes (seconds).
+		CHARGE_BRAKE_TIME = 0.08,
+		-- Follow-up strike on the ground (Awakened tackle): reach in studs.
+		FOLLOW_UP_RANGE = 7,
+	}),
+
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish
 	-- you (M1 on you while you're down); otherwise you get back up.
 	Knockout = table.freeze({

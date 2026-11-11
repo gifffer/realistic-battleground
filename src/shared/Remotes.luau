@@ -99,17 +99,38 @@ return table.freeze({
 	CombatAction = event("CombatAction"),
 
 	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model,
-	--                        zone: Types.HitZone?, side: Types.HitSide?, attackId: number?)
+	--                        zone: Types.HitZone?, side: Types.HitSide?, attackId: number?,
+	--                        moveId: string?)
 	-- Something happened in a fight; clients show effects (flash, text, shake)
 	-- and the victim's reaction, chosen from where (zone) and from which side
 	-- of the victim (side) the hit landed. `attackId` = the attacker's number
-	-- for that M1 (see Attack), nil for dummies.
+	-- for that M1 (see Attack), nil for dummies. `moveId` = the kit move that
+	-- landed ("BottleSmash"...), nil for an M1.
 	CombatEvent = event("CombatEvent"),
 
 	-- server → ONE client  (attackId: number)
 	-- "Your M1 number `attackId` is over" (after all its CombatEvents). Lets
 	-- the attacker undo a hit it predicted that the server never confirmed.
 	AttackResolved = event("AttackResolved"),
+
+	-- client → server  (slot: number, aim: Vector3?)
+	-- "I use the move on key `slot` (1–4) of my kit" (the Awakening version
+	-- if I'm awakened). The server checks everything (cooldown, stamina,
+	-- stun...) and answers with CombatAction to everyone, or MoveRefused.
+	UseMove = event("UseMove"),
+
+	-- client → server  ()
+	-- "G pressed": awaken (Street Fury...) if the gauge is full.
+	Awaken = event("Awaken"),
+
+	-- server → ONE client  (slot: number)
+	-- "Your move on key `slot` was refused" (the client had already started
+	-- its animation to feel instant: it stops it).
+	MoveRefused = event("MoveRefused"),
+
+	-- client → server  (kitId: string)
+	-- Equip a kit from the Kits menu. Saved. Only kits that are available.
+	EquipKit = event("EquipKit"),
 
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)
 	-- A fighter was eliminated: one line in the kill feed (top right).
