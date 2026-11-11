@@ -43,8 +43,8 @@ publié) ; pour le désactiver : `Config.Dev.TEST_COURSE = false`.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| 1 | **C** | Le perso met **un genou à terre**, buste bas, poings levés ; la caméra descend. Re-**C** → debout. |
-| 2 | Accroupi, avancer | Marche accroupie : les jambes **alternent**, aucun pied dans le sol. |
+| 1 | **C** | Accroupi tactique : buste penché en avant, genoux pliés, pied gauche devant, garde haute ; la caméra descend. Re-**C** → debout. |
+| 2 | Accroupi, avancer | Marche accroupie tactique : les jambes **alternent**, le pied qui avance se soulève, aucun pied dans le sol. |
 | 3 | Accroupi puis **Espace** | Le perso se relève (ne saute pas). |
 | 4 | Accroupi puis **Shift** | Le perso se relève et court. |
 | 5 | Courir sur la piste puis **C** | Glissade : buste en arrière et tourné, une jambe tendue devant, un genou levé, une main au sol derrière. Finit **accroupi**. STAMINA -15. |

@@ -101,7 +101,7 @@ return table.freeze({
 		DEFAULT_FOV = 70,
 		SPRINT_FOV = 78, -- slightly wider view while sprinting = feeling of speed
 		-- How far the camera goes down (studs), matching the body's animation.
-		CROUCH_DROP = 1.4,
+		CROUCH_DROP = 1.1,
 		SLIDE_DROP = 2.3,
 	}),
 })

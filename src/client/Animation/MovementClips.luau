@@ -19,131 +19,87 @@
 local R6Pose = require(script.Parent.R6Pose)
 
 local clips: { [string]: R6Pose.Clip } = {
-	-- One knee down (right), left shin upright, torso low, fists up. Slow breathing.
-	-- R6 has no knees: the "bent" look comes from MOVING the legs up into the
-	-- torso (pos), not only rotating them.
+	-- Tactical crouch: torso leaning forward, knees bent (legs pushed up into the
+	-- torso: R6 has no knees), left foot ahead, guard up. Slow breathing.
 	CrouchIdle = {
-		length = 2.6,
+		length = 2.4,
 		looped = true,
 		keyframes = {
 			{
 				time = 0,
 				pose = {
-					Root = { rot = Vector3.new(-16, 0, 0), pos = Vector3.new(0, -1.35, 0) },
-					Neck = { rot = Vector3.new(12, 0, 0) },
-					RightShoulder = { rot = Vector3.new(58, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(72, 0, 32) },
-					RightHip = { rot = Vector3.new(-66, 0, 5), pos = Vector3.new(0, 0.07, 0.1) },
-					LeftHip = { rot = Vector3.new(16, 0, -5), pos = Vector3.new(0, 1.7, -0.9) },
+					Root = { rot = Vector3.new(-24, 0, 0), pos = Vector3.new(0, -0.95, 0) },
+					Neck = { rot = Vector3.new(20.4, 0, 0) },
+					RightShoulder = { rot = Vector3.new(52, 0, -25) },
+					LeftShoulder = { rot = Vector3.new(60, 0, 28) },
+					RightHip = { rot = Vector3.new(10, 0, 6), pos = Vector3.new(0, 1.11, 0) },
+					LeftHip = { rot = Vector3.new(42, 0, -6), pos = Vector3.new(0, 1.1, 0) },
 				},
 			},
 			{
-				time = 1.3,
+				time = 1.2,
 				pose = {
-					Root = { rot = Vector3.new(-14, 0, 0), pos = Vector3.new(0, -1.3, 0) },
-					Neck = { rot = Vector3.new(10, 0, 0) },
-					RightShoulder = { rot = Vector3.new(61, 0, -30) },
-					LeftShoulder = { rot = Vector3.new(75, 0, 30) },
-					RightHip = { rot = Vector3.new(-66, 0, 5), pos = Vector3.new(0, 0.1, 0.1) },
-					LeftHip = { rot = Vector3.new(16, 0, -5), pos = Vector3.new(0, 1.63, -0.9) },
+					Root = { rot = Vector3.new(-22, 0, 0), pos = Vector3.new(0, -0.9, 0) },
+					Neck = { rot = Vector3.new(19, 0, 0) },
+					RightShoulder = { rot = Vector3.new(55, 0, -24) },
+					LeftShoulder = { rot = Vector3.new(63, 0, 27) },
+					RightHip = { rot = Vector3.new(10, 0, 6), pos = Vector3.new(0, 1.06, 0) },
+					LeftHip = { rot = Vector3.new(42, 0, -6), pos = Vector3.new(0, 1.04, 0) },
 				},
 			},
 		},
 	},
 
-	-- Crouched walk: legs alternate; the swinging leg is tucked under the body.
+	-- Tactical crouched walk: legs alternate, the swinging foot lifts off the
+	-- ground, torso steady and leaning forward, slight shoulder turn.
 	-- Length = one full cycle (2 steps) at Config.Character.CROUCH_SPEED;
 	-- it plays faster / slower with the real speed.
 	CrouchWalk = {
-		length = 1,
+		length = 0.8,
 		looped = true,
 		keyframes = {
 			{
 				time = 0,
 				pose = {
-					Root = { rot = Vector3.new(-16, 0, 0), pos = Vector3.new(0, -1.35, 0) },
-					Neck = { rot = Vector3.new(12, 0, 0) },
-					RightShoulder = { rot = Vector3.new(58, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(72, 0, 32) },
-					RightHip = { rot = Vector3.new(-66, 0, 5), pos = Vector3.new(0, 0.07, 0.1) },
-					LeftHip = { rot = Vector3.new(16, 0, -5), pos = Vector3.new(0, 1.7, -0.9) },
+					Root = { rot = Vector3.new(-24, -4, 0), pos = Vector3.new(0, -0.9, 0) },
+					Neck = { rot = Vector3.new(20.4, 4, 0) },
+					RightShoulder = { rot = Vector3.new(54, 0, -25) },
+					LeftShoulder = { rot = Vector3.new(56, 0, 28) },
+					RightHip = { rot = Vector3.new(2, 0, 6), pos = Vector3.new(0, 1.02, 0) },
+					LeftHip = { rot = Vector3.new(56, 0, -6), pos = Vector3.new(0, 0.94, 0) },
 				},
 			},
 			{
-				time = 0.12,
+				time = 0.2,
 				pose = {
-					Root = { rot = Vector3.new(-17, -2, 0), pos = Vector3.new(0, -1.25, 0) },
-					Neck = { rot = Vector3.new(12.5, 0, 0) },
-					RightShoulder = { rot = Vector3.new(62, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(66, 0, 32) },
-					RightHip = { rot = Vector3.new(-28, 0, 5), pos = Vector3.new(0, 1.09, -0.05) },
-					LeftHip = { rot = Vector3.new(-4.5, 0, -5), pos = Vector3.new(0, 1.55, -0.55) },
+					Root = { rot = Vector3.new(-24, 0, 0), pos = Vector3.new(0, -0.82, 0) },
+					Neck = { rot = Vector3.new(20.4, 0, 0) },
+					RightShoulder = { rot = Vector3.new(50, 0, -25) },
+					LeftShoulder = { rot = Vector3.new(60, 0, 28) },
+					RightHip = { rot = Vector3.new(34, 0, 6), pos = Vector3.new(0, 1.41, 0) },
+					LeftHip = { rot = Vector3.new(28, 0, -6), pos = Vector3.new(0, 0.94, 0) },
 				},
 			},
 			{
-				time = 0.25,
+				time = 0.4,
 				pose = {
-					Root = { rot = Vector3.new(-18, -4, 0), pos = Vector3.new(0, -1.15, 0) },
-					Neck = { rot = Vector3.new(13, 0, 0) },
-					RightShoulder = { rot = Vector3.new(66, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(60, 0, 32) },
-					RightHip = { rot = Vector3.new(10, 0, 5), pos = Vector3.new(0, 1.6, -0.2) },
-					LeftHip = { rot = Vector3.new(-25, 0, -5), pos = Vector3.new(0, 1.08, -0.2) },
+					Root = { rot = Vector3.new(-24, 4, 0), pos = Vector3.new(0, -0.9, 0) },
+					Neck = { rot = Vector3.new(20.4, -4, 0) },
+					RightShoulder = { rot = Vector3.new(46, 0, -25) },
+					LeftShoulder = { rot = Vector3.new(64, 0, 28) },
+					RightHip = { rot = Vector3.new(56, 0, 6), pos = Vector3.new(0, 0.94, 0) },
+					LeftHip = { rot = Vector3.new(2, 0, -6), pos = Vector3.new(0, 1.02, 0) },
 				},
 			},
 			{
-				time = 0.38,
+				time = 0.6,
 				pose = {
-					Root = { rot = Vector3.new(-17, -2, 0), pos = Vector3.new(0, -1.25, 0) },
-					Neck = { rot = Vector3.new(12.5, 0, 0) },
-					RightShoulder = { rot = Vector3.new(69, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(59, 0, 32) },
-					RightHip = { rot = Vector3.new(13, 0, 5), pos = Vector3.new(0, 1.65, -0.55) },
-					LeftHip = { rot = Vector3.new(-45.5, 0, -5), pos = Vector3.new(0, 0.66, -0.05) },
-				},
-			},
-			{
-				time = 0.5,
-				pose = {
-					Root = { rot = Vector3.new(-16, 0, 0), pos = Vector3.new(0, -1.35, 0) },
-					Neck = { rot = Vector3.new(12, 0, 0) },
-					RightShoulder = { rot = Vector3.new(72, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(58, 0, 32) },
-					RightHip = { rot = Vector3.new(16, 0, 5), pos = Vector3.new(0, 1.7, -0.9) },
-					LeftHip = { rot = Vector3.new(-66, 0, -5), pos = Vector3.new(0, 0.07, 0.1) },
-				},
-			},
-			{
-				time = 0.62,
-				pose = {
-					Root = { rot = Vector3.new(-17, 2, 0), pos = Vector3.new(0, -1.25, 0) },
-					Neck = { rot = Vector3.new(12.5, 0, 0) },
-					RightShoulder = { rot = Vector3.new(66, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(62, 0, 32) },
-					RightHip = { rot = Vector3.new(-4.5, 0, 5), pos = Vector3.new(0, 1.55, -0.55) },
-					LeftHip = { rot = Vector3.new(-28, 0, -5), pos = Vector3.new(0, 1.09, -0.05) },
-				},
-			},
-			{
-				time = 0.75,
-				pose = {
-					Root = { rot = Vector3.new(-18, 4, 0), pos = Vector3.new(0, -1.15, 0) },
-					Neck = { rot = Vector3.new(13, 0, 0) },
-					RightShoulder = { rot = Vector3.new(60, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(66, 0, 32) },
-					RightHip = { rot = Vector3.new(-25, 0, 5), pos = Vector3.new(0, 1.08, -0.2) },
-					LeftHip = { rot = Vector3.new(10, 0, -5), pos = Vector3.new(0, 1.6, -0.2) },
-				},
-			},
-			{
-				time = 0.88,
-				pose = {
-					Root = { rot = Vector3.new(-17, 2, 0), pos = Vector3.new(0, -1.25, 0) },
-					Neck = { rot = Vector3.new(12.5, 0, 0) },
-					RightShoulder = { rot = Vector3.new(59, 0, -32) },
-					LeftShoulder = { rot = Vector3.new(69, 0, 32) },
-					RightHip = { rot = Vector3.new(-45.5, 0, 5), pos = Vector3.new(0, 0.66, -0.05) },
-					LeftHip = { rot = Vector3.new(13, 0, -5), pos = Vector3.new(0, 1.65, -0.55) },
+					Root = { rot = Vector3.new(-24, 0, 0), pos = Vector3.new(0, -0.82, 0) },
+					Neck = { rot = Vector3.new(20.4, 0, 0) },
+					RightShoulder = { rot = Vector3.new(50, 0, -25) },
+					LeftShoulder = { rot = Vector3.new(60, 0, 28) },
+					RightHip = { rot = Vector3.new(28, 0, 6), pos = Vector3.new(0, 0.94, 0) },
+					LeftHip = { rot = Vector3.new(34, 0, -6), pos = Vector3.new(0, 1.41, 0) },
 				},
 			},
 		},
