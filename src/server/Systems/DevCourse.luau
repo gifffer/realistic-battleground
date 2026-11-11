@@ -60,28 +60,29 @@ local function block(
 end
 
 -- Floating text above a part.
+-- Floating label above a test obstacle (same quiet style as the game UI:
+-- off-white condensed caps on a dark band, square corners).
 local function label(part: BasePart, text: string)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "Label"
-	gui.Size = UDim2.fromOffset(220, 60)
+	gui.Size = UDim2.fromOffset(200, 40)
 	gui.StudsOffsetWorldSpace = Vector3.new(0, part.Size.Y / 2 + 3, 0)
 	gui.MaxDistance = 140
+	gui.LightInfluence = 0
 	gui.Adornee = part
 
 	local textLabel = Instance.new("TextLabel")
 	textLabel.Size = UDim2.fromScale(1, 1)
-	textLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-	textLabel.BackgroundTransparency = 0.35
-	textLabel.TextColor3 = Color3.new(1, 1, 1)
-	textLabel.Font = Enum.Font.GothamBold
-	textLabel.TextSize = 16
+	textLabel.BorderSizePixel = 0
+	textLabel.BackgroundColor3 = Color3.fromHex("#0B0B0C")
+	textLabel.BackgroundTransparency = 0.45
+	textLabel.TextColor3 = Color3.fromHex("#ECE8E1")
+	textLabel.FontFace =
+		Font.new("rbxasset://fonts/families/RobotoCondensed.json", Enum.FontWeight.Medium)
+	textLabel.TextSize = 13
 	textLabel.TextWrapped = true
 	textLabel.Text = text
 	textLabel.Parent = gui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = textLabel
 
 	gui.Parent = part
 end

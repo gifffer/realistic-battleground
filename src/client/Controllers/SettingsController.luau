@@ -1,5 +1,5 @@
 --!strict
--- SettingsController: the "SETTINGS" window of the side menu.
+-- SettingsController: the "SETTINGS" section of the menu.
 --
 -- For now: first-person / third-person camera. Settings are saved on the
 -- server (Server/Systems/Settings), so they follow the player everywhere.
@@ -25,7 +25,7 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local PENDING_SECONDS = 3
 
 type Toggle = {
-	set: (value: boolean) -> (), -- updates the ON/OFF display
+	set: (value: boolean) -> (), -- updates the OFF / ON display
 }
 
 local SettingsController = {}
@@ -34,48 +34,53 @@ local firstPerson = false
 local lastLocalChange = -math.huge
 local firstPersonToggle: Toggle? = nil
 
--- A row: description on the left, ON/OFF button on the right.
-local function createToggle(
-	parent: Instance,
-	order: number,
-	text: string,
-	onClick: () -> ()
-): Toggle
-	local row = Theme.make("Frame", {
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, 40),
-		BackgroundColor3 = Theme.Colors.PanelLight,
-		Parent = parent,
-	}, {
-		Theme.corner(),
-		Theme.make("TextLabel", {
-			Position = UDim2.fromOffset(12, 0),
-			Size = UDim2.new(1, -110, 1, 0),
-			BackgroundTransparency = 1,
-			Font = Theme.Fonts.Regular,
-			TextSize = 15,
-			TextColor3 = Theme.Colors.Text,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Text = text,
-		}),
-		Theme.make("TextButton", {
-			Name = "Switch",
-			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -8, 0.5, 0),
-			Size = UDim2.fromOffset(80, 28),
-			Font = Theme.Fonts.Bold,
-			TextSize = 14,
-			TextColor3 = Theme.Colors.Text,
-			AutoButtonColor = true,
-		}, { Theme.corner() }),
-	})
+local C = Theme.Colors
 
-	local switch = row.Switch :: TextButton
-	switch.Activated:Connect(onClick)
+-- "OFF   ON" in text, the chosen one bright and underlined (no pill, no switch).
+local function createToggle(parent: Instance, onClick: () -> ()): Toggle
+	local holder = Theme.make("Frame", {
+		Name = "Toggle",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
+		Size = UDim2.fromOffset(70, 22),
+		BackgroundTransparency = 1,
+		Parent = parent,
+	})
+	local function option(text: string, x: number): TextButton
+		return Theme.text({
+			ClassName = "TextButton",
+			Name = text,
+			Position = UDim2.fromOffset(x, 0),
+			Size = UDim2.fromOffset(26, 18),
+			TextSize = 12,
+			TextColor3 = C.Ink3,
+			TextStrokeTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			AutoButtonColor = false,
+			Text = Theme.track(text, "four"),
+			Parent = holder,
+		}) :: TextButton
+	end
+	local off = option("OFF", 4)
+	local on = option("ON", 44)
+	local underline = Theme.make("Frame", {
+		Name = "Underline",
+		Position = UDim2.fromOffset(44, 20),
+		Size = UDim2.fromOffset(20, 2),
+		BackgroundColor3 = C.Ink,
+		Parent = holder,
+	})
+	off.Activated:Connect(onClick)
+	on.Activated:Connect(onClick)
 
 	local function set(value: boolean)
-		switch.Text = if value then "ON" else "OFF"
-		switch.BackgroundColor3 = if value then Theme.Colors.On else Theme.Colors.Off
+		local chosen = if value then on else off
+		Theme.tween(on, Theme.FAST, { TextColor3 = if value then C.Ink else C.Ink3 })
+		Theme.tween(off, Theme.FAST, { TextColor3 = if value then C.Ink3 else C.Ink })
+		Theme.tween(underline, 0.18, {
+			Position = UDim2.fromOffset(chosen.Position.X.Offset + 3, 20),
+			Size = UDim2.fromOffset(chosen.Size.X.Offset - 6, 2),
+		}, Enum.EasingStyle.Quart)
 	end
 	return { set = set }
 end
@@ -89,30 +94,83 @@ local function setFirstPerson(value: boolean)
 end
 
 local function buildWindow(content: Frame)
-	Theme.make("UIListLayout", {
-		Padding = UDim.new(0, 8),
-		SortOrder = Enum.SortOrder.LayoutOrder,
+	Theme.text({
+		Name = "Section",
+		Size = UDim2.new(1, 0, 0, 12),
+		TextSize = 10,
+		TextColor3 = C.Ink3,
+		TextStrokeTransparency = 1,
+		Text = Theme.track("CAMERA", "three"),
 		Parent = content,
 	})
-
-	firstPersonToggle = createToggle(content, 1, "First-person camera", function()
+	local row = Theme.make("Frame", {
+		Name = "FirstPersonRow",
+		Position = UDim2.fromOffset(0, 12),
+		Size = UDim2.new(1, 0, 0, 52),
+		BackgroundTransparency = 1,
+		Parent = content,
+	}, {
+		Theme.text({
+			Name = "Name",
+			Position = UDim2.fromOffset(0, 8),
+			Size = UDim2.fromOffset(320, 18),
+			FontFace = Theme.Fonts.Body,
+			TextSize = 15,
+			TextStrokeTransparency = 1,
+			Text = "First-person camera",
+		}),
+		Theme.text({
+			Name = "Description",
+			Position = UDim2.fromOffset(0, 28),
+			Size = UDim2.fromOffset(320, 14),
+			FontFace = Theme.Fonts.Body,
+			TextSize = 12,
+			TextColor3 = C.Ink3,
+			TextStrokeTransparency = 1,
+			Text = "See the fight through your character's eyes.",
+		}),
+		Theme.make("Frame", {
+			Name = "Rule",
+			Position = UDim2.new(0, 0, 1, -1),
+			Size = UDim2.new(1, 0, 0, 1),
+			BackgroundColor3 = C.Ink,
+			BackgroundTransparency = 0.9,
+		}),
+	})
+	firstPersonToggle = createToggle(row, function()
 		lastLocalChange = os.clock()
 		setFirstPerson(not firstPerson)
 		Remotes.UpdateSetting:FireServer("firstPerson", firstPerson)
 	end)
 	setFirstPerson(firstPerson) -- show the current value
 
-	Theme.make("TextLabel", {
-		LayoutOrder = 2,
-		Size = UDim2.new(1, 0, 0, 40),
+	-- Hint: the key that frees the mouse cursor.
+	Theme.make("Frame", {
+		Name = "Hint",
+		Position = UDim2.fromOffset(0, 85),
+		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
-		Font = Theme.Fonts.Regular,
-		TextSize = 13,
-		TextColor3 = Theme.Colors.TextDim,
-		TextWrapped = true,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		Text = `Tip: press {Config.Controls.FREE_CURSOR.Name} to free or lock the mouse cursor.`,
 		Parent = content,
+	}, {
+		Theme.make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 10),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		Theme.keyCap(Theme.track(string.upper(Config.Controls.FREE_CURSOR.Name), "thin"), {
+			LayoutOrder = 1,
+		}),
+		Theme.text({
+			LayoutOrder = 2,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 20),
+			FontFace = Theme.Fonts.Body,
+			TextSize = 12,
+			TextColor3 = C.Ink2,
+			TextStrokeTransparency = 1,
+			Text = `Press {Config.Controls.FREE_CURSOR.Name} to free or lock the cursor`,
+		}),
 	})
 end
 
@@ -130,6 +188,7 @@ function SettingsController.start()
 	MenuController.register({
 		id = "Settings",
 		label = "SETTINGS",
+		subtitle = "CAMERA · CONTROLS",
 		order = 100, -- last button; Kits/Duel/Quests/Shop will come before it
 		build = buildWindow,
 	})
