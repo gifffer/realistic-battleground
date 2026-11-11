@@ -172,6 +172,7 @@ end
 local function stun(state: CombatState, duration: number)
 	state.stunnedUntil = math.max(state.stunnedUntil, now() + duration)
 	state.attackToken += 1 -- a stunned fighter's wind-up is cancelled
+	state.slipUntil = 0 -- ...and so is a slip
 	stopBlocking(state)
 	setAttribute(state.model, "Stunned", true)
 end
@@ -204,6 +205,7 @@ local function dealDamage(victim: CombatState, attacker: CombatState?, amount: n
 	if victim.humanoid.Health - amount <= 0 then
 		stopBlocking(victim)
 		victim.attackToken += 1 -- cancels a punch they were winding up
+		victim.slipUntil = 0
 		Knockout.knockOut(victim.model, attackerModel)
 	else
 		victim.humanoid.Health -= amount
@@ -399,9 +401,17 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
-	-- 1b. Slip (Boxer): a hit from the front is slipped, and answered.
-	if time < victim.slipUntil and isInFront(victim, attacker) then
+	-- 1b. Slip (Boxer): a hit from the front is slipped, and answered. The
+	-- attacker's move is cut (its next hits don't land), and the slipper
+	-- can't be hit by anyone until the counter lands.
+	if
+		time < victim.slipUntil
+		and isInFront(victim, attacker)
+		and not isStunned(victim)
+		and not isBusy(victim)
+	then
 		victim.slipUntil = 0
+		attacker.attackToken += 1
 		event("Dodged", false, false)
 		Moves.counter(victim, attacker)
 		return false
@@ -658,6 +668,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	end
 	-- Attacking ends the spawn protection.
 	Knockout.endProtection(model)
+	state.slipUntil = 0 -- punching ends a slip
 
 	-- A KO'd fighter right in front: finish them instead of punching.
 	-- (Players only: training dummies never finish anyone.)

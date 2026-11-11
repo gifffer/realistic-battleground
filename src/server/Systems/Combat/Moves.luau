@@ -263,6 +263,7 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	end
 	-- Using a move ends the spawn protection (like attacking).
 	Knockout.endProtection(state.model)
+	state.slipUntil = 0 -- a new move ends the previous slip
 
 	state.cooldowns[move.id] = time + move.cooldown
 	c.setAttribute(state.model, `CD_{move.id}`, serverTime(move.cooldown))
@@ -278,7 +279,8 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	-- slipUntil in resolveHit and calls Moves.counter).
 	local counter = move.counter
 	if counter then
-		state.slipUntil = time + counter.window
+		-- (Never longer than the move itself.)
+		state.slipUntil = time + math.min(counter.window, move.duration)
 		state.slipMoveId = move.id
 	end
 
@@ -322,7 +324,15 @@ end
 function Moves.counter(state: CombatState, attacker: CombatState)
 	local c = context()
 	local kit = Kits.get(state.kitId)
-	if kit == nil or state.slipMoveId == nil then
+	local slipMoveId = state.slipMoveId
+	state.slipMoveId = nil
+	if
+		kit == nil
+		or slipMoveId == nil
+		or not c.isAlive(state)
+		or c.isStunned(state)
+		or c.isBusy(state)
+	then
 		return
 	end
 	local move: Kits.MoveDef? = nil
@@ -333,7 +343,7 @@ function Moves.counter(state: CombatState, attacker: CombatState)
 	end
 	for _, list in lists do
 		for _, candidate in list do
-			if candidate.id == state.slipMoveId then
+			if candidate.id == slipMoveId then
 				move = candidate
 			end
 		end
@@ -348,6 +358,7 @@ function Moves.counter(state: CombatState, attacker: CombatState)
 	state.attackingUntil = time + busy
 	state.attackToken += 1
 	local token = state.attackToken
+	state.invulnerableUntil = math.max(state.invulnerableUntil, time + counter.at)
 	Remotes.CombatAction:FireAllClients(state.model, counter.animation)
 	task.delay(counter.at, function()
 		if state.attackToken ~= token or not c.isAlive(state) or not c.isAlive(attacker) then

@@ -44,7 +44,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "Uppercut",
 			name = "UPPERCUT",
-			description = "From the legs, under the chin. Lifts them off the ground.",
+			description = "Under the chin. Lifts them off the ground.",
 			animation = "Boxer_Uppercut",
 			duration = 0.75,
 			cooldown = 9,
@@ -66,7 +66,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "Slip",
 			name = "SLIP",
-			description = "Slips the next punch and counters with a hook.",
+			description = "Slips a punch, counters with a hook.",
 			animation = "Boxer_Slip",
 			duration = 0.6,
 			cooldown = 8,
@@ -89,7 +89,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "LiverShot",
 			name = "LIVER SHOT",
-			description = "A hook to the body that empties their stamina.",
+			description = "Body hook. Empties their stamina.",
 			animation = "Boxer_LiverShot",
 			duration = 0.8,
 			cooldown = 9,
@@ -118,7 +118,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "JabRushPlus",
 				name = "JAB FLURRY",
-				description = "Six punches, the fifth one a right cross.",
+				description = "Six punches, one right cross.",
 				animation = "Boxer_JabRushPlus",
 				duration = 0.9,
 				cooldown = 6,
@@ -135,7 +135,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "UppercutPlus",
 				name = "RISING UPPERCUT",
-				description = "A bigger uppercut that sends them flying.",
+				description = "Sends them flying.",
 				animation = "Boxer_Uppercut",
 				duration = 0.75,
 				cooldown = 7,
@@ -157,14 +157,14 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "SlipPlus",
 				name = "SLIP & HOOK",
-				description = "A longer slip, the counter stuns longer.",
+				description = "Longer slip, harder counter.",
 				animation = "Boxer_Slip",
 				duration = 0.6,
 				cooldown = 6,
 				stamina = 12,
 				hits = {},
 				counter = {
-					window = 0.65,
+					window = 0.6,
 					animation = "Boxer_SlipCounter",
 					at = 0.18,
 					hit = {
@@ -180,7 +180,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "KnockoutCombo",
 				name = "KNOCKOUT COMBO",
-				description = "Body, head, head, uppercut. They go down.",
+				description = "Body, head, head, uppercut.",
 				animation = "Boxer_KnockoutCombo",
 				duration = 1.6,
 				cooldown = 12,
