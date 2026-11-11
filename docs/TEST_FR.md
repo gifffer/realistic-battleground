@@ -163,6 +163,7 @@ réticule : **tête** ou **corps**.
 | R11 | À 2 joueurs : A frappe B qui **bloque** | Chez A : la réaction de garde (BlockHit), jamais une réaction de coup reçu. |
 | R12 | Garde (F) et garde après un coup, vue de face et de côté | Poings **devant le visage à hauteur des pommettes**, à une main de distance (pas collés à la tête), coudes **bas** qui protègent les côtes, bras **pas croisés**. |
 | R13 | Frapper (clic gauche), puis **tout de suite** escalader un rebord / glisser / sauter un obstacle | Les bras font l'escalade (plus de poings levés en garde) ; en arrivant en haut, pas de garde qui revient. |
+| R14 | Frapper, puis **courir** (marche puis Shift) pendant que la garde est levée | Course de boxeur : torse penché, tête stable, poings en garde un peu plus bas qui battent en rythme, foulées courtes avec genoux pliés (plus de grands ciseaux raides). Plus vite en sprint. À l'arrêt : retour à la garde normale. |
 
 À 2 joueurs : les deux écrans doivent montrer **la même** réaction (le côté est décidé par le serveur).
 Aucune ligne rouge ni jaune ne doit apparaître dans l'Output. Un avertissement jaune

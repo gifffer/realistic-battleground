@@ -81,6 +81,85 @@ local clips: { [string]: R6Pose.Clip } = {
 		},
 	},
 
+	-- Running while in a fight (the guard is up and the fighter moves): a compact
+	-- boxer's run instead of Roblox's stiff scissor legs under a frozen guard. Torso
+	-- leaning in, head steady, fists still up (a bit lower, pumping with the stride),
+	-- short strides with the knees bending, a small weight shift from foot to foot.
+	-- Full body; played at the speed of the run (CharacterAnimationController).
+	-- Feet were checked: the supporting foot touches the ground on every keyframe.
+	GuardRun = {
+		length = 0.64,
+		looped = true,
+		keyframes = {
+			{
+				time = 0,
+				pose = {
+					Root = { rot = Vector3.new(-12, -4, 0), pos = Vector3.new(0, -0.02, 0) },
+					Neck = { rot = Vector3.new(9, 4, 0) },
+					RightShoulder = { rot = Vector3.new(98, 0, -36.5) },
+					LeftShoulder = { rot = Vector3.new(114, 0, 37) },
+					RightHip = { rot = Vector3.new(36, 0, 0) },
+					LeftHip = { rot = Vector3.new(-14, 0, 0), pos = Vector3.new(0, 0.22, 0) },
+				},
+			},
+			{
+				time = 0.08,
+				pose = {
+					Root = { rot = Vector3.new(-12, -4, -1.77), pos = Vector3.new(0, -0.05, 0) },
+					Neck = { rot = Vector3.new(9, 4, 1.06) },
+					RightShoulder = { rot = Vector3.new(99.76, 0, -36.5) },
+					LeftShoulder = { rot = Vector3.new(112.24, 0, 37) },
+					RightHip = { rot = Vector3.new(16, 0, 0), pos = Vector3.new(0, 0.04, 0) },
+					LeftHip = { rot = Vector3.new(14, 0, 0), pos = Vector3.new(0, 0.5, 0) },
+				},
+			},
+			{
+				time = 0.16,
+				pose = {
+					Root = { rot = Vector3.new(-12, -4, -2.5), pos = Vector3.new(0, -0.01, 0) },
+					Neck = { rot = Vector3.new(9, 4, 1.5) },
+					RightShoulder = { rot = Vector3.new(104, 0, -36.5) },
+					LeftShoulder = { rot = Vector3.new(108, 0, 37) },
+					RightHip = { rot = Vector3.new(-10, 0, 0), pos = Vector3.new(0, 0.12, 0) },
+					LeftHip = { rot = Vector3.new(34, 0, 0), pos = Vector3.new(0, 0.2, 0) },
+				},
+			},
+			{
+				time = 0.32,
+				pose = {
+					Root = { rot = Vector3.new(-12, -4, 0), pos = Vector3.new(0, -0.01, 0) },
+					Neck = { rot = Vector3.new(9, 4, 0) },
+					RightShoulder = { rot = Vector3.new(110, 0, -36.5) },
+					LeftShoulder = { rot = Vector3.new(102, 0, 37) },
+					RightHip = { rot = Vector3.new(-14, 0, 0), pos = Vector3.new(0, 0.22, 0) },
+					LeftHip = { rot = Vector3.new(36, 0, 0) },
+				},
+			},
+			{
+				time = 0.4,
+				pose = {
+					Root = { rot = Vector3.new(-12, -4, 1.77), pos = Vector3.new(0, -0.02, 0) },
+					Neck = { rot = Vector3.new(9, 4, -1.06) },
+					RightShoulder = { rot = Vector3.new(108.24, 0, -36.5) },
+					LeftShoulder = { rot = Vector3.new(103.76, 0, 37) },
+					RightHip = { rot = Vector3.new(14, 0, 0), pos = Vector3.new(0, 0.5, 0) },
+					LeftHip = { rot = Vector3.new(16, 0, 0), pos = Vector3.new(0, 0.04, 0) },
+				},
+			},
+			{
+				time = 0.48,
+				pose = {
+					Root = { rot = Vector3.new(-12, -4, 2.5), pos = Vector3.new(0, 0.01, 0) },
+					Neck = { rot = Vector3.new(9, 4, -1.5) },
+					RightShoulder = { rot = Vector3.new(104, 0, -36.5) },
+					LeftShoulder = { rot = Vector3.new(108, 0, 37) },
+					RightHip = { rot = Vector3.new(34, 0, 0), pos = Vector3.new(0, 0.2, 0) },
+					LeftHip = { rot = Vector3.new(-10, 0, 0), pos = Vector3.new(0, 0.12, 0) },
+				},
+			},
+		},
+	},
+
 	-- Left jab (combo hit 1): the lead hand snaps out from the guard and back.
 	-- Impact at 0.15 s = Config.Combat.HIT_DELAY.
 	Brawler_M1_1 = {

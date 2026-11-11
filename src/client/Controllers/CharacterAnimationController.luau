@@ -55,12 +55,18 @@ local FADE_IN: { [string]: number } = {
 	Block = 0.08,
 	Stunned = 0.12,
 	Guard = 0.12,
+	GuardRun = 0.15,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
 local FADE_OUT: { [string]: number } = { Guard = 0.5 }
 -- A fighter keeps its guard up this long after its last punch / hit taken.
 local COMBAT_STANCE_TIME = 3.5
+-- In a fight, moving faster than this (studs/s) switches the guard to the
+-- fighting run (GuardRun), slower switches back: two values ("hysteresis")
+-- so a speed hovering around one number doesn't flicker between the two.
+local GUARD_RUN_START = 6
+local GUARD_RUN_STOP = 3
 -- Flinch spring (see the header): stiffness and damping. Higher stiffness =
 -- faster wobble; higher damping = it dies out sooner.
 local FLINCH_STIFFNESS = 190
@@ -243,7 +249,18 @@ local function stanceClip(entry: Tracked, state: string?): string?
 		return "Block"
 	end
 	if os.clock() < entry.combatUntil then
-		return "Guard" -- still in a fight: fists up
+		-- Still in a fight: fists up. Moving (standing up, not crouched): the
+		-- whole body runs like a fighter instead of Roblox's run under a
+		-- frozen guard.
+		if state == nil then
+			local current = entry.stance[#entry.stance]
+			local running = current ~= nil and current.target == 1 and current.name == "GuardRun"
+			local threshold = if running then GUARD_RUN_STOP else GUARD_RUN_START
+			if horizontalSpeed(entry.root) > threshold then
+				return "GuardRun"
+			end
+		end
+		return "Guard"
 	end
 	return nil
 end
@@ -253,6 +270,9 @@ local function playbackRate(entry: Tracked, name: string): number
 	if name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
+	elseif name == "GuardRun" then
+		-- The stride follows the real speed (walking 16 = normal, sprinting faster).
+		return math.clamp(horizontalSpeed(entry.root) / Config.Character.WALK_SPEED, 0.7, 1.6)
 	elseif name == "Vault" then
 		return 1 / Config.Climb.VAULT_DURATION
 	elseif name == "Climb" then
