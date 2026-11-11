@@ -56,7 +56,8 @@ local MenuController = {}
 
 local gui: ScreenGui
 local menuButton: TextButton
-local openLayer: Frame -- everything shown while open
+local openLayer: CanvasGroup -- everything shown while open (fades as one)
+local fadeToken = 0
 local nav: Frame
 local marker: Frame
 local panels: Frame
@@ -268,7 +269,9 @@ function MenuController.open(id: string)
 	lastId = id
 
 	if wasClosed then
+		fadeToken += 1
 		openLayer.Visible = true
+		Theme.tween(openLayer, OPEN_TIME, { GroupTransparency = 0 })
 		menuButton.Visible = false
 		setWorldDimmed(true)
 		CameraController.setCursorFree("menu", true)
@@ -304,7 +307,21 @@ function MenuController.close()
 		setItemActive(ui, false)
 	end
 	openId = nil
-	openLayer.Visible = false
+	-- Fade out, then hide (unless it was reopened meanwhile).
+	fadeToken += 1
+	local token = fadeToken
+	Theme.tween(
+		openLayer,
+		CLOSE_TIME,
+		{ GroupTransparency = 1 },
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In
+	)
+	task.delay(CLOSE_TIME, function()
+		if fadeToken == token then
+			openLayer.Visible = false
+		end
+	end)
 	menuButton.Visible = true
 	marker.Visible = false
 	setWorldDimmed(false)
@@ -369,10 +386,11 @@ function MenuController.init()
 		end
 	end)
 
-	openLayer = Theme.make("Frame", {
+	openLayer = Theme.make("CanvasGroup", {
 		Name = "Open",
 		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
+		GroupTransparency = 1,
 		Visible = false,
 		Parent = gui,
 	}, {

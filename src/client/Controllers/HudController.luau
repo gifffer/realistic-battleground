@@ -198,6 +198,7 @@ local function touched()
 		end
 		Theme.tween(hpFill, 0.1, { BackgroundTransparency = 0 })
 		Theme.tween(stFill, 0.1, { BackgroundTransparency = 0 })
+		Theme.tween(hpGhost, 0.1, { BackgroundTransparency = 0.15 })
 	end
 end
 
@@ -305,6 +306,9 @@ local function updateIdle()
 		{ BackgroundTransparency = IDLE_TRANSPARENCY },
 		Enum.EasingStyle.Linear
 	)
+	-- The red damage ghost sits under the bar: hide it, or it would show
+	-- through the faded bar and tint a healthy bar red.
+	Theme.tween(hpGhost, 0.6, { BackgroundTransparency = 1 }, Enum.EasingStyle.Linear)
 end
 
 -- Hidden while knocked out or while a menu is open.

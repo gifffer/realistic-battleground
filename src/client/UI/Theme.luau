@@ -105,10 +105,15 @@ function Theme.text(props: { [string]: any }, children: { Instance }?): any
 		TextWrapped = false,
 		RichText = false,
 	}
+	-- `ClassName` picks the class (e.g. "TextButton"); it is not a property
+	-- we can set (read-only), so it is kept out of the copied props.
+	local className = props.ClassName or "TextLabel"
 	for key, value in props do
-		defaults[key] = value
+		if key ~= "ClassName" then
+			defaults[key] = value
+		end
 	end
-	return Theme.make(props.ClassName or "TextLabel", defaults, children)
+	return Theme.make(className, defaults, children)
 end
 
 -- Letter-spacing. Roblox has no letter-spacing property and the wide

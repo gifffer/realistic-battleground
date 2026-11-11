@@ -59,6 +59,7 @@ local finishGui: BillboardGui
 local finishWord: TextLabel
 local finishKey: TextLabel
 local finishTimeFill: Frame
+local finishTick: Frame
 local finishPulse: Tween? = nil
 
 local wasKnockedOut = false
@@ -266,6 +267,8 @@ local function buildFinishPrompt()
 		AlwaysOnTop = true,
 		LightInfluence = 0,
 		Enabled = false,
+		-- Built once: must survive our respawns (Roblox clears PlayerGui).
+		ResetOnSpawn = false,
 		Parent = player:WaitForChild("PlayerGui"),
 	})
 	finishKey = Theme.keyCap("M1", {
@@ -299,7 +302,7 @@ local function buildFinishPrompt()
 		Parent = timeTrack,
 	})
 	-- A fading hairline pointing down at the body.
-	Theme.make("Frame", {
+	finishTick = Theme.make("Frame", {
 		Name = "Tick",
 		Position = UDim2.fromOffset(12, 24),
 		Size = UDim2.fromOffset(1, 18),
@@ -390,8 +393,16 @@ local function setPromptVisible(visible: boolean)
 		finishPulse = nil
 	end
 	if visible then
+		-- Appear: the word fades in, the hairline grows down to the body.
 		finishWord.TextColor3 = C.Ink
-		local outline = finishKey:FindFirstChild("Outline") :: UIStroke
+		finishWord.TextTransparency = 1
+		finishTick.Size = UDim2.fromOffset(1, 0)
+		Theme.tween(finishWord, 0.15, { TextTransparency = 0 })
+		Theme.tween(finishTick, 0.2, { Size = UDim2.fromOffset(1, 18) }, Enum.EasingStyle.Quart)
+		local outline = finishKey:FindFirstChild("Outline")
+		if outline == nil or not outline:IsA("UIStroke") then
+			return
+		end
 		outline.Transparency = 0.1
 		-- Slow "breathing" of the key's outline: it invites the click.
 		local pulse = TweenService:Create(
@@ -402,6 +413,15 @@ local function setPromptVisible(visible: boolean)
 		pulse:Play()
 		finishPulse = pulse
 	end
+end
+
+-- We clicked to finish: the word flashes red, the prompt fades away.
+function KnockoutController.onFinishStarted()
+	if not finishGui.Enabled then
+		return
+	end
+	finishWord.TextColor3 = C.BloodHi
+	Theme.tween(finishWord, 0.15, { TextTransparency = 1 }, Enum.EasingStyle.Linear)
 end
 
 local function updatePrompt(character: Model?)

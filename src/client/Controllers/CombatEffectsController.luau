@@ -157,6 +157,7 @@ local function word(model: Model, text: string, color: Color3)
 		AlwaysOnTop = true,
 		LightInfluence = 0,
 		MaxDistance = 60,
+		ResetOnSpawn = false,
 		Adornee = root,
 		Parent = player:FindFirstChildOfClass("PlayerGui"),
 	}) :: BillboardGui

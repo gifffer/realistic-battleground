@@ -36,6 +36,18 @@ local firstPersonToggle: Toggle? = nil
 
 local C = Theme.Colors
 
+-- Short names for keys shown on key caps ("LEFT CTRL", not "LEFTCONTROL").
+local KEY_LABELS: { [Enum.KeyCode]: string } = {
+	[Enum.KeyCode.LeftControl] = "LEFT CTRL",
+	[Enum.KeyCode.RightControl] = "RIGHT CTRL",
+	[Enum.KeyCode.LeftShift] = "LEFT SHIFT",
+	[Enum.KeyCode.LeftAlt] = "LEFT ALT",
+}
+
+local function keyLabel(key: Enum.KeyCode): string
+	return KEY_LABELS[key] or string.upper(key.Name)
+end
+
 -- "OFF   ON" in text, the chosen one bright and underlined (no pill, no switch).
 local function createToggle(parent: Instance, onClick: () -> ()): Toggle
 	local holder = Theme.make("Frame", {
@@ -77,10 +89,16 @@ local function createToggle(parent: Instance, onClick: () -> ()): Toggle
 		local chosen = if value then on else off
 		Theme.tween(on, Theme.FAST, { TextColor3 = if value then C.Ink else C.Ink3 })
 		Theme.tween(off, Theme.FAST, { TextColor3 = if value then C.Ink3 else C.Ink })
-		Theme.tween(underline, 0.18, {
-			Position = UDim2.fromOffset(chosen.Position.X.Offset + 3, 20),
-			Size = UDim2.fromOffset(chosen.Size.X.Offset - 6, 2),
-		}, Enum.EasingStyle.Quart)
+		-- The underline matches the chosen word's real width (known once the
+		-- text is laid out, hence the deferred call).
+		task.defer(function()
+			local width = math.max(chosen.TextBounds.X, 8)
+			local x = chosen.Position.X.Offset + (chosen.Size.X.Offset - width) / 2
+			Theme.tween(underline, 0.18, {
+				Position = UDim2.fromOffset(x, 20),
+				Size = UDim2.fromOffset(width - 3, 2),
+			}, Enum.EasingStyle.Quart)
+		end)
 	end
 	return { set = set }
 end
@@ -158,9 +176,7 @@ local function buildWindow(content: Frame)
 			Padding = UDim.new(0, 10),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
-		Theme.keyCap(Theme.track(string.upper(Config.Controls.FREE_CURSOR.Name), "thin"), {
-			LayoutOrder = 1,
-		}),
+		Theme.keyCap(keyLabel(Config.Controls.FREE_CURSOR), { LayoutOrder = 1 }),
 		Theme.text({
 			LayoutOrder = 2,
 			AutomaticSize = Enum.AutomaticSize.X,

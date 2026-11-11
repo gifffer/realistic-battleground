@@ -103,7 +103,9 @@ local function updateAim()
 
 	local frame = crosshair
 	if frame then
-		frame.Visible = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+		local character = player.Character
+		local down = character ~= nil and character:GetAttribute("KnockedOut") == true
+		frame.Visible = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter and not down
 		local head = onOpponent and currentZone == "Head"
 		if head ~= onHead then
 			onHead = head

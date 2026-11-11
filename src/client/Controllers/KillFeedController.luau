@@ -38,6 +38,7 @@ type Row = {
 	age: TextLabel,
 	createdAt: number,
 	order: number,
+	fading: boolean, -- leaving: restyle() must not bring it back
 }
 
 local KillFeedController = {}
@@ -88,6 +89,9 @@ end
 
 local function restyle()
 	for index, row in rows do
+		if row.fading then
+			continue
+		end
 		local target = if index >= 3 then OLD_ROW_TRANSPARENCY else 0
 		for _, text in row.texts do
 			Theme.tween(text, 0.18, { TextTransparency = target })
@@ -175,8 +179,14 @@ local function addLine(kind: unknown, victim: unknown, killer: unknown)
 		})
 	end
 
-	local row: Row =
-		{ frame = frame, texts = texts, age = age, createdAt = os.clock(), order = order }
+	local row: Row = {
+		frame = frame,
+		texts = texts,
+		age = age,
+		createdAt = os.clock(),
+		order = order,
+		fading = false,
+	}
 	table.insert(rows, 1, row)
 	Theme.tween(content, 0.18, { Position = UDim2.fromOffset(0, 0) })
 	restyle()
@@ -190,6 +200,7 @@ local function addLine(kind: unknown, victim: unknown, killer: unknown)
 		if row.frame.Parent == nil then
 			return
 		end
+		row.fading = true
 		for _, text in row.texts do
 			Theme.tween(text, 0.6, { TextTransparency = 1 }, Enum.EasingStyle.Linear)
 		end
