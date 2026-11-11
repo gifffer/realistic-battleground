@@ -22,6 +22,10 @@ export type HitDef = {
 	slow: { multiplier: number, duration: number }?,
 	unblockable: boolean?, -- goes through a block (still parried / dodged)
 	breaksProp: boolean?, -- the bottle breaks on this hit
+	-- Chance (0-1) this hit draws visible blood (spray). nil = none.
+	bloodChance: number?,
+	-- Glass: on a hit in the face, skin tears off (Config.Injuries.SKIN_TEAR).
+	tearsSkin: boolean?,
 }
 
 export type MoveDef = {

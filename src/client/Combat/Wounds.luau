@@ -7,8 +7,12 @@
 --
 -- A mark = a thin, flat, dark disc lying on the surface of the part
 -- (bruise or dried cut), welded to it so it follows the animations.
--- Discreet on purpose: no gore. Same positions on every client (they come
--- from a fixed list, not from random numbers).
+-- Discreet on purpose. Same positions on every client (they come from a
+-- fixed list, not from random numbers).
+--
+-- Torn skin (glass in the face, "SkinTorn" attribute, up to
+-- Config.Injuries.SKIN_TEAR_MAX): raw, wet wounds on the face: a dark rim
+-- (the torn edge) with the bright flesh inside, slightly raised.
 --
 --   Wounds.watch(model)   start drawing the marks of this fighter
 
@@ -130,7 +134,96 @@ local function refresh(model: Model, partName: string)
 	end
 end
 
+-- Torn skin on the face: where each raw wound goes (1st, 2nd, 3rd).
+type Tear = { at: Vector2, width: number, height: number, tilt: number }
+local TEARS: { Tear } = {
+	{ at = Vector2.new(-0.18, 0.05), width = 0.42, height = 0.26, tilt = 18 }, -- cheekbone
+	{ at = Vector2.new(0.22, 0.28), width = 0.34, height = 0.18, tilt = -25 }, -- brow
+	{ at = Vector2.new(0.05, -0.3), width = 0.3, height = 0.22, tilt = 8 }, -- jaw
+}
+local TEAR_RIM = Color3.fromRGB(58, 8, 8)
+local TEAR_FLESH = Color3.fromRGB(150, 30, 32)
+
+local function newPatch(
+	head: BasePart,
+	offset: CFrame,
+	size: Vector3,
+	color: Color3,
+	parent: Instance
+)
+	local patch = Instance.new("Part")
+	patch.Shape = Enum.PartType.Cylinder
+	patch.Size = size
+	patch.Material = Enum.Material.SmoothPlastic
+	patch.Color = color
+	patch.CanCollide = false
+	patch.CanQuery = false
+	patch.CanTouch = false
+	patch.CastShadow = false
+	patch.Massless = true
+	patch.CFrame = head.CFrame * offset
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = head
+	weld.Part1 = patch
+	weld.Parent = patch
+	patch.Parent = parent
+	return patch
+end
+
+local function refreshTears(model: Model)
+	local head = model:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") then
+		return
+	end
+	local value = model:GetAttribute("SkinTorn")
+	local count = if typeof(value) == "number" then math.clamp(value, 0, #TEARS) else 0
+	local existing = head:FindFirstChild("TornSkin")
+	if count == 0 then
+		if existing then
+			existing:Destroy()
+		end
+		return
+	end
+	local folder: Instance
+	if existing then
+		folder = existing
+	else
+		folder = Instance.new("Folder")
+		folder.Name = "TornSkin"
+		folder.Parent = head
+	end
+	local drawn = #folder:GetChildren()
+	for index = drawn + 1, count do
+		local tear = TEARS[index]
+		local wound = Instance.new("Model")
+		wound.Name = `Tear{index}`
+		-- On the rounded face (same curve as the marks), turned by `tilt`.
+		local base =
+			markOffset(head, { normal = FRONT, at = tear.at, size = tear.width, color = TEAR_RIM })
+		local turn = CFrame.Angles(math.rad(tear.tilt), 0, 0)
+		-- Torn edge: a dark rim, a bit bigger; the flesh inside, raised and wet.
+		newPatch(head, base * turn, Vector3.new(0.03, tear.width, tear.height), TEAR_RIM, wound)
+		local flesh = newPatch(
+			head,
+			base * CFrame.new(0.012, 0, 0) * turn,
+			Vector3.new(0.035, tear.width * 0.78, tear.height * 0.72),
+			TEAR_FLESH,
+			wound
+		)
+		flesh.Reflectance = 0.15
+		wound.Parent = folder
+	end
+	local children = folder:GetChildren()
+	for index = #children, count + 1, -1 do
+		children[index]:Destroy()
+	end
+end
+
 function Wounds.watch(model: Model)
+	model:GetAttributeChangedSignal("SkinTorn"):Connect(function()
+		refreshTears(model)
+	end)
+	refreshTears(model)
 	for partName in SPOTS do
 		local attribute = attributeOf(partName)
 		model:GetAttributeChangedSignal(attribute):Connect(function()

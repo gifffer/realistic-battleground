@@ -219,8 +219,19 @@ return table.freeze({
 		LOW_HEALTH = 25,
 		REGEN_DELAY = 10, -- seconds without taking damage before it starts
 		REGEN_PER_SECOND = 1,
-		-- A heavy blow to the head (the 4th M1 on the head) opens a cut.
+		-- A heavy blow to the head (the 4th M1 on the head) MAY open a cut
+		-- (this chance), which bleeds like this.
 		CRIT_BLEED = table.freeze({ perSecond = 1.5, duration = 3 }),
+		CRIT_BLEED_CHANCE = 0.3,
+		-- Chance that a plain punch (M1 1-3) draws visible blood, per zone. Fists
+		-- rarely cut: blood is mostly for the bottle (its moves set their own
+		-- `bloodChance` in the kit). Decided by the server: everyone sees the same.
+		PUNCH_BLOOD_CHANCE = table.freeze({ Head = 0.12, Torso = 0.03, Legs = 0 }),
+		-- Glass in the face tears skin off (moves with `tearsSkin`, on a head hit
+		-- that isn't from behind). Realistic gore: on Roblox, set the experience's
+		-- maturity questionnaire accordingly, or turn this off (false).
+		SKIN_TEAR = true,
+		SKIN_TEAR_MAX = 3, -- raw wounds left on the face, at most
 		-- Visible marks (bruises, cuts) on a body part: at most this many.
 		MAX_WOUNDS_PER_PART = 3,
 		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).

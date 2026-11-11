@@ -29,6 +29,7 @@ local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
+local SoundController = require(script.Parent.SoundController)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 
 local KC = Config.Kits
@@ -215,7 +216,14 @@ local function tryAwaken()
 	if typeof(fury) ~= "number" or fury < KC.FURY_MAX then
 		return
 	end
-	-- Not predicted: the server plays the activation for everyone (us too).
+	-- Same rules as the server (not blocking, stunned, busy, between two
+	-- attacks): otherwise it would refuse, and G must not roar for nothing.
+	if not CombatController.canStartMove() then
+		return
+	end
+	-- The roar starts THE MOMENT G is pressed (for us). The server confirms and
+	-- plays the activation for everyone else (and the animation for us too).
+	SoundController.play("Awaken", character)
 	Remotes.Awaken:FireServer()
 end
 

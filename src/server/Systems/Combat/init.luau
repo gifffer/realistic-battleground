@@ -156,9 +156,21 @@ local function fireEvent(
 	zone: Types.HitZone?,
 	side: Types.HitSide?,
 	attackId: number?,
-	moveId: string?
+	moveId: string?,
+	blood: boolean?,
+	skinTearSeed: number?
 )
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side, attackId, moveId)
+	Remotes.CombatEvent:FireAllClients(
+		kind,
+		victim,
+		attacker,
+		zone,
+		side,
+		attackId,
+		moveId,
+		blood,
+		skinTearSeed
+	)
 end
 
 local function stopBlocking(state: CombatState)
@@ -277,6 +289,7 @@ local function healInjuries(state: CombatState)
 	for part in state.wounds do
 		setAttribute(state.model, woundAttribute(part), nil)
 	end
+	setAttribute(state.model, "SkinTorn", nil)
 	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
 end
@@ -366,6 +379,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local zone = spec.zone
 	-- Which side of the victim the blow arrives from (picks the reaction).
 	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, attacker.root.Position)
+	-- Blood / torn skin of a hit that lands (decided below, sent with it).
+	local blood = false
+	local skinTearSeed: number? = nil
 	local function event(kind: Types.CombatEventKind, withZone: boolean, withSide: boolean)
 		fireEvent(
 			kind,
@@ -374,7 +390,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 			if withZone then zone :: Types.HitZone else nil,
 			if withSide then side else nil,
 			spec.attackId,
-			spec.moveId
+			spec.moveId,
+			if blood then true else nil,
+			skinTearSeed
 		)
 	end
 	-- Awakened attackers hit harder.
@@ -435,6 +453,30 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 
 	-- 4. Normal hit.
 	dealDamage(victim, attacker, damage)
+
+	-- Blood: rolled here, so every client shows the same thing. Fists rarely
+	-- draw blood; the bottle's moves set their own (high) chance. The 4th M1
+	-- on the head may open a cut (then it bleeds, see below).
+	local critCut = false
+	local bloodChance: number = 0
+	if spec.bloodChance ~= nil then
+		bloodChance = spec.bloodChance
+	elseif spec.kind == "Finisher" and zone == "Head" then
+		critCut = random:NextNumber() < INJ.CRIT_BLEED_CHANCE
+		bloodChance = if critCut then 1 else 0
+	else
+		bloodChance = INJ.PUNCH_BLOOD_CHANCE[zone] or 0
+	end
+	blood = random:NextNumber() < bloodChance
+	-- Glass in the face (not from behind): skin tears off. Even on the blow
+	-- that knocks them out.
+	if spec.tearsSkin and INJ.SKIN_TEAR and zone == "Head" and side ~= "Back" then
+		skinTearSeed = random:NextInteger(1, 2 ^ 30)
+		local torn = victim.model:GetAttribute("SkinTorn")
+		local count = if typeof(torn) == "number" then torn else 0
+		setAttribute(victim.model, "SkinTorn", math.min(INJ.SKIN_TEAR_MAX, count + 1))
+	end
+
 	if Knockout.isKnockedOut(victim.model) then
 		-- That hit knocked them out: no stun or knockback on a limp body.
 		event(spec.kind, true, true)
@@ -451,8 +493,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		victim.slowMultiplier = slow.multiplier
 	end
 	local bleed = spec.bleed
-	-- A heavy blow to the head (the 4th M1) opens a cut too.
-	if bleed == nil and spec.kind == "Finisher" and zone == "Head" then
+	-- The 4th M1 on the head opened a cut (rolled above).
+	if bleed == nil and critCut then
 		bleed = INJ.CRIT_BLEED
 	end
 	if bleed then

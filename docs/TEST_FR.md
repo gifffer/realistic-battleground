@@ -236,3 +236,20 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | L3 | Passer de marche à course et inversement | Transition douce, pas de clignotement entre les deux. |
 | L4 | Sauter en marchant | L'animation de saut de Roblox (pas de marche dans les airs). |
 | L5 | Vitesse | Marche plus lente qu'avant (10), sprint 22 : réglable dans `src/shared/Config.luau` (`WALK_SPEED`, `SPRINT_SPEED`). |
+
+## Son de l'awakening, sang et peau arrachée (`feature/gore-awakening-sound`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| G1 | Jauge Fury pleine, appuyer sur **G** | Le cri de Street Fury part **au moment de l'appui** (une seule fois), puis l'animation. Les autres joueurs l'entendent aussi. |
+| G2 | G en gardant F (garde) ou pendant un coup | Rien ne se passe (ni son ni activation), comme le serveur. |
+| G3 | Frapper au poing 20 fois (tête et corps) | Le sang est **rare** : quelques giclées à la tête, presque jamais au corps. Le 4ᵉ coup à la tête n'ouvre une coupure qu'environ 1 fois sur 3. |
+| G4 | **Bouteille** (touche 1) | Giclée de sang **à chaque fois**, saignement plus long. |
+| G5 | Bouteille **en pleine face** (face au Dummy) | Des **morceaux de peau** (couleur de peau et chair rouge) sont arrachés et volent à l'opposé du coup puis restent au sol quelques secondes ; une **plaie à vif** reste sur le visage (max 3). |
+| G6 | Bouteille **dans le dos** | Pas de peau arrachée (juste le sang). |
+| G7 | 2 joueurs | Les deux écrans voient **les mêmes** morceaux, au même endroit. |
+| G8 | Mourir / réapparaître | Les plaies du visage disparaissent. |
+
+Note : le sang réaliste et la peau arrachée demandent de remplir honnêtement le **questionnaire de
+maturité** de l'expérience (Creator Dashboard). Pour un public plus jeune, mettre
+`SKIN_TEAR = false` dans `src/shared/Config.luau` (section `Injuries`).

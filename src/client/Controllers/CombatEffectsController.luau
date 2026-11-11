@@ -566,7 +566,9 @@ local function onCombatEvent(
 	zoneArg: unknown,
 	sideArg: unknown,
 	attackIdArg: unknown,
-	moveIdArg: unknown
+	moveIdArg: unknown,
+	bloodArg: unknown,
+	skinTearSeedArg: unknown
 )
 	if typeof(victim) ~= "Instance" or typeof(attacker) ~= "Instance" then
 		return -- a model that doesn't exist on this client (streamed out...)
@@ -626,6 +628,13 @@ local function onCombatEvent(
 			end
 		else
 			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
+		end
+		-- Blood and torn skin: decided by the server (same on every screen).
+		if bloodArg == true then
+			KitEffects.bloodSpray(victim, attacker, zone)
+		end
+		if typeof(skinTearSeedArg) == "number" then
+			KitEffects.skinTear(victim, attacker, skinTearSeedArg)
 		end
 		if iAmVictim then
 			drainColour()
@@ -703,7 +712,10 @@ local function onCombatAction(model: Model, action: string)
 	if action == "GetUp" then
 		return
 	elseif KitEffects.isMoveAnimation(action) then
-		KitEffects.onAction(model, action) -- prop in hand + its own sound
+		-- Prop in hand + its own sound. Our own Street Fury roar already
+		-- played when we pressed G (KitController): don't play it twice.
+		local alreadyHeard = model == player.Character and action == "Brawler_Awaken"
+		KitEffects.onAction(model, action, alreadyHeard)
 	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model) -- the heavy blows
 	elseif string.sub(action, 1, 4) == "Dash" then

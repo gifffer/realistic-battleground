@@ -38,8 +38,12 @@ local kit: KitTypes.KitDef = {
 					stun = 0.7,
 					hitbox = HEAD,
 					forward = 3,
-					bleed = { perSecond = 2, duration = 4 },
+					-- A bottle broken on the head: it always cuts, bleeds hard, and the
+					-- glass tears the skin of the face.
+					bleed = { perSecond = 3, duration = 6 },
 					breaksProp = true,
+					bloodChance = 1,
+					tearsSkin = true,
 				},
 			},
 		},
@@ -120,7 +124,16 @@ local kit: KitTypes.KitDef = {
 				stamina = 10,
 				prop = "BrokenBottle",
 				hits = {
-					{ at = 0.2, damage = 6, zone = "Head", stun = 0.5, hitbox = WIDE, forward = 3 },
+					{
+						at = 0.2,
+						damage = 6,
+						zone = "Head",
+						stun = 0.5,
+						hitbox = WIDE,
+						forward = 3,
+						bloodChance = 0.85, -- jagged glass
+						tearsSkin = true,
+					},
 					{
 						at = 0.45,
 						damage = 8,
@@ -129,6 +142,8 @@ local kit: KitTypes.KitDef = {
 						hitbox = WIDE,
 						forward = 3,
 						bleed = { perSecond = 4, duration = 5 },
+						bloodChance = 1,
+						tearsSkin = true,
 					},
 				},
 			},

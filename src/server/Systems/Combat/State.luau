@@ -69,6 +69,8 @@ export type HitSpec = {
 	bleed: { perSecond: number, duration: number }?,
 	slow: { multiplier: number, duration: number }?,
 	unblockable: boolean?,
+	bloodChance: number?, -- chance of visible blood (nil: the M1 rules in Config.Injuries)
+	tearsSkin: boolean?, -- glass: skin tears off on a hit in the face
 	attackId: number?, -- M1 number from the client (prediction), nil for moves
 	moveId: string?, -- kit move id, nil for an M1
 }
