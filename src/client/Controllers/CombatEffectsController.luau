@@ -44,6 +44,7 @@ local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
@@ -139,6 +140,10 @@ local predictions: { [Model]: { [number]: Prediction } } = {}
 -- When each fighter last started a dash: it may be in its dodge frames,
 -- which only the server knows, so we don't predict hits on it.
 local dashedAt: { [Model]: number } = {}
+-- Hurt groans: at most one every GRUNT_INTERVAL seconds per fighter (a
+-- combo would otherwise stack them).
+local GRUNT_INTERVAL = 0.6
+local nextGruntAt: { [Model]: number } = {}
 local random = Random.new()
 local shakeUntil = 0
 local shakeStrength = 0
@@ -195,6 +200,7 @@ local function onCombatantAdded(instance: Instance)
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
 	KitEffects.watch(model) -- bleeding drips, Street Fury
+	Wounds.watch(model) -- bruises and cuts where they were hit
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
 	end)
@@ -206,6 +212,7 @@ local function onCombatantRemoved(instance: Instance)
 		visuals[instance] = nil
 		predictions[instance] = nil
 		dashedAt[instance] = nil
+		nextGruntAt[instance] = nil
 	end
 end
 
@@ -597,6 +604,21 @@ local function onCombatEvent(
 			headBlur()
 		end
 
+		-- Hurt enough: the victim groans (read a moment later, once the
+		-- server's new health has reached us).
+		task.delay(0.05, function()
+			local humanoid = victim:FindFirstChildOfClass("Humanoid")
+			local time = os.clock()
+			if
+				humanoid
+				and humanoid.Health > 0
+				and humanoid.Health <= Config.Injuries.HURT_SOUND_HEALTH
+				and time >= (nextGruntAt[victim] or 0)
+			then
+				nextGruntAt[victim] = time + GRUNT_INTERVAL
+				SoundController.play("HurtGrunt", victim)
+			end
+		end)
 		if moveId then
 			KitEffects.onHit(victim, attacker, moveId, zone)
 			if iAmAttacker then

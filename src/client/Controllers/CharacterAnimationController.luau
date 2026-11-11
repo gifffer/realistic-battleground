@@ -57,6 +57,11 @@ local FADE_IN: { [string]: number } = {
 	Guard = 0.12,
 	Walk = 0.15,
 	Run = 0.15,
+	-- Injuries: the tired posture settles in slowly.
+	HurtGuard = 0.3,
+	HurtIdle = 0.4,
+	LimpWalk = 0.2,
+	LimpIdle = 0.3,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
@@ -158,6 +163,8 @@ local sprintPose: { [string]: CFrame } = {}
 -- Helpers
 ------------------------------------------------------------------------------
 
+local isLimping: (entry: Tracked) -> boolean -- defined below (compose)
+
 local function horizontalSpeed(root: BasePart): number
 	local v = root.AssemblyLinearVelocity
 	return Vector3.new(v.X, 0, v.Z).Magnitude
@@ -219,7 +226,23 @@ local function movementState(entry: Tracked): string?
 end
 
 -- Movement clip for this state ("Crouch" splits into idle / walk), nil = none.
+-- A limping fighter (legs injured) walks and stands on its good leg.
 local function movementClip(entry: Tracked, state: string?): string?
+	-- (Only on the ground: jumping, falling, swimming, climbing a ladder or
+	-- sitting keep Roblox's own animations.)
+	local humanoidState = entry.humanoid:GetState()
+	local onGround = humanoidState == Enum.HumanoidStateType.Running
+		or humanoidState == Enum.HumanoidStateType.RunningNoPhysics
+	if
+		(state == nil or state == "Walk")
+		and onGround
+		and entry.model:GetAttribute("Limping") == true
+	then
+		local current = entry.movement[#entry.movement]
+		local walking = current ~= nil and current.target == 1 and current.name == "LimpWalk"
+		local threshold = if walking then CROUCH_WALK_STOP else CROUCH_WALK_START
+		return if horizontalSpeed(entry.root) > threshold then "LimpWalk" else "LimpIdle"
+	end
 	if state == "Crouch" then
 		local current = entry.movement[#entry.movement]
 		local walking = current ~= nil and current.target == 1 and current.name == "CrouchWalk"
@@ -266,15 +289,25 @@ local function stanceClip(entry: Tracked, state: string?): string?
 	if model:GetAttribute("Blocking") == true or (isLocal(entry) and predictedBlock) then
 		return "Block"
 	end
+	-- Low health (step 5): a tired, lower guard in a fight, a hunched,
+	-- hurting posture otherwise.
+	local health = entry.humanoid.Health
+	local hurt = health > 0
+		and health < Config.Injuries.LOW_HEALTH
+		and model:GetAttribute("KnockedOut") ~= true
 	if os.clock() < entry.combatUntil then
-		return "Guard" -- still in a fight: fists up
+		-- Still in a fight: fists up.
+		return if hurt then "HurtGuard" else "Guard"
 	end
-	return nil
+	return if hurt then "HurtIdle" else nil
 end
 
 -- Playback speed of a clip.
 local function playbackRate(entry: Tracked, name: string): number
-	if name == "CrouchWalk" then
+	if name == "LimpWalk" then
+		-- Authored for 12 studs/s (walking speed × the limp's slowdown).
+		return math.clamp(horizontalSpeed(entry.root) / 12, 0.6, 1.6)
+	elseif name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
 	elseif name == "Walk" then
@@ -365,6 +398,14 @@ local function blendChannel(
 	return result, touched
 end
 
+-- A limp clip is playing (or fading in) on the movement channel.
+isLimping = function(entry: Tracked): boolean
+	local current = entry.movement[#entry.movement]
+	return current ~= nil
+		and current.target == 1
+		and (current.name == "LimpWalk" or current.name == "LimpIdle")
+end
+
 -- Damped spring pulling the flinch back to zero (the head wobbles and settles).
 local function updateFlinch(entry: Tracked, dt: number)
 	if entry.flinch.Magnitude < 0.02 and entry.flinchSpeed.Magnitude < 0.5 then
@@ -415,8 +456,13 @@ local function compose(entry: Tracked)
 			result = result * CFrame.new():Lerp(lean, sprint)
 			any = true
 		end
-		result, touched = blendChannel(entry.stance, motor, joint, result)
-		any = any or touched
+		-- While limping, the limp owns the pelvis (Root): its weight shift
+		-- must stay under the guard / hurt posture, or the legs no longer
+		-- line up with the body.
+		if not (joint == "Root" and isLimping(entry)) then
+			result, touched = blendChannel(entry.stance, motor, joint, result)
+			any = any or touched
+		end
 		result, touched = blendChannel(entry.action, motor, joint, result)
 		any = any or touched
 		-- Flinch: added on top of everything, on the head and (less) the torso.

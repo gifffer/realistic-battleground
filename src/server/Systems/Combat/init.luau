@@ -70,6 +70,7 @@ local State = require(script.State)
 
 local C = Config.Combat
 local KC = Config.Kits
+local INJ = Config.Injuries
 
 -- Dash animation names a client may send (anything else is ignored).
 local DASH_ANIMATIONS = table.freeze({
@@ -197,6 +198,9 @@ local function dealDamage(victim: CombatState, attacker: CombatState?, amount: n
 	if attackerModel then
 		Knockout.noteHit(victim.model, attackerModel)
 	end
+	-- (Out-of-combat regeneration waits for this to be old enough.)
+	victim.lastDamagedAt = now()
+	victim.regenCarry = 0
 	if victim.humanoid.Health - amount <= 0 then
 		stopBlocking(victim)
 		victim.attackToken += 1 -- cancels a punch they were winding up
@@ -209,6 +213,72 @@ local function dealDamage(victim: CombatState, attacker: CombatState?, amount: n
 		addFury(attacker, amount * KC.FURY_PER_DAMAGE_DEALT)
 		damaged.fire({ victim = victim.model, attacker = attacker.model, amount = amount })
 	end
+end
+
+-- Starts (or strengthens) bleeding: a new cut replaces a weaker one and
+-- refreshes a stronger one's time.
+local function startBleeding(
+	victim: CombatState,
+	attacker: CombatState,
+	perSecond: number,
+	duration: number
+)
+	local time = now()
+	victim.bleedPerSecond =
+		math.max(perSecond, if time < victim.bleedUntil then victim.bleedPerSecond else 0)
+	victim.bleedUntil = math.max(victim.bleedUntil, time + duration)
+	victim.nextBleedTick = math.max(victim.nextBleedTick, time + KC.BLEED_TICK)
+	victim.bleedSource = attacker.model
+	setAttribute(victim.model, "Bleeding", true)
+	-- For the victim's HUD: how much the cut will still take.
+	setAttribute(victim.model, "BleedPerSecond", victim.bleedPerSecond)
+	setAttribute(
+		victim.model,
+		"BleedUntil",
+		workspace:GetServerTimeNow() + (victim.bleedUntil - time)
+	)
+end
+
+-- Attribute holding the wound count of a body part. Attribute names can't
+-- contain spaces: "Right Leg" → "Wound_RightLeg".
+local function woundAttribute(part: string): string
+	return "Wound_" .. string.gsub(part, " ", "")
+end
+
+-- Injuries left by a hit that landed (step 5):
+--   • a visible mark on the body part hit ("Wound_<Part>" attribute = how
+--     many, clients draw them),
+--   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
+local function injure(victim: CombatState, zone: Types.HitZone, damage: number, side: Types.HitSide)
+	local part = "Torso"
+	if zone == "Head" then
+		part = "Head"
+	elseif zone == "Legs" then
+		-- The leg on the side the kick came from (from the front: the right one).
+		part = if side == "Left" then "Left Leg" else "Right Leg"
+		victim.legDamage += damage
+		if not victim.limping and victim.legDamage >= INJ.LIMP_LEG_DAMAGE then
+			victim.limping = true
+			setAttribute(victim.model, "Limping", true)
+		end
+	end
+	local count = math.min(INJ.MAX_WOUNDS_PER_PART, (victim.wounds[part] or 0) + 1)
+	if count ~= victim.wounds[part] then
+		victim.wounds[part] = count
+		setAttribute(victim.model, woundAttribute(part), count)
+	end
+end
+
+-- A kill (or nothing at all, see onKill): every injury is healed.
+local function healInjuries(state: CombatState)
+	state.legDamage = 0
+	state.limping = false
+	setAttribute(state.model, "Limping", false)
+	for part in state.wounds do
+		setAttribute(state.model, woundAttribute(part), nil)
+	end
+	table.clear(state.wounds)
+	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
 end
 
 -- Knocked to the ground (tackle, launch): the body goes limp for `duration`
@@ -381,22 +451,14 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		victim.slowMultiplier = slow.multiplier
 	end
 	local bleed = spec.bleed
-	if bleed then
-		-- A new cut replaces a weaker one, refreshes a stronger one's time.
-		victim.bleedPerSecond =
-			math.max(bleed.perSecond, if time < victim.bleedUntil then victim.bleedPerSecond else 0)
-		victim.bleedUntil = math.max(victim.bleedUntil, time + bleed.duration)
-		victim.nextBleedTick = math.max(victim.nextBleedTick, time + KC.BLEED_TICK)
-		victim.bleedSource = attacker.model
-		setAttribute(victim.model, "Bleeding", true)
-		-- For the victim's HUD: how much the cut will still take.
-		setAttribute(victim.model, "BleedPerSecond", victim.bleedPerSecond)
-		setAttribute(
-			victim.model,
-			"BleedUntil",
-			workspace:GetServerTimeNow() + (victim.bleedUntil - time)
-		)
+	-- A heavy blow to the head (the 4th M1) opens a cut too.
+	if bleed == nil and spec.kind == "Finisher" and zone == "Head" then
+		bleed = INJ.CRIT_BLEED
 	end
+	if bleed then
+		startBleeding(victim, attacker, bleed.perSecond, bleed.duration)
+	end
+	injure(victim, zone :: Types.HitZone, damage, side)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -478,12 +540,18 @@ function Combat.register(model: Model, player: Player?)
 		slowMultiplier = 1,
 		knockdownToken = 0,
 		knockedDownUntil = 0,
+		legDamage = 0,
+		limping = false,
+		wounds = {},
+		lastDamagedAt = -math.huge,
+		regenCarry = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
 	model:SetAttribute("Fury", 0)
 	model:SetAttribute("Awakened", false)
 	model:SetAttribute("Bleeding", false)
+	model:SetAttribute("Limping", false)
 	-- A player fights with the kit saved in their profile.
 	local data = if player then PlayerData.getData(player) else nil
 	Combat.setKit(model, if data then data.equippedKit else Kits.DEFAULT)
@@ -707,12 +775,30 @@ end
 -- Every frame: end stuns, apply slowdowns to players
 ------------------------------------------------------------------------------
 
-local function update()
+local function update(dt: number)
 	local time = now()
 	for model, state in states do
 		local stunned = time < state.stunnedUntil
 		setAttribute(model, "Stunned", stunned)
 		setAttribute(model, "Awakened", time < state.awakenedUntil)
+
+		-- Out of combat for a while at low health: health slowly comes back
+		-- (up to LOW_HEALTH only: a kill is the real way to heal).
+		local humanoid = state.humanoid
+		if
+			humanoid.Health > 0
+			and humanoid.Health < INJ.LOW_HEALTH
+			and time - state.lastDamagedAt >= INJ.REGEN_DELAY
+			and state.bleedPerSecond == 0
+			and not Knockout.isKnockedOut(model)
+		then
+			state.regenCarry += INJ.REGEN_PER_SECOND * dt
+			if state.regenCarry >= 1 then
+				local amount = math.floor(state.regenCarry)
+				state.regenCarry -= amount
+				humanoid.Health = math.min(INJ.LOW_HEALTH, humanoid.Health + amount)
+			end
+		end
 
 		-- Bleeding: small ticks of damage until the cut closes.
 		if state.bleedPerSecond > 0 then
@@ -751,6 +837,9 @@ local function update()
 				"LegHit",
 				if time < state.legSlowUntil then C.LEG_HIT_SLOW else nil
 			)
+			-- Limping (legs injured): slower, and no sprinting.
+			Movement.setSpeedModifier(player, "Limp", if state.limping then INJ.LIMP_SPEED else nil)
+			Movement.setSprintLock(player, "Limp", state.limping)
 			-- Slowed by a kit move (dirty kick).
 			Movement.setSpeedModifier(
 				player,
@@ -920,6 +1009,12 @@ function Combat.start()
 		addFury = addFury,
 	})
 	Knockout.onGetUp(onGetUp)
+	Knockout.onKill(function(killer)
+		local state = states[killer]
+		if state then
+			healInjuries(state)
+		end
+	end)
 	Remotes.Attack.OnServerEvent:Connect(onAttack)
 	Remotes.SetBlocking.OnServerEvent:Connect(onSetBlocking)
 	Remotes.Dash.OnServerEvent:Connect(onDash)

@@ -60,6 +60,8 @@ local Knockout = {}
 local fighters: { [Model]: FighterInfo } = {}
 -- Called when a KO'd fighter gets back up (Combat stuns them, plays GetUp).
 local getUpCallbacks: { (Model) -> () } = {}
+-- Called with the killer's model when they get a kill (Combat heals their injuries).
+local killCallbacks: { (Model) -> () } = {}
 
 local function now(): number
 	return os.clock()
@@ -128,6 +130,9 @@ local function rewardKill(killer: Model?, killerPlayer: Player?, victim: Fighter
 		if killerHumanoid and killerHumanoid.Health > 0 and not busy then
 			killerHumanoid.Health =
 				math.min(killerHumanoid.MaxHealth, killerHumanoid.Health + K.KILL_HEAL)
+			for _, callback in killCallbacks do
+				task.spawn(callback, killer)
+			end
 		end
 	end
 	-- Only kills on real players count in the stats (no farming dummies).
@@ -418,6 +423,11 @@ function Knockout.finish(victim: Model, attacker: Model)
 end
 
 -- `callback(model)` when a KO'd fighter gets back up.
+-- `callback(killerModel)` each time a fighter gets a kill (and its heal).
+function Knockout.onKill(callback: (Model) -> ())
+	table.insert(killCallbacks, callback)
+end
+
 function Knockout.onGetUp(callback: (Model) -> ())
 	table.insert(getUpCallbacks, callback)
 end

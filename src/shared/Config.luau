@@ -209,6 +209,24 @@ return table.freeze({
 		FOLLOW_UP_RANGE = 7,
 	}),
 
+	-- Injuries (step 5). They last until you die or get a kill (which heals).
+	Injuries = table.freeze({
+		-- Legs: after this much damage taken on the legs (kicks), you LIMP.
+		LIMP_LEG_DAMAGE = 25,
+		LIMP_SPEED = 0.75, -- speed multiplier while limping (no sprinting)
+		-- Low health: under this, screen and posture show it (client) and,
+		-- out of combat, health slowly comes back up to it.
+		LOW_HEALTH = 25,
+		REGEN_DELAY = 10, -- seconds without taking damage before it starts
+		REGEN_PER_SECOND = 1,
+		-- A heavy blow to the head (the 4th M1 on the head) opens a cut.
+		CRIT_BLEED = table.freeze({ perSecond = 1.5, duration = 3 }),
+		-- Visible marks (bruises, cuts) on a body part: at most this many.
+		MAX_WOUNDS_PER_PART = 3,
+		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).
+		HURT_SOUND_HEALTH = 70,
+	}),
+
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish
 	-- you (M1 on you while you're down); otherwise you get back up.
 	Knockout = table.freeze({

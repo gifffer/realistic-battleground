@@ -211,6 +211,23 @@ Pas de son dédié encore pour la bouteille / coup de tête / tackle / tibia / A
 utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes IDs dans
 `src/shared/Sounds.luau` : **BottleBreak, Slash, Headbutt, Tackle, KickLow, Awaken**.
 
+<<<<<<< HEAD
+## Étape 5 — Blessures (`feature/injuries`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la jambe gauche. |
+| B2 | Faire un kill en boitant | La boiterie **disparaît** (le kill soigne toutes les blessures). |
+| B3 | Frapper le Dummy plusieurs fois à la tête / au torse / aux jambes | Des **petites marques sombres** (bleus, coupure au sourcil) apparaissent là où il a été touché (3 max par partie). Elles partent à sa mort. |
+| B4 | 4ᵉ M1 visé à la **tête** | L'adversaire **saigne** un peu (3 s), même sans bouteille. |
+| B5 | Descendre **sous 25 PV** | Bords de l'écran qui s'assombrissent et **respirent**, image un peu floue et moins colorée ; plus tu es bas, plus c'est fort. Ton perso est **voûté** (main sur les côtes) hors combat, **garde basse et fatiguée** en combat — les autres le voient. |
+| B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
+| B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
+
+| B8 | Se faire frapper **à 70 PV ou moins** | Le perso pousse un **cri de douleur** (3 sons au hasard), entendu par tout le monde. |
+
+Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seulement toi).
+=======
 ## Marche et course réalistes (`feature/realistic-locomotion`)
 
 | # | Test | Résultat attendu |
@@ -220,3 +237,4 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 | L3 | Passer de marche à course et inversement | Transition douce, pas de clignotement entre les deux. |
 | L4 | Sauter en marchant | L'animation de saut de Roblox (pas de marche dans les airs). |
 | L5 | Vitesse | Marche plus lente qu'avant (10), sprint 22 : réglable dans `src/shared/Config.luau` (`WALK_SPEED`, `SPRINT_SPEED`). |
+>>>>>>> origin/main
