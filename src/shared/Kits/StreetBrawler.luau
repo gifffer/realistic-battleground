@@ -16,7 +16,7 @@ local WIDE = Vector3.new(7, 5, 6)
 local kit: KitTypes.KitDef = {
 	id = "StreetBrawler",
 	name = "STREET BRAWLER",
-	description = "Bar fights, broken bottles and no rules. Hits hard, fights dirty.",
+	description = "Fights dirty and close. Hits hard and leaves marks.",
 	order = 1,
 	available = true,
 
@@ -24,7 +24,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "BottleSmash",
 			name = "BOTTLE SMASH",
-			description = "Smashes a bottle over the head. The cut keeps bleeding.",
+			description = "Breaks a bottle over their head.",
 			animation = "Brawler_Bottle",
 			duration = 0.9,
 			cooldown = 8,
@@ -46,7 +46,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "Headbutt",
 			name = "HEADBUTT",
-			description = "Grabs the collar and drives the forehead in. Long stun.",
+			description = "Point blank. Leaves them dazed.",
 			animation = "Brawler_Headbutt",
 			duration = 0.7,
 			cooldown = 6,
@@ -58,7 +58,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "Tackle",
 			name = "TACKLE",
-			description = "A low shoulder charge that takes the opponent off his feet.",
+			description = "Rush in and take them to the ground.",
 			animation = "Brawler_Tackle",
 			duration = 0.9,
 			cooldown = 10,
@@ -84,7 +84,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "DirtyKick",
 			name = "DIRTY KICK",
-			description = "A mean kick to the shin. Slows the opponent down.",
+			description = "A low kick to the shin that slows them.",
 			animation = "Brawler_DirtyKick",
 			duration = 0.6,
 			cooldown = 7,
@@ -105,7 +105,7 @@ local kit: KitTypes.KitDef = {
 
 	awakening = {
 		name = "STREET FURY",
-		description = "Snaps. For a few seconds every move turns nastier and nothing stops him.",
+		description = "Fills as you deal damage. Press G when full: each move becomes its fury version.",
 		animation = "Brawler_Awaken",
 		duration = 10,
 		damageMultiplier = 1.2,
@@ -113,7 +113,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "BrokenBottle",
 				name = "BROKEN BOTTLE",
-				description = "Two slashes with the broken neck. Deep bleeding.",
+				description = "Two slashes. Deep cuts.",
 				animation = "Brawler_BrokenBottle",
 				duration = 1.0,
 				cooldown = 6,
@@ -135,7 +135,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "DoubleHeadbutt",
 				name = "DOUBLE HEADBUTT",
-				description = "Holds the collar and headbutts twice.",
+				description = "Holds the collar, headbutts twice.",
 				animation = "Brawler_DoubleHeadbutt",
 				duration = 1.0,
 				cooldown = 5,
@@ -163,7 +163,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "TackleSlam",
 				name = "TACKLE SLAM",
-				description = "Tackles, then hammers the opponent on the ground.",
+				description = "Takes them down, then hits them there.",
 				animation = "Brawler_Tackle",
 				duration = 0.9,
 				cooldown = 8,
@@ -191,7 +191,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "KickCombo",
 				name = "KICK COMBO",
-				description = "A low kick to the shin, then a high kick that launches.",
+				description = "Shin, then face. Sends them flying.",
 				animation = "Brawler_KickCombo",
 				duration = 0.95,
 				cooldown = 6,

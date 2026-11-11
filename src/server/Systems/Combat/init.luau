@@ -387,6 +387,13 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		victim.nextBleedTick = math.max(victim.nextBleedTick, time + KC.BLEED_TICK)
 		victim.bleedSource = attacker.model
 		setAttribute(victim.model, "Bleeding", true)
+		-- For the victim's HUD: how much the cut will still take.
+		setAttribute(victim.model, "BleedPerSecond", victim.bleedPerSecond)
+		setAttribute(
+			victim.model,
+			"BleedUntil",
+			workspace:GetServerTimeNow() + (victim.bleedUntil - time)
+		)
 	end
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.

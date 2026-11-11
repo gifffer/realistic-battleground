@@ -24,6 +24,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
@@ -33,6 +34,9 @@ local KC = Config.Kits
 local player = Players.LocalPlayer
 
 local KitController = {}
+
+-- A key press the rules refused (cooldown, low stamina): the HUD shows it.
+local denied = Signal.new() :: Signal.Signal<number>
 
 -- Ids of the moves that are charges (tackles), from every kit's data.
 local CHARGE_MOVES: { [string]: boolean } = {}
@@ -118,11 +122,12 @@ local function tryMove(slot: number)
 	if move == nil or not CombatController.canStartMove() then
 		return
 	end
-	if KitController.cooldownLeft(character, move) > 0 then
-		return
-	end
 	local stamina = player:GetAttribute("Stamina")
-	if typeof(stamina) == "number" and stamina < move.stamina then
+	if
+		KitController.cooldownLeft(character, move) > 0
+		or (typeof(stamina) == "number" and stamina < move.stamina)
+	then
+		denied.fire(slot)
 		return
 	end
 
@@ -131,6 +136,16 @@ local function tryMove(slot: number)
 	KitEffects.onAction(character, move.animation)
 	startCharge(move, root)
 	Remotes.UseMove:FireServer(slot, AimController.getAimDirection())
+end
+
+-- Uses the move on `slot` (a key, or a click on the move bar).
+function KitController.use(slot: number)
+	tryMove(slot)
+end
+
+-- Calls `callback(slot)` when a press is refused (cooldown / low stamina).
+function KitController.onDenied(callback: (number) -> ()): Signal.Connection
+	return denied.connect(callback)
 end
 
 local function tryAwaken()
