@@ -239,8 +239,14 @@ local function startBleeding(
 	)
 end
 
+-- Attribute holding the wound count of a body part. Attribute names can't
+-- contain spaces: "Right Leg" → "Wound_RightLeg".
+local function woundAttribute(part: string): string
+	return "Wound_" .. string.gsub(part, " ", "")
+end
+
 -- Injuries left by a hit that landed (step 5):
---   • a visible mark on the body part hit ("Wound_<part>" attribute = how
+--   • a visible mark on the body part hit ("Wound_<Part>" attribute = how
 --     many, clients draw them),
 --   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
 local function injure(victim: CombatState, zone: Types.HitZone, damage: number, side: Types.HitSide)
@@ -259,7 +265,7 @@ local function injure(victim: CombatState, zone: Types.HitZone, damage: number, 
 	local count = math.min(INJ.MAX_WOUNDS_PER_PART, (victim.wounds[part] or 0) + 1)
 	if count ~= victim.wounds[part] then
 		victim.wounds[part] = count
-		setAttribute(victim.model, `Wound_{part}`, count)
+		setAttribute(victim.model, woundAttribute(part), count)
 	end
 end
 
@@ -269,7 +275,7 @@ local function healInjuries(state: CombatState)
 	state.limping = false
 	setAttribute(state.model, "Limping", false)
 	for part in state.wounds do
-		setAttribute(state.model, `Wound_{part}`, nil)
+		setAttribute(state.model, woundAttribute(part), nil)
 	end
 	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame

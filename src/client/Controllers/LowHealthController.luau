@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Sounds = require(ReplicatedStorage.Shared.Sounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local SoundController = require(script.Parent.SoundController)
 
@@ -151,8 +152,8 @@ local function update(dt: number)
 	end
 	blur.Size = level * MAX_BLUR
 	grade.Saturation = level * MAX_DESATURATION
-	setSound(heartbeat, level, 0.6)
-	setSound(breathing, level, 0.45)
+	setSound(heartbeat, level, Sounds.Heartbeat.volume)
+	setSound(breathing, level, Sounds.Breathing.volume)
 end
 
 function LowHealthController.init()
