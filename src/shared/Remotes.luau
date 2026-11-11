@@ -70,4 +70,21 @@ return table.freeze({
 	-- Change one setting from the Settings window. The server checks the name
 	-- and the type of the value (see Server/Systems/Settings).
 	UpdateSetting = event("UpdateSetting"),
+
+	-- client → server  ()
+	-- "I want to M1". The server checks timing, then finds who is hit.
+	Attack = event("Attack"),
+
+	-- client → server  (wantsToBlock: boolean)
+	-- F pressed / released.
+	SetBlocking = event("SetBlocking"),
+
+	-- client → server  ()
+	-- "I just dashed". The client moves itself right away (feels instant);
+	-- the server checks cooldown + stamina and gives the dodge frames.
+	Dash = event("Dash"),
+
+	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model)
+	-- Something happened in a fight; clients show effects (flash, text, shake).
+	CombatEvent = event("CombatEvent"),
 })

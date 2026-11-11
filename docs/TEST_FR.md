@@ -65,3 +65,33 @@ publié) ; pour le désactiver : `Config.Dev.TEST_COURSE = false`.
 
 Test à 2 joueurs : le joueur 2 voit les **animations** du joueur 1, avec un petit décalage normal (réseau).
 Dans l'Output, **aucune ligne rouge**. S'il y en a : copie-les-moi avec le numéro du test.
+
+## Étape 2 — Combat de base (`feature/combat-integration`)
+
+Deux **mannequins** apparaissent devant le point d'apparition : **Dummy** (gris, passif, se soigne
+après 3 s) et **Attacking Dummy** (rouge, te frappe si tu t'approches à moins de 7 studs).
+Les **boîtes rouges** qui apparaissent sont les hitbox (visibles seulement dans Studio).
+Il n'y a pas encore d'animations : c'est normal que le perso ne bouge pas les bras.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| 1 | Clic gauche près du **Dummy** | Boîte rouge devant toi, le Dummy flashe rouge, sa vie baisse (barre au-dessus de lui). |
+| 2 | **Maintenir** clic gauche | 4 coups enchaînés ; le 4ᵉ **repousse** le Dummy ; petite pause avant le combo suivant. |
+| 3 | Frapper dans le vide puis attendre 1 s | Le combo recommence au coup 1. |
+| 4 | Pendant que tu frappes | Tu avances plus lentement, Shift ne fait pas courir. |
+| 5 | S'approcher de l'**Attacking Dummy** sans rien faire | Tu flashes rouge, contour **jaune** (étourdi), ta vie baisse, l'écran tremble un peu, le 4ᵉ coup te repousse. |
+| 6 | Maintenir **F** devant lui | Contour **bleu** ; les coups flashent bleu, ta vie baisse très peu, ta STAMINA baisse. |
+| 7 | Rester en garde jusqu'à STAMINA 0 | « **GUARD BREAK!** » orange, contour jaune, tu ne peux plus bloquer ni frapper ~1,5 s. |
+| 8 | Appuyer sur F **juste avant** un coup | « **PARRY!** » blanc : c'est **lui** qui devient jaune (étourdi 1 s). Frappe-le pendant ce temps. |
+| 9 | Spammer F | Les parades ne marchent plus (il faut lâcher F ~0,6 s avant de retenter). |
+| 10 | Garde (F) avec l'Attacking Dummy **dans ton dos** | Le blocage ne marche pas de dos : tu prends le coup normalement. |
+| 11 | **Q** en marchant / à l'arrêt | Petit dash dans ta direction / en arrière ; STAMINA −25 ; 2 s avant le prochain. |
+| 12 | Q pile quand l'Attacking Dummy frappe | « **DODGE** » : le coup ne fait rien. |
+| 13 | Tuer le Dummy | Il tombe, et revient 3 s plus tard. |
+| 14 | Mourir face à l'Attacking Dummy | Tu réapparais, tout remarche (frapper, bloquer, dash). |
+
+Test à 2 joueurs (*Test → Clients and Servers → 2 Players*) : vous pouvez vous frapper, bloquer et
+parer entre vous ; chaque joueur voit les contours bleus/jaunes de l'autre.
+
+Si un test échoue : copie-moi les lignes rouges de l'Output et dis-moi le numéro du test
+(une vidéo marche très bien aussi).

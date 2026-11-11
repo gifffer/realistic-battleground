@@ -37,4 +37,10 @@ export type MoveState = "Walk" | "Sprint" | "Crouch" | "Slide" | "Climb" | "Vaul
 -- or the climb finished before the server's maximum duration).
 export type MoveAction = "Slide" | "Climb" | "Vault" | "Cancel"
 
+-- What happened when an attack reached someone (Remotes.CombatEvent).
+--   Hit        normal hit          Blocked     hit blocked (chip damage)
+--   Finisher   4th hit, knockback  GuardBreak  block broken (no stamina)
+--   Parried    perfect block       Dodged      hit during dash frames
+export type CombatEventKind = "Hit" | "Finisher" | "Blocked" | "GuardBreak" | "Parried" | "Dodged"
+
 return nil
