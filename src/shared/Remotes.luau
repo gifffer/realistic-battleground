@@ -79,10 +79,18 @@ return table.freeze({
 	-- F pressed / released.
 	SetBlocking = event("SetBlocking"),
 
-	-- client → server  ()
+	-- client → server  (animation: string)
 	-- "I just dashed". The client moves itself right away (feels instant);
 	-- the server checks cooldown + stamina and gives the dodge frames.
+	-- `animation` = "DashForward" / "DashBack" / "DashLeft" / "DashRight"
+	-- (only used so the other players see the right dash animation).
 	Dash = event("Dash"),
+
+	-- server → all clients  (fighter: Model, action: string)
+	-- A fighter started a move (an M1 "Brawler_M1_2", a dash "DashLeft"...):
+	-- every client plays the matching animation and sound on that fighter.
+	-- (The fighter's own client already did, the moment the key was pressed.)
+	CombatAction = event("CombatAction"),
 
 	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model)
 	-- Something happened in a fight; clients show effects (flash, text, shake).

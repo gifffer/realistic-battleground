@@ -6,10 +6,15 @@
 --     orange = guard break.
 --   • Floating text: "PARRY!", "GUARD BREAK!", "DODGE".
 --   • Small camera shake when YOU hit or get hit.
---   • Your own reaction animations (hit, block hit, stunned...).
+--   • Reaction animations (hit, block hit, parry, guard break) and sounds,
+--     on EVERY fighter.
+--   • Other fighters' punches and dashes (Remotes.CombatAction): animation
+--     + sound. Ours already played when we pressed the key.
 --
 -- Data comes from the server: the Config.Combat.TAG tag + "Blocking" /
--- "Stunned" attributes on each fighter, and Remotes.CombatEvent.
+-- "Stunned" attributes on each fighter (the block / stunned animations
+-- follow them, see CharacterAnimationController), Remotes.CombatEvent and
+-- Remotes.CombatAction.
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
@@ -21,7 +26,8 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
-local AnimationController = require(script.Parent.AnimationController)
+local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local SoundController = require(script.Parent.SoundController)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
@@ -112,14 +118,6 @@ local function onCombatantAdded(instance: Instance)
 	end)
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshOutline(visual)
-		-- Our own "stunned" animation.
-		if model == player.Character then
-			if model:GetAttribute("Stunned") == true then
-				AnimationController.play("Stunned", { looped = true })
-			else
-				AnimationController.stop("Stunned")
-			end
-		end
 	end)
 	refreshOutline(visual)
 end
@@ -213,36 +211,60 @@ local function onCombatEvent(kind: Types.CombatEventKind, victim: Model, attacke
 	if kind == "Hit" or kind == "Finisher" then
 		flash(victim, COLORS.Hit)
 		local strong = kind == "Finisher"
+		CharacterAnimationController.playAction(
+			victim,
+			if isInFront(victim, attacker) then "HitFront" else "HitBack"
+		)
+		SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		if iAmVictim then
 			shake(if strong then 1.6 else 0.8, if strong then 0.25 else 0.15)
-			AnimationController.play(if isInFront(victim, attacker) then "HitFront" else "HitBack")
 		elseif iAmAttacker then
 			shake(if strong then 0.8 else 0.35, 0.1)
 		end
 	elseif kind == "Blocked" then
 		flash(victim, COLORS.Blocked)
+		CharacterAnimationController.playAction(victim, "BlockHit")
+		SoundController.play("Block", victim)
 		if iAmVictim then
 			shake(0.3, 0.1)
-			AnimationController.play("BlockHit")
 		end
 	elseif kind == "Parried" then
 		flash(attacker, COLORS.Parry)
 		floatingText(victim, "PARRY!", COLORS.Parry)
-		if iAmVictim then
-			AnimationController.play("Parry")
-		end
+		CharacterAnimationController.playAction(victim, "Parry")
+		SoundController.play("Parry", victim)
 		if iAmVictim or iAmAttacker then
 			shake(0.6, 0.15)
 		end
 	elseif kind == "GuardBreak" then
 		flash(victim, COLORS.GuardBreak)
 		floatingText(victim, "GUARD BREAK!", COLORS.GuardBreak)
+		CharacterAnimationController.playAction(victim, "GuardBreak")
+		SoundController.play("GuardBreak", victim)
 		if iAmVictim then
 			shake(1.2, 0.2)
-			AnimationController.play("GuardBreak")
 		end
 	elseif kind == "Dodged" then
 		floatingText(victim, "DODGE", Theme.Colors.Text)
+		SoundController.play("Dodge", victim)
+	end
+end
+
+-- Another fighter started a punch or a dash (ours already played locally).
+local function onCombatAction(model: Model, action: string)
+	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
+		return
+	end
+	if model == player.Character then
+		return
+	end
+	CharacterAnimationController.playAction(model, action)
+	if action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
+		SoundController.play("HeavySwing", model)
+	elseif string.sub(action, 1, 4) == "Dash" then
+		SoundController.play("Dash", model)
+	else
+		SoundController.play("Swing", model)
 	end
 end
 
@@ -259,6 +281,7 @@ function CombatEffectsController.start()
 	end
 
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)
+	Remotes.CombatAction.OnClientEvent:Connect(onCombatAction)
 	RunService:BindToRenderStep("CombatShake", Enum.RenderPriority.Camera.Value + 2, updateShake)
 end
 

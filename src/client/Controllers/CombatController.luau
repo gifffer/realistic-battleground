@@ -7,7 +7,8 @@
 --
 -- The client NEVER decides a hit, damage or a stun: it only asks. To feel
 -- instant it mirrors the server's timing rules (so it doesn't send requests
--- the server would refuse) and plays the animations right away.
+-- the server would refuse) and plays the animations and sounds right away.
+-- No fighting during a slide / climb / vault (same rule as the server).
 --
 -- Dash: the character is moved by this client (Roblox lets each client
 -- simulate its own character). The server checks the cooldown/stamina and
@@ -21,7 +22,9 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local AnimationController = require(script.Parent.AnimationController)
+local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local ParkourController = require(script.Parent.ParkourController)
+local SoundController = require(script.Parent.SoundController)
 
 local C = Config.Combat
 local player = Players.LocalPlayer
@@ -60,10 +63,22 @@ local function isStunned(character: Model): boolean
 	return character:GetAttribute("Stunned") == true
 end
 
+-- Sliding, climbing or vaulting: hands and legs are busy.
+local function isBusyMoving(): boolean
+	local state = ParkourController.getVisualState()
+	return state == "Slide" or state == "Climb" or state == "Vault"
+end
+
 local function tryAttack()
 	local character = getCharacterParts()
 	local time = os.clock()
-	if character == nil or blocking or isStunned(character) or time < nextAttackAt then
+	if
+		character == nil
+		or blocking
+		or isStunned(character)
+		or isBusyMoving()
+		or time < nextAttackAt
+	then
 		return
 	end
 
@@ -75,7 +90,8 @@ local function tryAttack()
 	lastAttackAt = time
 	nextAttackAt = time + (if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL)
 
-	AnimationController.play(`Brawler_M1_{combo}`)
+	CharacterAnimationController.playAction(character, `Brawler_M1_{combo}`)
+	SoundController.play(if isFinisher then "HeavySwing" else "Swing", character)
 	Remotes.Attack:FireServer()
 end
 
@@ -89,6 +105,7 @@ local function setBlocking(value: boolean)
 		if
 			character == nil
 			or isStunned(character)
+			or isBusyMoving()
 			or os.clock() < lastAttackAt + C.M1_INTERVAL
 		then
 			return
@@ -96,11 +113,7 @@ local function setBlocking(value: boolean)
 		blockRequestedAt = os.clock()
 	end
 	blocking = value
-	if value then
-		AnimationController.play("Block", { looped = true })
-	else
-		AnimationController.stop("Block")
-	end
+	CharacterAnimationController.setPredictedBlock(value)
 	Remotes.SetBlocking:FireServer(value)
 end
 
@@ -128,7 +141,7 @@ local function tryDash()
 	if character == nil or humanoid == nil or root == nil then
 		return
 	end
-	if blocking or isStunned(character) or time < nextDashAt then
+	if blocking or isStunned(character) or isBusyMoving() or time < nextDashAt then
 		return
 	end
 	local stamina = player:GetAttribute("Stamina")
@@ -139,8 +152,9 @@ local function tryDash()
 	nextDashAt = time + C.DASH_COOLDOWN
 	local direction, animation = getDashDirection(humanoid, root)
 	Push.apply(root, direction * (C.DASH_DISTANCE / C.DASH_TIME), C.DASH_TIME)
-	AnimationController.play(animation)
-	Remotes.Dash:FireServer()
+	CharacterAnimationController.playAction(character, animation)
+	SoundController.play("Dash", character)
+	Remotes.Dash:FireServer(animation)
 end
 
 function CombatController.start()
@@ -182,7 +196,7 @@ function CombatController.start()
 			and os.clock() - blockRequestedAt > BLOCK_CONFIRM_TIME
 		then
 			blocking = false
-			AnimationController.stop("Block")
+			CharacterAnimationController.setPredictedBlock(false)
 		end
 		-- Still holding F: block again as soon as it's allowed.
 		if blockHeld and not blocking then
@@ -197,6 +211,7 @@ function CombatController.start()
 	-- New life: forget the previous fight.
 	player.CharacterAdded:Connect(function()
 		blocking = false
+		CharacterAnimationController.setPredictedBlock(false)
 		combo = 0
 		nextAttackAt = 0
 		nextDashAt = 0

@@ -45,6 +45,16 @@ local Hitbox = require(script.Hitbox)
 
 local C = Config.Combat
 
+-- Dash animation names a client may send (anything else is ignored).
+local DASH_ANIMATIONS = table.freeze({
+	DashForward = true,
+	DashBack = true,
+	DashLeft = true,
+	DashRight = true,
+})
+-- Movement states during which a player can't fight (Server/Systems/Movement).
+local BUSY_MOVE_STATES = table.freeze({ Slide = true, Climb = true, Vault = true })
+
 type CombatState = {
 	model: Model,
 	humanoid: Humanoid,
@@ -88,6 +98,12 @@ end
 
 local function isStunned(state: CombatState): boolean
 	return now() < state.stunnedUntil
+end
+
+-- Sliding or climbing: hands and legs are busy, no fighting.
+local function isBusyMoving(state: CombatState): boolean
+	local player = state.player
+	return player ~= nil and BUSY_MOVE_STATES[Movement.getMoveState(player)] == true
 end
 
 local function setAttribute(model: Model, name: string, value: boolean)
@@ -228,7 +244,13 @@ end
 -- M1. Returns true if the attack started.
 function Combat.tryAttack(model: Model): boolean
 	local state = states[model]
-	if state == nil or not isAlive(state) or isStunned(state) or state.blocking then
+	if
+		state == nil
+		or not isAlive(state)
+		or isStunned(state)
+		or state.blocking
+		or isBusyMoving(state)
+	then
 		return false
 	end
 	local time = now()
@@ -249,6 +271,8 @@ function Combat.tryAttack(model: Model): boolean
 	state.attackingUntil = time + C.M1_INTERVAL
 	state.attackToken += 1
 	local token = state.attackToken
+	-- Everyone plays the punch (animation + swing sound).
+	Remotes.CombatAction:FireAllClients(model, `Brawler_M1_{combo}`)
 
 	task.delay(C.HIT_DELAY, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
@@ -275,7 +299,7 @@ function Combat.setBlocking(model: Model, wantsToBlock: boolean)
 		stopBlocking(state)
 		return
 	end
-	if state.blocking or not isAlive(state) or isStunned(state) then
+	if state.blocking or not isAlive(state) or isStunned(state) or isBusyMoving(state) then
 		return
 	end
 	local time = now()
@@ -293,7 +317,13 @@ end
 -- stamina and give the dodge frames.
 local function tryDash(model: Model, player: Player): boolean
 	local state = states[model]
-	if state == nil or not isAlive(state) or isStunned(state) or state.blocking then
+	if
+		state == nil
+		or not isAlive(state)
+		or isStunned(state)
+		or state.blocking
+		or isBusyMoving(state)
+	then
 		return false
 	end
 	local time = now()
@@ -370,10 +400,17 @@ local function onSetBlocking(player: Player, wantsToBlock: unknown)
 	Combat.setBlocking(character, wantsToBlock)
 end
 
-local function onDash(player: Player)
+local function onDash(player: Player, animation: unknown)
 	local character = player.Character
-	if character and dashLimiter.allow(player) then
-		tryDash(character, player)
+	if character == nil or not dashLimiter.allow(player) then
+		return
+	end
+	-- Only the 4 known names (the value is shown to every client).
+	if typeof(animation) ~= "string" or not DASH_ANIMATIONS[animation] then
+		return
+	end
+	if tryDash(character, player) then
+		Remotes.CombatAction:FireAllClients(character, animation)
 	end
 end
 

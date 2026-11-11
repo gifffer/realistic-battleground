@@ -71,7 +71,7 @@ Dans l'Output, **aucune ligne rouge**. S'il y en a : copie-les-moi avec le numé
 Deux **mannequins** apparaissent devant le point d'apparition : **Dummy** (gris, passif, se soigne
 après 3 s) et **Attacking Dummy** (rouge, te frappe si tu t'approches à moins de 7 studs).
 Les **boîtes rouges** qui apparaissent sont les hitbox (visibles seulement dans Studio).
-Il n'y a pas encore d'animations : c'est normal que le perso ne bouge pas les bras.
+Les **sons** ne jouent que si leurs IDs sont remplis dans `src/shared/Sounds.luau` (`docs/SOUNDS_FR.md`).
 
 | # | Test | Résultat attendu |
 |---|---|---|
@@ -89,9 +89,16 @@ Il n'y a pas encore d'animations : c'est normal que le perso ne bouge pas les br
 | 12 | Q pile quand l'Attacking Dummy frappe | « **DODGE** » : le coup ne fait rien. |
 | 13 | Tuer le Dummy | Il tombe, et revient 3 s plus tard. |
 | 14 | Mourir face à l'Attacking Dummy | Tu réapparais, tout remarche (frapper, bloquer, dash). |
+| 15 | Animations des coups | 1 : direct du gauche ; 2 : direct du droit (le buste tourne) ; 3 : crochet du gauche ; 4 : coup plongeant du droit, bras levé avant. Chaque coup a un petit élan avant l'impact. |
+| 16 | Animations de défense | F : avant-bras croisés devant le visage (les jambes continuent de marcher). Coup bloqué : recul. Parade : le bras droit écarte le coup. Guard break : bras qui s'ouvrent, puis titube. |
+| 17 | Étourdi / touché | Tête basse, bras ballants qui se balancent. Touché de face : tête en arrière ; de dos : projeté en avant. |
+| 18 | Dashs (Q) | Avant : penché, bras en arrière. Arrière : buste en arrière, garde levée. Côtés : le corps penche dans la direction. |
+| 19 | L'**Attacking Dummy** | Il joue lui aussi ses coups, ses réactions et son état étourdi. |
+| 20 | Pendant une glissade / escalade : clic gauche, F, Q | Rien ne se passe. Et en garde (F) ou étourdi : pas de glissade ni d'escalade. |
+| 21 | Accroupi + clic gauche ou F | Ça marche : on frappe / bloque accroupi. |
 
 Test à 2 joueurs (*Test → Clients and Servers → 2 Players*) : vous pouvez vous frapper, bloquer et
-parer entre vous ; chaque joueur voit les contours bleus/jaunes de l'autre.
+parer entre vous ; chaque joueur voit les contours bleus/jaunes **et les animations** de l'autre.
 
 Si un test échoue : copie-moi les lignes rouges de l'Output et dis-moi le numéro du test
 (une vidéo marche très bien aussi).

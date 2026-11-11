@@ -207,17 +207,20 @@ Déjà : `coins`, `stats.kills/deaths/wins/matchesPlayed`. À ajouter (via migra
 - `dailyQuests` (quêtes du jour + progression + date)
 - `settings` (`firstPerson`, `blockDuelRequests`)
 
-## 10. Animations
-Faites par le propriétaire du jeu dans Studio et publiées sur **son compte perso**.
-Étapes détaillées : `docs/ANIMATIONS_FR.md`.
+## 10. Animations & sons
+- **Animations** : faites **en code** (pas d'Animation Editor), vérifiées dans un aperçu du rig R6.
+  Détails : `docs/ANIMATIONS_FR.md`.
+- **Sons** : choisis par le propriétaire du jeu, IDs dans `src/shared/Sounds.luau`.
+  Guide : `docs/SOUNDS_FR.md`.
 
 ## 11. Feuille de route
 Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 
 1. ✅ **Base personnage** : R6, caméra 3ᵉ personne épaule, course + endurance, HUD vie/endurance,
    menu latéral (squelette) + fenêtre Settings (1ʳᵉ/3ᵉ personne).
-1 bis. **Mouvements** : accroupi, glissade, escalade de rebord. ← en cours
-2. **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur.
+1 bis. ✅ **Mouvements** : accroupi, glissade, vault, mantle (+ animations en code).
+2. **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur,
+   animations de combat en code, sons. ← en cours
 3. **Dégâts & mort** : dégâts localisés, ragdoll, **KO + finisher**, réapparition, kill feed, kill = +35 PV.
 4. **Système de kits** + **Street Brawler** (4 attaques + Awakening).
 5. **Blessures** : saignement, boiterie, effets faible vie.
