@@ -20,4 +20,7 @@ export type PlayerProfile = {
 -- What the server sends to the owning client.
 export type ProfileSnapshot = PlayerProfile
 
+-- How a character is currently moving (decided by the server, see MovementRules).
+export type MoveState = "Walk" | "Sprint" | "Crouch"
+
 return nil

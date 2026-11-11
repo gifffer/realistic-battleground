@@ -1,5 +1,6 @@
 --!strict
--- doom-roblox client entry point.
+-- Realistic Battleground client entry point. Loads every module in Controllers:
+-- init() all of them, then start() all of them.
 
 local Controllers = script:FindFirstChild("Controllers")
 

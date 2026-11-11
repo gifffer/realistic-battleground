@@ -49,4 +49,9 @@ return table.freeze({
 	-- client → server  ()
 	-- "Send me my save again" (the first push can arrive before the client listens).
 	RequestProfile = event("RequestProfile"),
+
+	-- client → server  (wantSprint: boolean, wantCrouch: boolean)
+	-- Which movement keys the player is holding. Only an INTENT: the server
+	-- decides the real state (stamina, exhaustion) — see Server/Systems/Movement.
+	SetMovementInput = event("SetMovementInput"),
 })
