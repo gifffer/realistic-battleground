@@ -210,3 +210,18 @@ Les touches **1 2 3 4** lancent les attaques du kit, **G** l'Awakening quand la 
 Pas de son dédié encore pour la bouteille / coup de tête / tackle / tibia / Awakening : ils
 utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes IDs dans
 `src/shared/Sounds.luau` : **BottleBreak, Slash, Headbutt, Tackle, KickLow, Awaken**.
+
+## Étape 5 — Blessures (`feature/injuries`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la jambe gauche. |
+| B2 | Faire un kill en boitant | La boiterie **disparaît** (le kill soigne toutes les blessures). |
+| B3 | Frapper le Dummy plusieurs fois à la tête / au torse / aux jambes | Des **petites marques sombres** (bleus, coupure au sourcil) apparaissent là où il a été touché (3 max par partie). Elles partent à sa mort. |
+| B4 | 4ᵉ M1 visé à la **tête** | L'adversaire **saigne** un peu (3 s), même sans bouteille. |
+| B5 | Descendre **sous 25 PV** | Bords de l'écran qui s'assombrissent et **respirent**, image un peu floue et moins colorée ; plus tu es bas, plus c'est fort. Ton perso est **voûté** (main sur les côtes) hors combat, **garde basse et fatiguée** en combat — les autres le voient. |
+| B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
+| B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
+
+Battement de cœur / respiration : emplacements **Heartbeat** et **Breathing** dans
+`src/shared/Sounds.luau` (vides : envoie-moi des IDs si tu veux les entendre).

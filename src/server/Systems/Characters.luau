@@ -2,7 +2,8 @@
 -- Characters: prepares every character when it spawns.
 --
 --   • Sets health from Config.
---   • Turns OFF passive regeneration (game design: a kill heals, time doesn't).
+--   • Turns OFF passive regeneration (game design: a kill heals, time doesn't;
+--     only a slow regen up to 25 HP out of combat, see Combat + Config.Injuries).
 --     Roblox puts a script named "Health" in every character that heals 1 %
 --     of max health per second; we delete it as soon as the character spawns.
 --   • Checks the avatar is R6. The game is built for R6 (6 body parts:
