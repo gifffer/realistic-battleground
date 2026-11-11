@@ -3,7 +3,7 @@
 --
 --   ROSTER              STREET BRAWLER                       EQUIPPED
 --   | STREET BRAWLER    Fights dirty and close. Hits hard...
---     EQUIPPED          MOVES                     COST   COOLDOWN
+--     EQUIPPED          MOVES                  STAMINA   COOLDOWN
 --   BOXER               [1] BOTTLE SMASH            15        8 s
 --   NOT AVAILABLE YET       Breaks a bottle...      — BROKEN BOTTLE
 --                       ...
@@ -75,8 +75,8 @@ end
 local function keyCap(parent: Instance, text: string, filled: boolean): Frame
 	local frame = Theme.make("Frame", {
 		Name = "KeyCap",
-		Position = UDim2.fromOffset(0, 7),
-		Size = UDim2.fromOffset(18, 18),
+		Position = UDim2.fromOffset(0, 6),
+		Size = UDim2.fromOffset(22, 18),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = if filled then 0 else 1,
 		Parent = parent,
@@ -125,7 +125,7 @@ local function seconds(parent: Instance, value: number)
 		Size = UDim2.fromOffset(8, 11),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 9,
-		TextColor3 = C.Ink3,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Text = "s",
@@ -149,7 +149,7 @@ local function moveRow(parent: Instance, index: number, move: Kits.MoveDef, fury
 	keyCap(row, tostring(index), false)
 	Theme.text({
 		Name = "Name",
-		Position = UDim2.fromOffset(30, 6),
+		Position = UDim2.fromOffset(34, 6),
 		Size = UDim2.fromOffset(200, 13),
 		TextStrokeTransparency = 1,
 		Text = Theme.track(move.name, "four"),
@@ -157,7 +157,7 @@ local function moveRow(parent: Instance, index: number, move: Kits.MoveDef, fury
 	})
 	Theme.text({
 		Name = "Sentence",
-		Position = UDim2.fromOffset(30, 22),
+		Position = UDim2.fromOffset(34, 22),
 		Size = UDim2.fromOffset(230, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
@@ -167,10 +167,10 @@ local function moveRow(parent: Instance, index: number, move: Kits.MoveDef, fury
 		Parent = row,
 	})
 	Theme.text({
-		Name = "Cost",
+		Name = "Stamina",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -82, 0, 6),
-		Size = UDim2.fromOffset(54, 13),
+		Size = UDim2.fromOffset(64, 13),
 		FontFace = Theme.Fonts.Number,
 		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
@@ -208,6 +208,8 @@ local function moveRow(parent: Instance, index: number, move: Kits.MoveDef, fury
 				AutomaticSize = Enum.AutomaticSize.X,
 				Size = UDim2.fromOffset(0, 11),
 				TextSize = 9,
+				TextColor3 = C.Ink2,
+				TextTransparency = 0.2,
 			}),
 		})
 	end
@@ -225,7 +227,7 @@ local function sectionHead(parent: Instance, y: number, title: string, columns: 
 	})
 	caption(title, { Size = UDim2.new(1, 0, 0, 12), Parent = head })
 	local rightEdge = { 0, -82 }
-	local widths = { 82, 54 }
+	local widths = { 82, 64 }
 	for position, text in columns do
 		caption(text, {
 			AnchorPoint = Vector2.new(1, 0),
@@ -273,46 +275,63 @@ local function equipArea(parent: Instance, kit: Kits.KitDef)
 		end)
 		return
 	end
-	local button = Theme.text({
-		ClassName = "TextButton",
+	-- EQUIP: the same "line + word" button as MENU / CLOSE (no boxes).
+	local button = Theme.make("TextButton", {
 		Name = "EquipButton",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 26),
-		BackgroundColor3 = C.Ink,
+		Position = UDim2.new(1, 0, 0, 6),
+		Size = UDim2.fromOffset(90, 14),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
-		TextStrokeTransparency = 1,
-		Text = Theme.track("EQUIP", "four"),
+		Text = "",
 		Parent = parent,
-	}, {
-		Theme.make("UIPadding", {
-			PaddingLeft = UDim.new(0, 16),
-			PaddingRight = UDim.new(0, 13),
-		}),
 	}) :: TextButton
-	local stroke = Theme.make("UIStroke", {
-		Thickness = 1,
-		Color = C.Ink,
-		Transparency = 0.45,
-		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+	local line = Theme.make("Frame", {
+		Name = "Line",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -62, 0.5, 0),
+		Size = UDim2.fromOffset(18, 1),
+		BackgroundColor3 = C.Ink,
+		BackgroundTransparency = 0.15,
 		Parent = button,
-	}) :: UIStroke
+	}) :: Frame
+	local word = Theme.text({
+		Name = "Label",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.new(0, 52, 1, 0),
+		TextTransparency = 0.15,
+		TextStrokeTransparency = 1,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Text = Theme.track("EQUIP", "four"),
+		Parent = button,
+	}) :: TextLabel
 	button.MouseEnter:Connect(function()
-		Theme.tween(button, 0.1, { BackgroundTransparency = 0.92 })
-		Theme.tween(stroke, 0.1, { Transparency = 0 })
+		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1) })
+		Theme.tween(word, 0.15, { TextTransparency = 0 })
 	end)
 	button.MouseLeave:Connect(function()
-		Theme.tween(button, 0.1, { BackgroundTransparency = 1 })
-		Theme.tween(stroke, 0.1, { Transparency = 0.45 })
+		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1) })
+		Theme.tween(word, 0.15, { TextTransparency = 0.15 })
 	end)
 	button.Activated:Connect(function()
-		button.BackgroundTransparency = 0
-		button.TextColor3 = C.Scrim
+		Theme.tween(
+			word,
+			0.1,
+			{ TextTransparency = 1 },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
+		Theme.tween(
+			line,
+			0.1,
+			{ Size = UDim2.fromOffset(0, 1) },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
 		Remotes.EquipKit:FireServer(kit.id)
 		-- Shown at once; the saved profile confirms it (or puts it back).
-		task.delay(0.08, function()
+		task.delay(0.1, function()
 			equippedId = kit.id
 			renderDetail(false)
 			for _, item in rosterItems do
@@ -362,7 +381,7 @@ local function fillDetail(kit: Kits.KitDef)
 		return
 	end
 
-	sectionHead(detail, 80, "MOVES", { "COOLDOWN", "COST" })
+	sectionHead(detail, 80, "MOVES", { "COOLDOWN", "STAMINA" })
 	local list = Theme.make("Frame", {
 		Name = "Moves",
 		Position = UDim2.fromOffset(0, 99),
@@ -388,15 +407,15 @@ local function fillDetail(kit: Kits.KitDef)
 		})
 		Theme.make("Frame", {
 			Name = "Rail",
-			Position = UDim2.fromOffset(-14, 7),
+			Position = UDim2.fromOffset(-14, 6),
 			Size = UDim2.fromOffset(2, 18),
 			BackgroundColor3 = C.BloodHi,
 			Parent = row,
 		})
-		keyCap(row, "G", true)
+		keyCap(row, "G", false) -- the red rail is what marks it
 		Theme.text({
 			Name = "Name",
-			Position = UDim2.fromOffset(30, 6),
+			Position = UDim2.fromOffset(34, 6),
 			Size = UDim2.fromOffset(200, 13),
 			TextStrokeTransparency = 1,
 			Text = Theme.track(awakening.name, "four"),
@@ -404,7 +423,7 @@ local function fillDetail(kit: Kits.KitDef)
 		})
 		Theme.text({
 			Name = "Sentence",
-			Position = UDim2.fromOffset(30, 22),
+			Position = UDim2.fromOffset(34, 22),
 			Size = UDim2.fromOffset(260, 32),
 			FontFace = Theme.Fonts.Body,
 			TextSize = 12,
@@ -558,7 +577,7 @@ local function build(content: Frame)
 	Theme.make("Frame", {
 		Name = "Divider2",
 		Position = UDim2.fromOffset(170, 0),
-		Size = UDim2.fromOffset(1, 340),
+		Size = UDim2.fromOffset(1, 360),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.88,
 		Parent = content,

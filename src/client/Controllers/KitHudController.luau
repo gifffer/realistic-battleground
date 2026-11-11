@@ -11,7 +11,6 @@
 --
 --   STREET FURY                  64 %
 --   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   the Awakening gauge
---   AWAKENING
 --
 -- • A bright key = usable. No colours per move: brightness only.
 -- • Gauge full: "[G] AWAKEN" appears. While awakened (Street Fury): the
@@ -76,7 +75,6 @@ local furyLabel: TextLabel
 local furyNum: TextLabel
 local furyUnit: TextLabel
 local furyFill: Frame
-local furySub: TextLabel
 local furyGo: Frame
 local goStroke: UIStroke
 local furyRail: Frame
@@ -86,6 +84,8 @@ local goPulse: Tween? = nil
 local furyGrade: ColorCorrectionEffect
 local edgeLeft: Frame
 local edgeRight: Frame
+local shadeLeft: Frame
+local shadeRight: Frame
 local beat: Frame
 
 local shownFury = -1
@@ -166,12 +166,12 @@ local function buildSlot(index: number, holder: GuiObject): Slot
 		Text = "",
 		Parent = holder,
 	}) :: TextButton
-	local cap, stroke, keyText = keyCap(button, tostring(index), Vector2.new(18, 18))
+	local cap, stroke, keyText = keyCap(button, tostring(index), Vector2.new(22, 18))
 	cap.Position = UDim2.fromOffset(0, 3)
 	local name = Theme.text({
 		Name = "Name",
-		Position = UDim2.fromOffset(30, 0),
-		Size = UDim2.new(1, -120, 0, 24),
+		Position = UDim2.fromOffset(34, 0),
+		Size = UDim2.new(1, -124, 0, 24),
 		TextSize = 11,
 		Text = "",
 		Parent = button,
@@ -188,8 +188,8 @@ local function buildSlot(index: number, holder: GuiObject): Slot
 	}) :: TextLabel
 	local cdTrack = Theme.make("Frame", {
 		Name = "CdTrack",
-		Position = UDim2.fromOffset(30, 24),
-		Size = UDim2.new(1, -30, 0, 1),
+		Position = UDim2.fromOffset(34, 24),
+		Size = UDim2.new(1, -34, 0, 1),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.84,
 		Visible = false,
@@ -247,20 +247,24 @@ local function build()
 	})
 
 	-- Street Fury edges (under everything) and the activation beat.
-	local function edge(name: string, right: boolean): Frame
+	-- Each side: a dark shade, with a dark red on top (red alone over a
+	-- light floor turns pink). Both fade in and out together.
+	local function edge(name: string, right: boolean, color: Color3, inner: number): Frame
 		return Theme.make("Frame", {
 			Name = name,
 			AnchorPoint = Vector2.new(if right then 1 else 0, 0),
 			Position = UDim2.fromScale(if right then 1 else 0, 0),
-			Size = UDim2.fromScale(0.14, 1),
-			BackgroundColor3 = C.BloodDeep,
+			Size = UDim2.fromScale(0.12, 1),
+			BackgroundColor3 = color,
 			BackgroundTransparency = 1,
 			ZIndex = 0,
 			Parent = gui,
-		}, { Theme.gradient(if right then 180 else 0, { { 0, 0.74 }, { 1, 1 } }) }) :: Frame
+		}, { Theme.gradient(if right then 180 else 0, { { 0, inner }, { 1, 1 } }) }) :: Frame
 	end
-	edgeLeft = edge("FuryEdgeL", false)
-	edgeRight = edge("FuryEdgeR", true)
+	shadeLeft = edge("FuryShadeL", false, C.Scrim, 0.72)
+	shadeRight = edge("FuryShadeR", true, C.Scrim, 0.72)
+	edgeLeft = edge("FuryEdgeL", false, C.BloodDeep, 0.76)
+	edgeRight = edge("FuryEdgeR", true, C.BloodDeep, 0.76)
 	beat = Theme.make("Frame", {
 		Name = "FuryBeat",
 		Size = UDim2.fromScale(1, 1),
@@ -312,7 +316,7 @@ local function build()
 	-- below add 16 to the spec's x.)
 	furyRail = Theme.make("Frame", {
 		Name = "FuryRail",
-		Position = UDim2.fromOffset(2, 5),
+		Position = UDim2.fromOffset(2, 3),
 		Size = UDim2.fromOffset(2, 0),
 		BackgroundColor3 = C.BloodHi,
 		Visible = false,
@@ -320,7 +324,7 @@ local function build()
 	})
 	furyLabel = Theme.text({
 		Name = "FuryLabel",
-		Position = UDim2.fromOffset(16, 137),
+		Position = UDim2.fromOffset(16, 133), -- same line as HEALTH
 		Size = UDim2.fromOffset(150, 12),
 		TextSize = 10,
 		TextColor3 = C.Ink2,
@@ -365,19 +369,10 @@ local function build()
 		BackgroundColor3 = C.Ink,
 		Parent = track,
 	})
-	furySub = Theme.text({
-		Name = "FurySub",
-		Position = UDim2.fromOffset(16, 174),
-		Size = UDim2.fromOffset(150, 11),
-		TextSize = 9,
-		TextColor3 = C.Ink2,
-		Text = Theme.track("AWAKENING", "three"),
-		Parent = furyGroup,
-	})
 	furyGo = Theme.make("Frame", {
 		Name = "FuryGo",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 132),
+		Position = UDim2.new(1, 0, 0, 130),
 		Size = UDim2.fromOffset(0, 18),
 		AutomaticSize = Enum.AutomaticSize.X,
 		BackgroundTransparency = 1,
@@ -392,7 +387,7 @@ local function build()
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 	})
-	local goKey, stroke = keyCap(furyGo, "G", Vector2.new(20, 18))
+	local goKey, stroke = keyCap(furyGo, "G", Vector2.new(22, 18))
 	goKey.LayoutOrder = 1
 	stroke.Transparency = 0.1
 	goStroke = stroke
@@ -431,7 +426,9 @@ end
 -- Applies the look of `state` (see the table in the header).
 local function styleSlot(slot: Slot, state: SlotState, awakened: boolean, animate: boolean)
 	local ready = state == "Ready"
-	local inverted = ready and awakened
+	-- (Keycaps are never inverted: in Street Fury only the names change.)
+	local inverted = false
+	local _ = awakened
 	local time = if animate then 0.12 else 0
 	local textT = if ready then 0 else DIM
 	if slot.current ~= state or slot.inverted ~= inverted then
@@ -512,15 +509,15 @@ local function swapName(slot: Slot, text: string, delay: number)
 		Theme.tween(
 			slot.name,
 			0.1,
-			{ TextTransparency = 1, Position = UDim2.fromOffset(30, -3) },
+			{ TextTransparency = 1, Position = UDim2.fromOffset(34, -3) },
 			Enum.EasingStyle.Linear
 		)
 		task.delay(0.1, function()
 			slot.name.Text = text
-			slot.name.Position = UDim2.fromOffset(30, 4)
+			slot.name.Position = UDim2.fromOffset(34, 4)
 			Theme.tween(slot.name, 0.16, {
 				TextTransparency = if slot.current == "Ready" then 0 else DIM,
-				Position = UDim2.fromOffset(30, 0),
+				Position = UDim2.fromOffset(34, 0),
 			})
 		end)
 	end)
@@ -592,8 +589,9 @@ local function setScreenFury(on: boolean)
 		Saturation = if on then -0.25 else 0,
 		Contrast = if on then 0.06 else 0,
 	})
-	Theme.tween(edgeLeft, time, { BackgroundTransparency = if on then 0 else 1 })
-	Theme.tween(edgeRight, time, { BackgroundTransparency = if on then 0 else 1 })
+	for _, frame in { edgeLeft, edgeRight, shadeLeft, shadeRight } do
+		Theme.tween(frame, time, { BackgroundTransparency = if on then 0 else 1 })
+	end
 	if on then
 		beat.BackgroundTransparency = 0.8
 		Theme.tween(beat, 0.5, { BackgroundTransparency = 1 })
@@ -617,8 +615,8 @@ local function setFuryState(state: "Charging" | "Full" | "Active")
 		Theme.tween(furyUnit, 0.12, { TextTransparency = 1 }, Enum.EasingStyle.Linear)
 		Theme.tween(furyLabel, 0.2, { TextColor3 = C.Ink })
 		furyGo.Visible = true
-		furyGo.Position = UDim2.new(1, 8, 0, 132)
-		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, 0, 0, 132) }, Enum.EasingStyle.Quart)
+		furyGo.Position = UDim2.new(1, 8, 0, 130)
+		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, 0, 0, 130) }, Enum.EasingStyle.Quart)
 		local pulse = TweenService:Create(
 			goStroke,
 			TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -632,12 +630,11 @@ local function setFuryState(state: "Charging" | "Full" | "Active")
 		furyUnit.TextTransparency = 0
 		furyUnit.Text = "s"
 		furyLabel.TextColor3 = C.Ink
-		furySub.Text = Theme.track("AWAKENED", "three")
 		furyFill.BackgroundColor3 = C.BloodHi
 		furyFill.Size = UDim2.fromScale(1, 1)
 		furyRail.Visible = true
 		furyRail.Size = UDim2.fromOffset(2, 0)
-		Theme.tween(furyRail, 0.2, { Size = UDim2.fromOffset(2, 94) }, Enum.EasingStyle.Quart)
+		Theme.tween(furyRail, 0.2, { Size = UDim2.fromOffset(2, 96) }, Enum.EasingStyle.Quart)
 		fadingOut = false
 		setScreenFury(true)
 	else -- Charging
@@ -646,7 +643,6 @@ local function setFuryState(state: "Charging" | "Full" | "Active")
 		furyUnit.TextTransparency = 0
 		furyUnit.Text = "%"
 		Theme.tween(furyLabel, 0.2, { TextColor3 = C.Ink2 })
-		furySub.Text = Theme.track("AWAKENING", "three")
 		fadingOut = false
 		if previous == "Active" then
 			furyFill.BackgroundColor3 = C.Ink
@@ -691,8 +687,9 @@ local function updateFury(model: Model, kit: Kits.KitDef)
 			fadingOut = true
 			local info = TweenInfo.new(left, Enum.EasingStyle.Linear)
 			TweenService:Create(furyGrade, info, { Saturation = 0, Contrast = 0 }):Play()
-			TweenService:Create(edgeLeft, info, { BackgroundTransparency = 1 }):Play()
-			TweenService:Create(edgeRight, info, { BackgroundTransparency = 1 }):Play()
+			for _, frame in { edgeLeft, edgeRight, shadeLeft, shadeRight } do
+				TweenService:Create(frame, info, { BackgroundTransparency = 1 }):Play()
+			end
 		end
 		return
 	end

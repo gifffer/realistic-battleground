@@ -13,7 +13,7 @@
 --   WINDED. While blocking it reads GUARD.
 -- • Full health and stamina for a few seconds: the whole block fades back,
 --   any change brings it back.
--- • Bleeding (a bottle cut...): the label reads BLEEDING in red, the part of
+-- • Bleeding (a bottle cut...): the label reads BLEEDING, the part of
 --   the bar the cut will still take is drawn red and shrinks with each tick,
 --   and the left edge of the screen darkens a little at each tick.
 -- • Soft dark gradients at the screen edges keep text readable on bright
@@ -52,6 +52,7 @@ local stLabel: TextLabel
 local hpLabel: TextLabel
 local bleedSeg: Frame
 local bleedEdge: Frame
+local bleedShade: Frame
 local bleeding = false
 local texts: { TextLabel } = {} -- every text of the block (for the idle fade)
 
@@ -176,14 +177,23 @@ local function build()
 		Visible = false,
 		Parent = hpTrack,
 	})
+	-- Left edge while bleeding: a dark shade with a dark red on top.
+	bleedShade = Theme.make("Frame", {
+		Name = "BleedShade",
+		Size = UDim2.new(0, 220, 1, 0),
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = 1,
+		ZIndex = 0,
+		Parent = gui,
+	}, { Theme.gradient(0, { { 0, 0.72 }, { 1, 1 } }) })
 	bleedEdge = Theme.make("Frame", {
 		Name = "BleedEdge",
-		Size = UDim2.new(0, 280, 1, 0),
+		Size = UDim2.new(0, 220, 1, 0),
 		BackgroundColor3 = C.BloodDeep,
 		BackgroundTransparency = 1,
 		ZIndex = 0,
 		Parent = gui,
-	}, { Theme.gradient(0, { { 0, 0.7 }, { 1, 1 } }) })
+	}, { Theme.gradient(0, { { 0, 0.72 }, { 1, 1 } }) })
 	local stTrack = Theme.make("Frame", {
 		Name = "StTrack",
 		Position = UDim2.fromOffset(0, 48),
@@ -279,10 +289,13 @@ local function updateBleeding(tick: boolean)
 		bleeding = now
 		touched()
 		if now then
+			-- Brighter, not red (small red caps don't read on a light floor):
+			-- the red is in the bar and at the edge.
 			hpLabel.Text = Theme.track("BLEEDING", "three")
-			hpLabel.TextColor3 = C.BloodHi
+			hpLabel.TextColor3 = C.Ink
 			bleedSeg.Visible = true
 			bleedEdge.BackgroundTransparency = 0.15
+			Theme.tween(bleedShade, 0.2, { BackgroundTransparency = 0 })
 		else
 			hpLabel.Text = Theme.track("HEALTH", "three")
 			Theme.tween(hpLabel, 0.3, { TextColor3 = C.Ink2 })
@@ -290,6 +303,7 @@ local function updateBleeding(tick: boolean)
 			task.delay(0.4, function()
 				if not bleeding then
 					Theme.tween(bleedEdge, 0.4, { BackgroundTransparency = 1 })
+					Theme.tween(bleedShade, 0.4, { BackgroundTransparency = 1 })
 				end
 			end)
 		end
