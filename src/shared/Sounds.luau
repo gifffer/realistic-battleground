@@ -69,9 +69,9 @@ local sounds: { [string]: SoundInfo } = {
 	-- Until they have their own ids, each one borrows a combat sound with
 	-- its own pitch (so it still sounds different).
 	BottleBreak = { -- glass shattering on a head
-		ids = {},
+		ids = { 94487606893742 },
 		volume = 0.9,
-		pitch = 1.35,
+		pitch = 1,
 		pitchVariation = 0.06,
 		fallback = "Hit",
 	},
@@ -104,9 +104,9 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "Hit",
 	},
 	Awaken = { -- Street Fury starts (a neck crack, a low growl...)
-		ids = {},
+		ids = { 101404702795772 },
 		volume = 0.8,
-		pitch = 0.6,
+		pitch = 1,
 		pitchVariation = 0.03,
 		fallback = "HeavySwing",
 	},
