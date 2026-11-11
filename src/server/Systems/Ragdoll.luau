@@ -7,7 +7,10 @@
 --     joint that lets the limb swing freely, with angle limits so it
 --     doesn't bend in impossible ways.
 --   • The limbs get collisions (normally off) so they rest on the floor.
---   • The Humanoid stops standing the body up (PlatformStand).
+--   • The Humanoid stops standing the body up: Physics state (the only state
+--     in which Roblox lets R6 arms and legs collide with the floor) + PlatformStand.
+--   • RequiresNeck is turned off: otherwise Roblox KILLS a humanoid whose
+--     neck joint is switched off (a KO would become an instant death).
 --   • The SERVER simulates the body while it's limp (SetNetworkOwner(nil)):
 --     every player sees the same fall, and a cheater can't move their own
 --     knocked-out body.
@@ -58,6 +61,8 @@ function Ragdoll.enable(model: Model)
 		return
 	end
 	model:SetAttribute("Ragdolled", true)
+	-- Must be off BEFORE the neck motor is disabled (see the header).
+	humanoid.RequiresNeck = false
 
 	for motorName, limit in JOINTS do
 		local motor = torso:FindFirstChild(motorName)
@@ -100,6 +105,10 @@ function Ragdoll.enable(model: Model)
 		if root:CanSetNetworkOwnership() then
 			root:SetNetworkOwner(nil)
 		end
+		-- Now that the server owns the body, its state change takes effect:
+		-- Physics = limbs keep their collisions, nothing stands it up.
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+		humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 		-- A small push so the body doesn't just fold in place.
 		root.AssemblyLinearVelocity += root.CFrame.LookVector * -6 + Vector3.new(0, 4, 0)
 	end
@@ -149,14 +158,16 @@ function Ragdoll.disable(model: Model, owner: Player?)
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		root.CanCollide = true
-		-- Give the body back to its player's computer.
-		if owner and root:CanSetNetworkOwnership() then
-			root:SetNetworkOwner(owner)
-		end
 	end
+	-- Stand up while the server still owns the body (its state change counts),
+	-- THEN give the body back to its player's computer.
 	humanoid.PlatformStand = false
 	humanoid.AutoRotate = true
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
 	humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	if owner and root and root:IsA("BasePart") and root:CanSetNetworkOwnership() then
+		root:SetNetworkOwner(owner)
+	end
 	model:SetAttribute("Ragdolled", false)
 end
 

@@ -29,6 +29,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -358,6 +359,8 @@ local function onCombatAction(model: Model, action: string)
 		return
 	end
 	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
+		-- Ours: already played when we clicked, unless the server disagreed.
+		CombatController.onServerAction(action)
 		return
 	end
 	CharacterAnimationController.playAction(model, action)

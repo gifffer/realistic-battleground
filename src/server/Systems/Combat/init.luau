@@ -24,12 +24,14 @@
 --
 -- API for other server systems:
 --   Combat.register(model, player?)    makes a model able to fight
---   Combat.tryAttack(model, zone?)     M1 (used by remotes and dummies);
+--   Combat.tryAttack(model, aim?)      M1 (used by remotes and dummies);
 --                                      near a KO'd fighter it finishes them
 --
--- Hit zones: the attacker aims at the head or the torso (Remotes.Attack
--- sends the zone). The server only accepts it if that body part of the
--- victim really is inside the hitbox; otherwise it uses a part that is.
+-- Hit zones: the client sends where it AIMS (a direction, Remotes.Attack).
+-- The SERVER casts that ray itself from the attacker's head: the body part
+-- it meets on the victim gives the zone (a hat or hair counts as the head);
+-- if it meets nothing, it's a torso hit. The zone must also be inside the
+-- hitbox. A client can't just claim "head": it has to actually aim there.
 -- Damage × Config.Combat.ZONE_DAMAGE, a head hit stuns a bit longer, a
 -- leg hit slows down.
 --
@@ -70,7 +72,21 @@ local ZONE_PARTS: { [Types.HitZone]: { string } } = {
 	Torso = { "Torso", "HumanoidRootPart", "Right Arm", "Left Arm" },
 	Legs = { "Right Leg", "Left Leg" },
 }
-local VALID_ZONES = table.freeze({ Head = true, Torso = true, Legs = true })
+-- Body part name (R6) → zone, for the server-side aim ray.
+local PART_ZONES: { [string]: Types.HitZone } = {
+	Head = "Head",
+	Torso = "Torso",
+	HumanoidRootPart = "Torso",
+	["Right Arm"] = "Torso",
+	["Left Arm"] = "Torso",
+	["Right Leg"] = "Legs",
+	["Left Leg"] = "Legs",
+}
+-- Length of the server's aim ray (studs): a bit more than a punch's reach.
+local AIM_RAY_LENGTH = 14
+-- The aim must point roughly where the attacker faces (dot product with
+-- its facing; 0.2 ≈ within 78°), else it's ignored.
+local MIN_AIM_FACING = 0.2
 local random = Random.new()
 
 type CombatState = {
@@ -367,9 +383,28 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	return true
 end
 
--- M1. Returns true if the attack started. `zone` = where the attacker aims
--- (nil for dummies: random head / torso).
-function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
+-- The zone the attacker's aim ray meets on `victim`, or nil if it misses.
+local function aimZone(attacker: CombatState, victim: Model, direction: Vector3): Types.HitZone?
+	local head = attacker.model:FindFirstChild("Head")
+	local origin = if head and head:IsA("BasePart") then head.Position else attacker.root.Position
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { victim }
+	local hit = workspace:Raycast(origin, direction * AIM_RAY_LENGTH, params)
+	if hit == nil then
+		return nil
+	end
+	local part = hit.Instance
+	-- Accessories (hats, hair...) are worn on the head.
+	if part.Parent and part.Parent:IsA("Accessory") then
+		return "Head"
+	end
+	return PART_ZONES[part.Name]
+end
+
+-- M1. Returns true if the attack started. `aim` = the direction the player
+-- aims at (validated by onAttack); nil for dummies (random head / torso).
+function Combat.tryAttack(model: Model, aim: Vector3?): boolean
 	local state = states[model]
 	if
 		state == nil
@@ -394,8 +429,8 @@ function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
 		return true
 	end
 
-	local aimed: Types.HitZone = zone
-		or (if random:NextNumber() < 0.5 then "Head" else "Torso") :: Types.HitZone
+	-- Dummies don't aim: they pick head or torso at random.
+	local dummyZone: Types.HitZone = if random:NextNumber() < 0.5 then "Head" else "Torso"
 
 	-- Advance the combo (or start over if the last M1 was too long ago).
 	if time - state.lastAttackAt > C.COMBO_RESET then
@@ -423,6 +458,12 @@ function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
 		for _, victimModel in victims do
 			local victim = states[victimModel]
 			if victim and isAlive(victim) then
+				-- Players: where their aim ray lands (no valid aim = torso).
+				-- Dummies: random.
+				local aimed: Types.HitZone = if aim
+					then aimZone(state, victimModel, aim) or "Torso"
+					elseif state.player then "Torso"
+					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
 				resolveHit(state, victim, combo, landed)
@@ -534,16 +575,34 @@ local attackLimiter = RateLimiter.new(6, 5)
 local blockLimiter = RateLimiter.new(10, 6)
 local dashLimiter = RateLimiter.new(3, 1)
 
-local function onAttack(player: Player, zone: unknown)
+local function onAttack(player: Player, aim: unknown)
 	local character = player.Character
 	if character == nil or not attackLimiter.allow(player) then
 		return
 	end
-	-- Only the 3 known zone names; anything else = no preference.
-	local aimed: Types.HitZone? = if typeof(zone) == "string" and VALID_ZONES[zone]
-		then zone :: Types.HitZone
-		else nil
-	Combat.tryAttack(character, aimed or "Torso")
+	-- The aim direction: a real, finite, non-zero Vector3, pointing roughly
+	-- where the character faces. Anything else = no aim (a torso hit).
+	local direction: Vector3? = nil
+	local state = states[character]
+	if typeof(aim) == "Vector3" and state then
+		local finite = aim.X == aim.X
+			and aim.Y == aim.Y
+			and aim.Z == aim.Z
+			and aim.Magnitude < math.huge
+		if finite and aim.Magnitude > 0.1 then
+			local unit = aim.Unit
+			local look = state.root.CFrame.LookVector
+			local flatAim = Vector3.new(unit.X, 0, unit.Z)
+			local flatLook = Vector3.new(look.X, 0, look.Z)
+			local facing = flatAim.Magnitude > 1e-3
+				and flatLook.Magnitude > 1e-3
+				and flatAim.Unit:Dot(flatLook.Unit) >= MIN_AIM_FACING
+			if facing then
+				direction = unit
+			end
+		end
+	end
+	Combat.tryAttack(character, direction)
 end
 
 local function onSetBlocking(player: Player, wantsToBlock: unknown)

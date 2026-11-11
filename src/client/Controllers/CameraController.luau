@@ -96,6 +96,15 @@ local function updateShoulderCamera(dt: number)
 	local drop = updateCrouchDrop(dt)
 	local rotationHeld = next(rotationHoldReasons) ~= nil
 
+	-- Lying limp (knocked out): the offset is relative to the root part,
+	-- which tumbles with the body; it could push the camera into the floor.
+	local character = player.Character
+	if character and character:GetAttribute("Ragdolled") == true then
+		current.CameraOffset = Vector3.zero
+		current.AutoRotate = false
+		return
+	end
+
 	if firstPerson then
 		current.CameraOffset = drop
 		current.AutoRotate = not rotationHeld

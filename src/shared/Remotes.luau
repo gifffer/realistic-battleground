@@ -71,10 +71,11 @@ return table.freeze({
 	-- and the type of the value (see Server/Systems/Settings).
 	UpdateSetting = event("UpdateSetting"),
 
-	-- client → server  (zone: Types.HitZone)
-	-- "I want to M1", aiming at the opponent's head or torso (centre of the
-	-- screen). The server checks timing, finds who is hit, and only accepts
-	-- the zone if that body part really is inside the hitbox.
+	-- client → server  (aim: Vector3?)
+	-- "I want to M1", aiming in this direction (from my head to the point
+	-- under my crosshair). The server checks timing and the direction, finds
+	-- who is hit, then casts the aim ray ITSELF to find the zone (head /
+	-- torso) and checks that body part is inside the hitbox.
 	-- (Near a knocked-out fighter, an M1 finishes them instead.)
 	Attack = event("Attack"),
 

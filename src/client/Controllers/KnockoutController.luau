@@ -152,7 +152,12 @@ end
 -- "FINISH [M1]" above the closest KO'd opponent in front of us.
 local function updatePrompt(character: Model?)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if root == nil or not root:IsA("BasePart") or isKnockedOut(character) then
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local cannotAct = humanoid == nil
+		or humanoid.Health <= 0
+		or isKnockedOut(character)
+		or (character :: Model):GetAttribute("Ragdolled") == true
+	if root == nil or not root:IsA("BasePart") or cannotAct then
 		finishPrompt.Enabled = false
 		return
 	end
@@ -161,14 +166,19 @@ local function updatePrompt(character: Model?)
 	local best: BasePart? = nil
 	local bestDistance = K.FINISH_RANGE
 	for _, instance in CollectionService:GetTagged(Config.Combat.TAG) do
-		if instance:IsA("Model") and instance ~= character and isKnockedOut(instance) then
+		local available = instance:IsA("Model")
+			and instance ~= character
+			and isKnockedOut(instance)
+			and instance:GetAttribute("BeingFinished") ~= true
+		if available then
 			local torso = instance:FindFirstChild("Torso")
 			if torso and torso:IsA("BasePart") then
 				local offset = torso.Position - root.Position
 				local flat = Vector3.new(offset.X, 0, offset.Z)
 				local distance = flat.Magnitude
+				-- Same rule as the finisher itself (CombatController / server).
 				local inFront = distance < 1.5 or flat.Unit:Dot(forward) > 0.35
-				if distance <= bestDistance and inFront then
+				if distance <= bestDistance and inFront and math.abs(offset.Y) < 6 then
 					best, bestDistance = torso, distance
 				end
 			end
