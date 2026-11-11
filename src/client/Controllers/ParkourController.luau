@@ -4,7 +4,9 @@
 -- Controls (keys in Config.Controls):
 --   • C               → crouch / stand up.
 --   • C while sprinting → slide: a burst of speed that fades, you end crouched.
---   • Jump in front of a wall you can reach → climb onto it (Shared/Ledge).
+--   • Jump in front of a wall you can reach (Shared/Ledge):
+--       low obstacle → VAULT: hand on top, swing over, keep your speed;
+--       high ledge   → MANTLE: grab the edge, hang, pull up, step onto it.
 --   • Jump while crouched → stand up.  Jump during a slide → stop the slide.
 --
 -- The body poses (crouch, slide, climb) are animated by
@@ -38,10 +40,24 @@ local player = Players.LocalPlayer
 local CONFIRM_TIMEOUT = 0.4
 -- After this long, a slide that is barely moving has hit a wall → stop it.
 local WALL_CHECK_DELAY = 0.15
--- Small push forward when a climb ends, so you don't stand on the very edge.
-local CLIMB_EXIT_SPEED = 4
+-- Speed (studs/s) you leave a mantle with, so you don't stand on the very edge.
+local MANTLE_EXIT_SPEED = 3
 
-type Action = "Slide" | "Climb"
+-- Mantle phases, as fractions of its duration. MUST match the keyframe
+-- times of the "Climb" clip in Client/Animation/MovementClips.
+local MANTLE_CATCH_END = 0.22 -- start → hands on the ledge
+local MANTLE_HANG_END = 0.36 -- hanging, legs swinging
+local MANTLE_PULL_END = 0.62 -- pulled up: waist at the ledge
+-- Hanging: the root is this far from the wall, and this far under the ledge.
+-- (Checked against the "Climb" clip: with these values the hands of the
+-- hanging pose land on the ledge, and the hands of the "pulled up" pose
+-- press on it. Change the clip's arm angles → re-tune these.)
+local HANG_DISTANCE = 0.7
+local HANG_DEPTH = 1.7
+-- End of the pull: the root is this high above the ledge (waist on it).
+local WAIST_HEIGHT = 0.65
+
+type Action = "Slide" | "Climb" | "Vault"
 
 type ActionState = {
 	kind: Action,
@@ -51,10 +67,15 @@ type ActionState = {
 	direction: Vector3,
 	velocity: LinearVelocity?,
 	attachment: Attachment?,
-	-- Climb
-	from: Vector3,
-	control: Vector3,
-	to: Vector3,
+	-- Climb / vault
+	duration: number,
+	from: Vector3, -- root position at the start
+	fromLook: Vector3, -- where the body was facing at the start
+	hang: Vector3, -- mantle: root position while hanging
+	waist: Vector3, -- mantle: root position at the end of the pull
+	control: Vector3, -- vault: top of the arc
+	to: Vector3, -- root position at the end, standing on the ledge
+	exitSpeed: number,
 }
 
 local ParkourController = {}
@@ -89,7 +110,7 @@ end
 local function updateJumpAllowed()
 	local current = humanoid
 	if current then
-		local allowed = not crouched and not (action and action.kind == "Climb")
+		local allowed = not crouched and not (action and action.kind ~= "Slide")
 		current:SetStateEnabled(Enum.HumanoidStateType.Jumping, allowed)
 	end
 end
@@ -135,7 +156,10 @@ local function endAction(standUp: boolean)
 		updateJumpAllowed()
 		local part = root
 		if part and not standUp then
-			part.AssemblyLinearVelocity = current.direction * CLIMB_EXIT_SPEED
+			-- Finished normally: leave with some speed, and tell the server
+			-- (its timer is the LONGEST a climb can take).
+			part.AssemblyLinearVelocity = current.direction * current.exitSpeed
+			Remotes.RequestMoveAction:FireServer("Cancel")
 		end
 	end
 end
@@ -189,9 +213,14 @@ local function startSlide(now: number)
 		direction = direction,
 		velocity = velocity,
 		attachment = attachment,
+		duration = Config.Slide.DURATION,
 		from = part.Position,
+		fromLook = direction,
+		hang = part.Position,
+		waist = part.Position,
 		control = part.Position,
 		to = part.Position,
+		exitSpeed = 0,
 	}
 	lastSlideAt = now
 	Remotes.RequestMoveAction:FireServer("Slide")
@@ -242,42 +271,105 @@ local function tryStartClimb(now: number)
 	end
 
 	local from = part.Position
-	-- Curve: go UP first (above the ledge), then forward onto it.
-	local control = Vector3.new(from.X, ledge.target.Y + 0.5, from.Z)
+	local edge = ledge.edge
+	local vault = Ledge.isVault(ledge)
+	local kind: Action = if vault then "Vault" else "Climb"
+
+	-- Mantle key positions (see the phases at the top of this file).
+	local wallSide = edge - ledge.facing * HANG_DISTANCE
+	local waist = Vector3.new(wallSide.X, edge.Y + WAIST_HEIGHT, wallSide.Z)
+	-- Hang under the ledge — but never go DOWN to get there (low ledge, or
+	-- grabbed at the top of a jump): then we hang from where we are.
+	local hangY = math.min(math.max(edge.Y - HANG_DEPTH, from.Y), waist.Y)
+	local hang = Vector3.new(wallSide.X, hangY, wallSide.Z)
+
+	-- Vault: one smooth arc passing just above the obstacle.
+	local control = edge + Vector3.new(0, Config.Character.ROOT_TO_FEET, 0)
+	local entrySpeed = horizontalVelocity(part).Magnitude
 
 	CameraController.holdRotation("parkour", true)
 	crouched = false
 	action = {
-		kind = "Climb",
+		kind = kind,
 		startedAt = now,
 		confirmed = false,
 		direction = ledge.facing,
 		velocity = nil,
 		attachment = nil,
+		duration = Ledge.duration(ledge),
 		from = from,
+		fromLook = part.CFrame.LookVector,
+		hang = hang,
+		waist = waist,
 		control = control,
 		to = ledge.target,
+		-- A vault keeps your momentum; a mantle ends almost still.
+		exitSpeed = if vault
+			then math.max(entrySpeed, Config.Character.WALK_SPEED)
+			else MANTLE_EXIT_SPEED,
 	}
 	updateJumpAllowed()
 	lastClimbAt = now
-	Remotes.RequestMoveAction:FireServer("Climb")
+	Remotes.RequestMoveAction:FireServer(kind)
+end
+
+local function smoothstep(k: number): number
+	return k * k * (3 - 2 * k) -- slow start, slow end
+end
+
+-- How far we are inside a phase: 0 at `from`, 1 at `to`.
+local function phase(u: number, from: number, to: number): number
+	return math.clamp((u - from) / (to - from), 0, 1)
+end
+
+-- Root position of a mantle at progress u (0 → 1).
+local function mantlePosition(current: ActionState, u: number): Vector3
+	if u < MANTLE_CATCH_END then
+		-- Catch: fast at first, settling on the ledge ("ease out").
+		local k = phase(u, 0, MANTLE_CATCH_END)
+		return current.from:Lerp(current.hang, 1 - (1 - k) * (1 - k))
+	elseif u < MANTLE_HANG_END then
+		return current.hang -- hanging: only the legs move (animation)
+	elseif u < MANTLE_PULL_END then
+		local k = smoothstep(phase(u, MANTLE_HANG_END, MANTLE_PULL_END))
+		return current.hang:Lerp(current.waist, k)
+	end
+	-- Step up: rise first, then move forward onto the ledge (Bézier curve).
+	local k = smoothstep(phase(u, MANTLE_PULL_END, 1))
+	local corner = Vector3.new(current.waist.X, current.to.Y + 0.3, current.waist.Z)
+	local a = current.waist:Lerp(corner, k)
+	local b = corner:Lerp(current.to, k)
+	return a:Lerp(b, k)
+end
+
+-- Root position of a vault at progress u: one arc from → control → to.
+local function vaultPosition(current: ActionState, u: number): Vector3
+	local a = current.from:Lerp(current.control, u)
+	local b = current.control:Lerp(current.to, u)
+	return a:Lerp(b, u)
 end
 
 -- Runs just BEFORE each physics step, so physics starts from our position.
 local function updateClimb(current: ActionState, elapsed: number)
 	local part = root :: BasePart
-	local t = math.clamp(elapsed / Config.Climb.DURATION, 0, 1)
-	local eased = t * t * (3 - 2 * t) -- "smoothstep": slow start, slow end
+	local u = math.clamp(elapsed / current.duration, 0, 1)
 
-	-- Quadratic Bézier curve from → control → to.
-	local a = current.from:Lerp(current.control, eased)
-	local b = current.control:Lerp(current.to, eased)
-	local position = a:Lerp(b, eased)
+	local position = if current.kind == "Vault"
+		then vaultPosition(current, u)
+		else mantlePosition(current, u)
 
-	part.CFrame = CFrame.lookAt(position, position + current.direction)
+	-- Turn to face the wall during the first moments (no instant snap).
+	local turn = smoothstep(phase(u, 0, 0.15))
+	local look = current.fromLook:Lerp(current.direction, turn)
+	look = Vector3.new(look.X, 0, look.Z)
+	if look.Magnitude < 1e-3 then
+		look = current.direction
+	end
+
+	part.CFrame = CFrame.lookAt(position, position + look)
 	part.AssemblyLinearVelocity = Vector3.zero -- cancel gravity for this step
 
-	if t >= 1 then
+	if u >= 1 then
 		endAction(false)
 	end
 end
@@ -317,7 +409,7 @@ end
 ------------------------------------------------------------------------------
 
 local function onCrouchKey()
-	if not isAlive() or (action and action.kind == "Climb") then
+	if not isAlive() or (action and action.kind ~= "Slide") then
 		return
 	end
 	local now = os.clock()
@@ -373,13 +465,23 @@ end
 ------------------------------------------------------------------------------
 
 -- What OUR character is doing right now, as we predict it (no network delay):
--- "Slide", "Climb", "Crouch", or nil (standing: walk / sprint).
+-- "Slide", "Climb", "Vault", "Crouch", or nil (standing: walk / sprint).
 -- Used by CharacterAnimationController to animate our own character.
 function ParkourController.getVisualState(): Types.MoveState?
 	if action then
 		return action.kind
 	elseif crouched then
 		return "Crouch"
+	end
+	return nil
+end
+
+-- Progress (0 → 1) of our current climb / vault, nil otherwise. Lets the
+-- animation follow the body's movement exactly.
+function ParkourController.getClimbProgress(): number?
+	local current = action
+	if current and current.kind ~= "Slide" then
+		return math.clamp((os.clock() - current.startedAt) / current.duration, 0, 1)
 	end
 	return nil
 end

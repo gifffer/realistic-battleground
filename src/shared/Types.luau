@@ -29,10 +29,12 @@ export type ProfileSnapshot = PlayerProfile
 
 -- How a character is moving right now. Decided by the server
 -- (Server/Systems/Movement), published as the Player attribute "MoveState".
-export type MoveState = "Walk" | "Sprint" | "Crouch" | "Slide" | "Climb"
+-- "Climb" = mantle onto a high ledge, "Vault" = quick hop over a low obstacle.
+export type MoveState = "Walk" | "Sprint" | "Crouch" | "Slide" | "Climb" | "Vault"
 
 -- Short movement moves the client can ask for (Remotes.RequestMoveAction).
--- "Cancel" = stop the current one early (e.g. jumping out of a slide).
-export type MoveAction = "Slide" | "Climb" | "Cancel"
+-- "Cancel" = the current one is over on the client (jumped out of a slide,
+-- or the climb finished before the server's maximum duration).
+export type MoveAction = "Slide" | "Climb" | "Vault" | "Cancel"
 
 return nil

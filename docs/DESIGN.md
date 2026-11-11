@@ -93,7 +93,8 @@ ou en cliquant le même bouton.
 | Shift (maintenu) | Courir |
 | C | **S'accroupir** / se relever |
 | C pendant la course | **Glissade** (finit accroupi) |
-| Espace face à un rebord | **Escalade** (se hisser sur un muret, un conteneur…) |
+| Espace face à un obstacle bas | **Vault** (on passe par-dessus sans perdre sa vitesse) |
+| Espace face à un rebord haut | **Mantle** (attraper le rebord, se hisser dessus) |
 | Ctrl | Libérer / verrouiller le curseur (pour cliquer les menus en 3ᵉ personne) |
 
 > Ouvrir/fermer les menus : à la souris. En 3ᵉ personne le curseur est bloqué au centre (pour viser) :
