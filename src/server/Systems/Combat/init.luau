@@ -24,12 +24,16 @@
 --
 -- API for other server systems:
 --   Combat.register(model, player?)    makes a model able to fight
---   Combat.tryAttack(model, zone?)     M1 (used by remotes and dummies);
---                                      near a KO'd fighter it finishes them
+--   Combat.tryAttack(model, aim?, id?) M1 (used by remotes and dummies);
+--                                      near a KO'd fighter it finishes them.
+--                                      `id` = the client's number for this M1,
+--                                      echoed in CombatEvent (prediction)
 --
--- Hit zones: the attacker aims at the head or the torso (Remotes.Attack
--- sends the zone). The server only accepts it if that body part of the
--- victim really is inside the hitbox; otherwise it uses a part that is.
+-- Hit zones: the client sends where it AIMS (a direction, Remotes.Attack).
+-- The SERVER casts that ray itself from the attacker's head: the body part
+-- it meets on the victim gives the zone (a hat or hair counts as the head);
+-- if it meets nothing, it's a torso hit. The zone must also be inside the
+-- hitbox. A client can't just claim "head": it has to actually aim there.
 -- Damage × Config.Combat.ZONE_DAMAGE, a head hit stuns a bit longer, a
 -- leg hit slows down.
 --
@@ -71,7 +75,21 @@ local ZONE_PARTS: { [Types.HitZone]: { string } } = {
 	Torso = { "Torso", "HumanoidRootPart", "Right Arm", "Left Arm" },
 	Legs = { "Right Leg", "Left Leg" },
 }
-local VALID_ZONES = table.freeze({ Head = true, Torso = true, Legs = true })
+-- Body part name (R6) → zone, for the server-side aim ray.
+local PART_ZONES: { [string]: Types.HitZone } = {
+	Head = "Head",
+	Torso = "Torso",
+	HumanoidRootPart = "Torso",
+	["Right Arm"] = "Torso",
+	["Left Arm"] = "Torso",
+	["Right Leg"] = "Legs",
+	["Left Leg"] = "Legs",
+}
+-- Length of the server's aim ray (studs): a bit more than a punch's reach.
+local AIM_RAY_LENGTH = 14
+-- The aim must point roughly where the attacker faces (dot product with
+-- its facing; 0.2 ≈ within 78°), else it's ignored.
+local MIN_AIM_FACING = 0.2
 local random = Random.new()
 
 type CombatState = {
@@ -96,6 +114,7 @@ type CombatState = {
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
 	nextDashAt: number,
+	knockbackUntil: number, -- a finisher's knockback is running until then
 }
 
 export type DamageInfo = {
@@ -140,14 +159,17 @@ end
 
 -- `zone` and `side` are only sent when a hit reached the body (or the guard):
 -- every client uses them to play the same reaction on the victim.
+-- `attackId` = the number the attacker's client gave this M1 (nil for
+-- dummies): its client uses it to match the result with its prediction.
 local function fireEvent(
 	kind: Types.CombatEventKind,
 	victim: Model,
 	attacker: Model,
 	zone: Types.HitZone?,
-	side: Types.HitSide?
+	side: Types.HitSide?,
+	attackId: number?
 )
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side)
+	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side, attackId)
 end
 
 local function stopBlocking(state: CombatState)
@@ -232,7 +254,8 @@ local function resolveHit(
 	attacker: CombatState,
 	victim: CombatState,
 	combo: number,
-	zone: Types.HitZone
+	zone: Types.HitZone,
+	attackId: number?
 )
 	local isFinisher = combo == #C.M1_DAMAGE
 	local damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[zone]
@@ -245,13 +268,13 @@ local function resolveHit(
 		return
 	end
 	if Knockout.isProtected(victim.model) then
-		fireEvent("Protected", victim.model, attacker.model)
+		fireEvent("Protected", victim.model, attacker.model, nil, nil, attackId)
 		return
 	end
 
 	-- 1. Dash dodge frames: the hit misses.
 	if time < victim.invulnerableUntil then
-		fireEvent("Dodged", victim.model, attacker.model)
+		fireEvent("Dodged", victim.model, attacker.model, nil, nil, attackId)
 		return
 	end
 
@@ -259,7 +282,7 @@ local function resolveHit(
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
 			stun(attacker, C.PARRY_STUN)
-			fireEvent("Parried", victim.model, attacker.model)
+			fireEvent("Parried", victim.model, attacker.model, nil, nil, attackId)
 			return
 		end
 
@@ -269,17 +292,19 @@ local function resolveHit(
 		if victimPlayer and not Stamina.trySpend(victimPlayer, cost) then
 			Stamina.drain(victimPlayer, Config.Stamina.MAX) -- empty the bar
 			stun(victim, C.GUARD_BREAK_STUN)
-			fireEvent("GuardBreak", victim.model, attacker.model, nil, side)
+			fireEvent("GuardBreak", victim.model, attacker.model, nil, side, attackId)
 			return
 		end
 		dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
 		-- The guard absorbs the hit but is still shoved back a little.
-		Push.apply(
-			victim.root,
-			awayFromAttacker(attacker, victim) * C.BLOCK_PUSH_SPEED,
-			C.HIT_PUSH_TIME
-		)
-		fireEvent("Blocked", victim.model, attacker.model, nil, side)
+		if time >= victim.knockbackUntil then
+			Push.apply(
+				victim.root,
+				awayFromAttacker(attacker, victim) * C.BLOCK_PUSH_SPEED,
+				C.HIT_PUSH_TIME
+			)
+		end
+		fireEvent("Blocked", victim.model, attacker.model, nil, side, attackId)
 		return
 	end
 
@@ -292,7 +317,8 @@ local function resolveHit(
 			victim.model,
 			attacker.model,
 			zone,
-			side
+			side,
+			attackId
 		)
 		return
 	end
@@ -304,16 +330,20 @@ local function resolveHit(
 		stun(victim, C.FINISHER_STUN + extraStun)
 		local direction = awayFromAttacker(attacker, victim)
 		Push.apply(victim.root, direction * C.KNOCKBACK_SPEED, C.KNOCKBACK_TIME)
-		fireEvent("Finisher", victim.model, attacker.model, zone, side)
+		victim.knockbackUntil = time + C.KNOCKBACK_TIME
+		fireEvent("Finisher", victim.model, attacker.model, zone, side, attackId)
 	else
 		stun(victim, C.HIT_STUN + extraStun)
 		-- Small push: the body is moved by the fist (no "punch through it" look).
-		Push.apply(
-			victim.root,
-			awayFromAttacker(attacker, victim) * C.HIT_PUSH_SPEED,
-			C.HIT_PUSH_TIME
-		)
-		fireEvent("Hit", victim.model, attacker.model, zone, side)
+		-- Not during a finisher's knockback (a new push replaces the running one).
+		if time >= victim.knockbackUntil then
+			Push.apply(
+				victim.root,
+				awayFromAttacker(attacker, victim) * C.HIT_PUSH_SPEED,
+				C.HIT_PUSH_TIME
+			)
+		end
+		fireEvent("Hit", victim.model, attacker.model, zone, side, attackId)
 	end
 end
 
@@ -350,6 +380,7 @@ function Combat.register(model: Model, player: Player?)
 		finishingUntil = 0,
 		invulnerableUntil = 0,
 		nextDashAt = 0,
+		knockbackUntil = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -394,9 +425,28 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	return true
 end
 
--- M1. Returns true if the attack started. `zone` = where the attacker aims
--- (nil for dummies: random head / torso).
-function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
+-- The zone the attacker's aim ray meets on `victim`, or nil if it misses.
+local function aimZone(attacker: CombatState, victim: Model, direction: Vector3): Types.HitZone?
+	local head = attacker.model:FindFirstChild("Head")
+	local origin = if head and head:IsA("BasePart") then head.Position else attacker.root.Position
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { victim }
+	local hit = workspace:Raycast(origin, direction * AIM_RAY_LENGTH, params)
+	if hit == nil then
+		return nil
+	end
+	local part = hit.Instance
+	-- Accessories (hats, hair...) are worn on the head.
+	if part.Parent and part.Parent:IsA("Accessory") then
+		return "Head"
+	end
+	return PART_ZONES[part.Name]
+end
+
+-- M1. Returns true if the attack started. `aim` = the direction the player
+-- aims at (validated by onAttack); nil for dummies (random head / torso).
+function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boolean
 	local state = states[model]
 	if
 		state == nil
@@ -421,8 +471,8 @@ function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
 		return true
 	end
 
-	local aimed: Types.HitZone = zone
-		or (if random:NextNumber() < 0.5 then "Head" else "Torso") :: Types.HitZone
+	-- Dummies don't aim: they pick head or torso at random.
+	local dummyZone: Types.HitZone = if random:NextNumber() < 0.5 then "Head" else "Torso"
 
 	-- Advance the combo (or start over if the last M1 was too long ago).
 	if time - state.lastAttackAt > C.COMBO_RESET then
@@ -450,9 +500,15 @@ function Combat.tryAttack(model: Model, zone: Types.HitZone?): boolean
 		for _, victimModel in victims do
 			local victim = states[victimModel]
 			if victim and isAlive(victim) then
+				-- Players: where their aim ray lands (no valid aim = torso).
+				-- Dummies: random.
+				local aimed: Types.HitZone = if aim
+					then aimZone(state, victimModel, aim) or "Torso"
+					elseif state.player then "Torso"
+					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				resolveHit(state, victim, combo, landed)
+				resolveHit(state, victim, combo, landed, attackId)
 			end
 		end
 	end)
@@ -561,16 +617,42 @@ local attackLimiter = RateLimiter.new(6, 5)
 local blockLimiter = RateLimiter.new(10, 6)
 local dashLimiter = RateLimiter.new(3, 1)
 
-local function onAttack(player: Player, zone: unknown)
+local function onAttack(player: Player, aim: unknown, attackId: unknown)
 	local character = player.Character
 	if character == nil or not attackLimiter.allow(player) then
 		return
 	end
-	-- Only the 3 known zone names; anything else = no preference.
-	local aimed: Types.HitZone? = if typeof(zone) == "string" and VALID_ZONES[zone]
-		then zone :: Types.HitZone
+	-- The aim direction: a real, finite, non-zero Vector3, pointing roughly
+	-- where the character faces. Anything else = no aim (a torso hit).
+	local direction: Vector3? = nil
+	local state = states[character]
+	if typeof(aim) == "Vector3" and state then
+		local finite = aim.X == aim.X
+			and aim.Y == aim.Y
+			and aim.Z == aim.Z
+			and aim.Magnitude < math.huge
+		if finite and aim.Magnitude > 0.1 then
+			local unit = aim.Unit
+			local look = state.root.CFrame.LookVector
+			local flatAim = Vector3.new(unit.X, 0, unit.Z)
+			local flatLook = Vector3.new(look.X, 0, look.Z)
+			local facing = flatAim.Magnitude > 1e-3
+				and flatLook.Magnitude > 1e-3
+				and flatAim.Unit:Dot(flatLook.Unit) >= MIN_AIM_FACING
+			if facing then
+				direction = unit
+			end
+		end
+	end
+	-- The M1's number (only echoed back to the clients, never trusted for
+	-- anything else): a whole number, else ignored.
+	local id: number? = if typeof(attackId) == "number"
+			and attackId == attackId
+			and attackId % 1 == 0
+			and math.abs(attackId) < 2 ^ 31
+		then attackId
 		else nil
-	Combat.tryAttack(character, aimed or "Torso")
+	Combat.tryAttack(character, direction, id)
 end
 
 local function onSetBlocking(player: Player, wantsToBlock: unknown)

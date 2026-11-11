@@ -71,10 +71,13 @@ return table.freeze({
 	-- and the type of the value (see Server/Systems/Settings).
 	UpdateSetting = event("UpdateSetting"),
 
-	-- client → server  (zone: Types.HitZone)
-	-- "I want to M1", aiming at the opponent's head or torso (centre of the
-	-- screen). The server checks timing, finds who is hit, and only accepts
-	-- the zone if that body part really is inside the hitbox.
+	-- client → server  (aim: Vector3?, attackId: number?)
+	-- `attackId` = a number the client gives each M1, sent back in CombatEvent
+	-- so the client can match the result with what it predicted.
+	-- "I want to M1", aiming in this direction (from my head to the point
+	-- under my crosshair). The server checks timing and the direction, finds
+	-- who is hit, then casts the aim ray ITSELF to find the zone (head /
+	-- torso) and checks that body part is inside the hitbox.
 	-- (Near a knocked-out fighter, an M1 finishes them instead.)
 	Attack = event("Attack"),
 
@@ -96,10 +99,11 @@ return table.freeze({
 	CombatAction = event("CombatAction"),
 
 	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model,
-	--                        zone: Types.HitZone?, side: Types.HitSide?)
+	--                        zone: Types.HitZone?, side: Types.HitSide?, attackId: number?)
 	-- Something happened in a fight; clients show effects (flash, text, shake)
 	-- and the victim's reaction, chosen from where (zone) and from which side
-	-- of the victim (side) the hit landed.
+	-- of the victim (side) the hit landed. `attackId` = the attacker's number
+	-- for that M1 (see Attack), nil for dummies.
 	CombatEvent = event("CombatEvent"),
 
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)

@@ -14,10 +14,12 @@
 --     freeze on the contact frame) and a physical flinch in the direction
 --     the fist pushed.
 --   • Our OWN punches: the reaction is predicted the instant our fist lands
---     (CombatEffectsController.predictHit), instead of one network trip
---     later when the fist is already coming back (that looked like the
---     punch went through the body). Damage, sound and flash still wait for
---     the server.
+--     (predictHit, HIT_DELAY after CombatController's attack signal),
+--     instead of one network trip later when the fist is already coming
+--     back (that looked like the punch went through the body). Each M1 has
+--     a number echoed by the server: if the server's result differs
+--     (dodged, blocked, another zone...), its version replaces ours.
+--     Damage, sound and flash always wait for the server.
 --   • Other fighters' punches and dashes (Remotes.CombatAction): animation
 --     + sound. Ours already played when we pressed the key.
 --
@@ -38,6 +40,7 @@ local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -93,8 +96,15 @@ local BODY_FLINCH: { [string]: Vector3 } = {
 	Right = Vector3.new(-0.3, 0.3, -0.6),
 }
 -- Our own predicted hits: how long we wait for the server's answer before
--- forgetting the prediction (seconds).
-local PREDICTION_MEMORY = 0.6
+-- forgetting the prediction (seconds, plus the round trip).
+local PREDICTION_MEMORY = 0.4
+-- After a fighter starts a dash, no prediction for its dodge frames plus
+-- this margin (the dash reaches us a bit late).
+local DASH_MARGIN = 0.15
+-- Same as the server's aim ray (Combat AIM_RAY_LENGTH).
+local AIM_RAY_LENGTH = 14
+-- If OUR character has one of these, the server cancels our punch.
+local ATTACKER_CANCEL_ATTRIBUTES = table.freeze({ "Stunned", "KnockedOut", "Ragdolled" })
 -- Attributes that mean "this punch won't simply hit": no prediction then,
 -- we let the server decide (block, parry, KO, spawn protection).
 local NO_PREDICTION_ATTRIBUTES =
@@ -119,6 +129,19 @@ type Visual = {
 local CombatEffectsController = {}
 
 local visuals: { [Model]: Visual } = {}
+
+type Prediction = {
+	time: number,
+	strong: boolean,
+	zone: Types.HitZone,
+	side: Types.HitSide,
+}
+-- What we showed for our own M1s: per victim, per M1 number (the server
+-- echoes that number with the result, see CombatController.AttackInfo).
+local predictions: { [Model]: { [number]: Prediction } } = {}
+-- When each fighter last started a dash: it may be in its dodge frames,
+-- which only the server knows, so we don't predict hits on it.
+local dashedAt: { [Model]: number } = {}
 local random = Random.new()
 local shakeUntil = 0
 local shakeStrength = 0
@@ -192,6 +215,8 @@ end
 local function onCombatantRemoved(instance: Instance)
 	if instance:IsA("Model") then
 		visuals[instance] = nil
+		predictions[instance] = nil
+		dashedAt[instance] = nil
 	end
 end
 
@@ -367,14 +392,43 @@ end
 -- Prediction of our own hits
 ------------------------------------------------------------------------------
 
--- When each fighter last got a predicted reaction from one of OUR punches.
-local predictedAt: { [Model]: number } = {}
+-- How long a prediction waits for the server's answer: a margin plus the
+-- round trip (with a high ping the answer comes later).
+local function predictionMemory(): number
+	return PREDICTION_MEMORY + player:GetNetworkPing() * 2
+end
 
--- Takes a recent prediction for `victim` (true = we already showed it).
-local function consumePrediction(victim: Model): boolean
-	local time = predictedAt[victim]
-	predictedAt[victim] = nil
-	return time ~= nil and os.clock() - time < PREDICTION_MEMORY
+-- Takes (and forgets) what we predicted for this victim and this M1.
+local function takePrediction(victim: Model, attackId: unknown): Prediction?
+	local byId = predictions[victim]
+	if byId == nil or typeof(attackId) ~= "number" then
+		return nil
+	end
+	local prediction = byId[attackId]
+	byId[attackId] = nil
+	if next(byId) == nil then
+		predictions[victim] = nil
+	end
+	if prediction and os.clock() - prediction.time < predictionMemory() then
+		return prediction
+	end
+	return nil
+end
+
+-- Drops predictions the server never answered (our punch missed on the
+-- server, or was cancelled).
+local function forgetOldPredictions()
+	local limit = os.clock() - predictionMemory()
+	for victim, byId in predictions do
+		for id, prediction in byId do
+			if prediction.time < limit then
+				byId[id] = nil
+			end
+		end
+		if next(byId) == nil then
+			predictions[victim] = nil
+		end
+	end
 end
 
 local function canPredictHitOn(model: Model): boolean
@@ -387,14 +441,46 @@ local function canPredictHitOn(model: Model): boolean
 			return false
 		end
 	end
-	return true
+	local dashed = dashedAt[model]
+	return dashed == nil or os.clock() - dashed > Config.Combat.DASH_INVULNERABLE + DASH_MARGIN
 end
 
--- Body parts of each zone (same as the server's Combat ZONE_PARTS).
+-- Same rules as the server (Combat): the aim ray from our head says which
+-- body part we aim at; punches only land on the head or the torso, and the
+-- part must be inside the hitbox.
+local PART_ZONES: { [string]: Types.HitZone } = {
+	Head = "Head",
+	Torso = "Torso",
+	HumanoidRootPart = "Torso",
+	["Right Arm"] = "Torso",
+	["Left Arm"] = "Torso",
+	["Right Leg"] = "Legs",
+	["Left Leg"] = "Legs",
+}
 local ZONE_PARTS: { [string]: { string } } = {
 	Head = { "Head" },
 	Torso = { "Torso", "HumanoidRootPart", "Right Arm", "Left Arm" },
 }
+
+local function aimZone(origin: Vector3, victim: Model, aim: Vector3?): Types.HitZone
+	local zone: Types.HitZone = "Torso"
+	if aim == nil then
+		return zone
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { victim }
+	local hit = workspace:Raycast(origin, aim * AIM_RAY_LENGTH, params)
+	if hit then
+		local part = hit.Instance
+		if part.Parent and part.Parent:IsA("Accessory") then
+			zone = "Head" -- hats, hair... are worn on the head
+		else
+			zone = PART_ZONES[part.Name] or "Torso"
+		end
+	end
+	return zone
+end
 
 local function zoneInBox(zone: string, parts: { [string]: boolean }): boolean
 	for _, name in ZONE_PARTS[zone] do
@@ -405,7 +491,8 @@ local function zoneInBox(zone: string, parts: { [string]: boolean }): boolean
 	return false
 end
 
--- Same rule as the server's landingZone (punches reach the head or the torso).
+-- The server's landingZone: the aimed zone if a punch can reach it and it's
+-- in the box, else the torso if it is, else the head.
 local function predictZone(aimed: Types.HitZone, parts: { [string]: boolean }): Types.HitZone
 	local zone: Types.HitZone = "Torso"
 	if (aimed == "Head" or aimed == "Torso") and zoneInBox(aimed, parts) then
@@ -416,20 +503,30 @@ local function predictZone(aimed: Types.HitZone, parts: { [string]: boolean }): 
 	return zone
 end
 
--- Called by CombatController Config.Combat.HIT_DELAY after we click, i.e.
--- the moment our fist reaches its target in the punch animation. Uses the
--- SAME box as the server. Purely visual: the server still decides the hit,
--- the damage and everything else.
-function CombatEffectsController.predictHit(strong: boolean, aimed: Types.HitZone)
+-- Runs Config.Combat.HIT_DELAY after we click, i.e. the moment our fist
+-- reaches its target in the punch animation. Same box and same aim rule
+-- as the server. Purely visual: the server still decides the hit, the
+-- damage and everything else, and corrects us if it disagrees.
+local function predictHit(info: CombatController.AttackInfo)
 	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if character == nil or root == nil or not root:IsA("BasePart") then
+	if
+		character == nil
+		or humanoid == nil
+		or humanoid.Health <= 0
+		or root == nil
+		or not root:IsA("BasePart")
+	then
 		return
 	end
-	-- A stunned attacker's punch is cancelled by the server.
-	if character:GetAttribute("Stunned") == true then
-		return
+	-- The server cancels the punch of a stunned / knocked-out attacker.
+	for _, attribute in ATTACKER_CANCEL_ATTRIBUTES do
+		if character:GetAttribute(attribute) == true then
+			return
+		end
 	end
+	forgetOldPredictions()
 
 	local params = OverlapParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -449,11 +546,19 @@ function CombatEffectsController.predictHit(strong: boolean, aimed: Types.HitZon
 		end
 	end
 
+	local head = character:FindFirstChild("Head")
+	local origin = if head and head:IsA("BasePart") then head.Position else root.Position
 	for model, parts in partsByModel do
 		if canPredictHitOn(model) then
+			local zone: Types.HitZone = predictZone(aimZone(origin, model, info.aim), parts)
 			local side: Types.HitSide = HitSide.compute(model:GetPivot(), root.Position)
-			predictedAt[model] = os.clock()
-			playHitReaction(model, character, strong, predictZone(aimed, parts), side)
+			local byId = predictions[model]
+			if byId == nil then
+				byId = {}
+				predictions[model] = byId
+			end
+			byId[info.id] = { time = os.clock(), strong = info.strong, zone = zone, side = side }
+			playHitReaction(model, character, info.strong, zone, side)
 		end
 	end
 end
@@ -467,7 +572,8 @@ local function onCombatEvent(
 	victim: Model,
 	attacker: Model,
 	zoneArg: unknown,
-	sideArg: unknown
+	sideArg: unknown,
+	attackIdArg: unknown
 )
 	if typeof(victim) ~= "Instance" or typeof(attacker) ~= "Instance" then
 		return -- a model that doesn't exist on this client (streamed out...)
@@ -475,15 +581,28 @@ local function onCombatEvent(
 	local character = player.Character
 	local iAmVictim = victim == character
 	local iAmAttacker = attacker == character
-	-- Did we already show this hit (our own punch, predicted)?
-	local alreadyShown = iAmAttacker and consumePrediction(victim)
+	-- What we showed for this M1 when our fist landed (our punches only).
+	local prediction = if iAmAttacker then takePrediction(victim, attackIdArg) else nil
+	if prediction and kind ~= "Hit" and kind ~= "Finisher" then
+		-- We showed a hit, the server says it was dodged / blocked / parried:
+		-- undo our reaction (the right effect plays just below).
+		CharacterAnimationController.cancelReaction(victim)
+		CharacterAnimationController.clearHitStop(attacker)
+	end
 
 	if kind == "Hit" or kind == "Finisher" then
 		flash(victim, COLORS.Hit)
 		local strong = kind == "Finisher"
 		local zone: Types.HitZone = resolveZone(zoneArg)
+		local side: Types.HitSide = resolveSide(sideArg, victim, attacker)
+		-- Already shown exactly like this by our prediction? Otherwise the
+		-- server's version wins (it replaces a wrong guess).
+		local alreadyShown = prediction ~= nil
+			and prediction.strong == strong
+			and prediction.zone == zone
+			and prediction.side == side
 		if not alreadyShown then
-			playHitReaction(victim, attacker, strong, zone, resolveSide(sideArg, victim, attacker))
+			playHitReaction(victim, attacker, strong, zone, side)
 		end
 		if iAmVictim and zone == "Head" then
 			headBlur()
@@ -542,15 +661,18 @@ local function onCombatAction(model: Model, action: string)
 		return
 	end
 	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
+		-- Ours: already played when we clicked, unless the server disagreed.
+		CombatController.onServerAction(action)
 		return
+	end
+	if string.sub(action, 1, 4) == "Dash" then
+		dashedAt[model] = os.clock()
 	end
 	CharacterAnimationController.playAction(model, action)
 	if action == "GetUp" then
 		return
-	elseif action == "Finisher" then
-		SoundController.play("HeavySwing", model)
-	elseif action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
-		SoundController.play("HeavySwing", model)
+	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
+		SoundController.play("HeavySwing", model) -- the heavy blows
 	elseif string.sub(action, 1, 4) == "Dash" then
 		SoundController.play("Dash", model)
 	else
@@ -572,6 +694,12 @@ function CombatEffectsController.start()
 
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)
 	Remotes.CombatAction.OnClientEvent:Connect(onCombatAction)
+	-- Our M1: show the hit the instant the fist lands (HIT_DELAY later).
+	CombatController.onAttackStarted(function(info)
+		task.delay(Config.Combat.HIT_DELAY, function()
+			predictHit(info)
+		end)
+	end)
 	RunService:BindToRenderStep("CombatShake", Enum.RenderPriority.Camera.Value + 2, updateShake)
 end
 

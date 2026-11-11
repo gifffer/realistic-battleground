@@ -23,10 +23,9 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
-local Types = require(ReplicatedStorage.Shared.Types)
+local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
-local CombatEffectsController = require(script.Parent.CombatEffectsController)
 local ParkourController = require(script.Parent.ParkourController)
 local SoundController = require(script.Parent.SoundController)
 
@@ -50,6 +49,23 @@ local combo = 0
 local lastAttackAt = -math.huge
 local nextAttackAt = 0
 local nextDashAt = 0
+-- When we last PREDICTED a finisher (to reconcile with the server's choice).
+local predictedFinisherAt = -math.huge
+-- Number of our last M1 (see tryAttack).
+local attackSeq = 0
+
+-- One of our M1 just started (not the KO finisher). CombatEffectsController
+-- listens to it to show the hit the instant our fist lands. (A signal, not a
+-- direct call: CombatEffectsController already requires this module, and two
+-- modules can't require each other.)
+export type AttackInfo = {
+	strong: boolean, -- the 4th hit of the combo
+	aim: Vector3?, -- AimController.getAimDirection(), sent to the server
+	id: number, -- this M1's number, echoed back in Remotes.CombatEvent
+}
+local attackStarted = Signal.new() :: Signal.Signal<AttackInfo>
+-- The server answers within this long (else it's an old action).
+local RECONCILE_WINDOW = 0.6
 
 local function getCharacterParts(): (Model?, Humanoid?, BasePart?)
 	local character = player.Character
@@ -86,7 +102,9 @@ local function findFinishTarget(root: BasePart): Model?
 	for _, instance in CollectionService:GetTagged(C.TAG) do
 		if instance:IsA("Model") and instance ~= player.Character then
 			local torso = instance:FindFirstChild("Torso")
-			if instance:GetAttribute("KnockedOut") == true and torso and torso:IsA("BasePart") then
+			local available = instance:GetAttribute("KnockedOut") == true
+				and instance:GetAttribute("BeingFinished") ~= true
+			if available and torso and torso:IsA("BasePart") then
 				local offset = torso.Position - root.Position
 				local flat = Vector3.new(offset.X, 0, offset.Z)
 				local distance = flat.Magnitude
@@ -116,12 +134,13 @@ local function tryAttack()
 
 	-- Opponent down in front of us: finish them (the server confirms).
 	if findFinishTarget(root) then
+		predictedFinisherAt = time
 		combo = 0
 		nextAttackAt = time + K.FINISH_DURATION
 		lastAttackAt = time
 		CharacterAnimationController.playAction(character, "Finisher")
 		SoundController.play("HeavySwing", character)
-		Remotes.Attack:FireServer(AimController.getZone())
+		Remotes.Attack:FireServer(AimController.getAimDirection())
 		return
 	end
 
@@ -135,14 +154,13 @@ local function tryAttack()
 
 	CharacterAnimationController.playAction(character, `Brawler_M1_{combo}`)
 	SoundController.play(if isFinisher then "HeavySwing" else "Swing", character)
-	local zone: Types.HitZone = AimController.getZone()
-	Remotes.Attack:FireServer(zone)
-	-- Our fist reaches its target HIT_DELAY later (the punch's impact frame):
-	-- show the victim's reaction at that exact moment, without waiting for
-	-- the server's answer (visual only, the server still decides the hit).
-	task.delay(C.HIT_DELAY, function()
-		CombatEffectsController.predictHit(isFinisher, zone)
-	end)
+	-- Each M1 gets a number, sent to the server and echoed back with its
+	-- result, so our prediction below is matched with THIS punch only.
+	attackSeq += 1
+	local seq = attackSeq
+	local aim = AimController.getAimDirection()
+	Remotes.Attack:FireServer(aim, seq)
+	attackStarted.fire({ strong = isFinisher, aim = aim, id = seq })
 end
 
 local function setBlocking(value: boolean)
@@ -205,6 +223,36 @@ local function tryDash()
 	CharacterAnimationController.playAction(character, animation)
 	SoundController.play("Dash", character)
 	Remotes.Dash:FireServer(animation)
+end
+
+-- The server tells everyone what we really did (Remotes.CombatAction). We
+-- normally predicted it already; this fixes the rare case where the server
+-- chose differently (the KO'd target was just taken / got up, or we didn't
+-- see it yet). Called by CombatEffectsController for OUR character.
+function CombatController.onServerAction(action: string)
+	local character = player.Character
+	if character == nil then
+		return
+	end
+	local time = os.clock()
+	local predictedFinisher = time - predictedFinisherAt <= RECONCILE_WINDOW
+	if action == "Finisher" and not predictedFinisher then
+		-- The server finished someone we didn't see as finishable: show it.
+		CharacterAnimationController.playAction(character, "Finisher")
+		combo = 0
+		nextAttackAt = math.max(nextAttackAt, time + K.FINISH_DURATION)
+	elseif string.sub(action, 1, 11) == "Brawler_M1_" and predictedFinisher then
+		-- We predicted a finisher but the server threw a normal punch.
+		predictedFinisherAt = -math.huge
+		CharacterAnimationController.playAction(character, action)
+		combo = tonumber(string.sub(action, 12)) or 1
+		nextAttackAt = lastAttackAt + C.M1_INTERVAL
+	end
+end
+
+-- Calls `callback` each time one of our M1 starts (see AttackInfo).
+function CombatController.onAttackStarted(callback: (AttackInfo) -> ()): Signal.Connection
+	return attackStarted.connect(callback)
 end
 
 function CombatController.start()

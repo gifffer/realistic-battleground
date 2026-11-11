@@ -7,8 +7,10 @@
 --     torso / arms = "Torso", legs = "Legs");
 --   • if it touches nothing, the camera's angle decides: looking up = head,
 --     looking down = legs, straight = torso.
--- CombatController sends that zone with each M1. The SERVER doesn't trust it:
--- it only applies it if that body part is really inside the punch's hitbox.
+-- CombatController sends the AIM DIRECTION (from our head to the point under
+-- the crosshair) with each M1. The SERVER casts that ray itself to find the
+-- zone, and checks the body part is inside the punch's hitbox: the zone
+-- shown here is only for the crosshair colour.
 --
 -- Also draws the crosshair (a small dot in the middle of the screen) while
 -- the mouse is locked: white normally, RED on an opponent's head.
@@ -50,6 +52,7 @@ local CROSSHAIR_COLORS: { [string]: Color3 } = {
 local AimController = {}
 
 local currentZone: Types.HitZone = "Torso"
+local aimPoint: Vector3 = Vector3.zero -- the world point under the crosshair
 local onOpponent = false
 local crosshair: Frame? = nil
 local rayParams = RaycastParams.new()
@@ -64,6 +67,10 @@ local function fighterPart(part: Instance): Types.HitZone?
 	end
 	if not CollectionService:HasTag(model, Config.Combat.TAG) then
 		return nil
+	end
+	-- Hats, hair... are worn on the head (same rule as the server).
+	if part.Parent and part.Parent:IsA("Accessory") then
+		return "Head"
 	end
 	return PART_ZONES[part.Name]
 end
@@ -81,6 +88,7 @@ local function updateAim()
 
 	rayParams.FilterDescendantsInstances = { player.Character :: any }
 	local hit = workspace:Raycast(ray.Origin, ray.Direction * AIM_DISTANCE, rayParams)
+	aimPoint = if hit then hit.Position else ray.Origin + ray.Direction * AIM_DISTANCE
 	local zone = if hit then fighterPart(hit.Instance) else nil
 	onOpponent = zone ~= nil
 	if zone == nil then
@@ -98,9 +106,21 @@ local function updateAim()
 	end
 end
 
--- The zone aimed at right now.
+-- The zone aimed at right now (crosshair colour).
 function AimController.getZone(): Types.HitZone
 	return currentZone
+end
+
+-- Direction from our head to the point under the crosshair (sent to the
+-- server with each M1), or nil if we have no head.
+function AimController.getAimDirection(): Vector3?
+	local character = player.Character
+	local head = character and character:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") then
+		return nil
+	end
+	local offset = aimPoint - head.Position
+	return if offset.Magnitude > 0.1 then offset.Unit else nil
 end
 
 function AimController.start()

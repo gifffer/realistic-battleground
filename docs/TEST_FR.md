@@ -149,7 +149,9 @@ réticule : **tête** ou **corps**.
 | R7 | Coup **bloqué** (Attacking Dummy, F) | Tu es repoussé un petit peu en garde. |
 | R8 | 4ᵉ coup (finisher) | Grosse réaction + gros recul (inchangé). |
 | R9 | Pieds | Pendant les réactions, les pieds restent au sol (ni enfoncés, ni en l'air). |
+| R10 | À 2 joueurs : B fait un **dash (Q)** pile quand A frappe | Chez A : « DODGE » et **pas** de réaction de coup sur B (si une réaction a commencé, elle s'arrête aussitôt). |
+| R11 | À 2 joueurs : A frappe B qui **bloque** | Chez A : la réaction de garde (BlockHit), jamais une réaction de coup reçu. |
 
 À 2 joueurs : les deux écrans doivent montrer **la même** réaction (le côté est décidé par le serveur).
-L'Output peut afficher un avertissement jaune `no clip named "GetUp"` ou `"Finisher"` : ces deux
-animations n'existent pas encore (prévues par l'étape 3), ce n'est pas une erreur de cette branche.
+Aucune ligne rouge ni jaune ne doit apparaître dans l'Output. Un avertissement jaune
+`no clip named "..."` signale une animation demandée qui n'existe pas : envoie-le-moi.

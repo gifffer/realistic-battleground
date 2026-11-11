@@ -22,6 +22,7 @@
 --
 -- Replicated to clients (attributes on the fighter's model):
 --   "KnockedOut" (boolean), "KOEndsAt" (server time, workspace:GetServerTimeNow()),
+--   "BeingFinished" (boolean: someone is finishing them right now),
 --   "Protected" (boolean), "Ragdolled" (boolean, see Ragdoll).
 
 local Players = game:GetService("Players")
@@ -42,8 +43,13 @@ type FighterInfo = {
 	knockedOut: boolean,
 	koToken: number, -- +1 cancels the pending get-up
 	finishedBy: Model?, -- set while someone is finishing them
-	lastAttacker: Model?,
+	lastAttacker: Model?, -- last fighter who hit them (player or dummy)
 	lastHitAt: number,
+	-- Last PLAYER who hit them. Kept apart so that taking one hit from a
+	-- training dummy can't steal a real opponent's kill, and stored as the
+	-- Player (not their body): it stays valid if they respawn meanwhile.
+	lastPlayerAttacker: Player?,
+	lastPlayerHitAt: number,
 	protectionToken: number,
 	dead: boolean,
 }
@@ -73,40 +79,57 @@ local function feed(kind: Types.KillFeedKind, victim: string, killer: string?)
 	Remotes.KillFeed:FireAllClients(kind, victim, killer)
 end
 
--- The killer: whoever is finishing them, else the last attacker if recent.
-local function creditedKiller(info: FighterInfo): Model?
-	if info.finishedBy then
-		return info.finishedBy
+-- Who gets the kill: whoever is finishing them; else the last PLAYER who hit
+-- them recently (their CURRENT body, even if they respawned); else the last
+-- dummy that hit them recently. Returns the killer's model (for the heal)
+-- and player (for the stats and the name), each may be nil.
+local function creditedKiller(info: FighterInfo): (Model?, Player?)
+	local finisher = info.finishedBy
+	if finisher then
+		return finisher, Players:GetPlayerFromCharacter(finisher)
+	end
+	local attackerPlayer = info.lastPlayerAttacker
+	if
+		attackerPlayer
+		and attackerPlayer.Parent == Players
+		and now() - info.lastPlayerHitAt <= K.COMBAT_TAG_TIME
+	then
+		return attackerPlayer.Character, attackerPlayer
 	end
 	if info.lastAttacker and now() - info.lastHitAt <= K.COMBAT_TAG_TIME then
-		return info.lastAttacker
+		return info.lastAttacker, nil
 	end
-	return nil
+	return nil, nil
+end
+
+local function killerName(model: Model?, player: Player?): string?
+	if player then
+		return player.DisplayName
+	end
+	return if model then displayName(model) else nil
 end
 
 -- Kill rewards: health for the killer, stats in the saves.
-local function rewardKill(killer: Model?, victim: FighterInfo)
+local function rewardKill(killer: Model?, killerPlayer: Player?, victim: FighterInfo)
 	local victimPlayer = victim.player
 	if victimPlayer then
 		PlayerData.update(victimPlayer, function(data)
 			data.stats.deaths += 1
 		end)
 	end
-	if killer == nil or killer == victim.model then
+	if killerPlayer ~= nil and killerPlayer == victimPlayer then
 		return
 	end
-	local killerHumanoid = killer:FindFirstChildOfClass("Humanoid")
-	local killerInfo = fighters[killer]
-	if
-		killerHumanoid
-		and killerHumanoid.Health > 0
-		and not (killerInfo and killerInfo.knockedOut)
-	then
-		killerHumanoid.Health =
-			math.min(killerHumanoid.MaxHealth, killerHumanoid.Health + K.KILL_HEAL)
+	if killer and killer ~= victim.model then
+		local killerHumanoid = killer:FindFirstChildOfClass("Humanoid")
+		local killerInfo = fighters[killer]
+		local busy = killerInfo ~= nil and (killerInfo.knockedOut or killerInfo.dead)
+		if killerHumanoid and killerHumanoid.Health > 0 and not busy then
+			killerHumanoid.Health =
+				math.min(killerHumanoid.MaxHealth, killerHumanoid.Health + K.KILL_HEAL)
+		end
 	end
 	-- Only kills on real players count in the stats (no farming dummies).
-	local killerPlayer = Players:GetPlayerFromCharacter(killer)
 	if killerPlayer and victimPlayer then
 		PlayerData.update(killerPlayer, function(data)
 			data.stats.kills += 1
@@ -180,6 +203,7 @@ local function getUp(info: FighterInfo)
 	end
 	info.knockedOut = false
 	info.finishedBy = nil
+	setAttribute(info.model, "BeingFinished", false)
 	Ragdoll.disable(info.model, info.player)
 	info.humanoid.Health = math.min(info.humanoid.MaxHealth, K.GETUP_HEALTH)
 	setAttribute(info.model, "KnockedOut", false)
@@ -195,16 +219,17 @@ local function onDied(info: FighterInfo)
 	end
 	info.dead = true
 	info.koToken += 1
-	local killer = creditedKiller(info)
+	local killer, killerPlayer = creditedKiller(info)
 	Ragdoll.enable(info.model) -- a dead body always goes limp
 	setAttribute(info.model, "KnockedOut", false)
 	setAttribute(info.model, "KOEndsAt", nil)
+	setAttribute(info.model, "BeingFinished", false)
 	feed(
 		if info.finishedBy then "Finished" else "Died",
 		displayName(info.model),
-		if killer then displayName(killer) else nil
+		killerName(killer, killerPlayer)
 	)
-	rewardKill(killer, info)
+	rewardKill(killer, killerPlayer, info)
 end
 
 ------------------------------------------------------------------------------
@@ -217,8 +242,10 @@ function Knockout.register(model: Model, player: Player?)
 	if humanoid == nil then
 		return
 	end
-	-- The body must stay in one piece at death so it can ragdoll.
+	-- The body must stay in one piece at death so it can ragdoll, and
+	-- switching the neck joint off (ragdoll) must not kill it.
 	humanoid.BreakJointsOnDeath = false
+	humanoid.RequiresNeck = false
 	local info: FighterInfo = {
 		model = model,
 		humanoid = humanoid,
@@ -228,6 +255,8 @@ function Knockout.register(model: Model, player: Player?)
 		finishedBy = nil,
 		lastAttacker = nil,
 		lastHitAt = -math.huge,
+		lastPlayerAttacker = nil,
+		lastPlayerHitAt = -math.huge,
 		protectionToken = 0,
 		dead = false,
 	}
@@ -280,6 +309,11 @@ function Knockout.noteHit(victim: Model, attacker: Model)
 	if info then
 		info.lastAttacker = attacker
 		info.lastHitAt = now()
+		local attackerPlayer = Players:GetPlayerFromCharacter(attacker)
+		if attackerPlayer then
+			info.lastPlayerAttacker = attackerPlayer
+			info.lastPlayerHitAt = now()
+		end
 	end
 end
 
@@ -346,6 +380,7 @@ function Knockout.reserve(victim: Model, attacker: Model): boolean
 		return false
 	end
 	info.finishedBy = attacker
+	setAttribute(victim, "BeingFinished", true)
 	return true
 end
 
@@ -357,6 +392,7 @@ function Knockout.release(victim: Model)
 		return
 	end
 	info.finishedBy = nil
+	setAttribute(victim, "BeingFinished", false)
 	local endsAt = victim:GetAttribute("KOEndsAt")
 	if typeof(endsAt) == "number" and workspace:GetServerTimeNow() >= endsAt then
 		getUp(info)
@@ -388,14 +424,16 @@ local function onLeaving(player: Player)
 	if info == nil or info.dead then
 		return
 	end
-	local inFight = info.knockedOut or now() - info.lastHitAt <= K.COMBAT_TAG_TIME
+	local inFight = info.knockedOut
+		or now() - info.lastHitAt <= K.COMBAT_TAG_TIME
+		or now() - info.lastPlayerHitAt <= K.COMBAT_TAG_TIME
 	if not inFight then
 		return
 	end
-	local killer = creditedKiller(info)
+	local killer, killerPlayer = creditedKiller(info)
 	info.dead = true
-	feed("Fled", displayName(info.model), if killer then displayName(killer) else nil)
-	rewardKill(killer, info)
+	feed("Fled", displayName(info.model), killerName(killer, killerPlayer))
+	rewardKill(killer, killerPlayer, info)
 end
 
 function Knockout.init()

@@ -78,6 +78,7 @@ local REACTIONS = table.freeze({
 	HitJab = true,
 	HitCross = true,
 	HitHook = true,
+	HitBody = true,
 	HitBodyFront = true,
 	HitBodyBack = true,
 	HitBodyLeft = true,
@@ -419,6 +420,18 @@ local function onPreSimulation(dt: number)
 		-- Limp (knocked out): physics moves the body, not us. Forget what we
 		-- were playing so nothing resumes when it gets up (GetUp plays then).
 		if model:GetAttribute("Ragdolled") == true then
+			-- Give every joint we posed back its last Roblox pose first:
+			-- a pose left in Transform would stay stuck (the root joint
+			-- stays on during the ragdoll, and all of them after it).
+			for motor, written in entry.lastWritten do
+				if motor.Transform == written then
+					motor.Transform = entry.lastBase[motor] or CFrame.new()
+				end
+			end
+			entry.flinch = Vector3.zero
+			entry.flinchSpeed = Vector3.zero
+			entry.sprintWeight = 0
+			entry.freezeUntil = 0
 			table.clear(entry.movement)
 			table.clear(entry.stance)
 			table.clear(entry.action)
@@ -472,6 +485,12 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	if entry == nil then
 		return
 	end
+	-- A punch / dash started during a hit-stop ends it: only a REACTION
+	-- keeps the contact frame (it is followed by hitStop()). Otherwise a dash
+	-- would slide away frozen in the punch pose.
+	if not REACTIONS[name] then
+		entry.freezeUntil = 0
+	end
 	for _, layer in entry.action do
 		layer.target = 0
 		layer.fadeOut = ACTION_FADE_IN -- cut the old one fast
@@ -487,6 +506,33 @@ end
 function CharacterAnimationController.getLastAction(model: Model): string?
 	local entry = tracked[model]
 	return if entry then entry.lastAction else nil
+end
+
+-- Undoes a reaction shown too early (our prediction, when the server says
+-- the hit was dodged): fades the action out, ends the hit-stop and the flinch.
+function CharacterAnimationController.cancelReaction(model: Model)
+	local entry = tracked[model]
+	if entry == nil then
+		return
+	end
+	for _, layer in entry.action do
+		if REACTIONS[layer.name] then
+			layer.target = 0
+			layer.fadeOut = ACTION_FADE_OUT
+		end
+	end
+	entry.freezeUntil = 0
+	entry.flinch = Vector3.zero
+	entry.flinchSpeed = Vector3.zero
+end
+
+-- Ends the hit-stop of `model` right away (e.g. our own punch, frozen by a
+-- predicted hit that the server says didn't land).
+function CharacterAnimationController.clearHitStop(model: Model)
+	local entry = tracked[model]
+	if entry then
+		entry.freezeUntil = 0
+	end
 end
 
 -- Hit-stop: pauses the model's punch / reaction clip for `duration` seconds.
