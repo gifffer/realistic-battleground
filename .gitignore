@@ -1,0 +1,23 @@
+# Roblox build artifacts
+*.rbxl
+*.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+
+# Wally
+Packages/
+ServerPackages/
+DevPackages/
+wally.lock
+
+# Toolchain (aftman.toml is created by the Rojo VS Code extension; the project uses rokit.toml)
+sourcemap.json
+aftman.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc

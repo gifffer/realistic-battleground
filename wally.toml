@@ -1,0 +1,11 @@
+[package]
+name = "gifffer/realistic-battleground"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+
+[server-dependencies]
+# Player saves with session locking (by loleris). Installed into ServerPackages/.
+ProfileStore = "lm-loleris/profilestore@1.0.3"
