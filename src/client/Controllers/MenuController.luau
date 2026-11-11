@@ -1,20 +1,27 @@
 --!strict
--- MenuController: the side menu (buttons on the left of the screen) and the
--- windows they open.
+-- MenuController: the game menu (everything that isn't fighting).
 --
--- Design rule: keys are for fighting; everything else is a button that opens
--- a window. Each feature ADDS ITS OWN entry from its controller:
+-- Closed: a discreet "— MENU" on the left edge of the screen.
+-- Open: the world blurs and loses its colour, a numbered list of sections
+-- on the left ("01 SETTINGS"...), the open section's panel next to it (big
+-- light title, a subtitle, a hairline, then its content). "— CLOSE" (or the
+-- MENU button again) closes it.
+--
+-- Design rule: keys are for fighting; everything else is in this menu.
+-- Each feature ADDS ITS OWN section from its controller:
 --
 --   MenuController.register({
---       id = "Settings",          -- unique name
---       label = "SETTINGS",       -- text on the button (English)
---       order = 100,              -- position in the menu (small = top)
---       build = function(content: Frame) ... end, -- fills the window, once
+--       id = "Settings",              -- unique name
+--       label = "SETTINGS",           -- name in the list (English, caps)
+--       subtitle = "CAMERA · CONTROLS",
+--       order = 100,                  -- position in the list (small = top)
+--       build = function(content: Frame) ... end, -- fills the panel, once
 --   })
 --
--- Only one window is open at a time. While a window is open the mouse
--- cursor is free (CameraController.setCursorFree("menu", ...)).
+-- While the menu is open the mouse cursor is free
+-- (CameraController.setCursorFree("menu", ...)).
 
+local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -23,85 +30,162 @@ local CameraController = require(script.Parent.CameraController)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
+local C = Theme.Colors
 
-local BUTTON_SIZE = Vector2.new(96, 40)
-local WINDOW_SIZE = Vector2.new(460, 340)
-local TITLE_HEIGHT = 44
+local ITEM_HEIGHT = 34
+local OPEN_TIME = 0.25
+local CLOSE_TIME = 0.15
 
 export type MenuEntry = {
 	id: string,
 	label: string,
+	subtitle: string?,
 	order: number,
 	build: (content: Frame) -> (),
 }
 
 type EntryUi = {
 	entry: MenuEntry,
-	button: TextButton,
-	window: Frame?, -- created the first time it's opened
+	item: TextButton,
+	index: TextLabel,
+	name: TextLabel,
+	panel: Frame?, -- created the first time it's opened
 }
 
 local MenuController = {}
 
 local gui: ScreenGui
-local sideBar: Frame
+local menuButton: TextButton
+local openLayer: CanvasGroup -- everything shown while open (fades as one)
+local fadeToken = 0
+local nav: Frame
+local marker: Frame
+local panels: Frame
+local blur: BlurEffect
+local grade: ColorCorrectionEffect
 local entries: { [string]: EntryUi } = {}
 local openId: string? = nil
+local lastId: string? = nil
 local openChanged = Signal.new() :: Signal.Signal<string?>
 
-local function createWindow(entry: MenuEntry): Frame
-	local window = Theme.make("Frame", {
-		Name = `{entry.id}Window`,
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.fromOffset(WINDOW_SIZE.X, WINDOW_SIZE.Y),
-		BackgroundColor3 = Theme.Colors.Panel,
-		Visible = false,
-		Parent = gui,
-	}, {
-		Theme.corner(),
-		Theme.make("UIStroke", { Color = Theme.Colors.PanelLight, Thickness = 1 }),
-		Theme.make("TextLabel", {
-			Name = "Title",
-			Position = UDim2.fromOffset(16, 0),
-			Size = UDim2.new(1, -72, 0, TITLE_HEIGHT),
-			BackgroundTransparency = 1,
-			Font = Theme.Fonts.Title,
-			TextSize = 20,
-			TextColor3 = Theme.Colors.Text,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			Text = entry.label,
-		}),
-		Theme.make("TextButton", {
-			Name = "Close",
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -8, 0, 8),
-			Size = UDim2.fromOffset(28, 28),
-			BackgroundColor3 = Theme.Colors.PanelLight,
-			Font = Theme.Fonts.Bold,
-			TextSize = 16,
-			TextColor3 = Theme.Colors.Text,
-			Text = "X",
-			AutoButtonColor = true,
-		}, { Theme.corner() }),
-		Theme.make("Frame", {
-			Name = "Content",
-			Position = UDim2.fromOffset(0, TITLE_HEIGHT),
-			Size = UDim2.new(1, 0, 1, -TITLE_HEIGHT),
-			BackgroundTransparency = 1,
-		}, { Theme.padding(16) }),
-	})
+------------------------------------------------------------------------------
+-- Building
+------------------------------------------------------------------------------
 
-	window.Close.Activated:Connect(function()
-		MenuController.close()
+-- A "— LABEL" text button with a hairline that grows on hover.
+local function lineButton(text: string, props: { [string]: any }): TextButton
+	props.BackgroundTransparency = 1
+	props.Text = ""
+	props.AutoButtonColor = false
+	local button = Theme.make("TextButton", props, {
+		Theme.make("Frame", {
+			Name = "Line",
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.fromScale(0, 0.5),
+			Size = UDim2.fromOffset(18, 1),
+			BackgroundColor3 = C.Ink,
+			BackgroundTransparency = 0.15,
+		}),
+		Theme.text({
+			Name = "Label",
+			Position = UDim2.fromOffset(28, 0),
+			Size = UDim2.new(1, -28, 1, 0),
+			TextTransparency = 0.15,
+			Text = Theme.track(text, "four"),
+		}),
+	}) :: TextButton
+	local line = button:FindFirstChild("Line") :: Frame
+	local label = button:FindFirstChild("Label") :: TextLabel
+	button.MouseEnter:Connect(function()
+		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1) })
+		Theme.tween(label, 0.15, { Position = UDim2.fromOffset(38, 0), TextTransparency = 0 })
 	end)
-	entry.build(window.Content)
-	return window
+	button.MouseLeave:Connect(function()
+		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1) })
+		Theme.tween(label, 0.15, { Position = UDim2.fromOffset(28, 0), TextTransparency = 0.15 })
+	end)
+	return button
 end
 
-local function setButtonActive(ui: EntryUi, active: boolean)
-	ui.button.BackgroundColor3 = if active then Theme.Colors.Accent else Theme.Colors.Panel
-	ui.button.TextColor3 = if active then Theme.Colors.Background else Theme.Colors.Text
+local function createPanel(entry: MenuEntry): Frame
+	local panel = Theme.make("Frame", {
+		Name = `{entry.id}Panel`,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = panels,
+	}, {
+		Theme.text({
+			Name = "Title",
+			Size = UDim2.new(1, 0, 0, 44),
+			FontFace = Theme.Fonts.Display,
+			TextSize = 40,
+			TextStrokeTransparency = 1,
+			Text = Theme.track(entry.label, "thin"),
+		}),
+		Theme.text({
+			Name = "Subtitle",
+			Position = UDim2.fromOffset(0, 52),
+			Size = UDim2.new(1, 0, 0, 12),
+			TextSize = 10,
+			TextColor3 = C.Ink3,
+			TextStrokeTransparency = 1,
+			Text = Theme.track(entry.subtitle or "", "three"),
+		}),
+		Theme.make("Frame", {
+			Name = "Rule",
+			Position = UDim2.fromOffset(0, 90),
+			Size = UDim2.new(1, 0, 0, 1),
+			BackgroundColor3 = C.Ink,
+			BackgroundTransparency = 0.78,
+		}),
+		Theme.make("Frame", {
+			Name = "Content",
+			Position = UDim2.fromOffset(0, 116),
+			Size = UDim2.new(1, 0, 1, -116),
+			BackgroundTransparency = 1,
+		}),
+	}) :: Frame
+	entry.build(panel:FindFirstChild("Content") :: Frame)
+	return panel
+end
+
+-- Renumbers the list (01, 02...) in display order.
+local function renumber()
+	local list = {}
+	for _, ui in entries do
+		table.insert(list, ui)
+	end
+	table.sort(list, function(a, b)
+		return a.entry.order < b.entry.order
+	end)
+	for position, ui in list do
+		ui.index.Text = string.format("%02d", position)
+	end
+end
+
+local function setItemActive(ui: EntryUi, active: boolean)
+	Theme.tween(ui.name, Theme.FAST, { TextColor3 = if active then C.Ink else C.Ink3 })
+	Theme.tween(ui.index, Theme.FAST, { TextColor3 = if active then C.Ink2 else C.Ink3 })
+	if active then
+		marker.Visible = true
+		Theme.tween(marker, 0.18, {
+			Position = UDim2.fromOffset(
+				-16,
+				ui.item.AbsolutePosition.Y - nav.AbsolutePosition.Y + 11
+			),
+		}, Enum.EasingStyle.Quart)
+	end
+end
+
+-- Blur + desaturation of the world behind the menu.
+local function setWorldDimmed(dimmed: boolean)
+	local time = if dimmed then OPEN_TIME else CLOSE_TIME
+	Theme.tween(blur, time, { Size = if dimmed then 10 else 0 })
+	Theme.tween(grade, time, {
+		Saturation = if dimmed then -0.5 else 0,
+		Brightness = if dimmed then -0.08 else 0,
+	})
 end
 
 ------------------------------------------------------------------------------
@@ -111,24 +195,57 @@ end
 function MenuController.register(entry: MenuEntry)
 	assert(entries[entry.id] == nil, `menu entry "{entry.id}" registered twice`)
 
-	local button = Theme.make("TextButton", {
+	local item = Theme.make("TextButton", {
 		Name = entry.id,
 		LayoutOrder = entry.order,
-		Size = UDim2.fromOffset(BUTTON_SIZE.X, BUTTON_SIZE.Y),
-		BackgroundColor3 = Theme.Colors.Panel,
-		BackgroundTransparency = 0.1,
-		Font = Theme.Fonts.Bold,
-		TextSize = 13,
-		TextColor3 = Theme.Colors.Text,
-		Text = entry.label,
-		AutoButtonColor = true,
-		Parent = sideBar,
-	}, { Theme.corner() }) :: TextButton
+		Size = UDim2.new(1, 0, 0, ITEM_HEIGHT),
+		BackgroundTransparency = 1,
+		Text = "",
+		AutoButtonColor = false,
+		Parent = nav:FindFirstChild("Items"),
+	}, {
+		Theme.text({
+			Name = "Index",
+			Size = UDim2.new(0, 18, 1, 0),
+			FontFace = Theme.Fonts.Number,
+			TextSize = 10,
+			TextColor3 = C.Ink3,
+			TextStrokeTransparency = 1,
+			Text = "00",
+		}),
+		Theme.text({
+			Name = "Name",
+			Position = UDim2.fromOffset(30, 0),
+			Size = UDim2.new(1, -30, 1, 0),
+			TextSize = 13,
+			TextColor3 = C.Ink3,
+			TextStrokeTransparency = 1,
+			Text = Theme.track(entry.label, "four"),
+		}),
+	}) :: TextButton
 
-	entries[entry.id] = { entry = entry, button = button, window = nil }
+	local ui: EntryUi = {
+		entry = entry,
+		item = item,
+		index = item:FindFirstChild("Index") :: TextLabel,
+		name = item:FindFirstChild("Name") :: TextLabel,
+		panel = nil,
+	}
+	entries[entry.id] = ui
+	renumber()
 
-	button.Activated:Connect(function()
-		MenuController.toggle(entry.id)
+	item.MouseEnter:Connect(function()
+		if openId ~= entry.id then
+			Theme.tween(ui.name, 0.1, { TextColor3 = C.Ink2 })
+		end
+	end)
+	item.MouseLeave:Connect(function()
+		if openId ~= entry.id then
+			Theme.tween(ui.name, 0.1, { TextColor3 = C.Ink3 })
+		end
+	end)
+	item.Activated:Connect(function()
+		MenuController.open(entry.id)
 	end)
 end
 
@@ -137,16 +254,43 @@ function MenuController.open(id: string)
 	if ui == nil then
 		return
 	end
+	local wasClosed = openId == nil
 	if openId and openId ~= id then
-		MenuController.close()
+		local previous = entries[openId]
+		if previous and previous.panel then
+			previous.panel.Visible = false
+			setItemActive(previous, false)
+		end
 	end
-	if ui.window == nil then
-		ui.window = createWindow(ui.entry)
+	if ui.panel == nil then
+		ui.panel = createPanel(ui.entry)
 	end
-	(ui.window :: Frame).Visible = true
-	setButtonActive(ui, true)
 	openId = id
-	CameraController.setCursorFree("menu", true)
+	lastId = id
+
+	if wasClosed then
+		fadeToken += 1
+		openLayer.Visible = true
+		Theme.tween(openLayer, OPEN_TIME, { GroupTransparency = 0 })
+		menuButton.Visible = false
+		setWorldDimmed(true)
+		CameraController.setCursorFree("menu", true)
+		-- Slide in from the left.
+		nav.Position = UDim2.fromOffset(48, 176)
+		panels.Position = UDim2.fromOffset(284, 168)
+		Theme.tween(nav, 0.22, { Position = UDim2.fromOffset(64, 176) }, Enum.EasingStyle.Quart)
+		task.delay(0.04, function()
+			Theme.tween(
+				panels,
+				0.22,
+				{ Position = UDim2.fromOffset(300, 168) },
+				Enum.EasingStyle.Quart
+			)
+		end)
+	end
+	(ui.panel :: Frame).Visible = true
+	-- Wait a frame so the item has its position before moving the marker.
+	task.defer(setItemActive, ui, true)
 	openChanged.fire(id)
 end
 
@@ -156,11 +300,31 @@ function MenuController.close()
 		return
 	end
 	local ui = entries[id]
-	if ui and ui.window then
-		ui.window.Visible = false
-		setButtonActive(ui, false)
+	if ui then
+		if ui.panel then
+			ui.panel.Visible = false
+		end
+		setItemActive(ui, false)
 	end
 	openId = nil
+	-- Fade out, then hide (unless it was reopened meanwhile).
+	fadeToken += 1
+	local token = fadeToken
+	Theme.tween(
+		openLayer,
+		CLOSE_TIME,
+		{ GroupTransparency = 1 },
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In
+	)
+	task.delay(CLOSE_TIME, function()
+		if fadeToken == token then
+			openLayer.Visible = false
+		end
+	end)
+	menuButton.Visible = true
+	marker.Visible = false
+	setWorldDimmed(false)
 	CameraController.setCursorFree("menu", false)
 	openChanged.fire(nil)
 end
@@ -173,12 +337,12 @@ function MenuController.toggle(id: string)
 	end
 end
 
--- Id of the open window, or nil.
+-- Id of the open section, or nil.
 function MenuController.getOpen(): string?
 	return openId
 end
 
--- Fires with the id of the window just opened, or nil when it closes.
+-- Fires with the id of the section just opened, or nil when the menu closes.
 function MenuController.onOpenChanged(callback: (string?) -> ()): Signal.Connection
 	return openChanged.connect(callback)
 end
@@ -192,24 +356,110 @@ function MenuController.init()
 	gui = Theme.make("ScreenGui", {
 		Name = "Menu",
 		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 		DisplayOrder = 10,
 		Parent = player:WaitForChild("PlayerGui"),
 	})
-	sideBar = Theme.make("Frame", {
-		Name = "SideBar",
+
+	menuButton = lineButton("MENU", {
+		Name = "MenuButton",
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 16, 0.5, 0),
-		Size = UDim2.fromOffset(BUTTON_SIZE.X, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
+		Position = UDim2.new(0, 48, 0.5, -24),
+		Size = UDim2.fromOffset(120, 16),
+		Parent = gui,
+	})
+	menuButton.Activated:Connect(function()
+		local target = lastId
+		if target == nil then
+			-- First time: the first section of the list.
+			local best: EntryUi? = nil
+			for _, ui in entries do
+				if best == nil or ui.entry.order < best.entry.order then
+					best = ui
+				end
+			end
+			target = if best then best.entry.id else nil
+		end
+		if target then
+			MenuController.open(target)
+		end
+	end)
+
+	openLayer = Theme.make("CanvasGroup", {
+		Name = "Open",
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
+		GroupTransparency = 1,
+		Visible = false,
 		Parent = gui,
 	}, {
-		Theme.make("UIListLayout", {
-			Padding = UDim.new(0, 8),
-			SortOrder = Enum.SortOrder.LayoutOrder,
+		-- Dark from the left, fading into the (blurred) world.
+		Theme.make("Frame", {
+			Name = "Scrim",
+			Size = UDim2.new(0, 900, 1, 0),
+			BackgroundColor3 = C.Scrim,
+		}, { Theme.gradient(0, { { 0, 0.1 }, { 0.38, 0.18 }, { 0.66, 0.55 }, { 1, 1 } }) }),
+		Theme.make("Frame", {
+			Name = "Divider",
+			Position = UDim2.fromOffset(268, 176),
+			Size = UDim2.fromOffset(1, 196),
+			BackgroundColor3 = C.Ink,
+			BackgroundTransparency = 0.86,
 		}),
 	})
+
+	nav = Theme.make("Frame", {
+		Name = "Nav",
+		Position = UDim2.fromOffset(64, 176),
+		Size = UDim2.fromOffset(180, 260),
+		BackgroundTransparency = 1,
+		Parent = openLayer,
+	}, {
+		Theme.text({
+			Name = "Header",
+			Size = UDim2.new(1, 0, 0, 12),
+			TextSize = 10,
+			TextColor3 = C.Ink3,
+			TextStrokeTransparency = 1,
+			Text = Theme.track("MENU", "three"),
+		}),
+		Theme.make("Frame", {
+			Name = "Items",
+			Position = UDim2.fromOffset(0, 34),
+			Size = UDim2.new(1, 0, 1, -34),
+			BackgroundTransparency = 1,
+		}, {
+			Theme.make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }),
+		}),
+	})
+	marker = Theme.make("Frame", {
+		Name = "Marker",
+		Size = UDim2.fromOffset(2, 12),
+		BackgroundColor3 = C.Ink,
+		Visible = false,
+		Parent = nav,
+	})
+
+	panels = Theme.make("Frame", {
+		Name = "Panels",
+		Position = UDim2.fromOffset(300, 168),
+		Size = UDim2.fromOffset(440, 280),
+		BackgroundTransparency = 1,
+		Parent = openLayer,
+	})
+
+	local close = lineButton("CLOSE", {
+		Name = "Close",
+		Position = UDim2.fromOffset(300, 460),
+		Size = UDim2.fromOffset(120, 16),
+		Parent = openLayer,
+	})
+	close.Activated:Connect(MenuController.close)
+
+	-- World effects, local to this player (they live in Lighting on the client).
+	blur = Theme.make("BlurEffect", { Name = "MenuBlur", Size = 0, Parent = Lighting })
+	grade = Theme.make("ColorCorrectionEffect", { Name = "MenuGrade", Parent = Lighting })
 end
 
 return MenuController

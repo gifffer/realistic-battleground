@@ -26,6 +26,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local KnockoutController = require(script.Parent.KnockoutController)
 local ParkourController = require(script.Parent.ParkourController)
 local SoundController = require(script.Parent.SoundController)
 
@@ -140,6 +141,7 @@ local function tryAttack()
 		lastAttackAt = time
 		CharacterAnimationController.playAction(character, "Finisher")
 		SoundController.play("HeavySwing", character)
+		KnockoutController.onFinishStarted()
 		Remotes.Attack:FireServer(AimController.getAimDirection())
 		return
 	end

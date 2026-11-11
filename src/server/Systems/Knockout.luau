@@ -23,6 +23,7 @@
 -- Replicated to clients (attributes on the fighter's model):
 --   "KnockedOut" (boolean), "KOEndsAt" (server time, workspace:GetServerTimeNow()),
 --   "BeingFinished" (boolean: someone is finishing them right now),
+--   "KOBy" (string: the name of who knocked them out),
 --   "Protected" (boolean), "Ragdolled" (boolean, see Ragdoll).
 
 local Players = game:GetService("Players")
@@ -208,6 +209,7 @@ local function getUp(info: FighterInfo)
 	info.humanoid.Health = math.min(info.humanoid.MaxHealth, K.GETUP_HEALTH)
 	setAttribute(info.model, "KnockedOut", false)
 	setAttribute(info.model, "KOEndsAt", nil)
+	setAttribute(info.model, "KOBy", nil)
 	for _, callback in getUpCallbacks do
 		task.spawn(callback, info.model)
 	end
@@ -329,6 +331,13 @@ function Knockout.knockOut(victim: Model, attacker: Model?)
 	info.knockedOut = true
 	info.finishedBy = nil
 	info.humanoid.Health = 1
+	-- Who dropped them (shown on their knock-out screen).
+	local dropper = if attacker then Players:GetPlayerFromCharacter(attacker) else nil
+	setAttribute(
+		victim,
+		"KOBy",
+		if dropper then dropper.DisplayName elseif attacker then attacker.Name else nil
+	)
 	Ragdoll.enable(victim)
 	setAttribute(victim, "KnockedOut", true)
 	setAttribute(victim, "KOEndsAt", workspace:GetServerTimeNow() + K.DURATION)

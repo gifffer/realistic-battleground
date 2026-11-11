@@ -12,8 +12,9 @@
 -- zone, and checks the body part is inside the punch's hitbox: the zone
 -- shown here is only for the crosshair colour.
 --
--- Also draws the crosshair (a small dot in the middle of the screen) while
--- the mouse is locked: white normally, RED on an opponent's head.
+-- Also draws the crosshair while the mouse is locked: four short arms with
+-- a thin dark outline (readable on bright scenes), off-white normally, RED
+-- on an opponent's head.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -42,11 +43,12 @@ local PART_ZONES: { [string]: Types.HitZone } = {
 	["Right Leg"] = "Legs",
 	["Left Leg"] = "Legs",
 }
-local CROSSHAIR_COLORS: { [string]: Color3 } = {
-	None = Color3.fromRGB(240, 240, 240),
-	Head = Color3.fromRGB(235, 60, 60),
-	Torso = Color3.fromRGB(255, 255, 255),
-	Legs = Color3.fromRGB(240, 200, 80),
+-- Crosshair geometry (px): 25×25, four arms around a 4 px gap.
+local ARMS = {
+	{ position = Vector2.new(0, 12), size = Vector2.new(8, 1) }, -- left
+	{ position = Vector2.new(17, 12), size = Vector2.new(8, 1) }, -- right
+	{ position = Vector2.new(12, 0), size = Vector2.new(1, 8) }, -- top
+	{ position = Vector2.new(12, 17), size = Vector2.new(1, 8) }, -- bottom
 }
 
 local AimController = {}
@@ -55,6 +57,8 @@ local currentZone: Types.HitZone = "Torso"
 local aimPoint: Vector3 = Vector3.zero -- the world point under the crosshair
 local onOpponent = false
 local crosshair: Frame? = nil
+local arms: { Frame } = {}
+local onHead = false
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
@@ -97,12 +101,21 @@ local function updateAim()
 	end
 	currentZone = zone :: Types.HitZone
 
-	local dot = crosshair
-	if dot then
-		dot.Visible = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
-		dot.BackgroundColor3 = if onOpponent
-			then CROSSHAIR_COLORS[currentZone]
-			else CROSSHAIR_COLORS.None
+	local frame = crosshair
+	if frame then
+		local character = player.Character
+		local down = character ~= nil and character:GetAttribute("KnockedOut") == true
+		frame.Visible = UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter and not down
+		local head = onOpponent and currentZone == "Head"
+		if head ~= onHead then
+			onHead = head
+			for _, arm in arms do
+				Theme.tween(arm, 0.08, {
+					BackgroundColor3 = if head then Theme.Colors.BloodHi else Theme.Colors.Ink,
+					BackgroundTransparency = if head then 0 else 0.1,
+				}, Enum.EasingStyle.Linear)
+			end
+		end
 	end
 end
 
@@ -130,25 +143,36 @@ function AimController.start()
 		IgnoreGuiInset = true,
 		DisplayOrder = 5,
 		Parent = player:WaitForChild("PlayerGui"),
-	}, {
-		Theme.make("Frame", {
-			Name = "Dot",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(5, 5),
-			BackgroundColor3 = CROSSHAIR_COLORS.None,
-			BackgroundTransparency = 0.15,
-			BorderSizePixel = 0,
-			Visible = false,
-		}, {
-			Theme.corner(UDim.new(1, 0)),
-			Theme.make(
-				"UIStroke",
-				{ Color = Color3.new(0, 0, 0), Transparency = 0.4, Thickness = 1 }
-			),
-		}),
 	})
-	crosshair = gui.Dot
+	local frame = Theme.make("Frame", {
+		Name = "Crosshair",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(25, 25),
+		BackgroundTransparency = 1,
+		Visible = false,
+		Parent = gui,
+	}) :: Frame
+	for _, arm in ARMS do
+		table.insert(
+			arms,
+			Theme.make("Frame", {
+				Position = UDim2.fromOffset(arm.position.X, arm.position.Y),
+				Size = UDim2.fromOffset(arm.size.X, arm.size.Y),
+				BackgroundColor3 = Theme.Colors.Ink,
+				BackgroundTransparency = 0.1,
+				Parent = frame,
+			}, {
+				Theme.make("UIStroke", {
+					Thickness = 1,
+					Color = Theme.Colors.Scrim,
+					Transparency = 0.55,
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				}),
+			})
+		)
+	end
+	crosshair = frame
 	RunService.RenderStepped:Connect(updateAim)
 end
 
