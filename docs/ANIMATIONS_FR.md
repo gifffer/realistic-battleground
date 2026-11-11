@@ -5,7 +5,8 @@ que le jeu**. Le jeu est sur ton compte perso → publie les animations sur **to
 
 ## 1. Préparer un mannequin (rig)
 1. Ouvre ta place dans Studio.
-2. Onglet **Avatar** → **Rig Builder** → choisis **R15** → **Block Rig** (ou *Character Mesh*).
+2. Onglet **Avatar** → **Rig Builder** → choisis **R6** → **Block Rig**.
+   (Le jeu est en **R6** : seulement 6 parties à animer — tête, torse, 2 bras, 2 jambes.)
    Un mannequin apparaît dans le `Workspace`.
 3. Renomme-le (ex. `AnimRig`). Ne le mets pas dans un dossier synchronisé par Rojo.
 
