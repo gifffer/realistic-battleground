@@ -55,6 +55,8 @@ local FADE_IN: { [string]: number } = {
 	Block = 0.08,
 	Stunned = 0.12,
 	Guard = 0.12,
+	Walk = 0.15,
+	Run = 0.15,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
@@ -97,6 +99,11 @@ local AVERAGE_MANTLE_DURATION = (Config.Climb.MANTLE_MIN_DURATION + Config.Climb
 local MOVING_SPEED = 1
 -- Crouch idle ↔ walk switch with a gap ("hysteresis"), so a speed hovering
 -- around one value doesn't flicker between the two clips.
+-- Walk / run (studs per second): below WALK_MIN_SPEED we stand (Roblox's
+-- idle); above RUN_START_SPEED we run, back to walking under RUN_STOP_SPEED.
+local WALK_MIN_SPEED = 1
+local RUN_START_SPEED = 14
+local RUN_STOP_SPEED = 12
 local CROUCH_WALK_START = 1.5
 local CROUCH_WALK_STOP = 0.5
 -- Characters farther than this from the camera aren't animated by us
@@ -220,6 +227,22 @@ local function movementClip(entry: Tracked, state: string?): string?
 		return if horizontalSpeed(entry.root) > threshold then "CrouchWalk" else "CrouchIdle"
 	elseif state == "Slide" or state == "Climb" or state == "Vault" then
 		return state
+	elseif state == nil then
+		-- Standing up: our own walk / run instead of Roblox's. Nothing in the
+		-- air (Roblox's jump / fall animation plays) or when standing still.
+		local airborne = entry.humanoid:GetState() == Enum.HumanoidStateType.Freefall
+			or entry.humanoid:GetState() == Enum.HumanoidStateType.Jumping
+		local speed = horizontalSpeed(entry.root)
+		if airborne or speed < WALK_MIN_SPEED then
+			return nil
+		end
+		-- Walk ↔ run with a gap between the two speeds ("hysteresis"), so a
+		-- speed hovering around one value doesn't flicker between the clips.
+		local current = entry.movement[#entry.movement]
+		local running = current ~= nil and current.target == 1 and current.name == "Run"
+		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED)
+			then "Run"
+			else "Walk"
 	end
 	return nil
 end
@@ -254,6 +277,16 @@ local function playbackRate(entry: Tracked, name: string): number
 	if name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
+	elseif name == "Walk" then
+		-- Faster walk = faster steps (about 3 steps per second at full walking speed).
+		return math.clamp(horizontalSpeed(entry.root) / Config.Character.WALK_SPEED * 1.5, 0.7, 1.6)
+	elseif name == "Run" then
+		-- About 4.5 steps per second at full sprint.
+		return math.clamp(
+			horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED * 1.35,
+			0.8,
+			1.5
+		)
 	elseif name == "Vault" then
 		return 1 / Config.Climb.VAULT_DURATION
 	elseif name == "Climb" then
@@ -413,7 +446,10 @@ local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
 		then false
 		elseif owner == player then owner:GetAttribute("Sprinting") == true and state == nil
 		else state == "Sprint"
-	if sprinting and horizontalSpeed(entry.root) > MOVING_SPEED then
+	-- Our Run clip already leans the body: no extra lean on top of it.
+	local current = entry.movement[#entry.movement]
+	local ownRun = current ~= nil and current.name == "Run"
+	if sprinting and not ownRun and horizontalSpeed(entry.root) > MOVING_SPEED then
 		target = math.clamp(horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED, 0, 1)
 	end
 	local step = dt / DEFAULT_FADE

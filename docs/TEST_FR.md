@@ -210,3 +210,13 @@ Les touches **1 2 3 4** lancent les attaques du kit, **G** l'Awakening quand la 
 Pas de son dédié encore pour la bouteille / coup de tête / tackle / tibia / Awakening : ils
 utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes IDs dans
 `src/shared/Sounds.luau` : **BottleBreak, Slash, Headbutt, Tackle, KickLow, Awaken**.
+
+## Marche et course réalistes (`feature/realistic-locomotion`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L1 | Marcher (sans Shift), filmer **de côté** | 4 temps par pas : jambes écartées (contact), le corps descend (down), la jambe passe sous le corps pied levé (pass), le corps remonte jambe tendue (up). La tête ondule légèrement. Bras le long du corps qui se balancent à l'opposé des jambes. |
+| L2 | Courir (Shift) | Foulées plus longues, talon qui remonte derrière, genou devant, un instant les deux pieds en l'air, torse penché, bras qui battent. |
+| L3 | Passer de marche à course et inversement | Transition douce, pas de clignotement entre les deux. |
+| L4 | Sauter en marchant | L'animation de saut de Roblox (pas de marche dans les airs). |
+| L5 | Vitesse | Marche plus lente qu'avant (10), sprint 22 : réglable dans `src/shared/Config.luau` (`WALK_SPEED`, `SPRINT_SPEED`). |
