@@ -1,5 +1,5 @@
 --!strict
--- doom-roblox server entry point. Two-phase bootstrap: init() all systems,
+-- Realistic Battleground server entry point. Two-phase bootstrap: init() all systems,
 -- then start() all systems.
 
 local Systems = script:FindFirstChild("Systems")

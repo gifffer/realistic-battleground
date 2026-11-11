@@ -1,0 +1,8 @@
+--!strict
+-- Intentionally EMPTY.
+--
+-- Roblox normally adds a script named "Health" to every character, which
+-- slowly heals players over time. The game design says: no passive
+-- regeneration (a kill heals instead). A script with the same name in
+-- StarterCharacterScripts replaces Roblox's one, so this empty file turns
+-- passive regeneration off.

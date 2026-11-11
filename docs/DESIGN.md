@@ -82,9 +82,11 @@ ou en cliquant le même bouton.
 | Q | **Esquive** (dash dans la direction de déplacement) |
 | 1, 2, 3, 4 | Attaques spéciales du kit |
 | G (une fois la jauge pleine) | **Ultime** |
-| Shift | Courir |
+| Shift (maintenu) | Courir |
+| Ctrl | Libérer / verrouiller le curseur (pour cliquer les menus en 3ᵉ personne) |
 
-> Ouvrir/fermer les menus : à la souris (le curseur se libère quand une fenêtre est ouverte).
+> Ouvrir/fermer les menus : à la souris. En 3ᵉ personne le curseur est bloqué au centre (pour viser) :
+> **Ctrl** le libère pour cliquer un bouton du menu ; une fenêtre ouverte le garde libre.
 
 ### 5.2 Règles de base
 - **Vie** : 100 PV. **Endurance** : 100, se recharge après 1 s sans la dépenser.
@@ -198,7 +200,7 @@ Faites par le propriétaire du jeu dans Studio et publiées sur **son compte per
 ## 11. Feuille de route
 Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 
-1. **Base personnage** : R6 forcé, caméra 3ᵉ personne épaule, course + endurance, HUD vie/endurance,
+1. ✅ **Base personnage** : R6, caméra 3ᵉ personne épaule, course + endurance, HUD vie/endurance,
    menu latéral (squelette) + fenêtre Settings (1ʳᵉ/3ᵉ personne).
 2. **Combat de base** : M1 (4 coups), blocage, parade, esquive, stun, hitbox serveur.
 3. **Dégâts & mort** : dégâts localisés, ragdoll, mort/réapparition, kill feed, kill = +35 PV.

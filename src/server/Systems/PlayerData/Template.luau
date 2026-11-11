@@ -22,6 +22,10 @@ local template: Types.PlayerProfile = {
 		wins = 0,
 		matchesPlayed = 0,
 	},
+	-- Added in v0.0.2: no migration needed, Reconcile() adds it to older saves.
+	settings = {
+		firstPerson = false,
+	},
 }
 
 return template

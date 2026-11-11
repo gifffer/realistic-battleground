@@ -16,9 +16,20 @@
       }
     },
     "StarterPlayer": {
+      "$properties": {
+        "EnableMouseLockOption": false,
+        "CameraMinZoomDistance": 6,
+        "CameraMaxZoomDistance": 12
+      },
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
+        }
+      },
+      "StarterCharacterScripts": {
+        "$className": "StarterCharacterScripts",
+        "Health": {
+          "$path": "src/character/Health.server.luau"
         }
       }
     }
