@@ -461,6 +461,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local bloodChance: number = 0
 	if spec.bloodChance ~= nil then
 		bloodChance = spec.bloodChance
+	elseif spec.moveId ~= nil then
+		bloodChance = 0 -- a kit move that doesn't say it cuts: no blood
 	elseif spec.kind == "Finisher" and zone == "Head" then
 		critCut = random:NextNumber() < INJ.CRIT_BLEED_CHANCE
 		bloodChance = if critCut then 1 else 0

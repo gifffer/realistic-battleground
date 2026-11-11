@@ -151,9 +151,14 @@ local function newPatch(
 	color: Color3,
 	parent: Instance
 )
+	-- A flat ellipse: a thin block shaped by a sphere mesh (a Cylinder's face
+	-- would always be round, losing the torn shape and its tilt).
 	local patch = Instance.new("Part")
-	patch.Shape = Enum.PartType.Cylinder
+	patch.Shape = Enum.PartType.Block
 	patch.Size = size
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = patch
 	patch.Material = Enum.Material.SmoothPlastic
 	patch.Color = color
 	patch.CanCollide = false

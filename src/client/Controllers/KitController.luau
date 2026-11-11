@@ -207,6 +207,12 @@ function KitController.onDenied(callback: (number) -> ()): Signal.Connection
 	return denied.connect(callback)
 end
 
+-- After pressing G we wait this long (s) for the server to confirm (the
+-- "Awakened" attribute): no second roar meanwhile, and no roar left playing
+-- if it refused. About a round trip with a good margin.
+local AWAKEN_CONFIRM_TIME = 0.6
+local awakenPendingUntil = 0
+
 local function tryAwaken()
 	local character = player.Character
 	if character == nil or isAwakened(character) then
@@ -221,10 +227,23 @@ local function tryAwaken()
 	if not CombatController.canStartMove() then
 		return
 	end
+	-- Already asked (waiting for the server's answer): one roar per press only.
+	if os.clock() < awakenPendingUntil then
+		return
+	end
+	awakenPendingUntil = os.clock() + AWAKEN_CONFIRM_TIME
 	-- The roar starts THE MOMENT G is pressed (for us). The server confirms and
 	-- plays the activation for everyone else (and the animation for us too).
-	SoundController.play("Awaken", character)
+	local roar = SoundController.play("Awaken", character)
 	Remotes.Awaken:FireServer()
+	-- The server refused after all (a stun that hadn't reached us yet...):
+	-- no Street Fury, so take the roar back.
+	task.delay(AWAKEN_CONFIRM_TIME, function()
+		if roar and character:GetAttribute("Awakened") ~= true then
+			roar:Stop()
+			roar:Destroy()
+		end
+	end)
 end
 
 -- The server refused our move: undo what we showed. Only if it's the move
@@ -262,6 +281,7 @@ function KitController.start()
 		end
 	end)
 	player.CharacterAdded:Connect(function()
+		awakenPendingUntil = 0
 		chargeToken += 1
 		chargeUntil = 0
 		pending = nil
