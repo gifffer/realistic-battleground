@@ -46,6 +46,8 @@ return table.freeze({
 		SHOULDER_OFFSET = Vector3.new(1.75, 0.25, 0),
 		MIN_ZOOM = 6,
 		MAX_ZOOM = 12,
+		-- Camera distance used when coming back from first person.
+		DEFAULT_ZOOM = 10,
 		DEFAULT_FOV = 70,
 		SPRINT_FOV = 78, -- slightly wider view while sprinting = feeling of speed
 	}),
