@@ -131,3 +131,25 @@ Test à 2 joueurs : met l'autre KO, achève-le → le kill feed s'affiche chez l
 orange ; ses **deaths** et tes **kills** augmentent (fenêtre Settings / sauvegarde). Si un joueur
 **quitte en plein combat** (touché il y a moins de 10 s), le kill feed affiche « X FLED » et le
 dernier qui l'a frappé gagne le kill.
+
+## Réactions aux coups (`feature/hit-reactions`)
+
+Branche construite **par-dessus** `feature/damage-death` (étape 3). Teste sur le **Dummy gris**
+(il ne se retourne pas vers toi, donc tu peux le frapper de tous les côtés). Vise avec le
+réticule : **tête** ou **corps**.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Frapper le Dummy **au corps, de face** | Il se **plie en avant autour du poing** (les bras tombent sur le ventre), il ne recule plus « à vide ». |
+| R2 | Au corps, **de dos** | Le dos se cambre, il est projeté vers l'avant. |
+| R3 | Au corps, par **sa gauche** puis par **sa droite** | Il se tord du côté touché (coude qui couvre les côtes) et glisse de l'autre côté. Les deux côtés sont symétriques. |
+| R4 | À la **tête, de face** | Comme avant : jab = tête en arrière, cross et crochet = tête projetée sur le côté. |
+| R5 | À la tête par **sa gauche / sa droite** | La tête part **à l'opposé** du poing (jamais vers le poing). |
+| R6 | N'importe quel coup | Un très court arrêt **au contact** (le corps est encore en place quand le poing touche), puis la réaction ; la victime recule d'environ 1 stud. |
+| R7 | Coup **bloqué** (Attacking Dummy, F) | Tu es repoussé un petit peu en garde. |
+| R8 | 4ᵉ coup (finisher) | Grosse réaction + gros recul (inchangé). |
+| R9 | Pieds | Pendant les réactions, les pieds restent au sol (ni enfoncés, ni en l'air). |
+
+À 2 joueurs : les deux écrans doivent montrer **la même** réaction (le côté est décidé par le serveur).
+L'Output peut afficher un avertissement jaune `no clip named "GetUp"` ou `"Finisher"` : ces deux
+animations n'existent pas encore (prévues par l'étape 3), ce n'est pas une erreur de cette branche.

@@ -96,8 +96,10 @@ return table.freeze({
 	CombatAction = event("CombatAction"),
 
 	-- server → all clients  (kind: Types.CombatEventKind, victim: Model, attacker: Model,
-	--                        zone: Types.HitZone?)
-	-- Something happened in a fight; clients show effects (flash, text, shake).
+	--                        zone: Types.HitZone?, side: Types.HitSide?)
+	-- Something happened in a fight; clients show effects (flash, text, shake)
+	-- and the victim's reaction, chosen from where (zone) and from which side
+	-- of the victim (side) the hit landed.
 	CombatEvent = event("CombatEvent"),
 
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)

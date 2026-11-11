@@ -43,6 +43,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
@@ -137,13 +138,16 @@ local function setAttribute(model: Model, name: string, value: boolean)
 	end
 end
 
+-- `zone` and `side` are only sent when a hit reached the body (or the guard):
+-- every client uses them to play the same reaction on the victim.
 local function fireEvent(
 	kind: Types.CombatEventKind,
 	victim: Model,
 	attacker: Model,
-	zone: Types.HitZone?
+	zone: Types.HitZone?,
+	side: Types.HitSide?
 )
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone)
+	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side)
 end
 
 local function stopBlocking(state: CombatState)
@@ -216,6 +220,13 @@ local function isInFront(victim: CombatState, attacker: CombatState): boolean
 	return flat.Unit:Dot(Vector3.new(look.X, 0, look.Z).Unit) > 0
 end
 
+-- Flat direction from the attacker to the victim (where a hit pushes).
+local function awayFromAttacker(attacker: CombatState, victim: CombatState): Vector3
+	local away = victim.root.Position - attacker.root.Position
+	local flat = Vector3.new(away.X, 0, away.Z)
+	return if flat.Magnitude > 1e-3 then flat.Unit else attacker.root.CFrame.LookVector
+end
+
 -- Decides what a hit does to `victim`. The heart of the combat rules.
 local function resolveHit(
 	attacker: CombatState,
@@ -226,6 +237,8 @@ local function resolveHit(
 	local isFinisher = combo == #C.M1_DAMAGE
 	local damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[zone]
 	local time = now()
+	-- Which side of the victim the fist arrives from (picks the reaction).
+	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, attacker.root.Position)
 
 	-- 0. On the ground (finish them instead), or just spawned (protected).
 	if Knockout.isKnockedOut(victim.model) then
@@ -256,11 +269,17 @@ local function resolveHit(
 		if victimPlayer and not Stamina.trySpend(victimPlayer, cost) then
 			Stamina.drain(victimPlayer, Config.Stamina.MAX) -- empty the bar
 			stun(victim, C.GUARD_BREAK_STUN)
-			fireEvent("GuardBreak", victim.model, attacker.model)
+			fireEvent("GuardBreak", victim.model, attacker.model, nil, side)
 			return
 		end
 		dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
-		fireEvent("Blocked", victim.model, attacker.model)
+		-- The guard absorbs the hit but is still shoved back a little.
+		Push.apply(
+			victim.root,
+			awayFromAttacker(attacker, victim) * C.BLOCK_PUSH_SPEED,
+			C.HIT_PUSH_TIME
+		)
+		fireEvent("Blocked", victim.model, attacker.model, nil, side)
 		return
 	end
 
@@ -268,7 +287,13 @@ local function resolveHit(
 	dealDamage(victim, attacker, damage)
 	if Knockout.isKnockedOut(victim.model) then
 		-- That hit knocked them out: no stun or knockback on a limp body.
-		fireEvent(if isFinisher then "Finisher" else "Hit", victim.model, attacker.model, zone)
+		fireEvent(
+			if isFinisher then "Finisher" else "Hit",
+			victim.model,
+			attacker.model,
+			zone,
+			side
+		)
 		return
 	end
 	if zone == "Legs" then
@@ -277,16 +302,18 @@ local function resolveHit(
 	local extraStun = if zone == "Head" then C.HEAD_EXTRA_STUN else 0
 	if isFinisher then
 		stun(victim, C.FINISHER_STUN + extraStun)
-		local away = victim.root.Position - attacker.root.Position
-		local flat = Vector3.new(away.X, 0, away.Z)
-		local direction = if flat.Magnitude > 1e-3
-			then flat.Unit
-			else attacker.root.CFrame.LookVector
+		local direction = awayFromAttacker(attacker, victim)
 		Push.apply(victim.root, direction * C.KNOCKBACK_SPEED, C.KNOCKBACK_TIME)
-		fireEvent("Finisher", victim.model, attacker.model, zone)
+		fireEvent("Finisher", victim.model, attacker.model, zone, side)
 	else
 		stun(victim, C.HIT_STUN + extraStun)
-		fireEvent("Hit", victim.model, attacker.model, zone)
+		-- Small push: the body is moved by the fist (no "punch through it" look).
+		Push.apply(
+			victim.root,
+			awayFromAttacker(attacker, victim) * C.HIT_PUSH_SPEED,
+			C.HIT_PUSH_TIME
+		)
+		fireEvent("Hit", victim.model, attacker.model, zone, side)
 	end
 end
 

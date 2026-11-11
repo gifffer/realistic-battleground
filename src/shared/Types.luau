@@ -54,6 +54,11 @@ export type CombatEventKind =
 -- Where a hit lands (Config.Combat.ZONE_DAMAGE).
 export type HitZone = "Head" | "Torso" | "Legs"
 
+-- Which side of the victim the attacker stands on when the hit lands
+-- (Shared/Util/HitSide). Picks the hit reaction: a punch on the left
+-- cheek doesn't throw the head the same way as one on the right.
+export type HitSide = "Front" | "Back" | "Left" | "Right"
+
 -- A line of the kill feed (Remotes.KillFeed).
 --   Finished  killer finished a KO'd victim
 --   Fled      victim left the game in the middle of a fight (killer gets the kill)

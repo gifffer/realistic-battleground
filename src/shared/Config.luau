@@ -121,6 +121,11 @@ return table.freeze({
 		FINISHER_STUN = 0.8,
 		KNOCKBACK_SPEED = 45, -- studs/s, 4th hit only
 		KNOCKBACK_TIME = 0.2,
+		-- Every other hit pushes the victim a little too (about 1 stud): the
+		-- body is moved by the fist instead of the fist going through it.
+		HIT_PUSH_SPEED = 9,
+		HIT_PUSH_TIME = 0.1,
+		BLOCK_PUSH_SPEED = 5, -- a blocked hit still shoves the guard back a bit
 
 		-- Blocking.
 		BLOCK_REDUCTION = 0.8, -- 80 % less damage

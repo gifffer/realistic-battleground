@@ -23,8 +23,10 @@ local UserInputService = game:GetService("UserInputService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Types = require(ReplicatedStorage.Shared.Types)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local CombatEffectsController = require(script.Parent.CombatEffectsController)
 local ParkourController = require(script.Parent.ParkourController)
 local SoundController = require(script.Parent.SoundController)
 
@@ -133,7 +135,14 @@ local function tryAttack()
 
 	CharacterAnimationController.playAction(character, `Brawler_M1_{combo}`)
 	SoundController.play(if isFinisher then "HeavySwing" else "Swing", character)
-	Remotes.Attack:FireServer(AimController.getZone())
+	local zone: Types.HitZone = AimController.getZone()
+	Remotes.Attack:FireServer(zone)
+	-- Our fist reaches its target HIT_DELAY later (the punch's impact frame):
+	-- show the victim's reaction at that exact moment, without waiting for
+	-- the server's answer (visual only, the server still decides the hit).
+	task.delay(C.HIT_DELAY, function()
+		CombatEffectsController.predictHit(isFinisher, zone)
+	end)
 end
 
 local function setBlocking(value: boolean)
