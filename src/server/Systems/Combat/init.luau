@@ -47,6 +47,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -85,11 +86,6 @@ local PART_ZONES: { [string]: Types.HitZone } = {
 	["Right Leg"] = "Legs",
 	["Left Leg"] = "Legs",
 }
--- Length of the server's aim ray (studs): a bit more than a punch's reach.
-local AIM_RAY_LENGTH = 14
--- The aim must point roughly where the attacker faces (dot product with
--- its facing; 0.2 ≈ within 78°), else it's ignored.
-local MIN_AIM_FACING = 0.2
 local random = Random.new()
 
 type CombatState = {
@@ -432,7 +428,7 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Include
 	params.FilterDescendantsInstances = { victim }
-	local hit = workspace:Raycast(origin, direction * AIM_RAY_LENGTH, params)
+	local hit = workspace:Raycast(origin, direction * C.AIM_RAY_LENGTH, params)
 	if hit == nil then
 		return nil
 	end
@@ -448,17 +444,25 @@ end
 -- aims at (validated by onAttack); nil for dummies (random head / torso).
 function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boolean
 	local state = states[model]
-	if
-		state == nil
-		or not isAlive(state)
-		or isStunned(state)
-		or state.blocking
-		or isBusy(state)
-	then
+	if state == nil then
+		return false
+	end
+	-- Tells the attacker's client that this M1 is over: every CombatEvent
+	-- for it was already sent. A hit it predicted that no event confirmed
+	-- didn't happen (punch refused, cancelled or missed): it undoes it.
+	local function resolved()
+		local owner = state.player
+		if owner and attackId then
+			Remotes.AttackResolved:FireClient(owner, attackId)
+		end
+	end
+	if not isAlive(state) or isStunned(state) or state.blocking or isBusy(state) then
+		resolved()
 		return false
 	end
 	local time = now()
 	if time < state.nextAttackAt then
+		resolved()
 		return false
 	end
 	-- Attacking ends the spawn protection.
@@ -468,6 +472,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	-- (Players only: training dummies never finish anyone.)
 	local finishTarget = if state.player then Knockout.findFinishTarget(model) else nil
 	if finishTarget and startFinisher(state, finishTarget) then
+		resolved() -- a finisher, not this M1
 		return true
 	end
 
@@ -493,6 +498,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	task.delay(C.HIT_DELAY, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
 		if state.attackToken ~= token or not isAlive(state) then
+			resolved()
 			return
 		end
 		local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -C.HITBOX_FORWARD)
@@ -511,6 +517,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 				resolveHit(state, victim, combo, landed, attackId)
 			end
 		end
+		resolved()
 	end)
 	return true
 end
@@ -623,27 +630,12 @@ local function onAttack(player: Player, aim: unknown, attackId: unknown)
 		return
 	end
 	-- The aim direction: a real, finite, non-zero Vector3, pointing roughly
-	-- where the character faces. Anything else = no aim (a torso hit).
-	local direction: Vector3? = nil
+	-- where the character faces (Shared/Util/AimRule, the same rule the
+	-- client uses to predict). Anything else = no aim (a torso hit).
 	local state = states[character]
-	if typeof(aim) == "Vector3" and state then
-		local finite = aim.X == aim.X
-			and aim.Y == aim.Y
-			and aim.Z == aim.Z
-			and aim.Magnitude < math.huge
-		if finite and aim.Magnitude > 0.1 then
-			local unit = aim.Unit
-			local look = state.root.CFrame.LookVector
-			local flatAim = Vector3.new(unit.X, 0, unit.Z)
-			local flatLook = Vector3.new(look.X, 0, look.Z)
-			local facing = flatAim.Magnitude > 1e-3
-				and flatLook.Magnitude > 1e-3
-				and flatAim.Unit:Dot(flatLook.Unit) >= MIN_AIM_FACING
-			if facing then
-				direction = unit
-			end
-		end
-	end
+	local direction: Vector3? = if state
+		then AimRule.validate(aim, state.root.CFrame.LookVector)
+		else nil
 	-- The M1's number (only echoed back to the clients, never trusted for
 	-- anything else): a whole number, else ignored.
 	local id: number? = if typeof(attackId) == "number"

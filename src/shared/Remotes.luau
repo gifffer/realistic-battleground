@@ -106,6 +106,11 @@ return table.freeze({
 	-- for that M1 (see Attack), nil for dummies.
 	CombatEvent = event("CombatEvent"),
 
+	-- server → ONE client  (attackId: number)
+	-- "Your M1 number `attackId` is over" (after all its CombatEvents). Lets
+	-- the attacker undo a hit it predicted that the server never confirmed.
+	AttackResolved = event("AttackResolved"),
+
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)
 	-- A fighter was eliminated: one line in the kill feed (top right).
 	KillFeed = event("KillFeed"),

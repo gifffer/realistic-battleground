@@ -36,12 +36,14 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
+local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
@@ -101,8 +103,6 @@ local PREDICTION_MEMORY = 0.4
 -- After a fighter starts a dash, no prediction for its dodge frames plus
 -- this margin (the dash reaches us a bit late).
 local DASH_MARGIN = 0.15
--- Same as the server's aim ray (Combat AIM_RAY_LENGTH).
-local AIM_RAY_LENGTH = 14
 -- If OUR character has one of these, the server cancels our punch.
 local ATTACKER_CANCEL_ATTRIBUTES = table.freeze({ "Stunned", "KnockedOut", "Ragdolled" })
 -- Attributes that mean "this punch won't simply hit": no prediction then,
@@ -445,64 +445,6 @@ local function canPredictHitOn(model: Model): boolean
 	return dashed == nil or os.clock() - dashed > Config.Combat.DASH_INVULNERABLE + DASH_MARGIN
 end
 
--- Same rules as the server (Combat): the aim ray from our head says which
--- body part we aim at; punches only land on the head or the torso, and the
--- part must be inside the hitbox.
-local PART_ZONES: { [string]: Types.HitZone } = {
-	Head = "Head",
-	Torso = "Torso",
-	HumanoidRootPart = "Torso",
-	["Right Arm"] = "Torso",
-	["Left Arm"] = "Torso",
-	["Right Leg"] = "Legs",
-	["Left Leg"] = "Legs",
-}
-local ZONE_PARTS: { [string]: { string } } = {
-	Head = { "Head" },
-	Torso = { "Torso", "HumanoidRootPart", "Right Arm", "Left Arm" },
-}
-
-local function aimZone(origin: Vector3, victim: Model, aim: Vector3?): Types.HitZone
-	local zone: Types.HitZone = "Torso"
-	if aim == nil then
-		return zone
-	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = { victim }
-	local hit = workspace:Raycast(origin, aim * AIM_RAY_LENGTH, params)
-	if hit then
-		local part = hit.Instance
-		if part.Parent and part.Parent:IsA("Accessory") then
-			zone = "Head" -- hats, hair... are worn on the head
-		else
-			zone = PART_ZONES[part.Name] or "Torso"
-		end
-	end
-	return zone
-end
-
-local function zoneInBox(zone: string, parts: { [string]: boolean }): boolean
-	for _, name in ZONE_PARTS[zone] do
-		if parts[name] then
-			return true
-		end
-	end
-	return false
-end
-
--- The server's landingZone: the aimed zone if a punch can reach it and it's
--- in the box, else the torso if it is, else the head.
-local function predictZone(aimed: Types.HitZone, parts: { [string]: boolean }): Types.HitZone
-	local zone: Types.HitZone = "Torso"
-	if (aimed == "Head" or aimed == "Torso") and zoneInBox(aimed, parts) then
-		zone = aimed
-	elseif not zoneInBox("Torso", parts) and zoneInBox("Head", parts) then
-		zone = "Head"
-	end
-	return zone
-end
-
 -- Runs Config.Combat.HIT_DELAY after we click, i.e. the moment our fist
 -- reaches its target in the punch animation. Same box and same aim rule
 -- as the server. Purely visual: the server still decides the hit, the
@@ -528,29 +470,12 @@ local function predictHit(info: CombatController.AttackInfo)
 	end
 	forgetOldPredictions()
 
-	local params = OverlapParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character }
-	local box = root.CFrame * CFrame.new(0, 0, -Config.Combat.HITBOX_FORWARD)
-
-	local partsByModel: { [Model]: { [string]: boolean } } = {}
-	for _, part in workspace:GetPartBoundsInBox(box, Config.Combat.HITBOX_SIZE, params) do
-		local model = part:FindFirstAncestorOfClass("Model")
-		if model and CollectionService:HasTag(model, Config.Combat.TAG) then
-			local parts = partsByModel[model]
-			if parts == nil then
-				parts = {}
-				partsByModel[model] = parts
-			end
-			parts[part.Name] = true
-		end
-	end
-
-	local head = character:FindFirstChild("Head")
-	local origin = if head and head:IsA("BasePart") then head.Position else root.Position
-	for model, parts in partsByModel do
+	-- Same aim rule and same rest-pose bodies as the server (HitPrediction).
+	local aim = AimRule.validate(info.aim, root.CFrame.LookVector)
+	for model, parts in HitPrediction.findVictims(character, root) do
 		if canPredictHitOn(model) then
-			local zone: Types.HitZone = predictZone(aimZone(origin, model, info.aim), parts)
+			local aimed: Types.HitZone = HitPrediction.aimZone(root, model, aim)
+			local zone: Types.HitZone = HitPrediction.landingZone(aimed, parts)
 			local side: Types.HitSide = HitSide.compute(model:GetPivot(), root.Position)
 			local byId = predictions[model]
 			if byId == nil then
@@ -559,6 +484,28 @@ local function predictHit(info: CombatController.AttackInfo)
 			end
 			byId[info.id] = { time = os.clock(), strong = info.strong, zone = zone, side = side }
 			playHitReaction(model, character, info.strong, zone, side)
+		end
+	end
+end
+
+-- The server finished our M1 number `attackId` (all its CombatEvents came
+-- first). A hit we predicted for it that no event confirmed didn't happen:
+-- undo it.
+local function onAttackResolved(attackId: unknown)
+	if typeof(attackId) ~= "number" then
+		return
+	end
+	local character = player.Character
+	for victim, byId in predictions do
+		if byId[attackId] then
+			byId[attackId] = nil
+			if next(byId) == nil then
+				predictions[victim] = nil
+			end
+			CharacterAnimationController.cancelReaction(victim)
+			if character then
+				CharacterAnimationController.clearHitStop(character)
+			end
 		end
 	end
 end
@@ -694,6 +641,7 @@ function CombatEffectsController.start()
 
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)
 	Remotes.CombatAction.OnClientEvent:Connect(onCombatAction)
+	Remotes.AttackResolved.OnClientEvent:Connect(onAttackResolved)
 	-- Our M1: show the hit the instant the fist lands (HIT_DELAY later).
 	CombatController.onAttackStarted(function(info)
 		task.delay(Config.Combat.HIT_DELAY, function()

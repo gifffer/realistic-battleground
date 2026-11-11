@@ -156,6 +156,11 @@ return table.freeze({
 		ZONE_DAMAGE = table.freeze({ Head = 1.25, Torso = 1, Legs = 0.85 }),
 		-- Punches can land on the head or the torso (legs = kicks, later kits).
 		PUNCH_ZONES = table.freeze({ "Head", "Torso" }),
+		-- Aim ray (Shared/Util/AimRule): its length in studs (a bit more than a
+		-- punch's reach), and how much it must point where the attacker faces
+		-- (dot product with the facing; 0.2 ≈ within 78°), else it's ignored.
+		AIM_RAY_LENGTH = 14,
+		MIN_AIM_FACING = 0.2,
 		HEAD_EXTRA_STUN = 0.15, -- seconds added to the stun of a head hit
 		LEG_HIT_SLOW = 0.8, -- speed multiplier after a leg hit...
 		LEG_HIT_SLOW_TIME = 1.5, -- ...for this long
