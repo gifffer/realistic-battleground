@@ -477,6 +477,17 @@ local function setFury(entry: Watched, on: boolean)
 	entry.fury = created
 end
 
+-- A finisher with a kill effect (Shop): "Dust" or "Glass" at `position`.
+-- ("Impact" is the screen part, done by CombatEffectsController.)
+function KitEffects.killEffect(effect: string, position: Vector3)
+	if effect == "Dust" then
+		burst(position, 12, Color3.fromRGB(150, 140, 124), Enum.Material.Sand, 0.18, 10, 1.4)
+	elseif effect == "Glass" then
+		burst(position + Vector3.new(0, 1, 0), 18, GLASS_COLOR, Enum.Material.Glass, 0.16, 18, 2.5)
+		SoundController.play("BottleBreak", nil)
+	end
+end
+
 function KitEffects.watch(model: Model)
 	if watched[model] then
 		return

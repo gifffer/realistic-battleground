@@ -714,7 +714,12 @@ local function onCombatAction(model: Model, action: string)
 	elseif model == player.Character and action == "Boxer_SlipCounter" then
 		CombatController.holdAttacks(0.55) -- our counter punch
 	end
-	if model == player.Character and not SERVER_ONLY_ACTIONS[action] then
+	-- (Emotes are played by the server's answer, for us too.)
+	if
+		model == player.Character
+		and not SERVER_ONLY_ACTIONS[action]
+		and string.sub(action, 1, 6) ~= "Emote_"
+	then
 		-- Ours: already played when we clicked, unless the server disagreed.
 		CombatController.onServerAction(action)
 		return
@@ -723,8 +728,8 @@ local function onCombatAction(model: Model, action: string)
 		dashedAt[model] = os.clock()
 	end
 	CharacterAnimationController.playAction(model, action)
-	if action == "GetUp" then
-		return
+	if action == "GetUp" or string.sub(action, 1, 6) == "Emote_" then
+		return -- (no swing sound)
 	elseif KitEffects.isMoveAnimation(action) then
 		-- Prop in hand + its own sound. Our own Street Fury roar already
 		-- played when we pressed G (KitController): don't play it twice.
@@ -743,7 +748,24 @@ end
 -- Lifecycle
 ------------------------------------------------------------------------------
 
+-- A finisher with a kill effect (Shop): debris there, and for the "Impact"
+-- effect a shake + colour drain if we're close enough to feel it.
+local function onKillEffect(effect: unknown, position: unknown)
+	if typeof(effect) ~= "string" or typeof(position) ~= "Vector3" then
+		return
+	end
+	KitEffects.killEffect(effect, position)
+	if effect == "Impact" then
+		local camera = workspace.CurrentCamera
+		if camera and (camera.CFrame.Position - position).Magnitude < 60 then
+			shake(1.4, 0.3)
+			drainColour()
+		end
+	end
+end
+
 function CombatEffectsController.start()
+	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
 	local tag = Config.Combat.TAG
 	CollectionService:GetInstanceAddedSignal(tag):Connect(onCombatantAdded)
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)
