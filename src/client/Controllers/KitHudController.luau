@@ -145,9 +145,6 @@ local function keyCap(parent: Instance, text: string, size: Vector2): (Frame, UI
 	}) :: UIStroke
 	local label = Theme.text({
 		Name = "KeyText",
-		-- (Digits sit a little high and left in their text box: nudged by
-		-- 1 px so they look centred in the cap.)
-		Position = UDim2.fromOffset(1, 1),
 		Size = UDim2.fromScale(1, 1),
 		TextYAlignment = Enum.TextYAlignment.Center,
 		FontFace = Theme.Fonts.NumberMedium,
