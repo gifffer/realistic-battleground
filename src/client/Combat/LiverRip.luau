@@ -18,6 +18,7 @@
 local Debris = game:GetService("Debris")
 
 local GoreKit = require(script.Parent.GoreKit)
+local BloodGush = require(script.Parent.BloodGush)
 local HeadBlast = require(script.Parent.HeadBlast)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
@@ -29,7 +30,6 @@ local BLOOD = Color3.fromRGB(78, 6, 6)
 local BLOOD_WET = Color3.fromRGB(104, 8, 8)
 local BONE = Color3.fromRGB(224, 212, 188)
 local LIFETIME = 30 -- seconds the liver stays on the floor
-local POUR_TIME = 3.5 -- seconds the hole pours blood
 
 -- Where the liver was: the victim's right, under the ribs, in front (torso
 -- space; the server's "Tear" cut is there too).
@@ -158,38 +158,16 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	SoundController.play("FleshTear", victim)
 	if at then
 		burst(at, 90, 10)
-		-- The hole pours, in spurts, for a while; a pool spreads under it.
-		local torso = victim:FindFirstChild("Torso")
-		if torso and torso:IsA("BasePart") then
-			local hole = Instance.new("Attachment")
-			hole.Name = "LiverHole"
-			-- (its Front = the torso's front: out of the hole)
-			hole.CFrame = CFrame.new(WOUND + Vector3.new(0, 0, -0.05))
-			hole.Parent = torso
-			local pour = emitter(hole, 40)
-			task.spawn(function()
-				local start = os.clock()
-				while hole.Parent and os.clock() - start < POUR_TIME do
-					local fade = 1 - (os.clock() - start) / POUR_TIME
-					pour.Rate = 120 * fade
-					task.wait(0.15)
-					pour.Rate = 20 * fade
-					task.wait(0.4)
-				end
-				pour.Rate = 0
-				Debris:AddItem(hole, 1.5)
-			end)
-			task.delay(0.5, function()
-				if torso.Parent then
-					HeadBlast.pool(
-						torso.Position,
-						3.6,
-						POUR_TIME + 2,
-						math.floor(at.X * 13 + at.Z * 7)
-					)
-				end
-			end)
-		end
+		-- The vessels of the liver torn: the hole spurts with each beat and
+		-- runs down the side, a pool spreads; it gets all over him.
+		BloodGush.torso(
+			victim,
+			WOUND + Vector3.new(0, 0, -0.05),
+			Vector3.new(0.35, -0.25, -1),
+			math.floor(at.X * 13 + at.Z * 7),
+			7
+		)
+		BloodGush.splatter(attacker, at.Position, 16, math.floor(at.Z * 11 + at.X * 3))
 	end
 	if arm == nil or not arm:IsA("BasePart") then
 		warn("[LiverRip] no Left Arm to hold the liver")

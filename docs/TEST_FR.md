@@ -406,3 +406,11 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | W5 | L'os touche un mur / le sol | Il **se casse en deux** là où il touche. Les moitiés restent ~20 s. |
 | W6 | Se faire mettre KO / mourir en tenant l'os | Il tombe et se casse à tes pieds. |
 | W7 | Un 2ᵉ joueur essaie de prendre l'os déjà pris | Plus de bouton. En duel : impossible de prendre un os. |
+
+### Sang des finishers qui arrachent (batte, foie, bras)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
+| S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
+| S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |

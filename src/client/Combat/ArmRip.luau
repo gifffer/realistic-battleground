@@ -30,6 +30,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local GoreKit = require(script.Parent.GoreKit)
+local BloodGush = require(script.Parent.BloodGush)
 local HeadBlast = require(script.Parent.HeadBlast)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
@@ -48,7 +49,6 @@ local TENDON = Color3.fromRGB(214, 200, 182)
 local MUSCLE = Color3.fromRGB(150, 32, 34)
 local MUSCLE_DARK = Color3.fromRGB(112, 22, 26)
 local FAT = Color3.fromRGB(222, 190, 112)
-local PUMP_TIME = 4 -- seconds the shoulder pumps blood
 local DRIP_TIME = 10 -- seconds the arm drips
 -- The socket, torso space (its right side), facing out (+X).
 local SOCKET = CFrame.new(1.05, 0.5, 0) * CFrame.Angles(0, -math.pi / 2, 0)
@@ -182,39 +182,6 @@ local function dress(part: BasePart, name: string, skin: Color3, random: Random)
 	folder.Parent = part
 end
 
--- Blood out of the shoulder: a burst, then spurts (the heart still
--- beating a few times, weaker each time), a pool spreading under it.
-local function pump(torso: BasePart, random: Random)
-	local hole = Instance.new("Attachment")
-	hole.Name = "ArmRipBlood"
-	hole.CFrame = SOCKET
-	hole.Parent = torso
-	local spurt = emitter(hole, 0)
-	spurt:Emit(80)
-	task.spawn(function()
-		local start = os.clock()
-		while hole.Parent and os.clock() - start < PUMP_TIME do
-			local fade = 1 - (os.clock() - start) / PUMP_TIME
-			spurt.Rate = 140 * fade
-			task.wait(0.14)
-			spurt.Rate = 15 * fade
-			task.wait(0.42)
-		end
-		spurt.Rate = 0
-		Debris:AddItem(hole, 1.5)
-	end)
-	task.delay(0.4, function()
-		if torso.Parent then
-			HeadBlast.pool(
-				(torso.CFrame * SOCKET).Position,
-				random:NextNumber(2.8, 3.6),
-				PUMP_TIME + 2,
-				random:NextInteger(1, 2 ^ 20)
-			)
-		end
-	end)
-end
-
 -- The arm drips from its torn end (in his hand, then on the floor).
 local function drip(arm: BasePart)
 	local point = Instance.new("Attachment")
@@ -251,7 +218,19 @@ function ArmRip.apply(model: Model, live: boolean)
 	ArmRip.boneTaken(model) -- (seen late: already taken)
 	if live then
 		SoundController.play("ArmTear", model)
-		pump(torso, random)
+		-- the artery under the arm (axillary) torn: spurting out of the
+		-- socket, running down the side; the arm's own end spurts in his hand
+		BloodGush.torso(model, SOCKET.Position, Vector3.new(1, 0.1, -0.2), seed, 12)
+		local top = Vector3.new(0, arm.Size.Y / 2 + 0.05, 0)
+		BloodGush.artery(arm, CFrame.lookAt(top, top + Vector3.new(0, 1, 0)), {
+			seconds = 2.5,
+			beat = 0.4,
+			speed = 6,
+			size = 0.1,
+			pool = 0,
+			seed = seed + 3,
+			ignore = { model },
+		})
 		drip(arm)
 	end
 end

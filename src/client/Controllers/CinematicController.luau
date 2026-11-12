@@ -24,6 +24,7 @@ local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local ArmRip = require(script.Parent.Parent.Combat.ArmRip)
+local BloodGush = require(script.Parent.Parent.Combat.BloodGush)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
 local CameraController = require(script.Parent.CameraController)
@@ -252,6 +253,8 @@ local function playEvent(
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)
+		-- it goes all over him (and his bat)
+		BloodGush.splatter(attacker, victim:GetPivot().Position, 14, math.floor(event.time * 1000))
 	elseif kind == "Gut" then
 		SoundController.play("KnockoutPunch", victim)
 		LiverRip.gut(victim, attacker)
@@ -265,6 +268,14 @@ local function playEvent(
 		SoundController.play("Strain", attacker)
 	elseif kind == "Pop" then
 		ArmRip.pop(victim)
+	elseif kind == "Tear" then
+		-- (the arm off itself: ArmRip, from the server's "ArmTorn"): the first
+		-- jet hits him full on
+		local torso = victim:FindFirstChild("Torso")
+		local from = if torso and torso:IsA("BasePart")
+			then torso.Position
+			else victim:GetPivot().Position
+		BloodGush.splatter(attacker, from, 22, math.floor(event.time * 1000))
 	elseif kind == "Throw" then
 		-- (the arm off itself: ArmRip, from the server's "ArmTorn")
 		ArmRip.thrown(attacker, anchor)
