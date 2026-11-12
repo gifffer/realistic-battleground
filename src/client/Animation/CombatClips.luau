@@ -6030,7 +6030,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 0.55,
 				pose = {
-					Root = { rot = Vector3.new(-18, -43.5, 0), pos = Vector3.new(0.117, -0.314, -0.1) },
+					Root = {
+						rot = Vector3.new(-18, -43.5, 0),
+						pos = Vector3.new(0.117, -0.314, -0.1),
+					},
 					Neck = { rot = Vector3.new(-27, 26.1, 0) },
 					RightShoulder = { rot = Vector3.new(83.8, -1.93, -53) },
 					LeftShoulder = { rot = Vector3.new(178, -27.7, 110) },
@@ -6041,7 +6044,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 0.85,
 				pose = {
-					Root = { rot = Vector3.new(-16, -63.8, 0), pos = Vector3.new(0.192, -0.226, -0.1) },
+					Root = {
+						rot = Vector3.new(-16, -63.8, 0),
+						pos = Vector3.new(0.192, -0.226, -0.1),
+					},
 					Neck = { rot = Vector3.new(-22.5, 38.2, 0) },
 					RightShoulder = { rot = Vector3.new(106, -1.43, -4.71) },
 					LeftShoulder = { rot = Vector3.new(180, -23.7, 102) },
@@ -6052,7 +6058,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 1.15,
 				pose = {
-					Root = { rot = Vector3.new(-14, -79.5, 0), pos = Vector3.new(0.25, -0.158, -0.1) },
+					Root = {
+						rot = Vector3.new(-14, -79.5, 0),
+						pos = Vector3.new(0.25, -0.158, -0.1),
+					},
 					Neck = { rot = Vector3.new(-19, 47.7, 0) },
 					RightShoulder = { rot = Vector3.new(140, -1.22, 8.67) },
 					LeftShoulder = { rot = Vector3.new(182, -14.1, 94.6) },
@@ -6064,7 +6073,10 @@ local clips: { [string]: R6Pose.Clip } = {
 				time = 1.4,
 				tangent = "flat",
 				pose = {
-					Root = { rot = Vector3.new(-13, -87.6, 0), pos = Vector3.new(0.25, -0.123, -0.1) },
+					Root = {
+						rot = Vector3.new(-13, -87.6, 0),
+						pos = Vector3.new(0.25, -0.123, -0.1),
+					},
 					Neck = { rot = Vector3.new(-17.2, 52.6, 0) },
 					RightShoulder = { rot = Vector3.new(163, -0.356, 12.6) },
 					LeftShoulder = { rot = Vector3.new(183, -7.18, 90.6) },
@@ -6086,7 +6098,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 1.62,
 				pose = {
-					Root = { rot = Vector3.new(-22, -36.8, 0), pos = Vector3.new(0.0917, -0.343, -0.1) },
+					Root = {
+						rot = Vector3.new(-22, -36.8, 0),
+						pos = Vector3.new(0.0917, -0.343, -0.1),
+					},
 					Neck = { rot = Vector3.new(-28.5, 22.1, 0) },
 					RightShoulder = { rot = Vector3.new(82.5, -1.89, -39.1) },
 					LeftShoulder = { rot = Vector3.new(135, -23.2, 91.6) },
@@ -6108,7 +6123,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 1.75,
 				pose = {
-					Root = { rot = Vector3.new(-22, 26.8, 0), pos = Vector3.new(-0.0833, -0.353, -0.1) },
+					Root = {
+						rot = Vector3.new(-22, 26.8, 0),
+						pos = Vector3.new(-0.0833, -0.353, -0.1),
+					},
 					Neck = { rot = Vector3.new(-29, -16.1, 0) },
 					RightShoulder = { rot = Vector3.new(65.7, -27.3, -58.8) },
 					LeftShoulder = { rot = Vector3.new(126, -17.2, 85.6) },
@@ -6119,7 +6137,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 1.82,
 				pose = {
-					Root = { rot = Vector3.new(-16, 61.5, 0), pos = Vector3.new(-0.183, -0.236, -0.1) },
+					Root = {
+						rot = Vector3.new(-16, 61.5, 0),
+						pos = Vector3.new(-0.183, -0.236, -0.1),
+					},
 					Neck = { rot = Vector3.new(-23, -36.9, 0) },
 					RightShoulder = { rot = Vector3.new(-10.1, -40.8, -138) },
 					LeftShoulder = { rot = Vector3.new(169, -20.2, 88.9) },
@@ -6130,7 +6151,10 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 1.95,
 				pose = {
-					Root = { rot = Vector3.new(-9, 82.4, 0), pos = Vector3.new(-0.25, -0.119, -0.1) },
+					Root = {
+						rot = Vector3.new(-9, 82.4, 0),
+						pos = Vector3.new(-0.25, -0.119, -0.1),
+					},
 					Neck = { rot = Vector3.new(-17, -49.5, 0) },
 					RightShoulder = { rot = Vector3.new(45.3, -30.2, -148) },
 					LeftShoulder = { rot = Vector3.new(155, 19.5, 87.9) },
