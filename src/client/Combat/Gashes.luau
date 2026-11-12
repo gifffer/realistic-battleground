@@ -181,6 +181,12 @@ local function findKit(): Kit?
 			end
 		end
 	end
+	-- Every insert must be there (the kit replicates piece by piece).
+	for name in WoundShapes.shapes do
+		if found.pieces[name] == nil then
+			return nil
+		end
+	end
 	kit = found
 	return found
 end
@@ -680,9 +686,8 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		piece.Material = look.material
 		setUp(piece, part, parent)
 	end
-	-- Dark flesh deep behind the cut: wherever the hole in the skin reaches
-	-- past the insert (the sharp tips of a torn laceration), you see deep
-	-- red instead of through the body.
+	-- Dark flesh deep behind the cut: wherever the steps of the hole in the
+	-- skin reach past the insert, you see deep red instead of through the body.
 	local reachX, reachY = 0, 0
 	for _, point in cut.shape.points do
 		reachX, reachY = math.max(reachX, math.abs(point.X)), math.max(reachY, math.abs(point.Y))
@@ -717,7 +722,8 @@ end
 type Opened = {
 	folder: Folder,
 	partTransparency: number,
-	faceTransparency: number?,
+	face: Decal?, -- the face picture we hid, and its own transparency
+	faceTransparency: number,
 	connection: RBXScriptConnection?,
 }
 local opened: { [BasePart]: Opened } = {}
@@ -733,9 +739,8 @@ local function close(part: BasePart)
 	end
 	state.folder:Destroy()
 	part.Transparency = state.partTransparency
-	local face = part:FindFirstChildOfClass("Decal")
-	if face and state.faceTransparency then
-		face.Transparency = state.faceTransparency
+	if state.face then
+		state.face.Transparency = state.faceTransparency
 	end
 end
 
@@ -753,7 +758,8 @@ local function refresh(model: Model, partName: string)
 			local data = Gash.decode(model:GetAttribute(Gash.attribute(key, index)))
 			if data then
 				local placed = if isHead then placeOnHead(part, data) else placeOnBox(part, data)
-				if placed then
+				-- (no insert for it in this kit: no hole either)
+				if placed and found.pieces[placed.shapeName] then
 					table.insert(cuts, placed)
 				end
 			end
@@ -763,9 +769,10 @@ local function refresh(model: Model, partName: string)
 	local previous = opened[part]
 	local partTransparency = if previous then previous.partTransparency else part.Transparency
 	local face = part:FindFirstChildOfClass("Decal")
-	local faceTransparency = if previous
+	-- (the same face as before: we hid it, its real value is the saved one)
+	local faceTransparency = if previous and previous.face == face
 		then previous.faceTransparency
-		else (if face then face.Transparency else nil)
+		else (if face then face.Transparency else 0)
 	close(part)
 	if #cuts == 0 or found == nil then
 		return
@@ -784,6 +791,7 @@ local function refresh(model: Model, partName: string)
 	local state: Opened = {
 		folder = folder,
 		partTransparency = partTransparency,
+		face = face,
 		faceTransparency = faceTransparency,
 		connection = nil,
 	}
@@ -799,8 +807,10 @@ local function refresh(model: Model, partName: string)
 				if item:IsA("BasePart") then
 					item.LocalTransparencyModifier = part.LocalTransparencyModifier
 				elseif item:IsA("SurfaceGui") then
-					-- pictures don't follow the modifier: hide them with their part
+					-- pictures don't follow the modifier: fade them with their part
 					item.Enabled = part.LocalTransparencyModifier < 0.99
+				elseif item:IsA("ImageLabel") then
+					item.ImageTransparency = part.LocalTransparencyModifier
 				end
 			end
 		end

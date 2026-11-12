@@ -264,7 +264,13 @@ end
 --   • a visible mark on the body part hit ("Wound_<Part>" attribute = how
 --     many, clients draw them),
 --   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
-local function injure(victim: CombatState, zone: Types.HitZone, damage: number, side: Types.HitSide)
+local function injure(
+	victim: CombatState,
+	zone: Types.HitZone,
+	damage: number,
+	side: Types.HitSide,
+	mark: boolean -- add a bruise / cut mark (Wound_<Part>)
+)
 	local part = "Torso"
 	if zone == "Head" then
 		part = "Head"
@@ -276,6 +282,9 @@ local function injure(victim: CombatState, zone: Types.HitZone, damage: number, 
 			victim.limping = true
 			setAttribute(victim.model, "Limping", true)
 		end
+	end
+	if not mark then
+		return
 	end
 	local count = math.min(INJ.MAX_WOUNDS_PER_PART, (victim.wounds[part] or 0) + 1)
 	if count ~= victim.wounds[part] then
@@ -640,7 +649,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	if bleed then
 		startBleeding(victim, attacker, bleed.perSecond, bleed.duration)
 	end
-	injure(victim, zone :: Types.HitZone, damage, side)
+	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
+	injure(victim, zone :: Types.HitZone, damage, side, spec.cuts == nil)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -801,8 +811,6 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 	return PART_ZONES[part.Name]
 end
 
--- M1. Returns true if the attack started. `aim` = the direction the player
--- aims at (validated by onAttack); nil for dummies (random head / torso).
 -- Removes every glass cut of this fighter (the training dummies heal
 -- completely when left alone).
 function Combat.clearCuts(model: Model)
@@ -813,6 +821,8 @@ function Combat.clearCuts(model: Model)
 	end
 end
 
+-- M1. Returns true if the attack started. `aim` = the direction the player
+-- aims at (validated by onAttack); nil for dummies (random head / torso).
 function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boolean
 	local state = states[model]
 	if state == nil then
