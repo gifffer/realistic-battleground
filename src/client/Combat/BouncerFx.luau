@@ -291,7 +291,10 @@ end
 ------------------------------------------------------------------------------
 
 type Choked = { squeezes: number, skin: Color3, head: BasePart, fade: Tween? }
-local choked: { [Model]: Choked } = {}
+local choked: { [Model]: Choked } = setmetatable({}, { __mode = "k" }) :: any
+-- Each head's own colour, read once before it is ever tinted (a new choke
+-- while the last one is still fading must not take the red for the skin).
+local trueSkin: { [BasePart]: Color3 } = setmetatable({}, { __mode = "k" }) :: any
 local vignette: ColorCorrectionEffect? = nil
 
 local function ourVignette(): ColorCorrectionEffect?
@@ -315,10 +318,18 @@ local function squeeze(victim: Model, attacker: Model, sleeper: boolean)
 	if head == nil or not head:IsA("BasePart") then
 		return
 	end
+	local skin = trueSkin[head]
+	if skin == nil then
+		skin = head.Color
+		trueSkin[head] = skin
+	end
 	local entry = choked[victim]
 	if entry == nil or entry.head ~= head then
-		entry = { squeezes = 0, skin = head.Color, head = head, fade = nil }
+		entry = { squeezes = 0, skin = skin, head = head, fade = nil }
 		choked[victim] = entry
+		victim.Destroying:Once(function()
+			choked[victim] = nil
+		end)
 	end
 	local current: Choked = entry
 	if current.fade then
@@ -392,7 +403,10 @@ function BouncerFx.onHit(victim: Model, attacker: Model, moveId: string, shake: 
 	elseif moveId == "Shove" then
 		scrape(victim, 0.3)
 	elseif moveId == "Chokehold_Hold" or moveId == "SleeperHold_Hold" then
-		squeeze(victim, attacker, moveId == "SleeperHold_Hold")
+		-- (only while held: the Sleeper's last blow drops them, let go)
+		if victim:GetAttribute("Held") ~= nil then
+			squeeze(victim, attacker, moveId == "SleeperHold_Hold")
+		end
 	end
 end
 

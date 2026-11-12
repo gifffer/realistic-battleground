@@ -969,10 +969,11 @@ local function dropWeapon(state: CombatState, broke: boolean)
 	end
 	state.weapon = nil
 	state.weaponHits = 0
-	setAttribute(state.model, "Weapon", nil)
+	-- (the snap first: the clients still have it in the hand to break)
 	if broke then
 		Remotes.WeaponBroke:FireAllClients(state.model, id)
 	end
+	setAttribute(state.model, "Weapon", nil)
 end
 
 -- A torn arm lying on the floor: anyone close can pull the bone out of it
@@ -1593,7 +1594,8 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed] * (if weapon
 						then weapon.damageMultiplier
 						else 1),
-					bloodChance = if weapon then weapon.bloodChance else nil,
+					-- (the 4th keeps its own head-crit rule, Config.Injuries)
+					bloodChance = if weapon and not isFinisher then weapon.bloodChance else nil,
 					zone = landed,
 					stun = if isFinisher then C.FINISHER_STUN else C.HIT_STUN,
 					headStun = true,
@@ -1683,6 +1685,7 @@ function Combat.resetForRound(model: Model)
 	if Ragdoll.isRagdolled(model) then
 		Ragdoll.disable(model, state.player)
 	end
+	dropWeapon(state, false) -- (no weapons in a duel)
 	state.humanoid.Health = state.humanoid.MaxHealth
 	local player = state.player
 	if player then

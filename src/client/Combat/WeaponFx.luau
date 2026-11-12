@@ -30,6 +30,8 @@ local GRIP = CFrame.new(0, -0.95, 0.05) * CFrame.Angles(math.rad(145), 0, 0)
 local BONE_LENGTH = 1.7
 
 local held: { [Model]: Instance } = setmetatable({}, { __mode = "k" }) :: any
+-- Where each one was last in the hand (to break it there, even if it's gone).
+local lastAt: { [Model]: CFrame } = setmetatable({}, { __mode = "k" }) :: any
 
 local function paint(layer: string): (Color3, number)
 	if layer == "Flesh" then
@@ -48,13 +50,13 @@ local function newBone(): BasePart
 	if piece then
 		return GoreKit.spawn(piece, CFrame.identity, paint)
 	end
+	-- (along its own Y, like the real one)
 	local shaft = Instance.new("Part")
 	shaft.Name = "Bone"
-	shaft.Shape = Enum.PartType.Cylinder
-	shaft.Size = Vector3.new(BONE_LENGTH * 0.8, 0.17, 0.17)
+	shaft.Size = Vector3.new(0.16, BONE_LENGTH * 0.8, 0.16)
 	shaft.Material = Enum.Material.SmoothPlastic
 	shaft.Color = BONE:Lerp(BONE_BLOODY, 0.35)
-	shaft.CFrame = CFrame.Angles(0, 0, math.pi / 2)
+	shaft.CFrame = CFrame.identity
 	local function knob(name: string, size: Vector3, at: Vector3, color: Color3)
 		local part = Instance.new("Part")
 		part.Name = name
@@ -64,10 +66,10 @@ local function newBone(): BasePart
 		part.Color = color
 		part.CanCollide = false
 		part.Massless = true
-		part.CFrame = CFrame.new(at)
-		local weld = Instance.new("WeldConstraint")
+		local weld = Instance.new("Weld")
 		weld.Part0 = shaft
 		weld.Part1 = part
+		weld.C0 = CFrame.new(at)
 		weld.Parent = part
 		part.Parent = shaft
 	end
@@ -81,6 +83,9 @@ local function remove(model: Model)
 	local prop = held[model]
 	held[model] = nil
 	if prop then
+		if prop:IsA("BasePart") then
+			lastAt[model] = prop.CFrame
+		end
 		prop:Destroy()
 	end
 end
@@ -132,9 +137,8 @@ end
 
 -- It snapped on a blow: two halves fall from the hand, splinters fly.
 function WeaponFx.broke(model: Model, id: string)
-	local prop = held[model]
-	local at = if prop and prop:IsA("BasePart") then prop.CFrame else model:GetPivot()
 	remove(model)
+	local at = lastAt[model] or model:GetPivot()
 	if id ~= "Bone" then
 		return
 	end
@@ -154,7 +158,14 @@ function WeaponFx.broke(model: Model, id: string)
 			math.random() - 0.5,
 			math.random() - 0.5
 		) * 20
+		-- (not into the one holding it: it collides once clear of the hand)
+		half.CanCollide = false
 		half.Parent = workspace
+		task.delay(0.25, function()
+			if half.Parent then
+				half.CanCollide = true
+			end
+		end)
 		Debris:AddItem(half, 12)
 	end
 	for _ = 1, 8 do
