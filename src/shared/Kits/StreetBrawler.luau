@@ -108,6 +108,13 @@ local kit: KitTypes.KitDef = {
 		},
 	},
 
+	-- Finishing a knocked-out opponent: a quick stomp on the head.
+	finisher = {
+		animation = "Brawler_FinisherStomp",
+		impact = 0.3,
+		duration = 0.75,
+	},
+
 	awakening = {
 		name = "STREET FURY",
 		description = "Fills as you deal damage. Press G when full: each move becomes its fury version.",

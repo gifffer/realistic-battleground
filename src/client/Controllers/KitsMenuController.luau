@@ -49,6 +49,7 @@ local rosterMarker: Frame
 local detail: CanvasGroup -- fades / slides as one when switching kits
 local body: Frame -- its content (inset: the canvas cuts what sticks out)
 local renderDetail: (animate: boolean) -> ()
+local refreshRoster: () -> () -- (both defined further down)
 
 ------------------------------------------------------------------------------
 -- Small pieces
@@ -338,6 +339,16 @@ local function equipArea(parent: Instance, kit: Kits.KitDef)
 		)
 		Remotes.EquipKit:FireServer(kit.id)
 		-- Shown at once; the saved profile confirms it (or puts it back).
+		-- If the server doesn't save it (refused, too fast...), the saved
+		-- profile wins again after a moment.
+		task.delay(2, function()
+			local profile = PlayerDataController.get()
+			if profile and profile.equippedKit ~= equippedId then
+				equippedId = profile.equippedKit
+				refreshRoster()
+				renderDetail(false)
+			end
+		end)
 		task.delay(0.1, function()
 			equippedId = kit.id
 			renderDetail(false)
@@ -487,7 +498,7 @@ local function statusText(kit: Kits.KitDef): string
 		else "AVAILABLE"
 end
 
-local function refreshRoster()
+refreshRoster = function()
 	for _, item in rosterItems do
 		local selected = item.kit.id == selectedId
 		local dimmed = if item.kit.available then 0 else 0.4

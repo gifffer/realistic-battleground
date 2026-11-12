@@ -29,6 +29,8 @@ export type HitDef = {
 	-- Config.Injuries.SKIN_TEAR. "Lac" = a bottle smashed on them (ragged
 	-- laceration), "Slash" = a broken bottle (clean, longer cut).
 	cuts: ("Lac" | "Slash")?,
+	launch: number?, -- with knockdown: thrown UP at this speed (studs/s): uppercuts
+	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 }
 
 export type MoveDef = {
@@ -46,6 +48,22 @@ export type MoveDef = {
 	-- After a charge connects: a follow-up strike on the fallen victim.
 	followUp: { animation: string, delay: number, at: number, damage: number }?,
 	prop: string?, -- object held during the move ("Bottle", "BrokenBottle")
+	-- Slip (Boxer): for `window` seconds the fighter dodges the first hit
+	-- coming from the front and answers with `hit` (its animation plays,
+	-- the hit lands `at` seconds later on the one who missed).
+	counter: { window: number, animation: string, at: number, hit: HitDef }?,
+	-- Combo: only the FIRST hit checks a hitbox; the next ones land on the
+	-- fighters the first one reached, if they are still close (cinematic
+	-- combos that can't "miss" halfway).
+	chain: boolean?,
+}
+
+-- The kit's own way to finish a knocked-out opponent (M1 on them). Kits
+-- without one use the default finisher (Config.Knockout).
+export type FinisherDef = {
+	animation: string,
+	impact: number, -- seconds from the click to the killing blow
+	duration: number, -- can't do anything else until then
 }
 
 export type AwakeningDef = {
@@ -65,6 +83,7 @@ export type KitDef = {
 	available: boolean, -- false = shown as "coming soon", can't be equipped
 	moves: { MoveDef },
 	awakening: AwakeningDef?,
+	finisher: FinisherDef?,
 }
 
 return nil
