@@ -7600,7 +7600,7 @@ local clips: { [string]: R6Pose.Clip } = {
 		},
 	},
 	Sentinel_FinisherVictim = {
-		length = 3.0,
+		length = 3.5,
 		looped = false,
 		keyframes = {
 			{
@@ -7769,6 +7769,18 @@ local clips: { [string]: R6Pose.Clip } = {
 					LeftHip = { rot = Vector3.new(6, 0, 0) },
 				},
 			},
+			{
+				time = 3.5,
+				tangent = "flat",
+				pose = {
+					Root = { rot = Vector3.new(0, 0, 0), pos = Vector3.new(-0.64, 0.48, -0.6) },
+					Neck = { rot = Vector3.new(-30, 0, 0) },
+					RightShoulder = { rot = Vector3.new(10, 0, 20) },
+					LeftShoulder = { rot = Vector3.new(10, 0, -20) },
+					RightHip = { rot = Vector3.new(6, 0, 0) },
+					LeftHip = { rot = Vector3.new(6, 0, 0) },
+				},
+			},
 		},
 	},
 	Bull_Finisher = {
@@ -7923,7 +7935,7 @@ local clips: { [string]: R6Pose.Clip } = {
 		},
 	},
 	Bull_FinisherVictim = {
-		length = 3.4,
+		length = 3.9,
 		looped = false,
 		keyframes = {
 			{
@@ -8028,6 +8040,18 @@ local clips: { [string]: R6Pose.Clip } = {
 			},
 			{
 				time = 3.4,
+				tangent = "flat",
+				pose = {
+					Root = { rot = Vector3.new(88, 0, 0), pos = Vector3.new(0, -2.35, 0.2) },
+					Neck = { rot = Vector3.new(10, 0, 0) },
+					RightShoulder = { rot = Vector3.new(150, 0, 40) },
+					LeftShoulder = { rot = Vector3.new(150, 0, -40) },
+					RightHip = { rot = Vector3.new(10, 0, 10) },
+					LeftHip = { rot = Vector3.new(6, 0, -10) },
+				},
+			},
+			{
+				time = 3.9,
 				tangent = "flat",
 				pose = {
 					Root = { rot = Vector3.new(88, 0, 0), pos = Vector3.new(0, -2.35, 0.2) },

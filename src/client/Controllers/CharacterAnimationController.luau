@@ -535,12 +535,15 @@ local function onPreSimulation(dt: number)
 	local cameraPosition = if camera then camera.CFrame.Position else Vector3.zero
 
 	for model, entry in tracked do
-		if entry.humanoid.Health <= 0 or model.Parent == nil then
+		if model.Parent == nil then
 			continue
 		end
-		-- Limp (knocked out): physics moves the body, not us. Forget what we
-		-- were playing so nothing resumes when it gets up (GetUp plays then).
-		if model:GetAttribute("Ragdolled") == true then
+		-- Limp (knocked out) or dead: physics moves the body, not us. Forget
+		-- what we were playing so nothing resumes when it gets up (GetUp
+		-- plays then). (Dead too: a finisher's clip moved its root part to
+		-- where the clip had put the body - a pose left on top would count
+		-- twice.)
+		if entry.humanoid.Health <= 0 or model:GetAttribute("Ragdolled") == true then
 			-- Give every joint we posed back its last Roblox pose first:
 			-- a pose left in Transform would stay stuck (the root joint
 			-- stays on during the ragdoll, and all of them after it).

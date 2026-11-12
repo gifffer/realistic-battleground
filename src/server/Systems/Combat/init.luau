@@ -934,28 +934,31 @@ local function tearLiverOut(victim: Model)
 	)
 end
 
--- The Bull's finisher: his two horns go into the belly. Two "Tear" cuts
--- (Gashes draws the holes, through the clothes).
-local function goreWounds(victim: Model)
-	for _, point in { Vector3.new(0.42, -0.45, -0.5), Vector3.new(-0.42, -0.4, -0.5) } do
-		for candidate = 1, Gash.MAX_PER_PART do
-			local name = Gash.attribute("Torso", candidate)
-			if victim:GetAttribute(name) == nil then
-				setAttribute(
-					victim,
-					name,
-					Gash.encode({
-						kind = "Tear",
-						size = "L",
-						point = point,
-						angle = random:NextNumber(-0.4, 0.4),
-						seed = random:NextInteger(1, 2 ^ 30),
-					})
-				)
-				break
-			end
+-- The Bull's finisher: his horns go into the belly. One big "Tear" (two
+-- side by side don't fit on the torso's front: they'd overlap); a free
+-- slot, else over the first cut (like the liver). Returns the attribute
+-- set (taken back if the finisher is cut short before the kill).
+local function goreWounds(victim: Model): string
+	local index = 1
+	for candidate = 1, Gash.MAX_PER_PART do
+		if victim:GetAttribute(Gash.attribute("Torso", candidate)) == nil then
+			index = candidate
+			break
 		end
 	end
+	local name = Gash.attribute("Torso", index)
+	setAttribute(
+		victim,
+		name,
+		Gash.encode({
+			kind = "Tear",
+			size = "L",
+			point = Vector3.new(0, -0.4, -0.5), -- the belly, in front
+			angle = random:NextNumber(-25, 25), -- (degrees)
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
+	return name
 end
 
 -- Where the victim's body is in the last frame of its clip (anchor space of
@@ -1136,6 +1139,7 @@ local function startCinematic(
 	local connections: { RBXScriptConnection } = {}
 	local over = false
 	local killed = false
+	local goreWound: string? = nil -- (the Bull's horns: taken back if cut short)
 	-- Everything this cinematic holds, let go (once). Before the killing
 	-- blow, the victim drops back down, still KO'd (someone can finish them).
 	local function finish()
@@ -1147,6 +1151,9 @@ local function startCinematic(
 			connection:Disconnect()
 		end
 		if not killed then
+			if goreWound and target.Parent then
+				setAttribute(target, goreWound, nil)
+			end
 			if victimPlace and victimRoot.Parent then
 				victimRoot.Anchored = false
 				Ragdoll.enable(target)
@@ -1185,8 +1192,8 @@ local function startCinematic(
 	if cinematic.id == "Gore" then
 		-- the horns going in (Shared/Finishers "Gore" at 0.7 s)
 		task.delay(0.7, function()
-			if not over and target.Parent then
-				goreWounds(target)
+			if not over and target.Parent and state.attackToken == token and isAlive(state) then
+				goreWound = goreWounds(target)
 			end
 		end)
 	end

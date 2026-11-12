@@ -1112,7 +1112,8 @@ local function alive(model: Model, token: number): boolean
 end
 
 -- Glowing eyes on `head` for `time` seconds (the Bull's rage).
-local function rageEyes(head: BasePart, time: number)
+local function rageEyes(head: BasePart, time: number): { BasePart }
+	local made: { BasePart } = {}
 	for _, side in { -1, 1 } do
 		local eye = newPart(Vector3.new(0.14, 0.08, 0.04), RAGE, Enum.Material.Neon)
 		eye.Anchored = false
@@ -1139,7 +1140,9 @@ local function rageEyes(head: BasePart, time: number)
 			tween(eye, 0.3, { Transparency = 1 })
 		end)
 		Debris:AddItem(eye, time + 0.35)
+		table.insert(made, eye)
 	end
+	return made
 end
 
 ------------------------------------------------------------------------------
@@ -1292,7 +1295,7 @@ local function smoulder(limb: BasePart, at: Vector3, out: Vector3, time: number)
 	end)
 end
 
-local function burn(body: Model, limb: BasePart, position: Vector3)
+local function burn(body: Model, limb: BasePart, position: Vector3, force: boolean?)
 	local size = (if limb.Name == "Head" then 0.22 elseif limb.Name == "Torso" then 0.4 else 0.32)
 		* random:NextNumber(0.9, 1.15)
 	local margin = size * 1.6 * 0.85 / 2 -- (the widest layer's radius)
@@ -1389,8 +1392,8 @@ local function burn(body: Model, limb: BasePart, position: Vector3)
 			burnCount[body] = nil
 		end)
 	end
-	if count >= MAX_BURNS then
-		return
+	if count >= MAX_BURNS and not force then
+		return -- (a finisher's burns always show)
 	end
 	burnCount[body] = count + 1
 	table.insert(spots, { at = at, out = out, size = size, level = 1 })
@@ -2833,6 +2836,10 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 				tween(beam.part, 0.15, { Transparency = 1 })
 				Debris:AddItem(beam.part, 0.2)
 			end
+			for _, eye in eyes do
+				tween(eye, 0.15, { Transparency = 1 })
+				Debris:AddItem(eye, 0.2)
+			end
 			Debris:AddItem(hot, 1.8)
 			return
 		end
@@ -2856,7 +2863,7 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 			lastBurn = now
 			local spot = face.CFrame
 				* CFrame.new(random:NextNumber(-0.35, 0.35), random:NextNumber(-0.3, 0.35), -0.6)
-			burn(victim, face, spot.Position)
+			burn(victim, face, spot.Position, true)
 		end
 	end)
 end
@@ -2865,7 +2872,7 @@ end
 -- "Incinerated"): charred skin with glowing cracks cooling down, the hair
 -- burnt off, smoke rising for a while.
 local charred: { [Model]: boolean } = {}
-local function incinerate(model: Model)
+local function incinerate(model: Model, live: boolean)
 	if charred[model] then
 		return
 	end
@@ -2877,26 +2884,46 @@ local function incinerate(model: Model)
 	model.Destroying:Once(function()
 		charred[model] = nil
 	end)
-	head.Material = Enum.Material.CrackedLava
-	head.Color = Color3.fromRGB(96, 34, 20)
-	task.delay(1.8, function()
-		if head.Parent then
-			head.Material = Enum.Material.Basalt
-			TweenService:Create(head, TweenInfo.new(2), { Color = Color3.fromRGB(34, 27, 25) })
-				:Play()
-		end
-	end)
+	local CHARRED = Color3.fromRGB(34, 27, 25)
+	-- (the classic head is a mesh: no material texture shows on it; Neon
+	-- does: it glows hot, then cools to dull char)
+	if live then
+		head.Material = Enum.Material.Neon
+		head.Color = Color3.fromRGB(200, 70, 20)
+		TweenService:Create(head, TweenInfo.new(1.8), { Color = Color3.fromRGB(96, 34, 20) }):Play()
+		task.delay(1.8, function()
+			if head.Parent then
+				head.Material = Enum.Material.SmoothPlastic
+				TweenService:Create(head, TweenInfo.new(2), { Color = CHARRED }):Play()
+			end
+		end)
+	else
+		head.Material = Enum.Material.SmoothPlastic
+		head.Color = CHARRED
+	end
 	for _, item in head:GetChildren() do
 		if item:IsA("Decal") then
-			TweenService:Create(item, TweenInfo.new(0.6), { Transparency = 0.85 }):Play()
+			if live then
+				TweenService:Create(item, TweenInfo.new(0.6), { Transparency = 0.85 }):Play()
+			else
+				item.Transparency = 0.85
+			end
 		end
 	end
-	-- the hair / hat burns away in a puff
+	-- the hair / hat (what's worn on the head) burns away in a puff
 	for _, accessory in model:GetChildren() do
 		local handle = if accessory:IsA("Accessory")
 			then accessory:FindFirstChild("Handle")
 			else nil
-		if handle and handle:IsA("BasePart") then
+		if
+			handle
+			and handle:IsA("BasePart")
+			and (handle.Position - head.Position).Magnitude < 2.2
+		then
+			if not live then
+				handle.Transparency = 1
+				continue
+			end
 			emit(handle.Position, {
 				texture = TEX.fire,
 				color = EMBER,
@@ -2912,9 +2939,12 @@ local function incinerate(model: Model)
 			TweenService:Create(handle, TweenInfo.new(0.5), { Transparency = 1 }):Play()
 		end
 	end
+	if not live then
+		return -- (a body seen later: already cold)
+	end
 	for _ = 1, 10 do
 		local spot = head.CFrame * CFrame.new(random:NextUnitVector() * 0.6)
-		burn(model, head, spot.Position)
+		burn(model, head, spot.Position, true)
 	end
 	local top = Instance.new("Attachment")
 	top.Position = Vector3.new(0, 0.5, 0)
@@ -2966,9 +2996,21 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model)
 	elseif kind == "Charge" then
 		local head = part(attacker, "Head")
 		if head then
-			SoundController.play("LaserCharge", attacker)
-			chargeEyes(head, 0.6, 0.5)
-			gather(head, Vector3.new(0, 0.1, -0.5), 2.4, 0.55, LASER, 80)
+			local charge = SoundController.play("LaserCharge", attacker)
+			local eyes = chargeEyes(head, 0.6, 0.5)
+			gather(head, Vector3.new(0, 0.1, -0.5), 2.4, 0.55, LASER, 80, function()
+				if finisherTokens[attacker] == token then
+					return false
+				end
+				-- (cut short: the charge stops)
+				if charge then
+					charge:Stop()
+				end
+				for _, eye in eyes do
+					eye.Transparency = 1
+				end
+				return true
+			end)
 			for step = 1, 4 do
 				task.delay(0.25 + step * 0.07, function()
 					if finisherTokens[attacker] == token then
@@ -2991,7 +3033,14 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model)
 		snort(attacker, 2)
 		local head = part(attacker, "Head")
 		if head then
-			rageEyes(head, 3.6)
+			local eyes = rageEyes(head, 3.6)
+			animate(3.6, function()
+				if finisherTokens[attacker] ~= token then
+					for _, eye in eyes do
+						eye.Transparency = 1
+					end
+				end
+			end)
 		end
 		local spot = feet(attacker)
 		if spot then
@@ -3072,11 +3121,11 @@ function KitVFX.start()
 			return
 		end
 		if instance:GetAttribute("Incinerated") == true then
-			incinerate(instance)
+			incinerate(instance, false)
 		end
 		instance:GetAttributeChangedSignal("Incinerated"):Connect(function()
 			if instance:GetAttribute("Incinerated") == true then
-				incinerate(instance)
+				incinerate(instance, true)
 			end
 		end)
 	end
