@@ -74,6 +74,9 @@ export type HitSpec = {
 	bleed: { perSecond: number, duration: number }?,
 	slow: { multiplier: number, duration: number }?,
 	unblockable: boolean?,
+	-- Chance of visible blood per zone (nil: the M1 rules in Config.Injuries).
+	bloodChance: { [string]: number }?,
+	cuts: ("Lac" | "Slash")?, -- glass: cuts the skin where it lands (Gash)
 	launch: number?, -- with knockdown: thrown up at this speed (uppercuts)
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 	attackId: number?, -- M1 number from the client (prediction), nil for moves

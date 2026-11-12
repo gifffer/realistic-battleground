@@ -55,13 +55,13 @@ local FADE_IN: { [string]: number } = {
 	Block = 0.08,
 	Stunned = 0.12,
 	Guard = 0.12,
-	Walk = 0.15,
-	Run = 0.15,
 	-- Injuries: the tired posture settles in slowly.
 	HurtGuard = 0.3,
 	HurtIdle = 0.4,
 	LimpWalk = 0.2,
 	LimpIdle = 0.3,
+	Walk = 0.15,
+	Run = 0.15,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.

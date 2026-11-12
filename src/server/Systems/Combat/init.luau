@@ -52,6 +52,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
+local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -156,9 +157,21 @@ local function fireEvent(
 	zone: Types.HitZone?,
 	side: Types.HitSide?,
 	attackId: number?,
-	moveId: string?
+	moveId: string?,
+	blood: boolean?,
+	skinTearSeed: number?
 )
-	Remotes.CombatEvent:FireAllClients(kind, victim, attacker, zone, side, attackId, moveId)
+	Remotes.CombatEvent:FireAllClients(
+		kind,
+		victim,
+		attacker,
+		zone,
+		side,
+		attackId,
+		moveId,
+		blood,
+		skinTearSeed
+	)
 end
 
 local function stopBlocking(state: CombatState)
@@ -251,7 +264,13 @@ end
 --   • a visible mark on the body part hit ("Wound_<Part>" attribute = how
 --     many, clients draw them),
 --   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
-local function injure(victim: CombatState, zone: Types.HitZone, damage: number, side: Types.HitSide)
+local function injure(
+	victim: CombatState,
+	zone: Types.HitZone,
+	damage: number,
+	side: Types.HitSide,
+	mark: boolean -- add a bruise / cut mark (Wound_<Part>)
+)
 	local part = "Torso"
 	if zone == "Head" then
 		part = "Head"
@@ -264,10 +283,121 @@ local function injure(victim: CombatState, zone: Types.HitZone, damage: number, 
 			setAttribute(victim.model, "Limping", true)
 		end
 	end
+	if not mark then
+		return
+	end
 	local count = math.min(INJ.MAX_WOUNDS_PER_PART, (victim.wounds[part] or 0) + 1)
 	if count ~= victim.wounds[part] then
 		victim.wounds[part] = count
 		setAttribute(victim.model, woundAttribute(part), count)
+	end
+end
+
+-- Glass cut ("Gash_<Part>_<n>" attributes, see Shared/Util/Gash). Where:
+-- on the side of the part that faces the attacker (a bit to the left or
+-- right at random), at a random height of the zone (forehead / temple /
+-- cheek, chest / belly / back). Hitting the same spot again
+-- with the same glass makes that cut bigger (S -> M -> L) instead of adding
+-- one; at most Gash.MAX_PER_PART per part. Realistic: a bottle cuts skin and
+-- flesh, it never opens a skull or a rib cage.
+local GASH_HEIGHT: { [string]: { number } } = { -- studs from the part's centre
+	Head = { -0.12, 0.22 },
+	Torso = { -0.6, 0.65 },
+}
+local HEAD_RADIUS = 0.6 -- the round head you see (the head part is 2x1x1)
+
+local function addGash(
+	victim: CombatState,
+	attacker: CombatState,
+	zone: string, -- Types.HitZone
+	kind: "Lac" | "Slash"
+)
+	-- (Glass moves aim at the head or the torso: Moves' AIMABLE_ZONES.)
+	if zone ~= "Head" and zone ~= "Torso" then
+		return
+	end
+	local partName = zone
+	local part = victim.model:FindFirstChild(partName)
+	local key = Gash.KEY_OF[partName]
+	if part == nil or not part:IsA("BasePart") or key == nil then
+		return
+	end
+	-- Toward the attacker, flat, in the part's space, turned up to ~25°.
+	local toward = part.CFrame:VectorToObjectSpace(attacker.root.Position - part.Position)
+	local flat = Vector3.new(toward.X, 0, toward.Z)
+	local direction = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	direction = CFrame.Angles(0, random:NextNumber(-0.45, 0.45), 0):VectorToWorldSpace(direction)
+	local heights = GASH_HEIGHT[key]
+	local y = random:NextNumber(heights[1], heights[2])
+	local point: Vector3
+	if key == "Head" then
+		point = direction * HEAD_RADIUS * part.Size.Y + Vector3.new(0, y * part.Size.Y, 0)
+	else
+		-- Torso: on the chest or the back, never on its sides (the arms
+		-- cover them). From the side: near the edge on that side.
+		local half = part.Size / 2
+		local front = if math.abs(direction.Z) > 0.05
+			then math.sign(direction.Z)
+			else (if random:NextInteger(0, 1) == 0 then -1 else 1)
+		local x = math.clamp(
+			direction.X / math.max(math.abs(direction.Z), 0.05) * half.Z,
+			-0.8 * half.X,
+			0.8 * half.X
+		)
+		point = Vector3.new(x, y, front * half.Z)
+	end
+	-- A slash runs across, a bit diagonal; a laceration can point any way.
+	local angle = if kind == "Slash"
+		then random:NextNumber(12, 45) * (if random:NextInteger(0, 1) == 0 then -1 else 1)
+		else random:NextNumber(-90, 90)
+
+	-- Same glass, close to an old cut: that cut grows.
+	local free: number? = nil
+	local closest: number? = nil
+	local closestDistance = math.huge
+	for index = 1, Gash.MAX_PER_PART do
+		local old = Gash.decode(victim.model:GetAttribute(Gash.attribute(key, index)))
+		if old == nil then
+			free = free or index
+		else
+			local distance = (old.point - point).Magnitude
+			if
+				old.kind == kind
+				and distance < INJ.GASH_MERGE_DISTANCE
+				and distance < closestDistance
+			then
+				closest, closestDistance = index, distance
+			end
+		end
+	end
+	if closest == nil and free == nil then
+		-- No room left: the nearest cut of any kind grows instead.
+		for index = 1, Gash.MAX_PER_PART do
+			local old = Gash.decode(victim.model:GetAttribute(Gash.attribute(key, index)))
+			if old and (old.point - point).Magnitude < closestDistance then
+				closest, closestDistance = index, (old.point - point).Magnitude
+			end
+		end
+	end
+	if closest then
+		local attribute = Gash.attribute(key, closest)
+		local old = Gash.decode(victim.model:GetAttribute(attribute))
+		if old then
+			old.size = Gash.bigger(old.size)
+			setAttribute(victim.model, attribute, Gash.encode(old))
+		end
+	elseif free then
+		setAttribute(
+			victim.model,
+			Gash.attribute(key, free),
+			Gash.encode({
+				kind = kind,
+				size = "S",
+				point = point,
+				angle = angle,
+				seed = random:NextInteger(1, 2 ^ 30),
+			})
+		)
 	end
 end
 
@@ -278,6 +408,12 @@ local function healInjuries(state: CombatState)
 	setAttribute(state.model, "Limping", false)
 	for part in state.wounds do
 		setAttribute(state.model, woundAttribute(part), nil)
+	end
+	-- Cuts in the skin ("Gash_<Part>_<n>"): a new body.
+	for name in state.model:GetAttributes() do
+		if string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX then
+			setAttribute(state.model, name, nil)
+		end
 	end
 	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
@@ -368,6 +504,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local zone = spec.zone
 	-- Which side of the victim the blow arrives from (picks the reaction).
 	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, attacker.root.Position)
+	-- Blood / torn skin of a hit that lands (decided below, sent with it).
+	local blood = false
+	local skinTearSeed: number? = nil
 	local function event(kind: Types.CombatEventKind, withZone: boolean, withSide: boolean)
 		fireEvent(
 			kind,
@@ -376,7 +515,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 			if withZone then zone :: Types.HitZone else nil,
 			if withSide then side else nil,
 			spec.attackId,
-			spec.moveId
+			spec.moveId,
+			if blood then true else nil,
+			skinTearSeed
 		)
 	end
 	-- Awakened attackers hit harder.
@@ -453,6 +594,32 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 
 	-- 4. Normal hit.
 	dealDamage(victim, attacker, damage)
+
+	-- Blood: rolled here, so every client shows the same thing. Fists rarely
+	-- draw blood; the bottle's moves set their own (high) chance. The 4th M1
+	-- on the head may open a cut (then it bleeds, see below).
+	local critCut = false
+	local bloodChance: number = 0
+	local chances = spec.bloodChance
+	if chances ~= nil then
+		bloodChance = chances[zone] or 0
+	elseif spec.moveId ~= nil then
+		bloodChance = 0 -- a kit move that doesn't say it cuts: no blood
+	elseif spec.kind == "Finisher" and zone == "Head" then
+		critCut = random:NextNumber() < INJ.CRIT_BLEED_CHANCE
+		bloodChance = if critCut then 1 else 0
+	else
+		bloodChance = INJ.PUNCH_BLOOD_CHANCE[zone] or 0
+	end
+	blood = random:NextNumber() < bloodChance
+	-- Glass cuts the skin where it really landed (the zone the attacker aimed
+	-- at), on the side facing the attacker. Even on the blow that knocks
+	-- them out.
+	if spec.cuts and INJ.SKIN_TEAR then
+		skinTearSeed = random:NextInteger(1, 2 ^ 30)
+		addGash(victim, attacker, zone, spec.cuts)
+	end
+
 	if Knockout.isKnockedOut(victim.model) then
 		-- That hit knocked them out: no stun or knockback on a limp body.
 		event(spec.kind, true, true)
@@ -475,14 +642,15 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		Stamina.drain(victimPlayer, drain)
 	end
 	local bleed = spec.bleed
-	-- A heavy blow to the head (the 4th M1) opens a cut too.
-	if bleed == nil and spec.kind == "Finisher" and zone == "Head" then
+	-- The 4th M1 on the head opened a cut (rolled above).
+	if bleed == nil and critCut then
 		bleed = INJ.CRIT_BLEED
 	end
 	if bleed then
 		startBleeding(victim, attacker, bleed.perSecond, bleed.duration)
 	end
-	injure(victim, zone :: Types.HitZone, damage, side)
+	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
+	injure(victim, zone :: Types.HitZone, damage, side, spec.cuts == nil)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -644,6 +812,16 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 		return "Head"
 	end
 	return PART_ZONES[part.Name]
+end
+
+-- Removes every glass cut of this fighter (the training dummies heal
+-- completely when left alone).
+function Combat.clearCuts(model: Model)
+	for name in model:GetAttributes() do
+		if string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX then
+			setAttribute(model, name, nil)
+		end
+	end
 end
 
 -- M1. Returns true if the attack started. `aim` = the direction the player

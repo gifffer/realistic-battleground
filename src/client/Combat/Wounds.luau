@@ -7,10 +7,14 @@
 --
 -- A mark = a thin, flat, dark disc lying on the surface of the part
 -- (bruise or dried cut), welded to it so it follows the animations.
--- Discreet on purpose: no gore. Same positions on every client (they come
--- from a fixed list, not from random numbers).
+-- Discreet on purpose. Same positions on every client (they come from a
+-- fixed list, not from random numbers).
+--
+-- Glass cuts ("Gash_<Part>_<n>" attributes) are drawn by Gashes.
 --
 --   Wounds.watch(model)   start drawing the marks of this fighter
+
+local Gashes = require(script.Parent.Gashes)
 
 local Wounds = {}
 
@@ -132,6 +136,7 @@ local function refresh(model: Model, partName: string)
 end
 
 function Wounds.watch(model: Model)
+	Gashes.watch(model) -- glass cuts, drawn for real
 	for partName in SPOTS do
 		local attribute = attributeOf(partName)
 		model:GetAttributeChangedSignal(attribute):Connect(function()

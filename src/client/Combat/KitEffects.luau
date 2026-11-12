@@ -249,9 +249,11 @@ local function burst(
 	material: Enum.Material,
 	size: number,
 	speed: number,
-	lifetime: number
+	lifetime: number,
+	seeded: Random?
 )
-	local random = Random.new()
+	-- `seeded`: same random numbers on every client (pieces land the same).
+	local random = seeded or Random.new()
 	for _ = 1, count do
 		local piece = Instance.new("Part")
 		piece.Name = "Debris"
@@ -364,12 +366,6 @@ local function drip(model: Model)
 	end)
 end
 
--- A spray of blood from a cut (broken bottle).
-local function spray(position: Vector3)
-	burst(position, 6, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.1, 9, 1.2)
-	stain(position, 0.9)
-end
-
 ------------------------------------------------------------------------------
 -- Watched fighters: bleeding drips and Street Fury
 ------------------------------------------------------------------------------
@@ -466,14 +462,14 @@ end)
 
 -- A move started on `model` (animation name from Remotes.CombatAction, or
 -- our own key press): prop in hand and the swing sound.
-function KitEffects.onAction(model: Model, animation: string)
+function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local move = moveByAnimation[animation]
 	local prop = if move then move.prop else nil
 	if move and prop then
 		holdProp(model, prop, move.duration)
 	end
 	local sound = START_SOUNDS[animation]
-	if sound then
+	if sound and not silent then
 		SoundController.play(sound, model)
 	end
 end
@@ -486,8 +482,9 @@ end
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
 	SoundController.play(HIT_SOUNDS[moveId] or "Hit", victim)
-	local head = victim:FindFirstChild("Head")
-	local headPosition = if head and head:IsA("BasePart") then head.Position else nil
+	-- Where it landed (the bottle goes where it's aimed: head or torso).
+	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
+	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil
 	local move = moveById[moveId]
 	local breaks = false
 	if move then
@@ -512,15 +509,125 @@ function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: 
 			burst(headPosition, 14, GLASS_COLOR, Enum.Material.Glass, 0.16, 16, 2.5)
 		end
 	end
-	if moveId == "BrokenBottle" and headPosition then
-		spray(headPosition)
-	end
 	if zone == "Legs" then
 		local leg = victim:FindFirstChild("Right Leg")
 		if leg and leg:IsA("BasePart") then
 			burst(leg.Position, 3, Color3.fromRGB(90, 84, 76), Enum.Material.Sand, 0.12, 5, 0.8)
 		end
 	end
+end
+
+------------------------------------------------------------------------------
+-- Blood and torn skin (decided by the server, see Remotes.CombatEvent)
+------------------------------------------------------------------------------
+
+-- Raw flesh under torn skin: wet, dark red.
+local FLESH_COLOR = Color3.fromRGB(128, 26, 28)
+-- Never more than this many pieces of skin lying around (16 players...).
+local MAX_SKIN_PIECES = 40
+local SKIN_PIECE_LIFETIME = 8
+local skinPieces = 0
+
+-- The point of `part` facing `attacker` (where the blow landed).
+local function impactPoint(part: BasePart, attacker: Model): (Vector3, Vector3)
+	local toward = attacker:GetPivot().Position - part.Position
+	local flat = Vector3.new(toward.X, 0, toward.Z)
+	local direction = if flat.Magnitude > 1e-3 then flat.Unit else part.CFrame.LookVector
+	return part.Position + direction * 0.5, direction
+end
+
+-- A hit that draws blood: a spray from the impact, a stain on the floor.
+function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
+	local partName = if zone == "Head"
+		then "Head"
+		elseif zone == "Legs" then "Right Leg"
+		else "Torso"
+	local part = victim:FindFirstChild(partName)
+	if part == nil or not part:IsA("BasePart") then
+		return
+	end
+	local point = impactPoint(part, attacker)
+	burst(
+		point,
+		if zone == "Head" then 9 else 6,
+		BLOOD_COLOR,
+		Enum.Material.SmoothPlastic,
+		0.1,
+		9,
+		1.4
+	)
+	stain(point, if zone == "Head" then 1.1 else 0.8)
+end
+
+-- Glass cutting the skin (face, torso or leg, from `zone`): a spray of blood
+-- and, sometimes, a tiny shred of skin flicked off by the glass. `seed`
+-- comes from the server: every client shows exactly the same thing. The cut
+-- that stays is drawn by Gashes (the "Gash_<Part>_<n>" attributes).
+function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone: string?)
+	local partName = "Head"
+	if zone == "Torso" then
+		partName = "Torso"
+	elseif zone == "Legs" then
+		-- the leg closest to the attacker
+		local left = victim:FindFirstChild("Left Leg")
+		local right = victim:FindFirstChild("Right Leg")
+		local from = attacker:GetPivot().Position
+		partName = "Right Leg"
+		if left and right and left:IsA("BasePart") and right:IsA("BasePart") then
+			if (left.Position - from).Magnitude < (right.Position - from).Magnitude then
+				partName = "Left Leg"
+			end
+		end
+	end
+	local head = victim:FindFirstChild(partName) -- the torn part
+	if head == nil or not head:IsA("BasePart") then
+		return
+	end
+	local random = Random.new(seed)
+	local point, toward = impactPoint(head, attacker)
+	local away = -toward
+	local skin = head.Color
+
+	local count = random:NextInteger(0, 2) -- glass cuts; it rarely rips skin away
+	for index = 1, count do
+		if skinPieces >= MAX_SKIN_PIECES then
+			break
+		end
+		-- Thin, irregular flaps: skin on some, the flesh under it on others.
+		local piece = Instance.new("Part")
+		piece.Name = "TornSkin"
+		piece.Size = Vector3.new(
+			random:NextNumber(0.05, 0.1),
+			random:NextNumber(0.015, 0.025),
+			random:NextNumber(0.04, 0.08)
+		)
+		piece.Material = Enum.Material.SmoothPlastic
+		local isFlesh = index % 2 == 0
+		piece.Color = if isFlesh then FLESH_COLOR else skin
+		piece.Reflectance = if isFlesh then 0.12 else 0 -- wet
+		piece.CanCollide = true
+		piece.CanQuery = false
+		piece.CanTouch = false
+		piece.CollisionGroup = "Default"
+		piece.CFrame = CFrame.new(point + random:NextUnitVector() * 0.15)
+			* CFrame.Angles(random:NextNumber(0, 6.3), random:NextNumber(0, 6.3), 0)
+		-- Ripped off by the blow: away from the attacker, up, spread out.
+		local spread = random:NextUnitVector() * 0.6
+		local direction = (away + Vector3.new(0, random:NextNumber(0.5, 1.1), 0) + spread).Unit
+		piece.AssemblyLinearVelocity = direction * random:NextNumber(5, 9)
+		piece.AssemblyAngularVelocity = random:NextUnitVector() * 25
+		piece.Parent = workspace
+		skinPieces += 1
+		task.delay(SKIN_PIECE_LIFETIME, function()
+			skinPieces -= 1
+			piece:Destroy()
+		end)
+	end
+
+	-- Bleeding from the fresh cut (same drops on every client).
+	burst(point, 9, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.1, 9, 1.4, random)
+	stain(point + away * 0.8, 1.3)
+	stain(point + away * 1.6 + Vector3.new(random:NextNumber(-0.4, 0.4), 0, 0), 0.7)
 end
 
 return table.freeze(KitEffects)

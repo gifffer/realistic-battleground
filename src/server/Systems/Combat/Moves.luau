@@ -99,6 +99,8 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		bleed = hit.bleed,
 		slow = hit.slow,
 		unblockable = hit.unblockable,
+		bloodChance = hit.bloodChance or {}, -- a move without it never bleeds visibly
+		cuts = hit.cuts,
 		launch = hit.launch,
 		staminaDrain = hit.staminaDrain,
 		attackId = nil,

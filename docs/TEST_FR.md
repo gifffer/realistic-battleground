@@ -211,7 +211,6 @@ Pas de son dédié encore pour la bouteille / coup de tête / tackle / tibia / A
 utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes IDs dans
 `src/shared/Sounds.luau` : **BottleBreak, Slash, Headbutt, Tackle, KickLow, Awaken**.
 
-<<<<<<< HEAD
 ## Étape 5 — Blessures (`feature/injuries`)
 
 | # | Test | Résultat attendu |
@@ -223,11 +222,10 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 | B5 | Descendre **sous 25 PV** | Bords de l'écran qui s'assombrissent et **respirent**, image un peu floue et moins colorée ; plus tu es bas, plus c'est fort. Ton perso est **voûté** (main sur les côtes) hors combat, **garde basse et fatiguée** en combat — les autres le voient. |
 | B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
 | B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
-
 | B8 | Se faire frapper **à 70 PV ou moins** | Le perso pousse un **cri de douleur** (3 sons au hasard), entendu par tout le monde. |
 
 Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seulement toi).
-=======
+
 ## Marche et course réalistes (`feature/realistic-locomotion`)
 
 | # | Test | Résultat attendu |
@@ -237,7 +235,29 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | L3 | Passer de marche à course et inversement | Transition douce, pas de clignotement entre les deux. |
 | L4 | Sauter en marchant | L'animation de saut de Roblox (pas de marche dans les airs). |
 | L5 | Vitesse | Marche plus lente qu'avant (10), sprint 22 : réglable dans `src/shared/Config.luau` (`WALK_SPEED`, `SPRINT_SPEED`). |
->>>>>>> origin/main
+
+## Son de l'awakening, sang et peau arrachée (`feature/gore-awakening-sound`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| G1 | Jauge Fury pleine, appuyer sur **G** | Le cri de Street Fury part **au moment de l'appui** (une seule fois), puis l'animation. Les autres joueurs l'entendent aussi. |
+| G2 | G en gardant F (garde) ou pendant un coup | Rien ne se passe (ni son ni activation), comme le serveur. |
+| G3 | Frapper au poing 20 fois (tête et corps) | Le sang est **rare** : quelques giclées à la tête, presque jamais au corps. Le 4ᵉ coup à la tête n'ouvre une coupure qu'environ 1 fois sur 3. |
+| G4 | **Bouteille** (touche 1) en visant la **tête** | Giclée de sang **à chaque fois**, saignement plus long. Une **lacération** apparaît du côté de l'attaquant (front, tempe ou joue) : bord de peau déchiré, chair rouge, sang qui coule. **Jamais** d'os cassé ni de cerveau. |
+| G4b | Bouteille en visant le **corps** | Le verre se brise sur le torse, sang souvent. Lacération sur la poitrine ou le ventre, avec du gras jaune ; le t-shirt reste dessiné autour. |
+| G5 | Bouteille **au même endroit** 3 fois | La même plaie grandit : petite → moyenne → grande. Elle ne devient pas plus profonde jusqu'aux os. |
+| G5b | **Broken Bottle** à la tête puis au corps | **Entailles** longues et nettes, en biais. À la taille L : du muscle rouge foncé au fond (corps), ou un peu d'os pâle au fond (tête). |
+| G6 | Frapper ailleurs sur la même partie | Une **nouvelle** plaie (3 max par partie ; au-delà, la plus proche grandit). |
+| G7 | 2 joueurs | Les deux écrans voient **les mêmes** plaies, au même endroit. |
+| G8 | Mourir / réapparaître | Le corps redevient intact. |
+| G9 | Regarder de près une tête ou un torse blessé | La tête reste **ronde**, sans bord carré. Le visage est à sa place (yeux, bouche). Le t-shirt et le pantalon sont alignés autour de la plaie. Si un motif est décalé ou à l'envers, envoie une capture. |
+| G10 | Ta propre tête blessée, en 1re personne | Rien ne gêne la vue. |
+
+Les plaies demandent d'importer `WoundKit` une fois (voir `docs/WOUNDS_FR.md`).
+
+Note : le sang réaliste et les plaies demandent de remplir honnêtement le **questionnaire de
+maturité** de l'expérience (Creator Dashboard). Pour un public plus jeune, mettre
+`SKIN_TEAR = false` dans `src/shared/Config.luau` (section `Injuries`).
 
 ## Étape 6 — Kit Boxer (`feature/boxer`)
 

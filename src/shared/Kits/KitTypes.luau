@@ -22,6 +22,13 @@ export type HitDef = {
 	slow: { multiplier: number, duration: number }?,
 	unblockable: boolean?, -- goes through a block (still parried / dodged)
 	breaksProp: boolean?, -- the bottle breaks on this hit
+	-- Chance (0-1) this hit draws visible blood, per zone it lands on
+	-- ({ Head = 1, Torso = 0.5 }). nil / missing zone = no blood.
+	bloodChance: { [string]: number }?,
+	-- Glass: cuts the skin where the hit lands (head or torso), see
+	-- Config.Injuries.SKIN_TEAR. "Lac" = a bottle smashed on them (ragged
+	-- laceration), "Slash" = a broken bottle (clean, longer cut).
+	cuts: ("Lac" | "Slash")?,
 	launch: number?, -- with knockdown: thrown UP at this speed (studs/s): uppercuts
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 }
