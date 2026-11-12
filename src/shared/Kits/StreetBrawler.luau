@@ -34,12 +34,17 @@ local kit: KitTypes.KitDef = {
 				{
 					at = 0.32,
 					damage = 9,
-					zone = "Head",
+					-- No fixed zone: it lands where the attacker aims (head or
+					-- torso), like a punch. Only a head hit tears the head open.
 					stun = 0.7,
 					hitbox = HEAD,
 					forward = 3,
-					bleed = { perSecond = 2, duration = 4 },
+					-- Glass: it bleeds hard (always on the head, often on the body)
+					-- and leaves a ragged cut where it lands.
+					bleed = { perSecond = 3, duration = 6 },
 					breaksProp = true,
+					bloodChance = { Head = 1, Torso = 0.6 },
+					cuts = "Lac",
 				},
 			},
 		},
@@ -127,15 +132,24 @@ local kit: KitTypes.KitDef = {
 				stamina = 10,
 				prop = "BrokenBottle",
 				hits = {
-					{ at = 0.2, damage = 6, zone = "Head", stun = 0.5, hitbox = WIDE, forward = 3 },
+					{
+						at = 0.2,
+						damage = 6,
+						stun = 0.5, -- (no fixed zone: where the attacker aims)
+						hitbox = WIDE,
+						forward = 3,
+						bloodChance = { Head = 0.85, Torso = 0.5 }, -- jagged glass
+						cuts = "Slash",
+					},
 					{
 						at = 0.45,
 						damage = 8,
-						zone = "Head",
 						stun = 0.7,
 						hitbox = WIDE,
 						forward = 3,
 						bleed = { perSecond = 4, duration = 5 },
+						bloodChance = { Head = 1, Torso = 0.6 },
+						cuts = "Slash",
 					},
 				},
 			},

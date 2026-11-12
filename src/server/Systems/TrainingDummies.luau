@@ -118,7 +118,10 @@ local function spawnDummy(kind: DummyKind, position: Vector3)
 			-- gets up or someone finishes it.
 			local knockedOut = model:GetAttribute("KnockedOut") == true
 			if not knockedOut and os.clock() - lastDamagedAt > HEAL_AFTER then
-				humanoid.Health = humanoid.MaxHealth
+				if humanoid.Health < humanoid.MaxHealth then
+					humanoid.Health = humanoid.MaxHealth
+					Combat.clearCuts(model) -- the glass cuts heal too
+				end
 			end
 			if isAttacker and not knockedOut and model:GetAttribute("Stunned") ~= true then
 				local target = findClosestPlayer(root.Position)

@@ -104,7 +104,7 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "Hit",
 	},
 	Awaken = { -- Street Fury starts (a neck crack, a low growl...)
-		ids = { 120898948780322 },
+		ids = { 642336941 },
 		volume = 0.8,
 		pitch = 1,
 		pitchVariation = 0.03,

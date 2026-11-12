@@ -65,19 +65,20 @@ local function pickId(name: string, ids: { number }): number
 	return id
 end
 
-function SoundController.play(name: string, model: Model?)
+-- Returns the Sound (to stop it early), or nil if nothing played.
+function SoundController.play(name: string, model: Model?): Sound?
 	local info = Sounds[name]
 	if info == nil then
 		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
-		return
+		return nil
 	end
 	local ids = resolveIds(name)
 	if #ids == 0 or model == nil then
-		return
+		return nil
 	end
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if root == nil or not root:IsA("BasePart") then
-		return
+		return nil
 	end
 
 	local sound = Instance.new("Sound")
@@ -93,6 +94,7 @@ function SoundController.play(name: string, model: Model?)
 	-- Removed once finished (TimeLength is 0 until the file is loaded, hence
 	-- the safe minimum).
 	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
+	return sound
 end
 
 -- A looping sound heard only by this player, not placed in the world (the
