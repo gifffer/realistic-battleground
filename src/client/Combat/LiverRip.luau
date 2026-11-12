@@ -192,6 +192,7 @@ function LiverRip.rip(victim: Model, attacker: Model)
 		end
 	end
 	if arm == nil or not arm:IsA("BasePart") then
+		warn("[LiverRip] no Left Arm to hold the liver")
 		return
 	end
 	-- In the fist, hanging out of it.
@@ -199,7 +200,9 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	liver.CanCollide = false
 	liver.Massless = true
 	liver.Anchored = false
-	liver:PivotTo(arm.CFrame * CFrame.new(0, -1.25, -0.15) * CFrame.Angles(0, 0, math.rad(80)))
+	-- (its CFrame, not PivotTo: an imported piece's pivot is elsewhere)
+	liver.CFrame = arm.CFrame * CFrame.new(0, -1.25, -0.15) * CFrame.Angles(0, 0, math.rad(80))
+	liver:SetAttribute("LiverOf", attacker.Name)
 	local weld = Instance.new("WeldConstraint")
 	weld.Name = "Held"
 	weld.Part0 = arm
@@ -226,6 +229,19 @@ function LiverRip.drop(attacker: Model)
 	local liver: BasePart? = held[attacker]
 	held[attacker] = nil
 	if liver == nil or liver.Parent == nil then
+		-- (lost track of it? find it in his hand)
+		for _, item in workspace:GetChildren() do
+			if
+				item:IsA("BasePart")
+				and item:GetAttribute("LiverOf") == attacker.Name
+				and item:FindFirstChild("Held")
+			then
+				liver = item
+			end
+		end
+	end
+	if liver == nil then
+		warn("[LiverRip] no liver in the hand to drop")
 		return
 	end
 	local weld = liver:FindFirstChild("Held")
@@ -234,8 +250,12 @@ function LiverRip.drop(attacker: Model)
 	end
 	liver.Massless = false
 	liver.CanCollide = true
-	-- (it slips out of the fist: a little forward, turning over)
-	liver.AssemblyLinearVelocity = attacker:GetPivot().LookVector * 1.2 + Vector3.new(0, -1, 0)
+	-- (it slips out of the fist, out to his side - away from the body that
+	-- falls in front of him - turning over)
+	local pivot = attacker:GetPivot()
+	liver.AssemblyLinearVelocity = -pivot.RightVector * 2.2
+		+ pivot.LookVector * 0.4
+		+ Vector3.new(0, -1, 0)
 	liver.AssemblyAngularVelocity = Vector3.new(2.5, 0.8, 3)
 	-- When it reaches the floor (a free fall from where it is).
 	local params = RaycastParams.new()

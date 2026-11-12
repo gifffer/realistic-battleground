@@ -126,6 +126,9 @@ function GoreKit.spawn(
 	for _, layer in piece.layers do
 		local part = layer.source:Clone()
 		part:ClearAllChildren()
+		-- (the importer gives each piece a pivot at the kit's origin: far
+		-- away; a copy's pivot is its own centre)
+		part.PivotOffset = CFrame.identity
 		part.Anchored = false
 		part.CanQuery = false
 		part.CanTouch = false
