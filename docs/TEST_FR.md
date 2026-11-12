@@ -399,5 +399,18 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | S7 | Mannequins de la boutique de vêtements | Chacun porte une tenue du SHOP (haut + pantalon aux couleurs de GREY SWEATS, OLIVE…). S'il n'y a pas de mannequin, rien ne casse. |
 | S8 | Le bar | On peut y entrer par l'angle (porte large de 8) ; comptoir, tabourets, billard, juke-box, lumière chaude ; pas de prompt de boutique dedans. |
 
+### v4 : map plus grande, portes, graphismes
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| V1 | Se promener | La map est plus grande (~262 × 270 au lieu de ~240 × 240) : avenue et rue Kerr plus larges (chaussée et trottoirs), terrain sous le pont plus long. Toujours 10 spawns, les mannequins d'entraînement toujours dans la Cage. |
+| V2 | Marcher vers une boutique (THREADBARE, REWIND, le bar — y compris la porte arrière du bar sur la cour) | Portes vitrées doubles (cadre métal, barres de poussée) qui s'ouvrent seules vers l'intérieur quand tu arrives à ~10 studs, et se referment quand plus personne n'est près. Elles ne se referment jamais sur toi. |
+| V3 | Combat devant une porte fermée | Un corps projeté contre la porte fermée est arrêté par elle (normal). Une porte ouverte ne bloque rien. |
+| V4 | Fenêtres | Toutes les fenêtres (étages, rez-de-chaussée, arrière des immeubles) ont le même cadre : montants, linteau, appui, traverse ; celles des immeubles lointains ont au moins un appui. |
+| V5 | Voitures | Toutes les berlines (garées, taxi, épave du parking, voiture sur cric) ont le même modèle détaillé (jantes, passages de roue, rétros, calandre, plaques, joints de portes). L'épave : rouille, capot soulevé, portière enfoncée, une roue manquante. Le van a le même niveau (cabine vitrée, pare-brise incliné, phares). |
+| V6 | Mannequins de la boutique de vêtements | Mieux faits (cou, épaules, bras et jambes articulés, mains, chaussures) et chacun dans une pose : main sur la hanche, bras levé, en marche, bras croisés. Ils prennent toujours les couleurs de la tenue. |
+| V7 | Bout est de la rue Kerr (à côté de CHECKS CASHED) | Plus de « ROAD CLOSED » ni de barrières : un kiosque à journaux éclairé (« NEWS LOTTO SMOKES ») contre le mur, un banc, une vieille pub de diner en hauteur. |
+| V8 | Parcours de test (Studio) | Toujours au sud, sans chevaucher la ville (déplacé un peu plus au sud). |
+
 Les sons `Rain` et `Thunder` (`src/shared/Sounds.luau`) sont vides pour l'instant : donne-moi des IDs et je les mets.
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
