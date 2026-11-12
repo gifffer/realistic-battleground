@@ -28,7 +28,7 @@ local GALLBLADDER = Color3.fromRGB(74, 100, 42)
 local BLOOD = Color3.fromRGB(78, 6, 6)
 local BLOOD_WET = Color3.fromRGB(104, 8, 8)
 local BONE = Color3.fromRGB(224, 212, 188)
-local LIFETIME = 14 -- seconds the liver stays on the floor
+local LIFETIME = 30 -- seconds the liver stays on the floor
 local POUR_TIME = 3.5 -- seconds the hole pours blood
 
 -- Where the liver was: the victim's right, under the ribs, in front (torso

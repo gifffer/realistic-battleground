@@ -160,29 +160,30 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(0, 0.6, -1.0),
 				fov = 56,
 			},
-			-- Low, from his left: the hook into their right side, under the ribs.
+			-- Behind his left side, low: past him, the fist going into their right
+			-- side under the ribs (nothing in between: checked on the poses).
 			{
 				time = 1.98,
-				from = Vector3.new(-2.9, -0.7, -0.8),
-				to = Vector3.new(-2.6, -0.8, -1.1),
-				look = Vector3.new(-0.4, -0.6, -1.8),
-				fov = 52,
+				from = Vector3.new(-2.9, -0.3, 0.35),
+				to = Vector3.new(-2.6, -0.45, 0.05),
+				look = Vector3.new(-0.52, -0.95, -2.0),
+				fov = 50,
 			},
-			-- From the front-left: the arm comes out, the liver in the hand.
+			-- From his left, low: the arm pulls out, the liver in the fist.
 			{
 				time = 2.55,
-				from = Vector3.new(-3.2, 0.2, -2.6),
-				to = Vector3.new(-3.0, 0.35, -2.2),
-				look = Vector3.new(-0.8, -0.2, -1.3),
-				fov = 56,
+				from = Vector3.new(-4.1, -1.15, -0.6),
+				to = Vector3.new(-3.8, -1.0, -0.85),
+				look = Vector3.new(-1.1, -0.5, -1.4),
+				fov = 55,
 			},
-			-- Close: he looks at it.
+			-- In front of it: he holds it out at arm's length and looks at it.
 			{
 				time = 2.85,
-				from = Vector3.new(-1.7, 1.0, -2.8),
-				to = Vector3.new(-1.45, 1.1, -2.55),
-				look = Vector3.new(-0.45, 0.75, -1.0),
-				fov = 46,
+				from = Vector3.new(-1.5, 1.15, -3.7),
+				to = Vector3.new(-1.45, 1.05, -3.4),
+				look = Vector3.new(-1.4, 0.4, -1.12),
+				fov = 45,
 			},
 			-- Wide: the body on the floor, the liver thrown down by it.
 			{

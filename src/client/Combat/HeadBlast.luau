@@ -45,8 +45,8 @@ local SCLERA = Color3.fromRGB(236, 230, 220)
 local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
-local PIECE_LIFETIME = 10 -- seconds the pieces stay on the floor
-local MARK_LIFETIME = 12 -- seconds the blood stays on the floor
+local PIECE_LIFETIME = 30 -- seconds the pieces stay on the floor
+local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
 local MAX_MARKS = 140 -- blood marks on the floor at once (several finishers...)
 local PUMP_TIME = 4.5 -- seconds the neck keeps pumping blood
 local BEAT = 0.55 -- seconds between two spurts (a racing heart)
@@ -588,7 +588,7 @@ local function pump(model: Model, mouth: Attachment, random: Random)
 	local emitter = bloodEmitter(mouth)
 	local below = mouth.WorldPosition
 	local pool: { BasePart } = {}
-	local real = blot(GoreShapes.pool, below, 0.4, nil, random, 25)
+	local real = blot(GoreShapes.pool, below, 0.4, nil, random, 40)
 	if real then
 		local k = random:NextNumber(3.2, 4.2) / 0.4
 		local grown = real.Size * Vector3.new(k, 1, k) -- (across, not thicker)
@@ -602,7 +602,7 @@ local function pump(model: Model, mouth: Attachment, random: Random)
 		local offset =
 			Vector3.new(random:NextNumber(-0.35, 0.35), 0, random:NextNumber(-0.35, 0.35))
 		local piece =
-			mark(below + offset, 0.3, nil, nil, if index == 1 then BLOOD else BLOOD_WET, 25)
+			mark(below + offset, 0.3, nil, nil, if index == 1 then BLOOD else BLOOD_WET, 40)
 		if piece then
 			table.insert(pool, piece)
 		end
@@ -895,8 +895,8 @@ end
 -- A pool spreading under `position` to `size` studs over `seconds`.
 function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: number)
 	local random = Random.new(seed)
-	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 25)
-		or mark(position, 0.3, nil, nil, BLOOD, 25)
+	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 40)
+		or mark(position, 0.3, nil, nil, BLOOD, 40)
 	if piece then
 		local k = size / 0.3
 		-- (grows across, not thicker: a round mark's thin axis is X)

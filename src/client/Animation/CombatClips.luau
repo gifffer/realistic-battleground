@@ -6151,7 +6151,8 @@ local clips: { [string]: R6Pose.Clip } = {
 	},
 	-- Boxer: hauls them up by the collar, two hooks to the body, right hook,
 	-- left hook, cross; then a left hook into their right side under the
-	-- ribs: the hand goes in, tears the liver out, he looks at it, drops it.
+	-- ribs: the hand goes in, tears the liver out, he holds it out at arm's
+	-- length and looks at it, then throws it down.
 	Boxer_FinisherCombo = {
 		length = 4.1,
 		looped = false,
@@ -6359,24 +6360,24 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 2.95,
 				pose = {
-					Root = { rot = Vector3.new(-2, -8, 0), pos = Vector3.new(0, -0.05, 0.05) },
-					Neck = { rot = Vector3.new(26, 12, 0) },
-					RightShoulder = { rot = Vector3.new(70, 0, -20) },
-					LeftShoulder = { rot = Vector3.new(115, 0, 40) },
-					RightHip = { rot = Vector3.new(10, 0, -2) },
-					LeftHip = { rot = Vector3.new(2, 0, 0) },
+					Root = { rot = Vector3.new(-2, 14, 0), pos = Vector3.new(0, -0.05, 0.05) },
+					Neck = { rot = Vector3.new(14, 30, 0) },
+					RightShoulder = { rot = Vector3.new(20, 0, -10) },
+					LeftShoulder = { rot = Vector3.new(96, 0, 18) },
+					RightHip = { rot = Vector3.new(-8, 0, -2) },
+					LeftHip = { rot = Vector3.new(10, 0, 2) },
 				},
 			},
 			{
 				time = 3.45,
 				tangent = "flat",
 				pose = {
-					Root = { rot = Vector3.new(0, -10, 0), pos = Vector3.new(0, -0.05, 0.05) },
-					Neck = { rot = Vector3.new(24, 18, 0) },
-					RightShoulder = { rot = Vector3.new(64, 0, -18) },
-					LeftShoulder = { rot = Vector3.new(112, 24, 36) },
-					RightHip = { rot = Vector3.new(10, 0, -2) },
-					LeftHip = { rot = Vector3.new(-2, 0, 0) },
+					Root = { rot = Vector3.new(0, 16, 0), pos = Vector3.new(0, -0.05, 0.05) },
+					Neck = { rot = Vector3.new(12, 34, 0) },
+					RightShoulder = { rot = Vector3.new(18, 0, -10) },
+					LeftShoulder = { rot = Vector3.new(98, 0, 18) },
+					RightHip = { rot = Vector3.new(-10, 0, -2) },
+					LeftHip = { rot = Vector3.new(10, 0, 2) },
 				},
 			},
 			{
@@ -6385,7 +6386,7 @@ local clips: { [string]: R6Pose.Clip } = {
 					Root = { rot = Vector3.new(-4, 14, 0), pos = Vector3.new(0, -0.1, 0) },
 					Neck = { rot = Vector3.new(10, -10, 0) },
 					RightShoulder = { rot = Vector3.new(70, 0, -20) },
-					LeftShoulder = { rot = Vector3.new(76, -24, 6) },
+					LeftShoulder = { rot = Vector3.new(82, 0, 8) },
 					RightHip = { rot = Vector3.new(-12, 0, -2) },
 					LeftHip = { rot = Vector3.new(16, 0, 4) },
 				},
@@ -6405,7 +6406,8 @@ local clips: { [string]: R6Pose.Clip } = {
 	},
 	-- The Boxer finisher's victim, held up (in its own space, facing the
 	-- Boxer): dangling, folding on the body shots, head snapped by each
-	-- punch, folding over the arm that goes into its side, a jerk when the
+	-- punch; its right hand comes up to clutch him, it folds over the arm that
+	-- goes into its side, a jerk when the
 	-- liver is torn out (the server ragdolls it then).
 	Boxer_FinisherVictim = {
 		length = 2.8,
@@ -6548,7 +6550,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				pose = {
 					Root = { rot = Vector3.new(-16, 0, 10), pos = Vector3.new(0, -0.4, 0.15) },
 					Neck = { rot = Vector3.new(-30, 0, 12) },
-					RightShoulder = { rot = Vector3.new(8, 0, 6) },
+					RightShoulder = { rot = Vector3.new(120, 0, 16) },
 					LeftShoulder = { rot = Vector3.new(8, 0, -8) },
 					RightHip = { rot = Vector3.new(24, 0, -10), pos = Vector3.new(0, 0.4, 0) },
 					LeftHip = { rot = Vector3.new(38, 0, -12), pos = Vector3.new(0, 0.4, 0) },
@@ -6560,7 +6562,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				pose = {
 					Root = { rot = Vector3.new(-34, 14, 12), pos = Vector3.new(0.1, -0.5, 0.3) },
 					Neck = { rot = Vector3.new(-18, 10, 0) },
-					RightShoulder = { rot = Vector3.new(44, 0, -30) },
+					RightShoulder = { rot = Vector3.new(135, 0, 18) },
 					LeftShoulder = { rot = Vector3.new(40, 0, 24) },
 					RightHip = { rot = Vector3.new(44, 0, -2), pos = Vector3.new(0, 0.5, 0) },
 					LeftHip = { rot = Vector3.new(42, 0, -6), pos = Vector3.new(0, 0.5, 0) },
@@ -6571,7 +6573,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				pose = {
 					Root = { rot = Vector3.new(-38, 16, 14), pos = Vector3.new(0.1, -0.55, 0.32) },
 					Neck = { rot = Vector3.new(-8, 14, 0) },
-					RightShoulder = { rot = Vector3.new(52, 0, -34) },
+					RightShoulder = { rot = Vector3.new(140, 0, 20) },
 					LeftShoulder = { rot = Vector3.new(46, 0, 26) },
 					RightHip = { rot = Vector3.new(48, 0, -2), pos = Vector3.new(0, 0.55, 0) },
 					LeftHip = { rot = Vector3.new(44, 0, -6), pos = Vector3.new(0, 0.55, 0) },
@@ -6583,7 +6585,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				pose = {
 					Root = { rot = Vector3.new(-10, -6, -6), pos = Vector3.new(0, -0.35, 0.2) },
 					Neck = { rot = Vector3.new(40, -10, 0) },
-					RightShoulder = { rot = Vector3.new(20, 0, 30) },
+					RightShoulder = { rot = Vector3.new(70, 0, 40) },
 					LeftShoulder = { rot = Vector3.new(24, 0, -30) },
 					RightHip = { rot = Vector3.new(24, 0, 4), pos = Vector3.new(0, 0.35, 0) },
 					LeftHip = { rot = Vector3.new(16, 0, 6), pos = Vector3.new(0, 0.35, 0) },
@@ -6595,7 +6597,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				pose = {
 					Root = { rot = Vector3.new(-10, -6, -6), pos = Vector3.new(0, -0.35, 0.2) },
 					Neck = { rot = Vector3.new(40, -10, 0) },
-					RightShoulder = { rot = Vector3.new(20, 0, 30) },
+					RightShoulder = { rot = Vector3.new(70, 0, 40) },
 					LeftShoulder = { rot = Vector3.new(24, 0, -30) },
 					RightHip = { rot = Vector3.new(24, 0, 4), pos = Vector3.new(0, 0.35, 0) },
 					LeftHip = { rot = Vector3.new(16, 0, 6), pos = Vector3.new(0, 0.35, 0) },

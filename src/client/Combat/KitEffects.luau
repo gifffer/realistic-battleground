@@ -42,7 +42,7 @@ local FURY_LIGHT = Color3.fromRGB(150, 36, 28)
 
 -- Bleeding: one drop this often (seconds), stains on the floor live this long.
 local DRIP_INTERVAL = 0.22
-local STAIN_LIFETIME = 9
+local STAIN_LIFETIME = 30
 -- Never more than this many stains in the world (16 players bleeding...).
 local MAX_STAINS = 60
 
@@ -648,7 +648,7 @@ end
 local FLESH_COLOR = Color3.fromRGB(128, 26, 28)
 -- Never more than this many pieces of skin lying around (16 players...).
 local MAX_SKIN_PIECES = 40
-local SKIN_PIECE_LIFETIME = 8
+local SKIN_PIECE_LIFETIME = 20
 local skinPieces = 0
 
 -- The point of `part` facing `attacker` (where the blow landed).

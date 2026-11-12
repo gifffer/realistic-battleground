@@ -46,12 +46,18 @@ end
 
 -- The ids to use for `name`: its own, or its fallback's while it has none.
 local function resolveIds(name: string): { number }
-	local info = Sounds[name]
-	if #info.ids > 0 then
-		return info.ids
+	-- (a fallback can have its own fallback: followed, a few steps at most)
+	local info: Sounds.SoundInfo? = Sounds[name]
+	for _ = 1, 4 do
+		if info == nil then
+			return {}
+		end
+		if #info.ids > 0 then
+			return info.ids
+		end
+		info = if info.fallback then Sounds[info.fallback] else nil
 	end
-	local fallback = if info.fallback then Sounds[info.fallback] else nil
-	return if fallback then fallback.ids else {}
+	return {}
 end
 
 -- Random id, different from the last one played (when there's a choice).

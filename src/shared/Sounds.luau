@@ -153,26 +153,27 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.02,
 		fallback = "HeavyHit",
 	},
-	RibCrack = { -- ribs giving way under the fist
+	RibCrack = { -- ribs giving way under the fist (silent until it has an id:
+		-- the blow's own sound covers it)
 		ids = {},
 		volume = 0.9,
 		pitch = 1.3,
 		pitchVariation = 0.06,
-		fallback = "Hit",
 	},
-	FleshTear = { -- the liver torn out, wet
+	FleshTear = { -- the liver torn out, wet (until it has its own: the
+		-- bat's crunch, higher and softer - a gory sound, not a punch)
 		ids = {},
-		volume = 1,
-		pitch = 0.5,
+		volume = 0.55,
+		pitch = 1.25,
 		pitchVariation = 0.04,
-		fallback = "HeavyHit",
+		fallback = "BatCrush",
 	},
-	OrganDrop = { -- a heavy, wet organ hitting the floor
+	OrganDrop = { -- a heavy, wet organ hitting the floor (silent until it has
+		-- an id: a punch sound there sounded like an extra blow)
 		ids = {},
 		volume = 0.7,
 		pitch = 0.45,
 		pitchVariation = 0.05,
-		fallback = "Hit",
 	},
 
 	-- Injuries (step 5) -----------------------------------------------------

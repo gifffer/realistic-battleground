@@ -314,6 +314,25 @@ local function covered(model: Model, partName: string): boolean
 	return wearsPants
 end
 
+-- What each bruise looked like when drawn (part -> index -> its attribute).
+local drawn: { [BasePart]: { [number]: string? } } = setmetatable({}, { __mode = "k" }) :: any
+local FADE_OUT = 1.2 -- seconds a healed (or changed) bruise takes to go
+
+-- Fades out (then removes) the parts of bruise `index` on `part`.
+local function fadeOut(folder: Instance, index: number)
+	for _, piece in folder:GetChildren() do
+		if piece:IsA("BasePart") and piece:GetAttribute("BruiseIndex") == index then
+			piece:SetAttribute("BruiseIndex", nil)
+			TweenService:Create(piece, TweenInfo.new(FADE_OUT), { Transparency = 1 }):Play()
+			task.delay(FADE_OUT, function()
+				piece:Destroy()
+			end)
+		end
+	end
+end
+
+-- Draws again only the bruises that changed: a new or grown one appears,
+-- a healed one fades away (the others stay as they are).
 local function refresh(model: Model, partName: string)
 	local key = Gash.KEY_OF[partName]
 	local part = model:FindFirstChild(partName)
@@ -321,25 +340,36 @@ local function refresh(model: Model, partName: string)
 		return
 	end
 	local folder = part:FindFirstChild("Wounds")
-	if folder then
-		folder:Destroy()
+	local hidden = covered(model, partName)
+	if folder == nil then
+		local created = Instance.new("Folder")
+		created.Name = "Wounds"
+		created.Parent = part
+		folder = created
 	end
-	if covered(model, partName) then
-		return
-	end
-	local created = Instance.new("Folder")
-	created.Name = "Wounds"
+	local before = drawn[part] or {}
+	local now: { [number]: string? } = {}
 	for index = 1, Bruise.MAX_PER_PART do
-		local data = Bruise.decode(model:GetAttribute(Bruise.attribute(key, index)))
-		if data then
-			draw(part, key, data, created)
+		local value = model:GetAttribute(Bruise.attribute(key, index))
+		local data = if hidden then nil else Bruise.decode(value)
+		local text = if data then value :: string else nil
+		if text ~= before[index] then
+			fadeOut(folder :: Instance, index)
+			if data then
+				-- (built aside, then moved in: Gashes hides marks over a cut
+				-- as they are added to "Wounds")
+				local fresh = Instance.new("Folder")
+				draw(part, key, data, fresh)
+				for _, piece in fresh:GetChildren() do
+					piece:SetAttribute("BruiseIndex", index)
+					piece.Parent = folder
+				end
+				fresh:Destroy()
+			end
 		end
+		now[index] = text
 	end
-	if #created:GetChildren() == 0 then
-		created:Destroy()
-		return
-	end
-	created.Parent = part
+	drawn[part] = now
 end
 
 function Wounds.watch(model: Model)

@@ -1242,6 +1242,33 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 	return PART_ZONES[part.Name]
 end
 
+-- Heals one injury of this fighter, a little (the training dummies, left
+-- alone): a bruise pales a level, then goes; a bit of glass, then a cut,
+-- closes. Returns false when there is nothing left to heal.
+function Combat.healOneInjury(model: Model): boolean
+	local attributes = model:GetAttributes()
+	-- (the oldest-looking first: bruises, then glass, then cuts)
+	for name, value in attributes do
+		if Bruise.isAttribute(name) then
+			local data = Bruise.decode(value)
+			if data and data.level > 1 then
+				data.level -= 1
+				setAttribute(model, name, Bruise.encode(data))
+			else
+				setAttribute(model, name, nil)
+			end
+			return true
+		end
+	end
+	for name in attributes do
+		if Gash.isInjuryAttribute(name) then
+			setAttribute(model, name, nil)
+			return true
+		end
+	end
+	return false
+end
+
 -- Removes every cut and bruise of this fighter (the training dummies heal
 -- completely when left alone).
 function Combat.clearCuts(model: Model)
