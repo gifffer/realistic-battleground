@@ -671,11 +671,6 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
 	stain(point, if zone == "Head" then 1.1 else 0.8)
 end
 
--- A blood stain on the floor under `position` (HeadBlast: the burst head).
-function KitEffects.stain(position: Vector3, size: number)
-	stain(position, size)
-end
-
 -- Glass cutting the skin (face, torso or leg, from `zone`): a spray of blood
 -- and, sometimes, a tiny shred of skin flicked off by the glass. `seed`
 -- comes from the server: every client shows exactly the same thing. The cut

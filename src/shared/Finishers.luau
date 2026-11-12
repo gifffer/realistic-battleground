@@ -45,7 +45,7 @@ export type Cinematic = {
 	-- (the body beyond it), facing it, HEAD_DISTANCE away; "front" = where he is, the victim
 	-- pulled up in front of him at HOLD_DISTANCE, facing him.
 	placement: "head" | "front",
-	victimAnimation: string?, -- played on the victim (held up)
+	victimAnimation: string?, -- played on the victim (held up / laid out)
 	events: { Event },
 	shots: { Shot },
 }
@@ -59,6 +59,7 @@ local cinematics: { [string]: Cinematic } = {
 		duration = 3.3,
 		kill = 1.7,
 		placement = "head",
+		victimAnimation = "Brawler_FinisherBatVictim",
 		events = {
 			{ time = 0.35, kind = "Prop" },
 			{ time = 0.55, kind = "Plea" },
@@ -66,7 +67,8 @@ local cinematics: { [string]: Cinematic } = {
 			{ time = 1.7, kind = "Kill" },
 			{ time = 3.1, kind = "PropAway" },
 		},
-		-- (the victim lies along -Z: its head at (0, -2.4, -HEAD_DISTANCE),
+		-- (the server lays the victim out along -Z, face up: its head at
+		-- (0, -2.45, -HEAD_DISTANCE),
 		-- its body beyond)
 		shots = {
 			-- From the side, wide: the body on the ground, him drawing the bat.
@@ -93,17 +95,18 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(0, 1.0, -0.8),
 				fov = 58,
 			},
-			-- On the head as the bat comes down: it bursts.
+			-- From the side, low, on the head as the bat comes down: it
+			-- bursts; held a while to see it (the spray, the pieces, the neck).
 			{
 				time = 1.5,
-				from = Vector3.new(3.3, -1.3, -4.6),
-				to = Vector3.new(3.0, -1.5, -4.5),
-				look = Vector3.new(0, -2.4, -3.8),
-				fov = 54,
+				from = Vector3.new(3.6, -1.4, -4.4),
+				to = Vector3.new(3.1, -1.7, -4.9),
+				look = Vector3.new(0, -2.5, -4.2),
+				fov = 56,
 			},
 			-- Wide, slowly turning: what's left, him with the bat.
 			{
-				time = 2.1,
+				time = 2.45,
 				from = Vector3.new(5.2, 0.6, -6.6),
 				to = Vector3.new(5.6, 1.2, -2.0),
 				look = Vector3.new(0, -1.5, -3.2),

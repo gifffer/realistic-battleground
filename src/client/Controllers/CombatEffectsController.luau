@@ -698,6 +698,7 @@ end
 local SERVER_ONLY_ACTIONS = table.freeze({
 	GetUp = true,
 	Boxer_FinisherVictim = true, -- held up by a Boxer's finisher (we're the victim)
+	Brawler_FinisherBatVictim = true, -- laid out under a Street Brawler's bat
 	-- Cinematic finishers: not predicted, played only when the server starts them.
 	Brawler_FinisherBat = true,
 	Boxer_FinisherCombo = true,

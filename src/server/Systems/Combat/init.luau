@@ -957,6 +957,17 @@ local function startCinematic(
 			end
 		end
 		anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
+		-- The victim laid out flat on its back in front of him, head toward
+		-- him (lying however it fell, even still standing, the shots and the
+		-- bat would miss it): its head at (0, -2.45, -HEAD_DISTANCE).
+		victimPlace = anchor
+			* CFrame.new(0, -2.45, -(Finishers.HEAD_DISTANCE + 1.5))
+			* CFrame.fromMatrix(
+				Vector3.zero,
+				Vector3.new(1, 0, 0), -- its right: his right
+				Vector3.new(0, 0, 1), -- its head: toward him
+				Vector3.new(0, -1, 0) -- its back: on the floor (face up)
+			)
 	else
 		-- Where he is, facing the body; the victim hauled up in front of him.
 		local toward = Vector3.new(
@@ -1047,11 +1058,13 @@ local function startCinematic(
 		end
 		killed = true
 		if victimPlace then
-			-- Sent flying by the uppercut.
+			-- Limp; the Boxer's uppercut sends the body flying.
 			victimRoot.Anchored = false
 			Ragdoll.enable(target)
-			victimRoot.AssemblyLinearVelocity = anchor.LookVector * 34 + Vector3.new(0, 46, 0)
-			victimRoot.AssemblyAngularVelocity = anchor.RightVector * -9
+			if cinematic.placement == "front" then
+				victimRoot.AssemblyLinearVelocity = anchor.LookVector * 34 + Vector3.new(0, 46, 0)
+				victimRoot.AssemblyAngularVelocity = anchor.RightVector * -9
+			end
 		end
 		Knockout.finish(target, state.model)
 		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
