@@ -66,7 +66,7 @@ local cinematics: { [string]: Cinematic } = {
 		events = {
 			{ time = 0.35, kind = "Prop" },
 			{ time = 0.55, kind = "Plea" },
-			{ time = 1.5, kind = "Swing" },
+			{ time = 1.53, kind = "Swing" },
 			{ time = 1.7, kind = "Kill" },
 			{ time = 3.1, kind = "PropAway" },
 		},
