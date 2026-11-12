@@ -1279,6 +1279,17 @@ function Combat.clearCuts(model: Model)
 	end
 end
 
+-- TEMPORARY (FinisherShowcase, for filming; delete with it): `model`
+-- finishes the knocked-out `target` with its kit's finisher, wherever it
+-- stands (dummies never finish anyone otherwise).
+function Combat.finishFor(model: Model, target: Model): boolean
+	local state = states[model]
+	if state == nil or not Knockout.isKnockedOut(target) then
+		return false
+	end
+	return startFinisher(state, target)
+end
+
 -- M1. Returns true if the attack started. `aim` = the direction the player
 -- aims at (validated by onAttack); nil for dummies (random head / torso).
 function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boolean

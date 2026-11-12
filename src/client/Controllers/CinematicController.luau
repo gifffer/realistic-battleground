@@ -51,6 +51,12 @@ local SHAKES: { [string]: Shake } = {
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
+-- TEMPORARY (FinisherShowcase, for filming; delete with it): the showcase
+-- fighter whose finishers we watch with the cutscene camera (F6 cycles:
+-- the Street Brawler, the Boxer, nobody). Studio only.
+local SHOWCASE_FIGHTERS = { "Street Brawler", "Boxer" }
+local showcaseWatch: string? = nil
+
 -- One cinematic playing (key: its attacker).
 type Run = {
 	cinematic: Finishers.Cinematic,
@@ -287,7 +293,11 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 	local run: Run = { cinematic = cinematic, victim = victim, cancelled = false }
 	runs[attacker] = run
 	local character = player.Character
-	if character ~= nil and (character == attacker or character == victim) then
+	-- (TEMPORARY, FinisherShowcase: F6 watches one of its fighters)
+	local watching = showcaseWatch ~= nil
+		and attacker:GetAttribute("Showcase") == true
+		and attacker.Name == showcaseWatch
+	if watching or (character ~= nil and (character == attacker or character == victim)) then
 		run.stopCamera = playCamera(cinematic, anchor, victim, shakes)
 		if character == attacker then
 			CombatController.holdAttacks(cinematic.duration)
@@ -340,6 +350,16 @@ end
 
 function CinematicController.start()
 	makeBars()
+	if RunService:IsStudio() then
+		game:GetService("UserInputService").InputBegan:Connect(function(input, processed)
+			if processed or input.KeyCode ~= Enum.KeyCode.F6 then
+				return
+			end
+			local index = if showcaseWatch then table.find(SHOWCASE_FIGHTERS, showcaseWatch) else 0
+			showcaseWatch = SHOWCASE_FIGHTERS[(index or 0) + 1]
+			print(`[FinisherShowcase] watching: {showcaseWatch or "nobody"} (F6 to change)`)
+		end)
+	end
 	Remotes.FinisherStarted.OnClientEvent:Connect(onStarted)
 	Remotes.FinisherEnded.OnClientEvent:Connect(onEnded)
 end
