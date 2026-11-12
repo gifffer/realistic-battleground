@@ -6,8 +6,9 @@
 --                    hands and brings it down on the head of the opponent
 --                    lying on the ground: the head bursts.
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
---                    to the liver, hook, hook, cross, then crouches and
---                    lands a huge uppercut that sends them flying.
+--                    to the body, hook, hook, cross, then a left hook into
+--                    their right side under the ribs: the hand goes in and
+--                    tears the liver out; he looks at it and throws it down.
 --
 -- One timeline, read by the server (placement, the killing blow) and by
 -- every client (camera, sounds, blood, the bat). Times in seconds from the
@@ -21,7 +22,8 @@ export type Event = {
 	time: number,
 	-- "Prop" (the bat appears), "PropAway", "Plea" (the victim speaks),
 	-- "Swing" (whoosh), "Body" / "Face" (a punch lands), "Kill" (the
-	-- killing blow)
+	-- killing blow), "Gut" / "Dig" / "Rip" / "Drop" (the liver: the hand
+	-- goes in, digs, tears it out, throws it down)
 	kind: string,
 }
 
@@ -117,8 +119,8 @@ local cinematics: { [string]: Cinematic } = {
 	},
 	KnockoutCombo = {
 		id = "KnockoutCombo",
-		duration = 3.4,
-		kill = 2.42,
+		duration = 4.1,
+		kill = 2.62,
 		placement = "front",
 		victimAnimation = "Boxer_FinisherVictim",
 		events = {
@@ -127,8 +129,11 @@ local cinematics: { [string]: Cinematic } = {
 			{ time = 1.25, kind = "Face" },
 			{ time = 1.55, kind = "Face" },
 			{ time = 1.85, kind = "Face" },
-			{ time = 2.3, kind = "Swing" },
-			{ time = 2.42, kind = "Kill" },
+			{ time = 2.12, kind = "Swing" },
+			{ time = 2.25, kind = "Gut" }, -- the hand goes in under the ribs
+			{ time = 2.42, kind = "Dig" },
+			{ time = 2.62, kind = "Rip" }, -- the liver torn out, in his hand
+			{ time = 3.62, kind = "Drop" }, -- thrown on the floor
 		},
 		shots = {
 			-- Over his shoulder: he hauls them up.
@@ -155,21 +160,37 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(0, 0.6, -1.0),
 				fov = 56,
 			},
-			-- Low, looking up: he crouches, the uppercut.
+			-- Low, from his left: the hook into their right side, under the ribs.
 			{
 				time = 1.98,
-				from = Vector3.new(2.6, -2.2, -0.4),
-				to = Vector3.new(2.3, -2.3, -0.6),
-				look = Vector3.new(0, 1.0, -2.2),
-				fov = 66,
+				from = Vector3.new(-2.9, -0.7, -0.8),
+				to = Vector3.new(-2.6, -0.8, -1.1),
+				look = Vector3.new(-0.4, -0.6, -1.8),
+				fov = 52,
 			},
-			-- Following the victim through the air.
+			-- From the front-left: the arm comes out, the liver in the hand.
 			{
-				time = 2.5,
-				from = Vector3.new(4.5, 0.5, 1.5),
-				to = Vector3.new(5.5, 1.5, -1.0),
-				look = "victim",
-				fov = 62,
+				time = 2.55,
+				from = Vector3.new(-3.2, 0.2, -2.6),
+				to = Vector3.new(-3.0, 0.35, -2.2),
+				look = Vector3.new(-0.8, -0.2, -1.3),
+				fov = 56,
+			},
+			-- Close: he looks at it.
+			{
+				time = 2.85,
+				from = Vector3.new(-1.7, 1.0, -2.8),
+				to = Vector3.new(-1.45, 1.1, -2.55),
+				look = Vector3.new(-0.45, 0.75, -1.0),
+				fov = 46,
+			},
+			-- Wide: the body on the floor, the liver thrown down by it.
+			{
+				time = 3.5,
+				from = Vector3.new(4.6, 1.0, -4.6),
+				to = Vector3.new(5.2, 1.4, -2.2),
+				look = Vector3.new(-0.3, -1.3, -1.9),
+				fov = 60,
 			},
 		},
 	},

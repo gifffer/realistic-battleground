@@ -6,8 +6,11 @@ top two vertebrae of the neck.
 
     venv/bin/python -I tools/wounds/extract_anatomy.py <Z-Anatomy/Startup.blend>
 
+Also the liver (and its gallbladder) for the Boxer's finisher, and the right
+lower ribs the hand breaks through, in the R6 torso's space.
+
 Writes tools/wounds/anatomy/head.npz (small: decimated meshes, already in the
-classic Roblox head's space, studs):
+classic Roblox head's space, studs; the torso groups in the torso's space):
   X right of the character, Y up, Z toward the back (its face looks at -Z),
   origin = the head's centre. The skull is stretched to fill the classic
   head (it is wider and shorter than a real one).
@@ -44,12 +47,27 @@ GROUPS = {
     "sclera": (r"^Sclera\.[lr]$", 900, True),
     "iris": (r"^Anterior segment of eyeball\.[lr]$", 400, True),
     "vertebrae": (r"^(Atlas \(C1\)|Axis \(C2\))$", 2400, False),
+    # (torso space)
+    "liver": (r"^Liver$", 2400, False),
+    "gallbladder": (r"^Gallbladder$", 300, False),
+    "ribs": (r"^(Eighth|Ninth|Tenth) rib\.r$|^Costal cartilage of (eighth|ninth) rib\.r$", 5000, True),
 }
+TORSO_GROUPS = {"liver", "gallbladder", "ribs"}
 
 # The real head (Z-Anatomy, metres, Z up, -Y = the face) -> the classic
 # head (1.2 studs; the skull a little inside it, under the skin).
 CENTER = Vector((0.0, -0.007, 1.6005))
 SCALE = Vector((7.5, 5.3, 5.1))  # across, up, front-back
+
+
+# The real torso -> the R6 torso (2 x 2 x 1 studs, its centre the origin).
+TORSO_CENTER = Vector((0.0, -0.01, 1.2))
+TORSO_SCALE = Vector((5.9, 4.0, 4.5))  # across, up, front-back
+
+
+def to_torso(p):
+    d = p - TORSO_CENTER
+    return (-d.x * TORSO_SCALE.x, d.z * TORSO_SCALE.y, d.y * TORSO_SCALE.z)
 
 
 def to_head(p):
@@ -69,7 +87,7 @@ def main():
             if ob.type != "MESH" or not rx.search(ob.name):
                 continue
             world = ob.matrix_world
-            if min((world @ Vector(c)).z for c in ob.bound_box) < 1.45:
+            if group not in TORSO_GROUPS and min((world @ Vector(c)).z for c in ob.bound_box) < 1.45:
                 continue  # (the brain pattern: only what is in the head)
             mesh = ob.evaluated_get(depsgraph).to_mesh().copy()
             mesh.transform(world)
@@ -85,7 +103,8 @@ def main():
             dec.ratio = min(1.0, budget / total)
             evaluated = temp.evaluated_get(bpy.context.evaluated_depsgraph_get()).to_mesh()
             evaluated.calc_loop_triangles()
-            v = np.array([to_head(vx.co) for vx in evaluated.vertices], dtype=np.float32)
+            place = to_torso if group in TORSO_GROUPS else to_head
+            v = np.array([place(vx.co) for vx in evaluated.vertices], dtype=np.float32)
             f = np.array([tuple(t.vertices) for t in evaluated.loop_triangles], dtype=np.int32)
             temp.modifiers.remove(tri)
             temp.modifiers.remove(dec)

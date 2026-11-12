@@ -35,15 +35,16 @@ local GoreShapes = {
 		Tooth7 = Vector3.new(75, 3, -14),
 		Tooth8 = Vector3.new(78, 3, -14),
 		Jaw = Vector3.new(81, 3, -14),
-		Splat1 = Vector3.new(84, 3, -14),
-		Splat2 = Vector3.new(87, 3, -14),
-		Splat3 = Vector3.new(90, 3, -14),
-		Splat4 = Vector3.new(93, 3, -14),
-		Streak1 = Vector3.new(96, 3, -14),
-		Streak2 = Vector3.new(99, 3, -14),
-		Streak3 = Vector3.new(102, 3, -14),
-		Pool1 = Vector3.new(105, 3, -14),
-		Pool2 = Vector3.new(108, 3, -14),
+		Liver = Vector3.new(84, 3, -14),
+		Splat1 = Vector3.new(87, 3, -14),
+		Splat2 = Vector3.new(90, 3, -14),
+		Splat3 = Vector3.new(93, 3, -14),
+		Splat4 = Vector3.new(96, 3, -14),
+		Streak1 = Vector3.new(99, 3, -14),
+		Streak2 = Vector3.new(102, 3, -14),
+		Streak3 = Vector3.new(105, 3, -14),
+		Pool1 = Vector3.new(108, 3, -14),
+		Pool2 = Vector3.new(111, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -94,6 +95,9 @@ local GoreShapes = {
 	pool = {
 		"Pool1",
 		"Pool2",
+	},
+	organ = {
+		"Liver",
 	},
 }
 

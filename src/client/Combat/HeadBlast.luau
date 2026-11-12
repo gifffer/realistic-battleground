@@ -590,7 +590,8 @@ local function pump(model: Model, mouth: Attachment, random: Random)
 	local pool: { BasePart } = {}
 	local real = blot(GoreShapes.pool, below, 0.4, nil, random, 25)
 	if real then
-		local grown = real.Size * (random:NextNumber(3.2, 4.2) / 0.4)
+		local k = random:NextNumber(3.2, 4.2) / 0.4
+		local grown = real.Size * Vector3.new(k, 1, k) -- (across, not thicker)
 		TweenService:Create(
 			real,
 			TweenInfo.new(PUMP_TIME + 2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -884,6 +885,29 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 end
 
 ------------------------------------------------------------------------------
+
+-- Blood on the floor under `position`, for other gore (LiverRip): a splash
+-- `size` studs across, the same on every client (`seed`).
+function HeadBlast.splash(position: Vector3, size: number, seed: number)
+	splash(position, size, Random.new(seed))
+end
+
+-- A pool spreading under `position` to `size` studs over `seconds`.
+function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: number)
+	local random = Random.new(seed)
+	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 25)
+		or mark(position, 0.3, nil, nil, BLOOD, 25)
+	if piece then
+		local k = size / 0.3
+		-- (grows across, not thicker: a round mark's thin axis is X)
+		local flat = piece:IsA("Part") and piece.Shape == Enum.PartType.Cylinder
+		TweenService:Create(
+			piece,
+			TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Size = piece.Size * (if flat then Vector3.new(1, k, k) else Vector3.new(k, 1, k)) }
+		):Play()
+	end
+end
 
 -- The head of `model` is gone. `live`: it's happening now (the burst), not
 -- a body we only see now (streamed in late): then just what's left.

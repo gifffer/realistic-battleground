@@ -24,6 +24,7 @@ local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
 local CameraController = require(script.Parent.CameraController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
@@ -43,6 +44,9 @@ local SHAKES: { [string]: Shake } = {
 	Body = { at = 0, strength = 1.2, punch = 2 },
 	Face = { at = 0, strength = 2, punch = 3 },
 	Kill = { at = 0, strength = 4.5, punch = 9 },
+	Gut = { at = 0, strength = 4, punch = 8 }, -- the hand into the side
+	Dig = { at = 0, strength = 1.2, punch = 1 },
+	Rip = { at = 0, strength = 2.5, punch = 4 },
 }
 
 local bars: { top: Frame, bottom: Frame }? = nil
@@ -232,19 +236,21 @@ local function playEvent(
 		SoundController.play("VictimPlea", victim)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
-	elseif kind == "Body" then
+	elseif kind == "Body" or kind == "Dig" then
 		SoundController.play("BodyShot", victim)
 	elseif kind == "Face" then
 		SoundController.play("HeavyHit", victim)
 		KitEffects.bloodSpray(victim, attacker, "Head")
 	elseif kind == "Kill" then
-		if cinematic.id == "Bat" then
-			-- (the burst itself: HeadBlast, from the server's "HeadBlown")
-			SoundController.play("BatCrush", victim)
-		else
-			SoundController.play("KnockoutPunch", victim)
-			KitEffects.bloodSpray(victim, attacker, "Head")
-		end
+		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
+		SoundController.play("BatCrush", victim)
+	elseif kind == "Gut" then
+		SoundController.play("KnockoutPunch", victim)
+		LiverRip.gut(victim, attacker)
+	elseif kind == "Rip" then
+		LiverRip.rip(victim, attacker)
+	elseif kind == "Drop" then
+		LiverRip.drop(attacker)
 	end
 end
 
@@ -317,6 +323,7 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	end
 	run.cancelled = true
 	KitEffects.stopAction(attacker) -- the bat
+	LiverRip.cancel(attacker)
 	for _, clip in { "Brawler_FinisherBat", "Boxer_FinisherCombo" } do
 		CharacterAnimationController.stopAction(attacker, clip)
 	end

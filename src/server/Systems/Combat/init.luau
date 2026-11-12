@@ -867,6 +867,29 @@ local function blowHead(victim: Model)
 	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
 end
 
+-- The Boxer's finisher: the liver torn out under the right ribs. A "Tear"
+-- cut (Gashes draws the hole, broken ribs in it, through the clothes).
+local function tearLiverOut(victim: Model)
+	local index = 1
+	for candidate = 1, Gash.MAX_PER_PART do
+		if victim:GetAttribute(Gash.attribute("Torso", candidate)) == nil then
+			index = candidate
+			break
+		end
+	end
+	setAttribute(
+		victim,
+		Gash.attribute("Torso", index),
+		Gash.encode({
+			kind = "Tear",
+			size = "L",
+			point = Vector3.new(0.5, -0.3, -0.5), -- its right, under the ribs, in front
+			angle = 0,
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
+end
+
 -- A cinematic finisher (Shared/Finishers): both fighters are placed and held
 -- still (anchored) for the cutscene, the attacker can't be touched, the
 -- victim dies at the killing blow. Every client plays the camera / effects
@@ -1094,18 +1117,18 @@ local function startCinematic(
 		end
 		killed = true
 		if victimPlace then
-			-- Limp; the Boxer's uppercut sends the body flying.
+			-- Limp: it folds and drops where it stands.
 			victimRoot.Anchored = false
 			Ragdoll.enable(target)
-			if cinematic.placement == "front" then
-				victimRoot.AssemblyLinearVelocity = anchor.LookVector * 34 + Vector3.new(0, 46, 0)
-				victimRoot.AssemblyAngularVelocity = anchor.RightVector * -9
-			end
 		end
 		Knockout.finish(target, state.model)
 		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
-		if cinematic.id == "Bat" and victimHumanoid and victimHumanoid.Health <= 0 then
-			blowHead(target) -- (only on a body that really died)
+		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
+			if cinematic.id == "Bat" then
+				blowHead(target)
+			elseif cinematic.id == "KnockoutCombo" then
+				tearLiverOut(target)
+			end
 		end
 		-- (the attacker stays held until the end of the cutscene)
 	end)

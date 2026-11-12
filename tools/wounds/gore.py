@@ -15,6 +15,8 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
              (Tooth), the skin of the chin and cheeks torn along the top
              (Skin), the wound inside (Flesh), the top of the spine (Bone:
              atlas and axis)
+  Liver      the real liver (Liver) and its gallbladder (Gallbladder), for
+             the Boxer's finisher (torn out by hand); its middle the origin
   Splat<i> / Streak<i> / Pool<i>   blood on the floor (Blood): flat blots
              with droplets, stretched drops, a pool; 1 stud across, laid in
              X-Z (the game sizes and turns them)
@@ -52,6 +54,8 @@ COLORS = {
     "Tooth": (0.95, 0.93, 0.85),
     "Flesh": (0.55, 0.06, 0.06),
     "Blood": (0.25, 0.0, 0.0),
+    "Liver": (0.36, 0.09, 0.08),
+    "Gallbladder": (0.27, 0.36, 0.14),
 }
 
 
@@ -235,7 +239,7 @@ def build(add_object):
     rng = random.Random(4242)
     anatomy = load_anatomy()
     slots = {}
-    kinds = {k: [] for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool")}
+    kinds = {k: [] for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ")}
 
     def piece(name, layers, kind=None):
         slot = GORE_ORIGIN + Vector((len(slots) * SLOT_STEP, 0, 0))
@@ -310,6 +314,13 @@ def build(add_object):
             face.normal_flip()
     vertebrae = bm_of(*anatomy["vertebrae"][0])
     piece("Jaw", {"Bone": bm_join([mandible, vertebrae]), "Tooth": teeth, "Skin": jaw_skin, "Flesh": flesh})
+
+    # The Boxer's finisher: the real liver and its gallbladder, torn out
+    # (centred on the liver's middle: it ends up in a hand).
+    lv, lf = anatomy["liver"][0]
+    gv, gf = anatomy["gallbladder"][0]
+    middle = lv.mean(0)
+    piece("Liver", {"Liver": bm_of(lv - middle, lf), "Gallbladder": bm_of(gv - middle, gf)}, "organ")
 
     # Blood on the floor.
     for i in range(4):

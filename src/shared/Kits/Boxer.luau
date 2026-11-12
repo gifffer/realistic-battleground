@@ -112,8 +112,8 @@ local kit: KitTypes.KitDef = {
 	-- up, body shots, hooks, cross, then a huge uppercut that sends them flying.
 	finisher = {
 		animation = "Boxer_FinisherCombo",
-		impact = 2.42,
-		duration = 3.4,
+		impact = 2.62,
+		duration = 4.1,
 		cinematic = "KnockoutCombo",
 	},
 

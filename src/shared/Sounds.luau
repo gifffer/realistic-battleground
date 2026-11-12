@@ -146,12 +146,33 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.08,
 		fallback = "Hit",
 	},
-	KnockoutPunch = { -- the uppercut that ends it
+	KnockoutPunch = { -- the Boxer's last blow: the hand into the side
+		ids = { 140325083438865 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.02,
+		fallback = "HeavyHit",
+	},
+	RibCrack = { -- ribs giving way under the fist
+		ids = {},
+		volume = 0.9,
+		pitch = 1.3,
+		pitchVariation = 0.06,
+		fallback = "Hit",
+	},
+	FleshTear = { -- the liver torn out, wet
 		ids = {},
 		volume = 1,
-		pitch = 0.75,
-		pitchVariation = 0.03,
+		pitch = 0.5,
+		pitchVariation = 0.04,
 		fallback = "HeavyHit",
+	},
+	OrganDrop = { -- a heavy, wet organ hitting the floor
+		ids = {},
+		volume = 0.7,
+		pitch = 0.45,
+		pitchVariation = 0.05,
+		fallback = "Hit",
 	},
 
 	-- Injuries (step 5) -----------------------------------------------------
