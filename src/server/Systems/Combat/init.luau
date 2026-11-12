@@ -59,6 +59,7 @@ local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
+local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
@@ -898,6 +899,8 @@ function Combat.register(model: Model, player: Player?)
 		heldUntil = 0,
 		holding = nil,
 		heldBy = nil,
+		weapon = nil,
+		weaponHits = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -948,6 +951,63 @@ local function tearLiverOut(victim: Model)
 			seed = random:NextInteger(1, 2 ^ 30),
 		})
 	)
+end
+
+-- Weapons (Shared/Weapons): one in the right hand ("Weapon" attribute, the
+-- clients show it and swing it). Gone when it breaks (every client sees it
+-- snap: Remotes.WeaponBroke), or when its holder is knocked out or dies.
+local function giveWeapon(state: CombatState, id: string)
+	state.weapon = id
+	state.weaponHits = 0
+	setAttribute(state.model, "Weapon", id)
+end
+
+local function dropWeapon(state: CombatState, broke: boolean)
+	local id = state.weapon
+	if id == nil then
+		return
+	end
+	state.weapon = nil
+	state.weaponHits = 0
+	setAttribute(state.model, "Weapon", nil)
+	if broke then
+		Remotes.WeaponBroke:FireAllClients(state.model, id)
+	end
+end
+
+-- A torn arm lying on the floor: anyone close can pull the bone out of it
+-- (a ProximityPrompt; the server checks everything again).
+local function offerBone(victim: Model, arm: BasePart)
+	local point = Instance.new("Attachment")
+	point.Name = "BonePrompt"
+	point.Parent = arm
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Take the bone"
+	prompt.ObjectText = "Torn arm"
+	prompt.HoldDuration = 0.8
+	prompt.MaxActivationDistance = 7
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = point
+	prompt.Triggered:Connect(function(player: Player)
+		local character = player.Character
+		local state = if character then states[character] else nil
+		if
+			state == nil
+			or not isAlive(state)
+			or isBusy(state)
+			or isStunned(state)
+			or state.weapon ~= nil
+			or state.model:GetAttribute("DuelId") ~= nil -- (no weapons in a duel)
+			or victim:GetAttribute("BoneTaken") == true
+			or arm.Parent == nil
+			or (state.root.Position - arm.Position).Magnitude > 9
+		then
+			return
+		end
+		setAttribute(victim, "BoneTaken", true)
+		point:Destroy()
+		giveWeapon(state, "Bone")
+	end)
 end
 
 -- The Bouncer's finisher: the right arm torn off at the shoulder. Every
@@ -1011,6 +1071,12 @@ local function tearArmOff(victim: Model, attacker: Model, anchor: CFrame, throwI
 		end
 		arm.AssemblyLinearVelocity = anchor:VectorToWorldSpace(Finishers.ARM_THROW_VELOCITY)
 		arm.AssemblyAngularVelocity = anchor:VectorToWorldSpace(Vector3.new(5, 1, -3))
+		-- Once it lies there, its bone can be taken.
+		task.delay(0.8, function()
+			if arm.Parent then
+				offerBone(victim, arm)
+			end
+		end)
 	end)
 end
 
@@ -1521,8 +1587,13 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				resolveHit(state, victim, {
-					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed],
+				-- A weapon in hand (a bone...): heavier blows, more blood.
+				local weapon = Weapons.get(state.weapon)
+				local hit = resolveHit(state, victim, {
+					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed] * (if weapon
+						then weapon.damageMultiplier
+						else 1),
+					bloodChance = if weapon then weapon.bloodChance else nil,
 					zone = landed,
 					stun = if isFinisher then C.FINISHER_STUN else C.HIT_STUN,
 					headStun = true,
@@ -1534,6 +1605,13 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					knockback = if isFinisher then C.KNOCKBACK_SPEED else nil,
 					attackId = attackId,
 				})
+				-- It wears out on what it hits.
+				if hit and weapon and state.weapon == weapon.id then
+					state.weaponHits += 1
+					if state.weaponHits >= weapon.durability then
+						dropWeapon(state, true)
+					end
+				end
 			end
 		end
 		resolved()
@@ -1730,6 +1808,11 @@ local function update(dt: number)
 				local attacker = if source then states[source] else nil
 				dealDamage(state, attacker, state.bleedPerSecond * KC.BLEED_TICK)
 			end
+		end
+
+		-- Knocked out or dead: the weapon in hand is gone.
+		if state.weapon and (not isAlive(state) or Knockout.isKnockedOut(model)) then
+			dropWeapon(state, false)
 		end
 
 		local player = state.player

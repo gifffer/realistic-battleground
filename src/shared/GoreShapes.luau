@@ -47,6 +47,7 @@ local GoreShapes = {
 		Pool2 = Vector3.new(111, 3, -14),
 		ArmEnd = Vector3.new(114, 3, -14),
 		Shoulder = Vector3.new(117, 3, -14),
+		Humerus = Vector3.new(120, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -104,6 +105,7 @@ local GoreShapes = {
 	limb = {
 		"ArmEnd",
 		"Shoulder",
+		"Humerus",
 	},
 }
 

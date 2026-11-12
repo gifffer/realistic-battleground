@@ -22,6 +22,10 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
              the raw end (Flesh, FleshDark), torn skin hanging over the edges
              (Skin), the ball of the upper arm bone sticking out (Bone), torn
              tendons (Tendon)
+  Humerus    the same upper arm bone, whole, pulled out of the torn arm and
+             held as a club (Shared/Weapons "Bone"): its own space, along Y,
+             the ball (head) at the top, the elbow end at the bottom, scraps
+             of flesh still on it (Bone, Flesh, Tendon)
   Shoulder   ...and what it leaves on the torso (R6 torso space, its right
              side at X = 1): the open socket (Flesh, FleshDark), the cup of the
              shoulder blade and the end of the collarbone (Bone), torn skin
@@ -378,6 +382,32 @@ def torn_arm(rng):
     return arm_end, shoulder
 
 
+def humerus(rng):
+    """The whole upper arm bone (1.7 studs, along Y): the round head on top
+    (turned a little to the inside), a slightly curved shaft, the wide elbow
+    end with its two knuckles; torn flesh and tendons still on the head."""
+    bone = bm_join_all([
+        rod((0, -0.62, 0), (0, 0.0, 0.015), 0.085, 0.075, 12),
+        rod((0, 0.0, 0.015), (-0.02, 0.5, 0.0), 0.075, 0.095, 12),
+        blob(rng, (-0.06, 0.66, 0.0), (0.17, 0.16, 0.16), 16, 12, 0.006),  # the head
+        blob(rng, (0.05, 0.58, -0.05), (0.07, 0.06, 0.07), 8, 6, 0.0),     # greater tubercle
+        blob(rng, (0, -0.7, 0), (0.2, 0.07, 0.1), 12, 8, 0.0),             # the elbow end
+        blob(rng, (-0.09, -0.78, 0.0), (0.075, 0.06, 0.075), 10, 8, 0.0),  # trochlea
+        blob(rng, (0.09, -0.78, -0.01), (0.065, 0.055, 0.065), 10, 8, 0.0),  # capitulum
+    ])
+    flesh = bm_join_all([
+        blob(rng, (rng.uniform(-0.12, 0.08), 0.55 + rng.uniform(-0.1, 0.1), rng.uniform(-0.12, 0.12)),
+             (rng.uniform(0.04, 0.08), rng.uniform(0.04, 0.09), rng.uniform(0.04, 0.08)), 8, 6, 0.01)
+        for _ in range(6)
+    ])
+    tendons = bm_join_all([
+        rod((rng.uniform(-0.1, 0.1), 0.5, rng.uniform(-0.1, 0.1)),
+            (rng.uniform(-0.25, 0.25), 0.5 + rng.uniform(-0.25, 0.05), rng.uniform(-0.25, 0.25)), 0.02, 0.01, 6)
+        for _ in range(3)
+    ])
+    return {"Bone": bone, "Flesh": flesh, "Tendon": tendons}
+
+
 def bm_join_all(parts):
     out = bmesh.new()
     for part in parts:
@@ -491,6 +521,7 @@ def build(add_object):
     arm_end, shoulder = torn_arm(random.Random(7171))
     piece("ArmEnd", arm_end, "limb")
     piece("Shoulder", shoulder, "limb")
+    piece("Humerus", humerus(random.Random(5151)), "limb")
     return slots, kinds
 
 

@@ -19,6 +19,7 @@
 --
 --   ArmRip.apply(model, live)       draws the wounds (once per body)
 --   ArmRip.pop(victim)              the shoulder coming out (event "Pop")
+--   ArmRip.boneTaken(model)         its bone pulled out ("BoneTaken"): hidden
 --   ArmRip.thrown(attacker, anchor) he throws it down (event "Throw"): it
 --                                   lands by the body, a wet thud, a splash
 
@@ -235,10 +236,29 @@ function ArmRip.apply(model: Model, live: boolean)
 	local skin = arm.Color
 	dress(torso, "Shoulder", skin, random)
 	dress(arm, "ArmEnd", skin, random)
+	ArmRip.boneTaken(model) -- (seen late: already taken)
 	if live then
 		SoundController.play("ArmTear", model)
 		pump(torso, random)
 		drip(arm)
+	end
+end
+
+-- Someone pulled the bone out of the arm on the floor ("BoneTaken", the
+-- server; Shared/Weapons "Bone"): only the raw end is left, hollow.
+function ArmRip.boneTaken(model: Model)
+	if model:GetAttribute("BoneTaken") ~= true then
+		return
+	end
+	local arm = model:FindFirstChild("Right Arm")
+	local folder = if arm then arm:FindFirstChild("ArmRip") else nil
+	if folder == nil then
+		return
+	end
+	for _, item in folder:GetDescendants() do
+		if item:IsA("BasePart") and (item.Name == "Gore_ArmEnd_Bone" or item.Name == "Bone") then
+			item.Transparency = 1
+		end
 	end
 end
 

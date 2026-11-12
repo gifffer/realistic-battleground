@@ -369,26 +369,40 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 
 ## Kit Bouncer / Videur (`claude/bouncer-kit`)
 
-**Ré-importer `assets/wounds/WoundKit.fbx` avant** (Import 3D dans `Assets > Wounds`, voir `WOUNDS_FR.md`) : il contient les nouvelles pièces du bras arraché.
+**Ré-importer `assets/wounds/WoundKit.fbx` avant** (Import 3D dans `Assets > Wounds`, voir `WOUNDS_FR.md`) : il contient les pièces du bras arraché et l'os entier.
 Dans **Studio**, tous les kits sont débloqués pour tester (`Config.Dev.UNLOCK_KITS_IN_STUDIO`) ; dans le jeu publié, le Bouncer demande le **niveau 5** et **500 coins**.
-Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**.
+Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**. Pas de sons pour l'instant (ce sera la prochaine étape).
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| V1 | Menu KITS | La carte **BOUNCER** (« Huge and slow… ») avec ses 4 attaques ; dans le jeu publié : UNLOCKS AT LEVEL 5 / BUY · 500. |
+| V1 | Menu KITS | La carte **BOUNCER** avec ses 4 attaques ; dans le jeu publié : UNLOCKS AT LEVEL 5 / BUY · 500. |
 | V2 | Marcher, courir | Un peu plus lent qu'avec les autres kits. |
-| V3 | **1** (Shove) près du Dummy | Mains ramenées à la poitrine, pas en avant, les deux paumes dans le torse : le Dummy part **loin** en arrière. |
-| V4 | **2** (Chokehold) au contact | Il tend les bras et attrape : la victime est **retournée dos à lui**, son bras autour du cou ; elle se débat (jambes, mains sur son bras), **3 serrées** (bruit d'étouffement), puis il la lâche, elle titube, les mains à la gorge. Barre d'endurance de la victime vidée. |
-| V5 | **2** dans le vide | Il tend les bras, attrape le vide et revient en garde tout de suite (pas d'étranglement dans l'air). |
+| V3 | **1** (Shove) | Il recule le poids, ramène les mains, puis fait un pas et enfonce les deux paumes dans la poitrine : la victime part **loin** en arrière, ses pieds **raclent le sol** (petite poussière). |
+| V4 | **2** (Chokehold) au contact | Il attrape et se met **derrière** la victime, **son avant-bras en travers de la gorge**, sa tête à côté de la sienne ; la victime **tire sur son bras** avec les deux mains, les jambes se débattent. **3 serrées** : à chaque fois le visage **rougit puis vire au violet**, un peu de salive. Il la lâche : elle se plie en avant, les mains à la gorge ; la couleur revient en quelques secondes. Si c'est toi qu'on étrangle : l'écran **s'assombrit** à chaque serrée, puis revient. |
+| V5 | **2** dans le vide | Il tend les bras, attrape le vide et revient en garde (pas d'étranglement dans l'air). |
 | V6 | **2** sur quelqu'un qui **bloque** (F) | La saisie passe quand même (pas de parade possible). |
-| V7 | Pendant la saisie, un 3ᵉ joueur frappe le Bouncer | Il lâche tout de suite, les deux peuvent bouger. |
-| V8 | **3** (Body Slam) | Il prend la victime à bras-le-corps, la soulève **au-dessus de sa tête**, l'écrase sur le dos devant lui (gros choc) : elle part en ragdoll **là où elle est tombée** (pas de saut de position), puis se relève. |
-| V9 | **4** (Hammer Fist) | Les deux bras au-dessus de la tête, les poings s'abattent sur le crâne : grosse réaction, sonné ~1 s. |
-| V10 | Remplir la jauge, **G** | Il fait craquer sa nuque, bombe le torse (**LAST CALL**). Touches : **THROW OUT** (la victime est jetée très loin), **SLEEPER HOLD** (étranglement plus long, la victime s'effondre à la fin), **POWERBOMB** (plus fort), **DOUBLE HAMMER** (2 coups, le 2ᵉ la met au sol). |
-| V11 | Se faire frapper en Bouncer | Il perd un peu moins de vie que les autres kits pour le même coup. |
-| V12 | **Finisher** sur un KO (Dummy) | Bandes noires. La victime est **allongée sur le dos en travers devant lui**, tête à sa gauche. Il s'accroupit, prend son **poignet droit à deux mains** et lève le bras ; gros plan sur son visage (elle supplie). Il pose le **pied droit sur sa poitrine** et **tire trois fois** (il force, on l'entend) ; à la 2ᵉ, l'épaule **se déboîte** (craquement). À la 3ᵉ, **le bras s'arrache** : gerbe de sang, il recule d'un pas avec le bras dans les mains. Sur le corps : l'**épaule ouverte** (cavité rouge, os de l'épaule, peau déchirée, lambeaux), qui gicle par saccades, flaque dessous. Il **lève le bras** pour le regarder : la manche est toujours dessus, **l'os dépasse** en haut, ça dégouline. Puis il le **jette** à côté du corps (bruit lourd, éclaboussure). ~4,6 s. |
-| V13 | Finisher contre un mur | Il se place pour que le corps soit couché sur le sol, pas dans le mur (il peut tourner autour du corps). |
-| V14 | Un joueur qui arrive après | Il voit le corps sans bras droit, l'épaule ouverte, et le bras par terre avec l'os qui dépasse. |
-| V15 | 3ᵉ joueur tue l'attaquant **avant** l'arrachage | Tout s'arrête, la victime retombe KO, avec ses deux bras. |
+| V7 | Pendant une saisie, un 3ᵉ joueur frappe le Bouncer | Il lâche tout de suite, les animations des deux s'arrêtent, les deux peuvent bouger. |
+| V8 | **3** (Body Slam) | Il **plonge sous** la victime : un bras **entre ses jambes**, l'autre derrière ses épaules, il la soulève **à l'horizontale en travers de sa poitrine**, la tient un instant en haut, puis l'**écrase sur le dos** devant lui en se baissant avec elle. Au sol : **anneau de poussière**, éclats du sol, onde au ras du sol, la caméra tremble (plus fort si tu es près). La victime part en ragdoll **là où elle est tombée** (pas de saut de position), puis se relève. |
+| V9 | **4** (Hammer Fist) | Les deux poings très haut, il monte sur la pointe, puis les abat sur le haut du crâne en se pliant : grosse réaction, sueur / salive qui gicle de la tête. |
+| V10 | Remplir la jauge, **G** | Il fait craquer sa nuque des deux côtés, puis se campe, torse bombé : **poussière** sous ses pieds, **buée** qui sort de sa bouche (**LAST CALL**). |
+| V11 | **1** en Awakening (Throw Out) | Il l'attrape au col et à la ceinture, la fait pivoter sur le côté, puis la **jette** : elle vole loin, **poussière** là où elle retombe. |
+| V12 | **2** en Awakening (Sleeper Hold) | Comme l'étranglement mais plus long : la victime **faiblit** (les bras retombent), visage violet, elle **s'effondre** à la fin. Si c'est toi : l'écran devient presque **noir**. |
+| V13 | **3** en Awakening (Powerbomb) | Différent du Body Slam : il lui **met la tête entre ses jambes**, la soulève **assise sur ses épaules** (face à lui), puis l'**écrase sur le dos** devant lui et **tombe à genoux**, les jambes de la victime sur ses épaules. Poussière plus grosse. |
+| V14 | **4** en Awakening (Double Hammer) | Deux coups de marteau, le 2ᵉ met au sol. |
+| V15 | Se faire frapper en Bouncer | Il perd un peu moins de vie que les autres kits pour le même coup. |
+| V16 | **Finisher** sur un KO (Dummy) | Bandes noires. La victime est **allongée sur le dos en travers devant lui**, tête à sa gauche. Il s'accroupit, prend son **poignet droit à deux mains** et lève le bras ; gros plan sur son visage (elle supplie). Il pose le **pied droit sur sa poitrine** et **tire trois fois** ; à la 2ᵉ, l'épaule **se déboîte**. À la 3ᵉ, **le bras s'arrache** : gerbe de sang, il recule d'un pas avec le bras dans les mains. Sur le corps : l'**épaule ouverte** qui gicle par saccades, flaque dessous. Il **lève le bras** pour le regarder (la manche toujours dessus, **l'os dépasse**), puis le **jette** à côté du corps (éclaboussure). ~4,6 s. |
+| V17 | Finisher contre un mur | Il se place pour que le corps soit couché sur le sol, pas dans le mur. |
+| V18 | Un joueur qui arrive après | Il voit le corps sans bras droit, l'épaule ouverte, et le bras par terre avec l'os qui dépasse. |
+| V19 | 3ᵉ joueur tue l'attaquant **avant** l'arrachage | Tout s'arrête, la victime retombe KO, avec ses deux bras. |
 
-Nouveaux sons à remplir dans `src/shared/Sounds.luau` (en attendant, ils empruntent un son existant) : `Grab`, `Choke`, `BodySlam`, `Strain`, `ShoulderPop`, `ArmTear`, `LimbDrop`.
+### Os ramassable (arme)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| W1 | Après le finisher, s'approcher du **bras par terre** | Un bouton **« Take the bone »** apparaît (maintenir **E**). |
+| W2 | Maintenir E | Tu tiens **l'os** dans la main droite (pas le bras) : l'os entier, la tête ronde en avant comme une massue, un peu de chair dessus. Sur le bras au sol, **l'os a disparu** (il ne reste que le bout à vif). Les autres joueurs voient la même chose. |
+| W3 | Clic gauche avec l'os | Plus de coups de poing : **deux coups en diagonale** (l'os s'abat sur la tête), puis au 4ᵉ un **gros coup par-dessus la tête**. Plus de dégâts (x1,5) et plus souvent du sang. |
+| W4 | Toucher 6 fois | **L'os se casse** : deux morceaux tombent de la main, des éclats volent ; tu repars aux poings. |
+| W5 | Se faire mettre KO / mourir avec l'os | L'os disparaît. |
+| W6 | Un 2ᵉ joueur essaie de prendre l'os déjà pris | Plus de bouton. |
+| W7 | En duel | Impossible de prendre un os. |

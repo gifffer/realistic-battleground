@@ -192,4 +192,8 @@ return table.freeze({
 	--                        victimLevel: number?, killerLevel: number?)
 	-- A fighter was eliminated: one line in the kill feed (top right).
 	KillFeed = event("KillFeed"),
+
+	-- server → all clients  (model: Model, weaponId: string)
+	-- A weapon in someone's hand broke on a blow (it snaps, the pieces fall).
+	WeaponBroke = event("WeaponBroke"),
 })

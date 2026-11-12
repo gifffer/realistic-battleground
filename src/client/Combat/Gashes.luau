@@ -1185,6 +1185,8 @@ function Gashes.watch(model: Model)
 			HeadBlast.apply(model, true)
 		elseif name == ArmRip.ATTRIBUTE then
 			ArmRip.apply(model, true)
+		elseif name == "BoneTaken" then
+			ArmRip.boneTaken(model)
 		end
 	end)
 	-- Gone (destroyed, or just taken out of the game): forget its parts.

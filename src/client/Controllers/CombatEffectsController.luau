@@ -46,6 +46,7 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -202,6 +203,7 @@ local function onCombatantAdded(instance: Instance)
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
 	KitEffects.watch(model) -- bleeding drips, Street Fury
+	WeaponFx.watch(model) -- a bone (weapon) in the hand
 	Wounds.watch(model) -- bruises and cuts where they were hit
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
@@ -822,6 +824,11 @@ end
 
 function CombatEffectsController.start()
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
+	Remotes.WeaponBroke.OnClientEvent:Connect(function(model: unknown, id: unknown)
+		if typeof(model) == "Instance" and model:IsA("Model") and typeof(id) == "string" then
+			WeaponFx.broke(model, id)
+		end
+	end)
 	local tag = Config.Combat.TAG
 	CollectionService:GetInstanceAddedSignal(tag):Connect(onCombatantAdded)
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)
