@@ -80,13 +80,13 @@ export type RewardKind =
 
 -- Duel messages from the server to one player (Remotes.DuelEvent).
 --   Challenged   someone challenges you      { from: number (UserId), name, expiresAt }
---   Declined     your challenge was refused / expired   { name, reason }
+--   Declined     your challenge was refused / expired   { userId, name, reason }
 --   Queue        ranked search state         { searching: boolean, since: number? }
---   Waiting      all arenas busy, you're in line        {}
+--   Waiting      all arenas busy, you're in line        { opponent, ranked }
 --   Start        the match begins            { opponent: number, ranked: boolean }
 --   Round        a round is about to start   { round, score: {mine, theirs}, fightAt }
---   RoundEnd     a round is over             { round, won: boolean, score }
---   End          the match is over           { won, score, xp, coins, eloBefore?, eloAfter?, forfeit }
+--   RoundEnd     a round is over             { round, won: boolean, score, last }
+--   End          the match is over           { won, ranked, score, xp, coins, eloBefore?, eloAfter?, forfeit, returnAt }
 export type DuelEventKind =
 	"Challenged"
 	| "Declined"

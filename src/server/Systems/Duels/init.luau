@@ -57,7 +57,7 @@ local Duels = {}
 
 local matches: { [Player]: Match } = {}
 local pending: { [Player]: Pending } = {} -- challenged player → challenge
-local lastChallengeAt: { [Player]: number } = {}
+local lastChallengeAt: { [string]: number } = {} -- "challengerId:targetId" → time
 local queue: { { player: Player, since: number } } = {}
 local waitingForArena: { { a: Player, b: Player, ranked: boolean } } = {}
 -- "userIdA:userIdB" (sorted) → last rewarded challenge (anti-farm).
@@ -152,6 +152,7 @@ local function endRound(match: Match, loser: Player)
 			round = match.round,
 			won = player == winner,
 			score = scoreFor(match, player),
+			last = match.score[winner] >= D.ROUNDS_TO_WIN, -- the result follows
 		})
 	end
 	task.delay(D.ROUND_END_PAUSE, function()
@@ -257,8 +258,8 @@ function Duels.startMatch(a: Player, b: Player, ranked: boolean)
 	local arena = Arenas.claim()
 	if arena == nil then
 		table.insert(waitingForArena, { a = a, b = b, ranked = ranked })
-		send(a, "Waiting", {})
-		send(b, "Waiting", {})
+		send(a, "Waiting", { opponent = b.UserId, ranked = ranked })
+		send(b, "Waiting", { opponent = a.UserId, ranked = ranked })
 		return
 	end
 	nextMatchId += 1
@@ -373,11 +374,12 @@ endMatch = function(match: Match, winner: Player, forfeit: boolean)
 			coins = if reward and (player == winner or not forfeit) then reward.coins else 0,
 			eloBefore = if match.ranked then eloBefore[player] else nil,
 			eloAfter = if match.ranked then eloAfter[player] else nil,
+			returnAt = workspace:GetServerTimeNow() + D.RESULT_TIME,
 		})
 	end
 
 	-- Back to the free arena after the result screen.
-	task.delay(D.ROUND_END_PAUSE + 1, function()
+	task.delay(D.RESULT_TIME, function()
 		for _, player in { match.a, match.b } do
 			if player.Parent ~= Players then
 				continue
@@ -437,16 +439,18 @@ local function onChallenge(player: Player, targetUserId: unknown)
 	local target = Players:GetPlayerByUserId(targetUserId)
 	local time = os.clock()
 	local function refuse(reason: string)
-		send(
-			player,
-			"Declined",
-			{ name = if target then target.DisplayName else "", reason = reason }
-		)
+		send(player, "Declined", {
+			userId = if target then target.UserId else 0,
+			name = if target then target.DisplayName else "",
+			reason = reason,
+		})
 	end
 	if target == nil or target == player then
 		return
 	end
-	if time - (lastChallengeAt[player] or -math.huge) < D.CHALLENGE_COOLDOWN then
+	-- One challenge to the same player every CHALLENGE_COOLDOWN seconds.
+	local cooldownKey = `{player.UserId}:{target.UserId}`
+	if time - (lastChallengeAt[cooldownKey] or -math.huge) < D.CHALLENGE_COOLDOWN then
 		refuse("COOLDOWN")
 		return
 	end
@@ -467,7 +471,7 @@ local function onChallenge(player: Player, targetUserId: unknown)
 		refuse("BUSY")
 		return
 	end
-	lastChallengeAt[player] = time
+	lastChallengeAt[cooldownKey] = time
 	local challenge: Pending = { from = player, expires = time + D.CHALLENGE_TIMEOUT }
 	pending[target] = challenge
 	send(target, "Challenged", {
@@ -498,11 +502,19 @@ local function onRespond(player: Player, challengerUserId: unknown, accept: unkn
 	pending[player] = nil
 	local challenger = challenge.from
 	if not accept then
-		send(challenger, "Declined", { name = player.DisplayName, reason = "DECLINED" })
+		send(challenger, "Declined", {
+			userId = player.UserId,
+			name = player.DisplayName,
+			reason = "DECLINED",
+		})
 		return
 	end
 	if os.clock() > challenge.expires or not (isFree(player) and isFree(challenger)) then
-		send(challenger, "Declined", { name = player.DisplayName, reason = "IN A DUEL" })
+		send(challenger, "Declined", {
+			userId = player.UserId,
+			name = player.DisplayName,
+			reason = "IN A DUEL",
+		})
 		return
 	end
 	Duels.startMatch(challenger, player, false)
@@ -596,7 +608,6 @@ function Duels.start()
 	PlayerData.onLoaded(onLoaded)
 	PlayerData.onLeaving(onLeaving)
 	Players.PlayerRemoving:Connect(function(player)
-		lastChallengeAt[player] = nil
 		onLeaving(player) -- (if the save never loaded, onLeaving didn't run)
 	end)
 	Remotes.DuelChallenge.OnServerEvent:Connect(onChallenge)
