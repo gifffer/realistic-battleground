@@ -325,3 +325,14 @@ Comme le reste de la progression, ça compte **contre de vrais joueurs** (test �
 | Q3 | Atteindre l'objectif | En bas à gauche : **QUEST +110 XP · +55 COINS**, la quête passe à **DONE**. |
 | Q4 | Quitter puis revenir le même jour | Mêmes quêtes, même progression. |
 | Q5 | Après minuit UTC | 3 nouvelles quêtes. |
+
+## Étape 10 — Boutique (`feature/shop`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Menu → **SHOP** | 4 catégories (TITLES, OUTFITS, KILL EFFECTS, EMOTES), tes coins en haut, chaque article avec son prix (ou LEVEL x / NEED x MORE). |
+| B2 | **BUY** puis **CONFIRM** sur un article abordable | Les coins baissent, l'article passe à **EQUIP**. |
+| B3 | **EQUIP** un titre | Il apparaît en petit sous ton nom au-dessus de ta tête (vu par l'autre joueur). Survoler EQUIPPED → TAKE OFF le retire. |
+| B4 | EQUIP une tenue | Ton haut et ton pantalon prennent les couleurs (les vêtements de l'avatar sont retirés). Retirer une tenue s'applique à la prochaine vie. |
+| B5 | Effet de kill équipé, achever quelqu'un | Poussière / verre brisé / gros impact (écran qui tremble, couleurs qui pâlissent) au moment du coup. |
+| B6 | Touche **B** hors combat | Ton émote se joue (SHRUG gratuite au départ), les autres la voient. Juste après un coup : rien. |
