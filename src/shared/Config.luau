@@ -248,6 +248,7 @@ return table.freeze({
 		IN_COMBAT_TIME = 5, -- hit less than this long ago = can't be challenged
 		COUNTDOWN = 3, -- "3, 2, 1, FIGHT"
 		ROUND_END_PAUSE = 3, -- between the KO and the next round
+		RESULT_TIME = 6, -- the VICTORY / DEFEAT screen, then back to the free arena
 		ARENA_COUNT = 4,
 		-- Ranked (ELO).
 		START_ELO = 1000,

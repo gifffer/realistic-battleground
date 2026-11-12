@@ -361,6 +361,14 @@ function Knockout.noteHit(victim: Model, attacker: Model)
 			info.lastPlayerHitAt = now()
 		end
 	end
+	-- "In combat" until then (the Duel menu greys out CHALLENGE), for both.
+	local untilTime = workspace:GetServerTimeNow() + Config.Duels.IN_COMBAT_TIME
+	for _, model in { victim, attacker } do
+		local player = Players:GetPlayerFromCharacter(model)
+		if player then
+			player:SetAttribute("CombatUntil", untilTime)
+		end
+	end
 end
 
 -- 0 HP: knocked out instead of dead.
