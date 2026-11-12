@@ -270,7 +270,7 @@ local function moveRow(
 		Text = Theme.track(move.name, "four"),
 		Parent = row,
 	})
-	Theme.text({
+	local sentence = Theme.text({
 		Name = "Sentence",
 		Position = UDim2.fromOffset(34, 22),
 		Size = UDim2.fromOffset(230, 14),
@@ -280,7 +280,7 @@ local function moveRow(
 		TextStrokeTransparency = 1,
 		Text = move.description,
 		Parent = row,
-	})
+	}) :: TextLabel
 	Theme.text({
 		Name = "Stamina",
 		AnchorPoint = Vector2.new(1, 0),
@@ -296,7 +296,7 @@ local function moveRow(
 	seconds(row, move.cooldown)
 	if fury then
 		-- "— BROKEN BOTTLE": what this key becomes in Street Fury.
-		Theme.make("Frame", {
+		local furyLine = Theme.make("Frame", {
 			Name = "FuryVersion",
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, 0, 0, 24),
@@ -326,7 +326,21 @@ local function moveRow(
 				TextColor3 = C.Ink2,
 				TextTransparency = 0.2,
 			}),
-		})
+		}) :: Frame
+		-- Same line as the sentence: a long sentence (bold, x1.12) would run
+		-- under it ("Under the chin. Lifts them off the ground." reaches the
+		-- "— RISING UPPERCUT" line by ~18 px), so that sentence alone is
+		-- set a size smaller until it ends 8 px before the line.
+		local function fitSentence()
+			local room = furyLine.AbsolutePosition.X - 8 - sentence.AbsolutePosition.X
+			local width = sentence.TextBounds.X
+			if room > 0 and width > room and sentence.TextSize > 10 then
+				sentence.TextSize = math.max(10, math.floor(sentence.TextSize * room / width))
+			end
+		end
+		furyLine:GetPropertyChangedSignal("AbsolutePosition"):Connect(fitSentence)
+		sentence:GetPropertyChangedSignal("TextBounds"):Connect(fitSentence)
+		fitSentence()
 	end
 	return row
 end
@@ -664,10 +678,14 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 	Theme.text({
 		Name = "Desc",
 		Position = UDim2.fromOffset(0, 36),
-		Size = UDim2.new(1, 0, 0, 18),
+		-- Room for a second line (a long description no longer fits on one
+		-- at the bigger size, and the canvas would cut it).
+		Size = UDim2.new(1, 0, 0, 40),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 15,
 		TextStrokeTransparency = 1,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = kit.description,
 		Parent = body,
 	})
@@ -724,7 +742,7 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		Theme.text({
 			Name = "Sentence",
 			Position = UDim2.fromOffset(34, 22),
-			Size = UDim2.fromOffset(260, 32),
+			Size = UDim2.new(1, -34, 0, 40), -- two lines at most (the canvas ends at 380)
 			FontFace = Theme.Fonts.Body,
 			TextSize = 12,
 			TextColor3 = C.Ink2,

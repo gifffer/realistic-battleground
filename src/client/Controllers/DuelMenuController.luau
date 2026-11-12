@@ -608,7 +608,7 @@ local function buildActionRow(parent: Instance)
 		Name = "Opponent",
 		LayoutOrder = 3,
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
+		Size = UDim2.fromOffset(0, 16),
 		BackgroundTransparency = 1,
 		Parent = waitRight,
 	}, {
@@ -629,7 +629,7 @@ local function buildActionRow(parent: Instance)
 		Name = "Name",
 		LayoutOrder = 2,
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
+		Size = UDim2.fromOffset(0, 16),
 		TextSize = 13,
 		TextStrokeTransparency = 1,
 		Parent = waitOpponent,
@@ -683,8 +683,8 @@ local function buildRanked(parent: Instance)
 	eloNum = Theme.text({
 		Name = "EloNum",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 28),
-		Size = UDim2.fromOffset(120, 24),
+		Position = UDim2.new(1, 0, 0, 27),
+		Size = UDim2.fromOffset(120, 28),
 		FontFace = Theme.Fonts.NumberLight,
 		TextSize = 22,
 		TextStrokeTransparency = 1,

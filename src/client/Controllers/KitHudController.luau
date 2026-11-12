@@ -338,8 +338,9 @@ local function build()
 	furyNum = Theme.text({
 		Name = "FuryNum",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -15, 0, 124),
-		Size = UDim2.fromOffset(80, 24),
+		-- (y 122, not 124: the bigger number keeps its baseline on the "%".)
+		Position = UDim2.new(1, -15, 0, 122),
+		Size = UDim2.fromOffset(80, 28),
 		FontFace = Theme.Fonts.NumberLight,
 		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Right,

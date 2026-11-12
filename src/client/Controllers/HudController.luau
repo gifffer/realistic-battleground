@@ -188,8 +188,8 @@ local function build()
 	})
 	hpNum = label({
 		Name = "HpNum",
-		-- 60 wide: "100" in this font is ≈ 54 px (at 52 it touched HEALTH).
-		Size = UDim2.fromOffset(60, 30),
+		-- 66 × 34: "100" in this font (bold, ×1.12) is ≈ 63 × 34 px.
+		Size = UDim2.fromOffset(66, 34),
 		FontFace = Theme.Fonts.NumberLight,
 		TextSize = 30,
 		TextYAlignment = Enum.TextYAlignment.Top,
@@ -197,7 +197,8 @@ local function build()
 	})
 	hpLabel = label({
 		Name = "HpLabel",
-		Position = UDim2.fromOffset(56, 15),
+		-- y 18: sits on the numeral's baseline.
+		Position = UDim2.fromOffset(56, 18),
 		Size = UDim2.fromOffset(120, 12),
 		TextSize = 10,
 		TextColor3 = C.Ink2,
@@ -205,14 +206,14 @@ local function build()
 	})
 	-- HEALTH follows the numeral: never closer than 6 px to its last digit.
 	local function placeHpLabel()
-		hpLabel.Position = UDim2.fromOffset(math.max(56, hpNum.TextBounds.X + 6), 15)
+		hpLabel.Position = UDim2.fromOffset(math.max(56, hpNum.TextBounds.X + 6), 18)
 	end
 	hpNum:GetPropertyChangedSignal("TextBounds"):Connect(placeHpLabel)
 	placeHpLabel()
 	label({
 		Name = "HpMax",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 15),
+		Position = UDim2.new(1, 0, 0, 18),
 		Size = UDim2.fromOffset(40, 12),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 10,

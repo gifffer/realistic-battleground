@@ -2,7 +2,7 @@
 -- LevelUpController: the short "NEW LEVEL" beat when your level goes up.
 --
 --                 NEW LEVEL
---              L E V E L   1 0
+--                 LEVEL 10
 --          ─────────────────────        a hairline that draws itself
 --          UNLOCKED · MMA FIGHTER       only when a kit unlocks at that level
 --
@@ -87,8 +87,9 @@ local function build()
 		Visible = false,
 		Parent = gui,
 	})
-	-- Centred tracked text gets one trailing space, so the extra letter
-	-- spacing doesn't push it off centre (same as the KO title).
+	-- No trailing space after centred text: the tracking is tight now, so
+	-- a space after the last letter would only push it to the left (same
+	-- as the KO title).
 	eyebrow = Theme.text({
 		Name = "Eyebrow",
 		Size = UDim2.new(1, 0, 0, 12),
@@ -97,7 +98,7 @@ local function build()
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextTransparency = 1,
 		ZIndex = 3,
-		Text = Theme.track("NEW LEVEL", "three") .. " ",
+		Text = Theme.track("NEW LEVEL", "three"),
 		Parent = block,
 	}) :: TextLabel
 	title = Theme.text({
@@ -152,7 +153,7 @@ local function kitUnlockedAt(level: number): Kits.KitDef?
 end
 
 local function titleText(level: number): string
-	return Theme.track("LEVEL " .. tostring(level), "en") .. " "
+	return Theme.track("LEVEL " .. tostring(level), "en")
 end
 
 -- Sets the optional "UNLOCKED · ..." line for `level`; true if shown.
@@ -160,7 +161,7 @@ local function setUnlock(level: number): boolean
 	local kit = kitUnlockedAt(level)
 	unlock.Visible = kit ~= nil
 	if kit then
-		unlock.Text = Theme.track("UNLOCKED · " .. string.upper(kit.name), "three") .. " "
+		unlock.Text = Theme.track("UNLOCKED · " .. string.upper(kit.name), "three")
 	end
 	return kit ~= nil
 end

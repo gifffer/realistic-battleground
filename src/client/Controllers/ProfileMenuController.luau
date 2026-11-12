@@ -130,7 +130,7 @@ function ProfileMenuController.createWallet(panel: Instance): Wallet
 		Name = "WalletNum",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 14),
-		Size = UDim2.fromOffset(160, 24),
+		Size = UDim2.fromOffset(160, 28),
 		FontFace = Theme.Fonts.NumberLight,
 		TextSize = 22,
 		TextStrokeTransparency = 1,
@@ -326,7 +326,7 @@ local function buildLevel()
 	levelNum = Theme.text({
 		Name = "LevelNum",
 		Position = UDim2.fromOffset(0, 28),
-		Size = UDim2.fromOffset(60, 30),
+		Size = UDim2.fromOffset(72, 34),
 		FontFace = Theme.Fonts.NumberLight,
 		TextSize = 30,
 		TextStrokeTransparency = 1,
@@ -336,7 +336,7 @@ local function buildLevel()
 	}) :: TextLabel
 	levelOf = caption("OF 100", {
 		Name = "LevelOf",
-		Position = UDim2.fromOffset(56, 43),
+		Position = UDim2.fromOffset(56, 46),
 		Size = UDim2.fromOffset(120, 12),
 		TextColor3 = C.Ink2,
 		Parent = body,
@@ -345,7 +345,7 @@ local function buildLevel()
 	local function followNumeral()
 		local width = levelNum.TextBounds.X
 		if width > 0 then -- 0 = not measured yet (keep the 56 px fallback)
-			levelOf.Position = UDim2.fromOffset(width + 14, 43)
+			levelOf.Position = UDim2.fromOffset(width + 14, 46)
 		end
 	end
 	levelNum:GetPropertyChangedSignal("TextBounds"):Connect(followNumeral)
@@ -354,7 +354,7 @@ local function buildLevel()
 	xpNums = Theme.make("Frame", {
 		Name = "XpNums",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 43),
+		Position = UDim2.new(1, 0, 0, 46),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 12),
 		BackgroundTransparency = 1,
@@ -489,7 +489,7 @@ local function buildRecord()
 		local value = Theme.text({
 			Name = "Value",
 			Position = UDim2.fromOffset(x, 18),
-			Size = UDim2.new(1, -x, 0, 24),
+			Size = UDim2.new(1, -x, 0, 28),
 			FontFace = Theme.Fonts.NumberLight,
 			TextSize = 22,
 			TextStrokeTransparency = 1,
@@ -600,6 +600,8 @@ local function buildNextUnlock()
 		TextSize = 12,
 		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
+		-- Ends with "…" rather than running into the LEVEL column (≈ 414 px in).
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = nextRow,
 	}) :: TextLabel
 	nextLevel = columnValue(nextRow, "Level", -82, 64)
