@@ -9,6 +9,7 @@ Une bouteille ne casse pas un crâne et n'ouvre pas une cage thoracique. Le jeu 
 
 - Une bouteille fracassée laisse aussi des **bouts de verre plantés** dans la peau. Environ 1 fois sur 3, il n'y a que du verre, sans vraie plaie (`GLASS_GRAZE_CHANCE` dans `Config.luau`).
 - Le sang qui coule tombe **de la plaie**.
+- Le finisher à la batte du Street Brawler laisse une plaie à part : le **crâne enfoncé** (`Crush`), avec une grande déchirure, des éclats d'os et un peu de matière au fond. C'est la seule plaie qui va jusque-là, parce qu'une batte peut vraiment fracturer un crâne.
 - Frapper **au même endroit** agrandit la plaie : **S → M → L**. Ailleurs, ça fait une nouvelle plaie (3 au maximum par partie du corps).
 - La plaie se trouve **du côté où se tient l'attaquant**, à une hauteur au hasard : front, tempe ou joue pour la tête ; poitrine, ventre ou dos pour le torse.
 - Le **visage**, le **t-shirt** et le **pantalon** restent dessinés autour de la plaie.

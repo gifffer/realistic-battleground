@@ -112,6 +112,12 @@ return table.freeze({
 	-- "Gash_<Part>_<n>" attribute (Shared/Util/Gash).
 	CombatEvent = event("CombatEvent"),
 
+	-- server → all clients  (attacker: Model, victim: Model, cinematic: string, anchor: CFrame)
+	-- A cinematic finisher starts (Shared/Finishers): every client plays its
+	-- effects; the two fighters' clients also play its camera. `anchor` =
+	-- where the attacker stands (the timeline's positions are relative to it).
+	FinisherStarted = event("FinisherStarted"),
+
 	-- server → ONE client  (attackId: number)
 	-- "Your M1 number `attackId` is over" (after all its CombatEvents). Lets
 	-- the attacker undo a hit it predicted that the server never confirmed.

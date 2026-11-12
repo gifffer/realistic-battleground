@@ -118,7 +118,6 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
-	Brawler_FinisherStomp = "HeavySwing",
 }
 
 function KitEffects.isMoveAnimation(animation: string): boolean
@@ -210,6 +209,56 @@ local function removeProp(model: Model)
 	end
 end
 
+-- A wooden baseball bat held by its handle (finisher). Same layout as the
+-- bottle: pivot = the grip, its length along -Y.
+local BAT_WOOD = Color3.fromRGB(168, 118, 70)
+local BAT_TILT = 32 -- degrees
+local function buildBat(): Model
+	local model = Instance.new("Model")
+	model.Name = "Bat"
+	local alongY = CFrame.Angles(0, 0, math.rad(90))
+	local function piece(
+		name: string,
+		length: number,
+		diameter: number,
+		center: number,
+		color: Color3,
+		material: Enum.Material
+	)
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Shape = Enum.PartType.Cylinder
+		part.Size = Vector3.new(length, diameter, diameter)
+		part.Material = material
+		part.Color = color
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.Massless = true
+		part.CFrame = CFrame.new(0, -center, 0) * alongY
+		part.Parent = model
+	end
+	piece("Knob", 0.08, 0.26, -0.18, BAT_WOOD, Enum.Material.Wood)
+	piece("Grip", 0.95, 0.15, 0.3, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
+	piece("Handle", 0.5, 0.17, 1.02, BAT_WOOD, Enum.Material.Wood)
+	piece("Taper", 0.6, 0.22, 1.55, BAT_WOOD, Enum.Material.Wood)
+	piece("Barrel", 0.85, 0.28, 2.25, BAT_WOOD, Enum.Material.Wood)
+	local tip = Instance.new("Part")
+	tip.Name = "Tip"
+	tip.Shape = Enum.PartType.Ball
+	tip.Size = Vector3.new(0.28, 0.28, 0.28)
+	tip.Material = Enum.Material.Wood
+	tip.Color = BAT_WOOD
+	tip.CanCollide = false
+	tip.CanQuery = false
+	tip.CanTouch = false
+	tip.Massless = true
+	tip.CFrame = CFrame.new(0, -2.67, 0)
+	tip.Parent = model
+	model.WorldPivot = CFrame.new()
+	return model
+end
+
 -- Puts the prop in `model`'s right hand for `duration` seconds.
 local function holdProp(model: Model, kind: string, duration: number)
 	removeProp(model)
@@ -217,9 +266,13 @@ local function holdProp(model: Model, kind: string, duration: number)
 	if arm == nil or not arm:IsA("BasePart") then
 		return
 	end
-	local prop = buildBottle(kind == "BrokenBottle")
+	local prop = if kind == "Bat" then buildBat() else buildBottle(kind == "BrokenBottle")
 	-- The grip is at the bottom of the arm (the fist), the bottle sticks out.
-	local grip = arm.CFrame * CFrame.new(0, -0.85, 0)
+	-- The bat leans back across the fist, so both hands can hold it (the
+	-- finisher's poses were solved with this angle: BAT_TILT).
+	local grip = arm.CFrame
+		* CFrame.new(0, -0.85, 0)
+		* CFrame.Angles(0, 0, if kind == "Bat" then math.rad(BAT_TILT) else 0)
 	prop:PivotTo(grip)
 	for _, part in prop:GetChildren() do
 		if part:IsA("BasePart") then
@@ -523,6 +576,11 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	end
 end
 
+-- The finisher's bat in `model`'s hand for `duration` seconds.
+function KitEffects.showBat(model: Model, duration: number)
+	holdProp(model, "Bat", duration)
+end
+
 -- Our move was refused by the server: take the prop back.
 function KitEffects.stopAction(model: Model)
 	removeProp(model)
@@ -609,6 +667,31 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
 		1.4
 	)
 	stain(point, if zone == "Head" then 1.1 else 0.8)
+end
+
+-- Bits flying from a crushed skull (the bat finisher): blood, bone, skin.
+-- Same pieces on every client (`seed`).
+function KitEffects.crush(victim: Model, attacker: Model, seed: number)
+	local head = victim:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") then
+		return
+	end
+	local random = Random.new(seed)
+	local point = impactPoint(head, attacker)
+	burst(point, 18, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.12, 13, 2.2, random)
+	burst(
+		point,
+		6,
+		Color3.fromRGB(222, 210, 186),
+		Enum.Material.SmoothPlastic,
+		0.07,
+		9,
+		2.2,
+		random
+	)
+	burst(point, 4, head.Color, Enum.Material.SmoothPlastic, 0.08, 8, 2.2, random)
+	stain(point, 1.6)
+	stain(point + Vector3.new(random:NextNumber(-0.8, 0.8), 0, random:NextNumber(-0.8, 0.8)), 0.9)
 end
 
 -- Glass cutting the skin (face, torso or leg, from `zone`): a spray of blood

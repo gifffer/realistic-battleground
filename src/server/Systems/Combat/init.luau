@@ -57,6 +57,7 @@ local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
@@ -589,6 +590,11 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
+	-- 0b. In a cinematic finisher: untouchable (no effect, it's a cutscene).
+	if time < victim.cinematicUntil then
+		return false
+	end
+
 	-- 1. Dash dodge frames: the hit misses.
 	if time < victim.invulnerableUntil then
 		event("Dodged", false, false)
@@ -791,6 +797,7 @@ function Combat.register(model: Model, player: Player?)
 		legSlowUntil = 0,
 		finishingUntil = 0,
 		invulnerableUntil = 0,
+		cinematicUntil = 0,
 		nextDashAt = 0,
 		knockbackUntil = 0,
 		kitId = Kits.DEFAULT,
@@ -835,15 +842,136 @@ function Combat.register(model: Model, player: Player?)
 	end)
 end
 
+-- The crushed skull of the bat finisher: a "Crush" cut on the face (the
+-- victim lies on their back, face up).
+local function crushHead(victim: Model)
+	local index = 1
+	for candidate = 1, Gash.MAX_PER_PART do
+		if victim:GetAttribute(Gash.attribute("Head", candidate)) == nil then
+			index = candidate
+			break
+		end
+	end
+	setAttribute(
+		victim,
+		Gash.attribute("Head", index),
+		Gash.encode({
+			kind = "Crush",
+			size = "L",
+			point = Vector3.new(random:NextNumber(-0.08, 0.08), 0.06, -0.6),
+			angle = random:NextNumber(-8, 8),
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
+end
+
+-- A cinematic finisher (Shared/Finishers): both fighters are placed and held
+-- still (anchored) for the cutscene, the attacker can't be touched, the
+-- victim dies at the killing blow. Every client plays the camera / effects
+-- from Remotes.FinisherStarted.
+local function startCinematic(
+	state: CombatState,
+	target: Model,
+	finisher: Kits.FinisherDef,
+	cinematic: Finishers.Cinematic
+)
+	local root = state.root
+	local victimRoot = target:FindFirstChild("HumanoidRootPart")
+	local victimHead = target:FindFirstChild("Head")
+	if
+		not (
+			victimRoot
+			and victimRoot:IsA("BasePart")
+			and victimHead
+			and victimHead:IsA("BasePart")
+		)
+	then
+		Knockout.release(target)
+		return
+	end
+	local time = now()
+	local token = state.attackToken
+
+	-- Where everyone stands.
+	local anchor: CFrame
+	local victimPlace: CFrame? = nil
+	if cinematic.placement == "head" then
+		-- Beside the head of the body lying there, looking down at it.
+		local head = victimHead.Position
+		local away = Vector3.new(root.Position.X - head.X, 0, root.Position.Z - head.Z)
+		away = if away.Magnitude > 0.1 then away.Unit else -root.CFrame.LookVector
+		local stand = Vector3.new(head.X, root.Position.Y, head.Z) + away * Finishers.HEAD_DISTANCE
+		anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
+	else
+		-- Where he is, facing the body; the victim hauled up in front of him.
+		local toward = Vector3.new(
+			victimRoot.Position.X - root.Position.X,
+			0,
+			victimRoot.Position.Z - root.Position.Z
+		)
+		toward = if toward.Magnitude > 0.1 then toward.Unit else root.CFrame.LookVector
+		anchor = CFrame.lookAt(root.Position, root.Position + toward)
+		victimPlace = anchor
+			* CFrame.new(0, 0, -Finishers.HOLD_DISTANCE)
+			* CFrame.Angles(0, math.pi, 0)
+	end
+	root.Anchored = true
+	root.CFrame = anchor
+	state.cinematicUntil = time + cinematic.duration
+	if victimPlace then
+		Ragdoll.disable(target)
+		victimRoot.Anchored = true
+		victimRoot.CFrame = victimPlace
+	end
+
+	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
+	if cinematic.victimAnimation then
+		Remotes.CombatAction:FireAllClients(target, cinematic.victimAnimation)
+	end
+	Remotes.FinisherStarted:FireAllClients(state.model, target, cinematic.id, anchor)
+
+	local function letGo()
+		if victimPlace and victimRoot.Parent then
+			victimRoot.Anchored = false
+			Ragdoll.enable(target)
+		end
+	end
+
+	task.delay(cinematic.kill, function()
+		if state.attackToken ~= token or not isAlive(state) or target.Parent == nil then
+			-- Interrupted (the attacker died or left): the victim drops back.
+			letGo()
+			Knockout.release(target)
+			return
+		end
+		if cinematic.id == "Bat" then
+			crushHead(target)
+		end
+		if victimPlace then
+			-- Sent flying by the uppercut.
+			letGo()
+			victimRoot.AssemblyLinearVelocity = anchor.LookVector * 34 + Vector3.new(0, 46, 0)
+			victimRoot.AssemblyAngularVelocity = anchor.RightVector * -9
+		end
+		Knockout.finish(target, state.model)
+	end)
+	task.delay(cinematic.duration, function()
+		if root.Parent then
+			root.Anchored = false
+		end
+		state.cinematicUntil = 0
+	end)
+end
+
 -- Finisher on a KO'd fighter: kneel and strike; the victim dies at impact
--- unless the attacker is stunned (or dies) before.
+-- unless the attacker is stunned (or dies) before. Kits can have their own,
+-- some of them cinematic (Shared/Finishers).
 local function startFinisher(state: CombatState, target: Model): boolean
 	if not Knockout.reserve(target, state.model) then
 		return false
 	end
 	local time = now()
 	local K = Config.Knockout
-	-- Each kit can have its own finisher (the Street Brawler stomps).
 	local finisher = Kits.finisher(state.kitId)
 	state.nextAttackAt = time + finisher.duration
 	state.finishingUntil = time + finisher.duration
@@ -851,8 +979,14 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	state.combo = 0
 	state.attackToken += 1
 	local token = state.attackToken
-	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
 
+	local cinematic = Finishers.get(finisher.cinematic)
+	if cinematic then
+		startCinematic(state, target, finisher, cinematic)
+		return true
+	end
+
+	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
 	task.delay(finisher.impact, function()
 		local targetRoot = target:FindFirstChild("HumanoidRootPart")
 		local stillThere = targetRoot ~= nil

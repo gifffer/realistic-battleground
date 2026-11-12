@@ -111,6 +111,36 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "HeavySwing",
 	},
 
+	-- Cinematic finishers (Shared/Finishers) ------------------------------
+	BatDraw = { -- the bat pulled out from behind the back
+		ids = {},
+		volume = 0.6,
+		pitch = 0.75,
+		pitchVariation = 0.05,
+		fallback = "Swing",
+	},
+	BatCrush = { -- the bat on the skull: a deep, wet crack
+		ids = {},
+		volume = 1,
+		pitch = 0.55,
+		pitchVariation = 0.04,
+		fallback = "HeavyHit",
+	},
+	BodyShot = { -- a hook to the ribs, dull
+		ids = {},
+		volume = 0.85,
+		pitch = 0.8,
+		pitchVariation = 0.08,
+		fallback = "Hit",
+	},
+	KnockoutPunch = { -- the uppercut that ends it
+		ids = {},
+		volume = 1,
+		pitch = 0.75,
+		pitchVariation = 0.03,
+		fallback = "HeavyHit",
+	},
+
 	-- Injuries (step 5) -----------------------------------------------------
 	-- Loops heard only by you while your health is low.
 	Heartbeat = { ids = { 7237020278 }, volume = 0.6, pitch = 1, pitchVariation = 0 },

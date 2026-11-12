@@ -276,7 +276,7 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | X5 | Remplir la jauge, **G** | **KNOCKOUT MODE** : le boxeur sautille, touche ses gants, garde plus serrée. Mêmes effets d'écran que Street Fury. |
 | X6 | Pendant Knockout Mode | 1 = **JAB FLURRY** (6 coups, dont un direct du droit), 2 = **RISING UPPERCUT** (décolle plus haut), 3 = **SLIP & HOOK** (fenêtre plus longue, contre plus fort), 4 = **KNOCKOUT COMBO** : corps, tête, tête, gros uppercut — si le 1ᵉʳ coup touche, les suivants ne ratent pas, le dernier met au sol. |
 | X7 | Menu KITS | « 2 OF 2 AVAILABLE », Boxer **EQUIPPED** une fois choisi, le choix reste au prochain lancement. |
-| X8 | Kit **Street Brawler**, adversaire KO devant toi, clic gauche | Finisher propre au kit : **écrasement du pied** sur la tête, rapide (~0,75 s, coup à 0,3 s). Le Boxer garde le finisher normal (genou au sol). |
+| X8 | Finishers | Voir la section « Finishers cinématiques » plus bas. |
 | X9 | Touche **W** (AZERTY) / **Z** (QWERTY) | Bascule **1ʳᵉ ↔ 3ᵉ personne**, le choix est sauvegardé (même réglage que dans SETTINGS, où la touche est rappelée). |
 
 ## Étape 7 — Progression (`feature/progression`)
@@ -313,3 +313,19 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | D8 | Quitter le jeu en plein duel | L'autre gagne par **forfait**. |
 | D9 | SETTINGS → **BLOCK DUEL REQUESTS** | Les autres voient BLOCKS DUELS et ne peuvent plus te défier. |
 | D10 | PROFILE | Ligne **RANKED** (rang, ELO, victoires / défaites classées) et **DUEL WINS**. |
+
+## Finishers cinématiques (`feature/cinematic-finishers`)
+
+Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**. Ré-importer `WoundKit` avant (il contient la plaie du crâne enfoncé).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | **Street Brawler** sur un KO | Bandes noires, plusieurs plans de caméra. Le perso se place à côté de la tête, sort une **batte** de derrière son dos, la pose sur l'épaule en regardant le corps, la lève à deux mains au-dessus de la tête puis l'abat sur le crâne (gros plan, secousse, zoom). Gerbe de sang et d'éclats d'os, le **crâne reste enfoncé** sur le corps. Il remet la batte sur l'épaule, la batte disparaît, la caméra normale revient (~3,3 s). |
+| F2 | **Boxer** sur un KO | Il **relève** l'adversaire par le col, deux crochets au foie (l'adversaire se plie), crochet droit, crochet gauche (la tête part d'un côté puis de l'autre, un peu de sang), direct, puis s'accroupit et place un énorme **uppercut** : l'adversaire décolle, vole et retombe mort plus loin (~3,4 s). |
+| F3 | Pendant un finisher, un 3ᵉ joueur frappe l'attaquant | Rien ne se passe : l'attaquant est intouchable pendant la scène. |
+| F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. |
+| F5 | Un 3ᵉ joueur qui regarde | Pas de cinématique pour lui (sa caméra reste normale), mais il voit l'animation, la batte, le sang et entend les coups. |
+| F6 | Après le finisher | Le joueur peut de nouveau bouger et attaquer normalement, la caméra est revenue comme avant. |
+
+Les sons `BatDraw`, `BatCrush`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. Tu peux mettre tes IDs.
+

@@ -697,6 +697,7 @@ end
 -- (A slip's counter too: only the server knows a hit was slipped.)
 local SERVER_ONLY_ACTIONS = table.freeze({
 	GetUp = true,
+	Boxer_FinisherVictim = true, -- held up by a Boxer's finisher (we're the victim)
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,

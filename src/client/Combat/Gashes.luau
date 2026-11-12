@@ -60,6 +60,11 @@ local LOOKS: { [string]: Look } = {
 		reflectance = 0.05,
 		material = Enum.Material.SmoothPlastic,
 	},
+	Brain = { -- (the bat finisher's crushed skull only)
+		color = Color3.fromRGB(176, 128, 126),
+		reflectance = 0.2,
+		material = Enum.Material.SmoothPlastic,
+	},
 	Blood = {
 		color = Color3.fromRGB(62, 2, 2),
 		reflectance = 0.3,

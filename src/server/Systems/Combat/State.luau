@@ -28,6 +28,7 @@ export type CombatState = {
 	legSlowUntil: number, -- slowed by a leg hit until then
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
+	cinematicUntil: number, -- in a cinematic finisher: nobody can hit them
 	nextDashAt: number,
 	knockbackUntil: number, -- a knockback push is running until then
 
