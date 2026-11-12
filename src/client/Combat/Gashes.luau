@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
+local ArmRip = require(script.Parent.ArmRip)
 local HeadBlast = require(script.Parent.HeadBlast)
 
 local Gashes = {}
@@ -1182,6 +1183,8 @@ function Gashes.watch(model: Model)
 		elseif name == HeadBlast.ATTRIBUTE then
 			refresh(model, "Head")
 			HeadBlast.apply(model, true)
+		elseif name == ArmRip.ATTRIBUTE then
+			ArmRip.apply(model, true)
 		end
 	end)
 	-- Gone (destroyed, or just taken out of the game): forget its parts.
@@ -1219,6 +1222,7 @@ function Gashes.watch(model: Model)
 	end)
 	refreshAll(model)
 	HeadBlast.apply(model, false) -- (a body whose head burst before we saw it)
+	ArmRip.apply(model, false) -- (or whose arm was torn off)
 end
 
 return table.freeze(Gashes)

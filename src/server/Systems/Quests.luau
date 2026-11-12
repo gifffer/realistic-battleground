@@ -171,6 +171,7 @@ local function onCombatEvent(info: Combat.CombatEventInfo)
 			moveId
 			and not string.find(moveId, "_Counter", 1, true)
 			and not string.find(moveId, "_FollowUp", 1, true)
+			and not string.find(moveId, "_Hold", 1, true)
 		then
 			local counted = lastMoveCounted[attackerPlayer]
 			if counted == nil then

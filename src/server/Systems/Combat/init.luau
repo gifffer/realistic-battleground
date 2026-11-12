@@ -145,12 +145,14 @@ local function isBusyMoving(state: CombatState): boolean
 	return player ~= nil and BUSY_MOVE_STATES[Movement.getMoveState(player)] == true
 end
 
--- Can't fight: knocked out, sliding / climbing, or in the middle of a finisher.
+-- Can't fight: knocked out, sliding / climbing, in the middle of a finisher,
+-- or held by a grab.
 local function isBusy(state: CombatState): boolean
 	return Knockout.isKnockedOut(state.model)
 		or isBusyMoving(state)
 		or now() < state.finishingUntil
 		or now() < state.knockedDownUntil
+		or now() < state.heldUntil
 end
 
 local function setAttribute(model: Model, name: string, value: any)
@@ -637,6 +639,11 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	if isAwakened(attacker) and awakening and awakening.awakening then
 		damage *= awakening.awakening.damageMultiplier
 	end
+	-- A heavy build (Bouncer) takes less from every hit.
+	local victimKit = Kits.get(victim.kitId)
+	if victimKit and victimKit.damageTaken then
+		damage *= victimKit.damageTaken
+	end
 
 	-- 0. Not in the same fight: a duel is only between its two fighters
 	-- ("DuelId" attribute, nil for everyone in the free arena).
@@ -679,7 +686,11 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
-	if victim.blocking and isInFront(victim, attacker) then
+	if victim.blocking and spec.grab then
+		-- 2a. A grab: hands, not a blow. Nothing to parry, it goes through
+		-- the guard (only a hit that stuns him first, or a dash, beats it).
+		stopBlocking(victim)
+	elseif victim.blocking and isInFront(victim, attacker) then
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
 			stun(attacker, C.PARRY_STUN)
@@ -804,7 +815,10 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local knockdown = spec.knockdown
 	local knockback = spec.knockback
 	local pull = spec.pull
-	if knockdown then
+	if spec.grab or time < victim.heldUntil then
+		-- Caught / held (Combat/Grab): no push, the hold places the body.
+		stun(victim, spec.stun)
+	elseif knockdown then
 		-- Thrown to the ground (and away, upward if it's a launch).
 		local speed = knockback or 0
 		local up = spec.launch or (if speed >= 40 then KC.LAUNCH_UP_SPEED else 4)
@@ -881,6 +895,9 @@ function Combat.register(model: Model, player: Player?)
 		regenCarry = 0,
 		slipUntil = 0,
 		slipMoveId = nil,
+		heldUntil = 0,
+		holding = nil,
+		heldBy = nil,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -931,6 +948,70 @@ local function tearLiverOut(victim: Model)
 			seed = random:NextInteger(1, 2 ^ 30),
 		})
 	)
+end
+
+-- The Bouncer's finisher: the right arm torn off at the shoulder. Every
+-- client draws the wounds from "ArmTorn" (its value = a seed): the open
+-- socket on the torso, the bone sticking out of the arm. The arm stays a
+-- part of the body (its sleeve stays on), held in his right fist
+-- (Finishers.ARM_GRIP) until he throws it down `throwIn` seconds later.
+local function tearArmOff(victim: Model, attacker: Model, anchor: CFrame, throwIn: number?)
+	local torso = victim:FindFirstChild("Torso")
+	local arm = victim:FindFirstChild("Right Arm")
+	local fist = attacker:FindFirstChild("Right Arm")
+	if
+		not (
+			torso
+			and torso:IsA("BasePart")
+			and arm
+			and arm:IsA("BasePart")
+			and fist
+			and fist:IsA("BasePart")
+		)
+	then
+		return
+	end
+	-- Off the shoulder: its joint, and the loose one of the ragdoll.
+	for _, item in torso:GetChildren() do
+		if
+			item.Name == "Right Shoulder"
+			or item.Name == "Ragdoll_Right Shoulder"
+			or item.Name == "Ragdoll_Right Shoulder0"
+		then
+			item:Destroy()
+		end
+	end
+	local socket = arm:FindFirstChild("Ragdoll_Right Shoulder1")
+	if socket then
+		socket:Destroy()
+	end
+	arm.CanCollide = false
+	arm.Massless = true
+	local grip = Instance.new("Weld")
+	grip.Name = "TornArmGrip"
+	grip.Part0 = fist
+	grip.Part1 = arm
+	grip.C0 = Finishers.ARM_GRIP
+	grip.Parent = arm
+	setAttribute(victim, "ArmTorn", random:NextInteger(1, 2 ^ 30))
+	if throwIn == nil then
+		return
+	end
+	task.delay(throwIn, function()
+		if grip.Parent == nil or arm.Parent == nil then
+			return
+		end
+		grip:Destroy()
+		-- (from where it is in his hand on every screen at that moment)
+		arm.CFrame = anchor * Finishers.ARM_THROW_FROM
+		arm.Massless = false
+		arm.CanCollide = true
+		if arm:CanSetNetworkOwnership() then
+			arm:SetNetworkOwner(nil)
+		end
+		arm.AssemblyLinearVelocity = anchor:VectorToWorldSpace(Finishers.ARM_THROW_VELOCITY)
+		arm.AssemblyAngularVelocity = anchor:VectorToWorldSpace(Vector3.new(5, 1, -3))
+	end)
 end
 
 -- A cinematic finisher (Shared/Finishers): both fighters are placed and held
@@ -1070,6 +1151,82 @@ local function startCinematic(
 			local fallback = standingAt(own)
 			anchor = CFrame.lookAt(fallback, Vector3.new(head.X, fallback.Y, head.Z))
 		end
+	elseif cinematic.placement == "side" then
+		-- The body laid on its back across in front of him, where it lies now
+		-- (Finishers.SIDE_VICTIM): he comes to stand by it. Facing it the way
+		-- he comes from, else turned a quarter / half way round: the first
+		-- spot with a floor under both and no wall.
+		local torso = target:FindFirstChild("Torso")
+		local body = if torso and torso:IsA("BasePart") then torso.Position else victimRoot.Position
+		local toward = Vector3.new(body.X - root.Position.X, 0, body.Z - root.Position.Z)
+		toward = if toward.Magnitude > 0.1 then toward.Unit else root.CFrame.LookVector
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { state.model, target }
+		params.RespectCanCollide = true
+		local overlap = OverlapParams.new()
+		overlap.FilterType = Enum.RaycastFilterType.Exclude
+		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.RespectCanCollide = true
+		-- The floor's height under `at` (y of a root standing there), or nil.
+		local function floorUnder(at: Vector3): number?
+			local hit = workspace:Raycast(
+				Vector3.new(at.X, root.Position.Y + 1, at.Z),
+				Vector3.new(0, -8, 0),
+				params
+			)
+			return if hit then hit.Position.Y + 3 else nil
+		end
+		local laid = Finishers.SIDE_VICTIM
+		local function anchorFacing(direction: Vector3): CFrame?
+			local look = CFrame.lookAt(Vector3.zero, direction)
+			-- (the body stays where it is: he stands so it lies at SIDE_VICTIM)
+			local offset = look:VectorToWorldSpace(Vector3.new(laid.X, 0, laid.Z))
+			local stand = Vector3.new(body.X, 0, body.Z) - offset
+			local y = floorUnder(stand)
+			if y == nil then
+				return nil
+			end
+			local candidate = CFrame.lookAt(
+				Vector3.new(stand.X, y, stand.Z),
+				Vector3.new(stand.X, y, stand.Z) + direction
+			)
+			-- Room for him, and for the body (along his X, feet to his right).
+			if
+				#workspace:GetPartBoundsInBox(
+						candidate * CFrame.new(0, -0.2, 0),
+						Vector3.new(2.2, 4.4, 1.6),
+						overlap
+					)
+					> 0
+				or #workspace:GetPartBoundsInBox(
+						candidate * CFrame.new(0.8, -2.4, laid.Z),
+						Vector3.new(5.6, 0.8, 3.2),
+						overlap
+					)
+					> 0
+			then
+				return nil
+			end
+			for _, x in { -1.6, 0.8, 3.2 } do
+				local under = floorUnder((candidate * CFrame.new(x, 0, laid.Z)).Position)
+				if under == nil or math.abs(under - y) > 0.8 then
+					return nil
+				end
+			end
+			return candidate
+		end
+		local up = Vector3.new(0, 1, 0)
+		local found: CFrame? = nil
+		for _, direction in { toward, toward:Cross(up), -toward:Cross(up), -toward } do
+			found = anchorFacing(direction)
+			if found then
+				break
+			end
+		end
+		-- (nowhere clear: where he is, facing it, as close as it gets)
+		anchor = found or CFrame.lookAt(root.Position, root.Position + toward)
+		victimPlace = anchor * laid
 	else
 		-- Where he is, facing the body; the victim hauled up in front of him.
 		local toward = Vector3.new(
@@ -1171,6 +1328,14 @@ local function startCinematic(
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
+			elseif cinematic.id == "ArmRip" then
+				local throwIn: number? = nil
+				for _, event in cinematic.events do
+					if event.kind == "Throw" then
+						throwIn = event.time - cinematic.kill
+					end
+				end
+				tearArmOff(target, state.model, anchor, throwIn)
 			end
 		end
 		-- (the attacker stays held until the end of the cutscene)
@@ -1599,6 +1764,9 @@ local function update(dt: number)
 				"MoveSlow",
 				if time < state.slowUntil then state.slowMultiplier else nil
 			)
+			-- A heavy build (Bouncer) moves slower.
+			local kit = Kits.get(state.kitId)
+			Movement.setSpeedModifier(player, "Kit", if kit then kit.speed else nil)
 			-- Kneeling for a finisher: stay in place.
 			Movement.setSpeedModifier(
 				player,

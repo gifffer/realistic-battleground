@@ -57,6 +57,12 @@ export type CombatState = {
 	-- then countering with this move's counter.
 	slipUntil: number,
 	slipMoveId: string?,
+
+	-- Grabs (Bouncer, Combat/Grab.luau): held in place by someone until
+	-- heldUntil (can't act), or holding someone (`holding`).
+	heldUntil: number,
+	holding: CombatState?,
+	heldBy: CombatState?,
 }
 
 -- What one hit does. An M1 builds one, every kit move hit builds one
@@ -82,6 +88,9 @@ export type HitSpec = {
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 	attackId: number?, -- M1 number from the client (prediction), nil for moves
 	moveId: string?, -- kit move id, nil for an M1
+	-- A grab's catch (Combat/Grab): goes through a guard and can't be
+	-- parried (no blow to parry); no push, only the stun.
+	grab: boolean?,
 }
 
 return nil

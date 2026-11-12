@@ -14,6 +14,8 @@
 --      Combat's resolveHit, like an M1: block, parry, dodge all work.
 --   4. A charge (tackle) instead checks a hitbox around the attacker every
 --      frame while they rush forward; the first fighter touched is hit.
+--   5. A grab (Bouncer) catches the nearest fighter in reach and holds them
+--      while its hits land (Combat/Grab.luau).
 --
 -- The attacker's own client moves its character during a charge (like a
 -- dash: instant feel). The server only decides who gets hit.
@@ -34,6 +36,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Stamina = require(script.Parent.Parent.Stamina)
+local Grab = require(script.Parent.Grab)
 local Hitbox = require(script.Parent.Hitbox)
 local State = require(script.Parent.State)
 
@@ -318,6 +321,18 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 		end)
 	end
 	runCharge(state, move, token)
+	local grab = move.grab
+	if grab then
+		Grab.run({
+			getState = c.getState,
+			now = c.now,
+			isAlive = c.isAlive,
+			isAwakened = c.isAwakened,
+			setAttribute = c.setAttribute,
+			resolveHit = c.resolveHit,
+			specFor = specFor,
+		}, state, move, grab, token)
+	end
 	return true
 end
 

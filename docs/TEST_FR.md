@@ -366,3 +366,29 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | B7 | Kill / réapparition | Les bleus disparaissent. Un Dummy tué reste au sol **25 s** avant de réapparaître (le sang et les morceaux restent ~30 s). |
 
 Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
+
+## Kit Bouncer / Videur (`claude/bouncer-kit`)
+
+**Ré-importer `assets/wounds/WoundKit.fbx` avant** (Import 3D dans `Assets > Wounds`, voir `WOUNDS_FR.md`) : il contient les nouvelles pièces du bras arraché.
+Dans **Studio**, tous les kits sont débloqués pour tester (`Config.Dev.UNLOCK_KITS_IN_STUDIO`) ; dans le jeu publié, le Bouncer demande le **niveau 5** et **500 coins**.
+Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| V1 | Menu KITS | La carte **BOUNCER** (« Huge and slow… ») avec ses 4 attaques ; dans le jeu publié : UNLOCKS AT LEVEL 5 / BUY · 500. |
+| V2 | Marcher, courir | Un peu plus lent qu'avec les autres kits. |
+| V3 | **1** (Shove) près du Dummy | Mains ramenées à la poitrine, pas en avant, les deux paumes dans le torse : le Dummy part **loin** en arrière. |
+| V4 | **2** (Chokehold) au contact | Il tend les bras et attrape : la victime est **retournée dos à lui**, son bras autour du cou ; elle se débat (jambes, mains sur son bras), **3 serrées** (bruit d'étouffement), puis il la lâche, elle titube, les mains à la gorge. Barre d'endurance de la victime vidée. |
+| V5 | **2** dans le vide | Il tend les bras, attrape le vide et revient en garde tout de suite (pas d'étranglement dans l'air). |
+| V6 | **2** sur quelqu'un qui **bloque** (F) | La saisie passe quand même (pas de parade possible). |
+| V7 | Pendant la saisie, un 3ᵉ joueur frappe le Bouncer | Il lâche tout de suite, les deux peuvent bouger. |
+| V8 | **3** (Body Slam) | Il prend la victime à bras-le-corps, la soulève **au-dessus de sa tête**, l'écrase sur le dos devant lui (gros choc) : elle part en ragdoll **là où elle est tombée** (pas de saut de position), puis se relève. |
+| V9 | **4** (Hammer Fist) | Les deux bras au-dessus de la tête, les poings s'abattent sur le crâne : grosse réaction, sonné ~1 s. |
+| V10 | Remplir la jauge, **G** | Il fait craquer sa nuque, bombe le torse (**LAST CALL**). Touches : **THROW OUT** (la victime est jetée très loin), **SLEEPER HOLD** (étranglement plus long, la victime s'effondre à la fin), **POWERBOMB** (plus fort), **DOUBLE HAMMER** (2 coups, le 2ᵉ la met au sol). |
+| V11 | Se faire frapper en Bouncer | Il perd un peu moins de vie que les autres kits pour le même coup. |
+| V12 | **Finisher** sur un KO (Dummy) | Bandes noires. La victime est **allongée sur le dos en travers devant lui**, tête à sa gauche. Il s'accroupit, prend son **poignet droit à deux mains** et lève le bras ; gros plan sur son visage (elle supplie). Il pose le **pied droit sur sa poitrine** et **tire trois fois** (il force, on l'entend) ; à la 2ᵉ, l'épaule **se déboîte** (craquement). À la 3ᵉ, **le bras s'arrache** : gerbe de sang, il recule d'un pas avec le bras dans les mains. Sur le corps : l'**épaule ouverte** (cavité rouge, os de l'épaule, peau déchirée, lambeaux), qui gicle par saccades, flaque dessous. Il **lève le bras** pour le regarder : la manche est toujours dessus, **l'os dépasse** en haut, ça dégouline. Puis il le **jette** à côté du corps (bruit lourd, éclaboussure). ~4,6 s. |
+| V13 | Finisher contre un mur | Il se place pour que le corps soit couché sur le sol, pas dans le mur (il peut tourner autour du corps). |
+| V14 | Un joueur qui arrive après | Il voit le corps sans bras droit, l'épaule ouverte, et le bras par terre avec l'os qui dépasse. |
+| V15 | 3ᵉ joueur tue l'attaquant **avant** l'arrachage | Tout s'arrête, la victime retombe KO, avec ses deux bras. |
+
+Nouveaux sons à remplir dans `src/shared/Sounds.luau` (en attendant, ils empruntent un son existant) : `Grab`, `Choke`, `BodySlam`, `Strain`, `ShoulderPop`, `ArmTear`, `LimbDrop`.

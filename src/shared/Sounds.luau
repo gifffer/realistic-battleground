@@ -172,6 +172,56 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.05,
 	},
 
+	-- Bouncer -------------------------------------------------------------
+	Grab = { -- hands closing on a collar, cloth pulled tight
+		ids = {},
+		volume = 0.7,
+		pitch = 1,
+		pitchVariation = 0.08,
+		fallback = "Hit",
+	},
+	Choke = { -- a throat squeezed: a choked gasp
+		ids = {},
+		volume = 0.8,
+		pitch = 1,
+		pitchVariation = 0.08,
+		fallback = "HurtGrunt",
+	},
+	BodySlam = { -- a whole body driven into the floor
+		ids = {},
+		volume = 1,
+		pitch = 0.9,
+		pitchVariation = 0.05,
+		fallback = "Tackle",
+	},
+	Strain = { -- him pulling with everything he has (a grunt)
+		ids = {},
+		volume = 0.8,
+		pitch = 0.85,
+		pitchVariation = 0.05,
+	},
+	ShoulderPop = { -- the shoulder coming out of its socket
+		ids = {},
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.05,
+		fallback = "RibCrack",
+	},
+	ArmTear = { -- the arm torn off at the shoulder, wet
+		ids = {},
+		volume = 1,
+		pitch = 0.9,
+		pitchVariation = 0.04,
+		fallback = "FleshTear",
+	},
+	LimbDrop = { -- a heavy arm hitting the floor
+		ids = {},
+		volume = 0.8,
+		pitch = 0.9,
+		pitchVariation = 0.05,
+		fallback = "OrganDrop",
+	},
+
 	-- Injuries (step 5) -----------------------------------------------------
 	-- Loops heard only by you while your health is low.
 	Heartbeat = { ids = { 7237020278 }, volume = 0.6, pitch = 1, pitchVariation = 0 },

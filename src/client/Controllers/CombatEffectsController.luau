@@ -411,11 +411,14 @@ local function playHitReaction(
 	moveId: string?
 )
 	-- Some kit moves have their own reaction (a liver shot folds the body).
+	-- A grab's catch / a held fighter: its hold clip stays (no reaction).
 	local special = if moveId then KitEffects.reactionFor(moveId) else nil
-	CharacterAnimationController.playAction(
-		victim,
-		special or chooseReaction(strong, zone, side, attacker)
-	)
+	if not KitEffects.keepsPose(moveId, victim) then
+		CharacterAnimationController.playAction(
+			victim,
+			special or chooseReaction(strong, zone, side, attacker)
+		)
+	end
 	CharacterAnimationController.flinch(victim, flinchKick(strong, zone, side, attacker))
 	local stop = if strong then HEAVY_HIT_STOP else HIT_STOP
 	CharacterAnimationController.hitStop(victim, stop)
@@ -710,6 +713,12 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,
+	-- Bouncer: laid out for the arm, and his own cinematic + activation.
+	Bouncer_FinisherArmRip = true,
+	Bouncer_FinisherArmRipVictim = true,
+	Bouncer_Awaken = true,
+	-- (a grab's hold clips too: only the server knows it caught someone,
+	-- KitEffects.grabOf)
 })
 
 -- A fighter started a punch, a dash, a finisher, or got up after a KO.
@@ -718,11 +727,14 @@ local function onCombatAction(model: Model, action: string)
 	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
 		return
 	end
-	if model == player.Character and (action == "Brawler_Awaken" or action == "Boxer_Awaken") then
+	local grab = KitEffects.grabOf(action)
+	if model == player.Character and KitEffects.isAwakening(action) then
 		-- Our Awakening starts: no attack during the activation (as on the server).
 		CombatController.holdAttacks(Config.Kits.AWAKEN_TIME)
 	elseif model == player.Character and action == "Boxer_SlipCounter" then
 		CombatController.holdAttacks(0.55) -- our counter punch
+	elseif model == player.Character and grab then
+		CombatController.holdAttacks(grab.duration) -- holding someone / held
 	end
 	-- (Emotes are played by the server's answer, for us too.)
 	-- A "Finisher" strike that isn't our KO finisher (Street Fury's
@@ -734,6 +746,7 @@ local function onCombatAction(model: Model, action: string)
 	if
 		model == player.Character
 		and not SERVER_ONLY_ACTIONS[action]
+		and grab == nil
 		and not followUp
 		and string.sub(action, 1, 6) ~= "Emote_"
 	then
@@ -754,7 +767,7 @@ local function onCombatAction(model: Model, action: string)
 	elseif KitEffects.isMoveAnimation(action) then
 		-- Prop in hand + its own sound. Our own Street Fury roar already
 		-- played when we pressed G (KitController): don't play it twice.
-		local alreadyHeard = model == player.Character and action == "Brawler_Awaken"
+		local alreadyHeard = model == player.Character and KitEffects.isAwakening(action)
 		KitEffects.onAction(model, action, alreadyHeard)
 	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model) -- the heavy blows
