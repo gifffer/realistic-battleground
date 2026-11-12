@@ -128,6 +128,15 @@ local sounds: { [string]: SoundInfo } = {
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
 	Vault = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },
 	Mantle = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 }, -- grabbing a ledge
+
+	-- Weather (Server/Systems/Weather, played by Client/Controllers/WeatherController) ---
+	-- Not in 3D: heard by you wherever you are. Empty = silent, the game still works.
+	-- A steady rain LOOP (pick a seamless one, 30 s or more). Its volume follows the rain
+	-- (fades in / out) and is halved under a roof or the viaduct.
+	Rain = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0 },
+	-- A distant thunder rumble (one shot), heard 1 to 4 s after the flash. Put 2 or 3 different
+	-- ones: a random one plays each time, at a random volume between 60 and 100 %.
+	Thunder = { ids = {}, volume = 0.9, pitch = 1, pitchVariation = 0.08 },
 }
 
 return table.freeze(sounds)

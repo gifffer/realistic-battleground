@@ -348,4 +348,60 @@ return table.freeze({
 		CROUCH_DROP = 1.1,
 		SLIDE_DROP = 2.3,
 	}),
+
+	-- Weather events in the city (Server/Systems/Weather decides, everyone sees the same;
+	-- Client/Controllers/WeatherController draws the rain, the flashes and the notice).
+	-- Times are in seconds. NumberRange.new(a, b) = a random value between a and b.
+	Weather = table.freeze({
+		-- The first event comes this long after the server starts.
+		FIRST_EVENT = NumberRange.new(180, 300),
+		-- Calm gap after an event ends, before the next one may start.
+		GAP = NumberRange.new(240, 420),
+		-- When the dice say "nothing", try again this long after.
+		RETRY = 45,
+		-- Chances of each event (they don't need to add up to 100). Rain is likelier at
+		-- night; a power cut only happens at night (and at most once per night).
+		WEIGHTS_DAY = table.freeze({ Rain = 40, Fog = 30, Nothing = 30 }),
+		WEIGHTS_NIGHT = table.freeze({ Rain = 55, Fog = 20, PowerCut = 25, Nothing = 15 }),
+
+		-- RAIN: lasts 2 to 4 min. The rain grows for RAMP_IN, fades over RAMP_OUT.
+		RAIN_DURATION = NumberRange.new(120, 240),
+		RAIN_RAMP_IN = 25,
+		RAIN_RAMP_OUT = 30,
+		-- Part of the rains that are storms (with thunder).
+		STORM_CHANCE = 0.5,
+		-- Time between two thunder flashes in a storm.
+		THUNDER_GAP = NumberRange.new(30, 70),
+		-- The rumble is heard this long after the flash (light is faster than sound).
+		THUNDER_SOUND_DELAY = NumberRange.new(1.2, 4),
+
+		-- FOG: dense haze (about 90 studs of visibility) for 2 to 3 min.
+		FOG_DURATION = NumberRange.new(120, 180),
+		FOG_RAMP = 25,
+
+		-- POWER CUT (night only): the lights flicker, go dark, then come back as a wave
+		-- from the substation, the sodium lamps warming up from red to orange.
+		POWER_FLICKER = 2,
+		POWER_DARK = 40,
+		POWER_WARMUP = 6,
+		-- Not if the night ends in less than this (the dawn would come in the dark).
+		POWER_MIN_NIGHT_LEFT = 75,
+		SUBSTATION = Vector3.new(142, 0, -173),
+		-- Speed of the restore wave, in studs per second.
+		POWER_WAVE_SPEED = 66,
+
+		-- Client: the rain around the camera.
+		RAIN_RATE = 900, -- drops per second (halved on low graphics quality)
+		RAIN_AREA = 90, -- side of the square area it falls on, in studs
+		RAIN_HEIGHT = 45, -- the drops start this high above the camera
+		RAIN_LEAD = 0.4, -- the area moves ahead of a moving camera (× its speed)
+		SPLASH_RATE = 220, -- little splashes on the ground around you
+		-- The one-line notice top-left ("RAIN", "POWER CUT").
+		NOTICE_TIME = 3,
+
+		-- Studio only: the first event comes after 20 s and the gaps are 45 s, to test.
+		-- You can also force one: in the Studio command bar (server), type
+		-- workspace:SetAttribute("WeatherForce", "Rain")   ("Rain", "Storm", "Fog", "PowerCut").
+		STUDIO_FAST = true,
+	}),
 })

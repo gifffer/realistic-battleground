@@ -120,6 +120,31 @@ function SoundController.loop(name: string): Sound?
 	return sound
 end
 
+-- A one-shot sound heard by this player only, not placed in the world (thunder...).
+-- `volumeScale` multiplies the volume from Sounds (default 1). Returns the Sound, or nil
+-- if the sound has no id yet.
+function SoundController.play2D(name: string, volumeScale: number?): Sound?
+	local info = Sounds[name]
+	if info == nil then
+		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
+		return nil
+	end
+	local ids = resolveIds(name)
+	if #ids == 0 then
+		return nil
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = name
+	sound.SoundId = assetUrl(pickId(name, ids))
+	sound.Volume = info.volume * (volumeScale or 1)
+	sound.PlaybackSpeed = info.pitch
+		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
+	sound.Parent = game:GetService("SoundService")
+	sound:Play()
+	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, 12) + 0.5)
+	return sound
+end
+
 -- Downloads every sound in the background at startup.
 local function preloadAll()
 	local urls: { any } = {}
