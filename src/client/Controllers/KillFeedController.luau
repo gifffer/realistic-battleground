@@ -42,7 +42,9 @@ local OLD_ROW_TRANSPARENCY = 0.28
 -- Room around the feed inside the fading layer (the dark bands and the
 -- tick stick out on the right of the feed; a CanvasGroup cuts what is
 -- outside it).
+-- (Wide enough on the left for the longest line: two long names + verb.)
 local LAYER_MARGIN = 40
+local LAYER_EXTRA_LEFT = 260
 
 -- What a line is made of, in order: names (with their level) and verbs.
 type Part = {
@@ -374,7 +376,7 @@ function KillFeedController.start()
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.fromScale(1, 0),
 		Size = UDim2.fromOffset(
-			360 + 40 + LAYER_MARGIN,
+			360 + 40 + LAYER_MARGIN + LAYER_EXTRA_LEFT,
 			36 + K.FEED_LINES * ROW_HEIGHT + LAYER_MARGIN
 		),
 		BackgroundTransparency = 1,

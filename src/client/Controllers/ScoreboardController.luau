@@ -33,6 +33,7 @@ local StarterGui = game:GetService("StarterGui")
 
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local HudController = require(script.Parent.HudController)
 local KillFeedController = require(script.Parent.KillFeedController)
 local MenuController = require(script.Parent.MenuController)
 
@@ -575,6 +576,7 @@ local function setOpen(value: boolean)
 	end
 	open = value
 	KillFeedController.setHidden(value)
+	HudController.setRewardsHidden(value)
 	openChanged.fire(value)
 
 	local rowsInOrder = sortedRows()

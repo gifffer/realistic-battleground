@@ -45,6 +45,8 @@ local Progression = {}
 local contributors: { [Model]: { [Player]: number } } = {}
 -- Per player: damage dealt to players, not yet turned into XP.
 local damageCarry: { [Player]: number } = {}
+-- "killerId:victimId" → when that kill was last rewarded (anti-farm).
+local lastRewardedKill: { [string]: number } = {}
 -- Per player: seconds played since the last playtime reward.
 local playtime: { [Player]: number } = {}
 
@@ -114,19 +116,30 @@ local function onEliminated(elimination: Knockout.Elimination)
 	if victimPlayer == nil then
 		return
 	end
+	local repeatKill = false
 	if killerPlayer and killerPlayer.Parent == Players then
 		addAttribute(killerPlayer, "SessionKills", 1)
-		local finisher = elimination.kind == "Finished"
-		Progression.grant(
-			killerPlayer,
-			"Kill",
-			P.KILL_XP + (if finisher then P.FINISHER_BONUS_XP else 0),
-			P.KILL_COINS + (if finisher then P.FINISHER_BONUS_COINS else 0)
-		)
+		-- Anti-farm: killing the SAME player again within REPEAT_KILL_WINDOW
+		-- counts on the scoreboard but gives nothing (two friends trading kills).
+		local pair = `{killerPlayer.UserId}:{victimPlayer.UserId}`
+		local time = os.clock()
+		repeatKill = time - (lastRewardedKill[pair] or -math.huge) < P.REPEAT_KILL_WINDOW
+		if not repeatKill then
+			lastRewardedKill[pair] = time
+			local finisher = elimination.kind == "Finished"
+			Progression.grant(
+				killerPlayer,
+				"Kill",
+				P.KILL_XP + (if finisher then P.FINISHER_BONUS_XP else 0),
+				P.KILL_COINS + (if finisher then P.FINISHER_BONUS_COINS else 0)
+			)
+		end
 	end
-	-- Assists: everyone else who hurt them recently.
+	-- Assists: everyone else who hurt them recently (only when a player got
+	-- the kill: a fall or a self-elimination pays no assist).
 	local list = contributors[elimination.victim]
-	if list then
+	contributors[elimination.victim] = nil
+	if list and killerPlayer and not repeatKill then
 		local time = os.clock()
 		for player, at in list do
 			if
@@ -137,7 +150,6 @@ local function onEliminated(elimination: Knockout.Elimination)
 				Progression.grant(player, "Assist", P.ASSIST_XP, P.ASSIST_COINS)
 			end
 		end
-		contributors[elimination.victim] = nil
 	end
 end
 
@@ -209,15 +221,28 @@ local function onLoaded(player: Player)
 	if data then
 		setLevelAttribute(player, data.xp)
 	end
-	player:SetAttribute("SessionKills", 0)
-	player:SetAttribute("SessionDeaths", 0)
-	playtime[player] = 0
+	playtime[player] = playtime[player] or 0
+end
+
+-- Session stats start at 0 when the player joins (not when the save loads,
+-- which can come after their first fight).
+local function onPlayerAdded(player: Player)
+	if player:GetAttribute("SessionKills") == nil then
+		player:SetAttribute("SessionKills", 0)
+	end
+	if player:GetAttribute("SessionDeaths") == nil then
+		player:SetAttribute("SessionDeaths", 0)
+	end
 end
 
 function Progression.start()
 	Combat.onDamaged(onDamaged)
 	Knockout.onEliminated(onEliminated)
 	PlayerData.onLoaded(onLoaded)
+	Players.PlayerAdded:Connect(onPlayerAdded)
+	for _, player in Players:GetPlayers() do
+		onPlayerAdded(player)
+	end
 	Players.PlayerRemoving:Connect(function(player)
 		playtime[player] = nil
 		damageCarry[player] = nil

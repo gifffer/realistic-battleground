@@ -50,6 +50,7 @@ local grade: ColorCorrectionEffect
 
 -- "idle" = nothing on screen, "showing" = in or holding, "leaving" = fading out.
 local phase = "idle"
+local beatLevel: number? = nil -- the level the current beat shows
 local beatToken = 0 -- bumped by every new beat (stops the old timeline)
 local fadeToken = 0 -- bumped when the hold restarts (stops the old fade-out)
 local lastLevel: number? = nil
@@ -218,6 +219,7 @@ local function swapTitle(level: number)
 end
 
 local function playBeat(level: number)
+	beatLevel = level
 	if phase == "showing" then
 		swapTitle(level)
 		return
@@ -323,6 +325,29 @@ local function requestBeat(level: number)
 	end)
 end
 
+-- A beat on screen when the menu opens or the player is knocked out: it
+-- stops (the HUD is hidden anyway) and plays again once that's over.
+local function interruptIfBlocked()
+	if phase == "idle" or not blocked() then
+		return
+	end
+	beatToken += 1
+	fadeToken += 1
+	for _, tween in fadeTweens do
+		tween:Cancel()
+	end
+	table.clear(fadeTweens)
+	band.Visible = false
+	block.Visible = false
+	grade.Contrast = 0
+	grade.Saturation = 0
+	phase = "idle"
+	local level = beatLevel
+	if level then
+		requestBeat(level)
+	end
+end
+
 local function onLevelChanged()
 	local value = player:GetAttribute("Level")
 	if typeof(value) ~= "number" then
@@ -345,6 +370,8 @@ function LevelUpController.start()
 	local value = player:GetAttribute("Level")
 	lastLevel = if typeof(value) == "number" then value else nil
 	player:GetAttributeChangedSignal("Level"):Connect(onLevelChanged)
+	MenuController.onOpenChanged(interruptIfBlocked)
+	game:GetService("RunService").Heartbeat:Connect(interruptIfBlocked) -- (KO)
 end
 
 return LevelUpController

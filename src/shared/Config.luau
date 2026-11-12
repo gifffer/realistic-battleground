@@ -224,6 +224,9 @@ return table.freeze({
 		ASSIST_XP = 20,
 		ASSIST_COINS = 4,
 		ASSIST_TIME = 15, -- seconds: damage older than this doesn't count
+		-- Killing the same player again within this many seconds gives
+		-- nothing (no farming between two friends).
+		REPEAT_KILL_WINDOW = 180,
 		-- Damage dealt: 1 XP every DAMAGE_PER_XP damage (paid out every few seconds).
 		DAMAGE_PER_XP = 5,
 		-- Time played: every PLAYTIME_INTERVAL seconds.
