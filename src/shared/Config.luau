@@ -101,6 +101,9 @@ return table.freeze({
 		-- Builds a parkour test course next to the spawn: walls of every
 		-- height, vault rails, a climbing tower... (Server/Systems/DevCourse)
 		TEST_COURSE = true,
+		-- In Studio only: every kit can be equipped without buying it (to
+		-- test new kits without levelling up). Never in the published game.
+		UNLOCK_KITS_IN_STUDIO = true,
 	}),
 
 	-- Basic combat (M1 combo, block, parry, dash). Times are in seconds.

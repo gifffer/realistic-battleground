@@ -19,6 +19,8 @@
 --   KitEffects.stopAction(model)             our move was refused: undo it
 --   KitEffects.onHit(victim, attacker, moveId, zone)   a move landed
 --   KitEffects.isHeavy(moveId)               big reaction (HitHeavy) for it?
+--   KitEffects.grabOf(animation)             the grab a hold clip belongs to
+--   KitEffects.keepsPose(moveId, victim)     no reaction clip (grabs, holds)
 --   KitEffects.watch(model)                  bleeding / fury visuals
 
 local CollectionService = game:GetService("CollectionService")
@@ -53,16 +55,26 @@ local MAX_STAINS = 60
 
 local moveByAnimation: { [string]: Kits.MoveDef } = {}
 local moveById: { [string]: Kits.MoveDef } = {}
+-- The clips of the grabs' holds (both fighters'), with their grab.
+local grabByClip: { [string]: Kits.GrabDef } = {}
+-- The Awakenings' activation clips.
+local awakenClips: { [string]: boolean } = {}
 for _, kit in Kits.list() do
 	local lists = { kit.moves }
 	local awakening = kit.awakening
 	if awakening then
 		table.insert(lists, awakening.moves)
+		awakenClips[awakening.animation] = true
 	end
 	for _, list in lists do
 		for _, move in list do
 			moveByAnimation[move.animation] = moveByAnimation[move.animation] or move
 			moveById[move.id] = move
+			local grab = move.grab
+			if grab then
+				grabByClip[grab.animation] = grab
+				grabByClip[grab.victimAnimation] = grab
+			end
 		end
 	end
 end
@@ -80,6 +92,14 @@ local HEAVY_MOVES = table.freeze({
 	KnockoutCombo = true,
 	Slip_Counter = true,
 	SlipPlus_Counter = true,
+	Shove = true,
+	HammerFist = true,
+	DoubleHammer = true,
+	-- (a grab's hits are its move id + "_Hold", see Server/Combat/Grab)
+	BodySlam_Hold = true,
+	Powerbomb_Hold = true,
+	ThrowOut_Hold = true,
+	BoneThrow = true, -- (a bone thrown into them, Shared/Weapons)
 })
 -- Moves with their own victim reaction (instead of the usual one by zone).
 local REACTIONS: { [string]: string } = {
@@ -100,6 +120,20 @@ local HIT_SOUNDS: { [string]: string } = {
 	UppercutPlus = "HeavyHit",
 	KnockoutCombo = "HeavyHit",
 	SlipPlus_Counter = "HeavyHit",
+	Shove = "BodyShot",
+	HammerFist = "HeavyHit",
+	DoubleHammer = "HeavyHit",
+	-- Grabs: the hands closing, then what the hold does.
+	Chokehold = "Grab",
+	SleeperHold = "Grab",
+	BodySlam = "Grab",
+	Powerbomb = "Grab",
+	ThrowOut = "Grab",
+	Chokehold_Hold = "Choke",
+	SleeperHold_Hold = "Choke",
+	BodySlam_Hold = "BodySlam",
+	Powerbomb_Hold = "BodySlam",
+	ThrowOut_Hold = "Tackle",
 }
 -- Sound when the move STARTS (the swing).
 local START_SOUNDS: { [string]: string } = {
@@ -119,10 +153,39 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
+	Bouncer_Shove = "HeavySwing",
+	Bouncer_Grab = "Swing",
+	Bouncer_HammerFist = "HeavySwing",
+	Bouncer_DoubleHammer = "HeavySwing",
+	Bouncer_Awaken = "Awaken",
 }
 
+-- (a hold's clips are silent: the catch and its hits make the sounds)
 function KitEffects.isMoveAnimation(animation: string): boolean
-	return moveByAnimation[animation] ~= nil or START_SOUNDS[animation] ~= nil
+	return moveByAnimation[animation] ~= nil
+		or START_SOUNDS[animation] ~= nil
+		or grabByClip[animation] ~= nil
+end
+
+-- The grab whose hold plays this clip (on either fighter), or nil.
+function KitEffects.grabOf(animation: string): Kits.GrabDef?
+	return grabByClip[animation]
+end
+
+-- Is this an Awakening's activation clip (any kit)?
+function KitEffects.isAwakening(animation: string): boolean
+	return awakenClips[animation] == true
+end
+
+-- A hit that must not play a reaction clip on the victim: a grab's catch
+-- (its hold clip comes right after) or anything landing on a held fighter
+-- (its hold clip is playing).
+function KitEffects.keepsPose(moveId: string?, victim: Model): boolean
+	if victim:GetAttribute("Held") ~= nil then
+		return true
+	end
+	local move = if moveId then moveById[moveId] else nil
+	return move ~= nil and move.grab ~= nil
 end
 
 function KitEffects.isHeavy(moveId: string): boolean

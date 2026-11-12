@@ -44,7 +44,9 @@ local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
+local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -201,11 +203,31 @@ local function onCombatantAdded(instance: Instance)
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
 	KitEffects.watch(model) -- bleeding drips, Street Fury
+	WeaponFx.watch(model) -- a bone (to throw) in the hand
 	Wounds.watch(model) -- bruises and cuts where they were hit
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
 	end)
 	refreshState(visual)
+	-- A grab's hold (Server/Combat/Grab): "Held" / "Holding" = the hold clip
+	-- playing. When it ends (maybe cut short), the clip stops and our own
+	-- attacks are free again.
+	for _, name in { "Held", "Holding" } do
+		local playing = model:GetAttribute(name)
+		model:GetAttributeChangedSignal(name):Connect(function()
+			local value = model:GetAttribute(name)
+			if typeof(playing) == "string" and value == nil then
+				CharacterAnimationController.stopAction(model, playing)
+				if name == "Held" then
+					BouncerFx.onReleased(model) -- (a choked face gets its colour back)
+				end
+				if model == player.Character then
+					CombatController.releaseAttacks()
+				end
+			end
+			playing = value
+		end)
+	end
 end
 
 local function onCombatantRemoved(instance: Instance)
@@ -411,11 +433,14 @@ local function playHitReaction(
 	moveId: string?
 )
 	-- Some kit moves have their own reaction (a liver shot folds the body).
+	-- A grab's catch / a held fighter: its hold clip stays (no reaction).
 	local special = if moveId then KitEffects.reactionFor(moveId) else nil
-	CharacterAnimationController.playAction(
-		victim,
-		special or chooseReaction(strong, zone, side, attacker)
-	)
+	if not KitEffects.keepsPose(moveId, victim) then
+		CharacterAnimationController.playAction(
+			victim,
+			special or chooseReaction(strong, zone, side, attacker)
+		)
+	end
 	CharacterAnimationController.flinch(victim, flinchKick(strong, zone, side, attacker))
 	local stop = if strong then HEAVY_HIT_STOP else HIT_STOP
 	CharacterAnimationController.hitStop(victim, stop)
@@ -633,6 +658,7 @@ local function onCombatEvent(
 		end)
 		if moveId then
 			KitEffects.onHit(victim, attacker, moveId, zone)
+			BouncerFx.onHit(victim, attacker, moveId, shake)
 			if iAmAttacker then
 				CombatController.notifyMoveLanded(moveId)
 			end
@@ -712,6 +738,12 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,
+	-- Bouncer: laid out for the arm, and his own cinematic + activation.
+	Bouncer_FinisherArmRip = true,
+	Bouncer_FinisherArmRipVictim = true,
+	Bouncer_Awaken = true,
+	-- (a grab's hold clips too: only the server knows it caught someone,
+	-- KitEffects.grabOf)
 })
 
 -- A fighter started a punch, a dash, a finisher, or got up after a KO.
@@ -720,11 +752,14 @@ local function onCombatAction(model: Model, action: string)
 	if typeof(model) ~= "Instance" or not model:IsA("Model") or typeof(action) ~= "string" then
 		return
 	end
-	if model == player.Character and (action == "Brawler_Awaken" or action == "Boxer_Awaken") then
+	local grab = KitEffects.grabOf(action)
+	if model == player.Character and KitEffects.isAwakening(action) then
 		-- Our Awakening starts: no attack during the activation (as on the server).
 		CombatController.holdAttacks(Config.Kits.AWAKEN_TIME)
 	elseif model == player.Character and action == "Boxer_SlipCounter" then
 		CombatController.holdAttacks(0.55) -- our counter punch
+	elseif model == player.Character and grab then
+		CombatController.holdAttacks(grab.duration) -- holding someone / held
 	end
 	-- (Emotes are played by the server's answer, for us too.)
 	-- A "Finisher" strike that isn't our KO finisher (Street Fury's
@@ -736,6 +771,7 @@ local function onCombatAction(model: Model, action: string)
 	if
 		model == player.Character
 		and not SERVER_ONLY_ACTIONS[action]
+		and grab == nil
 		and not followUp
 		and string.sub(action, 1, 6) ~= "Emote_"
 	then
@@ -747,6 +783,7 @@ local function onCombatAction(model: Model, action: string)
 		dashedAt[model] = os.clock()
 	end
 	CharacterAnimationController.playAction(model, action)
+	BouncerFx.onAction(model, action)
 	if
 		action == "GetUp"
 		or string.sub(action, 1, 6) == "Emote_"
@@ -756,7 +793,7 @@ local function onCombatAction(model: Model, action: string)
 	elseif KitEffects.isMoveAnimation(action) then
 		-- Prop in hand + its own sound. Our own Street Fury roar already
 		-- played when we pressed G (KitController): don't play it twice.
-		local alreadyHeard = model == player.Character and action == "Brawler_Awaken"
+		local alreadyHeard = model == player.Character and KitEffects.isAwakening(action)
 		KitEffects.onAction(model, action, alreadyHeard)
 	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model) -- the heavy blows
@@ -789,6 +826,43 @@ end
 
 function CombatEffectsController.start()
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
+	-- Something thrown (Shared/Weapons): flying, then broken where it hit.
+	Remotes.WeaponThrown.OnClientEvent:Connect(
+		function(
+			thrower: unknown,
+			id: unknown,
+			throwId: unknown,
+			origin: unknown,
+			velocity: unknown
+		)
+			if
+				typeof(thrower) == "Instance"
+				and thrower:IsA("Model")
+				and typeof(id) == "string"
+				and typeof(throwId) == "number"
+				and typeof(origin) == "Vector3"
+				and typeof(velocity) == "Vector3"
+			then
+				WeaponFx.thrown(thrower, id, throwId, origin, velocity)
+			end
+		end
+	)
+	Remotes.WeaponBroke.OnClientEvent:Connect(
+		function(id: unknown, throwId: unknown, position: unknown, velocity: unknown)
+			if
+				typeof(id) == "string"
+				and typeof(position) == "Vector3"
+				and typeof(velocity) == "Vector3"
+			then
+				WeaponFx.broke(
+					id,
+					if typeof(throwId) == "number" then throwId else nil,
+					position,
+					velocity
+				)
+			end
+		end
+	)
 	local tag = Config.Combat.TAG
 	CollectionService:GetInstanceAddedSignal(tag):Connect(onCombatantAdded)
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)

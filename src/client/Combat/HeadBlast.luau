@@ -13,8 +13,7 @@
 --     head itself, so its cuts never come back over it);
 --   • leaves what a real blow like that leaves: the lower jaw and a few
 --     teeth, the open neck (torn skin, flesh, windpipe, the top of the
---     spine), the heart still pumping blood out of it in spurts, a pool
---     spreading under it;
+--     spine) - its arteries spurting is BloodGush.neck;
 --   • when it happens in front of us (not a body we only see later): the
 --     burst itself — thin pieces of skull (scalp outside, bone inside), brain,
 --     an eye, teeth, a spray and a mist of blood, the hair / hat sent flying,
@@ -49,9 +48,9 @@ local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
 local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
-local MAX_MARKS = 140 -- blood marks on the floor at once (several finishers...)
-local PUMP_TIME = 4.5 -- seconds the neck keeps pumping blood
-local BEAT = 0.55 -- seconds between two spurts (a racing heart)
+local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
+-- Pools never pushed out by newer drops (they fade on their own).
+local pinned: { [BasePart]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local done: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -137,6 +136,17 @@ end
 
 -- A flat mark of blood on the floor: round (`length` = nil) or a streak
 -- `length` long pointing along `along` (where the drop was going).
+-- Too many marks: the oldest that isn't a pool goes.
+local function evictOldest()
+	for index, piece in marks do
+		if not pinned[piece] then
+			table.remove(marks, index)
+			piece:Destroy()
+			return
+		end
+	end
+end
+
 local function mark(
 	position: Vector3,
 	width: number,
@@ -178,10 +188,7 @@ local function mark(
 	piece.Parent = workspace
 	table.insert(marks, piece)
 	if #marks > MAX_MARKS then
-		local oldest = table.remove(marks, 1)
-		if oldest then
-			oldest:Destroy()
-		end
+		evictOldest()
 	end
 	local life = lifetime or MARK_LIFETIME
 	task.delay(life * 0.7, function()
@@ -197,10 +204,7 @@ end
 local function keepMark(piece: BasePart, lifetime: number?)
 	table.insert(marks, piece)
 	if #marks > MAX_MARKS then
-		local oldest = table.remove(marks, 1)
-		if oldest then
-			oldest:Destroy()
-		end
+		evictOldest()
 	end
 	local life = lifetime or MARK_LIFETIME
 	task.delay(life * 0.7, function()
@@ -577,63 +581,6 @@ local function bloodEmitter(parent: Attachment): ParticleEmitter
 	return emitter
 end
 
--- The neck pumps blood in spurts (the heart still beats a few times, weaker
--- each time); a pool spreads under it.
-local function pump(model: Model, mouth: Attachment, random: Random)
-	local emitter = bloodEmitter(mouth)
-	local below = mouth.WorldPosition
-	local pool: { BasePart } = {}
-	local real = blot(GoreShapes.pool, below, 0.4, nil, random, 40)
-	if real then
-		local k = random:NextNumber(3.2, 4.2) / 0.4
-		local grown = real.Size * Vector3.new(k, 1, k) -- (across, not thicker)
-		TweenService:Create(
-			real,
-			TweenInfo.new(PUMP_TIME + 2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = grown }
-		):Play()
-	end
-	for index = 1, if real then 0 else 3 do
-		local offset =
-			Vector3.new(random:NextNumber(-0.35, 0.35), 0, random:NextNumber(-0.35, 0.35))
-		local piece =
-			mark(below + offset, 0.3, nil, nil, if index == 1 then BLOOD else BLOOD_WET, 40)
-		if piece then
-			table.insert(pool, piece)
-		end
-	end
-	for index, piece in pool do
-		local grown = Vector3.new(0.01, 1, 1) * (3.4 - index * 0.6) * random:NextNumber(0.85, 1.1)
-		TweenService:Create(
-			piece,
-			TweenInfo.new(PUMP_TIME + 2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = grown }
-		):Play()
-	end
-	task.spawn(function()
-		local start = os.clock()
-		while mouth.Parent and os.clock() - start < PUMP_TIME do
-			local fade = 1 - (os.clock() - start) / PUMP_TIME
-			emitter.Speed = NumberRange.new(3 + 6 * fade, 6 + 9 * fade)
-			emitter.Rate = 160 * fade -- a spurt
-			-- (thick blood: real drops and strings with each beat)
-			local up = mouth.WorldCFrame.UpVector -- (out of the neck, like the spurts)
-			Blood.spray(mouth.WorldPosition, up + Vector3.new(0, 0.6, 0), 1.2 * fade + 0.4, model)
-			task.wait(0.14)
-			emitter.Rate = 10 * fade -- between two
-			task.wait(BEAT - 0.14)
-		end
-		emitter.Rate = 0
-		Debris:AddItem(emitter, 1)
-	end)
-	-- (this body's pieces go with it)
-	model.AncestryChanged:Connect(function()
-		if model.Parent == nil then
-			emitter.Rate = 0
-		end
-	end)
-end
-
 ------------------------------------------------------------------------------
 -- The burst
 ------------------------------------------------------------------------------
@@ -1008,12 +955,28 @@ function HeadBlast.splash(position: Vector3, size: number, seed: number)
 	splash(position, size, Random.new(seed))
 end
 
+-- A stretched drop on the floor at `position` (`size` studs long), its tail
+-- along `along` (the way it was flying). For BloodGush.
+function HeadBlast.streak(position: Vector3, size: number, along: Vector3, seed: number)
+	local random = Random.new(seed)
+	if blot(GoreShapes.streak, position, size, along, random) == nil then
+		mark(
+			position,
+			size * 0.25,
+			size,
+			along,
+			if random:NextNumber() < 0.5 then BLOOD else BLOOD_WET
+		)
+	end
+end
+
 -- A pool spreading under `position` to `size` studs over `seconds`.
 function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: number)
 	local random = Random.new(seed)
 	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 40)
 		or mark(position, 0.3, nil, nil, BLOOD, 40)
 	if piece then
+		pinned[piece] = true
 		local k = size / 0.3
 		-- (grows across, not thicker: a round mark's thin axis is X)
 		local flat = piece:IsA("Part") and piece.Shape == Enum.PartType.Cylinder
@@ -1023,6 +986,11 @@ function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: 
 			{ Size = piece.Size * (if flat then Vector3.new(1, k, k) else Vector3.new(k, 1, k)) }
 		):Play()
 	end
+end
+
+-- Has the burst head of `model` been drawn already?
+function HeadBlast.isApplied(model: Model): boolean
+	return done[model] == true
 end
 
 -- The head of `model` is gone. `live`: it's happening now (the burst), not
@@ -1043,10 +1011,8 @@ function HeadBlast.apply(model: Model, live: boolean)
 		burst(model, head, torso, random)
 	end
 	hideAll(model, head)
-	local mouth = buildStump(torso, head.Color, random)
-	if live then
-		pump(model, mouth, random)
-	end
+	buildStump(torso, head.Color, random)
+	-- (the neck bleeding itself: BloodGush.neck, Gashes calls it when live)
 end
 
 return table.freeze(HeadBlast)
