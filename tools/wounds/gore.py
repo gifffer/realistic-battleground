@@ -17,6 +17,23 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
              atlas and axis)
   Liver      the real liver (Liver) and its gallbladder (Gallbladder), for
              the Boxer's finisher (torn out by hand); its middle the origin
+  ArmEnd     the Bouncer's finisher: the top of the right arm torn off at the
+             shoulder (in the R6 arm's space: 1 x 2 x 1, its top at Y = 1):
+             the raw end (Flesh, FleshDark), torn skin hanging over the edges
+             (Skin), the real humerus (Z-Anatomy) with its head sticking out
+             (Bone), torn tendons (Tendon)
+  Humerus    the same upper arm bone, whole: the real right humerus of
+             Z-Anatomy (anatomy/arm.npz), pulled out of the torn arm to be
+             thrown (Shared/Weapons "Bone"): its own space, along Y, the
+             head at the top, scraps of flesh still on it (Bone, Flesh,
+             Tendon)
+  HumerusA / HumerusB   the same bone snapped in two (head half / elbow
+             half), same space: when it hits something it breaks there
+  Shoulder   ...and what it leaves on the torso (R6 torso space, its right
+             side at X = 1): the open socket (Flesh, FleshDark), the real
+             outer shoulder blade (its socket, the acromion) and the end of
+             the collarbone (Bone, Z-Anatomy), torn skin around it (Skin),
+             shreds of muscle hanging (Flesh)
   Splat<i> / Streak<i> / Pool<i>   blood on the floor (Blood): flat blots
              with droplets, stretched drops, a pool; 1 stud across, laid in
              X-Z (the game sizes and turns them)
@@ -37,6 +54,7 @@ from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANATOMY = os.path.join(HERE, "anatomy", "head.npz")
+ARM_ANATOMY = os.path.join(HERE, "anatomy", "arm.npz")  # extract_arm.py
 GORE_ORIGIN = Vector((0.0, 0.0, -14.0))  # kit space: away from the inserts / frames
 SLOT_STEP = 3.0
 CUT_Y = -0.27  # the head bursts above this; below stays (the jaw)
@@ -56,6 +74,11 @@ COLORS = {
     "Blood": (0.25, 0.0, 0.0),
     "Liver": (0.36, 0.09, 0.08),
     "Gallbladder": (0.27, 0.36, 0.14),
+    "FleshDark": (0.36, 0.04, 0.05),
+    "Muscle": (0.55, 0.1, 0.1),
+    "MuscleDark": (0.42, 0.07, 0.08),
+    "Fat": (0.85, 0.72, 0.42),
+    "Tendon": (0.85, 0.80, 0.72),
 }
 
 
@@ -233,13 +256,272 @@ def blot(rng, radius, lobes, droplets, stretch=1.0, tail=0.0, ring=48):
     return bm
 
 
+def lumpy(bm, rng, amount, scale=6.0):
+    """Roughens a surface (raw flesh, a broken end): each vertex pushed out
+    or in along its normal by a smooth random amount."""
+    phases = [rng.uniform(0, 6.3) for _ in range(6)]
+    bm.normal_update()
+    for v in bm.verts:
+        p = v.co
+        n = (math.sin(p.x * scale + phases[0]) * math.sin(p.y * scale * 1.3 + phases[1])
+             + 0.6 * math.sin(p.z * scale * 1.7 + phases[2]) * math.sin(p.x * scale * 2.1 + phases[3])
+             + 0.3 * math.sin((p.x + p.y + p.z) * scale * 3.1 + phases[4]))
+        v.co = p + v.normal * amount * n / 1.9
+    bm.normal_update()
+    return bm
+
+
+def blob(rng, center, radii, segments=12, rings=8, rough=0.0):
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=rings, radius=1.0)
+    for v in bm.verts:
+        v.co = Vector((v.co.x * radii[0], v.co.y * radii[1], v.co.z * radii[2])) + Vector(center)
+    if rough:
+        lumpy(bm, rng, rough, 9.0)
+    return bm
+
+
+def rod(start, end, r1, r2=None, segments=8):
+    """A cylinder from `start` to `end` (a bone shaft, a tendon)."""
+    start, end = Vector(start), Vector(end)
+    axis = end - start
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, segments=segments, radius1=r1, radius2=r2 if r2 is not None else r1,
+                          depth=axis.length)
+    # (made along Z, centred): turn it onto the axis, move it to the middle
+    rot = Vector((0, 0, 1)).rotation_difference(axis.normalized()).to_matrix().to_4x4()
+    bmesh.ops.transform(bm, matrix=rot, verts=bm.verts)
+    bmesh.ops.translate(bm, vec=(start + end) / 2, verts=bm.verts)
+    return bm
+
+
+def flap(rng, base, out, down, width, length, curl):
+    """A torn flap of skin: a thin strip from `base`, going `out` then bending
+    `down` (curling), ragged at its end."""
+    base, out, down = Vector(base), Vector(out).normalized(), Vector(down).normalized()
+    side = out.cross(down).normalized()
+    bm = bmesh.new()
+    rows = []
+    steps = 5
+    for i in range(steps + 1):
+        t = i / steps
+        bend = (out * math.cos(curl * t) + down * math.sin(curl * t)) * length * t
+        w = width * (1 - 0.5 * t) * (1 + rng.uniform(-0.15, 0.15))
+        c = base + bend
+        rows.append([bm.verts.new(c - side * w / 2), bm.verts.new(c + side * w / 2)])
+    for i in range(steps):
+        bm.faces.new((rows[i][0], rows[i][1], rows[i + 1][1], rows[i + 1][0]))
+    return solidify(bm, 0.025)
+
+
+def load_arm_lists():
+    """The muscles of arm.npz (lists of bmeshes)."""
+    data = np.load(ARM_ANATOMY)
+    out = {"armmuscle": [], "shouldermuscle": []}
+    for key in sorted(data.files):
+        group, index, kind = key.split("__")
+        if group in out and kind == "v":
+            out[group].append(bm_of(data[key], data[f"{group}__{index}__f"]))
+    return out
+
+
+def tear(bm, rng, near_y, amount):
+    """Jags a cut end: the vertices near the cut pushed up / down (torn fibres,
+    not a clean slice)."""
+    phase = [rng.uniform(0, 6.3) for _ in range(3)]
+    for v in bm.verts:
+        if abs(v.co.y - near_y) < 0.06:
+            # (smooth tufts and dips, a little grain on them)
+            wave = math.sin(v.co.x * 23 + phase[0]) * math.sin(v.co.z * 19 + phase[1])
+            v.co.y += amount * (0.8 * wave + 0.5 * math.sin((v.co.x + v.co.z) * 41 + phase[2])) + rng.uniform(-0.2, 0.2) * amount
+    bm.normal_update()
+    return bm
+
+
+def torn_arm(rng):
+    """The Bouncer's finisher: (the arm's torn end, what stays on the torso),
+    each {layer: bmesh}. R6 part spaces (studs): X right, Y up, Z back.
+
+    The arm's end shows the real cut of its muscles (Z-Anatomy: deltoid,
+    biceps, triceps, brachialis, coracobrachialis), each torn at its own
+    height, the real humerus' head out of the middle, the fat under the skin
+    in a yellow band round the edge, the skin torn and hanging. The shoulder
+    keeps the real rotator cuff and pectoralis major torn short round the
+    empty socket of the real shoulder blade."""
+    arm = load_arm()
+    lists = load_arm_lists()
+
+    # ---- the arm's end: its top face (1 x 1 at Y = 1) torn open
+    half = 0.47
+    muscles, dark_muscles = [], []
+    for index, muscle in enumerate(lists["armmuscle"]):
+        for v in muscle.verts:  # (a little wider still: they fill the block)
+            v.co.x *= 1.15
+            v.co.z *= 1.15
+        # each torn at its own height, out of the stump (they bulge out of it)
+        y = 1.06 + rng.uniform(0.0, 0.16)
+        # (cut() keeps the side its normal points away from)
+        cut(muscle, [
+            ((0, y, 0), (0, 1, 0)), ((0, 0.8, 0), (0, -1, 0)),
+            ((half, 0, 0), (1, 0, 0)), ((-half, 0, 0), (-1, 0, 0)),
+            ((0, 0, half), (0, 0, 1)), ((0, 0, -half), (0, 0, -1)),
+        ], fill=True)
+        if len(muscle.faces):
+            tear(muscle, rng, y, 0.045)
+            (muscles if index % 2 == 0 else dark_muscles).append(muscle)
+    bone = arm["armhead"]
+    cut(bone, [((0, 0.55, 0), (0, -1, 0))], fill=True)
+    # under it all (between the muscles): dark, wet
+    floor = bmesh.new()
+    bmesh.ops.create_cube(floor, size=1.0)
+    for v in floor.verts:
+        v.co = Vector((v.co.x * 0.96, 1.01 + v.co.y * 0.03, v.co.z * 0.96))
+    # the fat under the skin: a band round the edge, ragged on top
+    fat = []
+    for side in range(4):
+        wall = bmesh.new()
+        bmesh.ops.create_cube(wall, size=1.0)
+        bmesh.ops.subdivide_edges(wall, edges=wall.edges[:], cuts=6, use_grid_fill=True)
+        for v in wall.verts:
+            x, y, z = v.co.x, v.co.y, v.co.z
+            local = Vector((x * 0.98, 1.0 + y * 0.1, 0.475 + z * 0.05))
+            ang = side * math.pi / 2
+            v.co = Vector((local.x * math.cos(ang) + local.z * math.sin(ang), local.y,
+                           -local.x * math.sin(ang) + local.z * math.cos(ang)))
+        tear(wall, rng, 1.05, 0.03)
+        fat.append(wall)
+    tendons = bm_join_all([
+        rod((rng.uniform(-0.25, 0.25), 1.0, rng.uniform(-0.25, 0.25)),
+            (rng.uniform(-0.4, 0.4), 1.0 + rng.uniform(0.12, 0.3), rng.uniform(-0.4, 0.4)), 0.022, 0.01, 6)
+        for _ in range(4)
+    ])
+    skin = []
+    for k in range(10):  # skin torn around the top edge, hanging over the sides
+        a = 2 * math.pi * k / 10 + rng.uniform(-0.2, 0.2)
+        out = Vector((math.cos(a), 0, math.sin(a)))
+        edge = 0.5 / max(abs(out.x), abs(out.z))  # (on the square's edge)
+        base = Vector((out.x * edge * 0.99, 1.0, out.z * edge * 0.99))
+        skin.append(flap(rng, base, out, (0, -1, 0), rng.uniform(0.18, 0.32), rng.uniform(0.1, 0.22), rng.uniform(1.2, 1.9)))
+    arm_end = {
+        "Muscle": bm_join_all(muscles),
+        "MuscleDark": bm_join_all(dark_muscles),
+        "FleshDark": floor,
+        "Fat": bm_join_all(fat),
+        "Bone": bone,
+        "Tendon": tendons,
+        "Skin": bm_join_all(skin),
+    }
+
+    # ---- the torso's right side: the socket left open
+    sx = 1.0
+    glenoid = bm_join_all([arm["scapula"], arm["clavicle"]])
+    # The socket (glenoid: the outermost bone at its height) moved to the
+    # middle of the wound, just out of the side: it shows, empty, where the
+    # head of the arm bone was. Its muscles move with it.
+    band = [v.co for v in glenoid.verts if 0.5 < v.co.y < 0.75]
+    edge = max(c.x for c in band)
+    cup = [c for c in band if c.x > edge - 0.05]
+    centre = sum(cup, Vector()) / len(cup)
+    shift = Vector((sx + 0.06, 0.5, 0.0)) - centre
+    bmesh.ops.translate(glenoid, vec=shift, verts=glenoid.verts)
+    cuff, cuff_dark = [], []
+    for index, muscle in enumerate(lists["shouldermuscle"]):
+        bmesh.ops.translate(muscle, vec=shift, verts=muscle.verts)
+        # torn short just out of the side (each at its own depth)
+        x = sx + rng.uniform(0.04, 0.14)
+        cut(muscle, [((x, 0, 0), (1, 0, 0)), ((0, -0.05, 0), (0, -1, 0)), ((0, 1.02, 0), (0, 1, 0)),
+                     ((0, 0, 0.5), (0, 0, 1)), ((0, 0, -0.5), (0, 0, -1))], fill=True)
+        if len(muscle.faces):
+            for v in muscle.verts:  # torn fibres at the end
+                if abs(v.co.x - x) < 0.06:
+                    v.co.x += rng.uniform(-0.04, 0.06)
+            (cuff if index % 2 == 0 else cuff_dark).append(muscle)
+    deep = blob(rng, (sx + 0.01, 0.5, 0.0), (0.02, 0.4, 0.38), 14, 8, 0.012)
+    # the fat under the skin: a torn yellow band just inside the skin's edge
+    angles = [2 * math.pi * k / 11 + rng.uniform(-0.2, 0.2) for k in range(11)]
+    fat_ring = bm_join_all([
+        flap(rng, Vector((sx + 0.02, 0.5 + math.sin(a) * rng.uniform(0.38, 0.44), math.cos(a) * rng.uniform(0.35, 0.41))),
+             Vector((0.0, math.sin(a), math.cos(a))), (1, 0, 0),
+             rng.uniform(0.12, 0.3), rng.uniform(0.03, 0.08), rng.uniform(0.1, 0.7))
+        for a in angles if rng.random() < 0.8
+    ])
+    hanging = bm_join_all([
+        rod((sx + 0.06, rng.uniform(0.15, 0.45), rng.uniform(-0.3, 0.3)),
+            (sx + rng.uniform(0.08, 0.16), rng.uniform(-0.2, 0.05), rng.uniform(-0.35, 0.35)),
+            rng.uniform(0.02, 0.035), 0.01, 6)
+        for _ in range(3)
+    ])
+    rim = []
+    for k in range(12):  # torn skin around the socket, curling out
+        a = 2 * math.pi * k / 12 + rng.uniform(-0.15, 0.15)
+        base = Vector((sx + 0.01, 0.5 + math.sin(a) * 0.48, math.cos(a) * 0.45))
+        out = Vector((0.0, math.sin(a), math.cos(a)))
+        rim.append(flap(rng, base, out, (1, 0, 0), rng.uniform(0.14, 0.24), rng.uniform(0.08, 0.16), rng.uniform(0.6, 1.2)))
+    hanging.free()  # (no sticks hanging out: the torn cuff is enough)
+    shoulder = {
+        "Muscle": bm_join_all(cuff),
+        "MuscleDark": bm_join_all(cuff_dark),
+        "FleshDark": deep,
+        "Fat": fat_ring,
+        "Bone": glenoid,
+        "Skin": bm_join_all(rim),
+    }
+    return arm_end, shoulder
+
+
+def load_arm():
+    data = np.load(ARM_ANATOMY)
+    return {g: bm_of(data[f"{g}__0__v"], data[f"{g}__0__f"]) for g in ("humerus", "armhead", "scapula", "clavicle")}
+
+
+def humerus(rng):
+    """The whole right humerus (Z-Anatomy), 1.7 studs along Y, the head up;
+    torn flesh and tendons still on its head."""
+    bone = load_arm()["humerus"]
+    flesh = bm_join_all([
+        blob(rng, (rng.uniform(-0.15, 0.05), 0.62 + rng.uniform(-0.12, 0.08), rng.uniform(-0.1, 0.1)),
+             (rng.uniform(0.04, 0.08), rng.uniform(0.04, 0.09), rng.uniform(0.04, 0.08)), 8, 6, 0.01)
+        for _ in range(6)
+    ])
+    tendons = bm_join_all([
+        rod((rng.uniform(-0.1, 0.05), 0.6, rng.uniform(-0.08, 0.08)),
+            (rng.uniform(-0.25, 0.2), 0.6 + rng.uniform(-0.25, 0.05), rng.uniform(-0.2, 0.2)), 0.02, 0.01, 6)
+        for _ in range(3)
+    ])
+    return {"Bone": bone, "Flesh": flesh, "Tendon": tendons}
+
+
+def snapped(bone, rng):
+    """The bone broken in two a little below its middle: a jagged break."""
+    halves = []
+    for side in (1, -1):
+        part = bm_copy(bone)
+        y = -0.12
+        # a slanted, toothed break: two planes
+        cut(part, [((0, y, 0), (0.25 * side, -1 * side, 0.1 * side))], fill=True)
+        rough_rim(part, rng, 0.06, lambda co: abs(co.y - y) < 0.2)
+        halves.append(part)
+    return halves[0], halves[1]
+
+
+def bm_join_all(parts):
+    out = bmesh.new()
+    for part in parts:
+        mesh = bpy.data.meshes.new("tmp")
+        part.to_mesh(mesh)
+        out.from_mesh(mesh)
+        bpy.data.meshes.remove(mesh)
+    out.normal_update()
+    return out
+
+
 def build(add_object):
     """Adds the gore pieces to the kit. `add_object(name, bm, offset, layer)`.
     Returns {piece: slot (kit-space Vector)} and the lists by kind."""
     rng = random.Random(4242)
     anatomy = load_anatomy()
     slots = {}
-    kinds = {k: [] for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ")}
+    kinds = {k: [] for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ", "limb")}
 
     def piece(name, layers, kind=None):
         slot = GORE_ORIGIN + Vector((len(slots) * SLOT_STEP, 0, 0))
@@ -329,6 +611,17 @@ def build(add_object):
         piece(f"Streak{i + 1}", {"Blood": blot(rng, 0.12, 0.4, 2, stretch=2.6, tail=0.5)}, "streak")
     for i in range(2):
         piece(f"Pool{i + 1}", {"Blood": blot(rng, 0.5, 0.8, 3 + i * 3, ring=72)}, "pool")
+
+    # The Bouncer's finisher: the right arm torn off at the shoulder. (Last,
+    # with its own random numbers: the pieces above keep their slots.)
+    arm_end, shoulder = torn_arm(random.Random(7171))
+    piece("ArmEnd", arm_end, "limb")
+    piece("Shoulder", shoulder, "limb")
+    bone = humerus(random.Random(5151))
+    top, bottom = snapped(bone["Bone"], random.Random(5252))  # (before: piece() frees the meshes)
+    piece("Humerus", bone, "limb")
+    piece("HumerusA", {"Bone": top}, "limb")
+    piece("HumerusB", {"Bone": bottom}, "limb")
     return slots, kinds
 
 
