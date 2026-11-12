@@ -123,6 +123,11 @@ return table.freeze({
 	-- short before the killing blow (killed = false: stop the cutscene).
 	FinisherEnded = event("FinisherEnded"),
 
+	-- TEMPORARY (FinisherShowcase, Studio only; delete with it):
+	-- client → server  (fighter: string)  "play this showcase fighter's
+	-- finisher once" ("Street Brawler" / "Boxer").
+	ShowcaseTrigger = event("ShowcaseTrigger"),
+
 	-- server → ONE client  (attackId: number)
 	-- "Your M1 number `attackId` is over" (after all its CombatEvents). Lets
 	-- the attacker undo a hit it predicted that the server never confirmed.

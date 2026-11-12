@@ -51,10 +51,14 @@ local SHAKES: { [string]: Shake } = {
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
--- TEMPORARY (FinisherShowcase, for filming; delete with it): the showcase
--- fighter whose finishers we watch with the cutscene camera (F6 cycles:
--- the Street Brawler, the Boxer, nobody). Studio only.
-local SHOWCASE_FIGHTERS = { "Street Brawler", "Boxer" }
+-- TEMPORARY (FinisherShowcase, for filming; delete with it), Studio only:
+-- F7 / F8 play the Street Brawler's / the Boxer's finisher on its stage, and
+-- the cutscene camera watches it; F6 turns that camera on / off.
+local SHOWCASE_KEYS: { [Enum.KeyCode]: string } = {
+	[Enum.KeyCode.F7] = "Street Brawler",
+	[Enum.KeyCode.F8] = "Boxer",
+}
+local showcaseCamera = true
 local showcaseWatch: string? = nil
 
 -- One cinematic playing (key: its attacker).
@@ -293,7 +297,7 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 	local run: Run = { cinematic = cinematic, victim = victim, cancelled = false }
 	runs[attacker] = run
 	local character = player.Character
-	-- (TEMPORARY, FinisherShowcase: F6 watches one of its fighters)
+	-- (TEMPORARY, FinisherShowcase: the fighter we just triggered)
 	local watching = showcaseWatch ~= nil
 		and attacker:GetAttribute("Showcase") == true
 		and attacker.Name == showcaseWatch
@@ -352,13 +356,24 @@ function CinematicController.start()
 	makeBars()
 	if RunService:IsStudio() then
 		game:GetService("UserInputService").InputBegan:Connect(function(input, processed)
-			if processed or input.KeyCode ~= Enum.KeyCode.F6 then
+			if processed then
 				return
 			end
-			local index = if showcaseWatch then table.find(SHOWCASE_FIGHTERS, showcaseWatch) else 0
-			showcaseWatch = SHOWCASE_FIGHTERS[(index or 0) + 1]
-			print(`[FinisherShowcase] watching: {showcaseWatch or "nobody"} (F6 to change)`)
+			local fighter = SHOWCASE_KEYS[input.KeyCode]
+			if fighter then
+				showcaseWatch = if showcaseCamera then fighter else nil
+				Remotes.ShowcaseTrigger:FireServer(fighter)
+			elseif input.KeyCode == Enum.KeyCode.F6 then
+				showcaseCamera = not showcaseCamera
+				if not showcaseCamera then
+					showcaseWatch = nil
+				end
+				print(
+					`[FinisherShowcase] cutscene camera: {if showcaseCamera then "on" else "off"}`
+				)
+			end
 		end)
+		print("[FinisherShowcase] F7: Street Brawler, F8: Boxer, F6: camera on/off")
 	end
 	Remotes.FinisherStarted.OnClientEvent:Connect(onStarted)
 	Remotes.FinisherEnded.OnClientEvent:Connect(onEnded)
