@@ -4,7 +4,7 @@
 --   "Bat"            Street Brawler: pulls a baseball bat from behind his
 --                    back, rests it on his shoulder, raises it with both
 --                    hands and brings it down on the head of the opponent
---                    lying on the ground (the skull is crushed).
+--                    lying on the ground: the head bursts.
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
 --                    to the liver, hook, hook, cross, then crouches and
 --                    lands a huge uppercut that sends them flying.
@@ -19,8 +19,9 @@ local Finishers = {}
 
 export type Event = {
 	time: number,
-	-- "Prop" (the bat appears), "PropAway", "Swing" (whoosh), "Body" /
-	-- "Face" (a punch lands), "Kill" (the killing blow)
+	-- "Prop" (the bat appears), "PropAway", "Plea" (the victim speaks),
+	-- "Swing" (whoosh), "Body" / "Face" (a punch lands), "Kill" (the
+	-- killing blow)
 	kind: string,
 }
 
@@ -40,8 +41,8 @@ export type Cinematic = {
 	id: string,
 	duration: number,
 	kill: number, -- the killing blow (server)
-	-- Where the attacker stands: "head" = beside the lying victim's head,
-	-- facing it, HEAD_DISTANCE away; "front" = where he is, the victim
+	-- Where the attacker stands: "head" = past the lying victim's head
+	-- (the body beyond it), facing it, HEAD_DISTANCE away; "front" = where he is, the victim
 	-- pulled up in front of him at HOLD_DISTANCE, facing him.
 	placement: "head" | "front",
 	victimAnimation: string?, -- played on the victim (held up)
@@ -49,7 +50,7 @@ export type Cinematic = {
 	shots: { Shot },
 }
 
-Finishers.HEAD_DISTANCE = 3.1 -- studs, attacker root → victim head (flat)
+Finishers.HEAD_DISTANCE = 3.8 -- studs, attacker root → victim head (flat): under the barrel
 Finishers.HOLD_DISTANCE = 2.2 -- studs between the two roots (Boxer: within punching reach)
 
 local cinematics: { [string]: Cinematic } = {
@@ -60,41 +61,52 @@ local cinematics: { [string]: Cinematic } = {
 		placement = "head",
 		events = {
 			{ time = 0.35, kind = "Prop" },
-			{ time = 1.5, kind = "Swing" },
+			{ time = 0.55, kind = "Plea" },
+			{ time = 1.42, kind = "Swing" },
 			{ time = 1.7, kind = "Kill" },
 			{ time = 3.1, kind = "PropAway" },
 		},
+		-- (the victim lies along -Z: its head at (0, -2.4, -HEAD_DISTANCE),
+		-- its body beyond)
 		shots = {
-			-- Behind his left shoulder: he draws the bat, looks down at them.
+			-- From the side, wide: the body on the ground, him drawing the bat.
 			{
 				time = 0,
-				from = Vector3.new(-2.6, 1.4, 3.6),
-				to = Vector3.new(-2.1, 1.2, 2.8),
-				look = Vector3.new(0, 0.6, -1.5),
+				from = Vector3.new(5.6, -0.6, -3.4),
+				to = Vector3.new(4.9, -0.9, -2.9),
+				look = Vector3.new(0, -1.3, -3.4),
 				fov = 62,
 			},
-			-- From the ground, by the victim's head: he raises the bat.
+			-- Close on the face of the one on the ground (they plead).
+			{
+				time = 0.55,
+				from = Vector3.new(1.9, -1.1, -5.4),
+				to = Vector3.new(1.6, -1.3, -5.1),
+				look = "victim",
+				fov = 50,
+			},
+			-- From the ground, by the head: he raises the bat over it.
 			{
 				time = 0.95,
-				from = Vector3.new(2.6, -2.3, -4.6),
-				to = Vector3.new(2.3, -2.4, -4.3),
-				look = Vector3.new(0, 1.2, -0.6),
+				from = Vector3.new(2.4, -2.4, -5.7),
+				to = Vector3.new(2.1, -2.5, -5.3),
+				look = Vector3.new(0, 1.0, -0.8),
 				fov = 58,
 			},
-			-- Close on the head as the bat comes down.
+			-- On the head as the bat comes down: it bursts.
 			{
-				time = 1.55,
-				from = Vector3.new(3.4, -1.6, -3.0),
-				to = Vector3.new(3.0, -1.9, -3.1),
-				look = Vector3.new(0, -2.5, -3.1),
-				fov = 48,
+				time = 1.5,
+				from = Vector3.new(3.3, -1.3, -4.6),
+				to = Vector3.new(3.0, -1.5, -4.5),
+				look = Vector3.new(0, -2.4, -3.8),
+				fov = 54,
 			},
-			-- Wide, turning slowly: the bat back on his shoulder.
+			-- Wide, slowly turning: what's left, him with the bat.
 			{
-				time = 2.15,
-				from = Vector3.new(5.5, 1.5, 1.5),
-				to = Vector3.new(-1.5, 2.3, 4.6),
-				look = Vector3.new(0, -0.8, -1.6),
+				time = 2.1,
+				from = Vector3.new(5.2, 0.6, -6.6),
+				to = Vector3.new(5.6, 1.2, -2.0),
+				look = Vector3.new(0, -1.5, -3.2),
 				fov = 60,
 			},
 		},

@@ -316,11 +316,11 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 
 ## Finishers cinématiques (`feature/cinematic-finishers`)
 
-Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**. Ré-importer `WoundKit` avant (il contient la plaie du crâne enfoncé).
+Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| F1 | **Street Brawler** sur un KO | Bandes noires, plusieurs plans de caméra. Le perso se place à côté de la tête, sort une **batte** de derrière son dos, la pose sur l'épaule en regardant le corps, la lève à deux mains au-dessus de la tête puis l'abat sur le crâne (gros plan, secousse, zoom). Gerbe de sang et d'éclats d'os, le **crâne reste enfoncé** sur le corps. Il remet la batte sur l'épaule, la batte disparaît, la caméra normale revient (~3,3 s). |
+| F1 | **Street Brawler** sur un KO | Bandes noires. Plan large de côté : le corps au sol et le perso, placé derrière sa tête, qui sort une **grosse batte**. Gros plan sur le visage de celui au sol, qui parle. Plan du sol : il lève la batte à deux mains et l'abat. La **tête explose** : morceaux de crâne, de cuir chevelu et de cervelle, nuage et pluie de sang, cheveux / chapeau projetés, grosses taches au sol. Il ne reste que le cou ouvert, qui pisse le sang quelques secondes. La caméra normale revient (~3,3 s). |
 | F2 | **Boxer** sur un KO | Il **relève** l'adversaire par le col, deux crochets au foie (l'adversaire se plie), crochet droit, crochet gauche (la tête part d'un côté puis de l'autre, un peu de sang), direct, puis s'accroupit et place un énorme **uppercut** : l'adversaire décolle, vole et retombe mort plus loin (~3,4 s). |
 | F3 | Pendant un finisher, un 3ᵉ joueur frappe l'attaquant | Rien ne se passe : l'attaquant est intouchable pendant la scène. |
 | F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. |
@@ -328,6 +328,7 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**. R�
 | F6 | Après le finisher | Le joueur peut de nouveau bouger et attaquer normalement, la caméra est revenue comme avant. |
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
 | F8 | Pendant la cinématique | Impossible de dasher, bloquer ou attaquer ; on ne peut pas lancer un duel avec l'attaquant. |
+| F9 | Un joueur qui arrive après (ou qui était loin) | Il voit le corps sans tête, le cou ouvert, sans l'explosion. |
 
-Les sons `BatDraw`, `BatCrush`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. Tu peux mettre tes IDs.
+Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
 

@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
+local HeadBlast = require(script.Parent.HeadBlast)
 
 local Gashes = {}
 
@@ -58,11 +59,6 @@ local LOOKS: { [string]: Look } = {
 	Bone = {
 		color = Color3.fromRGB(222, 210, 186),
 		reflectance = 0.05,
-		material = Enum.Material.SmoothPlastic,
-	},
-	Brain = { -- (the bat finisher's crushed skull only)
-		color = Color3.fromRGB(176, 128, 126),
-		reflectance = 0.2,
 		material = Enum.Material.SmoothPlastic,
 	},
 	Blood = {
@@ -1076,6 +1072,14 @@ local function refresh(model: Model, partName: string)
 		then previous.faceTransparency
 		else (if face then face.Transparency else 0)
 	close(part)
+	if isHead and HeadBlast.isBlown(model) then
+		-- Burst by the bat (HeadBlast): no head left, nor its cuts.
+		part.Transparency = 1
+		if face then
+			face.Transparency = 1
+		end
+		return
+	end
 	if #cuts == 0 or found == nil then
 		return
 	end
@@ -1162,6 +1166,9 @@ function Gashes.watch(model: Model)
 		local partName = if key then Gash.PART_OF[key] else nil
 		if partName then
 			refresh(model, partName)
+		elseif name == HeadBlast.ATTRIBUTE then
+			refresh(model, "Head")
+			HeadBlast.apply(model, true)
 		end
 	end)
 	-- Gone (destroyed, or just taken out of the game): forget its parts.
@@ -1198,6 +1205,7 @@ function Gashes.watch(model: Model)
 		end
 	end)
 	refreshAll(model)
+	HeadBlast.apply(model, false) -- (a body whose head burst before we saw it)
 end
 
 return table.freeze(Gashes)

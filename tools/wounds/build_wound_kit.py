@@ -68,9 +68,6 @@ VARIANTS = {
     ("Slash", "S"): dict(length=0.3, width=0.045, depth=0.05, lip=0.04, rag=0.25),
     ("Slash", "M"): dict(length=0.45, width=0.075, depth=0.08, lip=0.045, rag=0.25),
     ("Slash", "L"): dict(length=0.6, width=0.1, depth=0.11, lip=0.05, rag=0.25),
-    # The bat finisher: a skull crushed in - a big burst laceration over a
-    # depressed fracture (bone chips driven in, a little brain at the bottom).
-    ("Crush", "L"): dict(length=0.42, width=0.3, depth=0.13, lip=0.06, rag=1.6),
 }
 
 COLORS = {  # preview only: the game sets the real colours
@@ -80,7 +77,6 @@ COLORS = {  # preview only: the game sets the real colours
     "Fat": (0.93, 0.80, 0.45),
     "Muscle": (0.40, 0.03, 0.04),
     "Bone": (0.90, 0.86, 0.76),
-    "Brain": (0.72, 0.52, 0.52),
     "Blood": (0.25, 0.0, 0.0),
     "Marker": (1, 1, 1),
     "Skin": (0.80, 0.62, 0.50),
@@ -105,7 +101,7 @@ def outline(kind, v, rng, with_tears=True):
     torn skin edge only)."""
     a, b = v["length"] / 2, v["width"] / 2
     pts = []
-    if kind in ("Lac", "Crush"):
+    if kind == "Lac":
         noise = smooth_noise(rng, 2.2)
         # star-shaped splits: a few sharp tears going out of the ellipse
         tears = [(rng.uniform(0, 2 * math.pi), rng.uniform(0.25, 0.55), rng.uniform(0.08, 0.16)) for _ in range(rng.randint(3, 5))]
@@ -239,7 +235,7 @@ def build_insert(kind, size, v, head, seed):
     # rolling down into the cut.
     outer = ring(pts, nrm, lip, 0.002)
     # A torn edge is a little swollen; a clean cut lies almost flat.
-    swell = {"Lac": 0.005, "Crush": 0.009}.get(kind, 0.0015)
+    swell = 0.005 if kind == "Lac" else 0.0015
     crest = ring(pts, nrm, lip * 0.45, lambda i: swell * (1 + 0.5 * wobble[i]))
     edge = ring(pts, nrm, 0.0, 0.004)
     curl = ring(pts, nrm, -0.01, -0.012)
@@ -257,19 +253,6 @@ def build_insert(kind, size, v, head, seed):
     bed_layer = "Muscle" if deep and not head else "Flesh"
     b.strip(bed_layer, mid, low)
     b.fan(bed_layer, low, Vector((c.x, c.y, -depth * 1.05)))
-
-    # A crushed skull: chips of bone driven into the wound, all around its
-    # walls, and a little brain showing at the very bottom.
-    if kind == "Crush":
-        for _ in range(11):
-            i = rng.randrange(N)
-            p = dermis_low[i].lerp(low[i], rng.uniform(0.2, 0.85))
-            r = rng.uniform(0.016, 0.03)
-            b.blob("Bone", p, (r, r * rng.uniform(0.5, 0.9), r * 0.35), rot=rng.uniform(0, 6.3), subdiv=1)
-        for _ in range(4):
-            off = Vector((rng.uniform(-0.3, 0.3) * v["length"], rng.uniform(-0.25, 0.25) * v["width"], 0))
-            r = rng.uniform(0.025, 0.04)
-            b.blob("Brain", Vector((c.x, c.y, -depth * 0.95)) + off, (r, r * 0.8, r * 0.5), rot=rng.uniform(0, 6.3), subdiv=2)
 
     # Fat lobules on the walls (body only: little fat under the skin of the head).
     if not head:
@@ -299,7 +282,7 @@ def build_insert(kind, size, v, head, seed):
         pool.append(Vector((q.x, q.y, -depth * 0.82)))
     b.fan("Blood", pool, Vector((c.x, c.y - v["width"] * 0.15, -depth * 0.8)))
     lowest = sorted(range(N), key=lambda i: outer[i].y)[: N // 6]
-    drips = 3 if kind == "Crush" else {"S": rng.randint(0, 1), "M": 1, "L": 2}[size]
+    drips = {"S": rng.randint(0, 1), "M": 1, "L": 2}[size]
     for _ in range(drips):
         i = rng.choice(lowest)
         start = outer[i]

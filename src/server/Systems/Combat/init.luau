@@ -843,27 +843,10 @@ function Combat.register(model: Model, player: Player?)
 	end)
 end
 
--- The crushed skull of the bat finisher: a "Crush" cut on the face (the
--- victim lies on their back, face up).
-local function crushHead(victim: Model)
-	local index = 1
-	for candidate = 1, Gash.MAX_PER_PART do
-		if victim:GetAttribute(Gash.attribute("Head", candidate)) == nil then
-			index = candidate
-			break
-		end
-	end
-	setAttribute(
-		victim,
-		Gash.attribute("Head", index),
-		Gash.encode({
-			kind = "Crush",
-			size = "L",
-			point = Vector3.new(random:NextNumber(-0.08, 0.08), 0.06, -0.6),
-			angle = random:NextNumber(-8, 8),
-			seed = random:NextInteger(1, 2 ^ 30),
-		})
-	)
+-- The bat finisher: the head bursts. Every client shows it (and the neck
+-- left open) from this attribute, its value = the seed of the pieces.
+local function blowHead(victim: Model)
+	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
 end
 
 -- A cinematic finisher (Shared/Finishers): both fighters are placed and held
@@ -897,9 +880,15 @@ local function startCinematic(
 	local anchor: CFrame
 	local victimPlace: CFrame? = nil
 	if cinematic.placement == "head" then
-		-- Beside the head of the body lying there, looking down at it.
+		-- Past the head of the body lying there (the body beyond it, the
+		-- camera shots count on it), looking down at it.
 		local head = victimHead.Position
-		local away = Vector3.new(root.Position.X - head.X, 0, root.Position.Z - head.Z)
+		local torso = target:FindFirstChild("Torso")
+		local body = if torso and torso:IsA("BasePart") then torso.Position else victimRoot.Position
+		local away = Vector3.new(head.X - body.X, 0, head.Z - body.Z)
+		if away.Magnitude < 0.1 then
+			away = Vector3.new(root.Position.X - head.X, 0, root.Position.Z - head.Z)
+		end
 		away = if away.Magnitude > 0.1 then away.Unit else -root.CFrame.LookVector
 		local stand = Vector3.new(head.X, root.Position.Y, head.Z) + away * Finishers.HEAD_DISTANCE
 		anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
@@ -992,9 +981,6 @@ local function startCinematic(
 			return
 		end
 		killed = true
-		if cinematic.id == "Bat" then
-			crushHead(target)
-		end
 		if victimPlace then
 			-- Sent flying by the uppercut.
 			victimRoot.Anchored = false
@@ -1003,6 +989,10 @@ local function startCinematic(
 			victimRoot.AssemblyAngularVelocity = anchor.RightVector * -9
 		end
 		Knockout.finish(target, state.model)
+		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
+		if cinematic.id == "Bat" and victimHumanoid and victimHumanoid.Health <= 0 then
+			blowHead(target) -- (only on a body that really died)
+		end
 		-- (the attacker stays held until the end of the cutscene)
 	end)
 	task.delay(cinematic.duration, finish)

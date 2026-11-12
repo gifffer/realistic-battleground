@@ -215,8 +215,7 @@ local function playEvent(
 	cinematic: Finishers.Cinematic,
 	event: Finishers.Event,
 	attacker: Model,
-	victim: Model,
-	seed: number
+	victim: Model
 )
 	local kind = event.kind
 	if kind == "Prop" then
@@ -228,8 +227,10 @@ local function playEvent(
 		end
 		KitEffects.showBat(attacker, away - event.time)
 		SoundController.play("BatDraw", attacker)
+	elseif kind == "Plea" then
+		SoundController.play("VictimPlea", victim)
 	elseif kind == "Swing" then
-		SoundController.play("HeavySwing", attacker)
+		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
 	elseif kind == "Body" then
 		SoundController.play("BodyShot", victim)
 	elseif kind == "Face" then
@@ -237,8 +238,8 @@ local function playEvent(
 		KitEffects.bloodSpray(victim, attacker, "Head")
 	elseif kind == "Kill" then
 		if cinematic.id == "Bat" then
+			-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 			SoundController.play("BatCrush", victim)
-			KitEffects.crush(victim, attacker, seed)
 		else
 			SoundController.play("KnockoutPunch", victim)
 			KitEffects.bloodSpray(victim, attacker, "Head")
@@ -260,8 +261,6 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 	if cinematic == nil then
 		return
 	end
-	-- (the same random bits on every client: from where it happens)
-	local seed = math.floor(anchor.Position.X * 7 + anchor.Position.Z * 13) % 100000
 
 	-- The camera's shakes, at the blows' times.
 	local shakes: { Shake } = {}
@@ -291,7 +290,7 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 	for _, event in cinematic.events do
 		task.delay(event.time, function()
 			if not run.cancelled and attacker.Parent and victim.Parent then
-				playEvent(cinematic, event, attacker, victim, seed)
+				playEvent(cinematic, event, attacker, victim)
 			end
 		end)
 	end

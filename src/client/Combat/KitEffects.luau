@@ -238,22 +238,24 @@ local function buildBat(): Model
 		part.CFrame = CFrame.new(0, -center, 0) * alongY
 		part.Parent = model
 	end
-	piece("Knob", 0.08, 0.26, -0.18, BAT_WOOD, Enum.Material.Wood)
-	piece("Grip", 0.95, 0.15, 0.3, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
-	piece("Handle", 0.5, 0.17, 1.02, BAT_WOOD, Enum.Material.Wood)
-	piece("Taper", 0.6, 0.22, 1.55, BAT_WOOD, Enum.Material.Wood)
-	piece("Barrel", 0.85, 0.28, 2.25, BAT_WOOD, Enum.Material.Wood)
+	-- A big bat, ~3.5 studs (the finisher's impact pose was solved with
+	-- this length: the barrel lands on the head).
+	piece("Knob", 0.1, 0.3, -0.18, BAT_WOOD, Enum.Material.Wood)
+	piece("Grip", 0.95, 0.17, 0.3, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
+	piece("Handle", 0.55, 0.19, 1.05, BAT_WOOD, Enum.Material.Wood)
+	piece("Taper", 0.65, 0.28, 1.62, BAT_WOOD, Enum.Material.Wood)
+	piece("Barrel", 1.3, 0.42, 2.6, BAT_WOOD, Enum.Material.Wood)
 	local tip = Instance.new("Part")
 	tip.Name = "Tip"
 	tip.Shape = Enum.PartType.Ball
-	tip.Size = Vector3.new(0.28, 0.28, 0.28)
+	tip.Size = Vector3.new(0.42, 0.42, 0.42)
 	tip.Material = Enum.Material.Wood
 	tip.Color = BAT_WOOD
 	tip.CanCollide = false
 	tip.CanQuery = false
 	tip.CanTouch = false
 	tip.Massless = true
-	tip.CFrame = CFrame.new(0, -2.67, 0)
+	tip.CFrame = CFrame.new(0, -3.25, 0)
 	tip.Parent = model
 	model.WorldPivot = CFrame.new()
 	return model
@@ -669,29 +671,9 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
 	stain(point, if zone == "Head" then 1.1 else 0.8)
 end
 
--- Bits flying from a crushed skull (the bat finisher): blood, bone, skin.
--- Same pieces on every client (`seed`).
-function KitEffects.crush(victim: Model, attacker: Model, seed: number)
-	local head = victim:FindFirstChild("Head")
-	if head == nil or not head:IsA("BasePart") then
-		return
-	end
-	local random = Random.new(seed)
-	local point = impactPoint(head, attacker)
-	burst(point, 18, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.12, 13, 2.2, random)
-	burst(
-		point,
-		6,
-		Color3.fromRGB(222, 210, 186),
-		Enum.Material.SmoothPlastic,
-		0.07,
-		9,
-		2.2,
-		random
-	)
-	burst(point, 4, head.Color, Enum.Material.SmoothPlastic, 0.08, 8, 2.2, random)
-	stain(point, 1.6)
-	stain(point + Vector3.new(random:NextNumber(-0.8, 0.8), 0, random:NextNumber(-0.8, 0.8)), 0.9)
+-- A blood stain on the floor under `position` (HeadBlast: the burst head).
+function KitEffects.stain(position: Vector3, size: number)
+	stain(position, size)
 end
 
 -- Glass cutting the skin (face, torso or leg, from `zone`): a spray of blood

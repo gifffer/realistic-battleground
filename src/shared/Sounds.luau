@@ -119,12 +119,25 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.05,
 		fallback = "Swing",
 	},
-	BatCrush = { -- the bat on the skull: a deep, wet crack
-		ids = {},
+	BatCrush = { -- the bat bursts the head
+		ids = { 123012498248453 },
 		volume = 1,
-		pitch = 0.55,
-		pitchVariation = 0.04,
+		pitch = 1,
+		pitchVariation = 0.03,
 		fallback = "HeavyHit",
+	},
+	BatSwing = { -- the bat coming down
+		ids = { 9113305631 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.04,
+		fallback = "HeavySwing",
+	},
+	VictimPlea = { -- what the one on the ground says before the bat comes down
+		ids = { 76456045012714 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0,
 	},
 	BodyShot = { -- a hook to the ribs, dull
 		ids = {},
