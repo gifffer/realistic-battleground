@@ -1300,10 +1300,12 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 		return false
 	end
 	local time = now()
-	if time < state.nextAttackAt then
+	if time < state.nextAttackAt - C.ATTACK_GRACE then
 		resolved()
 		return false
 	end
+	-- (let in a hair early: it counts from when it was due, keeping the pace)
+	time = math.max(time, state.nextAttackAt)
 	-- Attacking ends the spawn protection.
 	Knockout.endProtection(model)
 	state.slipUntil = 0 -- punching ends a slip

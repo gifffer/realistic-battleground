@@ -279,6 +279,15 @@ function CombatController.onServerAction(action: string)
 		CharacterAnimationController.playAction(character, action)
 		combo = tonumber(string.sub(action, 12)) or 1
 		nextAttackAt = lastAttackAt + C.M1_INTERVAL
+	elseif string.sub(action, 1, 11) == "Brawler_M1_" then
+		-- Follow the server's count of the combo (a punch it refused would
+		-- otherwise put us one ahead: our "4th" being its 3rd...).
+		local serverCombo = tonumber(string.sub(action, 12))
+		if serverCombo and serverCombo ~= combo then
+			combo = serverCombo
+			local pause = if serverCombo == #C.M1_DAMAGE then C.FINISHER_RECOVERY else C.M1_INTERVAL
+			nextAttackAt = math.max(nextAttackAt, lastAttackAt + pause)
+		end
 	end
 end
 

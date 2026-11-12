@@ -577,15 +577,34 @@ end)
 
 -- A move started on `model` (animation name from Remotes.CombatAction, or
 -- our own key press): prop in hand and the swing sound.
+-- (each move started on a model gets a number: its later swings are
+-- skipped if it was cut short, or replaced by another move)
+local swingToken: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
 function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local move = moveByAnimation[animation]
 	local prop = if move then move.prop else nil
 	if move and prop then
 		holdProp(model, prop, move.duration)
 	end
+	local token = (swingToken[model] or 0) + 1
+	swingToken[model] = token
 	local sound = START_SOUNDS[animation]
 	if sound and not silent then
 		SoundController.play(sound, model)
+		-- A flurry (jab rush, kick combo...): every blow whooshes, not just
+		-- the first one.
+		if move and #move.hits > 1 then
+			local first = move.hits[1].at
+			for index = 2, #move.hits do
+				local at = move.hits[index].at
+				task.delay(math.max(0, at - first), function()
+					if swingToken[model] == token and model.Parent then
+						SoundController.play(sound, model)
+					end
+				end)
+			end
+		end
 	end
 end
 
@@ -596,6 +615,7 @@ end
 
 -- Our move was refused by the server: take the prop back.
 function KitEffects.stopAction(model: Model)
+	swingToken[model] = (swingToken[model] or 0) + 1 -- (no more swings of it)
 	removeProp(model)
 end
 
