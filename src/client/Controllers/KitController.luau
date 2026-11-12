@@ -140,24 +140,41 @@ local wallParams = OverlapParams.new()
 wallParams.FilterType = Enum.RaycastFilterType.Exclude
 wallParams.RespectCanCollide = true
 local opened: { [BasePart]: boolean } = {}
+local insideParams = OverlapParams.new()
+insideParams.FilterType = Enum.RaycastFilterType.Include
+-- Collision back on a wall the server didn't break, once we're out of it.
+local function closeWall(part: BasePart)
+	if part.Parent == nil or part:GetAttribute("Broken") == true then
+		opened[part] = nil
+		return
+	end
+	local character = player.Character
+	if character then
+		insideParams.FilterDescendantsInstances = { character }
+		if #workspace:GetPartBoundsInBox(part.CFrame, part.Size, insideParams) > 0 then
+			task.delay(0.25, closeWall, part) -- still in it: not yet
+			return
+		end
+	end
+	opened[part] = nil
+	part.CanCollide = true
+end
 local function openWalls(character: Model, root: BasePart, radius: number)
-	wallParams.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
+	local fighters = CollectionService:GetTagged(Config.Combat.TAG)
+	wallParams.FilterDescendantsInstances = fighters
 	local look = root.CFrame.LookVector
 	local feetY = root.Position.Y - 3
+	local under = Breakable.support(root, fighters) -- (never what we stand on)
 	for _, part in workspace:GetPartBoundsInRadius(root.Position + look * 2.5, radius, wallParams) do
 		if
 			not opened[part]
+			and part ~= under
 			and not part:IsDescendantOf(character)
 			and Breakable.check(part, feetY)
 		then
 			opened[part] = true
 			part.CanCollide = false
-			task.delay(1.5, function()
-				opened[part] = nil
-				if part.Parent and part:GetAttribute("Broken") ~= true then
-					part.CanCollide = true
-				end
-			end)
+			task.delay(1.5, closeWall, part)
 		end
 	end
 end

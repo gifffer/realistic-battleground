@@ -252,8 +252,9 @@ local function movementClip(entry: Tracked, state: string?): string?
 		return if horizontalSpeed(entry.root) > threshold then "CrouchWalk" else "CrouchIdle"
 	elseif state == "Slide" or state == "Climb" or state == "Vault" then
 		return state
-	elseif state == nil then
-		-- Standing up: our own walk / run instead of Roblox's. Nothing in the
+	elseif state == nil or state == "Walk" or state == "Sprint" then
+		-- Standing up (our own state is nil, the others' "Walk" / "Sprint"
+		-- from the server): our own walk / run instead of Roblox's. Nothing in the
 		-- air (Roblox's jump / fall animation plays) or when standing still.
 		local airborne = entry.humanoid:GetState() == Enum.HumanoidStateType.Freefall
 			or entry.humanoid:GetState() == Enum.HumanoidStateType.Jumping

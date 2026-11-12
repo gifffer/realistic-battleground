@@ -13,12 +13,38 @@
 --     part (mesh, union, decorated) breaks whole if small enough.
 --
 --   Breakable.check(part, feetY) → "pieces" | "whole" | nil
+--   Breakable.ground(cframe, size, feetY) → true if level with the feet
+--   Breakable.support(root, exclude) → the part the attacker stands on
+--       (never broken: he'd fall through)
 
 local Breakable = {}
 
 Breakable.MAX_SIZE = 80 -- studs: bigger than this never breaks
 Breakable.WHOLE_MAX = 14 -- studs: a part breaking in one go
 Breakable.PIECE = 3.5 -- studs: size of the pieces a wall is cut into
+
+-- Is a box (`cframe`, `size`) level with / under the attacker's feet? The
+-- ground, a step, a curb: not broken.
+function Breakable.ground(cframe: CFrame, size: Vector3, feetY: number): boolean
+	local half = size / 2
+	local top = cframe.Position.Y
+		+ math.abs(cframe.RightVector.Y) * half.X
+		+ math.abs(cframe.UpVector.Y) * half.Y
+		+ math.abs(cframe.LookVector.Y) * half.Z
+	return top <= feetY + 1.2
+end
+
+local downParams = RaycastParams.new()
+downParams.FilterType = Enum.RaycastFilterType.Exclude
+downParams.RespectCanCollide = true
+
+-- The part under the attacker (a ramp, a plank, a crate he's on), or nil.
+function Breakable.support(root: BasePart, exclude: { Instance }): BasePart?
+	downParams.FilterDescendantsInstances = exclude
+	local hit = workspace:Raycast(root.Position, Vector3.new(0, -4.5, 0), downParams)
+	local found = if hit then hit.Instance else nil
+	return if found and found:IsA("BasePart") then found else nil
+end
 
 local function protected(part: Instance): boolean
 	local node: Instance? = part
@@ -63,13 +89,11 @@ function Breakable.check(part: BasePart, feetY: number): string?
 	end
 	-- The ground and what is level with it (a curb, a step): not broken.
 	local frame = part.CFrame
-	local half = size / 2
-	local upX, upY, upZ =
-		math.abs(frame.RightVector.Y), math.abs(frame.UpVector.Y), math.abs(frame.LookVector.Y)
-	local top = frame.Position.Y + upX * half.X + upY * half.Y + upZ * half.Z
-	if top <= feetY + 0.6 then
+	if Breakable.ground(frame, size, feetY) then
 		return nil
 	end
+	local upX, upY, upZ =
+		math.abs(frame.RightVector.Y), math.abs(frame.UpVector.Y), math.abs(frame.LookVector.Y)
 	-- A floor / roof slab (its thin side facing up, wide both ways).
 	local dims = { size.X, size.Y, size.Z }
 	local ups = { upX, upY, upZ }

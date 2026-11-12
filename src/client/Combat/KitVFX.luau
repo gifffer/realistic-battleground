@@ -65,6 +65,9 @@ local RAGE = Color3.fromRGB(255, 40, 20)
 local CRACK = Color3.fromRGB(22, 20, 18)
 
 local random = Random.new()
+-- Thrown debris bounce on the map but go through fighters (registered by
+-- Server/Systems/Destruction).
+local DEBRIS_GROUP = "Debris"
 
 local fx = Instance.new("Folder")
 fx.Name = "KitVFX"
@@ -665,6 +668,7 @@ local function rocks(position: Vector3, count: number, power: number)
 		rock.CanCollide = true
 		rock.CastShadow = true
 		rock.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.5, 0.2)
+		rock.CollisionGroup = DEBRIS_GROUP
 		local angle = random:NextNumber(0, math.pi * 2)
 		local out = Vector3.new(math.cos(angle), 0, math.sin(angle))
 		rock.CFrame = CFrame.new(at + out * random:NextNumber(1, 2.5) + Vector3.new(0, 0.5, 0))
@@ -1072,12 +1076,22 @@ end
 local MAX_BURNS = 30
 local SEAR = Color3.fromRGB(122, 52, 32) -- seared skin
 local SCORCH = Color3.fromRGB(60, 30, 20)
-local burnCount: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+local burnCount: { [Model]: number } = {}
 type BurnSpot = { at: Vector3, out: Vector3, size: number, level: number }
-local burnSpots: { [BasePart]: { BurnSpot } } = setmetatable({}, { __mode = "k" }) :: any
+local burnSpots: { [BasePart]: { BurnSpot } } = {}
+-- (only the body parts: a hit on a hat / hair burns the head under it)
+local BURNABLE = table.freeze({
+	Head = true,
+	Torso = true,
+	["Left Arm"] = true,
+	["Right Arm"] = true,
+	["Left Leg"] = true,
+	["Right Leg"] = true,
+})
 
 -- The skin of a body part at `p` (part space): where, and which way is out.
-local function onSkin(limb: BasePart, p: Vector3): (Vector3, Vector3)
+-- `margin`: room kept from a flat face's edges (the burn's radius).
+local function onSkin(limb: BasePart, p: Vector3, margin: number?): (Vector3, Vector3)
 	if limb.Name == "Head" then
 		-- (the round classic head: radius 0.6, straight from -0.3 to 0.3)
 		local flatP = Vector3.new(p.X, 0, p.Z)
@@ -1089,22 +1103,18 @@ local function onSkin(limb: BasePart, p: Vector3): (Vector3, Vector3)
 	end
 	-- a block: the side face the point is on (not the top / bottom)
 	local half = limb.Size / 2
+	local m = margin or 0
+	local hx = math.max(0, math.min(half.X * 0.8, half.X - m))
+	local hy = math.max(0, math.min(half.Y * 0.85, half.Y - m))
+	local hz = math.max(0, math.min(half.Z * 0.7, half.Z - m))
 	local x, z = p.X / half.X, p.Z / half.Z
 	if math.abs(x) > math.abs(z) then
 		local side = if x >= 0 then 1 else -1
-		return Vector3.new(
-			side * half.X,
-			math.clamp(p.Y, -half.Y * 0.85, half.Y * 0.85),
-			math.clamp(p.Z, -half.Z * 0.7, half.Z * 0.7)
-		),
+		return Vector3.new(side * half.X, math.clamp(p.Y, -hy, hy), math.clamp(p.Z, -hz, hz)),
 			Vector3.new(side, 0, 0)
 	end
 	local side = if z >= 0 then 1 else -1
-	return Vector3.new(
-		math.clamp(p.X, -half.X * 0.8, half.X * 0.8),
-		math.clamp(p.Y, -half.Y * 0.85, half.Y * 0.85),
-		side * half.Z
-	),
+	return Vector3.new(math.clamp(p.X, -hx, hx), math.clamp(p.Y, -hy, hy), side * half.Z),
 		Vector3.new(0, 0, side)
 end
 
@@ -1150,7 +1160,10 @@ local BURN_LAYERS = {
 }
 
 local function burn(body: Model, limb: BasePart, position: Vector3)
-	local at, out = onSkin(limb, limb.CFrame:PointToObjectSpace(position))
+	local size = (if limb.Name == "Head" then 0.2 elseif limb.Name == "Torso" then 0.36 else 0.3)
+		* random:NextNumber(0.9, 1.15)
+	local margin = size * 1.4 * 0.82 / 2 -- (the widest layer's radius)
+	local at, out = onSkin(limb, limb.CFrame:PointToObjectSpace(position), margin)
 	local worldOut = limb.CFrame:VectorToWorldSpace(out)
 	local folder: Instance? = limb:FindFirstChild("Burns")
 	if folder == nil then
@@ -1163,6 +1176,9 @@ local function burn(body: Model, limb: BasePart, position: Vector3)
 	if spots == nil then
 		spots = {}
 		burnSpots[limb] = spots
+		limb.Destroying:Once(function()
+			burnSpots[limb] = nil
+		end)
 	end
 	local seed = random:NextNumber(0, math.pi * 2)
 	local upAxis = Vector3.new(0, 1, 0)
@@ -1205,13 +1221,17 @@ local function burn(body: Model, limb: BasePart, position: Vector3)
 			return
 		end
 	end
-	local count = burnCount[body] or 0
+	local count = burnCount[body]
+	if count == nil then
+		count = 0
+		body.Destroying:Once(function()
+			burnCount[body] = nil
+		end)
+	end
 	if count >= MAX_BURNS then
 		return
 	end
 	burnCount[body] = count + 1
-	local size = (if limb.Name == "Head" then 0.2 elseif limb.Name == "Torso" then 0.36 else 0.3)
-		* random:NextNumber(0.9, 1.15)
 	table.insert(spots, { at = at, out = out, size = size, level = 1 })
 	for index, layer in BURN_LAYERS do
 		-- (each layer a little off-centre: an uneven burn)
@@ -1599,11 +1619,19 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			if owner then
 				inBeam[owner] = true
 				contact[owner] = (contact[owner] or now)
-				local limb = touch.Instance
+				-- (a hat / hair: the head under it; the root: the torso)
+				local limb: Instance? = touch.Instance
+				if limb and limb.Parent and limb.Parent:IsA("Accessory") then
+					limb = owner:FindFirstChild("Head")
+				elseif limb and limb.Name == "HumanoidRootPart" then
+					limb = owner:FindFirstChild("Torso")
+				end
 				if
-					now - contact[owner] >= beam.warmup
-					and now - lastBurn > 0.12
+					limb
 					and limb:IsA("BasePart")
+					and BURNABLE[limb.Name]
+					and now - contact[owner] >= beam.warmup
+					and now - lastBurn > 0.12
 				then
 					lastBurn = now
 					burn(owner, limb, touch.Position)
@@ -1913,9 +1941,18 @@ local function goreCharge(model: Model, move: Kits.MoveDef, token: number)
 	if roar then
 		local sound = roar
 		local volume = sound.Volume
+		local cut = false
 		animate(move.duration, function(alpha)
-			if not alive(model, token) and sound.Volume > 0 then
+			if cut then
+				return
+			end
+			if not alive(model, token) then
+				cut = true
 				tween(sound, 0.15, { Volume = 0 })
+				task.delay(0.15, function()
+					sound:Stop()
+				end)
+				return
 			end
 			local left = (1 - alpha) * move.duration
 			if left < 0.2 then
@@ -2347,6 +2384,7 @@ local function wallDebris(pieces: { BrokenPiece }, point: Vector3, push: Vector3
 			chunk.CanCollide = true
 			chunk.CastShadow = true
 			chunk.CustomPhysicalProperties = PhysicalProperties.new(0.3, 0.6, 0.2)
+			chunk.CollisionGroup = DEBRIS_GROUP
 			chunk.CFrame = piece.cframe
 				* CFrame.new(offset)
 				* CFrame.Angles(random:NextNumber(-0.3, 0.3), random:NextNumber(-0.3, 0.3), 0)
@@ -2398,6 +2436,13 @@ local function bullStrides()
 			continue
 		end
 		local model = instance
+		if model:GetAttribute("Ragdolled") == true or model:GetAttribute("KnockedOut") == true then
+			continue
+		end
+		local owner = Players:GetPlayerFromCharacter(model)
+		if owner and owner:GetAttribute("MoveState") ~= "Sprint" then
+			continue -- (walking, sliding, crouching...)
+		end
 		local root = part(model, "HumanoidRootPart")
 		local humanoid = model:FindFirstChildOfClass("Humanoid")
 		if root == nil or humanoid == nil or humanoid.FloorMaterial == Enum.Material.Air then
@@ -2406,14 +2451,18 @@ local function bullStrides()
 		local velocity = root.AssemblyLinearVelocity
 		local speed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
 		-- (sprinting: the BullRun clip is on)
-		if speed < 14 or (root.Position - eye).Magnitude > 120 then
+		-- (above a sprint: a charge or a knockback, not strides)
+		local sprint = Config.Character.SPRINT_SPEED * 1.15
+		if speed < 14 or speed > sprint * 1.35 or (root.Position - eye).Magnitude > 120 then
 			continue
 		end
 		if now < (nextStride[model] or 0) then
 			continue
 		end
-		nextStride[model] = now
-			+ BULL_STRIDE * Config.Character.SPRINT_SPEED * 1.15 / math.max(speed, 1)
+		-- (the BullRun clip's own cadence: CharacterAnimationController plays
+		-- it at this rate, two hoofs per 0.6 s loop)
+		local rate = math.clamp(speed / sprint * 1.35, 0.8, 1.6)
+		nextStride[model] = now + BULL_STRIDE / rate
 		local side = -(strideSide[model] or 1)
 		strideSide[model] = side
 		local spot = root.Position - Vector3.new(0, 3, 0) + root.CFrame.RightVector * side * 0.5
