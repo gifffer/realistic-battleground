@@ -374,26 +374,8 @@ local function painter(skin: Color3): (layer: string) -> (Color3, number)
 	end
 end
 
--- The blood run down the front of the chest, and where it pumps out of.
-local function neckBlood(torso: BasePart, random: Random, folder: Folder): Attachment
-	for index = 1, 3 do
-		welded(
-			newPart(
-				"Run",
-				Vector3.new(random:NextNumber(0.08, 0.16), random:NextNumber(0.4, 1.1), 0.012),
-				BLOOD_WET,
-				false
-			),
-			torso,
-			torso.CFrame
-				* CFrame.new(
-					(index - 2) * 0.28 + random:NextNumber(-0.06, 0.06),
-					0.55,
-					-torso.Size.Z / 2 - 0.007
-				),
-			folder
-		)
-	end
+-- Where the blood pumps out of the neck.
+local function neckBlood(torso: BasePart): Attachment
 	local mouth = Instance.new("Attachment")
 	mouth.Name = "HeadBlastBlood"
 	mouth.Position = Vector3.new(0, torso.Size.Y / 2 + 0.15, 0)
@@ -404,7 +386,7 @@ end
 -- What's left on top of the torso, from the kit: the real lower jaw and its
 -- teeth in the skin of the chin, torn along the top, the wound inside, the
 -- top of the spine. nil without the kit.
-local function buildRealStump(torso: BasePart, skin: Color3, random: Random): Attachment?
+local function buildRealStump(torso: BasePart, skin: Color3): Attachment?
 	local pieces = GoreKit.get()
 	local jaw = if pieces then pieces.Jaw else nil
 	if jaw == nil then
@@ -423,7 +405,7 @@ local function buildRealStump(torso: BasePart, skin: Color3, random: Random): At
 	weld.Part1 = main
 	weld.Parent = main
 	main.Parent = folder
-	local mouth = neckBlood(torso, random, folder)
+	local mouth = neckBlood(torso)
 	folder.Parent = torso
 	return mouth
 end
@@ -542,13 +524,13 @@ local function buildSimpleStump(torso: BasePart, skin: Color3, random: Random): 
 			folder
 		)
 	end
-	local mouth = neckBlood(torso, random, folder)
+	local mouth = neckBlood(torso)
 	folder.Parent = torso
 	return mouth
 end
 
 local function buildStump(torso: BasePart, skin: Color3, random: Random): Attachment
-	return buildRealStump(torso, skin, random) or buildSimpleStump(torso, skin, random)
+	return buildRealStump(torso, skin) or buildSimpleStump(torso, skin, random)
 end
 
 ------------------------------------------------------------------------------
