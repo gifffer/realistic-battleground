@@ -292,3 +292,20 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | P9 | Kill feed | Le niveau des joueurs est écrit à côté de leur nom. |
 | P10 | Jouer 5 min | **PLAYTIME +15 XP · +2 COINS**. |
 | P11 | Menu KITS | Coins affichés en haut. (Les états « UNLOCKS AT LEVEL 10 » / « BUY · 500 » serviront aux futurs kits : Street Brawler et Boxer restent gratuits.) |
+
+## Étape 8 — Duels (`feature/duels`)
+
+À tester à **2 joueurs** (Test > Clients and Servers). Le parcours de test n'a plus de textes flottants (les couleurs restent).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| D1 | Menu → **DUEL** | Ton rang (BRONZE au départ) et ton ELO (1000), l'échelle des rangs, **FIND MATCH**, puis la liste des joueurs avec **CHALLENGE** (ou la raison : IN A DUEL, IN COMBAT, BLOCKS DUELS, KNOCKED OUT, CHALLENGE SENT · 10). |
+| D2 | A clique **CHALLENGE** sur B | Chez B : « A challenges you to a duel » à gauche, **Y** accepte / **N** refuse (ou clic), ligne de 15 s. Refus ou temps écoulé → A voit la raison. |
+| D3 | B accepte | Les deux sont téléportés dans une **arène** fermée. En haut au centre : CHALLENGE · ROUND 1, le score, le niveau / nom / vie de l'adversaire. **3, 2, 1, FIGHT** (bloqués pendant le compte). |
+| D4 | Mettre l'autre à 0 PV | Pas de KO au sol ni de finisher : **ROUND 1 — YOU**, il tombe, 3 s, manche suivante avec vie / endurance pleines. |
+| D5 | Gagner 2 manches | **VICTORY 2 — 1** (+40 XP · +8 COINS), l'autre **DEFEAT** (+10 XP), puis retour à l'arène libre après 6 s. Rejouer un défi contre la même personne dans les 3 min → pas de récompense. |
+| D6 | Pendant le duel | Impossible de changer de kit, personne d'autre ne peut te toucher, tes gains n'apparaissent pas en bas à gauche, un LEVEL UP attend la fin du duel. |
+| D7 | Les deux cliquent **FIND MATCH** | « SEARCHING · 0:03 » + CANCEL, puis match **RANKED** automatique. Fin : ELO **1000 → 1016** (+16), rang et barre vers le rang suivant ; victoire +100 XP · +25 COINS, défaite +30 XP. |
+| D8 | Quitter le jeu en plein duel | L'autre gagne par **forfait**. |
+| D9 | SETTINGS → **BLOCK DUEL REQUESTS** | Les autres voient BLOCKS DUELS et ne peuvent plus te défier. |
+| D10 | PROFILE | Ligne **RANKED** (rang, ELO, victoires / défaites classées) et **DUEL WINS**. |

@@ -37,6 +37,12 @@
 -- Other controllers can use:
 --   HudController.getGui()                 the HUD ScreenGui (to add layers)
 --   HudController.setRewardsHidden(true)   hide the reward lines (scoreboard held)
+--   HudController.setHidden(true)          hide the whole HUD (duel result screen),
+--                                          like it hides itself on a KO
+--
+-- Duel rewards (DuelWin / DuelLoss / RankedWin / RankedLoss) add NO line to
+-- the reward stack: the duel result screen lists them (DuelController). The
+-- XP line still grows, since it follows the save.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -122,6 +128,7 @@ type RewardRow = {
 
 local rewardsFrame: Frame
 local rewardRows: { RewardRow } = {} -- oldest first, newest last
+local hiddenByOther = false -- HudController.setHidden (duel result screen)
 local rewardsHidden = false
 
 ------------------------------------------------------------------------------
@@ -892,6 +899,9 @@ local function showReward(kind: Types.RewardKind, xp: number, coins: number)
 end
 
 local function onProgress(kind: unknown, xp: unknown, coins: unknown)
+	-- Only these four kinds get a line. Duel rewards ("DuelWin", "DuelLoss",
+	-- "RankedWin", "RankedLoss") are left out on purpose: the duel result
+	-- screen shows them.
 	if
 		(kind ~= "Kill" and kind ~= "Assist" and kind ~= "Damage" and kind ~= "Playtime")
 		or typeof(xp) ~= "number"
@@ -907,11 +917,12 @@ local function onProgress(kind: unknown, xp: unknown, coins: unknown)
 	showReward(kind :: Types.RewardKind, xp, coins)
 end
 
--- Hidden while knocked out or while a menu is open.
+-- Hidden while knocked out, while a menu is open, or when another
+-- controller asks (setHidden: the duel result screen).
 local function updateVisibility()
 	local character = player.Character
 	local down = character ~= nil and character:GetAttribute("KnockedOut") == true
-	gui.Enabled = not down and MenuController.getOpen() == nil
+	gui.Enabled = not down and not hiddenByOther and MenuController.getOpen() == nil
 end
 
 local function onCharacterAdded(character: Model)
@@ -1006,6 +1017,13 @@ end
 function HudController.setRewardsHidden(hidden: boolean)
 	rewardsHidden = hidden
 	rewardsFrame.Visible = not hidden
+end
+
+-- Hides / shows the whole HUD, the way it hides itself while you are
+-- knocked out (used by the duel's VICTORY / DEFEAT screen).
+function HudController.setHidden(hidden: boolean)
+	hiddenByOther = hidden
+	updateVisibility()
 end
 
 return HudController

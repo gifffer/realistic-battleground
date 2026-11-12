@@ -71,6 +71,7 @@ export type Elimination = {
 	killerPlayer: Player?, -- nil: no player gets the kill
 }
 local eliminationCallbacks: { (Elimination) -> () } = {}
+local interceptor: ((victim: Model, attacker: Model?) -> boolean)? = nil
 
 local function now(): number
 	return os.clock()
@@ -261,6 +262,13 @@ local function getUp(info: FighterInfo)
 	end
 end
 
+-- In a duel (or on its result screen): the Duels system handles it.
+local function inDuel(info: FighterInfo): boolean
+	local player = info.player
+	return info.model:GetAttribute("DuelId") ~= nil
+		or (player ~= nil and player:GetAttribute("InDuel") == true)
+end
+
 local function onDied(info: FighterInfo)
 	if info.dead then
 		return
@@ -272,6 +280,10 @@ local function onDied(info: FighterInfo)
 	setAttribute(info.model, "KnockedOut", false)
 	setAttribute(info.model, "KOEndsAt", nil)
 	setAttribute(info.model, "BeingFinished", false)
+	-- A duel settles its own deaths (round lost): no kill feed, no kill.
+	if inDuel(info) then
+		return
+	end
 	local kind: Types.KillFeedKind = if info.finishedBy then "Finished" else "Died"
 	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
 	rewardKill(killer, killerPlayer, info, kind)
@@ -360,12 +372,24 @@ function Knockout.noteHit(victim: Model, attacker: Model)
 			info.lastPlayerHitAt = now()
 		end
 	end
+	-- "In combat" until then (the Duel menu greys out CHALLENGE), for both.
+	local untilTime = workspace:GetServerTimeNow() + Config.Duels.IN_COMBAT_TIME
+	for _, model in { victim, attacker } do
+		local player = Players:GetPlayerFromCharacter(model)
+		if player then
+			player:SetAttribute("CombatUntil", untilTime)
+		end
+	end
 end
 
 -- 0 HP: knocked out instead of dead.
 function Knockout.knockOut(victim: Model, attacker: Model?)
 	local info = fighters[victim]
 	if info == nil or info.knockedOut or info.dead then
+		return
+	end
+	-- Another system decides what 0 HP means here (a duel round ends).
+	if interceptor and interceptor(victim, attacker) then
 		return
 	end
 	if attacker then
@@ -461,6 +485,24 @@ function Knockout.finish(victim: Model, attacker: Model)
 end
 
 -- `callback(model)` when a KO'd fighter gets back up.
+-- `handler(victim, attacker)` is asked first each time someone would be
+-- knocked out; returning true means "handled, don't knock them out"
+-- (Duels: in a duel, 0 HP ends the round instead).
+function Knockout.setInterceptor(handler: (victim: Model, attacker: Model?) -> boolean)
+	interceptor = handler
+end
+
+-- os.clock() of the last hit `model` took (from anyone), -inf if never.
+function Knockout.lastHitAt(model: Model): number
+	local info = fighters[model]
+	return if info then info.lastHitAt else -math.huge
+end
+
+-- The free-arena spawn point farthest from the enemies (respawns, end of a duel).
+function Knockout.pickSpawn(player: Player): SpawnLocation?
+	return pickSpawn(player)
+end
+
 -- `callback(elimination)` for every fighter eliminated (see Elimination).
 function Knockout.onEliminated(callback: (Elimination) -> ())
 	table.insert(eliminationCallbacks, callback)
@@ -483,8 +525,8 @@ end
 local function onLeaving(player: Player)
 	local character = player.Character
 	local info = if character then fighters[character] else nil
-	if info == nil or info.dead then
-		return
+	if info == nil or info.dead or inDuel(info) then
+		return -- (a duel handles leaving: forfeit)
 	end
 	local inFight = info.knockedOut
 		or now() - info.lastHitAt <= K.COMBAT_TAG_TIME

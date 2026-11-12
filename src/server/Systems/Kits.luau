@@ -23,6 +23,10 @@ local function onEquipKit(player: Player, kitId: unknown)
 	if typeof(kitId) ~= "string" or not limiter.allow(player) then
 		return
 	end
+	-- The kit is locked during a duel.
+	if player:GetAttribute("InDuel") == true then
+		return
+	end
 	-- Only real kits that are playable (not "coming soon" ones).
 	local kit = KitDefs.get(kitId)
 	local data = PlayerData.getData(player)

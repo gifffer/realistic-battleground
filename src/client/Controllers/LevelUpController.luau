@@ -14,7 +14,11 @@
 -- • The level comes from the "Level" attribute the server sets on your
 --   Player (Server/Systems/Progression). When it goes UP, the beat plays
 --   (the first value, when the save loads, plays nothing).
--- • Knocked out or menu open: the beat waits until that ends.
+-- • Knocked out, menu open or in a duel: the beat waits until that ends.
+--   "In a duel" = the "InDuel" attribute the server sets on your Player
+--   (Server/Systems/Duels): true from the match start until you are back
+--   in the free arena, so it covers the rounds AND the VICTORY / DEFEAT
+--   screen. The level-up then plays once you're back.
 -- • Two level-ups in a row: the second only swaps the title and restarts
 --   the hold.
 -- • The XP line in the vitals animates on its own (HudController).
@@ -295,11 +299,12 @@ end
 -- Waiting for the right moment
 ------------------------------------------------------------------------------
 
--- Knocked out or a menu open: not the moment.
+-- Knocked out, a menu open or in a duel (rounds + result): not the moment.
 local function blocked(): boolean
 	local character = player.Character
 	local down = character ~= nil and character:GetAttribute("KnockedOut") == true
-	return down or MenuController.getOpen() ~= nil
+	local inDuel = player:GetAttribute("InDuel") == true
+	return down or inDuel or MenuController.getOpen() ~= nil
 end
 
 local function requestBeat(level: number)
@@ -371,7 +376,7 @@ function LevelUpController.start()
 	lastLevel = if typeof(value) == "number" then value else nil
 	player:GetAttributeChangedSignal("Level"):Connect(onLevelChanged)
 	MenuController.onOpenChanged(interruptIfBlocked)
-	game:GetService("RunService").Heartbeat:Connect(interruptIfBlocked) -- (KO)
+	game:GetService("RunService").Heartbeat:Connect(interruptIfBlocked) -- (KO, duel)
 end
 
 return LevelUpController
