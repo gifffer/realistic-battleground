@@ -185,6 +185,38 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.06,
 	},
 
+	-- Sentinel / Bull ---------------------------------------------------------
+	LaserCharge = { -- the eyes heating up (heat vision)
+		ids = {},
+		volume = 0.6,
+		pitch = 1,
+		pitchVariation = 0.04,
+		fallback = "Awaken",
+	},
+	LaserBeam = { ids = {}, volume = 0.7, pitch = 1, pitchVariation = 0.03 }, -- the beam burning (looped)
+	ThunderClap = { -- two hands clapped hard enough to make a shockwave
+		ids = {},
+		volume = 1,
+		pitch = 0.9,
+		pitchVariation = 0.05,
+		fallback = "HeavyHit",
+	},
+	Slam = { -- landing from the sky (skyfall)
+		ids = {},
+		volume = 1,
+		pitch = 0.7,
+		pitchVariation = 0.05,
+		fallback = "HeavyHit",
+	},
+	BullSnort = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.08 },
+	Stomp = { -- the bull's stamp shaking the ground
+		ids = {},
+		volume = 1,
+		pitch = 0.6,
+		pitchVariation = 0.05,
+		fallback = "HeavyHit",
+	},
+
 	-- Movement -------------------------------------------------------------
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
 	Vault = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },

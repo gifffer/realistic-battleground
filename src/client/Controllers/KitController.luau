@@ -27,6 +27,7 @@ local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
+local CameraController = require(script.Parent.CameraController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
@@ -162,6 +163,44 @@ local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
 	end)
 end
 
+-- Leap (skyfall): our own client throws our character up and forward.
+local function startLeap(move: Kits.MoveDef, character: Model, root: BasePart)
+	local leap = move.leap
+	if leap == nil then
+		return
+	end
+	chargeToken += 1
+	local token = chargeToken
+	task.delay(leap.at, function()
+		if chargeToken ~= token or root.Parent == nil or chargeInterrupted(character) then
+			return
+		end
+		local look = root.CFrame.LookVector
+		local forward = Vector3.new(look.X, 0, look.Z)
+		forward = if forward.Magnitude > 1e-3 then forward.Unit else Vector3.new(0, 0, -1)
+		root.AssemblyLinearVelocity = forward * leap.forward + Vector3.new(0, leap.up, 0)
+		Push.apply(root, forward * leap.forward, leap.time)
+	end)
+end
+
+-- Beam (heat vision): the beam goes the way we faced when it started, so
+-- our character stops turning with the camera until it ends.
+local beamToken = 0
+local function holdForBeam(move: Kits.MoveDef)
+	local beam = move.beam
+	if beam == nil then
+		return
+	end
+	beamToken += 1
+	local token = beamToken
+	CameraController.holdRotation("beam", true)
+	task.delay(beam.to, function()
+		if beamToken == token then
+			CameraController.holdRotation("beam", false)
+		end
+	end)
+end
+
 local function tryMove(slot: number)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -191,6 +230,8 @@ local function tryMove(slot: number)
 	CharacterAnimationController.playAction(character, move.animation)
 	KitEffects.onAction(character, move.animation)
 	startCharge(move, character, root)
+	startLeap(move, character, root)
+	holdForBeam(move)
 	-- Each request gets a number: a refusal names it (see onMoveRefused).
 	requestSeq += 1
 	pending = { id = requestSeq, animation = move.animation }
@@ -256,6 +297,8 @@ local function onMoveRefused(_slot: unknown, requestId: unknown)
 	end
 	pending = nil
 	brake()
+	beamToken += 1
+	CameraController.holdRotation("beam", false)
 	CharacterAnimationController.stopAction(character, current.animation)
 	KitEffects.stopAction(character)
 	CombatController.releaseAttacks()

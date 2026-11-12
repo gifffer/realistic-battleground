@@ -45,6 +45,7 @@ local SoundController = require(script.Parent.SoundController)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local KitLooks = require(script.Parent.Parent.Combat.KitLooks)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -786,6 +787,7 @@ local function onKillEffect(effect: unknown, position: unknown)
 end
 
 function CombatEffectsController.start()
+	KitLooks.start() -- bull horns, sentinel cape
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
 	local tag = Config.Combat.TAG
 	CollectionService:GetInstanceAddedSignal(tag):Connect(onCombatantAdded)

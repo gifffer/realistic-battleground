@@ -366,3 +366,20 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | B7 | Kill / réapparition | Les bleus disparaissent. Un Dummy tué reste au sol **25 s** avant de réapparaître (le sang et les morceaux restent ~30 s). |
 
 Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
+
+## Kits Sentinel et Bull (`feature/kits-sentinel-bull`)
+
+Équipe le kit dans le menu Kits (gratuits), puis teste sur un mannequin.
+
+### Sentinel (cape rouge courte, yeux qui brillent pendant le laser)
+- [ ] **1 — Heat Vision** : les yeux chauffent ~0,5 s, puis deux lasers partent tout droit là où il regardait au départ (ils ne suivent PAS la souris). Il est presque immobile pendant le tir. Il faut rester ~0,5 s dans le laser avant les premiers dégâts, puis ~3,5 dégâts toutes les 0,25 s. Le laser s'arrête sur les murs (traces brûlées au sol / sur le mur).
+- [ ] **2 — Thunder Clap** : bras écartés puis clap : anneaux d'onde de choc devant, poussière, la cible est renversée.
+- [ ] **3 — Skyfall** : saut très haut vers l'avant, atterrissage poing au sol : cratère, fissures, cailloux, onde de choc, l'écran tremble près de l'impact. Imblocable.
+- [ ] **4 — Haymaker** : grosse préparation (le poing se charge de lumière), impact avec flash et anneaux, gros recul.
+
+### Bull (cornes de taureau)
+- [ ] **1 — Gore Charge** : il souffle de la vapeur par le nez, charge tête baissée (poussière tout du long), la cible saigne.
+- [ ] **2 — Horn Hook** : coup de tête vers le haut, la cible décolle.
+- [ ] **3 — Stampede** : il se cabre et frappe le sol : grosse onde de choc, fissures, cailloux ; ralentit les cibles autour. Imblocable.
+- [ ] **4 — Bull Toss** : attrape à la taille puis jette par-dessus sa tête.
+- [ ] Le finisher du Bull n'existe pas encore (finisher par défaut).

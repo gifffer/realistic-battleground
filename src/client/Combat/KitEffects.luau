@@ -30,6 +30,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local KitVFX = require(script.Parent.KitVFX)
 
 local KitEffects = {}
 
@@ -79,6 +80,10 @@ local HEAVY_MOVES = table.freeze({
 	KnockoutCombo = true,
 	Slip_Counter = true,
 	SlipPlus_Counter = true,
+	Haymaker = true,
+	Skyfall = true,
+	GoreCharge = true,
+	HornHook = true,
 })
 -- Moves with their own victim reaction (instead of the usual one by zone).
 local REACTIONS: { [string]: string } = {
@@ -99,6 +104,13 @@ local HIT_SOUNDS: { [string]: string } = {
 	UppercutPlus = "HeavyHit",
 	KnockoutCombo = "HeavyHit",
 	SlipPlus_Counter = "HeavyHit",
+	ThunderClap = "HeavyHit",
+	Skyfall = "HeavyHit",
+	Haymaker = "HeavyHit",
+	GoreCharge = "Tackle",
+	HornHook = "HeavyHit",
+	Stampede = "KickLow",
+	BullToss = "Tackle",
 }
 -- Sound when the move STARTS (the swing).
 local START_SOUNDS: { [string]: string } = {
@@ -118,6 +130,13 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
+	Sentinel_ThunderClap = "HeavySwing",
+	Sentinel_Skyfall = "Dash",
+	Sentinel_Haymaker = "HeavySwing",
+	Bull_GoreCharge = "Dash",
+	Bull_HornHook = "HeavySwing",
+	Bull_Stampede = "Swing",
+	Bull_Toss = "Dash",
 }
 
 function KitEffects.isMoveAnimation(animation: string): boolean
@@ -589,6 +608,7 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	end
 	local token = (swingToken[model] or 0) + 1
 	swingToken[model] = token
+	KitVFX.onAction(model, animation, move)
 	local sound = START_SOUNDS[animation]
 	if sound and not silent then
 		SoundController.play(sound, model)
@@ -616,12 +636,14 @@ end
 -- Our move was refused by the server: take the prop back.
 function KitEffects.stopAction(model: Model)
 	swingToken[model] = (swingToken[model] or 0) + 1 -- (no more swings of it)
+	KitVFX.stop(model)
 	removeProp(model)
 end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
 	SoundController.play(HIT_SOUNDS[moveId] or "Hit", victim)
+	KitVFX.onHit(victim, attacker, moveId)
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
 	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil

@@ -860,6 +860,7 @@ function Combat.register(model: Model, player: Player?)
 		finishingUntil = 0,
 		invulnerableUntil = 0,
 		cinematicUntil = 0,
+		channelUntil = 0,
 		cinematicToken = 0,
 		nextDashAt = 0,
 		knockbackUntil = 0,
@@ -1454,6 +1455,7 @@ function Combat.resetForRound(model: Model)
 		setAttribute(model, "InCinematic", nil)
 	end
 	state.stunnedUntil = 0
+	state.channelUntil = 0
 	state.attackToken += 1
 	state.knockdownToken += 1
 	state.knockedDownUntil = 0
@@ -1598,6 +1600,12 @@ local function update(dt: number)
 				player,
 				"MoveSlow",
 				if time < state.slowUntil then state.slowMultiplier else nil
+			)
+			-- Channelling a beam (heat vision): rooted.
+			Movement.setSpeedModifier(
+				player,
+				"Channel",
+				if time < state.channelUntil then 0.08 else nil
 			)
 			-- Kneeling for a finisher: stay in place.
 			Movement.setSpeedModifier(

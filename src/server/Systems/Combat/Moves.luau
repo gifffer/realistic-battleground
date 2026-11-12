@@ -241,6 +241,80 @@ local function runCharge(state: CombatState, move: Kits.MoveDef, token: number)
 	end)
 end
 
+-- Beam (heat vision): straight out of the eyes, the way the fighter faced
+-- when it started (locked: it doesn't follow the aim), stopped by walls.
+-- Someone in it heats up; only after `warmup` seconds in it do the hits
+-- land, one every `tick`. Out of it, they cool down twice as fast.
+local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
+	local c = context()
+	local beam = move.beam
+	if beam == nil then
+		return
+	end
+	local startedAt = c.now()
+	state.channelUntil = startedAt + beam.to
+	local look = state.root.CFrame.LookVector
+	local direction = Vector3.new(look.X, 0, look.Z)
+	direction = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.new(0, 0, -1)
+	local heat: { [CombatState]: number? } = {}
+	local lastTick = -math.huge
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	local connection: RBXScriptConnection? = nil
+	connection = RunService.Heartbeat:Connect(function()
+		local time = c.now()
+		local elapsed = time - startedAt
+		if state.attackToken ~= token or not c.isAlive(state) or elapsed > beam.to then
+			if connection then
+				connection:Disconnect()
+			end
+			if state.attackToken ~= token or not c.isAlive(state) then
+				state.channelUntil = 0 -- (cut short: free to move)
+			end
+			return
+		end
+		if elapsed < beam.from or time - lastTick < beam.tick then
+			return
+		end
+		lastTick = time
+		local head = state.model:FindFirstChild("Head")
+		local origin = if head and head:IsA("BasePart")
+			then head.Position + direction * 0.5
+			else state.root.Position + Vector3.new(0, 1.5, 0)
+		-- Walls stop it (fighters don't: they're in the box below).
+		params.FilterDescendantsInstances = { state.model }
+		local length = beam.range
+		local wall = workspace:Raycast(origin, direction * beam.range, params)
+		if wall and wall.Instance:FindFirstAncestorOfClass("Model") == nil then
+			length = wall.Distance
+		end
+		local box = CFrame.lookAt(origin + direction * (length / 2), origin + direction * length)
+		local victims, partsByModel =
+			Hitbox.query(box, Vector3.new(beam.radius * 2, beam.radius * 2, length), state.model)
+		local touched: { [CombatState]: boolean } = {}
+		for _, victimModel in victims do
+			local victim = c.getState(victimModel)
+			if victim and c.isAlive(victim) and not Knockout.isKnockedOut(victimModel) then
+				touched[victim] = true
+				local warmed = (heat[victim] or 0) + beam.tick
+				heat[victim] = warmed
+				if warmed >= beam.warmup then
+					local zone: Types.HitZone =
+						zoneFor(state, beam.hit, victimModel, partsByModel[victimModel], direction)
+					c.resolveHit(state, victim, specFor(beam.hit, zone, move.id))
+				end
+			end
+		end
+		for victim, value in heat do
+			if not touched[victim] then
+				local cooled = (value or 0) - beam.tick * 2
+				heat[victim] = if cooled > 0 then cooled else nil
+			end
+		end
+	end)
+end
+
 -- Kit move on key `slot` (1–4). Returns true if it started.
 function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	local c = context()
@@ -318,6 +392,7 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 		end)
 	end
 	runCharge(state, move, token)
+	runBeam(state, move, token)
 	return true
 end
 

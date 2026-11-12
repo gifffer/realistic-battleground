@@ -56,6 +56,25 @@ export type MoveDef = {
 	-- fighters the first one reached, if they are still close (cinematic
 	-- combos that can't "miss" halfway).
 	chain: boolean?,
+	-- Beam (heat vision): from `from` to `to` seconds a beam goes straight
+	-- out of the eyes, the way the fighter faced when it started (it does
+	-- NOT follow the aim), `range` studs (stopped by walls), `radius` thick.
+	-- The fighter is rooted meanwhile. Someone in it heats up: only after
+	-- `warmup` seconds in the beam does `hit` land, every `tick` seconds
+	-- (blockable); stepping out cools them down again.
+	beam: {
+		from: number,
+		to: number,
+		range: number,
+		radius: number,
+		warmup: number,
+		tick: number,
+		hit: HitDef,
+	}?,
+	-- Leap (skyfall): the fighter's own client throws him up (`up`
+	-- studs/s) and forward (`forward` studs/s) at `at` seconds; the hits
+	-- come down where he lands (a hitbox around him, forward = 0).
+	leap: { at: number, up: number, forward: number, time: number }?,
 }
 
 -- The kit's own way to finish a knocked-out opponent (M1 on them). Kits
