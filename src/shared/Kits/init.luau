@@ -1,5 +1,6 @@
 --!strict
--- Kits: the fighting styles a player can equip (Street Brawler, Boxer...).
+-- Kits: the fighting styles a player can equip (Street Brawler, Boxer,
+-- Bouncer...).
 --
 -- A kit = 4 moves on keys 1–4 + an Awakening (key G, when its gauge is
 -- full) that swaps the 4 moves for stronger versions for a few seconds.
@@ -15,6 +16,8 @@
 --   Kits.list()                → every kit, in display order
 --   Kits.DEFAULT               → the kit everybody starts with
 
+local RunService = game:GetService("RunService")
+
 local Config = require(script.Parent.Config)
 local KitTypes = require(script.KitTypes)
 
@@ -23,6 +26,7 @@ export type MoveDef = KitTypes.MoveDef
 export type AwakeningDef = KitTypes.AwakeningDef
 export type KitDef = KitTypes.KitDef
 export type FinisherDef = KitTypes.FinisherDef
+export type GrabDef = KitTypes.GrabDef
 
 local Kits = {}
 
@@ -43,6 +47,7 @@ add(require(script.StreetBrawler))
 add(require(script.Boxer))
 add(require(script.Sentinel))
 add(require(script.Bull))
+add(require(script.Bouncer))
 
 function Kits.get(id: string?): KitDef?
 	return if id then registry[id] else nil
@@ -56,6 +61,10 @@ end
 -- everyone; the others once bought (data.ownedKits).
 function Kits.owns(data: { ownedKits: { [string]: boolean } }, kit: KitDef): boolean
 	if kit.price == nil and kit.unlockLevel == nil then
+		return true
+	end
+	-- (testing in Studio: everything, Config.Dev)
+	if Config.Dev.UNLOCK_KITS_IN_STUDIO and RunService:IsStudio() then
 		return true
 	end
 	return data.ownedKits[kit.id] == true

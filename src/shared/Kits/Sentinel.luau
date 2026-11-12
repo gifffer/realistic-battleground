@@ -19,9 +19,9 @@ local kit: KitTypes.KitDef = {
 	id = "Sentinel",
 	name = "SENTINEL",
 	description = "Not quite human. Heat vision, thunderclaps, and fists like meteors.",
-	order = 3,
+	order = 5,
 	available = true,
-	walkSpeed = 0.9,
+	speed = 0.9,
 	noSprint = true,
 
 	-- Cinematic kill (Shared/Finishers "Incinerate").

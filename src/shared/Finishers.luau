@@ -12,6 +12,11 @@
 --                    to the body, hook, hook, cross, then a left hook into
 --                    their right side under the ribs: the hand goes in and
 --                    tears the liver out; he looks at it, lets it drop.
+--   "ArmRip"         Bouncer: the opponent laid on their back across in
+--                    front of him; he takes their right wrist in both hands,
+--                    puts his foot on their chest and pulls, three times:
+--                    the shoulder gives, the arm comes off. He holds it up,
+--                    looks at it, throws it down by the body.
 --
 -- One timeline, read by the server (placement, the killing blow) and by
 -- every client (camera, sounds, blood, the bat). Times in seconds from the
@@ -48,8 +53,9 @@ export type Cinematic = {
 	kill: number, -- the killing blow (server)
 	-- Where the attacker stands: "head" = past the lying victim's head
 	-- (the body beyond it), facing it, HEAD_DISTANCE away; "front" = where he is, the victim
-	-- pulled up in front of him at HOLD_DISTANCE, facing him.
-	placement: "head" | "front",
+	-- pulled up in front of him at HOLD_DISTANCE, facing him; "side" = by
+	-- the victim laid on its back across in front of him (SIDE_VICTIM).
+	placement: "head" | "front" | "side",
 	victimAnimation: string?, -- played on the victim (held up / laid out)
 	events: { Event },
 	shots: { Shot },
@@ -57,6 +63,41 @@ export type Cinematic = {
 
 Finishers.HEAD_DISTANCE = 3.8 -- studs, attacker root → victim head (flat): under the barrel
 Finishers.HOLD_DISTANCE = 2.2 -- studs between the two roots (Boxer: within punching reach)
+-- "side": where the victim's root is laid (anchor space): on its back, its
+-- head to his left, its right side (the arm he pulls) toward him.
+Finishers.SIDE_VICTIM = CFrame.new(0.3, -2.5, -2.7, 0, -1, 0, 0, 0, -1, 1, 0, 0)
+-- ArmRip: the torn arm in his right fist (his Right Arm's space), and where
+-- it is (anchor space) when he throws it. Measured on the two clips
+-- (Client/Animation/BouncerClips): change them together.
+Finishers.ARM_GRIP = CFrame.new(
+	0.7757,
+	-1.1319,
+	0.1752,
+	-0.1069,
+	0.9447,
+	0.3101,
+	0.3554,
+	-0.255,
+	0.8992,
+	0.9286,
+	0.2064,
+	-0.3085
+)
+Finishers.ARM_THROW_FROM = CFrame.new(
+	2.4602,
+	-0.2834,
+	-1.8162,
+	-0.104,
+	0.9834,
+	0.1484,
+	-0.7243,
+	-0.1772,
+	0.6663,
+	0.6816,
+	-0.0382,
+	0.7308
+)
+Finishers.ARM_THROW_VELOCITY = Vector3.new(3, -2, -1) -- anchor space, studs/s
 
 local cinematics: { [string]: Cinematic } = {
 	Bat = {
@@ -202,6 +243,85 @@ local cinematics: { [string]: Cinematic } = {
 				from = Vector3.new(4.6, 1.0, -4.6),
 				to = Vector3.new(5.2, 1.4, -2.2),
 				look = Vector3.new(-0.3, -1.3, -1.9),
+				fov = 60,
+			},
+		},
+	},
+	ArmRip = {
+		id = "ArmRip",
+		duration = 4.6,
+		kill = 2.35,
+		placement = "side",
+		victimAnimation = "Bouncer_FinisherArmRipVictim",
+		events = {
+			{ time = 0.3, kind = "Grab" }, -- both hands on their right wrist
+			{ time = 0.55, kind = "Plea" },
+			{ time = 0.95, kind = "Stomp" }, -- his foot on their chest
+			{ time = 1.2, kind = "Strain" },
+			{ time = 1.55, kind = "Strain" },
+			{ time = 1.62, kind = "Pop" }, -- the shoulder comes out
+			{ time = 1.9, kind = "Strain" },
+			{ time = 2.35, kind = "Tear" }, -- off (the kill)
+			{ time = 3.62, kind = "Throw" }, -- thrown down by the body
+		},
+		-- (the victim lies along X in front of him, its head to his left at
+		-- (-1.2, -2.5, -2.7), its right shoulder at about (-0.2, -2, -1.7))
+		shots = {
+			-- Wide and low, from beyond their feet: he bends down, takes the wrist.
+			{
+				time = 0,
+				from = Vector3.new(4.8, -0.6, -4.6),
+				to = Vector3.new(4.4, -0.8, -4.2),
+				look = Vector3.new(0, -1.2, -1.6),
+				fov = 60,
+			},
+			-- Close on their face, from the far side: they plead.
+			{
+				time = 0.55,
+				from = Vector3.new(-2.0, -1.3, -4.4),
+				to = Vector3.new(-1.8, -1.4, -4.1),
+				look = "victim",
+				fov = 48,
+			},
+			-- Low, from his left: the foot on the chest, the arm pulled tight.
+			{
+				time = 0.95,
+				from = Vector3.new(-3.4, -1.6, -0.4),
+				to = Vector3.new(-3.2, -1.5, -0.7),
+				look = Vector3.new(0, -1.4, -1.4),
+				fov = 55,
+			},
+			-- Across their shoulder, from the far side: it stretches, his face
+			-- beyond, straining.
+			{
+				time = 1.5,
+				from = Vector3.new(-1.8, -1.2, -3.6),
+				to = Vector3.new(-1.5, -1.3, -3.3),
+				look = Vector3.new(-0.2, -1.6, -1.5),
+				fov = 46,
+			},
+			-- Wider, low, from his left: it comes off, he staggers back.
+			{
+				time = 2.2,
+				from = Vector3.new(-3.8, -1.0, 0.8),
+				to = Vector3.new(-4.2, -0.8, 1.2),
+				look = Vector3.new(-0.2, -1.3, -1.2),
+				fov = 58,
+			},
+			-- From low in front of him: he holds it up and looks at it.
+			{
+				time = 2.75,
+				from = Vector3.new(2.2, -0.8, -3.4),
+				to = Vector3.new(2.0, -0.6, -3.1),
+				look = Vector3.new(0.9, 1.8, -0.5),
+				fov = 52,
+			},
+			-- Wide, from above: thrown down by the body.
+			{
+				time = 3.55,
+				from = Vector3.new(5.2, 1.6, -5.4),
+				to = Vector3.new(5.6, 2.0, -3.4),
+				look = Vector3.new(0.6, -2.2, -2.0),
 				fov = 60,
 			},
 		},

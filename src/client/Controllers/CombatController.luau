@@ -24,6 +24,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
@@ -165,6 +166,18 @@ local function tryAttack()
 		end
 		KnockoutController.onFinishStarted()
 		Remotes.Attack:FireServer(AimController.getAimDirection())
+		return
+	end
+
+	-- Holding something to throw (Shared/Weapons): the click throws it.
+	local weapon = Weapons.get(character:GetAttribute("Weapon"))
+	if weapon then
+		combo = 0
+		lastAttackAt = time
+		nextAttackAt = time + weapon.recovery
+		CharacterAnimationController.playAction(character, "Bone_Throw")
+		SoundController.play("HeavySwing", character)
+		Remotes.ThrowWeapon:FireServer(AimController.getAimDirection())
 		return
 	end
 

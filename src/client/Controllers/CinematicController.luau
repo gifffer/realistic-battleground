@@ -23,6 +23,8 @@ local TweenService = game:GetService("TweenService")
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
+local ArmRip = require(script.Parent.Parent.Combat.ArmRip)
+local BloodGush = require(script.Parent.Parent.Combat.BloodGush)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
@@ -48,26 +50,22 @@ local SHAKES: { [string]: Shake } = {
 	Gut = { at = 0, strength = 4, punch = 8 }, -- the hand into the side
 	Dig = { at = 0, strength = 1.2, punch = 1 },
 	Rip = { at = 0, strength = 2.5, punch = 4 },
-	Grab = { at = 0, strength = 1, punch = 1 },
+	-- (the Bouncer's arm)
+	Grab = { at = 0, strength = 0.8, punch = 1 },
+	Stomp = { at = 0, strength = 2, punch = 3 },
+	Strain = { at = 0, strength = 1.2, punch = 1.5 },
+	Pop = { at = 0, strength = 3, punch = 5 },
+	Tear = { at = 0, strength = 4.5, punch = 9 },
+	-- (the Sentinel's and the Bull's)
 	Beam = { at = 0, strength = 1.5, punch = 3 },
 	Burnt = { at = 0, strength = 3, punch = 6 },
 	Gore = { at = 0, strength = 4.5, punch = 9 }, -- the horns go in
 	Shake = { at = 0, strength = 2, punch = 2 },
 	Slam = { at = 0, strength = 5, punch = 10 },
-	Stomp = { at = 0, strength = 1.5, punch = 2 },
 }
--- The Sentinel's and the Bull's finishers: their effects are KitVFX's.
-local KIT_EVENTS = table.freeze({
-	Grab = true,
-	Charge = true,
-	Beam = true,
-	Burnt = true,
-	Snort = true,
-	Gore = true,
-	Shake = true,
-	Slam = true,
-	Stomp = true,
-})
+-- The Sentinel's and the Bull's finishers: all their effects are KitVFX's
+-- (by cinematic: other finishers have events with the same names).
+local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
 -- (and how much blood each of the Bull's blows draws)
 local GORE_BLOOD: { [string]: number } = { Gore = 3, Shake = 1, Slam = 2 }
 
@@ -242,10 +240,11 @@ local function playEvent(
 	cinematic: Finishers.Cinematic,
 	event: Finishers.Event,
 	attacker: Model,
-	victim: Model
+	victim: Model,
+	anchor: CFrame
 )
 	local kind = event.kind
-	if KIT_EVENTS[kind] then
+	if KIT_CINEMATICS[cinematic.id] then
 		KitVFX.finisherEvent(kind, attacker, victim)
 		for _ = 1, GORE_BLOOD[kind] or 0 do
 			KitEffects.bloodSpray(victim, attacker, "Torso")
@@ -265,14 +264,16 @@ local function playEvent(
 		SoundController.play("VictimPlea", victim)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
-	elseif kind == "Body" or kind == "Dig" then
+	elseif kind == "Body" or kind == "Dig" or kind == "Stomp" then
 		SoundController.play("BodyShot", victim)
 	elseif kind == "Face" then
 		SoundController.play("HeavyHit", victim)
-		KitEffects.bloodSpray(victim, attacker, "Head")
+		KitEffects.bloodSpray(victim, attacker, "Head", 3)
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)
+		-- it goes all over him (and his bat)
+		BloodGush.splatter(attacker, victim:GetPivot().Position, 14, math.floor(event.time * 1000))
 	elseif kind == "Gut" then
 		SoundController.play("KnockoutPunch", victim)
 		LiverRip.gut(victim, attacker)
@@ -280,6 +281,23 @@ local function playEvent(
 		LiverRip.rip(victim, attacker)
 	elseif kind == "Drop" then
 		LiverRip.drop(attacker)
+	elseif kind == "Grab" then
+		SoundController.play("Grab", victim)
+	elseif kind == "Strain" then
+		SoundController.play("Strain", attacker)
+	elseif kind == "Pop" then
+		ArmRip.pop(victim)
+	elseif kind == "Tear" then
+		-- (the arm off itself: ArmRip, from the server's "ArmTorn"): the first
+		-- jet hits him full on
+		local torso = victim:FindFirstChild("Torso")
+		local from = if torso and torso:IsA("BasePart")
+			then torso.Position
+			else victim:GetPivot().Position
+		BloodGush.splatter(attacker, from, 22, math.floor(event.time * 1000))
+	elseif kind == "Throw" then
+		-- (the arm off itself: ArmRip, from the server's "ArmTorn")
+		ArmRip.thrown(attacker, anchor)
 	end
 end
 
@@ -325,10 +343,12 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 
 	for _, event in cinematic.events do
 		task.delay(event.time, function()
-			-- (throwing the liver down needs only him there)
-			local victimThere = victim.Parent ~= nil or event.kind == "Drop"
+			-- (throwing the liver / the arm down needs only him there)
+			local victimThere = victim.Parent ~= nil
+				or event.kind == "Drop"
+				or event.kind == "Throw"
 			if not run.cancelled and attacker.Parent and victimThere then
-				playEvent(cinematic, event, attacker, victim)
+				playEvent(cinematic, event, attacker, victim, anchor)
 			end
 		end)
 	end
@@ -357,11 +377,24 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	LiverRip.cancel(attacker)
 	KitVFX.cancelFinisher(attacker)
 	for _, clip in
-		{ "Brawler_FinisherBat", "Boxer_FinisherCombo", "Sentinel_Finisher", "Bull_Finisher" }
+		{
+			"Brawler_FinisherBat",
+			"Boxer_FinisherCombo",
+			"Bouncer_FinisherArmRip",
+			"Sentinel_Finisher",
+			"Bull_Finisher",
+		}
 	do
 		CharacterAnimationController.stopAction(attacker, clip)
 	end
-	for _, clip in { "Boxer_FinisherVictim", "Sentinel_FinisherVictim", "Bull_FinisherVictim" } do
+	for _, clip in
+		{
+			"Boxer_FinisherVictim",
+			"Bouncer_FinisherArmRipVictim",
+			"Sentinel_FinisherVictim",
+			"Bull_FinisherVictim",
+		}
+	do
 		CharacterAnimationController.stopAction(run.victim, clip)
 	end
 	if run.stopCamera then

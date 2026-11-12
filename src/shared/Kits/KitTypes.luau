@@ -35,6 +35,31 @@ export type HitDef = {
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 }
 
+-- A grab (Bouncer): the hands close `at` seconds into the move on the first
+-- fighter in the box. It goes through a guard (and can't be parried: there
+-- is no blow to parry), but a hit that stuns the grabber first cancels it,
+-- and a dash dodges it. Caught: both fighters are held in place for
+-- `duration` seconds, the victim `distance` studs in front of him (facing him,
+-- or turned away: a choke from behind), each playing its clip, while
+-- `hits` land on the held fighter (their `at` counted from the catch).
+-- A hit with knockback / knockdown lets go of them first. An Awakened
+-- fighter can't be held (the catch only hurts).
+export type GrabDef = {
+	at: number,
+	hitbox: Vector3,
+	forward: number,
+	damage: number, -- of the catch itself
+	duration: number,
+	distance: number,
+	facing: "toward" | "away",
+	animation: string, -- his clip while holding (Client/Animation/CombatClips)
+	victimAnimation: string, -- theirs
+	hits: { HitDef },
+	-- A slam: released lying on their back, their root put here (relative
+	-- to his root): where their clip ends on the floor.
+	laidAt: CFrame?,
+}
+
 export type MoveDef = {
 	id: string,
 	name: string, -- shown in the move bar and the Kits menu (English)
@@ -78,6 +103,9 @@ export type MoveDef = {
 	-- studs/s) and forward (`forward` studs/s) at `at` seconds; the hits
 	-- come down where he lands (a hitbox around him, forward = 0).
 	leap: { at: number, up: number, forward: number, time: number }?,
+	-- A grab instead of strikes (see GrabDef). `duration` = a grab that
+	-- catches nobody; a catch keeps him busy until the hold ends.
+	grab: GrabDef?,
 }
 
 -- The kit's own way to finish a knocked-out opponent (M1 on them). Kits
@@ -106,7 +134,6 @@ export type KitDef = {
 	description: string,
 	order: number, -- position in the Kits menu
 	available: boolean, -- false = shown as "coming soon", can't be equipped
-	walkSpeed: number?, -- walking speed × this while equipped (default 1)
 	noSprint: boolean?, -- true = can't sprint with it
 	-- To unlock (step 7): reach this level, then buy it for this many coins.
 	-- nil = free, everyone has it (the two base kits).
@@ -115,6 +142,10 @@ export type KitDef = {
 	moves: { MoveDef },
 	awakening: AwakeningDef?,
 	finisher: FinisherDef?,
+	-- A heavy build (Bouncer): every hit taken deals this much of its
+	-- damage (0.85 = 15 % less), and he walks / runs this much slower.
+	damageTaken: number?,
+	speed: number?,
 }
 
 return nil

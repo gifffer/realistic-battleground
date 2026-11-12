@@ -1,5 +1,6 @@
 --!strict
--- GoreKit: the pieces of the burst head (bat finisher) in the imported
+-- GoreKit: the gore pieces of the finishers (the burst head of the bat, the
+-- Boxer's liver, the Bouncer's torn arm) in the imported
 -- WoundKit model: "Gore_<Piece>_<Layer>" meshes made from real anatomy
 -- (tools/wounds/gore.py, Shared/GoreShapes). HeadBlast puts copies of them
 -- where they were in the head, then lets them fly.
@@ -84,8 +85,14 @@ function GoreKit.get(): { [string]: Piece }?
 			table.insert(piece.layers, layer)
 		end
 	end
+	-- (the torn arm's pieces came later: a kit without them still has the
+	-- head's; ArmRip draws simpler ones itself then)
+	local optional: { [string]: boolean } = {}
+	for _, name in GoreShapes.limb do
+		optional[name] = true
+	end
 	for name in GoreShapes.slots do
-		if found[name] == nil then
+		if found[name] == nil and not optional[name] then
 			if not warned and next(found) == nil then
 				warned = true
 				warn(

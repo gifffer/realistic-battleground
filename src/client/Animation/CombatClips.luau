@@ -8954,4 +8954,9 @@ end
 -- Rib shot on the victim's RIGHT side = the left one, mirrored.
 clips.HitBodyRight = mirror(clips.HitBodyLeft)
 
+-- The Bouncer's clips are in their own file.
+for name, clip in require(script.Parent.BouncerClips) do
+	clips[name] = clip
+end
+
 return table.freeze(clips)

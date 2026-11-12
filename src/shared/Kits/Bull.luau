@@ -15,9 +15,9 @@ local kit: KitTypes.KitDef = {
 	id = "Bull",
 	name = "BULL",
 	description = "Horns, weight and rage. Charges, gores and tramples.",
-	order = 4,
+	order = 6,
 	available = true,
-	walkSpeed = 1.15, -- (a bull: walks faster than the others)
+	speed = 1.15, -- (a bull: walks faster than the others)
 
 	-- Cinematic kill (Shared/Finishers "Gore").
 	finisher = {
