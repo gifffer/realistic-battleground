@@ -77,6 +77,10 @@ local function findOrigin(): Vector3
 	local spawn = workspace:FindFirstChildWhichIsA("SpawnLocation", true)
 	local around = if spawn then spawn.Position else Vector3.zero
 	local start = around + Vector3.new(START_DISTANCE, 0, 0)
+	-- With the city built (Server/Systems/City), next to it, not inside.
+	if workspace:FindFirstChild("City") then
+		start = Vector3.new(-40, 0, 300)
+	end
 	-- Look for the ground under that point.
 	local hit = workspace:Raycast(start + Vector3.new(0, 200, 0), Vector3.new(0, -1000, 0))
 	return if hit then hit.Position else start

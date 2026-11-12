@@ -336,3 +336,16 @@ Comme le reste de la progression, ça compte **contre de vrais joueurs** (test �
 | B4 | EQUIP une tenue | Ton haut et ton pantalon prennent les couleurs (les vêtements de l'avatar sont retirés). Retirer une tenue s'applique à la prochaine vie. |
 | B5 | Effet de kill équipé, achever quelqu'un | Poussière / verre brisé / gros impact (écran qui tremble, couleurs qui pâlissent) au moment du coup. |
 | B6 | Touche **B** hors combat | Ton émote se joue (SHRUG gratuite au départ), les autres la voient. Juste après un coup : rien. |
+
+## Étape 11 — Map : le quartier (`feature/city-map`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| C1 | Lancer le jeu | Un quartier de 3 × 3 pâtés de maisons : rues en asphalte avec lignes, trottoirs, immeubles en brique / béton, ruelles, une petite place au centre. Tu apparais dans une rue (8 points d'apparition). |
+| C2 | Fin d'après-midi (au lancement) | Lumière chaude et rasante, ombres longues. |
+| C3 | Attendre ~6 min (ou changer `DAY_TIME` dans `Server/Systems/Ambience` pour tester) | Le soir tombe en 1 min 30 : lampadaires orangés allumés, néons colorés sur les façades, flaques qui brillent (rue mouillée), puis 6 min de nuit et retour à l'après-midi. |
+| C4 | Grimper sur un toit | Sur certains immeubles bas : benne (vault) → petite annexe (mantle) → toit (mantle). |
+| C5 | Bennes, caisses, barrières en béton | Se franchissent (vault) ou servent de couverture. |
+| C6 | Parcours de test (Studio) | Toujours là, à côté du quartier (au sud). |
+
+Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
