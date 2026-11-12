@@ -57,6 +57,7 @@ local kit: KitTypes.KitDef = {
 					blockCost = 3, -- (per tick: blocking the whole beam ≈ 18 stamina)
 					forward = 0,
 					bloodChance = {},
+					burns = true, -- (burnt through the skin, not bruised)
 				},
 			},
 		},

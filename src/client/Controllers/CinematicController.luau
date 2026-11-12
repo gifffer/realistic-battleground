@@ -68,6 +68,11 @@ local SHAKES: { [string]: Shake } = {
 local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
 -- (and how much blood each of the Bull's blows draws)
 local GORE_BLOOD: { [string]: number } = { Gore = 3, Shake = 1, Slam = 2 }
+-- (an event name both kits use, shaken differently in these finishers)
+local KIT_SHAKES: { [string]: { [string]: Shake } } = {
+	Incinerate = { Grab = { at = 0, strength = 1, punch = 1 } },
+	Gore = { Stomp = { at = 0, strength = 1.5, punch = 2 } },
+}
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
@@ -246,8 +251,9 @@ local function playEvent(
 	local kind = event.kind
 	if KIT_CINEMATICS[cinematic.id] then
 		KitVFX.finisherEvent(kind, attacker, victim)
-		for _ = 1, GORE_BLOOD[kind] or 0 do
-			KitEffects.bloodSpray(victim, attacker, "Torso")
+		local amount = GORE_BLOOD[kind]
+		if amount then
+			KitEffects.bloodSpray(victim, attacker, "Torso", amount)
 		end
 		return
 	end
@@ -319,7 +325,8 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 	-- The camera's shakes, at the blows' times.
 	local shakes: { Shake } = {}
 	for _, event in cinematic.events do
-		local shake = SHAKES[event.kind]
+		local overrides = KIT_SHAKES[cinematic.id]
+		local shake = (overrides and overrides[event.kind]) or SHAKES[event.kind]
 		if shake then
 			table.insert(
 				shakes,

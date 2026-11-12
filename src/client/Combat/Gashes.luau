@@ -76,6 +76,14 @@ local LOOKS: { [string]: Look } = {
 -- the skull on the head, cooked muscle on the body. No blood (cauterized).
 local CHARRED = Color3.fromRGB(26, 19, 16)
 local BURN_LOOKS: { [string]: Look } = {
+	-- (the burn inserts: BurnS / M / L, made for it)
+	Char = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
+	Eschar = {
+		color = Color3.fromRGB(176, 140, 104),
+		reflectance = 0.03,
+		material = Enum.Material.SmoothPlastic,
+	},
+	-- (an older kit without them: the laceration's insert, burnt)
 	Lip = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
 	Dermis = {
 		color = Color3.fromRGB(176, 140, 104),
@@ -203,6 +211,9 @@ local warnedOldKit = false
 
 -- The kit, once it is there and complete (nil until then: it is looked for
 -- again on the next call, so a kit that replicates late still works).
+-- Does the kit have the burn inserts (made after the first kits)?
+local burnInKit = false
+
 local function findKit(): Kit?
 	if kit then
 		return kit
@@ -260,12 +271,16 @@ local function findKit(): Kit?
 	local tearMissing = false
 	for name, shape in WoundShapes.shapes do
 		if found.pieces[name] == nil then
+			if shape.kind == "Burn" then
+				continue -- (an older kit: burns use the laceration's insert)
+			end
 			if shape.kind ~= "Tear" then
 				return nil
 			end
 			tearMissing = true
 		end
 	end
+	burnInKit = found.pieces.BurnS ~= nil and found.pieces.BurnL_Head ~= nil
 	if tearMissing and not warnedOldKit then
 		warnedOldKit = true
 		warn(
@@ -332,8 +347,8 @@ type Placed = {
 }
 
 local function shapeFor(data: Gash.Data, head: boolean): (string, WoundShapes.Shape?)
-	-- (a burn uses the laceration's hole: ragged and round-ish)
-	local kind = if data.kind == "Burn" then "Lac" else data.kind
+	-- (a burn: its own insert; an older kit without it: the laceration's)
+	local kind = if data.kind == "Burn" and not burnInKit then "Lac" else data.kind
 	local name = kind .. data.size .. (if head then "_Head" else "")
 	return name, WoundShapes.shapes[name]
 end
@@ -1051,6 +1066,7 @@ type Opened = {
 	face: Decal?, -- the face picture we hid, and its own transparency
 	faceTransparency: number,
 	connection: RBXScriptConnection?,
+	tint: { RBXScriptConnection }, -- the skin follows the part's colour
 }
 local opened: { [BasePart]: Opened } = {}
 
@@ -1088,6 +1104,9 @@ local function close(part: BasePart)
 		return
 	end
 	opened[part] = nil
+	for _, link in state.tint do
+		link:Disconnect()
+	end
 	if state.connection then
 		state.connection:Disconnect()
 	end
@@ -1163,7 +1182,21 @@ local function refresh(model: Model, partName: string)
 		face = face,
 		faceTransparency = faceTransparency,
 		connection = nil,
+		tint = {},
 	}
+	-- The skin repainted with the part (the Incinerate chars the head black)
+	local function retint()
+		for _, item in folder:GetDescendants() do
+			if item:IsA("BasePart") and item.Name == "Skin" then
+				item.Color = part.Color
+				item.Material = skinMaterial(part)
+				item.Reflectance = part.Reflectance
+			end
+		end
+	end
+	for _, property in { "Color", "Material", "Reflectance" } do
+		table.insert(state.tint, part:GetPropertyChangedSignal(property):Connect(retint))
+	end
 	part.Transparency = 1
 	if face then
 		face.Transparency = 1 -- (a decal still shows on an invisible part)

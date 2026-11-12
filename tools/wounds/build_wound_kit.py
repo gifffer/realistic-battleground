@@ -78,6 +78,17 @@ VARIANTS = {
     # torn out through it. Body only. Broken real ribs in it (gore.py's anatomy).
     ("Tear", "L"): dict(length=0.8, width=0.6, depth=0.44, lip=0.075, rag=1.7),
 }
+# The Sentinel's heat vision ("Burn"): the skin burnt through and gone - a
+# wide, round-ish hole with a black charred crust around it, the burnt skin
+# of its walls leathery and tan, and at the bottom what was under the skin:
+# cooked muscle (body) or the skull (head, where the skin is thin). No
+# blood: a burn this hot cauterizes. Last in the kit (added after the
+# others: their numbers don't move).
+BURN_VARIANTS = {
+    ("Burn", "S"): dict(length=0.3, width=0.26, depth=0.06, lip=0.06, rag=0.55),
+    ("Burn", "M"): dict(length=0.46, width=0.4, depth=0.075, lip=0.07, rag=0.55),
+    ("Burn", "L"): dict(length=0.64, width=0.54, depth=0.09, lip=0.08, rag=0.55),
+}
 # Where a "Tear" sits on the torso (torso space, the front face): the ribs
 # inside it are taken from there.
 TEAR_AT = (0.5, -0.3)
@@ -90,6 +101,8 @@ COLORS = {  # preview only: the game sets the real colours
     "Muscle": (0.40, 0.03, 0.04),
     "Bone": (0.90, 0.86, 0.76),
     "Blood": (0.25, 0.0, 0.0),
+    "Char": (0.10, 0.07, 0.06),
+    "Eschar": (0.69, 0.55, 0.41),
     "Marker": (1, 1, 1),
     "Skin": (0.80, 0.62, 0.50),
     **{k: v for k, v in gore.COLORS.items()},
@@ -114,6 +127,14 @@ def outline(kind, v, rng, with_tears=True):
     torn skin edge only)."""
     a, b = v["length"] / 2, v["width"] / 2
     pts = []
+    if kind == "Burn":
+        # round-ish, wavy (the burn spreads unevenly), no splits
+        noise = smooth_noise(rng, 2.5)
+        for i in range(N):
+            t = 2 * math.pi * i / N
+            r = 1 + 0.16 * v["rag"] * noise(t) + 0.03 * rng.uniform(-1, 1)
+            pts.append(Vector((a * r * math.cos(t), b * r * math.sin(t), 0)))
+        return pts
     if kind in ("Lac", "Tear"):
         noise = smooth_noise(rng, 2.2)
         # star-shaped splits: a few sharp tears going out of the ellipse
@@ -255,6 +276,85 @@ def tear_ribs(pts, v):
             else:
                 bm.free()
     return pieces
+
+
+def bend_and_measure(b, head):
+    """How far the insert reaches (before bending), then the head version
+    bent around the head's vertical axis."""
+    reach_x = max(abs(vert.co.x) for bm in b.parts.values() for vert in bm.verts)
+    reach_low = -min(vert.co.y for bm in b.parts.values() for vert in bm.verts)
+    reach_high = max(vert.co.y for bm in b.parts.values() for vert in bm.verts)
+    meshes = {}
+    for layer, bm in b.parts.items():
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+        if head:
+            for vert in bm.verts:
+                x, y, z = vert.co
+                th = x / HEAD_RADIUS
+                r = HEAD_RADIUS + z
+                vert.co = Vector((r * math.sin(th), y, r * math.cos(th) - HEAD_RADIUS))
+        meshes[layer] = bm
+    return meshes, (reach_x, reach_low, reach_high)
+
+
+def build_burn(size, v, head, seed):
+    """A burn: the skin burnt through (see BURN_VARIANTS)."""
+    rng = random.Random(seed)
+    pts = outline("Burn", v, rng)
+    nrm = normals2d(pts)
+    c = centroid(pts)
+    b = Builder(c)
+    depth = v["depth"] * (0.7 if head else 1.0)  # (the skull is right under the skin)
+    lip = v["lip"]
+    wobble = [rng.uniform(-1, 1) for _ in range(N + 16)]
+
+    def jit(scale):
+        return lambda i: wobble[i % len(wobble)] * scale
+
+    # Char: the black crust - from the skin, a little raised and crinkled,
+    # then curling down over the edge.
+    # (its width wanders: the burn ate further into the skin here and there)
+    reach_noise = smooth_noise(rng, 3.0)
+    widths = [lip * max(0.35, 1 + 0.75 * reach_noise(2 * math.pi * i / N)) for i in range(N)]
+    outer = [pts[i] + nrm[i] * widths[i] + Vector((0, 0, 0.0015)) for i in range(N)]
+    crest = [pts[i] + nrm[i] * widths[i] * 0.45 + Vector((0, 0, 0.0028 * (1 + 0.5 * wobble[i]))) for i in range(N)]
+    edge = ring(pts, nrm, 0.0, 0.0022, jitter=jit(0.004))
+    curl = ring(pts, nrm, -0.012, -0.014)
+    b.strip("Char", outer, crest)
+    b.strip("Char", crest, edge)
+    b.strip("Char", edge, curl)
+    # a few flat flakes of crust lifting off the rim
+    for _ in range({"S": 3, "M": 5, "L": 7}[size]):
+        i = rng.randrange(N)
+        p = outer[i].lerp(crest[i], rng.uniform(0.2, 0.9))
+        r = rng.uniform(0.007, 0.013)
+        b.blob("Char", Vector((p.x, p.y, 0.0025)), (r * 1.6, r, r * 0.22), rot=rng.uniform(0, 3.14))
+    # Eschar: the burnt skin of the walls, leathery, down into the hole.
+    wall = ring(pts, nrm, -0.02, -depth * 0.45, center=c, shrink=0.88, jitter=jit(0.004))
+    b.strip("Eschar", curl, wall)
+    low = ring(pts, nrm, 0, lambda i: -depth * (0.85 + 0.06 * wobble[i]), center=c, shrink=0.72, jitter=jit(0.003))
+    if head:
+        # the skull: a dome of bone filling the bottom
+        b.strip("Eschar", wall, low)
+        b.fan("Bone", low, Vector((c.x, c.y, -depth * 0.95)))
+        b.blob("Bone", Vector((c.x, c.y, -depth * 0.9)), (v["length"] * 0.3, v["width"] * 0.3, 0.012), subdiv=2)
+    else:
+        # cooked flesh, a few lobules of fat cooked yellow-brown, and the
+        # muscle at the bottom with its fibres
+        b.strip("Flesh", wall, low)
+        b.fan("Muscle", low, Vector((c.x, c.y, -depth)))
+        for _ in range({"S": 4, "M": 7, "L": 10}[size]):
+            i = rng.randrange(N)
+            p = wall[i].lerp(low[i], rng.uniform(0.2, 0.7))
+            r = rng.uniform(0.006, 0.011)
+            b.blob("Fat", p, (r, r * 0.8, r * 0.7))
+        turn = rng.uniform(-0.5, 0.5)
+        for k in range(6):
+            off = (k - 2.5) * v["width"] * 0.11
+            at = Vector((c.x - math.sin(turn) * off, c.y + math.cos(turn) * off, -depth * 0.96))
+            b.blob("Muscle", at, (v["length"] * 0.3, 0.008, 0.006), rot=turn, subdiv=2)
+    meshes, reach = bend_and_measure(b, head)
+    return pts, meshes, reach
 
 
 def build_insert(kind, size, v, head, seed):
@@ -708,6 +808,17 @@ def main():
             name = f"{kind}{size}" + ("_Head" if head else "")
             seed = sum(map(ord, name)) * 7919  # same shapes on every run
             pts, meshes, reach = build_insert(kind, size, v, head, seed)
+            offset = Vector((index * SPACING, 0, 0))
+            for layer, bm in meshes.items():
+                objects.append(add_object(f"{name}_{layer}", bm, offset, layer))
+            shapes.append((name, index, kind, size, head, v, pts, reach))
+            index += 1
+    # The burns, last (the numbers of the others don't move).
+    for head in (False, True):
+        for (kind, size), v in BURN_VARIANTS.items():
+            name = f"{kind}{size}" + ("_Head" if head else "")
+            seed = sum(map(ord, name)) * 7919
+            pts, meshes, reach = build_burn(size, v, head, seed)
             offset = Vector((index * SPACING, 0, 0))
             for layer, bm in meshes.items():
                 objects.append(add_object(f"{name}_{layer}", bm, offset, layer))

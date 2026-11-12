@@ -67,7 +67,7 @@ export type Context = {
 	) -> Types.HitZone,
 	addFury: (state: CombatState, amount: number) -> (),
 	-- heat vision burning through the skin there (a "Burn" wound)
-	addBurn: (victim: Model, partName: string, world: Vector3) -> (),
+	addBurn: (victim: Model, partName: string, world: Vector3) -> (string?, any),
 }
 
 local Moves = {}
@@ -107,6 +107,7 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		unblockable = hit.unblockable,
 		bloodChance = hit.bloodChance or {}, -- a move without it never bleeds visibly
 		cuts = hit.cuts,
+		burns = hit.burns,
 		launch = hit.launch,
 		staminaDrain = hit.staminaDrain,
 		attackId = nil,
@@ -341,17 +342,52 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 						zoneFor(state, beam.hit, victimModel, partsByModel[victimModel], direction)
 					if c.resolveHit(state, victim, specFor(beam.hit, zone, move.id)) then
 						-- where it touches them, it burns through the skin
+						-- (its centre line first; past it - the beam is thick -
+						-- the body part in it closest to its axis)
 						burnParams.FilterDescendantsInstances = { victimModel }
 						local spot = workspace:Raycast(origin, direction * length, burnParams)
+						local name: string? = nil
+						local at: Vector3? = nil
 						if spot then
-							local hit = spot.Instance
-							local name = hit.Name
-							if hit.Parent and hit.Parent:IsA("Accessory") then
+							name, at = spot.Instance.Name, spot.Position
+							if spot.Instance.Parent and spot.Instance.Parent:IsA("Accessory") then
 								name = "Head" -- (a hat, hair: the head under it)
-							elseif name == "HumanoidRootPart" then
-								name = "Torso"
 							end
-							c.addBurn(victimModel, name, spot.Position)
+						else
+							local best = math.huge
+							for partName in partsByModel[victimModel] or {} do
+								local limb = victimModel:FindFirstChild(partName)
+								if
+									limb
+									and limb:IsA("BasePart")
+									and partName ~= "HumanoidRootPart"
+								then
+									local along = math.clamp(
+										(limb.Position - origin):Dot(direction),
+										0,
+										length
+									)
+									local axisPoint = origin + direction * along
+									local l = limb.CFrame:PointToObjectSpace(axisPoint)
+									local half = limb.Size / 2
+									local nearest = limb.CFrame
+										* Vector3.new(
+											math.clamp(l.X, -half.X, half.X),
+											math.clamp(l.Y, -half.Y, half.Y),
+											math.clamp(l.Z, -half.Z, half.Z)
+										)
+									local distance = (nearest - axisPoint).Magnitude
+									if distance < best then
+										best, name, at = distance, partName, nearest
+									end
+								end
+							end
+						end
+						if name == "HumanoidRootPart" then
+							name = "Torso"
+						end
+						if name and at then
+							c.addBurn(victimModel, name, at)
 						end
 					end
 				end

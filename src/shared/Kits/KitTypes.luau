@@ -30,6 +30,7 @@ export type HitDef = {
 	-- Config.Injuries.SKIN_TEAR. "Lac" = a bottle smashed on them (ragged
 	-- laceration), "Slash" = a broken bottle (clean, longer cut).
 	cuts: ("Lac" | "Slash")?,
+	burns: boolean?, -- heat vision: burns through the skin (a "Burn" wound), no bruise
 	launch: number?, -- with knockdown: thrown UP at this speed (studs/s): uppercuts
 	breaks: number?, -- smashes the map (walls...) within this radius of the hitbox centre (Server Destruction)
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
@@ -143,8 +144,9 @@ export type KitDef = {
 	awakening: AwakeningDef?,
 	finisher: FinisherDef?,
 	-- A heavy build (Bouncer): every hit taken deals this much of its
-	-- damage (0.85 = 15 % less), and he walks / runs this much slower.
+	-- damage (0.85 = 15 % less).
 	damageTaken: number?,
+	-- Walk / run speed times this (0.9 = 10 % slower, 1.15 = 15 % faster).
 	speed: number?,
 }
 

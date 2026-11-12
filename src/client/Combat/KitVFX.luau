@@ -1148,7 +1148,8 @@ end
 ------------------------------------------------------------------------------
 -- Burns (heat vision): the skin chars where the beam touches a body
 ------------------------------------------------------------------------------
--- (see `burn` below: a laser cuts a groove, it doesn't leave a round scorch)
+-- (see `burn` below: a brief glow and smoke where the beam touches; the
+-- burn wound itself comes from the server)
 
 -- (only the body parts: a hit on a hat / hair burns the head under it)
 local BURNABLE = table.freeze({
@@ -1256,9 +1257,9 @@ end
 -- cooked muscle showing - is a "Burn" wound from the server, drawn by
 -- Gashes: the same for everyone, and it stays.)
 local lastGlow: { [Model]: number } = {}
-local function burn(body: Model, limb: BasePart, position: Vector3, _force: boolean?)
+local function burn(body: Model, limb: BasePart, position: Vector3, force: boolean?)
 	local now = os.clock()
-	if now - (lastGlow[body] or 0) < 0.1 then
+	if not force and now - (lastGlow[body] or 0) < 0.1 then
 		return
 	end
 	if lastGlow[body] == nil then
@@ -1268,16 +1269,9 @@ local function burn(body: Model, limb: BasePart, position: Vector3, _force: bool
 	end
 	lastGlow[body] = now
 	local p, o = onSkin(limb, limb.CFrame:PointToObjectSpace(position), 0.06)
-	local folder: Instance? = limb:FindFirstChild("Burns")
-	if folder == nil then
-		local made = Instance.new("Folder")
-		made.Name = "Burns"
-		made.Parent = limb
-		folder = made
-	end
 	local glow = skinOval(
 		limb,
-		folder :: Instance,
+		limb,
 		p + o * 0.01,
 		o,
 		Vector3.yAxis,

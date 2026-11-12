@@ -482,19 +482,24 @@ end
 -- cooked muscle under it). The beam staying on the same spot makes that
 -- burn grow (S, M, L); a part full of wounds: the nearest burn grows.
 local BURN_MERGE = 0.35 -- studs
-local function addBurn(victim: Model, partName: string, world: Vector3)
+local function addBurn(victim: Model, partName: string, world: Vector3): (string?, any)
 	if not INJ.SKIN_TEAR then
-		return
+		return nil, nil
 	end
 	local part = victim:FindFirstChild(partName)
 	local key = Gash.KEY_OF[partName]
 	if part == nil or not part:IsA("BasePart") or key == nil then
-		return
+		return nil, nil
 	end
 	-- On the skin: the round head's surface, or the side face it's on.
 	local p = part.CFrame:PointToObjectSpace(world)
 	local point: Vector3
 	if partName == "Head" then
+		-- (the head part is a 2-wide box, the head you see 1.2 across: a
+		-- point beside it never touched the skin)
+		if math.abs(p.X) > 0.62 then
+			return nil, nil
+		end
 		local flat = Vector3.new(p.X, 0, p.Z)
 		flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
 		point = flat * 0.6 + Vector3.new(0, math.clamp(p.Y, -0.25, 0.25), 0)
@@ -506,32 +511,42 @@ local function addBurn(victim: Model, partName: string, world: Vector3)
 			point = Vector3.new(p.X, math.clamp(p.Y, -half.Y, half.Y), math.sign(p.Z) * half.Z)
 		end
 	end
+	-- the nearest burn there grows; else a free slot; else (full) the
+	-- nearest wound of any kind turns into a burn
 	local free: number? = nil
-	local closest: number? = nil
-	local closestDistance = math.huge
+	local burnAt: number? = nil
+	local burnDistance = math.huge
+	local anyAt: number? = nil
+	local anyDistance = math.huge
 	for index = 1, Gash.MAX_PER_PART do
 		local old = Gash.decode(victim:GetAttribute(Gash.attribute(key, index)))
 		if old == nil then
 			free = free or index
 		else
 			local distance = (old.point - point).Magnitude
-			local near = old.kind == "Burn" and distance < BURN_MERGE
-			if (near or free == nil) and distance < closestDistance then
-				closest, closestDistance = index, distance
+			if old.kind == "Burn" and distance < burnDistance then
+				burnAt, burnDistance = index, distance
+			end
+			if distance < anyDistance then
+				anyAt, anyDistance = index, distance
 			end
 		end
 	end
 	local attribute: string
 	local data: Gash.Data
-	if closest and (closestDistance < BURN_MERGE or free == nil) then
-		attribute = Gash.attribute(key, closest)
+	local target = if burnAt and burnDistance < BURN_MERGE
+		then burnAt
+		elseif free then nil
+		else anyAt
+	if target then
+		attribute = Gash.attribute(key, target)
 		local old = Gash.decode(victim:GetAttribute(attribute))
 		if old == nil or (old.kind == "Burn" and old.size == "L") then
-			return -- (as deep as it gets)
+			return nil, nil -- (as deep as it gets)
 		end
 		data = old
-		data.kind = "Burn"
 		data.size = if old.kind == "Burn" then Gash.bigger(old.size) else old.size
+		data.kind = "Burn"
 	elseif free then
 		attribute = Gash.attribute(key, free)
 		data = {
@@ -542,9 +557,11 @@ local function addBurn(victim: Model, partName: string, world: Vector3)
 			seed = random:NextInteger(1, 2 ^ 30),
 		}
 	else
-		return
+		return nil, nil
 	end
+	local previous = victim:GetAttribute(attribute)
 	setAttribute(victim, attribute, Gash.encode(data))
+	return attribute, previous
 end
 
 -- Bits of glass stuck in the skin ("Shard_<Part>_<n>", Shared/Util/Gash):
@@ -891,7 +908,14 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
-	injure(victim, attacker, zone :: Types.HitZone, damage, side, spec.cuts == nil)
+	injure(
+		victim,
+		attacker,
+		zone :: Types.HitZone,
+		damage,
+		side,
+		spec.cuts == nil and not spec.burns
+	)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -1455,6 +1479,7 @@ local function startCinematic(
 	local over = false
 	local killed = false
 	local goreWound: string? = nil -- (the Bull's horns: taken back if cut short)
+	local burnsBefore: { [string]: any } = {} -- (and the Sentinel's burns)
 	-- Everything this cinematic holds, let go (once). Before the killing
 	-- blow, the victim drops back down, still KO'd (someone can finish them).
 	local function finish()
@@ -1468,6 +1493,11 @@ local function startCinematic(
 		if not killed then
 			if goreWound and target.Parent then
 				setAttribute(target, goreWound, nil)
+			end
+			if target.Parent then
+				for attribute, previous in burnsBefore do
+					setAttribute(target, attribute, if previous == false then nil else previous)
+				end
 			end
 			if victimPlace and victimRoot.Parent then
 				victimRoot.Anchored = false
@@ -1518,7 +1548,11 @@ local function startCinematic(
 			task.delay(1.65 + step * 0.28, function()
 				local head = target:FindFirstChild("Head")
 				if not over and head and head:IsA("BasePart") and state.attackToken == token then
-					addBurn(target, "Head", (head.CFrame * CFrame.new(offset)).Position)
+					local attribute, previous =
+						addBurn(target, "Head", (head.CFrame * CFrame.new(offset)).Position)
+					if attribute and burnsBefore[attribute] == nil then
+						burnsBefore[attribute] = if previous == nil then false else previous
+					end
 				end
 			end)
 		end
