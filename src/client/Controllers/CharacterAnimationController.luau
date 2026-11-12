@@ -392,7 +392,16 @@ local function blendChannel(
 	for _, layer in channel do
 		local localPose = layer.pose[joint]
 		if localPose and layer.weight > 0 then
-			result = result:Lerp(R6Pose.toTransform(motor, localPose), layer.weight)
+			local target = R6Pose.toTransform(motor, localPose)
+			-- An upper-body clip (guard, block, hit reaction: a Root but no
+			-- legs) keeps the height below it: crouched, the pelvis stays down
+			-- (the legs under it stay bent to match). Otherwise the pelvis
+			-- went back up while the legs stayed folded: feet in the air.
+			local legs = layer.pose :: { [string]: CFrame? }
+			if joint == "Root" and legs.RightHip == nil and legs.LeftHip == nil then
+				target += result.Position
+			end
+			result = result:Lerp(target, layer.weight)
 			touched = true
 		end
 	end
