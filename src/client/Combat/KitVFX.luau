@@ -180,6 +180,7 @@ type Floor = { position: Vector3, normal: Vector3, color: Color3, material: Enum
 local floorParams = RaycastParams.new()
 floorParams.FilterType = Enum.RaycastFilterType.Exclude
 floorParams.RespectCanCollide = true
+floorParams.IgnoreWater = true
 local function floorAt(position: Vector3): Floor?
 	local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
 	table.insert(ignore, fx)
@@ -191,12 +192,14 @@ local function floorAt(position: Vector3): Floor?
 	end
 	local instance = hit.Instance
 	local color = if instance:IsA("BasePart") then instance.Color else DUST
+	local material = hit.Material
 	if instance:IsA("Terrain") then
-		color = workspace.Terrain:GetMaterialColor(
-			if hit.Material == Enum.Material.Air then Enum.Material.Grass else hit.Material
-		)
+		if material == Enum.Material.Air or material == Enum.Material.Water then
+			material = Enum.Material.Grass
+		end
+		color = workspace.Terrain:GetMaterialColor(material)
 	end
-	return { position = hit.Position, normal = hit.Normal, color = color, material = hit.Material }
+	return { position = hit.Position, normal = hit.Normal, color = color, material = material }
 end
 
 -- Dust tinted like the floor it comes from.
@@ -547,9 +550,13 @@ local function cracks(position: Vector3, count: number, length: number, life: nu
 	local up = floor.normal
 	local pieces: { BasePart } = {}
 	local glows: { BasePart } = {}
-	local function segment(a: Vector3, b: Vector3, width: number)
+	-- (each point put back on the floor: cracks follow bumps and dips)
+	local function snap(point: Vector3): RaycastResult?
+		return workspace:Raycast(point + up * 2, -up * 4, floorParams)
+	end
+	local function segment(a: Vector3, b: Vector3, width: number, normal: Vector3)
 		local crack = newPart(Vector3.new(width, 0.03, (b - a).Magnitude + width * 0.5), CRACK)
-		crack.CFrame = CFrame.lookAt((a + b) / 2, b, up)
+		crack.CFrame = CFrame.lookAt((a + b) / 2, b, normal)
 		crack.Parent = fx
 		table.insert(pieces, crack)
 		if glow then
@@ -558,7 +565,7 @@ local function cracks(position: Vector3, count: number, length: number, life: nu
 				glow,
 				Enum.Material.Neon
 			)
-			core.CFrame = crack.CFrame + up * 0.004
+			core.CFrame = crack.CFrame + normal * 0.004
 			core.Parent = fx
 			table.insert(glows, core)
 		end
@@ -576,9 +583,13 @@ local function cracks(position: Vector3, count: number, length: number, life: nu
 		for step = 1, steps do
 			local side = dir:Cross(up).Unit
 			dir = (dir + side * random:NextNumber(-0.45, 0.45)).Unit
-			local nextPoint = point + dir * reach / steps
+			local landed = snap(point + dir * reach / steps)
+			if landed == nil then
+				return -- (off an edge)
+			end
+			local nextPoint = landed.Position + landed.Normal * 0.03
 			local w = width * (1 - (step - 1) / steps * 0.7)
-			segment(point, nextPoint, w)
+			segment(point, nextPoint, w, landed.Normal)
 			-- a branch now and then
 			if depth == 0 and step == 2 and random:NextNumber() < 0.7 then
 				local branch = (dir + side * (if random:NextNumber() < 0.5 then 1 else -1) * 0.9).Unit
@@ -793,7 +804,8 @@ local function gather(
 	radius: number,
 	time: number,
 	color: Color3,
-	rate: number
+	rate: number,
+	cut: (() -> boolean)? -- (true once the move is cut short: it stops)
 )
 	local shell = newPart(Vector3.one * radius * 2, color, nil, Enum.PartType.Ball)
 	shell.Transparency = 1
@@ -824,7 +836,11 @@ local function gather(
 	emitter.LockedToPart = true
 	emitter.Rate = rate
 	emitter.Parent = shell
-	task.delay(time, function()
+	animate(time, function()
+		if cut and cut() then
+			emitter.Rate = 0
+		end
+	end, function()
 		emitter.Rate = 0
 	end)
 	Debris:AddItem(shell, time + 0.5)
@@ -1161,7 +1177,9 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	glow.Parent = head
 
 	local charge = SoundController.play("LaserCharge", model)
-	gather(head, Vector3.new(0, 0.1, -0.5), 2.6, beam.from, LASER, 70)
+	gather(head, Vector3.new(0, 0.1, -0.5), 2.6, beam.from, LASER, 70, function()
+		return not alive(model, token)
+	end)
 	-- heat haze around the head while charging
 	local haze = Instance.new("Attachment")
 	haze.Position = Vector3.new(0, 0.1, -0.6)
@@ -1563,7 +1581,9 @@ local function skyfall(model: Model, move: Kits.MoveDef, token: number)
 		local arm = part(model, "Right Arm")
 		local root = part(model, "HumanoidRootPart")
 		if arm then
-			gather(arm, Vector3.new(0, -1, 0), 1.6, 0.22, ENERGY, 60)
+			gather(arm, Vector3.new(0, -1, 0), 1.6, 0.22, ENERGY, 60, function()
+				return not alive(model, token)
+			end)
 			trail(arm, ENERGY, 0.25, 0.8, 0.2, Vector3.new(0, -1, 0))
 		end
 		if root then
@@ -1612,7 +1632,9 @@ local function haymaker(model: Model, token: number)
 		charge.Parent = fx
 		tween(charge, impactAt, { Size = Vector3.one * 1.2, Transparency = 0.1 })
 		tween(glow, impactAt, { Brightness = 6 })
-		gather(arm, Vector3.new(0, -1, 0), 2.4, impactAt, ENERGY, 80)
+		gather(arm, Vector3.new(0, -1, 0), 2.4, impactAt, ENERGY, 80, function()
+			return not alive(model, token)
+		end)
 		for step = 1, 5 do
 			later(model, token, step * 0.09, function()
 				local hand = fist(model, "Right Arm")
@@ -1754,7 +1776,7 @@ local function goreCharge(model: Model, move: Kits.MoveDef, token: number)
 		local floor = floorAt(root.Position - Vector3.new(0, 3, 0))
 		-- a cloud of dust kicked up behind, debris from the hooves
 		local kick = Instance.new("Attachment")
-		kick.CFrame = CFrame.new(0, -2.7, 0.8) * CFrame.Angles(math.rad(25), 0, 0)
+		kick.CFrame = CFrame.new(0, -2.7, 0.8) * CFrame.Angles(math.rad(150), 0, 0)
 		kick.Parent = root
 		local back = Instance.new("Attachment")
 		back.CFrame = CFrame.new(0, -2.7, 0.8) * CFrame.Angles(math.rad(160), 0, 0)

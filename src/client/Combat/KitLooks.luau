@@ -273,13 +273,13 @@ local function buildTrimmings(torso: BasePart, folder: Instance)
 	-- gold clasps at the collarbones, a chain between them
 	local left, right = Vector3.new(-0.74, 0.86, -0.5), Vector3.new(0.74, 0.86, -0.5)
 	for _, at in { left, right } do
-		local clasp = newPart("Clasp", Vector3.new(0.22, 0.22, 0.08), GOLD, Enum.PartType.Cylinder)
+		local clasp = newPart("Clasp", Vector3.new(0.08, 0.22, 0.22), GOLD, Enum.PartType.Cylinder)
 		clasp.Material = Enum.Material.Metal
 		clasp.Reflectance = 0.3
 		weld(clasp, torso, CFrame.new(at) * CFrame.Angles(0, math.rad(90), 0), folder)
 		local gem = newPart("ClaspGem", Vector3.one * 0.1, EYE, Enum.PartType.Ball)
 		gem.Material = Enum.Material.Neon
-		weld(gem, torso, CFrame.new(at + Vector3.new(0, 0, -0.05)), folder)
+		weld(gem, torso, CFrame.new(at + Vector3.new(0, 0, -0.06)), folder)
 	end
 	local sag = Vector3.new(0, 0.82, -0.52)
 	for _, segment in { { left, sag }, { sag, right } } do
@@ -315,14 +315,19 @@ local LENGTH = 3.3 -- studs, shoulders to hem
 local HEM_WIDTH = 2.6 -- the cape flares out toward the hem
 local THICKNESS = 0.045
 local STEP = 1 / 60 -- the simulation's fixed time step
-local ITERATIONS = 6 -- constraint passes per step
-local GRAVITY_SCALE = 0.55 -- (cloth falls slower than a brick: air)
-local AERO = 1.8 -- push of the air on the cloth's faces
-local DRAG = 0.18 -- air dragging along the cloth
+local ITERATIONS = 6 -- constraint passes per step (more on a sudden jerk)
+-- Full gravity: the cloth falls with the body it hangs from (less would
+-- make it float up over his head on every jump). The "floaty" look comes
+-- from the air: pushing on its faces, dragging along it, and the form drag
+-- of a curved cape (horizontal: wind meeting it edge-on still moves it).
+local AERO = 6
+local DRAG = 0.4
+local SIDE_DRAG = 2
 local DAMPING = 0.992
 local MARGIN = 0.09 -- distance kept from the body
-local SIMULATE_DISTANCE = 220 -- studs from the camera
+local SIMULATE_DISTANCE = 220 -- studs from the camera (beyond: hidden)
 local SLOW_DISTANCE = 90 -- beyond: simulated every few frames
+local BACK_Z = 0.5 + MARGIN -- the back plane of the torso, cape side
 
 -- The top row, pinned (torso space): over the shoulders, across the back.
 local PINS: { Vector3 } = {}
@@ -333,7 +338,26 @@ for column = 1, COLS do
 	table.insert(PINS, Vector3.new(x, if edge then 1.0 else 1.02, if edge then 0.3 else 0.54))
 end
 
+-- Where each point hangs at rest (torso space): row 1 = the pins.
+local function restPoint(row: number, column: number): Vector3
+	local pin = PINS[column]
+	if row == 1 then
+		return pin
+	end
+	local t = (row - 1) / (ROWS - 1)
+	local spread = 1 + (HEM_WIDTH / 1.88 - 1) * t
+	return Vector3.new(
+		pin.X * spread,
+		pin.Y - LENGTH / (ROWS - 1) * (row - 1),
+		math.max(pin.Z, BACK_Z) + 0.05 * t
+	)
+end
+
 type Constraint = { a: number, b: number, rest: number, stiffness: number }
+-- A body part the cloth stays out of. mode "torso": pushed out through the
+-- back; "leg": the shortest way, but never out the front; "free": the
+-- shortest way.
+type Box = { part: BasePart, half: Vector3, mode: string }
 type Cloth = {
 	model: Model,
 	torso: BasePart,
@@ -341,16 +365,19 @@ type Cloth = {
 	folder: Folder,
 	pos: { Vector3 },
 	prev: { Vector3 },
-	constraints: { Constraint },
 	wedges: { WedgePart },
 	trim: { Part },
 	moved: { BasePart },
 	frames: { CFrame },
+	boxes: { Box },
+	boxFrames: { CFrame },
+	floorParams: RaycastParams,
 	gust: Vector3,
 	seed: number,
 	accumulator: number,
-	lastPin: Vector3,
+	lastFrame: CFrame,
 	skip: number,
+	hidden: boolean,
 }
 
 local function index(row: number, column: number): number
@@ -359,86 +386,63 @@ end
 
 local cloths: { [Model]: Cloth } = {}
 
--- Every point hanging straight down from its pin (start / after a teleport).
+-- Every point at rest (start / after a teleport / back in view).
 local function hang(cloth: Cloth)
 	local frame = cloth.torso.CFrame
-	local drop = LENGTH / (ROWS - 1)
 	for row = 1, ROWS do
 		for column = 1, COLS do
-			local pin = PINS[column]
-			local t = (row - 1) / (ROWS - 1)
-			local spread = 1 + (HEM_WIDTH / 1.88 - 1) * t
-			local localPoint = Vector3.new(
-				pin.X * spread,
-				pin.Y - drop * (row - 1),
-				math.max(pin.Z, 0.54) + 0.05 * t
-			)
-			local world = frame * localPoint
+			local world = frame * restPoint(row, column)
 			cloth.pos[index(row, column)] = world
 			cloth.prev[index(row, column)] = world
 		end
 	end
-	cloth.lastPin = frame.Position
+	cloth.lastFrame = frame
 end
 
+-- Distance constraints, their rest lengths measured on the rest pose.
 local function buildConstraints(): { Constraint }
 	local list: { Constraint } = {}
-	local drop = LENGTH / (ROWS - 1)
-	local function across(row: number): number
-		local t = (row - 1) / (ROWS - 1)
-		return (1.88 + (HEM_WIDTH - 1.88) * t) / (COLS - 1)
+	local function link(rowA: number, colA: number, rowB: number, colB: number, stiffness: number)
+		table.insert(list, {
+			a = index(rowA, colA),
+			b = index(rowB, colB),
+			rest = (restPoint(rowB, colB) - restPoint(rowA, colA)).Magnitude,
+			stiffness = stiffness,
+		})
 	end
 	for row = 1, ROWS do
 		for column = 1, COLS do
-			local here = index(row, column)
 			if column < COLS then
-				table.insert(
-					list,
-					{ a = here, b = index(row, column + 1), rest = across(row), stiffness = 1 }
-				)
+				link(row, column, row, column + 1, 1)
 			end
 			if row < ROWS then
-				table.insert(
-					list,
-					{ a = here, b = index(row + 1, column), rest = drop, stiffness = 1 }
-				)
+				link(row, column, row + 1, column, 1)
 				if column < COLS then
-					local w = (across(row) + across(row + 1)) / 2
-					local diagonal = math.sqrt(w * w + drop * drop)
-					table.insert(list, {
-						a = here,
-						b = index(row + 1, column + 1),
-						rest = diagonal,
-						stiffness = 0.6,
-					})
-					table.insert(list, {
-						a = index(row, column + 1),
-						b = index(row + 1, column),
-						rest = diagonal,
-						stiffness = 0.6,
-					})
+					link(row, column, row + 1, column + 1, 0.6)
+					link(row, column + 1, row + 1, column, 0.6)
 				end
 			end
 			-- bending: a little stiffness, so it folds softly, not like paper
 			if row + 2 <= ROWS then
-				table.insert(
-					list,
-					{ a = here, b = index(row + 2, column), rest = drop * 2, stiffness = 0.35 }
-				)
+				link(row, column, row + 2, column, 0.35)
 			end
 			if column + 2 <= COLS then
-				table.insert(list, {
-					a = here,
-					b = index(row, column + 2),
-					rest = across(row) * 2,
-					stiffness = 0.2,
-				})
+				link(row, column, row, column + 2, 0.2)
 			end
 		end
 	end
 	return list
 end
 local CONSTRAINTS = buildConstraints()
+
+local BODY_BOXES: { { name: string, half: Vector3, mode: string } } = {
+	{ name = "Torso", half = Vector3.new(1, 1, 0.5), mode = "torso" },
+	{ name = "Head", half = Vector3.new(0.62, 0.62, 0.62), mode = "torso" },
+	{ name = "Left Leg", half = Vector3.new(0.5, 1, 0.5), mode = "leg" },
+	{ name = "Right Leg", half = Vector3.new(0.5, 1, 0.5), mode = "leg" },
+	{ name = "Left Arm", half = Vector3.new(0.5, 1, 0.5), mode = "free" },
+	{ name = "Right Arm", half = Vector3.new(0.5, 1, 0.5), mode = "free" },
+}
 
 local function buildCape(model: Model): Instance?
 	local torso = model:FindFirstChild("Torso")
@@ -497,6 +501,22 @@ local function buildCape(model: Model): Instance?
 	end
 	folder.Parent = workspace
 
+	local boxes: { Box } = {}
+	for _, box in BODY_BOXES do
+		local limb = model:FindFirstChild(box.name)
+		if limb and limb:IsA("BasePart") then
+			table.insert(
+				boxes,
+				{ part = limb, half = box.half + Vector3.one * MARGIN, mode = box.mode }
+			)
+		end
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	params.IgnoreWater = true
+	params.FilterDescendantsInstances = { model, folder }
+
 	local cloth: Cloth = {
 		model = model,
 		torso = torso,
@@ -504,16 +524,19 @@ local function buildCape(model: Model): Instance?
 		folder = folder,
 		pos = {},
 		prev = {},
-		constraints = CONSTRAINTS,
 		wedges = wedges,
 		trim = trim,
 		moved = {},
 		frames = {},
+		boxes = boxes,
+		boxFrames = {},
+		floorParams = params,
 		gust = Vector3.zero,
 		seed = random:NextNumber(0, 1000),
 		accumulator = 0,
-		lastPin = torso.Position,
+		lastFrame = torso.CFrame,
 		skip = 0,
+		hidden = false,
 	}
 	hang(cloth)
 	cloths[model] = cloth
@@ -527,10 +550,8 @@ local function buildCape(model: Model): Instance?
 	return look
 end
 
--- Pushes `p` out of a box (CFrame `frame`, half sizes `half`). `back`:
--- push it out through the back (+Z) when it's not in the front half (the
--- cape goes behind the torso, never through it to the front).
-local function pushOut(p: Vector3, frame: CFrame, half: Vector3, back: boolean): (Vector3, boolean)
+-- Pushes `p` out of a box (CFrame `frame`, half sizes `half`), see Box.
+local function pushOut(p: Vector3, frame: CFrame, half: Vector3, mode: string): (Vector3, boolean)
 	local l = frame:PointToObjectSpace(p)
 	local dx = half.X - math.abs(l.X)
 	local dy = half.Y - math.abs(l.Y)
@@ -538,29 +559,17 @@ local function pushOut(p: Vector3, frame: CFrame, half: Vector3, back: boolean):
 	if dx <= 0 or dy <= 0 or dz <= 0 then
 		return p, false
 	end
-	if back and l.Z > -half.Z * 0.4 then
+	if mode == "torso" and l.Z > -half.Z * 0.4 then
 		l = Vector3.new(l.X, l.Y, half.Z)
 	elseif dx < dy and dx < dz then
 		l = Vector3.new(if l.X >= 0 then half.X else -half.X, l.Y, l.Z)
 	elseif dy < dz then
 		l = Vector3.new(l.X, if l.Y >= 0 then half.Y else -half.Y, l.Z)
 	else
-		l = Vector3.new(l.X, l.Y, if l.Z >= 0 then half.Z else -half.Z)
+		l = Vector3.new(l.X, l.Y, if l.Z >= 0 or mode ~= "free" then half.Z else -half.Z)
 	end
 	return frame * l, true
 end
-
-local BODY_BOXES: { { name: string, half: Vector3, back: boolean } } = {
-	{ name = "Torso", half = Vector3.new(1, 1, 0.5), back = true },
-	{ name = "Left Leg", half = Vector3.new(0.5, 1, 0.5), back = true },
-	{ name = "Right Leg", half = Vector3.new(0.5, 1, 0.5), back = true },
-	{ name = "Left Arm", half = Vector3.new(0.5, 1, 0.5), back = false },
-	{ name = "Right Arm", half = Vector3.new(0.5, 1, 0.5), back = false },
-}
-
-local floorParams = RaycastParams.new()
-floorParams.FilterType = Enum.RaycastFilterType.Exclude
-floorParams.RespectCanCollide = true
 
 local function windAt(cloth: Cloth, time: number): Vector3
 	local wind = workspace.GlobalWind
@@ -578,32 +587,11 @@ local function windAt(cloth: Cloth, time: number): Vector3
 	return wind + turbulence + cloth.gust
 end
 
-local function simulate(cloth: Cloth, dt: number, time: number)
+-- One step. `frame`: the torso at this step (interpolated across the
+-- frame's steps); wind, floor and body boxes: read once per frame.
+local function simulate(cloth: Cloth, frame: CFrame, dt: number, wind: Vector3, floorY: number)
 	local pos, prev = cloth.pos, cloth.prev
-	local frame = cloth.torso.CFrame
-	-- Teleported / respawned: hang it again.
-	if (frame.Position - cloth.lastPin).Magnitude > 12 then
-		hang(cloth)
-	end
-	cloth.lastPin = frame.Position
-
-	local gravity = Vector3.new(0, -workspace.Gravity * GRAVITY_SCALE, 0)
-	local wind = windAt(cloth, time)
-	-- The floor under him.
-	floorParams.FilterDescendantsInstances = { cloth.model, cloth.folder }
-	local floor = workspace:Raycast(cloth.root.Position, Vector3.new(0, -8, 0), floorParams)
-	local floorY = if floor then floor.Position.Y + 0.06 else -math.huge
-	local boxes: { { frame: CFrame, half: Vector3, back: boolean } } = {}
-	for _, box in BODY_BOXES do
-		local part = cloth.model:FindFirstChild(box.name)
-		if part and part:IsA("BasePart") then
-			table.insert(boxes, {
-				frame = part.CFrame,
-				half = box.half + Vector3.new(MARGIN, MARGIN, MARGIN),
-				back = box.back,
-			})
-		end
-	end
+	local gravity = Vector3.new(0, -workspace.Gravity, 0)
 
 	-- Forces (gravity, air) and motion of the free points.
 	for row = 2, ROWS do
@@ -619,7 +607,9 @@ local function simulate(cloth: Cloth, dt: number, time: number)
 			normal = if normal.Magnitude > 1e-6 then normal.Unit else Vector3.zero
 			local velocity = (p - prev[i]) / dt
 			local relative = wind - velocity
-			local push = normal * normal:Dot(relative) * AERO + relative * DRAG
+			local push = normal * normal:Dot(relative) * AERO
+				+ relative * DRAG
+				+ Vector3.new(relative.X, 0, relative.Z) * SIDE_DRAG
 			if push.Magnitude > 600 then
 				push = push.Unit * 600
 			end
@@ -629,15 +619,18 @@ local function simulate(cloth: Cloth, dt: number, time: number)
 		end
 	end
 	-- The top row follows the shoulders.
+	local jerk = 0
 	for column = 1, COLS do
 		local i = index(1, column)
+		local pinned = frame * PINS[column]
+		jerk = math.max(jerk, (pinned - pos[i]).Magnitude)
 		prev[i] = pos[i]
-		pos[i] = frame * PINS[column]
+		pos[i] = pinned
 	end
 
-	-- Keep the cloth's shape.
-	for _ = 1, ITERATIONS do
-		for _, c in cloth.constraints do
+	-- Keep the cloth's shape (harder on a sudden jerk: take-off, landing).
+	for _ = 1, if jerk > 0.4 then ITERATIONS * 2 else ITERATIONS do
+		for _, c in CONSTRAINTS do
 			local a, b = c.a, c.b
 			local pa, pb = pos[a], pos[b]
 			local delta = pb - pa
@@ -658,16 +651,25 @@ local function simulate(cloth: Cloth, dt: number, time: number)
 		end
 	end
 
-	-- Out of the body and above the floor (a little friction when touching).
+	-- Out of the body, behind the back, above the floor (a little friction
+	-- when touching).
+	local boxes, boxFrames = cloth.boxes, cloth.boxFrames
 	for i = COLS + 1, COLS * ROWS do
 		local p = pos[i]
 		local touched = false
-		for _, box in boxes do
-			local pushed, hit = pushOut(p, box.frame, box.half, box.back)
+		for k, box in boxes do
+			local pushed, hit = pushOut(p, boxFrames[k], box.half, box.mode)
 			if hit then
 				p = pushed
 				touched = true
 			end
+		end
+		-- never in front of the back above the hips (no flipping over the
+		-- head onto his chest)
+		local l = frame:PointToObjectSpace(p)
+		if l.Y > -1 and math.abs(l.X) < 1.2 and l.Z < BACK_Z then
+			p = frame * Vector3.new(l.X, l.Y, BACK_Z)
+			touched = true
 		end
 		if p.Y < floorY then
 			p = Vector3.new(p.X, floorY, p.Z)
@@ -751,21 +753,49 @@ local function updateCloths(dt: number)
 			continue
 		end
 		cloth.gust *= math.exp(-dt * 2.2)
-		local distance = (cloth.torso.Position - eye).Magnitude
+		local frame = cloth.torso.CFrame
+		-- Far away: hidden (not left floating where it was).
+		local distance = (frame.Position - eye).Magnitude
 		if distance > SIMULATE_DISTANCE then
+			if not cloth.hidden then
+				cloth.hidden = true
+				cloth.folder.Parent = nil
+			end
 			continue
+		elseif cloth.hidden then
+			cloth.hidden = false
+			cloth.folder.Parent = workspace
+			hang(cloth)
+			cloth.accumulator = 0
 		end
 		local every = if distance > SLOW_DISTANCE then 3 else 1
 		cloth.skip += 1
+		cloth.accumulator = math.min(cloth.accumulator + dt, STEP * 4)
 		if cloth.skip < every then
-			cloth.accumulator += dt
 			continue
 		end
 		cloth.skip = 0
-		cloth.accumulator = math.min(cloth.accumulator + dt, STEP * 4)
-		while cloth.accumulator >= STEP do
+		-- Teleported / respawned: back to rest.
+		if (frame.Position - cloth.lastFrame.Position).Magnitude > 12 then
+			hang(cloth)
+		end
+		-- Read once for the frame's steps: wind, floor, body.
+		local wind = windAt(cloth, time)
+		local floor =
+			workspace:Raycast(cloth.root.Position, Vector3.new(0, -8, 0), cloth.floorParams)
+		local floorY = if floor then floor.Position.Y + 0.06 else -math.huge
+		for k, box in cloth.boxes do
+			cloth.boxFrames[k] = box.part.CFrame
+		end
+		local steps = math.floor(cloth.accumulator / STEP)
+		local from = cloth.lastFrame
+		for step = 1, steps do
 			cloth.accumulator -= STEP
-			simulate(cloth, STEP, time)
+			-- (the shoulders move smoothly across the frame's steps)
+			simulate(cloth, from:Lerp(frame, step / steps), STEP, wind, floorY)
+		end
+		if steps > 0 then
+			cloth.lastFrame = frame
 		end
 		draw(cloth)
 	end
