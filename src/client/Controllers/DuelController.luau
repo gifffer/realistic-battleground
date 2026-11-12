@@ -67,7 +67,7 @@ local F = Theme.Fonts
 local D = Config.Duels
 
 -- Roboto Medium: only for a name inside a sentence ("Rook_77 challenges you").
-local ROBOTO_MEDIUM = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Medium)
+local ROBOTO_MEDIUM = Theme.Fonts.Body -- (bold-ish like the rest of the UI)
 
 local QUAD = Enum.EasingStyle.Quad
 local QUART = Enum.EasingStyle.Quart

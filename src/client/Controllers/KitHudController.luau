@@ -479,14 +479,14 @@ local function styleSlot(slot: Slot, state: SlotState, animate: boolean)
 		end
 		if state == "LowStamina" then
 			slot.state.FontFace = Theme.Fonts.Label
-			slot.state.TextSize = 9
+			slot.state.TextSize = math.floor(9 * Theme.TEXT_SCALE + 0.5)
 			slot.state.TextColor3 = C.Ink2
 			slot.state.Text = Theme.track("LOW STAMINA", "three")
 		elseif state == "Ready" then
 			slot.state.Text = ""
 		else
 			slot.state.FontFace = Theme.Fonts.Number
-			slot.state.TextSize = 11
+			slot.state.TextSize = math.floor(11 * Theme.TEXT_SCALE + 0.5)
 			slot.state.TextColor3 = C.Ink
 		end
 		slot.current = state
