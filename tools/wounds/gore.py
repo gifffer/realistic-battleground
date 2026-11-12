@@ -72,6 +72,9 @@ def bm_of(v, f):
             bm.faces.new([verts[int(i)] for i in tri])
         except ValueError:
             pass  # (a duplicate face)
+    # Faces outward on every closed part (Z-Anatomy's left-side copies are
+    # mirrored: inside out as they come, and Roblox shows one side only).
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
     bm.normal_update()
     return bm
 
@@ -101,6 +104,7 @@ def cut(bm, planes, fill=True):
         if boundary:
             filled = bmesh.ops.holes_fill(bm, edges=boundary, sides=0)
             bmesh.ops.triangulate(bm, faces=filled["faces"])
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])  # (the fills: outward too)
     bm.normal_update()
     return bm
 
@@ -219,6 +223,7 @@ def blot(rng, radius, lobes, droplets, stretch=1.0, tail=0.0, ring=48):
     if tail > 0:  # a line of drops trailing behind (a stretched drop)
         for k in range(1, 6):
             disc(-radius * stretch - tail * k / 5, rng.uniform(-0.03, 0.03), radius * 0.16 * (1 - k / 7), 0.05, 10)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])  # (each slab: outward)
     bmesh.ops.triangulate(bm, faces=bm.faces[:])
     bm.normal_update()
     return bm
@@ -269,11 +274,11 @@ def build(add_object):
         sclera = squeeze(sv, 0, 5.1 / 7.5)
         iris = iv.copy()
         iris[:, 0] = center[0] + (iris[:, 0] - center[0]) * (5.1 / 7.5)
+        # (the cone is built along Z: the back of the head; from the back of the eye)
         nerve = bmesh.new()
         bmesh.ops.create_cone(nerve, cap_ends=True, segments=8, radius1=0.025, radius2=0.02, depth=0.22)
-        bmesh.ops.rotate(nerve, verts=nerve.verts, cent=(0, 0, 0),
-                         matrix=__import__("mathutils").Matrix.Rotation(math.pi / 2, 3, "X"))
-        bmesh.ops.translate(nerve, verts=nerve.verts, vec=Vector((center[0], center[1], center[2] + 0.16)))
+        back = float(sv[:, 2].max())
+        bmesh.ops.translate(nerve, verts=nerve.verts, vec=Vector((center[0], center[1], back + 0.1)))
         piece(f"Eye{i + 1}", {"Sclera": bm_of(sclera, sf), "Iris": bm_of(iris, iff), "Flesh": nerve}, "eye")
 
     # Some upper teeth fly out.

@@ -86,6 +86,9 @@ local function hideAll(model: Model, head: BasePart)
 		hide(item)
 	end
 	head.DescendantAdded:Connect(hide)
+	-- (here, nothing lands on a head that isn't there any more)
+	head.CanCollide = false
+	head.CanQuery = false
 end
 
 ------------------------------------------------------------------------------
@@ -762,7 +765,13 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 			local piece = pieces[name]
 			if piece then
 				local part = GoreKit.spawn(piece, head.CFrame, paint)
-				part.CanCollide = true
+				-- (they start inside each other: solid once apart)
+				part.CanCollide = false
+				task.delay(0.1, function()
+					if part.Parent then
+						part.CanCollide = true
+					end
+				end)
 				local from = head.CFrame:VectorToWorldSpace(piece.center)
 				local direction = if from.Magnitude > 0.05
 					then from.Unit

@@ -29,6 +29,9 @@ export type Piece = {
 
 local pieces: { [string]: Piece }? = nil
 local warned = false
+-- A kit already looked through and found without the pieces (an old one):
+-- not looked through again until something is added to it.
+local lacking: Instance? = nil
 
 -- The pieces, once the kit is there with all of them (nil until then: it is
 -- looked for again next time, the kit may replicate late).
@@ -38,7 +41,7 @@ function GoreKit.get(): { [string]: Piece }?
 	end
 	local assets = ReplicatedStorage:FindFirstChild("Assets")
 	local model = if assets then assets:FindFirstChild("WoundKit", true) else nil
-	if model == nil then
+	if model == nil or model == lacking then
 		return nil
 	end
 	local origin = model:FindFirstChild("Kit_Origin", true)
@@ -90,7 +93,14 @@ function GoreKit.get(): { [string]: Piece }?
 						.. "assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md). Simpler pieces meanwhile."
 				)
 			end
-			return nil -- (still replicating, or an old kit)
+			-- (an old kit, or one still arriving: look again once it changes)
+			lacking = model
+			model.DescendantAdded:Once(function()
+				if lacking == model then
+					lacking = nil
+				end
+			end)
+			return nil
 		end
 	end
 	for _, piece in found do
