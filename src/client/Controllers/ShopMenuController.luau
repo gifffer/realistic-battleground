@@ -97,7 +97,7 @@ local CATEGORIES: { CategoryInfo } = {
 		id = "Outfit",
 		label = "OUTFITS",
 		description = "The colour of your top and trousers.",
-		canTakeOff = false, -- (the avatar's own clothes only come back next life)
+		canTakeOff = true, -- (the avatar's own clothes come back next life)
 	},
 	{
 		id = "KillEffect",

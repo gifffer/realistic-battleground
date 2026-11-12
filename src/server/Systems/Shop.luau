@@ -21,6 +21,7 @@ local Cosmetics = require(ReplicatedStorage.Shared.Cosmetics)
 local ProgressionCurve = require(ReplicatedStorage.Shared.Progression)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
+local Combat = require(script.Parent.Combat)
 local Knockout = require(script.Parent.Knockout)
 local PlayerData = require(script.Parent.PlayerData)
 
@@ -146,6 +147,7 @@ local function onEmote(player: Player)
 		or character:GetAttribute("Stunned") == true
 		or character:GetAttribute("Blocking") == true
 		or Knockout.isKnockedOut(character)
+		or not Combat.isIdle(character) -- mid-attack, sliding, frozen...
 	then
 		return
 	end
@@ -180,13 +182,21 @@ function Shop.start()
 	Knockout.onEliminated(onEliminated)
 	PlayerData.onLoaded(onLoaded)
 	local function watch(player: Player)
-		player.CharacterAdded:Connect(function(character)
-			-- After Roblox has dressed the avatar.
-			character:WaitForChild("Humanoid", 10)
-			task.wait(0.5)
-			if player.Character == character then
-				applyOutfit(player)
+		-- Once Roblox has dressed the avatar (its clothes and colours would
+		-- otherwise cover ours), and again if clothes are added later.
+		player.CharacterAppearanceLoaded:Connect(function(character)
+			if player.Character ~= character then
+				return
 			end
+			applyOutfit(player)
+			character.ChildAdded:Connect(function(child)
+				local isClothes = child:IsA("Shirt")
+					or child:IsA("Pants")
+					or child:IsA("ShirtGraphic")
+				if (isClothes or child:IsA("BodyColors")) and equippedItem(player, "Outfit") then
+					task.defer(applyOutfit, player)
+				end
+			end)
 		end)
 	end
 	Players.PlayerAdded:Connect(watch)
