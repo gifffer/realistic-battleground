@@ -9,6 +9,10 @@
 --     ground, close on the impact, wide), the camera shaking and pushing in
 --     on each blow. The player can't move during it (the server holds both
 --     characters); the normal camera comes back at the end.
+--
+-- The server can cut it short before the killing blow (the attacker dies,
+-- someone leaves: Remotes.FinisherEnded with killed = false): everything
+-- stops at once and the camera comes back.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,8 +21,11 @@ local TweenService = game:GetService("TweenService")
 
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Config = require(ReplicatedStorage.Shared.Config)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local CameraController = require(script.Parent.CameraController)
+local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
+local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 
 local player = Players.LocalPlayer
@@ -38,7 +45,18 @@ local SHAKES: { [string]: Shake } = {
 }
 
 local bars: { top: Frame, bottom: Frame }? = nil
-local playing = false
+
+-- One cinematic playing (key: its attacker).
+type Run = {
+	cinematic: Finishers.Cinematic,
+	victim: Model,
+	cancelled: boolean,
+	stopCamera: (() -> ())?, -- ours (we're one of the two fighters)
+}
+local runs: { [Model]: Run } = {}
+-- Which camera is ours now (a new cinematic takes the camera over; the old
+-- one's end then does nothing).
+local cameraGeneration = 0
 
 local function makeBars()
 	local gui = Instance.new("ScreenGui")
@@ -76,20 +94,38 @@ local function smooth(alpha: number): number
 	return a * a * (3 - 2 * a)
 end
 
--- The camera of the cutscene, for the two fighters.
+-- The normal field of view (sprinting or not: like SprintController).
+local function normalFov(): number
+	return if player:GetAttribute("Sprinting") == true
+		then Config.Camera.SPRINT_FOV
+		else Config.Camera.DEFAULT_FOV
+end
+
+-- In first person our own body is hidden; show it during the cutscene.
+local function showOwnBody(character: Model)
+	for _, item in character:GetDescendants() do
+		if item:IsA("BasePart") then
+			item.LocalTransparencyModifier = 0
+		elseif item:IsA("Decal") then
+			item.LocalTransparencyModifier = 0
+		end
+	end
+end
+
+-- The camera of the cutscene, for the two fighters. Returns what stops it
+-- (and gives the normal camera back).
 local function playCamera(
 	cinematic: Finishers.Cinematic,
 	anchor: CFrame,
 	victim: Model,
 	shakes: { Shake }
-)
+): (() -> ())?
 	local camera = workspace.CurrentCamera
-	if camera == nil or playing then
-		return
+	if camera == nil then
+		return nil
 	end
-	playing = true
-	local oldType = camera.CameraType
-	local oldFov = camera.FieldOfView
+	cameraGeneration += 1
+	local generation = cameraGeneration
 	camera.CameraType = Enum.CameraType.Scriptable
 	CameraController.holdRotation("cinematic", true)
 	showBars(true)
@@ -97,6 +133,7 @@ local function playCamera(
 	local random = Random.new()
 	local lastLook: Vector3? = nil
 
+	RunService:UnbindFromRenderStep("FinisherCamera") -- (an older one)
 	RunService:BindToRenderStep(
 		"FinisherCamera",
 		Enum.RenderPriority.Camera.Value + 10,
@@ -104,6 +141,10 @@ local function playCamera(
 			local t = os.clock() - start
 			if t >= cinematic.duration then
 				return
+			end
+			local character = player.Character
+			if character and CameraController.isFirstPerson() then
+				showOwnBody(character)
 			end
 			-- The shot running now, and when the next one starts.
 			local shots = cinematic.shots
@@ -152,16 +193,23 @@ local function playCamera(
 		end
 	)
 
-	task.delay(cinematic.duration, function()
+	local stopped = false
+	local function stop()
+		if stopped then
+			return
+		end
+		stopped = true
+		if cameraGeneration ~= generation then
+			return -- (a newer cutscene has the camera)
+		end
 		RunService:UnbindFromRenderStep("FinisherCamera")
 		showBars(false)
-		camera.FieldOfView = oldFov
-		camera.CameraType = if oldType == Enum.CameraType.Scriptable
-			then Enum.CameraType.Custom
-			else oldType
+		camera.FieldOfView = normalFov()
+		camera.CameraType = Enum.CameraType.Custom
 		CameraController.holdRotation("cinematic", false)
-		playing = false
-	end)
+	end
+	task.delay(cinematic.duration, stop)
+	return stop
 end
 
 -- The effects of one moment of the timeline (every client).
@@ -228,23 +276,65 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 			)
 		end
 	end
+	local old = runs[attacker]
+	if old then
+		old.cancelled = true
+	end
+	local run: Run = { cinematic = cinematic, victim = victim, cancelled = false }
+	runs[attacker] = run
 	local character = player.Character
 	if character ~= nil and (character == attacker or character == victim) then
-		playCamera(cinematic, anchor, victim, shakes)
+		run.stopCamera = playCamera(cinematic, anchor, victim, shakes)
+		if character == attacker then
+			CombatController.holdAttacks(cinematic.duration)
+		end
 	end
 
 	for _, event in cinematic.events do
 		task.delay(event.time, function()
-			if attacker.Parent and victim.Parent then
+			if not run.cancelled and attacker.Parent and victim.Parent then
 				playEvent(cinematic, event, attacker, victim, seed)
 			end
 		end)
+	end
+	task.delay(cinematic.duration, function()
+		if runs[attacker] == run then
+			runs[attacker] = nil
+		end
+	end)
+end
+
+-- The server ended a cinematic. Cut short (not killed): stop it all now.
+local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
+	if typeof(attacker) ~= "Instance" or not attacker:IsA("Model") then
+		return
+	end
+	local run = runs[attacker]
+	if run == nil or (run.victim :: unknown) ~= victim then
+		return
+	end
+	runs[attacker] = nil
+	if killed == true then
+		return -- (played to the end: everything stops on its own)
+	end
+	run.cancelled = true
+	KitEffects.stopAction(attacker) -- the bat
+	for _, clip in { "Brawler_FinisherBat", "Boxer_FinisherCombo" } do
+		CharacterAnimationController.stopAction(attacker, clip)
+	end
+	CharacterAnimationController.stopAction(run.victim, "Boxer_FinisherVictim")
+	if run.stopCamera then
+		run.stopCamera()
+	end
+	if attacker == player.Character then
+		CombatController.releaseAttacks()
 	end
 end
 
 function CinematicController.start()
 	makeBars()
 	Remotes.FinisherStarted.OnClientEvent:Connect(onStarted)
+	Remotes.FinisherEnded.OnClientEvent:Connect(onEnded)
 end
 
 return CinematicController

@@ -53,6 +53,8 @@ local nextAttackAt = 0
 local nextDashAt = 0
 -- When we last PREDICTED a finisher (to reconcile with the server's choice).
 local predictedFinisherAt = -math.huge
+-- A cinematic finisher asked for: the time we wait for the server's answer.
+local CINEMATIC_WAIT = 0.4
 -- Number of our last M1 (see tryAttack).
 local attackSeq = 0
 
@@ -126,6 +128,11 @@ local function myFinisher(character: Model): Kits.FinisherDef
 	return Kits.finisher(if typeof(kitId) == "string" then kitId else nil)
 end
 
+-- In a cinematic finisher (ours, or we're its victim): no input counts.
+local function inCinematic(character: Model): boolean
+	return character:GetAttribute("InCinematic") == true
+end
+
 local function tryAttack()
 	local character, _, root = getCharacterParts()
 	local time = os.clock()
@@ -134,6 +141,7 @@ local function tryAttack()
 		or root == nil
 		or blocking
 		or isStunned(character)
+		or inCinematic(character)
 		or isBusyMoving()
 		or time < nextAttackAt
 	then
@@ -143,12 +151,18 @@ local function tryAttack()
 	-- Opponent down in front of us: finish them (the server confirms).
 	if findFinishTarget(root) then
 		local finisher = myFinisher(character)
-		predictedFinisherAt = time
 		combo = 0
-		nextAttackAt = time + finisher.duration
 		lastAttackAt = time
-		CharacterAnimationController.playAction(character, finisher.animation)
-		SoundController.play("HeavySwing", character)
+		if finisher.cinematic then
+			-- A cutscene: nothing predicted, it starts when the server says so
+			-- (CinematicController holds our attacks for its length).
+			nextAttackAt = time + CINEMATIC_WAIT
+		else
+			predictedFinisherAt = time
+			nextAttackAt = time + finisher.duration
+			CharacterAnimationController.playAction(character, finisher.animation)
+			SoundController.play("HeavySwing", character)
+		end
 		KnockoutController.onFinishStarted()
 		Remotes.Attack:FireServer(AimController.getAimDirection())
 		return
@@ -183,6 +197,7 @@ local function setBlocking(value: boolean)
 		if
 			character == nil
 			or isStunned(character)
+			or inCinematic(character)
 			or isBusyMoving()
 			or os.clock() < lastAttackAt + C.M1_INTERVAL
 		then
@@ -219,7 +234,13 @@ local function tryDash()
 	if character == nil or humanoid == nil or root == nil then
 		return
 	end
-	if blocking or isStunned(character) or isBusyMoving() or time < nextDashAt then
+	if
+		blocking
+		or isStunned(character)
+		or inCinematic(character)
+		or isBusyMoving()
+		or time < nextDashAt
+	then
 		return
 	end
 	local stamina = player:GetAttribute("Stamina")
@@ -268,6 +289,7 @@ function CombatController.canStartMove(): boolean
 	return character ~= nil
 		and not blocking
 		and not isStunned(character)
+		and not inCinematic(character)
 		and not isBusyMoving()
 		and os.clock() >= nextAttackAt
 end

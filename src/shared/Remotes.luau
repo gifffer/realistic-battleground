@@ -118,6 +118,11 @@ return table.freeze({
 	-- where the attacker stands (the timeline's positions are relative to it).
 	FinisherStarted = event("FinisherStarted"),
 
+	-- server → all  (attacker: Model, victim: Model, killed: boolean)
+	-- That cinematic finisher is over: played to the end (killed), or cut
+	-- short before the killing blow (killed = false: stop the cutscene).
+	FinisherEnded = event("FinisherEnded"),
+
 	-- server → ONE client  (attackId: number)
 	-- "Your M1 number `attackId` is over" (after all its CombatEvents). Lets
 	-- the attacker undo a hit it predicted that the server never confirmed.

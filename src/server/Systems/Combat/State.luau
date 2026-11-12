@@ -29,6 +29,7 @@ export type CombatState = {
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
 	cinematicUntil: number, -- in a cinematic finisher: nobody can hit them
+	cinematicToken: number, -- changes with each cinematic (stale timers do nothing)
 	nextDashAt: number,
 	knockbackUntil: number, -- a knockback push is running until then
 

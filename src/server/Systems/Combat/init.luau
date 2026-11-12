@@ -798,6 +798,7 @@ function Combat.register(model: Model, player: Player?)
 		finishingUntil = 0,
 		invulnerableUntil = 0,
 		cinematicUntil = 0,
+		cinematicToken = 0,
 		nextDashAt = 0,
 		knockbackUntil = 0,
 		kitId = Kits.DEFAULT,
@@ -918,6 +919,9 @@ local function startCinematic(
 	root.Anchored = true
 	root.CFrame = anchor
 	state.cinematicUntil = time + cinematic.duration
+	state.cinematicToken += 1
+	local cinematicToken = state.cinematicToken
+	setAttribute(state.model, "InCinematic", true) -- (the client holds its inputs)
 	if victimPlace then
 		Ragdoll.disable(target)
 		victimRoot.Anchored = true
@@ -930,37 +934,84 @@ local function startCinematic(
 	end
 	Remotes.FinisherStarted:FireAllClients(state.model, target, cinematic.id, anchor)
 
-	local function letGo()
-		if victimPlace and victimRoot.Parent then
-			victimRoot.Anchored = false
-			Ragdoll.enable(target)
+	local connections: { RBXScriptConnection } = {}
+	local over = false
+	local killed = false
+	-- Everything this cinematic holds, let go (once). Before the killing
+	-- blow, the victim drops back down, still KO'd (someone can finish them).
+	local function finish()
+		if over then
+			return
 		end
+		over = true
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		if not killed then
+			if victimPlace and victimRoot.Parent then
+				victimRoot.Anchored = false
+				Ragdoll.enable(target)
+			end
+			Knockout.release(target)
+		end
+		-- (only if no newer cinematic took this fighter over)
+		if state.cinematicToken == cinematicToken then
+			if root.Parent then
+				root.Anchored = false
+			end
+			state.cinematicUntil = 0
+			state.finishingUntil = 0
+			setAttribute(state.model, "InCinematic", nil)
+		end
+		Remotes.FinisherEnded:FireAllClients(state.model, target, killed)
+	end
+	-- Interrupted: the attacker dies or leaves, the victim leaves.
+	table.insert(
+		connections,
+		state.humanoid.Died:Connect(function()
+			finish()
+		end)
+	)
+	for _, model in { state.model, target } do
+		table.insert(
+			connections,
+			model.AncestryChanged:Connect(function()
+				if model.Parent == nil then
+					finish()
+				end
+			end)
+		)
 	end
 
 	task.delay(cinematic.kill, function()
-		if state.attackToken ~= token or not isAlive(state) or target.Parent == nil then
-			-- Interrupted (the attacker died or left): the victim drops back.
-			letGo()
-			Knockout.release(target)
+		if over then
 			return
 		end
+		if state.attackToken ~= token or not isAlive(state) or target.Parent == nil then
+			finish()
+			return
+		end
+		killed = true
 		if cinematic.id == "Bat" then
 			crushHead(target)
 		end
 		if victimPlace then
 			-- Sent flying by the uppercut.
-			letGo()
+			victimRoot.Anchored = false
+			Ragdoll.enable(target)
 			victimRoot.AssemblyLinearVelocity = anchor.LookVector * 34 + Vector3.new(0, 46, 0)
 			victimRoot.AssemblyAngularVelocity = anchor.RightVector * -9
 		end
 		Knockout.finish(target, state.model)
+		-- (the attacker stays held until the end of the cutscene)
 	end)
-	task.delay(cinematic.duration, function()
-		if root.Parent then
-			root.Anchored = false
-		end
-		state.cinematicUntil = 0
-	end)
+	task.delay(cinematic.duration, finish)
+end
+
+-- Is this fighter in a cinematic finisher right now (Duels wait for it)?
+function Combat.isInCinematic(model: Model): boolean
+	local state = states[model]
+	return state ~= nil and now() < state.cinematicUntil
 end
 
 -- Finisher on a KO'd fighter: kneel and strike; the victim dies at impact
@@ -1192,6 +1243,13 @@ function Combat.resetForRound(model: Model)
 		Stamina.refill(player)
 	end
 	stopBlocking(state)
+	if state.cinematicUntil > 0 then
+		-- (a cutscene cut short: it lets go of nothing more)
+		state.cinematicToken += 1
+		state.cinematicUntil = 0
+		state.root.Anchored = false
+		setAttribute(model, "InCinematic", nil)
+	end
 	state.stunnedUntil = 0
 	state.attackToken += 1
 	state.knockdownToken += 1
@@ -1277,7 +1335,11 @@ local function update(dt: number)
 				state.bleedPerSecond = 0
 				state.bleedSource = nil
 				setAttribute(model, "Bleeding", false)
-			elseif time >= state.nextBleedTick and not Knockout.isKnockedOut(model) then
+			elseif
+				time >= state.nextBleedTick
+				and time >= state.cinematicUntil -- (no bleeding out mid-cutscene)
+				and not Knockout.isKnockedOut(model)
+			then
 				state.nextBleedTick = time + KC.BLEED_TICK
 				local source = state.bleedSource
 				local attacker = if source then states[source] else nil

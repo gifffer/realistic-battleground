@@ -698,6 +698,9 @@ end
 local SERVER_ONLY_ACTIONS = table.freeze({
 	GetUp = true,
 	Boxer_FinisherVictim = true, -- held up by a Boxer's finisher (we're the victim)
+	-- Cinematic finishers: not predicted, played only when the server starts them.
+	Brawler_FinisherBat = true,
+	Boxer_FinisherCombo = true,
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,
@@ -724,8 +727,8 @@ local function onCombatAction(model: Model, action: string)
 		dashedAt[model] = os.clock()
 	end
 	CharacterAnimationController.playAction(model, action)
-	if action == "GetUp" then
-		return
+	if action == "GetUp" or (SERVER_ONLY_ACTIONS[action] and string.find(action, "_Finisher")) then
+		return -- (a cutscene: its sounds come with it, CinematicController)
 	elseif KitEffects.isMoveAnimation(action) then
 		-- Prop in hand + its own sound. Our own Street Fury roar already
 		-- played when we pressed G (KitController): don't play it twice.
