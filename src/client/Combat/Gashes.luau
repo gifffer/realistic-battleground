@@ -281,7 +281,7 @@ local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
 	}
 end
 
-local function placeOnHead(part: BasePart, data: Gash.Data): Placed?
+local function placeOnHead(_part: BasePart, data: Gash.Data): Placed?
 	local name, shape = shapeFor(data, true)
 	if shape == nil then
 		return nil
