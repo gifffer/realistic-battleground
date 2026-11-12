@@ -1,14 +1,15 @@
 --!strict
 -- TEMPORARY - for filming the cinematic finishers. Delete this file (and
--- Combat.finishFor, and the showcase bit of CinematicController) once the
+-- Combat.finishFor, Remotes.ShowcaseTrigger, ShowcasePanelController and
+-- the showcase bit of CinematicController) once the
 -- videos are made.
 --
 -- In Studio only: two little stages near the spawn, each with a fighter
--- waiting; YOU trigger them (in game):
---   • F7: the Street Brawler (left) - the bat, the head bursts;
---   • F8: the Boxer (right) - the combo, the liver torn out.
--- A fresh opponent appears, is knocked out and finished; the cutscene
--- camera watches it (F6: camera on / off for them).
+-- waiting; YOU trigger them from a small panel you can drag around
+-- (ShowcasePanelController): the Street Brawler (left: the bat, the head
+-- bursts), the Boxer (right: the combo, the liver torn out). A fresh
+-- opponent appears, is knocked out and finished; the cutscene camera
+-- watches it (the panel turns it on / off).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -116,7 +117,7 @@ function FinisherShowcase.start()
 		CFrame.lookAt(base + Vector3.new(14, 0, 0), base + Vector3.new(14, 0, -10)),
 		Color3.fromRGB(150, 40, 40)
 	)
-	-- You trigger them (F7 / F8 in game, see CinematicController).
+	-- You trigger them (the showcase panel, ShowcasePanelController).
 	Remotes.ShowcaseTrigger.OnServerEvent:Connect(function(_player: Player, label: unknown)
 		if typeof(label) == "string" then
 			task.spawn(play, label)

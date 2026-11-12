@@ -51,14 +51,9 @@ local SHAKES: { [string]: Shake } = {
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
--- TEMPORARY (FinisherShowcase, for filming; delete with it), Studio only:
--- F7 / F8 play the Street Brawler's / the Boxer's finisher on its stage, and
--- the cutscene camera watches it; F6 turns that camera on / off.
-local SHOWCASE_KEYS: { [Enum.KeyCode]: string } = {
-	[Enum.KeyCode.F7] = "Street Brawler",
-	[Enum.KeyCode.F8] = "Boxer",
-}
-local showcaseCamera = true
+-- TEMPORARY (FinisherShowcase, for filming; delete with it): the showcase
+-- fighter whose finisher the cutscene camera watches (set by the showcase
+-- panel, ShowcasePanelController).
 local showcaseWatch: string? = nil
 
 -- One cinematic playing (key: its attacker).
@@ -352,29 +347,14 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	end
 end
 
+-- TEMPORARY (FinisherShowcase): watch this showcase fighter's next
+-- finisher with the cutscene camera (nil: don't).
+function CinematicController.watchShowcase(fighter: string?)
+	showcaseWatch = fighter
+end
+
 function CinematicController.start()
 	makeBars()
-	if RunService:IsStudio() then
-		game:GetService("UserInputService").InputBegan:Connect(function(input, processed)
-			if processed then
-				return
-			end
-			local fighter = SHOWCASE_KEYS[input.KeyCode]
-			if fighter then
-				showcaseWatch = if showcaseCamera then fighter else nil
-				Remotes.ShowcaseTrigger:FireServer(fighter)
-			elseif input.KeyCode == Enum.KeyCode.F6 then
-				showcaseCamera = not showcaseCamera
-				if not showcaseCamera then
-					showcaseWatch = nil
-				end
-				print(
-					`[FinisherShowcase] cutscene camera: {if showcaseCamera then "on" else "off"}`
-				)
-			end
-		end)
-		print("[FinisherShowcase] F7: Street Brawler, F8: Boxer, F6: camera on/off")
-	end
 	Remotes.FinisherStarted.OnClientEvent:Connect(onStarted)
 	Remotes.FinisherEnded.OnClientEvent:Connect(onEnded)
 end
