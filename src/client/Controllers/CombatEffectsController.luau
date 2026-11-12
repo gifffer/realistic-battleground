@@ -42,6 +42,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
@@ -535,6 +536,9 @@ local function predictHit(info: CombatController.AttackInfo)
 			end
 			byId[info.id] = { time = os.clock(), strong = info.strong, zone = zone, side = side }
 			playHitReaction(model, character, info.strong, zone, side)
+			-- The thud with the reaction, right away (the server's message
+			-- comes a round trip later: then it doesn't play it again).
+			SoundController.play(if info.strong then "HeavyHit" else "Hit", model)
 		end
 	end
 end
@@ -632,7 +636,8 @@ local function onCombatEvent(
 			if iAmAttacker then
 				CombatController.notifyMoveLanded(moveId)
 			end
-		else
+		elseif prediction == nil then
+			-- (a hit we predicted already made its sound)
 			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		end
 		-- Blood and torn skin: decided by the server (same on every screen).
@@ -697,6 +702,11 @@ end
 -- (A slip's counter too: only the server knows a hit was slipped.)
 local SERVER_ONLY_ACTIONS = table.freeze({
 	GetUp = true,
+	Boxer_FinisherVictim = true, -- held up by a Boxer's finisher (we're the victim)
+	Brawler_FinisherBatVictim = true, -- laid out under a Street Brawler's bat
+	-- Cinematic finishers: not predicted, played only when the server starts them.
+	Brawler_FinisherBat = true,
+	Boxer_FinisherCombo = true,
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,
@@ -715,9 +725,16 @@ local function onCombatAction(model: Model, action: string)
 		CombatController.holdAttacks(0.55) -- our counter punch
 	end
 	-- (Emotes are played by the server's answer, for us too.)
+	-- A "Finisher" strike that isn't our KO finisher (Street Fury's
+	-- tackle slam follow-up): never predicted, play it from here.
+	local kitId = model:GetAttribute("Kit")
+	local followUp = action == "Finisher"
+		and Kits.finisher(if typeof(kitId) == "string" then kitId else nil).animation
+			~= "Finisher"
 	if
 		model == player.Character
 		and not SERVER_ONLY_ACTIONS[action]
+		and not followUp
 		and string.sub(action, 1, 6) ~= "Emote_"
 	then
 		-- Ours: already played when we clicked, unless the server disagreed.
@@ -728,8 +745,12 @@ local function onCombatAction(model: Model, action: string)
 		dashedAt[model] = os.clock()
 	end
 	CharacterAnimationController.playAction(model, action)
-	if action == "GetUp" or string.sub(action, 1, 6) == "Emote_" then
-		return -- (no swing sound)
+	if
+		action == "GetUp"
+		or string.sub(action, 1, 6) == "Emote_"
+		or (SERVER_ONLY_ACTIONS[action] and string.find(action, "_Finisher"))
+	then
+		return -- (no swing sound; a cutscene's sounds come with it, CinematicController)
 	elseif KitEffects.isMoveAnimation(action) then
 		-- Prop in hand + its own sound. Our own Street Fury roar already
 		-- played when we pressed G (KitController): don't play it twice.

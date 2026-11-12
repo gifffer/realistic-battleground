@@ -28,6 +28,8 @@ export type CombatState = {
 	legSlowUntil: number, -- slowed by a leg hit until then
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
+	cinematicUntil: number, -- in a cinematic finisher: nobody can hit them
+	cinematicToken: number, -- changes with each cinematic (stale timers do nothing)
 	nextDashAt: number,
 	knockbackUntil: number, -- a knockback push is running until then
 
@@ -48,7 +50,6 @@ export type CombatState = {
 	-- Injuries (step 5), cleared by a kill or a new life.
 	legDamage: number, -- damage taken on the legs
 	limping: boolean, -- legDamage reached Config.Injuries.LIMP_LEG_DAMAGE
-	wounds: { [string]: number }, -- body part name → visible marks on it
 	lastDamagedAt: number, -- for the out-of-combat regeneration
 	regenCarry: number, -- fraction of HP regenerated, not given yet
 

@@ -39,16 +39,22 @@ turned and scaled the file. Insert number i sits at X = i * SPACING.
 """
 
 import math
+import os
 import random
 import sys
 
 import bpy  # first: it makes the other Blender modules importable
 import bmesh  # noqa: E402
+import numpy as np  # noqa: E402
 from mathutils import Vector  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gore  # noqa: E402  (the burst head of the bat finisher)
 
 OUT = sys.argv[1]
 PREVIEW = "--preview" in sys.argv
 LUA_OUT = "src/shared/WoundShapes.luau"
+GORE_LUA_OUT = "src/shared/GoreShapes.luau"
 
 # The classic R6 head (Roblox's avatar/heads/head.mesh, measured): a
 # cylinder of radius 0.6 whose straight part is 0.6 high (y -0.3..0.3), with
@@ -68,7 +74,13 @@ VARIANTS = {
     ("Slash", "S"): dict(length=0.3, width=0.045, depth=0.05, lip=0.04, rag=0.25),
     ("Slash", "M"): dict(length=0.45, width=0.075, depth=0.08, lip=0.045, rag=0.25),
     ("Slash", "L"): dict(length=0.6, width=0.1, depth=0.11, lip=0.05, rag=0.25),
+    # The Boxer's finisher: a hand driven in under the right ribs, the liver
+    # torn out through it. Body only. Broken real ribs in it (gore.py's anatomy).
+    ("Tear", "L"): dict(length=0.8, width=0.6, depth=0.44, lip=0.075, rag=1.7),
 }
+# Where a "Tear" sits on the torso (torso space, the front face): the ribs
+# inside it are taken from there.
+TEAR_AT = (0.5, -0.3)
 
 COLORS = {  # preview only: the game sets the real colours
     "Lip": (0.80, 0.62, 0.50),
@@ -80,6 +92,7 @@ COLORS = {  # preview only: the game sets the real colours
     "Blood": (0.25, 0.0, 0.0),
     "Marker": (1, 1, 1),
     "Skin": (0.80, 0.62, 0.50),
+    **{k: v for k, v in gore.COLORS.items()},
 }
 
 
@@ -101,7 +114,7 @@ def outline(kind, v, rng, with_tears=True):
     torn skin edge only)."""
     a, b = v["length"] / 2, v["width"] / 2
     pts = []
-    if kind == "Lac":
+    if kind in ("Lac", "Tear"):
         noise = smooth_noise(rng, 2.2)
         # star-shaped splits: a few sharp tears going out of the ellipse
         tears = [(rng.uniform(0, 2 * math.pi), rng.uniform(0.25, 0.55), rng.uniform(0.08, 0.16)) for _ in range(rng.randint(3, 5))]
@@ -218,6 +231,32 @@ def ring(pts, normals, offset, z, center=None, shrink=None, jitter=None):
 
 
 # --- One insert ---------------------------------------------------------------
+def tear_ribs(pts, v):
+    """The real ribs under a Tear, in the insert's axes (X = the torso's -X,
+    Y up, Z out of the front), kept inside the hole and snapped in two
+    where the hand went through."""
+    anatomy = gore.load_anatomy()
+    x0, y0 = TEAR_AT
+    a, b = v["length"] / 2 * 0.92, v["width"] / 2 * 0.92
+    planes = []
+    for k in range(16):  # the hole, roughly (an ellipse of planes)
+        t = 2 * math.pi * k / 16
+        n = Vector((math.cos(t) / a, math.sin(t) / b, 0)).normalized()
+        co = Vector((a * math.cos(t), b * math.sin(t), 0))
+        planes.append((co, n))
+    pieces = []
+    for vv, ff in anatomy["ribs"]:
+        local = np.stack([-(vv[:, 0] - x0), vv[:, 1] - y0, -vv[:, 2] - 0.5], axis=1)
+        for side in (-1, 1):  # the two broken halves, a gap in the middle
+            gap = [((side * 0.09, 0, 0), (-side, 0, 0))]
+            bm = gore.cut(gore.bm_of(local, ff), planes + gap, fill=True)
+            if len(bm.faces):
+                pieces.append(bm)
+            else:
+                bm.free()
+    return pieces
+
+
 def build_insert(kind, size, v, head, seed):
     rng = random.Random(seed)
     pts = outline(kind, v, rng)
@@ -235,7 +274,7 @@ def build_insert(kind, size, v, head, seed):
     # rolling down into the cut.
     outer = ring(pts, nrm, lip, 0.002)
     # A torn edge is a little swollen; a clean cut lies almost flat.
-    swell = 0.005 if kind == "Lac" else 0.0015
+    swell = {"Lac": 0.005, "Tear": 0.014}.get(kind, 0.0015)
     crest = ring(pts, nrm, lip * 0.45, lambda i: swell * (1 + 0.5 * wobble[i]))
     edge = ring(pts, nrm, 0.0, 0.004)
     curl = ring(pts, nrm, -0.01, -0.012)
@@ -248,7 +287,7 @@ def build_insert(kind, size, v, head, seed):
     # Walls down to the bed (red flesh), narrowing like a V.
     mid = ring(pts, nrm, 0, lambda i: -depth * (0.6 + 0.12 * wobble[i]), center=c, shrink=0.72, jitter=jit(0.004))
     low = ring(pts, nrm, 0, lambda i: -depth * (0.95 + 0.08 * wobble[i + 3]), center=c, shrink=0.42, jitter=jit(0.003))
-    deep = kind == "Slash" and size == "L"
+    deep = (kind == "Slash" and size == "L") or kind == "Tear"
     b.strip("Flesh", dermis_low, mid)
     bed_layer = "Muscle" if deep and not head else "Flesh"
     b.strip(bed_layer, mid, low)
@@ -270,6 +309,16 @@ def build_insert(kind, size, v, head, seed):
         for k in range(5):
             y = c.y + (k - 2) * v["width"] * 0.12
             b.blob("Muscle", Vector((c.x, y, -depth * 0.98)), (v["length"] * 0.28, 0.007, 0.006), subdiv=2)
+    # Torn open by a hand: the real right lower ribs (and their cartilage)
+    # across it, broken where the hand went through.
+    if kind == "Tear":
+        for part in tear_ribs(pts, v):
+            b.parts.setdefault("Bone", bmesh.new())
+            mesh = bpy.data.meshes.new("tmp")
+            part.to_mesh(mesh)
+            b.parts["Bone"].from_mesh(mesh)
+            bpy.data.meshes.remove(mesh)
+            part.free()
     # Bone at the bottom of a deep head slash: the skull just shows.
     if deep and head:
         b.blob("Bone", Vector((c.x, c.y, -depth * 1.0)), (v["length"] * 0.22, v["width"] * 0.22, 0.008), subdiv=2)
@@ -282,14 +331,14 @@ def build_insert(kind, size, v, head, seed):
         pool.append(Vector((q.x, q.y, -depth * 0.82)))
     b.fan("Blood", pool, Vector((c.x, c.y - v["width"] * 0.15, -depth * 0.8)))
     lowest = sorted(range(N), key=lambda i: outer[i].y)[: N // 6]
-    drips = {"S": rng.randint(0, 1), "M": 1, "L": 2}[size]
+    drips = 4 if kind == "Tear" else {"S": rng.randint(0, 1), "M": 1, "L": 2}[size]
     for _ in range(drips):
         i = rng.choice(lowest)
         start = outer[i]
-        length = rng.uniform(0.035, 0.09) * (1.4 if size == "L" else 1.0)
+        length = rng.uniform(0.035, 0.09) * (1.4 if size == "L" else 1.0) * (3 if kind == "Tear" else 1)
         if head:
             length *= 0.6  # the face is short: the blood stays on the straight part
-        w = rng.uniform(0.007, 0.012)
+        w = rng.uniform(0.007, 0.012) * (2.2 if kind == "Tear" else 1)
         steps = 10
         phase = rng.uniform(0, 6.3)
         bm = b.bm("Blood")
@@ -654,6 +703,8 @@ def main():
     objects = []
     for head in (False, True):
         for (kind, size), v in VARIANTS.items():
+            if head and kind == "Tear":
+                continue  # (body only)
             name = f"{kind}{size}" + ("_Head" if head else "")
             seed = sum(map(ord, name)) * 7919  # same shapes on every run
             pts, meshes, reach = build_insert(kind, size, v, head, seed)
@@ -676,6 +727,12 @@ def main():
         bpy.context.scene.collection.objects.link(ob)
         ob.data.materials.append(material("Skin"))
         objects.append(ob)
+    # The burst head (bat finisher): real anatomy, broken up.
+    before = len(bpy.context.scene.collection.objects)
+    gore_slots, gore_kinds = gore.build(
+        lambda name, bm, offset, layer: objects.append(add_object(name, bm, offset, layer))
+    )
+    print("gore objects:", len(bpy.context.scene.collection.objects) - before)
     # Markers: origin, 1 stud up, 1 stud out of the skin.
     # (Below the inserts: Kit_Origin is the point (0, -3, 0) of the inserts' axes.)
     for name, at in (("Kit_Origin", (0, -3, 0)), ("Kit_Up", (0, -2, 0)), ("Kit_Out", (0, -3, 1))):
@@ -757,6 +814,8 @@ def main():
     lines += ["\t} :: { [string]: Shape },", "}", "", "return WoundShapes", ""]
     with open(LUA_OUT, "w") as f:
         f.write("\n".join(lines))
+    with open(GORE_LUA_OUT, "w") as f:
+        f.write(gore.lua(gore_slots, gore_kinds))
     print("inserts:", len(shapes), "objects:", len(objects))
 
     if PREVIEW:

@@ -100,6 +100,7 @@ local function isFree(player: Player): boolean
 		and not returning[player]
 		and character ~= nil
 		and not Knockout.isKnockedOut(character)
+		and not Combat.isInCinematic(character)
 end
 
 local function inCombat(player: Player): boolean

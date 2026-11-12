@@ -114,6 +114,10 @@ return table.freeze({
 		-- M1 combo: damage of hits 1, 2, 3 and 4 (the 4th is the "finisher").
 		M1_DAMAGE = table.freeze({ 5, 5, 5, 8 }),
 		M1_INTERVAL = 0.38, -- minimum time between two M1
+		-- The server lets a punch / move in this much before its time (the
+		-- client sends it right on time, and the network adds a few ms:
+		-- without it, chained punches were refused - a swing with no hit).
+		ATTACK_GRACE = 0.08,
 		FINISHER_RECOVERY = 1.0, -- pause after the 4th hit before attacking again
 		COMBO_RESET = 1.0, -- no M1 for this long → the combo starts over at hit 1
 		-- Wind-up: time between the click and the moment the hit lands.
@@ -308,8 +312,6 @@ return table.freeze({
 		-- A new cut closer than this (studs) to an old one of the same glass
 		-- makes the old one bigger instead.
 		GASH_MERGE_DISTANCE = 0.3,
-		-- Visible marks (bruises, cuts) on a body part: at most this many.
-		MAX_WOUNDS_PER_PART = 3,
 		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).
 		HURT_SOUND_HEALTH = 70,
 	}),

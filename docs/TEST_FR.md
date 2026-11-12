@@ -276,7 +276,7 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | X5 | Remplir la jauge, **G** | **KNOCKOUT MODE** : le boxeur sautille, touche ses gants, garde plus serrée. Mêmes effets d'écran que Street Fury. |
 | X6 | Pendant Knockout Mode | 1 = **JAB FLURRY** (6 coups, dont un direct du droit), 2 = **RISING UPPERCUT** (décolle plus haut), 3 = **SLIP & HOOK** (fenêtre plus longue, contre plus fort), 4 = **KNOCKOUT COMBO** : corps, tête, tête, gros uppercut — si le 1ᵉʳ coup touche, les suivants ne ratent pas, le dernier met au sol. |
 | X7 | Menu KITS | « 2 OF 2 AVAILABLE », Boxer **EQUIPPED** une fois choisi, le choix reste au prochain lancement. |
-| X8 | Kit **Street Brawler**, adversaire KO devant toi, clic gauche | Finisher propre au kit : **écrasement du pied** sur la tête, rapide (~0,75 s, coup à 0,3 s). Le Boxer garde le finisher normal (genou au sol). |
+| X8 | Finishers | Voir la section « Finishers cinématiques » plus bas. |
 | X9 | Touche **W** (AZERTY) / **Z** (QWERTY) | Bascule **1ʳᵉ ↔ 3ᵉ personne**, le choix est sauvegardé (même réglage que dans SETTINGS, où la touche est rappelée). |
 
 ## Étape 7 — Progression (`feature/progression`)
@@ -337,15 +337,50 @@ Comme le reste de la progression, ça compte **contre de vrais joueurs** (test �
 | B5 | Effet de kill équipé, achever quelqu'un | Poussière / verre brisé / gros impact (écran qui tremble, couleurs qui pâlissent) au moment du coup. |
 | B6 | Touche **B** hors combat | Ton émote se joue (SHRUG gratuite au départ), les autres la voient. Juste après un coup : rien. |
 
-## Étape 11 — Map : le quartier (`feature/city-map`)
+## Finishers cinématiques (`feature/cinematic-finishers`)
+
+Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| C1 | Lancer le jeu | Un quartier de 3 × 3 pâtés de maisons : rues en asphalte avec lignes, trottoirs, immeubles en brique / béton, ruelles, une petite place au centre. Tu apparais dans une rue (8 points d'apparition). |
-| C2 | Fin d'après-midi (au lancement) | Lumière chaude et rasante, ombres longues. |
-| C3 | Attendre ~6 min (ou changer `DAY_TIME` dans `Server/Systems/Ambience` pour tester) | Le soir tombe en 1 min 30 : lampadaires orangés allumés, néons colorés sur les façades, flaques qui brillent (rue mouillée), puis 6 min de nuit et retour à l'après-midi. |
-| C4 | Grimper sur un toit | Sur certains immeubles bas : benne (vault) → petite annexe (mantle) → toit (mantle). |
-| C5 | Bennes, caisses, barrières en béton | Se franchissent (vault) ou servent de couverture. |
-| C6 | Parcours de test (Studio) | Toujours là, à côté du quartier (au sud). |
+| F1 | **Street Brawler** sur un KO (couché **ou resté debout**) — **ré-importer `WoundKit` avant** | Bandes noires. La victime est allongée sur le dos devant lui, tête vers lui. Plan large de côté : le corps au sol, le perso sort une **grosse batte**. Gros plan sur la victime (vue de sa gauche) qui lève la tête et tend la main en suppliant (on l'entend) ; le bras ne bouche pas l'image. Plan du sol : il lève la batte **à deux mains** (main gauche sur le manche, sous la droite), elle détourne la tête, il l'abat à deux mains. Plan de côté tenu : la **tête explose** en vraies pièces — morceaux de crâne (peau dehors, os dedans), cerveau, yeux, dents ; gerbe de sang, fine brume ; au sol, une éclaboussure et des traînées **sur le sol, jamais sur le corps**. Il reste la vraie mâchoire du bas avec ses dents, la peau du menton déchirée, les vertèbres ; le cou gicle par saccades, une flaque s'étend. Caméra normale ensuite (~3,3 s). |
+| F2 | **Boxer** sur un KO — **ré-importer `WoundKit` avant** | Il **relève** l'adversaire, deux coups au corps, crochet droit, crochet gauche, direct (la tête part d'un côté puis de l'autre, un peu de sang). Puis un **crochet du gauche dans son flanc droit, sous les côtes** : le poing rentre (craquement, ton son du coup final, gerbe de sang, éclats de côte), fouille, et **arrache le vrai foie** (avec la vésicule verte). Il le tient **à bout de bras** sur le côté, il dégouline, il le regarde (plan de face, bien visible) ; la victime s'effondre, un **trou** dans le flanc droit avec des **côtes cassées** dedans, à travers le t-shirt, qui gicle par saccades, flaque dessous. Il **ouvre la main : le foie tombe** au sol (plan bas), bruit mouillé et éclaboussure quand il touche le sol. ~4,1 s. |
+| F3 | Pendant un finisher, un 3ᵉ joueur frappe l'attaquant | Rien ne se passe : l'attaquant est intouchable pendant la scène. |
+| F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. |
+| F5 | Un 3ᵉ joueur qui regarde | Pas de cinématique pour lui (sa caméra reste normale), mais il voit l'animation, la batte, le sang et entend les coups. |
+| F6 | Après le finisher | Le joueur peut de nouveau bouger et attaquer normalement, la caméra est revenue comme avant. |
+| F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
+| F8 | Pendant la cinématique | Impossible de dasher, bloquer ou attaquer ; on ne peut pas lancer un duel avec l'attaquant. |
+| F9 | Un joueur qui arrive après (ou qui était loin) | Il voit le corps sans tête, le cou ouvert, sans l'explosion. |
 
+### Bleus
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Frapper un Dummy au visage (M1, Boxer, Street Brawler) | Un **bleu** apparaît **là où le coup touche**, du côté de l'attaquant : tache irrégulière, plus foncée au centre, qui s'estompe sur les bords. |
+| B2 | Regarder le bleu ~20 s puis ~1 min | Il passe du **rouge** au **violet**, puis au **bleu-violet**. |
+| B3 | Retaper au même endroit | Le même bleu **grandit et fonce** ; sur le visage, ça **gonfle** (joue, œil, arcade). Un coup très fort sur un bleu déjà gros **ouvre l'arcade** (petite coupure, filet de sang). |
+| B4 | Frapper le torse / les jambes d'un Dummy | Bleus sur le torse / la jambe touchée (4 max par partie, sinon le plus proche grossit). |
+| B5 | Un joueur avec un t-shirt / un pantalon | Pas de bleu visible à travers les vêtements ; ceux du visage, oui. |
+| B6 | Dummy laissé tranquille | Sa vie revient vite, mais ses blessures restent : **après 13 s** sans coup, elles guérissent **petit à petit** (un bleu pâlit d'un cran puis s'efface en douceur, puis le verre, puis les coupures), une toutes les 1,5 s. |
+| B7 | Kill / réapparition | Les bleus disparaissent. Un Dummy tué reste au sol **25 s** avant de réapparaître (le sang et les morceaux restent ~30 s). |
+
+Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
+
+## Étape 11 — Map : Marrow District (`feature/city-map`)
+
+**Avant de tester** : dans Studio, `Lighting` → `Technology` = **Future** (un script ne peut pas le régler ; sans ça, pas d'ombres de lampadaires ni de halo des néons).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| C1 | Lancer le jeu | Le quartier se construit en quelques secondes autour de toi (le sol et les spawns d'abord). 4 rues, 2 ruelles, carrefour avec taxi accidenté et chantier, parking « Lot 9 », terrain de basket grillagé sous un pont ferroviaire, cour de chargement, chantier, casse. Tu apparais dans une rue (12 points). |
+| C2 | Après-midi | Ciel couvert, lumière grise et terne, brume au loin. Façades en brique sale, fenêtres en retrait (certaines condamnées ou cassées), clims, gouttières, escaliers de secours, châteaux d'eau sur les toits. |
+| C3 | Nuit (attendre ~6 min ou changer `DAY_TIME` dans `Server/Systems/Ambience`) | Lampadaires orangés (quelques-uns grésillent, d'autres sont morts), environ un tiers des fenêtres allumées (chaud, bleu télé, néon froid), néons « DUFFY'S BAR », « DELI »… |
+| C4 | Grimper | Toit du garage, de l'entrepôt, du vieux hall, puis le tablier du pont : chaque marche est un vault ou un mantle. Le pont s'atteint aussi par l'escalier et par l'échafaudage du terrain. |
+| C5 | Météo (Studio : barre de commande `workspace:SetAttribute("WeatherForce", "Rain")`, ou `"Storm"`, `"Fog"`, `"PowerCut"` la nuit) | **Pluie** : ciel plus sombre, gouttes autour de toi, flaques qui brillent, gouttières qui coulent, petit texte « RAIN » en haut à gauche. **Orage** : éclairs (flash blanc) puis tonnerre. **Brouillard** : on voit à ~90 studs. **Coupure** (nuit) : tout clignote, 40 s de noir avec des lumières de secours rouges, puis le courant revient en vague. |
+| C6 | Sans rien forcer | Un premier événement arrive 3–5 min après le lancement, puis 4–7 min de calme entre deux. |
+| C7 | En duel | Pas de texte d'événement à l'écran. |
+| C8 | Parcours de test (Studio) | Toujours là, au sud du quartier. |
+
+Les sons `Rain` et `Thunder` (`src/shared/Sounds.luau`) sont vides pour l'instant : donne-moi des IDs et je les mets.
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.

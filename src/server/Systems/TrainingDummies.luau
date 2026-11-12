@@ -14,8 +14,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Combat = require(script.Parent.Combat)
 
-local HEAL_AFTER = 3 -- seconds without damage before a dummy heals
-local RESPAWN_AFTER = 3
+local HEAL_AFTER = 3 -- seconds without damage before a dummy's health comes back
+-- Its wounds (bruises, cuts, glass) start healing later, one at a time.
+local WOUNDS_HEAL_AFTER = 13 -- seconds without damage
+local WOUND_HEAL_STEP = 1.5 -- seconds between two (a bruise pales a level, then goes)
+local RESPAWN_AFTER = 25 -- a dead dummy lies there this long (to look at what was done)
 local ATTACK_RANGE = 7 -- studs
 local THINK_INTERVAL = 0.1 -- the attacking dummy "thinks" 10 times per second
 
@@ -112,6 +115,7 @@ local function spawnDummy(kind: DummyKind, position: Vector3)
 	end)
 
 	-- Brain: heal when left alone; the attacking one hits nearby players.
+	local nextWoundHealAt = 0
 	task.spawn(function()
 		while model.Parent and humanoid.Health > 0 do
 			-- Knocked out: lies there (no healing, no attacking) until it
@@ -120,8 +124,16 @@ local function spawnDummy(kind: DummyKind, position: Vector3)
 			if not knockedOut and os.clock() - lastDamagedAt > HEAL_AFTER then
 				if humanoid.Health < humanoid.MaxHealth then
 					humanoid.Health = humanoid.MaxHealth
-					Combat.clearCuts(model) -- the glass cuts heal too
 				end
+			end
+			local now = os.clock()
+			if
+				not knockedOut
+				and now - lastDamagedAt > WOUNDS_HEAL_AFTER
+				and now >= nextWoundHealAt
+			then
+				nextWoundHealAt = now + WOUND_HEAL_STEP
+				Combat.healOneInjury(model)
 			end
 			if isAttacker and not knockedOut and model:GetAttribute("Stunned") ~= true then
 				local target = findClosestPlayer(root.Position)
