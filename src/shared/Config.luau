@@ -309,6 +309,15 @@ return table.freeze({
 		-- fill in the experience's maturity questionnaire accordingly, or turn
 		-- this off.
 		SKIN_TEAR = true,
+		-- Bruise pictures: assets/bruises/*.png uploaded to Roblox, their image
+		-- ids here (docs/WOUNDS_FR.md). With them a bruise is soft, mottled
+		-- pictures on the skin (tinted by its age); without (0), overlapping
+		-- ovals.
+		BRUISE_IMAGES = table.freeze({
+			blobs = table.freeze({ 0, 0, 0, 0 }), -- bruise_1..4.png
+			rim = 0, -- bruise_rim.png
+			petechiae = 0, -- bruise_petechiae.png
+		}),
 		-- A smashed bottle leaves bits of glass stuck in the skin; this often it
 		-- only grazes them (glass, no torn cut).
 		GLASS_GRAZE_CHANCE = 0.35,

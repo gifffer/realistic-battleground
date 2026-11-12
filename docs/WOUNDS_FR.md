@@ -36,6 +36,16 @@ Tu peux supprimer le dossier `ReplicatedStorage > Assets > Anatomy` : il ne sert
 
 Sans `WoundKit`, le jeu marche quand même. Il y a le sang, mais pas de plaie visible.
 
+## Les images des bleus (une seule fois)
+
+Les bleus sont beaucoup plus réalistes avec leurs images (taches douces et marbrées, teintées selon l'âge du bleu). Sans elles, le jeu dessine des petits ovales.
+
+1. Dans Studio : **Asset Manager** (ou *Créer → Décalques*) → importer les 6 images de `assets/bruises/` : `bruise_1.png` … `bruise_4.png`, `bruise_rim.png`, `bruise_petechiae.png`.
+2. Pour chacune, copier son **ID d'image** (clic droit → *Copy Asset ID*). Attention : il faut l'ID de l'**image**, pas celui du décalque.
+3. Les coller dans `src/shared/Config.luau`, `Injuries.BRUISE_IMAGES` :
+   - `blobs = { id1, id2, id3, id4 }` (bruise_1 à bruise_4)
+   - `rim = id` (bruise_rim), `petechiae = id` (bruise_petechiae)
+
 ## La tête classique pour tout le monde
 
 Chaque combattant reçoit la **tête Roblox classique** : son visage et sa couleur de peau restent. C'est nécessaire parce que la partie blessée est remplacée par une copie exacte, percée là où se trouve la plaie (Roblox ne permet pas de percer une partie). La copie est faite aux mesures exactes de la tête classique, donc on ne voit pas la différence.
