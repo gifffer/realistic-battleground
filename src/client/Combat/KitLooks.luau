@@ -200,7 +200,8 @@ local function watch(model: Instance)
 	task.defer(refresh, model) -- (once its body has loaded)
 end
 
--- The capes swing back with the speed, and flutter a little.
+-- The capes swing back with the speed, and flutter a little. (a negative
+-- X angle lifts the hem backwards, away from the torso)
 local function swayCapes(dt: number)
 	local time = os.clock()
 	for model, cape in capes do
@@ -215,10 +216,10 @@ local function swayCapes(dt: number)
 		local flutter = math.sin(time * (6 + speed * 0.3)) * math.min(8, 1 + speed * 0.3)
 		-- (smoothed: no snapping when stopping)
 		local current = cape.upper.Transform
-		local target = CFrame.Angles(math.rad(lift + flutter * 0.4), 0, 0)
+		local target = CFrame.Angles(-math.rad(lift + flutter * 0.4), 0, 0)
 		cape.upper.Transform = current:Lerp(target, math.min(1, dt * 8))
 		cape.lower.Transform = cape.lower.Transform:Lerp(
-			CFrame.Angles(math.rad(lift * 0.35 + flutter), 0, 0),
+			CFrame.Angles(-math.rad(lift * 0.35 + flutter), 0, 0),
 			math.min(1, dt * 8)
 		)
 	end

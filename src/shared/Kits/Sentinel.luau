@@ -41,6 +41,7 @@ local kit: KitTypes.KitDef = {
 					damage = 3.5,
 					stun = 0.12,
 					hitbox = Vector3.zero, -- (the beam has its own)
+					blockCost = 3, -- (per tick: blocking the whole beam ≈ 18 stamina)
 					forward = 0,
 					bloodChance = {},
 				},

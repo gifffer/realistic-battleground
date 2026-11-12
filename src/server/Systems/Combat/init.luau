@@ -1410,6 +1410,7 @@ local function tryDash(model: Model, player: Player): boolean
 		or isStunned(state)
 		or state.blocking
 		or isBusy(state)
+		or now() < state.channelUntil -- (rooted by the beam)
 	then
 		return false
 	end
@@ -1607,6 +1608,8 @@ local function update(dt: number)
 				"Channel",
 				if time < state.channelUntil then 0.08 else nil
 			)
+			-- (clients don't predict a dash the server would refuse)
+			setAttribute(state.model, "Channeling", time < state.channelUntil)
 			-- Kneeling for a finisher: stay in place.
 			Movement.setSpeedModifier(
 				player,

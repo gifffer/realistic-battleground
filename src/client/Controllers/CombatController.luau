@@ -239,6 +239,7 @@ local function tryDash()
 		or isStunned(character)
 		or inCinematic(character)
 		or isBusyMoving()
+		or character:GetAttribute("Channeling") == true -- (heat vision: rooted)
 		or time < nextDashAt
 	then
 		return

@@ -572,6 +572,15 @@ function KitEffects.watch(model: Model)
 		setFury(entry, model:GetAttribute("Awakened") == true)
 	end)
 	setFury(entry, model:GetAttribute("Awakened") == true)
+	-- The server cuts a move when its fighter is stunned / knocked down /
+	-- out: its effects (heat vision beam, landing...) stop with it.
+	for _, attribute in { "Stunned", "KnockedOut", "Ragdolled" } do
+		model:GetAttributeChangedSignal(attribute):Connect(function()
+			if model:GetAttribute(attribute) == true then
+				KitVFX.stop(model)
+			end
+		end)
+	end
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
 			watched[model] = nil

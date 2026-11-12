@@ -21,6 +21,7 @@ export type HitDef = {
 	bleed: { perSecond: number, duration: number }?,
 	slow: { multiplier: number, duration: number }?,
 	unblockable: boolean?, -- goes through a block (still parried / dodged)
+	blockCost: number?, -- stamina a block of it costs (default: 1.5 × an M1's)
 	breaksProp: boolean?, -- the bottle breaks on this hit
 	-- Chance (0-1) this hit draws visible blood, per zone it lands on
 	-- ({ Head = 1, Torso = 0.5 }). nil / missing zone = no blood.

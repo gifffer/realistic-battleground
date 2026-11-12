@@ -164,6 +164,8 @@ local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
 end
 
 -- Leap (skyfall): our own client throws our character up and forward.
+-- (until when the leap's push runs: a late refusal takes it back)
+local leapUntil = 0
 local function startLeap(move: Kits.MoveDef, character: Model, root: BasePart)
 	local leap = move.leap
 	if leap == nil then
@@ -180,6 +182,7 @@ local function startLeap(move: Kits.MoveDef, character: Model, root: BasePart)
 		forward = if forward.Magnitude > 1e-3 then forward.Unit else Vector3.new(0, 0, -1)
 		root.AssemblyLinearVelocity = forward * leap.forward + Vector3.new(0, leap.up, 0)
 		Push.apply(root, forward * leap.forward, leap.time)
+		leapUntil = os.clock() + leap.time
 	end)
 end
 
@@ -194,9 +197,20 @@ local function holdForBeam(move: Kits.MoveDef)
 	beamToken += 1
 	local token = beamToken
 	CameraController.holdRotation("beam", true)
-	task.delay(beam.to, function()
-		if beamToken == token then
-			CameraController.holdRotation("beam", false)
+	local startedAt = os.clock()
+	local connection: RBXScriptConnection? = nil
+	connection = RunService.Heartbeat:Connect(function()
+		local character = player.Character
+		-- (ends on time, on a refusal / newer beam, or when the server cuts
+		-- it: stunned, knocked down / out)
+		local cut = character == nil or chargeInterrupted(character)
+		if beamToken ~= token or cut or os.clock() - startedAt > beam.to then
+			if connection then
+				connection:Disconnect()
+			end
+			if beamToken == token then
+				CameraController.holdRotation("beam", false)
+			end
 		end
 	end)
 end
@@ -297,6 +311,16 @@ local function onMoveRefused(_slot: unknown, requestId: unknown)
 	end
 	pending = nil
 	brake()
+	if os.clock() < leapUntil then
+		-- refused after we already jumped: back down, no forward push
+		leapUntil = 0
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			local velocity = root.AssemblyLinearVelocity
+			root.AssemblyLinearVelocity = Vector3.new(0, math.min(velocity.Y, 0), 0)
+			Push.apply(root, Vector3.zero, 0.05)
+		end
+	end
 	beamToken += 1
 	CameraController.holdRotation("beam", false)
 	CharacterAnimationController.stopAction(character, current.animation)

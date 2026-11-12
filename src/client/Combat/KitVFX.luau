@@ -157,7 +157,7 @@ local function burst(
 	count: number,
 	texture: string,
 	color: Color3,
-	size: NumberRange,
+	size: Vector2, -- (start size, end size),
 	speed: NumberRange,
 	lifetime: NumberRange,
 	spread: number,
@@ -172,8 +172,8 @@ local function burst(
 	emitter.Texture = texture
 	emitter.Color = ColorSequence.new(color)
 	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, size.Min),
-		NumberSequenceKeypoint.new(1, size.Max),
+		NumberSequenceKeypoint.new(0, size.X),
+		NumberSequenceKeypoint.new(1, size.Y),
 	})
 	emitter.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.2),
@@ -201,7 +201,7 @@ local function dust(position: Vector3, count: number, spread: number, size: numb
 		count,
 		SMOKE,
 		DUST,
-		NumberRange.new(size, size * 3),
+		Vector2.new(size, size * 3),
 		NumberRange.new(6, 16),
 		NumberRange.new(0.6, 1.4),
 		spread,
@@ -225,6 +225,8 @@ local function rocks(position: Vector3, count: number, power: number)
 		)
 		rock.Anchored = false
 		rock.CanCollide = true
+		-- (feather-light: a rock landing on a fighter doesn't shove them)
+		rock.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.5, 0.2)
 		rock.CFrame = CFrame.new(
 			at + Vector3.new(random:NextNumber(-1.5, 1.5), 0.4, random:NextNumber(-1.5, 1.5))
 		) * CFrame.Angles(random:NextNumber(0, 6.3), random:NextNumber(0, 6.3), 0)
@@ -485,6 +487,9 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		if not firing then
 			firing = true
 			loop = SoundController.play("LaserBeam", model)
+			if loop then
+				loop.Looped = true
+			end
 			flash(head.Position + direction, LASER, 8, 10, 0.3)
 			for _, pair in beams do
 				pair.outer.Parent = folder
@@ -496,7 +501,21 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		end
 		-- (one hit point for both eyes: they converge on it)
 		local origin = head.Position + direction * 0.5
-		local hit = workspace:Raycast(origin, direction * beam.range, params)
+		-- (like the server: fighters don't stop it, it burns through them;
+		-- the first thing that isn't a fighter does)
+		local skipped: { Instance } = { model, folder }
+		local hit: RaycastResult? = nil
+		for _ = 1, 8 do
+			params.FilterDescendantsInstances = skipped
+			hit = workspace:Raycast(origin, direction * beam.range, params)
+			local owner = if hit then hit.Instance:FindFirstAncestorOfClass("Model") else nil
+			if hit and owner and owner:FindFirstChildOfClass("Humanoid") then
+				table.insert(skipped, owner)
+				hit = nil
+			else
+				break
+			end
+		end
 		local target = if hit then hit.Position else origin + direction * beam.range
 		local flicker = 0.85 + math.random() * 0.3
 		for index, pair in beams do
@@ -513,9 +532,7 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			impact.WorldCFrame = CFrame.lookAt(target, target + hit.Normal)
 				* CFrame.Angles(math.rad(-90), 0, 0)
 			-- Scorch marks where it burns the ground / a wall.
-			local owner = hit.Instance:FindFirstAncestorOfClass("Model")
-			local onBody = owner ~= nil and owner:FindFirstChildOfClass("Humanoid") ~= nil
-			if not onBody and os.clock() - lastScorch > 0.08 then
+			if os.clock() - lastScorch > 0.08 then
 				lastScorch = os.clock()
 				local scorch = newPart(Vector3.new(0.02, 0.9, 0.9), Color3.fromRGB(26, 20, 18))
 				scorch.Shape = Enum.PartType.Cylinder
@@ -680,7 +697,7 @@ local function snort(model: Model)
 			6,
 			SMOKE,
 			Color3.fromRGB(220, 220, 225),
-			NumberRange.new(0.3, 1.4),
+			Vector2.new(0.3, 1.4),
 			NumberRange.new(3, 6),
 			NumberRange.new(0.5, 0.9),
 			15,
@@ -874,7 +891,7 @@ function KitVFX.onHit(victim: Model, _attacker: Model, moveId: string)
 			6,
 			SMOKE,
 			Color3.fromRGB(60, 56, 54),
-			NumberRange.new(0.4, 1.6),
+			Vector2.new(0.4, 1.6),
 			NumberRange.new(2, 5),
 			NumberRange.new(0.6, 1.1),
 			30
@@ -884,7 +901,7 @@ function KitVFX.onHit(victim: Model, _attacker: Model, moveId: string)
 			10,
 			FIRE,
 			Color3.fromRGB(255, 140, 60),
-			NumberRange.new(0.3, 0),
+			Vector2.new(0.3, 0),
 			NumberRange.new(3, 7),
 			NumberRange.new(0.2, 0.4),
 			50,

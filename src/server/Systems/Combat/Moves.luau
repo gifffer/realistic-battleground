@@ -92,7 +92,7 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		headStun = false, -- a move's stun is already tuned per hit
 		legSlow = false,
 		kind = "Hit",
-		blockCost = C.BLOCK_STAMINA_COST * 1.5, -- moves are heavier than an M1
+		blockCost = hit.blockCost or C.BLOCK_STAMINA_COST * 1.5, -- moves are heavier than an M1
 		knockback = hit.knockback,
 		knockdown = hit.knockdown,
 		pull = hit.pull,
@@ -257,7 +257,8 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 	local direction = Vector3.new(look.X, 0, look.Z)
 	direction = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.new(0, 0, -1)
 	local heat: { [CombatState]: number? } = {}
-	local lastTick = -math.huge
+	-- (ticks on a fixed grid: the damage doesn't depend on the frame rate)
+	local nextTick = startedAt + beam.from
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.RespectCanCollide = true
@@ -274,20 +275,31 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 			end
 			return
 		end
-		if elapsed < beam.from or time - lastTick < beam.tick then
+		if time < nextTick then
 			return
 		end
-		lastTick = time
+		nextTick = math.max(nextTick + beam.tick, time - beam.tick)
 		local head = state.model:FindFirstChild("Head")
 		local origin = if head and head:IsA("BasePart")
 			then head.Position + direction * 0.5
 			else state.root.Position + Vector3.new(0, 1.5, 0)
-		-- Walls stop it (fighters don't: they're in the box below).
-		params.FilterDescendantsInstances = { state.model }
+		-- Walls stop it (fighters don't: they're in the box below, so the
+		-- ray goes on through them).
+		local skipped: { Instance } = { state.model }
 		local length = beam.range
-		local wall = workspace:Raycast(origin, direction * beam.range, params)
-		if wall and wall.Instance:FindFirstAncestorOfClass("Model") == nil then
-			length = wall.Distance
+		for _ = 1, 8 do
+			params.FilterDescendantsInstances = skipped
+			local wall = workspace:Raycast(origin, direction * beam.range, params)
+			if wall == nil then
+				break
+			end
+			local owner = wall.Instance:FindFirstAncestorOfClass("Model")
+			if owner and owner:FindFirstChildOfClass("Humanoid") then
+				table.insert(skipped, owner)
+			else
+				length = wall.Distance
+				break
+			end
 		end
 		local box = CFrame.lookAt(origin + direction * (length / 2), origin + direction * length)
 		local victims, partsByModel =
