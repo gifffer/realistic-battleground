@@ -145,6 +145,22 @@ return table.freeze({
 	-- Buy a kit from the Kits menu (level and coins checked by the server).
 	BuyKit = event("BuyKit"),
 
+	-- client → server  (targetUserId: number)
+	-- "I challenge this player to a duel" (Duel menu).
+	DuelChallenge = event("DuelChallenge"),
+
+	-- client → server  (challengerUserId: number, accept: boolean)
+	-- Answer to a challenge.
+	DuelRespond = event("DuelRespond"),
+
+	-- client → server  (searching: boolean)
+	-- Join / leave the ranked matchmaking.
+	DuelQueue = event("DuelQueue"),
+
+	-- server → ONE client  (kind: Types.DuelEventKind, data: { [string]: any })
+	-- Everything about your duels (see Types.DuelEventKind for the data).
+	DuelEvent = event("DuelEvent"),
+
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?,
 	--                        victimLevel: number?, killerLevel: number?)
 	-- A fighter was eliminated: one line in the kill feed (top right).

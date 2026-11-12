@@ -71,6 +71,7 @@ export type Elimination = {
 	killerPlayer: Player?, -- nil: no player gets the kill
 }
 local eliminationCallbacks: { (Elimination) -> () } = {}
+local interceptor: ((victim: Model, attacker: Model?) -> boolean)? = nil
 
 local function now(): number
 	return os.clock()
@@ -368,6 +369,10 @@ function Knockout.knockOut(victim: Model, attacker: Model?)
 	if info == nil or info.knockedOut or info.dead then
 		return
 	end
+	-- Another system decides what 0 HP means here (a duel round ends).
+	if interceptor and interceptor(victim, attacker) then
+		return
+	end
 	if attacker then
 		Knockout.noteHit(victim, attacker)
 	end
@@ -461,6 +466,24 @@ function Knockout.finish(victim: Model, attacker: Model)
 end
 
 -- `callback(model)` when a KO'd fighter gets back up.
+-- `handler(victim, attacker)` is asked first each time someone would be
+-- knocked out; returning true means "handled, don't knock them out"
+-- (Duels: in a duel, 0 HP ends the round instead).
+function Knockout.setInterceptor(handler: (victim: Model, attacker: Model?) -> boolean)
+	interceptor = handler
+end
+
+-- os.clock() of the last hit `model` took (from anyone), -inf if never.
+function Knockout.lastHitAt(model: Model): number
+	local info = fighters[model]
+	return if info then info.lastHitAt else -math.huge
+end
+
+-- The free-arena spawn point farthest from the enemies (respawns, end of a duel).
+function Knockout.pickSpawn(player: Player): SpawnLocation?
+	return pickSpawn(player)
+end
+
 -- `callback(elimination)` for every fighter eliminated (see Elimination).
 function Knockout.onEliminated(callback: (Elimination) -> ())
 	table.insert(eliminationCallbacks, callback)

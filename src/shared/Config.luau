@@ -240,6 +240,37 @@ return table.freeze({
 		MAX_LEVEL = 100,
 	}),
 
+	-- Duels (step 8): best of 3, in arenas built far from the free arena.
+	Duels = table.freeze({
+		ROUNDS_TO_WIN = 2,
+		CHALLENGE_TIMEOUT = 15, -- seconds to accept
+		CHALLENGE_COOLDOWN = 10, -- seconds between two challenges sent
+		IN_COMBAT_TIME = 5, -- hit less than this long ago = can't be challenged
+		COUNTDOWN = 3, -- "3, 2, 1, FIGHT"
+		ROUND_END_PAUSE = 3, -- between the KO and the next round
+		ARENA_COUNT = 4,
+		-- Ranked (ELO).
+		START_ELO = 1000,
+		ELO_K = 32,
+		-- Matchmaking: accept an ELO gap of MATCH_RANGE, widening by
+		-- MATCH_RANGE_GROWTH every 5 s of waiting.
+		MATCH_RANGE = 100,
+		MATCH_RANGE_GROWTH = 50,
+		-- Ranks (shown in the menu): minimum ELO of each.
+		RANKS = table.freeze({
+			table.freeze({ name = "BRONZE", minElo = 0 }),
+			table.freeze({ name = "SILVER", minElo = 1100 }),
+			table.freeze({ name = "GOLD", minElo = 1300 }),
+			table.freeze({ name = "PLATINUM", minElo = 1500 }),
+			table.freeze({ name = "DIAMOND", minElo = 1700 }),
+		}),
+		-- Rewards (XP, coins). Challenges: same anti-farm as kills.
+		CHALLENGE_WIN = table.freeze({ xp = 40, coins = 8 }),
+		CHALLENGE_LOSS = table.freeze({ xp = 10, coins = 0 }),
+		RANKED_WIN = table.freeze({ xp = 100, coins = 25 }),
+		RANKED_LOSS = table.freeze({ xp = 30, coins = 0 }),
+	}),
+
 	-- Injuries (step 5). They last until you die or get a kill (which heals).
 	Injuries = table.freeze({
 		-- Legs: after this much damage taken on the legs (kicks), you LIMP.

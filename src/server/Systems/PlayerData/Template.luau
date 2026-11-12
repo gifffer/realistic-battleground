@@ -25,12 +25,17 @@ local template: Types.PlayerProfile = {
 	-- Added in v0.0.2: no migration needed, Reconcile() adds it to older saves.
 	settings = {
 		firstPerson = false,
+		blockDuels = false,
 	},
 	-- Added with the kits (step 4): Reconcile() adds it to older saves.
 	equippedKit = "StreetBrawler",
 	-- Added with the progression (step 7).
 	xp = 0,
 	ownedKits = {},
+	-- Added with the duels (step 8).
+	elo = 1000,
+	rankedWins = 0,
+	rankedLosses = 0,
 }
 
 return template
