@@ -2,9 +2,10 @@
 -- Finishers: the cinematic kills of the kits (a KO'd opponent + M1).
 --
 --   "Bat"            Street Brawler: pulls a baseball bat from behind his
---                    back, rests it on his shoulder, raises it with both
---                    hands and brings it down on the head of the opponent
---                    lying on the ground: the head bursts.
+--                    back straight into a big golf swing: up over his right
+--                    shoulder, then swept low across the head of the
+--                    opponent lying on the ground, from his right to his
+--                    left: the head bursts.
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
 --                    to the body, hook, hook, cross, then a left hook into
 --                    their right side under the ribs: the hand goes in and
@@ -65,7 +66,7 @@ local cinematics: { [string]: Cinematic } = {
 		events = {
 			{ time = 0.35, kind = "Prop" },
 			{ time = 0.55, kind = "Plea" },
-			{ time = 1.42, kind = "Swing" },
+			{ time = 1.45, kind = "Swing" },
 			{ time = 1.7, kind = "Kill" },
 			{ time = 3.1, kind = "PropAway" },
 		},
