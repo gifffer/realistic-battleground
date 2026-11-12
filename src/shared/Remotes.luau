@@ -107,8 +107,9 @@ return table.freeze({
 	-- for that M1 (see Attack), nil for dummies. `moveId` = the kit move that
 	-- landed ("BottleSmash"...), nil for an M1. `blood` = the hit draws
 	-- visible blood (rolled by the server: every client shows it). A number in
-	-- `skinTearSeed` = glass tore skin off the face: every client throws the
-	-- same pieces (random numbers from that seed).
+	-- `skinTearSeed` = glass cut the skin: every client shows the same blood
+	-- and shreds (random numbers from that seed). The cut itself is a
+	-- "Gash_<Part>_<n>" attribute (Shared/Util/Gash).
 	CombatEvent = event("CombatEvent"),
 
 	-- server → ONE client  (attackId: number)

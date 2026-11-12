@@ -39,12 +39,12 @@ local kit: KitTypes.KitDef = {
 					stun = 0.7,
 					hitbox = HEAD,
 					forward = 3,
-					-- Glass: it cuts (always on the head, often on the body) and
-					-- bleeds hard; on the head it tears it open.
+					-- Glass: it bleeds hard (always on the head, often on the body)
+					-- and leaves a ragged cut where it lands.
 					bleed = { perSecond = 3, duration = 6 },
 					breaksProp = true,
 					bloodChance = { Head = 1, Torso = 0.6 },
-					tearsSkin = true,
+					cuts = "Lac",
 				},
 			},
 		},
@@ -132,7 +132,7 @@ local kit: KitTypes.KitDef = {
 						hitbox = WIDE,
 						forward = 3,
 						bloodChance = { Head = 0.85, Torso = 0.5 }, -- jagged glass
-						tearsSkin = true,
+						cuts = "Slash",
 					},
 					{
 						at = 0.45,
@@ -142,7 +142,7 @@ local kit: KitTypes.KitDef = {
 						forward = 3,
 						bleed = { perSecond = 4, duration = 5 },
 						bloodChance = { Head = 1, Torso = 0.6 },
-						tearsSkin = true,
+						cuts = "Slash",
 					},
 				},
 			},

@@ -227,16 +227,19 @@ return table.freeze({
 		-- rarely cut: blood is mostly for the bottle (its moves set their own
 		-- `bloodChance` in the kit). Decided by the server: everyone sees the same.
 		PUNCH_BLOOD_CHANCE = table.freeze({ Head = 0.12, Torso = 0.03, Legs = 0 }),
-		-- Glass (moves with `tearsSkin`) tears the skin open where it lands: head,
-		-- torso or a leg, on the side it came from. Level 1 to SKIN_TEAR_MAX per
-		-- spot ("Torn_<Part>_<Side>" attributes, e.g. "Torn_Head_Front"):
-		-- skin torn away, then the muscles go (the skull, the ribs or the leg
-		-- bone show), then the bone itself (the brain shows). Drawn with the
-		-- anatomy models when they are imported (docs/ANATOMY_FR.md), else with
-		-- simple shapes (head only). Realistic gore: on Roblox, fill in the
-		-- experience's maturity questionnaire accordingly, or turn this off.
+		-- Glass (moves with `cuts`) cuts the skin where it lands: head or torso,
+		-- on the side facing the attacker. Realistic: a smashed bottle
+		-- makes a ragged laceration, a broken bottle a clean slash; both go
+		-- through the skin into the flesh (a deep slash shows muscle, or the
+		-- skull at the bottom on the head) - never an open skull or rib cage.
+		-- Hitting the same spot again makes that cut bigger (3 sizes). Drawn
+		-- with the wound models (docs/WOUNDS_FR.md). Realistic gore: on Roblox,
+		-- fill in the experience's maturity questionnaire accordingly, or turn
+		-- this off.
 		SKIN_TEAR = true,
-		SKIN_TEAR_MAX = 3,
+		-- A new cut closer than this (studs) to an old one of the same glass
+		-- makes the old one bigger instead.
+		GASH_MERGE_DISTANCE = 0.3,
 		-- Visible marks (bruises, cuts) on a body part: at most this many.
 		MAX_WOUNDS_PER_PART = 3,
 		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).

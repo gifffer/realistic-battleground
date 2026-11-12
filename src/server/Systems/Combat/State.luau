@@ -71,7 +71,7 @@ export type HitSpec = {
 	unblockable: boolean?,
 	-- Chance of visible blood per zone (nil: the M1 rules in Config.Injuries).
 	bloodChance: { [string]: number }?,
-	tearsSkin: boolean?, -- glass: tears the head open on a head hit
+	cuts: ("Lac" | "Slash")?, -- glass: cuts the skin where it lands (Gash)
 	attackId: number?, -- M1 number from the client (prediction), nil for moves
 	moveId: string?, -- kit move id, nil for an M1
 }

@@ -532,11 +532,10 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
 	stain(point, if zone == "Head" then 1.1 else 0.8)
 end
 
--- Glass tearing the skin (face, torso or leg, from `zone`): pieces of skin
--- (and raw flesh) torn off, thrown away from the blow, with a heavy spray of
--- blood. `seed` comes from the server: every client throws exactly the same
--- pieces. They fall and lie on the floor for a few seconds. The opened wound
--- that stays is drawn by Wounds / Anatomy (the "Torn_<Part>_<Side>" attributes).
+-- Glass cutting the skin (face, torso or leg, from `zone`): a spray of blood
+-- and, sometimes, a tiny shred of skin flicked off by the glass. `seed`
+-- comes from the server: every client shows exactly the same thing. The cut
+-- that stays is drawn by Gashes (the "Gash_<Part>_<n>" attributes).
 function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone: string?)
 	local partName = "Head"
 	if zone == "Torso" then
@@ -562,7 +561,7 @@ function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone:
 	local away = -toward
 	local skin = head.Color
 
-	local count = random:NextInteger(4, 6)
+	local count = random:NextInteger(0, 2) -- glass cuts; it rarely rips skin away
 	for index = 1, count do
 		if skinPieces >= MAX_SKIN_PIECES then
 			break
@@ -571,9 +570,9 @@ function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone:
 		local piece = Instance.new("Part")
 		piece.Name = "TornSkin"
 		piece.Size = Vector3.new(
-			random:NextNumber(0.14, 0.3),
-			random:NextNumber(0.03, 0.06),
-			random:NextNumber(0.1, 0.24)
+			random:NextNumber(0.05, 0.1),
+			random:NextNumber(0.015, 0.025),
+			random:NextNumber(0.04, 0.08)
 		)
 		piece.Material = Enum.Material.SmoothPlastic
 		local isFlesh = index % 2 == 0
@@ -588,7 +587,7 @@ function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone:
 		-- Ripped off by the blow: away from the attacker, up, spread out.
 		local spread = random:NextUnitVector() * 0.6
 		local direction = (away + Vector3.new(0, random:NextNumber(0.5, 1.1), 0) + spread).Unit
-		piece.AssemblyLinearVelocity = direction * random:NextNumber(9, 15)
+		piece.AssemblyLinearVelocity = direction * random:NextNumber(5, 9)
 		piece.AssemblyAngularVelocity = random:NextUnitVector() * 25
 		piece.Parent = workspace
 		skinPieces += 1
@@ -598,8 +597,8 @@ function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone:
 		end)
 	end
 
-	-- Heavy bleeding from the open wound (same drops on every client).
-	burst(point, 12, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.11, 11, 1.6, random)
+	-- Bleeding from the fresh cut (same drops on every client).
+	burst(point, 9, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.1, 9, 1.4, random)
 	stain(point + away * 0.8, 1.3)
 	stain(point + away * 1.6 + Vector3.new(random:NextNumber(-0.4, 0.4), 0, 0), 0.7)
 end

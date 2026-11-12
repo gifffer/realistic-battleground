@@ -25,9 +25,10 @@ export type HitDef = {
 	-- Chance (0-1) this hit draws visible blood, per zone it lands on
 	-- ({ Head = 1, Torso = 0.5 }). nil / missing zone = no blood.
 	bloodChance: { [string]: number }?,
-	-- Glass: tears the skin open where the hit lands (head, torso, leg), on
-	-- that side (Config.Injuries.SKIN_TEAR).
-	tearsSkin: boolean?,
+	-- Glass: cuts the skin where the hit lands (head or torso), see
+	-- Config.Injuries.SKIN_TEAR. "Lac" = a bottle smashed on them (ragged
+	-- laceration), "Slash" = a broken bottle (clean, longer cut).
+	cuts: ("Lac" | "Slash")?,
 }
 
 export type MoveDef = {

@@ -52,6 +52,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
+local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -281,6 +282,114 @@ local function injure(victim: CombatState, zone: Types.HitZone, damage: number, 
 	end
 end
 
+-- Glass cut ("Gash_<Part>_<n>" attributes, see Shared/Util/Gash). Where:
+-- on the side of the part that faces the attacker (a bit to the left or
+-- right at random), at a random height of the zone (forehead / temple /
+-- cheek, chest / belly / back). Hitting the same spot again
+-- with the same glass makes that cut bigger (S -> M -> L) instead of adding
+-- one; at most Gash.MAX_PER_PART per part. Realistic: a bottle cuts skin and
+-- flesh, it never opens a skull or a rib cage.
+local GASH_HEIGHT: { [string]: { number } } = { -- studs from the part's centre
+	Head = { -0.12, 0.22 },
+	Torso = { -0.6, 0.65 },
+}
+local HEAD_RADIUS = 0.6 -- the round head you see (the head part is 2x1x1)
+
+local function addGash(
+	victim: CombatState,
+	attacker: CombatState,
+	zone: string, -- Types.HitZone
+	kind: "Lac" | "Slash"
+)
+	-- (Glass moves aim at the head or the torso: Moves' AIMABLE_ZONES.)
+	if zone ~= "Head" and zone ~= "Torso" then
+		return
+	end
+	local partName = zone
+	local part = victim.model:FindFirstChild(partName)
+	local key = Gash.KEY_OF[partName]
+	if part == nil or not part:IsA("BasePart") or key == nil then
+		return
+	end
+	-- Toward the attacker, flat, in the part's space, turned up to ~25°.
+	local toward = part.CFrame:VectorToObjectSpace(attacker.root.Position - part.Position)
+	local flat = Vector3.new(toward.X, 0, toward.Z)
+	local direction = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+	direction = CFrame.Angles(0, random:NextNumber(-0.45, 0.45), 0):VectorToWorldSpace(direction)
+	local heights = GASH_HEIGHT[key]
+	local y = random:NextNumber(heights[1], heights[2])
+	local point: Vector3
+	if key == "Head" then
+		point = direction * HEAD_RADIUS * part.Size.Y + Vector3.new(0, y * part.Size.Y, 0)
+	else
+		-- Torso: on the chest or the back, never on its sides (the arms
+		-- cover them). From the side: near the edge on that side.
+		local half = part.Size / 2
+		local front = if math.abs(direction.Z) > 0.05
+			then math.sign(direction.Z)
+			else (if random:NextInteger(0, 1) == 0 then -1 else 1)
+		local x = math.clamp(
+			direction.X / math.max(math.abs(direction.Z), 0.05) * half.Z,
+			-0.8 * half.X,
+			0.8 * half.X
+		)
+		point = Vector3.new(x, y, front * half.Z)
+	end
+	-- A slash runs across, a bit diagonal; a laceration can point any way.
+	local angle = if kind == "Slash"
+		then random:NextNumber(12, 45) * (if random:NextInteger(0, 1) == 0 then -1 else 1)
+		else random:NextNumber(-90, 90)
+
+	-- Same glass, close to an old cut: that cut grows.
+	local free: number? = nil
+	local closest: number? = nil
+	local closestDistance = math.huge
+	for index = 1, Gash.MAX_PER_PART do
+		local old = Gash.decode(victim.model:GetAttribute(Gash.attribute(key, index)))
+		if old == nil then
+			free = free or index
+		else
+			local distance = (old.point - point).Magnitude
+			if
+				old.kind == kind
+				and distance < INJ.GASH_MERGE_DISTANCE
+				and distance < closestDistance
+			then
+				closest, closestDistance = index, distance
+			end
+		end
+	end
+	if closest == nil and free == nil then
+		-- No room left: the nearest cut of any kind grows instead.
+		for index = 1, Gash.MAX_PER_PART do
+			local old = Gash.decode(victim.model:GetAttribute(Gash.attribute(key, index)))
+			if old and (old.point - point).Magnitude < closestDistance then
+				closest, closestDistance = index, (old.point - point).Magnitude
+			end
+		end
+	end
+	if closest then
+		local attribute = Gash.attribute(key, closest)
+		local old = Gash.decode(victim.model:GetAttribute(attribute))
+		if old then
+			old.size = Gash.bigger(old.size)
+			setAttribute(victim.model, attribute, Gash.encode(old))
+		end
+	elseif free then
+		setAttribute(
+			victim.model,
+			Gash.attribute(key, free),
+			Gash.encode({
+				kind = kind,
+				size = "S",
+				point = point,
+				angle = angle,
+				seed = random:NextInteger(1, 2 ^ 30),
+			})
+		)
+	end
+end
+
 -- A kill (or nothing at all, see onKill): every injury is healed.
 local function healInjuries(state: CombatState)
 	state.legDamage = 0
@@ -289,9 +398,9 @@ local function healInjuries(state: CombatState)
 	for part in state.wounds do
 		setAttribute(state.model, woundAttribute(part), nil)
 	end
-	-- Torn skin ("Torn_<Part>_<Side>"): a new body.
+	-- Cuts in the skin ("Gash_<Part>_<n>"): a new body.
 	for name in state.model:GetAttributes() do
-		if string.sub(name, 1, 5) == "Torn_" then
+		if string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX then
 			setAttribute(state.model, name, nil)
 		end
 	end
@@ -476,26 +585,12 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		bloodChance = INJ.PUNCH_BLOOD_CHANCE[zone] or 0
 	end
 	blood = random:NextNumber() < bloodChance
-	-- Glass tears the skin open where it really landed (the zone the attacker
-	-- aimed at), on the side it came from: "Torn_<Part>_<Side>" goes up one
-	-- level. On the legs: the leg on that side (from the front or the back:
-	-- one of the two). Even on the blow that knocks them out.
-	if spec.tearsSkin and INJ.SKIN_TEAR then
-		local partKey: string
-		if zone == "Legs" then
-			if side == "Left" or side == "Right" then
-				partKey = side .. "Leg"
-			else
-				partKey = if random:NextInteger(0, 1) == 0 then "LeftLeg" else "RightLeg"
-			end
-		else
-			partKey = zone -- "Head" / "Torso"
-		end
+	-- Glass cuts the skin where it really landed (the zone the attacker aimed
+	-- at), on the side facing the attacker. Even on the blow that knocks
+	-- them out.
+	if spec.cuts and INJ.SKIN_TEAR then
 		skinTearSeed = random:NextInteger(1, 2 ^ 30)
-		local attribute = `Torn_{partKey}_{side}`
-		local torn = victim.model:GetAttribute(attribute)
-		local level = if typeof(torn) == "number" then torn else 0
-		setAttribute(victim.model, attribute, math.min(INJ.SKIN_TEAR_MAX, level + 1))
+		addGash(victim, attacker, zone, spec.cuts)
 	end
 
 	if Knockout.isKnockedOut(victim.model) then
@@ -680,6 +775,16 @@ end
 
 -- M1. Returns true if the attack started. `aim` = the direction the player
 -- aims at (validated by onAttack); nil for dummies (random head / torso).
+-- Removes every glass cut of this fighter (the training dummies heal
+-- completely when left alone).
+function Combat.clearCuts(model: Model)
+	for name in model:GetAttributes() do
+		if string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX then
+			setAttribute(model, name, nil)
+		end
+	end
+end
+
 function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boolean
 	local state = states[model]
 	if state == nil then
