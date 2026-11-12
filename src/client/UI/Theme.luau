@@ -1,7 +1,8 @@
 --!strict
 -- The look of the whole interface, in one place.
 --
--- Direction "editorial / film" (think Sifu, The Last of Us): almost no
+-- Direction "editorial / film" (think Sifu, The Last of Us), with BOLD,
+-- tight type (heavy condensed caps, bold titles): almost no
 -- boxes. Off-white type and 1–2 px hairlines on soft dark gradients, SQUARE
 -- corners everywhere, one desaturated blood red used ONLY for danger.
 -- Text shown to players is in English (game rule).
@@ -44,16 +45,23 @@ local FAMILY = {
 	Roboto = "rbxasset://fonts/families/Roboto.json",
 }
 
+-- Weights: between the first thin look (too serious) and full bold (not
+-- serious enough): semi-bold labels, medium titles, a little spacing. The names stay the same so every screen follows: e.g.
+-- "NumberLight" is now a bold number too.
 Theme.Fonts = table.freeze({
-	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.Medium), -- caps labels, names
+	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.SemiBold), -- caps labels, names
 	LabelBold = Font.new(FAMILY.Condensed, Enum.FontWeight.Bold), -- feedback words
-	LabelRegular = Font.new(FAMILY.Condensed, Enum.FontWeight.Regular), -- kill feed verbs
-	Number = Font.new(FAMILY.Mono, Enum.FontWeight.Regular), -- tabular numbers
-	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Light), -- the big HP number
-	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- key caps
-	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Light), -- titles
+	LabelRegular = Font.new(FAMILY.Condensed, Enum.FontWeight.Medium), -- kill feed verbs
+	Number = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- tabular numbers
+	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- the big HP number
+	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.SemiBold), -- key caps
+	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Medium), -- titles
 	Body = Font.new(FAMILY.Roboto, Enum.FontWeight.Regular), -- sentences
 })
+
+-- Every text a bit bigger than its layout asks (bold, tight text reads
+-- better slightly larger). Applied by Theme.text and Theme.keyCap.
+Theme.TEXT_SCALE = 1.06
 
 -- Soft shadow behind text drawn over the 3D world (never a hard outline).
 Theme.STROKE_TRANSPARENCY = 0.8
@@ -113,27 +121,34 @@ function Theme.text(props: { [string]: any }, children: { Instance }?): any
 			defaults[key] = value
 		end
 	end
+	defaults.TextSize = math.floor(defaults.TextSize * Theme.TEXT_SCALE + 0.5)
 	return Theme.make(className, defaults, children)
 end
 
--- Letter-spacing. Roblox has no letter-spacing property and the wide
--- tracking is the whole look, so we put a narrow Unicode space between
--- every letter (a word space becomes three of them).
---   "three" = wide (small caps labels)   "four" = medium
---   "thin"  = light (big titles)          "en"   = very wide (KO title)
+-- Letter-spacing. Roblox has no letter-spacing property, so we put a
+-- narrow Unicode space between every letter. The look is now TIGHT and
+-- punchy: only a hair space for small caps labels, nothing for titles.
+--   "three" / "four" = small labels (a hair apart)
+--   "thin" / "en"    = titles (letters as drawn)
 local TRACK_SPACES: { [string]: string } = {
-	thin = "\u{2009}",
-	four = "\u{2005}",
-	three = "\u{2004}",
-	en = "\u{2002}",
+	thin = "\u{200A}",
+	four = "\u{2009}",
+	three = "\u{2009}",
+	en = "\u{200A}",
 }
 
 function Theme.track(text: string, kind: string): string
-	local space = TRACK_SPACES[kind] or TRACK_SPACES.three
+	local space = TRACK_SPACES[kind]
+	if space == nil then
+		space = TRACK_SPACES.three
+	end
+	if space == "" then
+		return text
+	end
 	local out = {}
 	for _, code in utf8.codes(text) do
 		local char = utf8.char(code)
-		table.insert(out, if char == " " then space .. space .. space else char)
+		table.insert(out, if char == " " then " " else char)
 	end
 	return table.concat(out, space)
 end
@@ -171,6 +186,7 @@ function Theme.keyCap(text: string, props: { [string]: any }?): any
 			base[key] = value
 		end
 	end
+	base.TextSize = math.floor(base.TextSize * Theme.TEXT_SCALE + 0.5)
 	return Theme.make("TextLabel", base, {
 		Theme.make("UIPadding", {
 			PaddingLeft = UDim.new(0, 7),

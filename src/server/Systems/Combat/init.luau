@@ -115,6 +115,17 @@ local Combat = {}
 local states: { [Model]: CombatState } = {}
 local damaged = Signal.new() :: Signal.Signal<DamageInfo>
 
+-- Every outcome of a hit (landed, blocked, parried...), for other systems
+-- (daily quests count parries, head hits, kit moves landed...).
+export type CombatEventInfo = {
+	kind: Types.CombatEventKind,
+	victim: Model,
+	attacker: Model,
+	zone: Types.HitZone?,
+	moveId: string?,
+}
+local events = Signal.new() :: Signal.Signal<CombatEventInfo>
+
 local function now(): number
 	return os.clock()
 end
@@ -568,6 +579,13 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 			if blood then true else nil,
 			skinTearSeed
 		)
+		events.fire({
+			kind = kind,
+			victim = victim.model,
+			attacker = attacker.model,
+			zone = if withZone then zone :: Types.HitZone else nil,
+			moveId = spec.moveId,
+		})
 	end
 	-- Awakened attackers hit harder.
 	local damage = spec.damage
@@ -1257,6 +1275,10 @@ local function tryDash(model: Model, player: Player): boolean
 	state.nextDashAt = time + C.DASH_COOLDOWN
 	state.invulnerableUntil = time + C.DASH_INVULNERABLE
 	return true
+end
+
+function Combat.onEvent(callback: (CombatEventInfo) -> ()): Signal.Connection
+	return events.connect(callback)
 end
 
 function Combat.onDamaged(callback: (DamageInfo) -> ()): Signal.Connection

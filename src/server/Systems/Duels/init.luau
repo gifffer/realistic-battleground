@@ -69,6 +69,9 @@ local waitingForArena: { { a: Player, b: Player, ranked: boolean } } = {}
 -- "userIdA:userIdB" (sorted) → last rewarded challenge (anti-farm).
 local lastRewardedChallenge: { [string]: number } = {}
 local nextMatchId = 0
+-- Called when a match that counts (not farming) ends (daily quests).
+export type MatchResult = { winner: Player, loser: Player, ranked: boolean }
+local matchEndedCallbacks: { (MatchResult) -> () } = {}
 
 local function send(player: Player, kind: Types.DuelEventKind, data: { [string]: any })
 	if player.Parent == Players then
@@ -348,6 +351,9 @@ endMatch = function(match: Match, winner: Player, forfeit: boolean)
 	local counts = not farming and not nothingPlayed
 	if counts then
 		lastRewardedChallenge[pairKey] = os.clock()
+		for _, callback in matchEndedCallbacks do
+			task.spawn(callback, { winner = winner, loser = loser, ranked = match.ranked })
+		end
 	end
 	if match.ranked and counts then
 		-- The winner gets what the loser actually loses (ELO never below 0).
@@ -644,6 +650,10 @@ local function onLoaded(player: Player)
 	end
 	player:SetAttribute("InDuel", false)
 	player:SetAttribute("InQueue", false)
+end
+
+function Duels.onMatchEnded(callback: (MatchResult) -> ())
+	table.insert(matchEndedCallbacks, callback)
 end
 
 function Duels.isInDuel(player: Player): boolean

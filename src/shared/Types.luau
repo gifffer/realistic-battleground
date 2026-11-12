@@ -30,6 +30,20 @@ export type PlayerProfile = {
 	elo: number,
 	rankedWins: number,
 	rankedLosses: number,
+	-- Daily quests (step 9): today's 3 quests and their progress.
+	quests: DailyQuests,
+}
+
+export type QuestState = {
+	id: string, -- Shared/Quests id
+	goal: number,
+	progress: number,
+	done: boolean, -- reward already given
+}
+
+export type DailyQuests = {
+	day: number, -- Quests.today() they were drawn on (0 = never)
+	list: { QuestState },
 }
 
 -- What the server sends to the owning client.
@@ -77,6 +91,7 @@ export type RewardKind =
 	| "DuelLoss"
 	| "RankedWin"
 	| "RankedLoss"
+	| "Quest"
 
 -- Duel messages from the server to one player (Remotes.DuelEvent).
 --   Challenged   someone challenges you      { from: number (UserId), name, expiresAt }

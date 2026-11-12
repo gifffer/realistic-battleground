@@ -141,7 +141,9 @@ local function buildScreen()
 		TextSize = 10,
 		TextColor3 = C.Ink2,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Text = Theme.track("YOU ARE DOWN", "three") .. " ",
+		-- No trailing space: the tracking is tight now, so a space after
+		-- the last letter would only push the centred text to the left.
+		Text = Theme.track("YOU ARE DOWN", "three"),
 		Parent = block,
 	})
 	title = Theme.text({
@@ -151,7 +153,7 @@ local function buildScreen()
 		FontFace = Theme.Fonts.Display,
 		TextSize = 34,
 		TextXAlignment = Enum.TextXAlignment.Center,
-		Text = Theme.track("KNOCKED OUT", "en") .. " ",
+		Text = Theme.track("KNOCKED OUT", "en"),
 		Parent = block,
 	})
 	local track = Theme.make("Frame", {
@@ -277,6 +279,14 @@ local function buildFinishPrompt()
 		Size = UDim2.fromOffset(24, 20),
 		Parent = finishGui,
 	})
+	-- Bold "M1" (≈ 13 px) is wider than the 10 px the default 7 px side
+	-- padding leaves in a 24 px cap: 5 px keeps it inside the padding
+	-- without widening the cap (FINISH and the tick are placed from it).
+	local keyPadding = finishKey:FindFirstChildOfClass("UIPadding")
+	if keyPadding then
+		keyPadding.PaddingLeft = UDim.new(0, 5)
+		keyPadding.PaddingRight = UDim.new(0, 5)
+	end
 	finishWord = Theme.text({
 		Name = "Word",
 		Position = UDim2.fromOffset(34, 0),

@@ -67,7 +67,7 @@ local F = Theme.Fonts
 local D = Config.Duels
 
 -- Roboto Medium: only for a name inside a sentence ("Rook_77 challenges you").
-local ROBOTO_MEDIUM = Font.new("rbxasset://fonts/families/Roboto.json", Enum.FontWeight.Medium)
+local ROBOTO_MEDIUM = Theme.Fonts.Body -- (bold-ish like the rest of the UI)
 
 local QUAD = Enum.EasingStyle.Quad
 local QUART = Enum.EasingStyle.Quart
@@ -519,11 +519,13 @@ local function buildPrompt()
 		BackgroundTransparency = 1,
 		Parent = gui,
 	}) :: Frame
-	-- A dark patch with no visible edge (fades on all four sides).
+	-- A dark patch with no visible edge (fades on all four sides). 520 wide
+	-- so it still reaches under a long name at the bigger, bolder size
+	-- (the line can run to about 48 + 420 px).
 	promptScrim = Theme.make("CanvasGroup", {
 		Name = "PromptScrim",
 		Position = UDim2.new(0, 0, 0.5, -20),
-		Size = UDim2.fromOffset(460, 200),
+		Size = UDim2.fromOffset(520, 200),
 		BackgroundTransparency = 1,
 		GroupTransparency = 1,
 		Visible = false,
@@ -544,7 +546,7 @@ local function buildPrompt()
 	prompt = Theme.make("CanvasGroup", {
 		Name = "Prompt",
 		Position = UDim2.new(0, PROMPT_X, 0.5, PROMPT_Y),
-		Size = UDim2.fromOffset(420, 100),
+		Size = UDim2.fromOffset(480, 100),
 		BackgroundTransparency = 1,
 		GroupTransparency = 1,
 		Visible = false,
@@ -726,8 +728,8 @@ local function buildTop()
 	-- YOU 1 — 0 (the spacer keeps the digits on the screen centre)
 	local scoreRow = hRow("Frame", {
 		Name = "ScoreRow",
-		Position = UDim2.fromOffset(0, 16),
-		Size = UDim2.new(1, 0, 0, 24),
+		Position = UDim2.fromOffset(0, 15),
+		Size = UDim2.new(1, 0, 0, 26),
 		Parent = duelTop,
 	}, 12, Enum.HorizontalAlignment.Center) :: Frame
 	Theme.text({
@@ -746,7 +748,7 @@ local function buildTop()
 			FontFace = F.NumberLight,
 			TextSize = 22,
 			TextColor3 = color,
-			Size = UDim2.fromOffset(0, 24),
+			Size = UDim2.fromOffset(0, 26),
 			Text = text,
 		})
 	end
@@ -1041,8 +1043,8 @@ local function buildResult()
 	-- YOU 2 — 1 (bigger numerals; the opponent is named in the eyebrow)
 	resScore = hRow("CanvasGroup", {
 		Name = "Score",
-		Position = UDim2.fromOffset(0, 72),
-		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, 70),
+		Size = UDim2.new(1, 0, 0, 34),
 		GroupTransparency = 1,
 		Parent = block,
 	}, 14, Enum.HorizontalAlignment.Center) :: CanvasGroup
@@ -1062,7 +1064,7 @@ local function buildResult()
 			FontFace = F.NumberLight,
 			TextSize = 30,
 			TextColor3 = color,
-			Size = UDim2.fromOffset(0, 30),
+			Size = UDim2.fromOffset(0, 34),
 			Text = text,
 		})
 	end
@@ -1098,7 +1100,7 @@ local function buildResult()
 		TextSize = 10,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextTransparency = 1,
-		Text = Theme.track("RANK UP", "three") .. " ",
+		Text = Theme.track("RANK UP", "three"),
 		Parent = block,
 	}) :: TextLabel
 	upName = Theme.text({
@@ -1583,7 +1585,7 @@ local function playRoundStart(fightAt: number)
 		enter()
 		countRule.Visible = false
 		-- (+1 trailing space: the wide tracking stays centred.)
-		showCount(Theme.track("FIGHT", "en") .. " ")
+		showCount(Theme.track("FIGHT", "en"))
 		Theme.tween(roundCC, 0.3, { Saturation = 0, Contrast = 0 })
 		after(0.45, "beat", function()
 			for _, label in numLabels do
@@ -1871,7 +1873,7 @@ local function onEnd(data: { [string]: any })
 	resLv.Visible = level ~= nil
 	resLv.Text = if level then tostring(level) else ""
 	resName.Text = opponentDisplayName()
-	resTitle.Text = Theme.track(if won then "VICTORY" else "DEFEAT", "en") .. " "
+	resTitle.Text = Theme.track(if won then "VICTORY" else "DEFEAT", "en")
 	resMine.Text = tostring(scoreMine)
 	resTheirs.Text = tostring(scoreTheirs)
 
