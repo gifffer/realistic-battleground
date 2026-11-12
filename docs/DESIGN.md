@@ -230,8 +230,8 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 4. ✅ **Système de kits** + **Street Brawler** (4 attaques + Awakening « Street Fury »), saignement
    simple, fenêtre **Kits**.
 5. ✅ **Blessures** : saignement, boiterie, marques, effets faible vie, petite régénération.
-6. **Boxer** (Jab Rush, Uppercut, Slip, Liver Shot + Knockout Mode avec le Knockout Combo), gratuit. ← en cours
-7. **Progression** : XP, niveaux, coins sur kill/assist (déblocage des futurs kits).
+6. ✅ **Boxer** (Jab Rush, Uppercut, Slip, Liver Shot + Knockout Mode avec le Knockout Combo), gratuit.
+7. **Progression** : XP (kill, finisher, assist, dégâts, temps de jeu), niveaux 1–100, coins, profil, nom + niveau au-dessus des têtes, classement Tab, déblocage des futurs kits (niveau + coins). ← en cours
 8. **Duels** : défi (non classé), arènes, best of 3, récompenses, puis **Ranked** (matchmaking + ELO).
 9. **Quêtes quotidiennes**.
 10. **Boutique** : cosmétiques, achats Robux.
