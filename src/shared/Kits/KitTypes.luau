@@ -64,6 +64,9 @@ export type FinisherDef = {
 	animation: string,
 	impact: number, -- seconds from the click to the killing blow
 	duration: number, -- can't do anything else until then
+	-- A cinematic kill (Shared/Finishers: placement, camera, effects).
+	-- Its `kill` and `duration` must match impact / duration here.
+	cinematic: string?,
 }
 
 export type AwakeningDef = {

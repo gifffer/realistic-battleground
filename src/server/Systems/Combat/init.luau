@@ -52,11 +52,13 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
+local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
@@ -265,22 +267,18 @@ local function startBleeding(
 	)
 end
 
--- Attribute holding the wound count of a body part. Attribute names can't
--- contain spaces: "Right Leg" → "Wound_RightLeg".
-local function woundAttribute(part: string): string
-	return "Wound_" .. string.gsub(part, " ", "")
-end
-
 -- Injuries left by a hit that landed (step 5):
---   • a visible mark on the body part hit ("Wound_<Part>" attribute = how
---     many, clients draw them),
+--   • a bruise where it landed (addBruise, "Bruise_<Part>_<n>"),
 --   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
+-- (addBruise is below skinPoint: declared here, set there.)
+local addBruise: (victim: CombatState, attacker: CombatState, partName: string, damage: number) -> ()
 local function injure(
 	victim: CombatState,
+	attacker: CombatState,
 	zone: Types.HitZone,
 	damage: number,
 	side: Types.HitSide,
-	mark: boolean -- add a bruise / cut mark (Wound_<Part>)
+	mark: boolean -- leave a bruise (glass leaves its cut instead)
 )
 	local part = "Torso"
 	if zone == "Head" then
@@ -294,13 +292,8 @@ local function injure(
 			setAttribute(victim.model, "Limping", true)
 		end
 	end
-	if not mark then
-		return
-	end
-	local count = math.min(INJ.MAX_WOUNDS_PER_PART, (victim.wounds[part] or 0) + 1)
-	if count ~= victim.wounds[part] then
-		victim.wounds[part] = count
-		setAttribute(victim.model, woundAttribute(part), count)
+	if mark then
+		addBruise(victim, attacker, part, damage)
 	end
 end
 
@@ -323,7 +316,8 @@ local function skinPoint(
 	part: BasePart,
 	key: string,
 	attacker: CombatState,
-	spread: number
+	spread: number,
+	heightRange: { number }? -- (studs from the part's centre; default: GASH_HEIGHT)
 ): Vector3
 	-- Toward the attacker, flat, in the part's space, turned up to `spread`.
 	local toward = part.CFrame:VectorToObjectSpace(attacker.root.Position - part.Position)
@@ -331,7 +325,7 @@ local function skinPoint(
 	local direction = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
 	direction = CFrame.Angles(0, random:NextNumber(-spread, spread), 0)
 		:VectorToWorldSpace(direction)
-	local heights = GASH_HEIGHT[key]
+	local heights = heightRange or GASH_HEIGHT[key]
 	local y = random:NextNumber(heights[1], heights[2])
 	local point: Vector3
 	if key == "Head" then
@@ -351,6 +345,61 @@ local function skinPoint(
 		point = Vector3.new(x, y, front * half.Z)
 	end
 	return point
+end
+
+-- Bruises: where on each part a blow lands (heights, studs from the centre:
+-- the face from the jaw to the brow, the chest to the belly, the limbs).
+local BRUISE_HEIGHT: { [string]: { number } } = {
+	Head = { -0.26, 0.24 },
+	Torso = { -0.7, 0.6 },
+	LeftLeg = { -0.6, 0.5 },
+	RightLeg = { -0.6, 0.5 },
+	LeftArm = { -0.5, 0.5 },
+	RightArm = { -0.5, 0.5 },
+}
+local BRUISE_MERGE = { Head = 0.24, Torso = 0.38 } -- closer than this: the same bruise
+local HEAVY_BLOW = 12 -- damage: a blow this hard bruises two levels at once
+
+-- A bruise where the blow landed, facing the attacker. Hit again near it,
+-- the same bruise grows (bigger, darker, swollen); else a new one (at most
+-- Bruise.MAX_PER_PART: past that, the nearest grows).
+addBruise = function(victim: CombatState, attacker: CombatState, partName: string, damage: number)
+	local key = Gash.KEY_OF[partName]
+	local part = victim.model:FindFirstChild(partName)
+	if key == nil or part == nil or not part:IsA("BasePart") then
+		return
+	end
+	local point = skinPoint(part, key, attacker, 0.45, BRUISE_HEIGHT[key])
+	local grow = if damage >= HEAVY_BLOW then 2 else 1
+	local nearest, nearestIndex, nearestDistance = nil :: Bruise.Data?, 0, math.huge
+	local free = 0
+	for index = 1, Bruise.MAX_PER_PART do
+		local data = Bruise.decode(victim.model:GetAttribute(Bruise.attribute(key, index)))
+		if data then
+			local distance = (data.point - point).Magnitude
+			if distance < nearestDistance then
+				nearest, nearestIndex, nearestDistance = data, index, distance
+			end
+		elseif free == 0 then
+			free = index
+		end
+	end
+	local merge = BRUISE_MERGE[key] or 0.32
+	if nearest and (nearestDistance <= merge or free == 0) then
+		nearest.level = math.min(Bruise.MAX_LEVEL, nearest.level + grow)
+		setAttribute(victim.model, Bruise.attribute(key, nearestIndex), Bruise.encode(nearest))
+		return
+	end
+	setAttribute(
+		victim.model,
+		Bruise.attribute(key, free),
+		Bruise.encode({
+			point = point,
+			level = math.min(Bruise.MAX_LEVEL, grow),
+			born = workspace:GetServerTimeNow(),
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
 end
 
 local function addGash(
@@ -465,16 +514,12 @@ local function healInjuries(state: CombatState)
 	state.legDamage = 0
 	state.limping = false
 	setAttribute(state.model, "Limping", false)
-	for part in state.wounds do
-		setAttribute(state.model, woundAttribute(part), nil)
-	end
-	-- Cuts in the skin ("Gash_<Part>_<n>"): a new body.
+	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
-		if Gash.isInjuryAttribute(name) then
+		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
 			setAttribute(state.model, name, nil)
 		end
 	end
-	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
 end
 
@@ -604,6 +649,11 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 	if Knockout.isProtected(victim.model) then
 		event("Protected", false, false)
+		return false
+	end
+
+	-- 0b. In a cinematic finisher: untouchable (no effect, it's a cutscene).
+	if time < victim.cinematicUntil then
 		return false
 	end
 
@@ -741,7 +791,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
-	injure(victim, zone :: Types.HitZone, damage, side, spec.cuts == nil)
+	injure(victim, attacker, zone :: Types.HitZone, damage, side, spec.cuts == nil)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -809,6 +859,8 @@ function Combat.register(model: Model, player: Player?)
 		legSlowUntil = 0,
 		finishingUntil = 0,
 		invulnerableUntil = 0,
+		cinematicUntil = 0,
+		cinematicToken = 0,
 		nextDashAt = 0,
 		knockbackUntil = 0,
 		kitId = Kits.DEFAULT,
@@ -825,7 +877,6 @@ function Combat.register(model: Model, player: Player?)
 		knockedDownUntil = 0,
 		legDamage = 0,
 		limping = false,
-		wounds = {},
 		lastDamagedAt = -math.huge,
 		regenCarry = 0,
 		slipUntil = 0,
@@ -853,15 +904,295 @@ function Combat.register(model: Model, player: Player?)
 	end)
 end
 
+-- The bat finisher: the head bursts. Every client shows it (and the neck
+-- left open) from this attribute, its value = the seed of the pieces.
+local function blowHead(victim: Model)
+	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
+end
+
+-- The Boxer's finisher: the liver torn out under the right ribs. A "Tear"
+-- cut (Gashes draws the hole, broken ribs in it, through the clothes).
+local function tearLiverOut(victim: Model)
+	local index = 1
+	for candidate = 1, Gash.MAX_PER_PART do
+		if victim:GetAttribute(Gash.attribute("Torso", candidate)) == nil then
+			index = candidate
+			break
+		end
+	end
+	setAttribute(
+		victim,
+		Gash.attribute("Torso", index),
+		Gash.encode({
+			kind = "Tear",
+			size = "L",
+			point = Vector3.new(0.5, -0.3, -0.5), -- its right, under the ribs, in front
+			angle = 0,
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
+end
+
+-- A cinematic finisher (Shared/Finishers): both fighters are placed and held
+-- still (anchored) for the cutscene, the attacker can't be touched, the
+-- victim dies at the killing blow. Every client plays the camera / effects
+-- from Remotes.FinisherStarted.
+local function startCinematic(
+	state: CombatState,
+	target: Model,
+	finisher: Kits.FinisherDef,
+	cinematic: Finishers.Cinematic
+)
+	local root = state.root
+	local victimRoot = target:FindFirstChild("HumanoidRootPart")
+	local victimHead = target:FindFirstChild("Head")
+	if
+		not (
+			victimRoot
+			and victimRoot:IsA("BasePart")
+			and victimHead
+			and victimHead:IsA("BasePart")
+		)
+	then
+		Knockout.release(target)
+		return
+	end
+	local time = now()
+	local token = state.attackToken
+
+	-- Where everyone stands.
+	local anchor: CFrame
+	local victimPlace: CFrame? = nil
+	if cinematic.placement == "head" then
+		-- Past the head of the body lying there (the body beyond it, the
+		-- camera shots count on it), looking down at it.
+		-- No room there (a wall, the edge of the map): his own side of the
+		-- head, then the sides; never inside a wall.
+		local head = victimHead.Position
+		local torso = target:FindFirstChild("Torso")
+		local body = if torso and torso:IsA("BasePart") then torso.Position else victimRoot.Position
+		local function flat(v: Vector3): Vector3?
+			local f = Vector3.new(v.X, 0, v.Z)
+			return if f.Magnitude > 0.1 then f.Unit else nil
+		end
+		local past = flat(head - body)
+		local own = flat(root.Position - head) or -root.CFrame.LookVector
+		local candidates: { Vector3 } = {}
+		if past then
+			table.insert(candidates, past)
+		end
+		table.insert(candidates, own)
+		if past then
+			table.insert(candidates, past:Cross(Vector3.new(0, 1, 0)))
+			table.insert(candidates, -past:Cross(Vector3.new(0, 1, 0)))
+		end
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { state.model, target }
+		params.RespectCanCollide = true
+		local overlap = OverlapParams.new()
+		overlap.FilterType = Enum.RaycastFilterType.Exclude
+		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.RespectCanCollide = true
+		-- Where he'd stand (his feet on the floor there, if there is one).
+		local function standingAt(direction: Vector3): Vector3
+			local stand = Vector3.new(head.X, root.Position.Y, head.Z)
+				+ direction * Finishers.HEAD_DISTANCE
+			local floor =
+				workspace:Raycast(stand + Vector3.new(0, 2, 0), Vector3.new(0, -8, 0), params)
+			return if floor then Vector3.new(stand.X, floor.Position.Y + 3, stand.Z) else stand
+		end
+		-- A floor at the feet' height under `at` (studs, y of the root - 3).
+		local function floorAt(at: Vector3, rootY: number): boolean
+			local hit =
+				workspace:Raycast(Vector3.new(at.X, rootY - 1, at.Z), Vector3.new(0, -3, 0), params)
+			return hit ~= nil and math.abs(hit.Position.Y - (rootY - 3)) < 0.8
+		end
+		-- Room for him there, and for the body laid out beyond the head.
+		local function isClear(stand: Vector3): boolean
+			local from = Vector3.new(head.X, stand.Y + 1, head.Z)
+			if workspace:Raycast(from, stand + Vector3.new(0, 1, 0) - from, params) then
+				return false -- a wall between the head and there
+			end
+			if
+				#workspace:GetPartBoundsInBox(
+					CFrame.new(stand + Vector3.new(0, -0.2, 0)),
+					Vector3.new(1.8, 4.4, 1.2),
+					overlap
+				) > 0
+			then
+				return false
+			end
+			local look = Vector3.new(head.X - stand.X, 0, head.Z - stand.Z)
+			if look.Magnitude < 0.1 then
+				return false
+			end
+			look = look.Unit
+			local bodyAt = stand + look * 5.75 + Vector3.new(0, -2.4, 0)
+			if
+				#workspace:GetPartBoundsInBox(
+					CFrame.lookAt(bodyAt, bodyAt + look),
+					Vector3.new(2.2, 0.8, 5.1),
+					overlap
+				) > 0
+			then
+				return false -- (a wall where the body would lie)
+			end
+			return floorAt(stand, stand.Y)
+				and floorAt(stand + look * Finishers.HEAD_DISTANCE, stand.Y)
+				and floorAt(stand + look * 7.6, stand.Y)
+		end
+		local stand: Vector3? = nil
+		for _, direction in candidates do
+			local at = standingAt(direction)
+			if isClear(at) then
+				stand = at
+				break
+			end
+		end
+		if stand then
+			anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
+			-- The victim laid out flat on its back in front of him, head
+			-- toward him (lying however it fell, even still standing, the
+			-- shots and the bat would miss it): its head at
+			-- (0, -2.45, -HEAD_DISTANCE).
+			victimPlace = anchor
+				* CFrame.new(0, -2.45, -(Finishers.HEAD_DISTANCE + 1.5))
+				* CFrame.fromMatrix(
+					Vector3.zero,
+					Vector3.new(1, 0, 0), -- its right: his right
+					Vector3.new(0, 0, 1), -- its head: toward him
+					Vector3.new(0, -1, 0) -- its back: on the floor (face up)
+				)
+		else
+			-- Nowhere to lay it out (walls, a ledge): it stays as it lies,
+			-- he stands on his own side of the head.
+			local fallback = standingAt(own)
+			anchor = CFrame.lookAt(fallback, Vector3.new(head.X, fallback.Y, head.Z))
+		end
+	else
+		-- Where he is, facing the body; the victim hauled up in front of him.
+		local toward = Vector3.new(
+			victimRoot.Position.X - root.Position.X,
+			0,
+			victimRoot.Position.Z - root.Position.Z
+		)
+		toward = if toward.Magnitude > 0.1 then toward.Unit else root.CFrame.LookVector
+		anchor = CFrame.lookAt(root.Position, root.Position + toward)
+		victimPlace = anchor
+			* CFrame.new(0, 0, -Finishers.HOLD_DISTANCE)
+			* CFrame.Angles(0, math.pi, 0)
+	end
+	root.Anchored = true
+	root.CFrame = anchor
+	state.cinematicUntil = time + cinematic.duration
+	state.cinematicToken += 1
+	local cinematicToken = state.cinematicToken
+	setAttribute(state.model, "InCinematic", true) -- (the client holds its inputs)
+	if victimPlace then
+		Ragdoll.disable(target)
+		victimRoot.Anchored = true
+		victimRoot.CFrame = victimPlace
+	end
+
+	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
+	if cinematic.victimAnimation then
+		Remotes.CombatAction:FireAllClients(target, cinematic.victimAnimation)
+	end
+	Remotes.FinisherStarted:FireAllClients(state.model, target, cinematic.id, anchor)
+
+	local connections: { RBXScriptConnection } = {}
+	local over = false
+	local killed = false
+	-- Everything this cinematic holds, let go (once). Before the killing
+	-- blow, the victim drops back down, still KO'd (someone can finish them).
+	local function finish()
+		if over then
+			return
+		end
+		over = true
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		if not killed then
+			if victimPlace and victimRoot.Parent then
+				victimRoot.Anchored = false
+				Ragdoll.enable(target)
+			end
+			Knockout.release(target)
+		end
+		-- (only if no newer cinematic took this fighter over)
+		if state.cinematicToken == cinematicToken then
+			if root.Parent then
+				root.Anchored = false
+			end
+			state.cinematicUntil = 0
+			state.finishingUntil = 0
+			setAttribute(state.model, "InCinematic", nil)
+		end
+		Remotes.FinisherEnded:FireAllClients(state.model, target, killed)
+	end
+	-- Interrupted: the attacker dies or leaves, the victim leaves.
+	table.insert(
+		connections,
+		state.humanoid.Died:Connect(function()
+			finish()
+		end)
+	)
+	for _, model in { state.model, target } do
+		table.insert(
+			connections,
+			model.AncestryChanged:Connect(function()
+				if model.Parent == nil then
+					finish()
+				end
+			end)
+		)
+	end
+
+	task.delay(cinematic.kill, function()
+		if over then
+			return
+		end
+		if state.attackToken ~= token or not isAlive(state) or target.Parent == nil then
+			finish()
+			return
+		end
+		killed = true
+		if victimPlace then
+			-- Limp: it folds and drops where it stands.
+			victimRoot.Anchored = false
+			Ragdoll.enable(target)
+		end
+		Knockout.finish(target, state.model)
+		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
+		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
+			if cinematic.id == "Bat" then
+				blowHead(target)
+			elseif cinematic.id == "KnockoutCombo" then
+				tearLiverOut(target)
+			end
+		end
+		-- (the attacker stays held until the end of the cutscene)
+	end)
+	task.delay(cinematic.duration, finish)
+end
+
+-- Is this fighter in a cinematic finisher right now (Duels wait for it)?
+function Combat.isInCinematic(model: Model): boolean
+	local state = states[model]
+	return state ~= nil and now() < state.cinematicUntil
+end
+
 -- Finisher on a KO'd fighter: kneel and strike; the victim dies at impact
--- unless the attacker is stunned (or dies) before.
+-- unless the attacker is stunned (or dies) before. Kits can have their own,
+-- some of them cinematic (Shared/Finishers).
 local function startFinisher(state: CombatState, target: Model): boolean
 	if not Knockout.reserve(target, state.model) then
 		return false
 	end
 	local time = now()
 	local K = Config.Knockout
-	-- Each kit can have its own finisher (the Street Brawler stomps).
 	local finisher = Kits.finisher(state.kitId)
 	state.nextAttackAt = time + finisher.duration
 	state.finishingUntil = time + finisher.duration
@@ -869,8 +1200,14 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	state.combo = 0
 	state.attackToken += 1
 	local token = state.attackToken
-	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
 
+	local cinematic = Finishers.get(finisher.cinematic)
+	if cinematic then
+		startCinematic(state, target, finisher, cinematic)
+		return true
+	end
+
+	Remotes.CombatAction:FireAllClients(state.model, finisher.animation)
 	task.delay(finisher.impact, function()
 		local targetRoot = target:FindFirstChild("HumanoidRootPart")
 		local stillThere = targetRoot ~= nil
@@ -905,11 +1242,38 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 	return PART_ZONES[part.Name]
 end
 
--- Removes every glass cut of this fighter (the training dummies heal
+-- Heals one injury of this fighter, a little (the training dummies, left
+-- alone): a bruise pales a level, then goes; a bit of glass, then a cut,
+-- closes. Returns false when there is nothing left to heal.
+function Combat.healOneInjury(model: Model): boolean
+	local attributes = model:GetAttributes()
+	-- (the oldest-looking first: bruises, then glass, then cuts)
+	for name, value in attributes do
+		if Bruise.isAttribute(name) then
+			local data = Bruise.decode(value)
+			if data and data.level > 1 then
+				data.level -= 1
+				setAttribute(model, name, Bruise.encode(data))
+			else
+				setAttribute(model, name, nil)
+			end
+			return true
+		end
+	end
+	for name in attributes do
+		if Gash.isInjuryAttribute(name) then
+			setAttribute(model, name, nil)
+			return true
+		end
+	end
+	return false
+end
+
+-- Removes every cut and bruise of this fighter (the training dummies heal
 -- completely when left alone).
 function Combat.clearCuts(model: Model)
 	for name in model:GetAttributes() do
-		if Gash.isInjuryAttribute(name) then
+		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
 			setAttribute(model, name, nil)
 		end
 	end
@@ -936,10 +1300,12 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 		return false
 	end
 	local time = now()
-	if time < state.nextAttackAt then
+	if time < state.nextAttackAt - C.ATTACK_GRACE then
 		resolved()
 		return false
 	end
+	-- (let in a hair early: it counts from when it was due, keeping the pace)
+	time = math.max(time, state.nextAttackAt)
 	-- Attacking ends the spawn protection.
 	Knockout.endProtection(model)
 	state.slipUntil = 0 -- punching ends a slip
@@ -1080,6 +1446,13 @@ function Combat.resetForRound(model: Model)
 		Stamina.refill(player)
 	end
 	stopBlocking(state)
+	if state.cinematicUntil > 0 then
+		-- (a cutscene cut short: it lets go of nothing more)
+		state.cinematicToken += 1
+		state.cinematicUntil = 0
+		state.root.Anchored = false
+		setAttribute(model, "InCinematic", nil)
+	end
 	state.stunnedUntil = 0
 	state.attackToken += 1
 	state.knockdownToken += 1
@@ -1182,7 +1555,11 @@ local function update(dt: number)
 				state.bleedPerSecond = 0
 				state.bleedSource = nil
 				setAttribute(model, "Bleeding", false)
-			elseif time >= state.nextBleedTick and not Knockout.isKnockedOut(model) then
+			elseif
+				time >= state.nextBleedTick
+				and time >= state.cinematicUntil -- (no bleeding out mid-cutscene)
+				and not Knockout.isKnockedOut(model)
+			then
 				state.nextBleedTick = time + KC.BLEED_TICK
 				local source = state.bleedSource
 				local attacker = if source then states[source] else nil

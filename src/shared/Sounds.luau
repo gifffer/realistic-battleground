@@ -111,6 +111,67 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "HeavySwing",
 	},
 
+	-- Cinematic finishers (Shared/Finishers) ------------------------------
+	BatDraw = { -- the bat pulled out from behind the back
+		ids = {},
+		volume = 0.6,
+		pitch = 0.75,
+		pitchVariation = 0.05,
+		fallback = "Swing",
+	},
+	BatCrush = { -- the bat bursts the head
+		ids = { 123012498248453 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.03,
+		fallback = "HeavyHit",
+	},
+	BatSwing = { -- the bat coming down
+		ids = { 9113305631 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.04,
+		fallback = "HeavySwing",
+	},
+	VictimPlea = { -- what the one on the ground says before the bat comes down
+		ids = { 76456045012714 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0,
+	},
+	BodyShot = { -- a hook to the ribs, dull
+		ids = {},
+		volume = 0.85,
+		pitch = 0.8,
+		pitchVariation = 0.08,
+		fallback = "Hit",
+	},
+	KnockoutPunch = { -- the Boxer's last blow: the hand into the side
+		ids = { 140325083438865 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.02,
+		fallback = "HeavyHit",
+	},
+	RibCrack = { -- ribs giving way under the fist
+		ids = { 121666760679562 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.06,
+	},
+	FleshTear = { -- the liver torn out, wet
+		ids = { 111650608703379 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.04,
+	},
+	OrganDrop = { -- a heavy, wet organ hitting the floor
+		ids = { 135119591308242 },
+		volume = 0.7,
+		pitch = 1,
+		pitchVariation = 0.05,
+	},
+
 	-- Injuries (step 5) -----------------------------------------------------
 	-- Loops heard only by you while your health is low.
 	Heartbeat = { ids = { 7237020278 }, volume = 0.6, pitch = 1, pitchVariation = 0 },

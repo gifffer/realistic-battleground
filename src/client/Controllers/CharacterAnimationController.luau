@@ -386,13 +386,23 @@ local function blendChannel(
 	channel: Channel,
 	motor: Motor6D,
 	joint: string,
-	result: CFrame
+	result: CFrame,
+	keepHeight: Vector3? -- Root only: the crouch's drop, for upper-body clips
 ): (CFrame, boolean)
 	local touched = false
 	for _, layer in channel do
 		local localPose = layer.pose[joint]
 		if localPose and layer.weight > 0 then
-			result = result:Lerp(R6Pose.toTransform(motor, localPose), layer.weight)
+			local target = R6Pose.toTransform(motor, localPose)
+			-- An upper-body clip (guard, block, hit reaction: a Root but no
+			-- legs) keeps the height below it: crouched, the pelvis stays down
+			-- (the legs under it stay bent to match). Otherwise the pelvis
+			-- went back up while the legs stayed folded: feet in the air.
+			local legs = layer.pose :: { [string]: CFrame? }
+			if keepHeight and legs.RightHip == nil and legs.LeftHip == nil then
+				target += keepHeight
+			end
+			result = result:Lerp(target, layer.weight)
 			touched = true
 		end
 	end
@@ -449,6 +459,12 @@ local function compose(entry: Tracked)
 
 		local result = base
 		local touched, any = false, false
+		-- (the crouch's drop, worked out afresh each frame from the movement
+		-- clips alone: never from what was written before, or it piles up)
+		local keepHeight: Vector3? = nil
+		if joint == "Root" then
+			keepHeight = (blendChannel(entry.movement, motor, joint, CFrame.identity)).Position
+		end
 		result, touched = blendChannel(entry.movement, motor, joint, result)
 		any = any or touched
 		if sprint > 0 and sprintPose[joint] then
@@ -461,10 +477,10 @@ local function compose(entry: Tracked)
 		-- must stay under the guard / hurt posture, or the legs no longer
 		-- line up with the body.
 		if not (joint == "Root" and isLimping(entry)) then
-			result, touched = blendChannel(entry.stance, motor, joint, result)
+			result, touched = blendChannel(entry.stance, motor, joint, result, keepHeight)
 			any = any or touched
 		end
-		result, touched = blendChannel(entry.action, motor, joint, result)
+		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched
 		-- Flinch: added on top of everything, on the head and (less) the torso.
 		if entry.flinch ~= Vector3.zero and (joint == "Neck" or joint == "Root") then

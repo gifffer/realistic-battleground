@@ -108,6 +108,15 @@ local kit: KitTypes.KitDef = {
 		},
 	},
 
+	-- Cinematic kill (Shared/Finishers "KnockoutCombo"): hauls the opponent
+	-- up, body shots, hooks, cross, then a huge uppercut that sends them flying.
+	finisher = {
+		animation = "Boxer_FinisherCombo",
+		impact = 2.62,
+		duration = 4.1,
+		cinematic = "KnockoutCombo",
+	},
+
 	awakening = {
 		name = "KNOCKOUT MODE",
 		description = "Locks in. Faster combinations, and key 4 becomes the Knockout Combo.",

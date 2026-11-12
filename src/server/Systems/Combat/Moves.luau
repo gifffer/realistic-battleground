@@ -256,7 +256,8 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 		return false
 	end
 	local time = c.now()
-	if time < state.nextAttackAt or time < (state.cooldowns[move.id] or 0) then
+	local grace = Config.Combat.ATTACK_GRACE -- (see Config: the network's few ms)
+	if time < state.nextAttackAt - grace or time < (state.cooldowns[move.id] or 0) - grace then
 		return false
 	end
 	local player = state.player
