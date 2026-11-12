@@ -46,7 +46,9 @@ local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
 local PIECE_LIFETIME = 30 -- seconds the pieces stay on the floor
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
-local MAX_MARKS = 140 -- blood marks on the floor at once (several finishers...)
+local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
+-- Pools never pushed out by newer drops (they fade on their own).
+local pinned: { [BasePart]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local done: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -129,6 +131,17 @@ end
 
 -- A flat mark of blood on the floor: round (`length` = nil) or a streak
 -- `length` long pointing along `along` (where the drop was going).
+-- Too many marks: the oldest that isn't a pool goes.
+local function evictOldest()
+	for index, piece in marks do
+		if not pinned[piece] then
+			table.remove(marks, index)
+			piece:Destroy()
+			return
+		end
+	end
+end
+
 local function mark(
 	position: Vector3,
 	width: number,
@@ -170,10 +183,7 @@ local function mark(
 	piece.Parent = workspace
 	table.insert(marks, piece)
 	if #marks > MAX_MARKS then
-		local oldest = table.remove(marks, 1)
-		if oldest then
-			oldest:Destroy()
-		end
+		evictOldest()
 	end
 	local life = lifetime or MARK_LIFETIME
 	task.delay(life * 0.7, function()
@@ -189,10 +199,7 @@ end
 local function keepMark(piece: BasePart, lifetime: number?)
 	table.insert(marks, piece)
 	if #marks > MAX_MARKS then
-		local oldest = table.remove(marks, 1)
-		if oldest then
-			oldest:Destroy()
-		end
+		evictOldest()
 	end
 	local life = lifetime or MARK_LIFETIME
 	task.delay(life * 0.7, function()
@@ -838,6 +845,7 @@ function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: 
 	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 40)
 		or mark(position, 0.3, nil, nil, BLOOD, 40)
 	if piece then
+		pinned[piece] = true
 		local k = size / 0.3
 		-- (grows across, not thicker: a round mark's thin axis is X)
 		local flat = piece:IsA("Part") and piece.Shape == Enum.PartType.Cylinder

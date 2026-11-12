@@ -63,7 +63,7 @@ local function jetEmitter(parent: Attachment, size: number): ParticleEmitter
 	})
 	-- stretched along the way they fly: a stream, not dots
 	jet.Orientation = Enum.ParticleOrientation.VelocityParallel
-	jet.Squash = NumberSequence.new(-1.2)
+	jet.Squash = NumberSequence.new(1.5)
 	jet.Lifetime = NumberRange.new(0.5, 0.9)
 	jet.Speed = NumberRange.new(8, 12)
 	jet.SpreadAngle = Vector2.new(5, 5)
@@ -137,9 +137,12 @@ local function rain(
 	local flat = Vector3.new(moving.X, 0, moving.Z)
 	local along = if flat.Magnitude > 0.1 then flat.Unit else Vector3.new(1, 0, 0)
 	local delay = math.clamp((from - at).Magnitude / math.max(velocity.Magnitude, 1), 0.08, 0.6)
+	local big = random:NextNumber() < 0.5 + 0.3 * strength -- (not every beat: the marks are counted)
 	task.delay(delay, function()
-		HeadBlast.splash(at, 0.35 + 0.5 * strength, random:NextInteger(1, 2 ^ 20))
-		for index = 1, 2 + math.floor(3 * strength) do
+		if big then
+			HeadBlast.splash(at, 0.35 + 0.5 * strength, random:NextInteger(1, 2 ^ 20))
+		end
+		for index = 1, 1 + math.floor(1.5 * strength) do
 			local offset = along * random:NextNumber(-0.6, 1.2) * index * 0.35
 				+ along:Cross(Vector3.new(0, 1, 0)) * random:NextNumber(-0.12, 0.12)
 			HeadBlast.streak(
@@ -377,7 +380,8 @@ function BloodGush.neck(model: Model, seed: number)
 	if torso == nil or not torso:IsA("BasePart") then
 		return
 	end
-	local top = torso.Size.Y / 2
+	-- (out of the top of the stump, above its cut flesh)
+	local top = torso.Size.Y / 2 + 0.3
 	for index, x in { -0.17, 0.17 } do
 		local from = Vector3.new(x, top + 0.08, -0.12)
 		BloodGush.artery(torso, CFrame.lookAt(from, from + Vector3.new(x * 1.5, 1, -0.35)), {
@@ -394,14 +398,14 @@ function BloodGush.neck(model: Model, seed: number)
 	BloodGush.artery(torso, CFrame.lookAt(back, back + Vector3.new(0, 1, 0.6)), {
 		seconds = 6,
 		beat = 0.38,
-		speed = 3,
+		speed = 4.5,
 		size = 0.16,
 		pool = 0,
 		seed = seed + 7,
 		ignore = { model },
 	})
-	BloodGush.runDown(torso, Vector3.new(0, top, -0.5), 7, seed + 11)
-	BloodGush.runDown(torso, Vector3.new(0, top, 0.5), 5, seed + 13)
+	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, -0.5), 7, seed + 11)
+	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, 0.5), 5, seed + 13)
 end
 
 -- A hole torn in the body at `localPoint` (torso space), facing `outward`:
