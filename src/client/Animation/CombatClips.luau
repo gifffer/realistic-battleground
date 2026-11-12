@@ -7659,4 +7659,116 @@ end
 -- Rib shot on the victim's RIGHT side = the left one, mirrored.
 clips.HitBodyRight = mirror(clips.HitBodyLeft)
 
+-- Drinking a SpezCola (Server/Systems/SpezCola): the can is welded in the right hand, upright
+-- while the arm hangs. The arm comes up in front of the face (like holding a phone, ~120°),
+-- then goes on rising while the head tilts back: the can tips over into the mouth. Two small
+-- nods of the head = two gulps. Then the head comes down and the arm lowers.
+-- Upper body only (the legs keep walking: you can drink while walking, slowly).
+-- Named "Emote_..." so it is played like an emote: no fists up after it, no swing sound.
+-- Its length must match Config.Cola.DRINK_TIME.
+clips.Emote_Drink = {
+	length = 2.3,
+	looped = false,
+	keyframes = {
+		{
+			time = 0,
+			pose = {
+				Root = { rot = Vector3.new(0, 0, 0) },
+				Neck = { rot = Vector3.new(0, 0, 0) },
+				RightShoulder = { rot = Vector3.new(0, 0, 0) },
+				LeftShoulder = { rot = Vector3.new(0, 0, 0) },
+			},
+		},
+		{
+			-- the arm swings up, the eyes on the can
+			time = 0.32,
+			pose = {
+				Root = { rot = Vector3.new(0, -2, 0) },
+				Neck = { rot = Vector3.new(-6, 2, 0) },
+				RightShoulder = { rot = Vector3.new(72, 0, -14) },
+				LeftShoulder = { rot = Vector3.new(-3, 0, -3) },
+			},
+		},
+		{
+			-- the can at the lips
+			time = 0.6,
+			tangent = "flat",
+			pose = {
+				Root = { rot = Vector3.new(2, -3, 0) },
+				Neck = { rot = Vector3.new(4, 3, 0) },
+				RightShoulder = { rot = Vector3.new(118, 0, -32) },
+				LeftShoulder = { rot = Vector3.new(-4, 0, -4) },
+			},
+		},
+		{
+			-- head back, the can tips over
+			time = 0.9,
+			pose = {
+				Root = { rot = Vector3.new(5, -3, 0), pos = Vector3.new(0, 0, 0.04) },
+				Neck = { rot = Vector3.new(22, 3, 0) },
+				RightShoulder = { rot = Vector3.new(130, 0, -30) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			-- gulp 1
+			time = 1.15,
+			pose = {
+				Root = { rot = Vector3.new(6, -3, 0), pos = Vector3.new(0, 0, 0.05) },
+				Neck = { rot = Vector3.new(26, 3, 0) },
+				RightShoulder = { rot = Vector3.new(133, 0, -30) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			time = 1.32,
+			pose = {
+				Root = { rot = Vector3.new(5.5, -3, 0), pos = Vector3.new(0, 0, 0.05) },
+				Neck = { rot = Vector3.new(23, 3, 0) },
+				RightShoulder = { rot = Vector3.new(133, 0, -30) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			-- gulp 2, the last drop
+			time = 1.55,
+			tangent = "flat",
+			pose = {
+				Root = { rot = Vector3.new(7, -3, 0), pos = Vector3.new(0, 0, 0.06) },
+				Neck = { rot = Vector3.new(29, 3, 0) },
+				RightShoulder = { rot = Vector3.new(137, 0, -29) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			-- head down again ("ahh")
+			time = 1.82,
+			pose = {
+				Root = { rot = Vector3.new(1, -2, 0) },
+				Neck = { rot = Vector3.new(2, 2, 0) },
+				RightShoulder = { rot = Vector3.new(104, 0, -26) },
+				LeftShoulder = { rot = Vector3.new(-3, 0, -3) },
+			},
+		},
+		{
+			time = 2.05,
+			pose = {
+				Root = { rot = Vector3.new(0, -1, 0) },
+				Neck = { rot = Vector3.new(-2, 1, 0) },
+				RightShoulder = { rot = Vector3.new(42, 0, -8) },
+				LeftShoulder = { rot = Vector3.new(-1, 0, -1) },
+			},
+		},
+		{
+			time = 2.3,
+			pose = {
+				Root = { rot = Vector3.new(0, 0, 0) },
+				Neck = { rot = Vector3.new(0, 0, 0) },
+				RightShoulder = { rot = Vector3.new(0, 0, 0) },
+				LeftShoulder = { rot = Vector3.new(0, 0, 0) },
+			},
+		},
+	},
+}
+
 return table.freeze(clips)

@@ -23,6 +23,7 @@ end
 local VALIDATORS: { [string]: (value: unknown) -> boolean } = {
 	firstPerson = isBoolean,
 	blockDuels = isBoolean,
+	music = isBoolean,
 }
 
 local Settings = {}

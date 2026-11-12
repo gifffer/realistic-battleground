@@ -22,6 +22,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Types = require(ReplicatedStorage.Shared.Types)
+local SafeZone = require(ReplicatedStorage.Shared.Util.SafeZone)
 
 local C = Config.Combat
 
@@ -177,6 +178,10 @@ function HitPrediction.findVictims(
 			continue
 		end
 		if (root.Position - attackerRoot.Position).Magnitude > SEARCH_RADIUS then
+			continue
+		end
+		-- Someone standing in the park can't be hit (safe zone, the server's rule too).
+		if SafeZone.contains(root.Position) then
 			continue
 		end
 		local parts: { [string]: boolean } = {}

@@ -14,6 +14,7 @@ export type PlayerStats = {
 export type PlayerSettings = {
 	firstPerson: boolean, -- false = over-the-shoulder third person
 	blockDuels: boolean, -- true = nobody can challenge you to a duel
+	music: boolean, -- false = no music (the city's outdoor music and the places' speakers)
 }
 
 -- A player's save. Everything here must be JSON-friendly (DataStores store

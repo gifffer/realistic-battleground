@@ -58,6 +58,7 @@ local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
+local SafeZone = require(ReplicatedStorage.Shared.Util.SafeZone)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
@@ -153,6 +154,12 @@ local function isBusy(state: CombatState): boolean
 		or isBusyMoving(state)
 		or now() < state.finishingUntil
 		or now() < state.knockedDownUntil
+end
+
+-- Standing in the hidden park (Shared/Util/SafeZone): no fighting there, in either way
+-- (can't start an attack from it, can't be hit in it). Config.Park.
+local function inSafeZone(state: CombatState): boolean
+	return SafeZone.contains(state.root.Position)
 end
 
 local function setAttribute(model: Model, name: string, value: any)
@@ -643,6 +650,10 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	-- 0. Not in the same fight: a duel is only between its two fighters
 	-- ("DuelId" attribute, nil for everyone in the free arena).
 	if victim.model:GetAttribute("DuelId") ~= attacker.model:GetAttribute("DuelId") then
+		return false
+	end
+	-- The park is a safe zone: a hit on someone in it (or thrown from it) does nothing.
+	if inSafeZone(victim) or inSafeZone(attacker) then
 		return false
 	end
 	-- On the ground (finish them instead), or just spawned (protected).
@@ -1190,7 +1201,8 @@ end
 -- unless the attacker is stunned (or dies) before. Kits can have their own,
 -- some of them cinematic (Shared/Finishers).
 local function startFinisher(state: CombatState, target: Model): boolean
-	if not Knockout.reserve(target, state.model) then
+	-- Nobody is finished in the park (safe zone), even from just outside it.
+	if SafeZone.containsModel(target) or not Knockout.reserve(target, state.model) then
 		return false
 	end
 	local time = now()
@@ -1297,7 +1309,13 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 			Remotes.AttackResolved:FireClient(owner, attackId)
 		end
 	end
-	if not isAlive(state) or isStunned(state) or state.blocking or isBusy(state) then
+	if
+		not isAlive(state)
+		or isStunned(state)
+		or state.blocking
+		or isBusy(state)
+		or inSafeZone(state) -- the park: no fighting
+	then
 		resolved()
 		return false
 	end
@@ -1517,6 +1535,8 @@ end
 --     kill feed says "<name> was hit by a train";
 --   • otherwise they are knocked down (limp) for `knockdownTime` seconds and thrown at
 --     `velocity` (studs per second), then get up like after a tackle.
+--   • `alwaysLethal` = true (the train): they DIE, whatever their health, even during their
+--     spawn protection. No knockdown path.
 -- Returns true if it hit them. Ignored for a model that is not a fighter, dead, in a duel,
 -- or in a finisher's cutscene (anchored, being finished).
 function Combat.environmentHit(
@@ -1524,10 +1544,16 @@ function Combat.environmentHit(
 	damage: number,
 	velocity: Vector3,
 	knockdownTime: number,
-	cause: Types.KillFeedKind
+	cause: Types.KillFeedKind,
+	alwaysLethal: boolean?
 ): boolean
 	local state = states[model]
 	if state == nil or not isAlive(state) then
+		return false
+	end
+	-- The park is a safe zone: the world does not hurt you there either (the train, which
+	-- is always lethal, never goes there anyway: it is not stopped by this).
+	if alwaysLethal ~= true and inSafeZone(state) then
 		return false
 	end
 	local player = state.player
@@ -1540,8 +1566,8 @@ function Combat.environmentHit(
 		return false
 	end
 	local protected = Knockout.isProtected(model)
-	local lethal = not protected
-		and (Knockout.isKnockedOut(model) or state.humanoid.Health - damage <= 0)
+	local lethal = alwaysLethal == true
+		or (not protected and (Knockout.isKnockedOut(model) or state.humanoid.Health - damage <= 0))
 	if lethal then
 		stopBlocking(state)
 		state.attackToken += 1 -- cancels a punch they were winding up
@@ -1744,7 +1770,8 @@ local function onUseMove(player: Player, slot: unknown, aim: unknown, requestId:
 		return
 	end
 	local direction = AimRule.validate(aim, state.root.CFrame.LookVector)
-	if not Moves.use(state, slot, direction) then
+	-- (no kit move, grab or throw from the park: it is a safe zone)
+	if inSafeZone(state) or not Moves.use(state, slot, direction) then
 		-- Echo the client's number for this request (only sent back, never
 		-- trusted): it undoes THAT move, not a newer one.
 		local id = if typeof(requestId) == "number"
@@ -1763,7 +1790,7 @@ local function onAwaken(player: Player)
 		return
 	end
 	local state = states[character]
-	if state then
+	if state and not inSafeZone(state) then
 		Moves.awaken(state)
 	end
 end

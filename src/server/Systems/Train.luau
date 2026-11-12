@@ -19,10 +19,15 @@
 --
 -- The hits: every frame of a pass, the server works out where the train's box is (from the
 -- time: no physics), and every fighter (player or training dummy) whose HumanoidRootPart is
--- inside it gets hit ONCE per pass: Combat.environmentHit → Config.Train.DAMAGE, knocked
--- down and thrown sideways off the track and forward with the train. Lethal damage, or a
--- fighter lying knocked out on the track: dead at once ("<name> was hit by a train").
--- Fighters in a duel are never hit (and duels are in their own arenas anyway).
+-- inside it is hit ONCE per pass, and it is ALWAYS LETHAL (no choice, even with spawn
+-- protection): Combat.environmentHit(..., alwaysLethal) kills them ("<name> was hit by a
+-- train"; the kill still goes to whoever punched them in the last few seconds, see
+-- Knockout.killByEnvironment). Then the body is TORN APART here, on the server: the joints
+-- holding the head, the arms and the legs to the torso are removed and every piece is thrown
+-- forward with the train (the server simulates the pieces, so everyone sees the same thing).
+-- Remotes.TrainHit then tells every client to play the crash, the scream and the blood
+-- (Client/Controllers/TrainController + Client/Combat/TrainGore).
+-- Fighters in a duel or in a finisher's cutscene are never hit (duels have their own arenas).
 --
 -- Studio: shorter waits (Config.Train.STUDIO_FAST), and you can call a train at once from
 -- the command bar (server): workspace:SetAttribute("TrainForce", true)
@@ -32,6 +37,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local TrainPath = require(ReplicatedStorage.Shared.Util.TrainPath)
 local Combat = require(script.Parent.Combat)
 
@@ -72,6 +78,52 @@ local function rootOf(model: Instance): BasePart?
 		return nil
 	end
 	return root
+end
+
+-- The R6 joints (Motor6D in the Torso) that hold each limb, and the limb they hold.
+local LIMB_JOINTS: { [string]: string } = {
+	Neck = "Head",
+	["Right Shoulder"] = "Right Arm",
+	["Left Shoulder"] = "Left Arm",
+	["Right Hip"] = "Right Leg",
+	["Left Hip"] = "Left Leg",
+}
+
+-- Tears a dead body apart: removes the joints of the head, arms and legs (the motor AND the
+-- loose ragdoll joint that replaced it) and throws every limb with the train.
+-- `trainVelocity` = the train's speed and direction (studs per second).
+local function dismember(model: Model, trainVelocity: Vector3)
+	local torso = model:FindFirstChild("Torso")
+	if torso == nil or not torso:IsA("BasePart") then
+		return
+	end
+	for motorName, limbName in LIMB_JOINTS do
+		local limb = model:FindFirstChild(limbName)
+		if limb == nil or not limb:IsA("BasePart") then
+			continue
+		end
+		local motor = torso:FindFirstChild(motorName)
+		if motor then
+			motor:Destroy()
+		end
+		-- (the ball socket Server/Systems/Ragdoll put there; its "_NoCollide" partner stays:
+		-- the torn limb and the torso still never collide with each other)
+		for _, child in torso:GetChildren() do
+			if child.Name == "Ragdoll_" .. motorName then
+				child:Destroy()
+			end
+		end
+		limb.CanCollide = true
+		-- forward with the train, scattered, up; spinning
+		limb.AssemblyLinearVelocity = trainVelocity * T.DISMEMBER_FORWARD
+			+ random:NextUnitVector() * T.DISMEMBER_SPREAD
+			+ Vector3.new(0, T.DISMEMBER_UP * random:NextNumber(0.6, 1.2), 0)
+		limb.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(10, 30)
+		-- The server simulates the pieces (everyone sees them land in the same place).
+		if limb:CanSetNetworkOwnership() then
+			limb:SetNetworkOwner(nil)
+		end
+	end
 end
 
 -- One frame of a pass: hits every fighter inside the train's box (once per pass each).
@@ -115,7 +167,23 @@ local function checkHits(
 		local velocity = frame.axis * (pass.speed * T.FLING_FORWARD)
 			+ frame.right * (sideSign * T.FLING_SIDE)
 			+ Vector3.new(0, T.FLING_UP, 0)
-		Combat.environmentHit(model, T.DAMAGE, velocity, T.KNOCKDOWN_TIME, "Train")
+		local impact = root.Position
+		-- Always lethal (see the header).
+		if
+			not Combat.environmentHit(model, T.DAMAGE, velocity, T.KNOCKDOWN_TIME, "Train", true)
+		then
+			continue
+		end
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health <= 0 then
+			dismember(model, frame.axis * pass.speed)
+			Remotes.TrainHit:FireAllClients(
+				model,
+				impact,
+				velocity,
+				random:NextInteger(1, 1_000_000)
+			)
+		end
 	end
 end
 

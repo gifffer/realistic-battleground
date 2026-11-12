@@ -2,8 +2,10 @@
 -- Weather: random events over the city, decided by the server so everyone sees the same.
 --
 --   RAIN       2 to 4 min. Darker sky, thicker air, puddles everywhere and shining, drips,
---              gutters spouting. Half of the rains are STORMS: a thunder flash every 30-70 s.
---              A bit likelier at night.
+--              gutters spouting. A bit likelier at night.
+--   THUNDERSTORM  half of the rains: a black sky, much heavier rain blown by the wind (clients),
+--              a louder rain sound, and lightning every 9 to 24 s (a bolt in the sky, the screen
+--              flashes, the thunder rolls).
 --   FOG        2 to 3 min of dense haze: about 90 studs of visibility, lamps turn to orbs.
 --   POWER CUT  night only, at most once a night: every lamp, neon and window flickers for 2 s,
 --              then the district goes dark for 40 s (only the red exit lights and the things
@@ -18,7 +20,8 @@
 -- What each client draws (rain particles, the thunder flash, sounds, the notice) follows these
 -- attributes on Workspace:
 --   Weather           "Clear" | "Rain" | "Fog" | "PowerCut"
---   Storm             true during a rain with thunder
+--   Storm             true during a THUNDERSTORM (Weather is then "Rain" too, so anything that
+--                     only checks for rain still works)
 --   WeatherStartedAt  server time (workspace:GetServerTimeNow()) the event started
 --   WeatherEndsAt     server time it ends
 --   ThunderAt         server time of the last thunder flash (clients flash at that moment)
@@ -73,7 +76,7 @@ local function runRain(storm: boolean)
 	local duration = between(W.RAIN_DURATION)
 	local endsAt = os.clock() + duration
 	publish("Rain", duration, storm)
-	Ambience.setWeather("Rain", W.RAIN_RAMP_IN)
+	Ambience.setWeather(if storm then "Storm" else "Rain", W.RAIN_RAMP_IN)
 	if storm then
 		-- Thunder: the clients flash at ThunderAt (a little in the future, so the message
 		-- reaches everyone before the moment comes and they all flash together).

@@ -26,6 +26,7 @@ local template: Types.PlayerProfile = {
 	settings = {
 		firstPerson = false,
 		blockDuels = false,
+		music = true, -- added with the city music: Reconcile() adds it to older saves
 	},
 	-- Added with the kits (step 4): Reconcile() adds it to older saves.
 	equippedKit = "StreetBrawler",

@@ -372,8 +372,12 @@ return table.freeze({
 		RAIN_RAMP_OUT = 30,
 		-- Part of the rains that are storms (with thunder).
 		STORM_CHANCE = 0.5,
-		-- Time between two thunder flashes in a storm.
-		THUNDER_GAP = NumberRange.new(30, 70),
+		-- Time between two thunder flashes in a THUNDERSTORM (frequent lightning).
+		THUNDER_GAP = NumberRange.new(9, 24),
+		-- Client: a thunderstorm's rain is this many times denser than a plain rain, and blown
+		-- sideways by this wind (studs/s² added to the falling drops).
+		STORM_RAIN_MULT = 1.8,
+		STORM_WIND = Vector3.new(28, 0, 10),
 		-- The rumble is heard this long after the flash (light is faster than sound).
 		THUNDER_SOUND_DELAY = NumberRange.new(1.2, 4),
 
@@ -436,6 +440,12 @@ return table.freeze({
 		FLING_FORWARD = 0.7,
 		FLING_SIDE = 55,
 		FLING_UP = 38,
+		-- The train ALWAYS kills (no knockdown, even with spawn protection; never in a duel or
+		-- a finisher's cutscene) and tears the body apart: the head, arms and legs come off and
+		-- fly with the train (× its speed for forward, plus a random spread and a lift).
+		DISMEMBER_FORWARD = 0.9,
+		DISMEMBER_SPREAD = 28,
+		DISMEMBER_UP = 30,
 
 		-- Client: camera rumble for players this close to the track (it grows as the train
 		-- gets closer) and its strongest shake (1 = 0.1 stud).
@@ -446,5 +456,30 @@ return table.freeze({
 		-- You can also force one: in the Studio command bar (server), type
 		-- workspace:SetAttribute("TrainForce", true)
 		STUDIO_FAST = true,
+	}),
+
+	-- The hidden park (Shared/Util/SafeZone, Server/Systems/Combat): nobody fights there.
+	Park = table.freeze({
+		-- true = no punch, move, grab, throw or finisher starts in the park, and nobody
+		-- standing in it can be hit (the train never goes there).
+		SAFE_ZONE = true,
+		-- The small caption shown when you walk in (Client/Controllers/SafeZoneController).
+		CAPTION = "SAFE ZONE",
+		CAPTION_SUB = "No fighting in the park",
+	}),
+
+	-- SpezCola machines (Server/Systems/SpezCola, Client/Controllers/SpezColaController):
+	-- free, purely for fun. Take a can, it drops out of the tray, pick it up and drink it.
+	Cola = table.freeze({
+		COOLDOWN = 4, -- seconds between two cans for one player
+		MAX_PER_MACHINE = 4, -- cans lying around one machine (the oldest goes first)
+		MAX_TOTAL = 30, -- cans in the whole server
+		CAN_LIFETIME = 90, -- seconds before a can nobody drank disappears
+		EMPTY_LIFETIME = 10, -- seconds an empty (crushed) can stays on the ground
+		DISPENSE_DELAY = 0.55, -- seconds between the button and the can falling (the clunk)
+		DRINK_TIME = 2.3, -- length of the "Emote_Drink" clip (Client/Animation/CombatClips)
+		DRINK_SPEED = 0.7, -- walking speed × this while drinking
+		PROMPT_DISTANCE = 8, -- studs (the machine's button)
+		DRINK_DISTANCE = 6, -- studs (a can on the ground)
 	}),
 })

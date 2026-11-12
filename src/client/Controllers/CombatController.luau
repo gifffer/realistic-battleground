@@ -24,6 +24,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local SafeZone = require(ReplicatedStorage.Shared.Util.SafeZone)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
@@ -108,7 +109,12 @@ local function findFinishTarget(root: BasePart): Model?
 			local torso = instance:FindFirstChild("Torso")
 			local available = instance:GetAttribute("KnockedOut") == true
 				and instance:GetAttribute("BeingFinished") ~= true
-			if available and torso and torso:IsA("BasePart") then
+			if
+				available
+				and torso
+				and torso:IsA("BasePart")
+				and not SafeZone.contains(torso.Position) -- (nobody is finished in the park)
+			then
 				local offset = torso.Position - root.Position
 				local flat = Vector3.new(offset.X, 0, offset.Z)
 				local distance = flat.Magnitude
@@ -144,6 +150,7 @@ local function tryAttack()
 		or inCinematic(character)
 		or isBusyMoving()
 		or time < nextAttackAt
+		or SafeZone.contains(root.Position) -- the park is a safe zone (the server refuses too)
 	then
 		return
 	end
@@ -294,8 +301,10 @@ end
 -- For KitController (keys 1–4): can we start a move right now? Same rules
 -- as an M1 (not blocking, not stunned, not sliding, not mid-attack).
 function CombatController.canStartMove(): boolean
-	local character = getCharacterParts()
+	local character, _, root = getCharacterParts()
 	return character ~= nil
+		and root ~= nil
+		and not SafeZone.contains(root.Position) -- the park: no fighting
 		and not blocking
 		and not isStunned(character)
 		and not inCinematic(character)

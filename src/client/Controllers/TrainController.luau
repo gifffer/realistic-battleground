@@ -15,7 +15,10 @@
 --     "TrainSignalGo") go dark, the horn sounds (Shared/Sounds:
 --     TrainHorn, silent while it has no id), and the camera starts to shake if you are
 --     within SHAKE_RANGE studs of the track — stronger as the train gets closer;
---   • the rumble loop (TrainRumble) follows the train while it is out.
+--   • the moving loop (TrainMoving) follows the train while it is out;
+--   • someone is hit (Remotes.TrainHit, the server already killed them and tore the body
+--     apart): the crash at the impact (TrainCrash), the victim's scream from their body
+--     (TrainScream), and the blood (Client/Combat/TrainGore). Heard and seen by everyone.
 -- The train's parts never collide and can't be hit by rays: getting hit is decided by the
 -- server alone (the box it computes matches this model: Config.Train LENGTH / HALF_WIDTH /
 -- HEIGHT).
@@ -25,8 +28,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Sounds = require(ReplicatedStorage.Shared.Sounds)
 local TrainPath = require(ReplicatedStorage.Shared.Util.TrainPath)
+local TrainGore = require(script.Parent.Parent.Combat.TrainGore)
+local SoundController = require(script.Parent.SoundController)
 
 local T = Config.Train
 
@@ -426,7 +432,7 @@ local function buildSounds()
 	soundAnchor.CFrame = HIDDEN_CFRAME
 	soundAnchor.Parent = folder
 	horn = makeSound("TrainHorn", false, 320)
-	rumble = makeSound("TrainRumble", true, 180)
+	rumble = makeSound("TrainMoving", true, 200)
 end
 
 ------------------------------------------------------------------------------
@@ -643,10 +649,37 @@ local function shakeCamera()
 end
 
 ------------------------------------------------------------------------------
+-- Someone hit by the train (the server already killed them and tore the body apart)
+------------------------------------------------------------------------------
+
+local function onTrainHit(victim: unknown, impact: unknown, velocity: unknown, seed: unknown)
+	if
+		typeof(victim) ~= "Instance"
+		or not victim:IsA("Model")
+		or typeof(impact) ~= "Vector3"
+		or typeof(velocity) ~= "Vector3"
+		or typeof(seed) ~= "number"
+	then
+		return
+	end
+	SoundController.playAt("TrainCrash", impact, 220)
+	-- the scream, from the body itself (it follows the torso as it flies)
+	local torso = victim:FindFirstChild("Torso")
+	task.delay(0.15, function()
+		if torso and torso:IsA("BasePart") and torso.Parent then
+			SoundController.playAt("TrainScream", torso.Position, 160, torso)
+		end
+	end)
+	TrainGore.play(victim, impact, velocity, seed)
+end
+
+------------------------------------------------------------------------------
 -- Lifecycle
 ------------------------------------------------------------------------------
 
 function TrainController.start()
+	-- (listened to at once: the remote must not be missed while the city is still building)
+	Remotes.TrainHit.OnClientEvent:Connect(onTrainHit)
 	local found = workspace:WaitForChild("City", 120)
 	if found == nil then
 		return

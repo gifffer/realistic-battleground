@@ -7,17 +7,21 @@
 -- WeatherStartedAt, WeatherEndsAt, ThunderAt):
 --   • RAIN: streaks falling all around the camera (an invisible box that follows it, with a
 --     ParticleEmitter), small splashes on the ground around you, a soft cold "wet" grade on
---     the screen and the rain sound loop. It all grows and fades with the rain.
---   • THUNDER (storms): a double white flash of the screen at the exact moment the server
---     chose (the same for every player), then the rumble 1 to 4 s later.
---   • A one-line notice top-left for 3 s: "RAIN", "STORM", "FOG", "POWER CUT". No banner.
+--     the screen. It all grows and fades with the rain. (The rain SOUND is mixed with the
+--     music by CityAudioController, which reads WeatherController.rainState().)
+--   • THUNDERSTORM (Storm = true): heavier rain (more drops, slanted by the wind) and
+--     lightning: a jagged bolt in the sky + a double white flash of the screen at the exact
+--     moment the server chose (the same for every player), then the rumble 1 to 4 s later.
+--   • THE PARK (ParkZone, see ParkAtmosphereController) is always sunny: no rain, no
+--     splashes, no wet grade and no lightning in there.
+--   • A one-line notice top-left for 3 s: "RAIN", "THUNDERSTORM", "FOG", "POWER CUT".
 --   • CHARACTER FILL LIGHT (night and power cut): a soft, warm, short-range PointLight on every
 --     character's HumanoidRootPart (16 at most), only on this screen. Away from the lamps a
 --     fighter in dark clothes would melt into the blue night; this keeps everyone readable.
 --
 -- No images are used: the drops are plain squares stretched along their fall.
--- Sounds come from Shared/Sounds.luau (Rain, Thunder): while their ids are empty, nothing
--- plays and everything else still works.
+-- Sounds come from Shared/Sounds.luau (Thunder): while its ids are empty, nothing plays and
+-- everything else still works.
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -25,8 +29,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
-local Sounds = require(ReplicatedStorage.Shared.Sounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local ParkAtmosphereController = require(script.Parent.ParkAtmosphereController)
 local SoundController = require(script.Parent.SoundController)
 
 local W = Config.Weather
@@ -40,7 +44,7 @@ local random = Random.new()
 -- Words of the notice for each event.
 local NOTICE_TEXT: { [string]: string } = {
 	Rain = "RAIN",
-	Storm = "STORM",
+	Storm = "THUNDERSTORM",
 	Fog = "FOG",
 	PowerCut = "POWER CUT",
 }
@@ -56,7 +60,6 @@ local rainEmitter: ParticleEmitter
 local splashBox: Part
 local splashEmitter: ParticleEmitter
 local grade: ColorCorrectionEffect
-local rainSound: Sound? = nil
 local noticeGui: ScreenGui
 local noticeText: TextLabel
 local noticeLine: Frame
@@ -79,6 +82,19 @@ local nextProbe = 0
 local lowQuality = false
 -- Counts the notices, so an old one doesn't hide a newer one.
 local noticeId = 0
+-- The rain right now (0 → 1, the park not counted) and whether it is a thunderstorm: read by
+-- CityAudioController for the rain sound.
+local currentIntensity = 0
+local currentStorm = false
+
+-- THUNDERSTORM: how much heavier than a plain rain (Config.Weather.STORM_RAIN_MULT /
+-- STORM_WIND): more drops, blown sideways.
+local STORM_RATE: number = W.STORM_RAIN_MULT
+local STORM_WIND: Vector3 = W.STORM_WIND
+local CALM_WIND = Vector3.new(6, 0, 2)
+-- The lightning bolt: segments of neon in the sky, far from you.
+local BOLT_COLOR = Color3.fromRGB(214, 226, 255)
+local BOLT_TIME = 0.22 -- seconds it stays
 
 -- Character fill light (see the header).
 local FILL_NAME = "CityFillLight"
@@ -176,8 +192,6 @@ local function buildRain()
 	grade = Instance.new("ColorCorrectionEffect")
 	grade.Name = "WeatherGrade"
 	grade.Parent = Lighting
-
-	rainSound = SoundController.loop("Rain")
 end
 
 local function buildNotice()
@@ -239,15 +253,80 @@ local function showNotice(text: string)
 	end)
 end
 
--- The double flash of a lightning bolt, then the rumble.
+-- A jagged bolt of light far away in the sky, roughly where you look (only this screen has
+-- it), for a split second. Plain neon parts, no image.
+local function drawBolt()
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local look = camera.CFrame.LookVector
+	local flat = Vector3.new(look.X, 0, look.Z)
+	flat = if flat.Magnitude > 0.1 then flat.Unit else Vector3.new(0, 0, -1)
+	-- 160 to 320 studs away, up to 50 degrees left or right of where you look
+	local angle = math.rad(random:NextNumber(-50, 50))
+	local direction = CFrame.Angles(0, angle, 0):VectorToWorldSpace(flat)
+	local base = camera.CFrame.Position + direction * random:NextNumber(160, 320)
+	local point = Vector3.new(base.X, 420, base.Z)
+	local bottom = math.max(base.Y - 20, 30)
+	local folder = Instance.new("Folder")
+	folder.Name = "LightningBolt"
+	local width = 1.6
+	while point.Y > bottom do
+		local nextPoint = point
+			+ Vector3.new(
+				random:NextNumber(-14, 14),
+				-random:NextNumber(18, 34),
+				random:NextNumber(-14, 14)
+			)
+		local segment = Instance.new("Part")
+		segment.Anchored = true
+		segment.CanCollide = false
+		segment.CanQuery = false
+		segment.CanTouch = false
+		segment.CastShadow = false
+		segment.Material = Enum.Material.Neon
+		segment.Color = BOLT_COLOR
+		segment.Size = Vector3.new(width, width, (nextPoint - point).Magnitude)
+		segment.CFrame = CFrame.lookAt((point + nextPoint) / 2, nextPoint)
+		segment.Parent = folder
+		-- a small branch now and then
+		if random:NextNumber() < 0.3 then
+			local branchEnd = nextPoint
+				+ Vector3.new(
+					random:NextNumber(-20, 20),
+					-random:NextNumber(10, 22),
+					random:NextNumber(-20, 20)
+				)
+			local branch = segment:Clone()
+			branch.Size = Vector3.new(width * 0.5, width * 0.5, (branchEnd - nextPoint).Magnitude)
+			branch.CFrame = CFrame.lookAt((nextPoint + branchEnd) / 2, branchEnd)
+			branch.Parent = folder
+		end
+		point = nextPoint
+		width = math.max(0.5, width * 0.93)
+	end
+	folder.Parent = camera
+	task.delay(BOLT_TIME, function()
+		folder:Destroy()
+	end)
+end
+
+-- The bolt and the double flash of the screen, then the rumble. (Not in the park: the sun
+-- shines there.) A thunderstorm's flashes are brighter.
 local function thunder()
-	flash = 0.35
+	if ParkAtmosphereController.blend() > 0.5 then
+		return
+	end
+	local strength = if workspace:GetAttribute("Storm") == true then 1.6 else 1
+	drawBolt()
+	flash = 0.35 * strength
 	task.wait(0.06)
-	flash = 0.12
+	flash = 0.12 * strength
 	task.wait(0.08)
 	flash = 0
 	task.wait(0.1)
-	flash = 0.2
+	flash = 0.2 * strength
 	task.wait(0.05)
 	flash = 0
 	task.wait(random:NextNumber(W.THUNDER_SOUND_DELAY.Min, W.THUNDER_SOUND_DELAY.Max))
@@ -274,6 +353,10 @@ local function onWeatherChanged()
 	end
 	if kind == "Rain" and workspace:GetAttribute("Storm") == true then
 		kind = "Storm"
+	end
+	-- In the park the sun always shines: no weather notice there (nothing happens in it).
+	if ParkAtmosphereController.inPark() then
+		return
 	end
 	local text = NOTICE_TEXT[kind]
 	if text then
@@ -310,7 +393,10 @@ local function update(deltaTime: number)
 		return
 	end
 	local now = workspace:GetServerTimeNow()
-	local intensity = rainIntensity(now)
+	currentIntensity = rainIntensity(now)
+	currentStorm = workspace:GetAttribute("Storm") == true
+	-- No rain at all in the park (always sunny there): faded with the park's light.
+	local intensity = currentIntensity * (1 - ParkAtmosphereController.blend())
 	local cameraPosition = camera.CFrame.Position
 	-- The camera can be replaced (rare): move our boxes into the new one.
 	if rainBox.Parent ~= camera then
@@ -328,9 +414,6 @@ local function update(deltaTime: number)
 		rainEmitter.Rate = 0
 		splashEmitter.Rate = 0
 		lastCameraPosition = nil
-		if rainSound and rainSound.IsPlaying then
-			rainSound:Stop()
-		end
 		return
 	end
 
@@ -350,20 +433,14 @@ local function update(deltaTime: number)
 
 	local ahead = cameraVelocity * W.RAIN_LEAD
 	rainBox.CFrame = CFrame.new(cameraPosition + ahead + Vector3.new(0, W.RAIN_HEIGHT, 0))
+	-- A thunderstorm: more drops, slanted by the wind.
+	local heavy = if currentStorm then STORM_RATE else 1
 	rainEmitter.Rate = if indoors
 		then 0
-		else W.RAIN_RATE * intensity * (if lowQuality then 0.5 else 1)
+		else W.RAIN_RATE * intensity * heavy * (if lowQuality then 0.5 else 1)
+	rainEmitter.Acceleration = if currentStorm then STORM_WIND else CALM_WIND
 	splashBox.CFrame = CFrame.new(cameraPosition.X, floorY + 0.2, cameraPosition.Z)
-	splashEmitter.Rate = if covered then 0 else W.SPLASH_RATE * intensity
-
-	if rainSound then
-		rainSound.Volume = Sounds.Rain.volume
-			* intensity
-			* (if indoors then 0.25 elseif covered then 0.5 else 1)
-		if not rainSound.IsPlaying then
-			rainSound:Play()
-		end
-	end
+	splashEmitter.Rate = if covered then 0 else W.SPLASH_RATE * intensity * heavy
 end
 
 ------------------------------------------------------------------------------
@@ -402,6 +479,17 @@ local function updateFillLights()
 			end
 		end
 	end
+end
+
+------------------------------------------------------------------------------
+-- Read by CityAudioController (the rain sound)
+------------------------------------------------------------------------------
+
+-- The rain right now: its intensity (0 → 1, the park NOT counted: the caller fades it
+-- itself), whether it is a thunderstorm, whether a roof is above the camera, and whether
+-- the camera is under a low ceiling (inside).
+function WeatherController.rainState(): (number, boolean, boolean, boolean)
+	return currentIntensity, currentStorm, covered, indoors
 end
 
 ------------------------------------------------------------------------------

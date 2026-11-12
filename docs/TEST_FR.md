@@ -422,12 +422,37 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | N4 | S'approcher d'un PNJ (moins de ~12 studs) | Il tourne la tête vers toi (doucement, jamais à 180°). À ~8 studs, bulle de chat : vendeur « Fresh threads, cheap. » / « Got moves? Pick one. », barman « What'll it be? »… Une seule fois, puis plus avant ~40 s. |
 | N5 | Frapper / utiliser un move sur un PNJ, foncer dedans | Rien : pas de dégâts, pas de verrouillage, pas de nom ni de barre de vie au-dessus, il ne bouge pas d'un pouce. |
 | T1 | Forcer un train (Studio, barre de commande côté **serveur**) : `workspace:SetAttribute("TrainForce", true)` | 5 s d'alerte : les deux signaux au bout du pont passent du vert (au repos) au rouge clignotant, la caméra tremble un peu si tu es près des voies (à moins de 60 studs). Puis une locomotive rouge (phares allumés, numéro 4417) + un wagon couvert tagué + un wagon-citerne sortent du tunnel, traversent le pont à ~70 studs/s, roues qui tournent, et rentrent dans l'autre tunnel. Le tremblement grandit quand le train approche. |
-| T2 | Rester sur la voie | Touché une seule fois par passage : −60 PV, projeté sur le côté (hors des rails) et vers l'avant, au sol quelques secondes, puis tu te relèves. |
-| T3 | Se faire toucher avec peu de PV (ou KO sur la voie) | Mort directe, fil des kills : « <toi> was hit by a train ». Si quelqu'un t'a frappé juste avant : « <lui> threw <toi> under a train » (il a le kill). |
+| T2 | Rester sur la voie (même avec toute ta vie, même juste après le spawn) | **Toujours mortel** : bruit de choc, le corps est **démembré** (tête, bras, jambes arrachés, projetés avec le train, moignons rouges avec l'os, sang qui gicle, flaque sous le torse), la victime **hurle**. Tous les joueurs voient la même chose. Ta caméra suit ton torse jusqu'au respawn. |
+| T3 | Se faire frapper par quelqu'un juste avant le train | Fil des kills : « <lui> threw <toi> under a train » (il a le kill). Sinon : « <toi> was hit by a train ». |
 | T4 | Sans rien forcer | En Studio : un train ~15 s après la construction de la ville puis toutes les ~35 s. En jeu publié : 40–70 s après le lancement, puis toutes les 70–130 s, en alternant le sens. |
 | T5 | En duel | Jamais touché par le train. |
 
-Les sons `TrainHorn` et `TrainRumble` sont vides : le train passe en silence tant qu'ils n'ont pas d'ID.
+| T6 | Sons du train | Klaxon au début de l'alerte puis quand la loco sort du tunnel ; bruit de roulement (en 3D) qui suit le train, plus fort quand il est proche. |
 
-Les sons `Rain` et `Thunder` (`src/shared/Sounds.luau`) sont vides pour l'instant : donne-moi des IDs et je les mets.
+### v6 : musique, parc secret, orage
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| M1 | Se promener dehors | Une musique d'ambiance douce (jour), qui passe en fondu à celle de nuit au crépuscule. |
+| M2 | Marcher vers DUFFY'S | À ~50 studs on entend la musique du bar, **étouffée** (comme à travers les murs), de plus en plus fort. En entrant : claire, la musique de dehors baisse. 3 enceintes au mur. Pareil pour THREADBARE et REWIND (2 enceintes chacune). |
+| M3 | Deux joueurs dans le bar | Même chanson au même moment pour les deux. Quand une chanson finit, la suivante de la playlist démarre. |
+| M4 | Pluie | Le bruit de pluie s'**ajoute** à la musique (elle ne la remplace pas), monte et descend avec la pluie, plus faible sous un toit et dedans. |
+| M5 | Orage (`workspace:SetAttribute("WeatherForce", "Storm")`) | Texte « THUNDERSTORM », ciel noir, pluie bien plus dense et penchée par le vent, pluie plus forte au son, éclairs fréquents (un éclair dessiné dans le ciel + flash de l'écran) toutes les ~10–25 s. |
+| M6 | Le parc secret (passage discret) | Arbres, bancs, lampadaires, allées, massifs, aucun animal. Toujours **ensoleillé** (même la nuit ou sous l'orage : la lumière change en ~1,5 s en entrant, revient en sortant), pas de pluie ni d'éclair dedans. Sa musique sort des enceintes du parc ; la musique de la ville et la pluie se coupent. |
+| M7 | Menu → SETTINGS → SOUND → Music OFF | Plus de musique (dehors, bar, boutiques, parc). Pluie, train et coups restent. Sauvegardé. |
+| M8 | En duel | Pas de musique de ville ni de pluie. |
+
+#### v6 : SpezCola, zone sûre du parc, accessoires des PNJ
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| C1 | Trouver une machine SpezCola (chez DUFFY'S ou devant, près de la Cage, dans le parc) | Grande machine rouge éclairée, logo SpezCola. De près (~3–25 studs) on entend son **bourdonnement** en 3D. |
+| C2 | Prompt **[E] GET A SPEZCOLA** (maintenir 0,3 s) | Gratuit. Le bouton s'allume, petit temps (le « clunk »), puis une **canette** tombe du bac avec un bruit et roule un peu vers toi. Re-essayer tout de suite : rien (une canette max toutes les 4 s par joueur). Max 4 canettes par machine (la plus vieille disparaît), elles disparaissent seules après ~90 s. |
+| C3 | La canette | Rouge, bords argentés, opercule et languette, anneau blanc, « Spez » en blanc avec une vague. |
+| C4 | Prompt **[E] DRINK** sur la canette au sol | Elle va dans la main droite, animation de boisson visible par tous (canette à la bouche, tête en arrière, deux gorgées, ~2,3 s), tu marches un peu plus lentement. À la fin elle est un peu écrasée et jetée, disparaît 10 s après. |
+| C5 | Boire en duel, KO, juste après un combat, en bloquant | Rien ne se passe (aucun message). |
+| C6 | Se faire frapper (ou frapper / bloquer / glisser) en buvant | La canette tombe, l'animation est coupée. |
+| P1 | Entrer dans le parc | Petit texte discret en haut « SAFE ZONE — No fighting in the park » qui disparaît après ~3 s. |
+| P2 | Frapper / move / dash-attaque / finisher dans le parc, ou frapper quelqu'un dans le parc depuis l'extérieur | Rien : pas d'animation de coup (côté client), le serveur refuse tout, personne n'est touché ni achevé dans le parc. Le dash et le blocage marchent toujours. |
+| A1 | Regarder les PNJ de près | Cheveux en couches (frange, chignon, cheveux longs, rasé…), casquettes avec visière et bouton, bonnets avec revers, casquettes plates, casques audio, lunettes avec monture et verres (parfois solaires), boucles d'oreilles, montre, collier. Barman : tablier avec bretelles, poche (stylo, décapsuleur) et serviette sur l'épaule. Vendeurs : badge sur cordon à la couleur de la boutique. Rien ne flotte quand ils bougent. |
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.

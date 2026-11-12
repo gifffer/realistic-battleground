@@ -192,4 +192,10 @@ return table.freeze({
 	--                        victimLevel: number?, killerLevel: number?)
 	-- A fighter was eliminated: one line in the kill feed (top right).
 	KillFeed = event("KillFeed"),
+
+	-- server → all clients  (victim: Model, impact: Vector3, velocity: Vector3, seed: number)
+	-- The city's train just hit (and killed) `victim` at `impact`; its body was torn apart by
+	-- the server (the limbs fly at about `velocity`). Every client plays the crash, the
+	-- scream and the same blood (random numbers from `seed`): TrainController / TrainGore.
+	TrainHit = event("TrainHit"),
 })

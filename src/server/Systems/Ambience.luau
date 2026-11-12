@@ -77,7 +77,8 @@ local targetNight = false
 local lightsNight = false
 -- When the current day / night transition ends (os.clock()).
 local transitionEndsAt = 0
--- The weather on top of the phase: "Clear", "Rain" or "Fog".
+-- The weather on top of the phase: "Clear", "Rain", "Storm" (a thunderstorm: a darker,
+-- heavier rain) or "Fog".
 local weather = "Clear"
 -- False during a power cut.
 local powerOn = true
@@ -197,7 +198,7 @@ end
 -- The base look, changed by the current weather and by a power cut.
 local function currentLook(): Look
 	local look = baseLook(targetNight)
-	if weather == "Rain" then
+	if weather == "Rain" or weather == "Storm" then
 		-- Darker sky, thicker air, the lamps get halos.
 		look.lighting.Brightness *= 0.7
 		look.lighting.OutdoorAmbient =
@@ -211,6 +212,16 @@ local function currentLook(): Look
 		look.grade.Contrast += 0.04
 		look.bloom.Size += 6
 		look.sunRays.Intensity = 0
+		if weather == "Storm" then
+			-- A thunderstorm: a black sky, thicker rain haze, colder and darker still.
+			look.lighting.Brightness *= 0.75
+			look.lighting.OutdoorAmbient = scale(look.lighting.OutdoorAmbient, 0.85)
+			look.atmosphere.Density += 0.05
+			look.atmosphere.Haze += 0.6
+			look.clouds.Color = scale(look.clouds.Color, 0.7)
+			look.grade.Contrast += 0.04
+			look.grade.TintColor = look.grade.TintColor:Lerp(rgb(214, 224, 240), 0.5)
+		end
 	elseif weather == "Fog" then
 		-- About 70 studs of visibility on this small map: the lamps become orbs.
 		look.atmosphere.Density = 0.5
@@ -653,7 +664,7 @@ local function makeGutterSpouts()
 end
 
 local function applyWet(seconds: number)
-	local raining = weather == "Rain"
+	local raining = weather == "Rain" or weather == "Storm"
 	for _, puddle in tagged("CityPuddle") do
 		local transparency: number, reflectance: number
 		-- (At night there is little to reflect: a puddle that is too opaque and shiny reads as a
@@ -854,7 +865,7 @@ function Ambience.getNightNumber(): number
 	return nightNumber
 end
 
--- Changes the weather layer ("Clear", "Rain" or "Fog") over `seconds`.
+-- Changes the weather layer ("Clear", "Rain", "Storm" or "Fog") over `seconds`.
 function Ambience.setWeather(kind: string, seconds: number)
 	weather = kind
 	applyLook(seconds, false)
