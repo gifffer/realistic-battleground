@@ -85,8 +85,18 @@ local HEAD_FINE = 8 -- a sector with a cut in it: 8 thin columns (Shell_Band192)
 -- Head inserts are bent around the head for a level cut: turning them more
 -- than this would sink their ends into the skin.
 local HEAD_MAX_TURN = 8
-local SHELL_PIECES =
-	{ "Shell_Band24", "Shell_Band192", "Shell_Bevel24", "Shell_Cap", "Shell_FaceSheet" }
+local SHELL_PIECES = { "Shell_Band24", "Shell_Band192", "Shell_Bevel24", "Shell_Cap" }
+-- The face picture's pieces, one set per front sector (see the kit).
+local function isFrontSector(index: number): boolean
+	return math.cos((index + 0.5) * 2 * math.pi / HEAD_SECTORS) > 0
+end
+for index = 0, HEAD_SECTORS - 1 do
+	if isFrontSector(index) then
+		for _, piece in { "Band", "Top", "Bottom" } do
+			table.insert(SHELL_PIECES, `Shell_Face{piece}_{index}`)
+		end
+	end
+end
 -- Pictures on meshes (face, clothes on the bevels): Roblox lets their
 -- transparent pixels show what is under them only if the part is a hair
 -- transparent itself.
@@ -599,6 +609,54 @@ local function shellPiece(
 	return piece
 end
 
+-- The face picture on a thin column of the straight part next to a cut (the
+-- face pieces of the kit can't have a hole): an invisible card just over
+-- the skin carries it. The picture covers the front of the head (1.2 x 1.2,
+-- its top at the top of the head) as seen from the front; the card shows the
+-- bit in front of it. A thin column is almost flat, so it fits well.
+local function faceCard(
+	part: BasePart,
+	image: string,
+	angle: number,
+	width: number, -- radians
+	top: number,
+	height: number,
+	parent: Instance
+)
+	local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
+	local up = Vector3.new(0, 1, 0)
+	local chord = 2 * HEAD_RADIUS * math.sin(width / 2)
+	local card = Instance.new("Part")
+	card.Name = "FaceCard"
+	card.Transparency = 1
+	card.Size = Vector3.new(chord, height, 0.01)
+	card.CFrame = part.CFrame
+		* CFrame.fromMatrix(
+			out * (HEAD_RADIUS + 0.0015) + Vector3.new(0, top - height / 2, 0),
+			up:Cross(-out),
+			up,
+			-out
+		)
+	setUp(card, part, parent)
+	local projected = chord * math.cos(angle) -- its width seen from the front
+	local leftEdge = HEAD_RADIUS * math.sin(angle) + projected / 2 -- your left = the head's +X
+	local span = 2 * HEAD_RADIUS
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.LightInfluence = 1
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 400 -- as sharp as the real face
+	gui.ClipsDescendants = true
+	local label = Instance.new("ImageLabel")
+	label.BackgroundTransparency = 1
+	label.Image = image
+	label.Size = UDim2.fromScale(span / projected, span / height)
+	label.Position =
+		UDim2.fromScale(-(HEAD_RADIUS - leftEdge) / projected, -(HEAD_RADIUS - top) / height)
+	label.Parent = gui
+	gui.Parent = card
+end
+
 -- The round head rebuilt from the kit's smooth pieces: the straight part in
 -- 24 columns (8 thin ones where a cut is, with the hole left out), the
 -- rounded edges and the caps. Same shape as the real head, no seams.
@@ -627,7 +685,8 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 		name: string,
 		widthScale: number,
 		keep: { { boolean } }?,
-		rows: number
+		rows: number,
+		withFace: boolean -- draw the face on it (a thin column next to a cut)
 	)
 		local rowH = 2 * HEAD_BAND / rows
 		local runs: { Rect } = if keep
@@ -636,6 +695,17 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 		for _, run in runs do
 			local top = HEAD_BAND - (run.j - 1) * rowH
 			local height = run.h * rowH
+			if withFace then
+				faceCard(
+					part,
+					faceImage,
+					angle,
+					2 * math.pi / HEAD_SECTORS / HEAD_FINE,
+					top,
+					height,
+					parent
+				)
+			end
 			shellPiece(
 				part,
 				found,
@@ -683,11 +753,12 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 					"Shell_Band192",
 					1.03,
 					if column_.hasCut then column_.keep else nil,
-					rows * 2
+					rows * 2,
+					faceImage ~= "" and isFrontSector(index)
 				)
 			end
 		else
-			column(mid, "Shell_Band24", 1, nil, rows)
+			column(mid, "Shell_Band24", 1, nil, rows, false)
 		end
 		-- the rounded edges above and below
 		shellPiece(
@@ -703,35 +774,42 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 			parent
 		)
 		shellPiece(part, found, "Shell_Bevel24", WoundShapes.headOrigin, mid, 0, 1, 1, true, parent)
+		-- The face, from the kit's pieces (built at their place: angle 0),
+		-- a hair outside the skin; next to a cut, cards on the columns instead
+		-- of the straight piece (the hole stays free of the picture).
+		if faceImage ~= "" and isFrontSector(index) then
+			local pieces = { "Top", "Bottom" }
+			if not anyCut then
+				table.insert(pieces, "Band")
+			end
+			for _, piece in pieces do
+				local layer = shellPiece(
+					part,
+					found,
+					`Shell_Face{piece}_{index}`,
+					WoundShapes.headOrigin,
+					0,
+					0,
+					1,
+					1,
+					false,
+					parent,
+					1.0025
+				)
+				layer.Name = "Face"
+				layer.Color = Color3.new(1, 1, 1) -- (never tint the picture)
+				layer.CastShadow = false
+				if layer:IsA("MeshPart") then
+					layer.TextureID = faceImage
+				end
+				-- A mesh shows its picture's transparent pixels only when the
+				-- part itself is a little transparent (the skin shows there).
+				layer.Transparency = SEE_THROUGH
+			end
+		end
 	end
 	shellPiece(part, found, "Shell_Cap", WoundShapes.headOrigin, 0, 0, 1, 1, false, parent)
 	shellPiece(part, found, "Shell_Cap", WoundShapes.headOrigin, 0, 0, 1, 1, true, parent)
-	-- The face, in one piece: a thin sheet over the front, mapped exactly like
-	-- Roblox maps a face on the classic head, a hair outside the skin.
-	if faceImage ~= "" then
-		local sheet = shellPiece(
-			part,
-			found,
-			"Shell_FaceSheet",
-			WoundShapes.headOrigin,
-			0,
-			0,
-			1,
-			1,
-			false,
-			parent,
-			1.0025
-		)
-		sheet.Name = "FaceSheet"
-		sheet.Color = Color3.new(1, 1, 1) -- (never tint the picture)
-		sheet.CastShadow = false
-		if sheet:IsA("MeshPart") then
-			sheet.TextureID = faceImage
-		end
-		-- A mesh shows its picture's transparent pixels only when the part
-		-- itself is a little transparent (then the skin shows through them).
-		sheet.Transparency = SEE_THROUGH
-	end
 end
 
 -- The bevelled frame of a block part (see the kit), or nil.
@@ -801,20 +879,20 @@ local function buildBoxSkin(
 		end
 	end
 	if hasFrame and frameName and frameHome then
-		-- The bevels: skin, then the pants, then the shirt over them, a hair
-		-- bigger each (the clothes' transparent pixels show the layer below),
-		-- the way Roblox puts clothes on a body.
+		-- The bevels: skin, and over it a hair bigger the clothes (their
+		-- transparent pixels show the skin). One layer only: two see-through
+		-- layers at the same place are drawn in no sure order. The shirt if
+		-- there is one (torso, arms), else the pants.
 		shellPiece(part, found, frameName, frameHome, 0, 0, 1, 1, false, parent)
 		local shirt = model:FindFirstChildOfClass("Shirt")
 		local pants = model:FindFirstChildOfClass("Pants")
 		local isLeg = string.find(key, "Leg") ~= nil
 		local isArm = string.find(key, "Arm") ~= nil
 		local layers: { string } = {}
-		if (isLeg or key == "Torso") and pants and pants.PantsTemplate ~= "" then
-			table.insert(layers, pants.PantsTemplate)
-		end
 		if (isArm or key == "Torso") and shirt and shirt.ShirtTemplate ~= "" then
 			table.insert(layers, shirt.ShirtTemplate)
+		elseif (isLeg or key == "Torso") and pants and pants.PantsTemplate ~= "" then
+			table.insert(layers, pants.PantsTemplate)
 		end
 		for index, image in layers do
 			local layer = shellPiece(

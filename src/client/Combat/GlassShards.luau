@@ -101,7 +101,7 @@ local function drawShard(part: BasePart, shard: Gash.Shard, parent: Instance)
 	dot.Name = "ShardBlood"
 	dot.Shape = Enum.PartType.Cylinder
 	local size = random:NextNumber(0.05, 0.09)
-	dot.Size = Vector3.new(0.01, size, size * random:NextNumber(0.7, 1))
+	dot.Size = Vector3.new(0.01, size, size) -- (a cylinder's round face: Y = Z)
 	dot.Material = Enum.Material.SmoothPlastic
 	dot.Color = BLOOD_COLOR
 	dot.Reflectance = 0.25

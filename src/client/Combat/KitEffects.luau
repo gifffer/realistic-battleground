@@ -344,26 +344,42 @@ end
 -- One drop of blood falling from the wound: a glass cut (Gash_*), else the
 -- part that was hit ("BleedPart"), else the head.
 local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
+	-- The part that bleeds (set by the server), else any cut part.
+	local bleedPart = model:GetAttribute("BleedPart")
+	local wanted = if typeof(bleedPart) == "string" then bleedPart else nil
 	local spots: { { part: BasePart, point: Vector3 } } = {}
-	for name, value in model:GetAttributes() do
-		local key = string.match(name, "^" .. Gash.PREFIX .. "(%a+)_%d+$")
-		local partName = if key then Gash.PART_OF[key] else nil
-		local data = Gash.decode(value)
-		local part = if partName then model:FindFirstChild(partName) else nil
-		if data and part and part:IsA("BasePart") then
-			table.insert(spots, { part = part, point = data.point })
+	local function collect(onlyWanted: boolean)
+		for name, value in model:GetAttributes() do
+			local key = string.match(name, "^" .. Gash.PREFIX .. "(%a+)_%d+$")
+				or string.match(name, "^" .. Gash.SHARD_PREFIX .. "(%a+)_%d+$")
+			local partName = if key then Gash.PART_OF[key] else nil
+			local cut = Gash.decode(value)
+			local shard = if cut then nil else Gash.decodeShard(value)
+			local point = if cut then cut.point elseif shard then shard.point else nil
+			local part = if partName then model:FindFirstChild(partName) else nil
+			if
+				point
+				and part
+				and part:IsA("BasePart")
+				and (not onlyWanted or partName == wanted)
+			then
+				table.insert(spots, { part = part, point = point })
+			end
 		end
+	end
+	collect(true)
+	if #spots == 0 and wanted == nil then
+		collect(false)
 	end
 	if #spots > 0 then
 		local spot = spots[random:NextInteger(1, #spots)]
-		-- just under the cut, a little out of the skin
+		-- just under the wound, a little out of the skin
 		local outward = Vector3.new(spot.point.X, 0, spot.point.Z)
 		outward = if outward.Magnitude > 1e-3 then outward.Unit else Vector3.new(0, 0, -1)
 		local at = spot.point + outward * 0.06 + Vector3.new(0, -0.08, 0)
 		return (spot.part.CFrame * CFrame.new(at)).Position, spot.part
 	end
-	local bleedPart = model:GetAttribute("BleedPart")
-	local part = model:FindFirstChild(if typeof(bleedPart) == "string" then bleedPart else "Head")
+	local part = model:FindFirstChild(wanted or "Head")
 	if part == nil or not part:IsA("BasePart") then
 		return nil, nil
 	end

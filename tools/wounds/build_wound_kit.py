@@ -335,7 +335,8 @@ def build_insert(kind, size, v, head, seed):
 # angle 0 (its middle faces +Z). Normals are the true ones of the round
 # shape, so the pieces join without any visible seam.
 #   Shell_Band24   1/24 of the straight part, 1 stud high (the game scales Y)
-#   Shell_Band96   1/96 of it (thin columns next to a cut)
+#   Shell_Band192  1/192 of it (thin columns next to a cut)
+#   Shell_Face<Band|Top|Bottom>_<i>  the face picture's pieces (see face_piece)
 #   Shell_Bevel24  1/24 of the top rounded edge (the bottom one: turned over)
 #   Shell_Cap      the flat top (the bottom one: turned over)
 def shell_piece(points_normals_faces, name):
@@ -410,33 +411,44 @@ def outward_check(mesh, name):
     print(name, "faces flipped to face out:", len(flipped))
 
 
-def face_sheet(segments, band_rows, bevel_rings):
-    """The front half of the head (straight part + rounded edges), UV-mapped
-    exactly like Roblox puts a face on the classic head (measured from
+FACE_SECTORS = 24  # same as the head's columns (Gashes.luau HEAD_SECTORS)
+
+
+def face_piece(index, part, segments=8, band_rows=8, bevel_rings=12):
+    """The face picture's piece on one 15-degree sector of the head's front:
+    its straight part ("Band"), or its top / bottom rounded edge. Its UVs are
+    exactly how Roblox maps a face on the classic head (measured from
     head.mesh: a flat projection from the front, u = 0.5 - x / 1.2,
-    v = 0.5 - y / 1.2). The game paints the face on it, so the face is drawn
-    in one piece, without seams."""
-    verts, normals, faces, uvs = [], [], [], []
+    v = 0.5 - y / 1.2), so the pieces together draw the face in one go,
+    without seams; next to a cut, the game leaves out the Band piece (the
+    hole is there). Built at its real place around the head (angle 0 = the
+    face, insert axes)."""
     profile = []  # (radius, y, normal radial part, normal y), bottom to top
-    for j in range(bevel_rings, 0, -1):  # bottom rounded edge
-        t = math.radians(90) * j / bevel_rings
-        profile.append((HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t), -HEAD_BAND - HEAD_BEVEL * math.sin(t), math.cos(t), -math.sin(t)))
-    for j in range(band_rows + 1):
-        profile.append((HEAD_RADIUS, -HEAD_BAND + 2 * HEAD_BAND * j / band_rows, 1.0, 0.0))
-    for j in range(1, bevel_rings + 1):  # top rounded edge
-        t = math.radians(90) * j / bevel_rings
-        profile.append((HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t), HEAD_BAND + HEAD_BEVEL * math.sin(t), math.cos(t), math.sin(t)))
+    if part == "Bottom":
+        for j in range(bevel_rings, -1, -1):
+            t = math.radians(90) * j / bevel_rings
+            profile.append((HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t), -HEAD_BAND - HEAD_BEVEL * math.sin(t), math.cos(t), -math.sin(t)))
+    elif part == "Band":
+        for j in range(band_rows + 1):
+            profile.append((HEAD_RADIUS, -HEAD_BAND + 2 * HEAD_BAND * j / band_rows, 1.0, 0.0))
+    else:
+        for j in range(bevel_rings + 1):
+            t = math.radians(90) * j / bevel_rings
+            profile.append((HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t), HEAD_BAND + HEAD_BEVEL * math.sin(t), math.cos(t), math.sin(t)))
     rows = len(profile)
+    sector = 360 / FACE_SECTORS
+    # Gashes: sector `index` covers head angles index*15 .. (index+1)*15
+    # degrees, measured toward the head's +X; the kit's +X is the head's -X.
+    start = -(index + 1) * sector
+    verts, normals, faces, uvs = [], [], [], []
     for i in range(segments + 1):
-        a = math.radians(-90 + 180 * i / segments)  # the front half (insert axes: +Z = the face)
+        a = math.radians(start + sector * i / segments)
         sa, ca = math.sin(a), math.cos(a)
         for r, y, nr, ny in profile:
-            # insert axes: X = the head's left as you look at it... see below
             x, z = r * sa, r * ca
             verts.append((x, y, z))
             normals.append((nr * sa, ny, nr * ca))
-            # In the game the kit's +X is the head's -X (angle 0 turns it):
-            # the head's x = -x here.
+            # the head's x is -x here
             uvs.append((0.5 + x / (2 * HEAD_RADIUS), 1 - (0.5 - y / (2 * HEAD_RADIUS))))
     for i in range(segments):
         for j in range(rows - 1):
@@ -445,22 +457,30 @@ def face_sheet(segments, band_rows, bevel_rings):
     return verts, normals, faces, uvs
 
 
+def front_sectors():
+    """The sectors whose middle faces the front (where the face is)."""
+    sector = 2 * math.pi / FACE_SECTORS
+    return [i for i in range(FACE_SECTORS) if math.cos((i + 0.5) * sector) > 0]
+
+
 def build_head_shell():
     pieces = {
         "Shell_Band24": band(15, 8),
-        "Shell_Band96": band(3.75, 2),
         "Shell_Band192": band(1.875, 2),
         "Shell_Bevel24": bevel(15, 8, 10),
         "Shell_Cap": cap(192),  # same rim points as the 24 bevels (8 each): no crack
     }
     out = {name: shell_piece(data, name) for name, data in pieces.items()}
-    verts, normals, faces, uvs = face_sheet(96, 8, 12)
-    mesh = shell_piece((verts, normals, faces), "Shell_FaceSheet")
-    uv = mesh.uv_layers.new(name="UVMap")
-    for poly in mesh.polygons:
-        for li in poly.loop_indices:
-            uv.data[li].uv = uvs[mesh.loops[li].vertex_index]
-    out["Shell_FaceSheet"] = mesh
+    for index in front_sectors():
+        for part in ("Band", "Top", "Bottom"):
+            name = f"Shell_Face{part}_{index}"
+            verts, normals, faces, uvs = face_piece(index, part)
+            mesh = shell_piece((verts, normals, faces), name)
+            uv = mesh.uv_layers.new(name="UVMap")
+            for poly in mesh.polygons:
+                for li in poly.loop_indices:
+                    uv.data[li].uv = uvs[mesh.loops[li].vertex_index]
+            out[name] = mesh
     return out
 
 

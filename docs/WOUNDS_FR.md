@@ -43,8 +43,8 @@ On garde aussi les **accessoires de tête** : cheveux, chapeaux, lunettes et acc
 - **Serveur** : chaque plaie est un attribut du personnage, `Gash_<Partie>_<n>`. Par exemple, `Gash_Head_1 = "Slash|M|0.31|0.12|-0.52|-30|81234"` veut dire : entaille, taille M, position sur la tête, angle, graine aléatoire. Voir `src/shared/Util/Gash.luau`.
 - **Client** (`src/client/Combat/Gashes.luau`) :
   - il cache la vraie partie du corps et la remplace par une **copie exacte** : même forme, même couleur, même rendu lisse (sans le grain de la matière « Plastic », que Roblox n'affiche pas sur les personnages), avec le visage et les vêtements :
-    - pour la tête, ce sont des morceaux 3D lisses de la tête classique (`Shell_*` dans `WoundKit`) ;
-    - pour le torse, c'est le **cadre aux arêtes biseautées**, comme le dessine Roblox (`Shell_FrameTorso`), avec le t-shirt peint dessus, plus des tuiles plates pour l'intérieur des faces ;
+    - pour la tête, ce sont des morceaux 3D lisses de la tête classique (`Shell_*` dans `WoundKit`). Le visage est peint sur des morceaux qui épousent la tête, avec les mêmes coordonnées que Roblox (`Shell_Face*`). Près d'une plaie, de fines bandes le complètent pour que le trou reste libre ;
+    - pour le torse, c'est le **cadre aux arêtes biseautées**, comme le dessine Roblox (`Shell_FrameTorso`), avec le t-shirt (ou, sans t-shirt, le pantalon) peint dessus, plus des tuiles plates pour l'intérieur des faces ;
   - il enlève les tuiles **en suivant le contour exact** de la plaie ;
   - il pose dedans le **modèle 3D** de la plaie.
 - **Modèles** : `tools/wounds/build_wound_kit.py` (Blender en Python) fabrique `WoundKit.fbx` et `src/shared/WoundShapes.luau`, qui contient les contours. Pour les refaire :
