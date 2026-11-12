@@ -2075,7 +2075,8 @@ handlers.Queue = function(data)
 		end
 	else
 		searchingSince = nil
-		if state == "Searching" then
+		-- (Also ends a "waiting for a free arena" the server called off.)
+		if state == "Searching" or state == "Waiting" then
 			setState("Idle")
 		end
 	end
@@ -2104,6 +2105,10 @@ handlers.Start = function(data)
 		leavePrompt(0.2)
 	end
 	watchOpponent(opponentId)
+	-- The fight starts: the menu must not hide the countdown.
+	if MenuController.getOpen() ~= nil then
+		MenuController.close()
+	end
 	showTop()
 	setState("InMatch")
 end

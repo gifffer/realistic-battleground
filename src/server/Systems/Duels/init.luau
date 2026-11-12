@@ -47,6 +47,10 @@ type Match = {
 	score: { [Player]: number },
 	round: number,
 	roundActive: boolean,
+	-- "countdown" (frozen), "fight", "pause" (between rounds / after the last).
+	phase: string,
+	decidedWinner: Player?, -- set when someone reached ROUNDS_TO_WIN
+	eloAtStart: { [Player]: number }, -- ELO snapshot (a leaver can't dodge the loss)
 	ended: boolean,
 	connections: { RBXScriptConnection },
 }
@@ -136,12 +140,17 @@ end
 
 -- `loser` dropped to 0 HP (or died): the round goes to the other one.
 local function endRound(match: Match, loser: Player)
-	if match.ended or not match.roundActive then
+	-- (During the countdown too: dying then — a reset — still loses the round.)
+	if match.ended or match.phase == "pause" then
 		return
 	end
+	match.phase = "pause"
 	match.roundActive = false
 	local winner = other(match, loser)
 	match.score[winner] += 1
+	if match.score[winner] >= D.ROUNDS_TO_WIN then
+		match.decidedWinner = winner
+	end
 	local loserCharacter = loser.Character
 	if loserCharacter then
 		Ragdoll.enable(loserCharacter) -- they drop
@@ -222,8 +231,11 @@ startRound = function(match: Match)
 			fightAt = fightAt,
 		})
 	end
+	match.phase = "countdown"
+	local thisRound = match.round
 	task.delay(D.COUNTDOWN, function()
-		if not match.ended then
+		if not match.ended and match.round == thisRound and match.phase == "countdown" then
+			match.phase = "fight"
 			match.roundActive = true
 		end
 	end)
@@ -236,8 +248,11 @@ end
 local function processWaitingList()
 	while #waitingForArena > 0 do
 		local entry = waitingForArena[1]
-		if not (entry.a.Parent == Players and entry.b.Parent == Players) then
+		if not (isFree(entry.a) and isFree(entry.b)) then
+			-- One of them left or is busy: the match is off, tell them both.
 			table.remove(waitingForArena, 1)
+			send(entry.a, "Queue", { searching = false })
+			send(entry.b, "Queue", { searching = false })
 			continue
 		end
 		local arena = Arenas.claim()
@@ -275,6 +290,9 @@ function Duels.startMatch(a: Player, b: Player, ranked: boolean)
 		score = { [a] = 0, [b] = 0 },
 		round = 0,
 		roundActive = false,
+		phase = "pause",
+		decidedWinner = nil,
+		eloAtStart = { [a] = eloOf(a), [b] = eloOf(b) },
 		ended = false,
 		connections = {},
 	}
@@ -307,14 +325,34 @@ endMatch = function(match: Match, winner: Player, forfeit: boolean)
 	matches[match.b] = nil
 	returning[match.a] = true
 	returning[match.b] = true
+	-- Result screen: nobody moves or hits until they are back outside.
+	for _, player in { match.a, match.b } do
+		local character = player.Character
+		if character then
+			Combat.freeze(character, D.RESULT_TIME)
+		end
+	end
 
 	-- Ranked: ELO and ranked record.
-	local eloBefore: { [Player]: number } = { [winner] = eloOf(winner), [loser] = eloOf(loser) }
+	local eloBefore: { [Player]: number } = table.clone(match.eloAtStart)
 	local eloAfter: { [Player]: number } = table.clone(eloBefore)
-	if match.ranked then
-		local gain = eloGain(eloBefore[winner], eloBefore[loser])
+	local pairKey = if match.a.UserId < match.b.UserId
+		then `{match.a.UserId}:{match.b.UserId}`
+		else `{match.b.UserId}:{match.a.UserId}`
+	-- Anti-farm (ranked too): the same two players again within the window,
+	-- or a forfeit before a single round was finished = no rewards, no ELO.
+	local farming = os.clock() - (lastRewardedChallenge[pairKey] or -math.huge)
+		< Config.Progression.REPEAT_KILL_WINDOW
+	local nothingPlayed = forfeit and match.score[winner] == 0 and match.score[loser] == 0
+	local counts = not farming and not nothingPlayed
+	if counts then
+		lastRewardedChallenge[pairKey] = os.clock()
+	end
+	if match.ranked and counts then
+		-- The winner gets what the loser actually loses (ELO never below 0).
+		local gain = math.min(eloGain(eloBefore[winner], eloBefore[loser]), eloBefore[loser])
 		eloAfter[winner] += gain
-		eloAfter[loser] = math.max(0, eloAfter[loser] - gain)
+		eloAfter[loser] -= gain
 	end
 	for _, player in { winner, loser } do
 		local won = player == winner
@@ -339,16 +377,7 @@ endMatch = function(match: Match, winner: Player, forfeit: boolean)
 
 	-- Rewards. Challenges between the same two players: once per few minutes.
 	local rewards: { [Player]: { xp: number, coins: number } } = {}
-	local pairKey = if match.a.UserId < match.b.UserId
-		then `{match.a.UserId}:{match.b.UserId}`
-		else `{match.b.UserId}:{match.a.UserId}`
-	local farming = not match.ranked
-		and os.clock() - (lastRewardedChallenge[pairKey] or -math.huge)
-			< Config.Progression.REPEAT_KILL_WINDOW
-	if not farming then
-		if not match.ranked then
-			lastRewardedChallenge[pairKey] = os.clock()
-		end
+	if counts then
 		rewards[winner] = if match.ranked then D.RANKED_WIN else D.CHALLENGE_WIN
 		rewards[loser] = if match.ranked then D.RANKED_LOSS else D.CHALLENGE_LOSS
 		Progression.grant(
@@ -417,6 +446,9 @@ end
 local function interceptKnockout(victim: Model, _attacker: Model?): boolean
 	local player = Players:GetPlayerFromCharacter(victim)
 	local match = if player then matches[player] else nil
+	if player and returning[player] then
+		return true -- result screen: nothing can knock them out
+	end
 	if player == nil or match == nil then
 		return false -- normal KO
 	end
@@ -559,7 +591,11 @@ local function matchmake()
 		for candidate = index + 1, #queue do
 			local second = queue[candidate]
 			local gap = math.abs(eloOf(first.player) - eloOf(second.player))
-			if gap <= math.max(range(first), range(second)) and gap < bestGap then
+			local a, b = first.player.UserId, second.player.UserId
+			local key = if a < b then `{a}:{b}` else `{b}:{a}`
+			local recent = time - (lastRewardedChallenge[key] or -math.huge)
+				< Config.Progression.REPEAT_KILL_WINDOW
+			if not recent and gap <= math.max(range(first), range(second)) and gap < bestGap then
 				best, bestGap = candidate, gap
 			end
 		end
@@ -590,7 +626,12 @@ local function onLeaving(player: Player)
 	end
 	local match = matches[player]
 	if match then
-		endMatch(match, other(match, player), true)
+		local decided = match.decidedWinner
+		if decided then
+			endMatch(match, decided, false) -- already won / lost: no forfeit
+		else
+			endMatch(match, other(match, player), true)
+		end
 	end
 end
 

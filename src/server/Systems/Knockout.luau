@@ -262,6 +262,13 @@ local function getUp(info: FighterInfo)
 	end
 end
 
+-- In a duel (or on its result screen): the Duels system handles it.
+local function inDuel(info: FighterInfo): boolean
+	local player = info.player
+	return info.model:GetAttribute("DuelId") ~= nil
+		or (player ~= nil and player:GetAttribute("InDuel") == true)
+end
+
 local function onDied(info: FighterInfo)
 	if info.dead then
 		return
@@ -273,6 +280,10 @@ local function onDied(info: FighterInfo)
 	setAttribute(info.model, "KnockedOut", false)
 	setAttribute(info.model, "KOEndsAt", nil)
 	setAttribute(info.model, "BeingFinished", false)
+	-- A duel settles its own deaths (round lost): no kill feed, no kill.
+	if inDuel(info) then
+		return
+	end
 	local kind: Types.KillFeedKind = if info.finishedBy then "Finished" else "Died"
 	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
 	rewardKill(killer, killerPlayer, info, kind)
@@ -514,8 +525,8 @@ end
 local function onLeaving(player: Player)
 	local character = player.Character
 	local info = if character then fighters[character] else nil
-	if info == nil or info.dead then
-		return
+	if info == nil or info.dead or inDuel(info) then
+		return -- (a duel handles leaving: forfeit)
 	end
 	local inFight = info.knockedOut
 		or now() - info.lastHitAt <= K.COMBAT_TAG_TIME
