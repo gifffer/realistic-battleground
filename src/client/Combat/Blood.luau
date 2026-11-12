@@ -37,9 +37,9 @@ local Config = require(ReplicatedStorage.Shared.Config)
 
 local Blood = {}
 
-Blood.FRESH = Color3.fromRGB(128, 8, 10) -- bright, just out (oxygenated)
-Blood.DARK = Color3.fromRGB(80, 5, 7) -- a few seconds later
-Blood.DRY = Color3.fromRGB(48, 6, 6) -- dried
+Blood.FRESH = Color3.fromRGB(112, 7, 9) -- bright, just out (oxygenated)
+Blood.DARK = Color3.fromRGB(68, 4, 6) -- a few seconds later
+Blood.DRY = Color3.fromRGB(42, 6, 6) -- dried
 
 local MAX_DROPS = 220 -- flying at once
 local MAX_STRANDS = 24
@@ -49,7 +49,7 @@ local MAX_NEW_PER_FRAME = 90 -- new pieces a frame, at most (the rest is skipped
 local FLOOR_LIFETIME = 45 -- seconds a splat stays (fading the last third)
 local BODY_LIFETIME = 35
 local DRY_TIME = 14 -- seconds to darken and lose its shine
-local WET_SHINE = 0.22
+local WET_SHINE = 0.06 -- (more reflects the sky: it turns pink)
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 
 local random = Random.new()
@@ -128,8 +128,62 @@ local function keep(piece: BasePart, lifetime: number, onBody: boolean)
 	Debris:AddItem(piece, lifetime)
 end
 
+-- Where blood lands on a body: on the SKIN you see, not on the part's box.
+-- The classic head is round (0.6 across, its part a wider box); a hat or
+-- hair is on the head; the invisible root is the torso. Returns the part
+-- it sticks to, the point on its surface and the way out of it (nil: no
+-- skin there).
+local function onSkin(part: BasePart, world: Vector3): (BasePart?, Vector3, Vector3)
+	local model = part:FindFirstAncestorOfClass("Model")
+	if part.Parent and part.Parent:IsA("Accessory") then
+		local owner = part.Parent.Parent
+		local head = if owner then owner:FindFirstChild("Head") else nil
+		if head and head:IsA("BasePart") then
+			part = head
+		end
+	elseif part.Name == "HumanoidRootPart" and model then
+		local torso = model:FindFirstChild("Torso")
+		if torso and torso:IsA("BasePart") then
+			part = torso
+		end
+	end
+	local p = part.CFrame:PointToObjectSpace(world)
+	if part.Name == "Head" then
+		-- (round: straight from -0.3 to 0.3, rounded off above and below)
+		local flatP = Vector3.new(p.X, 0, p.Z)
+		local out = if flatP.Magnitude > 1e-3 then flatP.Unit else Vector3.new(0, 0, -1)
+		local y = math.clamp(p.Y, -0.5, 0.5)
+		local over = math.max(0, math.abs(y) - 0.3)
+		local radius = 0.3 + math.sqrt(math.max(0, 0.09 - over * over))
+		local tilt = if over > 0 then Vector3.new(0, math.sign(y) * over / 0.3, 0) else Vector3.zero
+		local normal = (out + tilt).Unit
+		return part,
+			part.CFrame * (out * radius + Vector3.new(0, y, 0)),
+			part.CFrame:VectorToWorldSpace(normal)
+	end
+	-- a block: the face the point is closest to
+	local half = part.Size / 2
+	local rx, ry, rz = math.abs(p.X) / half.X, math.abs(p.Y) / half.Y, math.abs(p.Z) / half.Z
+	local localNormal: Vector3
+	if rx >= ry and rx >= rz then
+		localNormal = Vector3.new(math.sign(p.X), 0, 0)
+	elseif ry >= rz then
+		localNormal = Vector3.new(0, math.sign(p.Y), 0)
+	else
+		localNormal = Vector3.new(0, 0, math.sign(p.Z))
+	end
+	local onFace = Vector3.new(
+		if localNormal.X ~= 0 then localNormal.X * half.X else math.clamp(p.X, -half.X, half.X),
+		if localNormal.Y ~= 0 then localNormal.Y * half.Y else math.clamp(p.Y, -half.Y, half.Y),
+		if localNormal.Z ~= 0 then localNormal.Z * half.Z else math.clamp(p.Z, -half.Z, half.Z)
+	)
+	return part, part.CFrame * onFace, part.CFrame:VectorToWorldSpace(localNormal)
+end
+Blood.onSkin = onSkin
+
 -- A flat ellipse of blood on a surface: centre `at`, facing `normal`, its
--- length along `along`.
+-- length along `along`. On a body (`onto`) it is put on the skin there and
+-- kept inside the face it's on (never hanging in the air past an edge).
 local function puddle(
 	at: Vector3,
 	normal: Vector3,
@@ -138,23 +192,38 @@ local function puddle(
 	length: number,
 	color: Color3,
 	onto: BasePart?,
-	lifetime: number
+	lifetime: number,
+	material: Enum.Material?,
+	transparency: number?
 ): Part?
 	if madeThisFrame >= MAX_NEW_PER_FRAME then
 		return nil
 	end
-	-- On a body part: only if it lies on it (not hanging past its edge).
+	local stuck = onto
 	if onto then
-		local l = onto.CFrame:PointToObjectSpace(at)
-		local h = onto.Size / 2
-		local r = math.max(width, length) * 0.5
-		local ln = onto.CFrame:VectorToObjectSpace(normal)
-		local function inside(value: number, extent: number, facing: number): boolean
-			-- (along the face's normal it may sit on the face itself)
-			return math.abs(facing) > 0.7 or math.abs(value) + r * 0.6 <= extent + 0.02
-		end
-		if not (inside(l.X, h.X, ln.X) and inside(l.Y, h.Y, ln.Y) and inside(l.Z, h.Z, ln.Z)) then
+		local skin, point, out = onSkin(onto, at)
+		if skin == nil then
 			return nil
+		end
+		stuck, at, normal = skin, point, out
+		local r = math.max(width, length) * 0.5
+		if skin.Name == "Head" then
+			-- (small on the round head: a flat piece can't follow its curve)
+			width, length = math.min(width, 0.3), math.min(length, 0.36)
+		else
+			-- inside the face: its centre at least `r` from the edges
+			local l = skin.CFrame:PointToObjectSpace(at)
+			local ln = skin.CFrame:VectorToObjectSpace(normal)
+			local h = skin.Size / 2
+			local function keepIn(value: number, extent: number, facing: number): number
+				if math.abs(facing) > 0.7 then
+					return value
+				end
+				local room = math.max(0, extent - r * 0.85)
+				return math.clamp(value, -room, room)
+			end
+			l = Vector3.new(keepIn(l.X, h.X, ln.X), keepIn(l.Y, h.Y, ln.Y), keepIn(l.Z, h.Z, ln.Z))
+			at = skin.CFrame * l
 		end
 	end
 	madeThisFrame += 1
@@ -170,43 +239,38 @@ local function puddle(
 	-- round: X along the normal, Y across, Z along)
 	local piece = newPiece("Blood", Vector3.new(0.01, width, length), color)
 	piece.Archivable = false -- (copies of a body don't copy its blood)
+	piece.Material = material or Enum.Material.SmoothPlastic
+	piece.Transparency = transparency or 0
 	local disc = Instance.new("SpecialMesh")
 	disc.MeshType = Enum.MeshType.Sphere
 	disc.Parent = piece
 	piece.CFrame = CFrame.fromMatrix(at + normal * lift, normal, side)
-	if onto then
+	if stuck then
 		piece.Anchored = false
 		piece.Massless = true
 		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = onto
+		weld.Part0 = stuck
 		weld.Part1 = piece
 		weld.Parent = piece
-		local holder = onto:FindFirstChild("BloodSplats")
+		local holder = stuck:FindFirstChild("BloodSplats")
 		if holder == nil or not holder:IsA("Folder") then
 			local made = Instance.new("Folder")
 			made.Name = "BloodSplats"
 			made.Archivable = false
-			made.Parent = onto
+			made.Parent = stuck
 			holder = made
 		end
 		piece.Parent = holder
 	else
 		piece.Parent = folder
 	end
-	keep(piece, lifetime, onto ~= nil)
+	keep(piece, lifetime, stuck ~= nil)
 	return piece
 end
 
 -- Blood running down a wall from `at`: a thin trail growing down slowly,
 -- a bead at its tip.
-local function run(
-	at: Vector3,
-	normal: Vector3,
-	width: number,
-	color: Color3,
-	onto: BasePart?,
-	lifetime: number
-)
+local function run(at: Vector3, normal: Vector3, width: number, color: Color3, lifetime: number)
 	local down = Vector3.new(0, -1, 0)
 	down = (down - normal * down:Dot(normal))
 	if down.Magnitude < 0.3 then
@@ -215,8 +279,19 @@ local function run(
 	down = down.Unit
 	local length = random:NextNumber(0.3, 1.6) * math.clamp(width * 4, 0.6, 2)
 	local time = length * random:NextNumber(1.5, 3)
-	local trail: Part? = puddle(at, normal, down, width * 0.45, 0.02, color, onto, lifetime)
-	local bead = puddle(at, normal, down, width * 0.7, width * 0.85, color, onto, lifetime)
+	local trail: Part? = puddle(at, normal, down, width * 0.45, 0.02, color, nil, lifetime)
+	local bead = puddle(
+		at,
+		normal,
+		down,
+		width * 0.7,
+		width * 0.85,
+		color,
+		nil,
+		lifetime,
+		Enum.Material.Glass,
+		0.15
+	)
 	if trail == nil or bead == nil then
 		return
 	end
@@ -240,16 +315,23 @@ local function run(
 			end
 			return
 		end
-		if trail.Anchored then
-			trail.Size = Vector3.new(0.01, width * 0.45 * (1 - t * 0.4), math.max(0.02, reach))
-			trail.CFrame = base + down * (reach / 2)
-			bead.CFrame = beadBase + down * reach
-		end
+		trail.Size = Vector3.new(0.01, width * 0.45 * (1 - t * 0.4), math.max(0.02, reach))
+		trail.CFrame = base + down * (reach / 2)
+		bead.CFrame = beadBase + down * reach
 	end)
 end
 
 -- A splash where blood lands. `velocity`: how it arrived (a streak along
--- its sliding part, satellites thrown ahead).
+-- its sliding part, satellites thrown out from where it hit).
+--   • the blob: one uneven puddle - a main ellipse with lobes bulging out
+--     of its edge (blood spreads unevenly), darker where it's thick;
+--   • a big one stays thick and wet in the middle: a glossy raised pool
+--     (Glass: it catches the light like liquid);
+--   • a fast drop leaves a streak and a drop at its end (the "!");
+--   • a hard landing throws satellite drops OUT from the centre, each one
+--     stretched away from it (the crown of a real spatter);
+--   • on a body it soaks in: a little see-through, no shine;
+--   • on a wall it runs down.
 function Blood.splat(
 	position: Vector3,
 	normal: Vector3,
@@ -260,7 +342,16 @@ function Blood.splat(
 	local body = if onto then isBody(onto) else nil
 	-- (stuck to a body, or to anything that moves: it goes with it)
 	local stuckTo = if onto and (body ~= nil or not onto.Anchored) then onto else nil
-	local lifetime = if body then BODY_LIFETIME else FLOOR_LIFETIME
+	local onBody = body ~= nil
+	if onBody and onto then
+		local skin, point, out = onSkin(onto, position)
+		if skin == nil then
+			return
+		end
+		stuckTo, position, normal = skin, point, out
+		size = math.min(size, if skin.Name == "Head" then 0.32 else 0.6)
+	end
+	local lifetime = if onBody then BODY_LIFETIME else FLOOR_LIFETIME
 	local v = velocity or Vector3.zero
 	local tangent = v - normal * v:Dot(normal)
 	local slide = tangent.Magnitude
@@ -272,72 +363,119 @@ function Blood.splat(
 	if across.Magnitude > 1e-3 then
 		across = across.Unit
 	end
-	local fresh = Blood.FRESH:Lerp(Blood.DARK, random:NextNumber(0, 0.5))
-	-- 1. the blob: a few overlapping round puddles, the middle darker
-	-- (a small drop: one puddle; a big splash: up to 5)
-	for index = 1, math.clamp(math.floor(size * 6), 1, 5) do
-		local offset = along * random:NextNumber(-0.25, 0.25) * size
-			+ across * random:NextNumber(-0.25, 0.25) * size
-		local d = size * random:NextNumber(0.45, 0.85) * (1 - index * 0.06)
+	local fresh = Blood.FRESH:Lerp(Blood.DARK, random:NextNumber(0, 0.45))
+	local soak = if onBody then 0.2 else 0 -- (on clothes / skin it soaks in)
+	-- 1. the blob: a main ellipse, lobes bulging out of its edge
+	local main = size * random:NextNumber(0.7, 0.9)
+	puddle(
+		position,
+		normal,
+		along,
+		main,
+		main * random:NextNumber(0.9, 1.25),
+		fresh,
+		stuckTo,
+		lifetime,
+		nil,
+		soak
+	)
+	local lobes = if size < 0.12 then 0 else math.clamp(math.floor(size * 10), 2, 6)
+	for index = 1, lobes do
+		local angle = (index / lobes + random:NextNumber(-0.08, 0.08)) * math.pi * 2
+		local dir = along * math.cos(angle) + across * math.sin(angle)
+		local d = main * random:NextNumber(0.3, 0.55)
 		puddle(
-			position + offset,
+			position + dir * main * random:NextNumber(0.32, 0.45),
 			normal,
-			along,
-			d,
-			d * random:NextNumber(0.85, 1.15),
-			if index == 1 then fresh else fresh:Lerp(Blood.DARK, 0.4),
+			dir,
+			d * random:NextNumber(0.7, 0.9),
+			d * random:NextNumber(1, 1.4),
+			fresh:Lerp(Blood.DARK, random:NextNumber(0, 0.3)),
 			stuckTo,
-			lifetime
+			lifetime,
+			nil,
+			soak
 		)
 	end
-	-- 2. a fast drop leaves a streak with a drop at its end (the "!")
+	-- 2. a big one: thick and wet in the middle
+	if size > 0.22 and not onBody then
+		local core = main * random:NextNumber(0.45, 0.6)
+		local pool = puddle(
+			position,
+			normal,
+			along,
+			core,
+			core * random:NextNumber(0.9, 1.2),
+			Blood.DARK:Lerp(Blood.FRESH, 0.3),
+			stuckTo,
+			lifetime,
+			Enum.Material.Glass,
+			0.1
+		)
+		if pool then
+			-- (a little raised: liquid has a thickness)
+			pool.Size = Vector3.new(math.min(0.05, core * 0.12), pool.Size.Y, pool.Size.Z)
+		end
+	end
+	-- 3. a fast drop leaves a streak with a drop at its end (the "!")
 	if slide > 5 and size > 0.15 then
 		local length = size * math.clamp(slide / 9, 1.2, 4)
 		puddle(
 			position + along * length * 0.45,
 			normal,
 			along,
-			size * 0.45,
+			size * 0.4,
 			length,
 			fresh,
 			stuckTo,
-			lifetime
+			lifetime,
+			nil,
+			soak
 		)
 		puddle(
 			position + along * (length * 0.95 + size * 0.3),
 			normal,
 			along,
-			size * 0.3,
+			size * 0.28,
 			size * 0.36,
 			fresh,
 			stuckTo,
-			lifetime
+			lifetime,
+			nil,
+			soak
 		)
 	end
-	-- 3. satellites thrown out around it, more ahead
-	-- (only a big drop landing hard throws satellites)
+	-- 4. a hard landing: satellites thrown out from the centre, each
+	-- stretched away from it (more ahead when it was moving)
 	local impact = math.clamp((v.Magnitude - 8) / 20, 0, 1)
-	local satellites = if size < 0.12 then 0 else math.min(9, math.floor(size * 30 * impact))
+	local satellites = if size < 0.12 then 0 else math.min(10, math.floor(size * 30 * impact))
 	for _ = 1, satellites do
-		local ahead = if slide > 2 then random:NextNumber(0, 1.6) else random:NextNumber(-1, 1)
-		local offset = along * ahead * size * 1.5 + across * random:NextNumber(-1, 1) * size * 1.1
-		local d = size * random:NextNumber(0.08, 0.22)
+		local angle = random:NextNumber(0, math.pi * 2)
+		local dir = along * math.cos(angle) + across * math.sin(angle)
+		if slide > 2 then
+			dir = (dir + along * 1.2).Unit
+		end
+		local distance = size * random:NextNumber(0.75, 1.9)
+		local d = size * random:NextNumber(0.06, 0.18)
+		local stretch = 1 + distance / size * random:NextNumber(0.4, 1)
 		puddle(
-			position + offset,
+			position + dir * distance,
 			normal,
-			along,
+			dir,
 			d,
-			d * random:NextNumber(1, 1.6),
+			d * stretch,
 			fresh,
 			stuckTo,
-			lifetime
+			lifetime,
+			nil,
+			soak
 		)
 	end
-	-- 4. on a wall (or a standing body part), it runs down
-	if stuckTo == nil and math.abs(normal.Y) < 0.75 and size > 0.08 then
+	-- 5. on a wall, it runs down
+	if not onBody and stuckTo == nil and math.abs(normal.Y) < 0.75 and size > 0.08 then
 		for _ = 1, random:NextInteger(1, if size > 0.3 then 3 else 1) do
 			local start = position + across * random:NextNumber(-0.3, 0.3) * size
-			run(start, normal, size * random:NextNumber(0.25, 0.4), fresh, stuckTo, lifetime)
+			run(start, normal, size * random:NextNumber(0.25, 0.4), fresh, lifetime)
 		end
 	end
 end
@@ -378,7 +516,7 @@ local function newDrop(position: Vector3, velocity: Vector3, size: number, sourc
 		Vector3.one * size,
 		Blood.FRESH:Lerp(Blood.DARK, random:NextNumber(0, 0.4))
 	)
-	part.Reflectance = 0.3
+	part.Reflectance = 0.12
 	local shape = Instance.new("SpecialMesh")
 	shape.MeshType = Enum.MeshType.Sphere
 	shape.Parent = part
@@ -411,7 +549,7 @@ function Blood.strand(point: Vector3, velocity: Vector3, thickness: number, sour
 	end
 	local thread = newPiece("BloodStrand", Vector3.new(0.05, thickness, thickness), Blood.FRESH)
 	thread.Shape = Enum.PartType.Cylinder
-	thread.Reflectance = 0.3
+	thread.Reflectance = 0.12
 	thread.Parent = folder
 	table.insert(strands, {
 		head = head,

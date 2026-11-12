@@ -30,7 +30,7 @@ local GALLBLADDER = Color3.fromRGB(74, 100, 42)
 local BLOOD = Color3.fromRGB(78, 6, 6)
 local BLOOD_WET = Color3.fromRGB(104, 8, 8)
 local BONE = Color3.fromRGB(224, 212, 188)
-local LIFETIME = 30 -- seconds the liver stays on the floor
+local LIFETIME = 240 -- seconds at most the liver stays (it goes with the body before)
 local POUR_TIME = 3.5 -- seconds the hole pours blood
 
 -- Where the liver was: the victim's right, under the ribs, in front (torso
@@ -246,6 +246,18 @@ function LiverRip.rip(victim: Model, attacker: Model)
 		end
 	end)
 	Debris:AddItem(liver, LIFETIME + 6)
+	-- (it stays until the body it came from is removed)
+	local function remove()
+		if liver.Parent and not liver:FindFirstChild("Held") then
+			liver:Destroy()
+		end
+	end
+	victim.Destroying:Once(remove)
+	victim.AncestryChanged:Connect(function()
+		if victim.Parent == nil then
+			remove()
+		end
+	end)
 end
 
 -- He opens his hand: the liver drops to the floor; a wet slap and a

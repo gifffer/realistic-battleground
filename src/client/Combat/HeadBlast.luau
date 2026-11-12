@@ -47,7 +47,7 @@ local SCLERA = Color3.fromRGB(236, 230, 220)
 local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
-local PIECE_LIFETIME = 30 -- seconds the pieces stay on the floor
+local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
 local MAX_MARKS = 140 -- blood marks on the floor at once (several finishers...)
 local PUMP_TIME = 4.5 -- seconds the neck keeps pumping blood
@@ -639,6 +639,70 @@ end
 ------------------------------------------------------------------------------
 
 -- A flying piece (collides with the floor, never with fighters' clicks).
+-- The body whose head is bursting (its pieces go when it goes).
+local bursting: Model? = nil
+
+-- A piece of the head stays on the floor until the body is removed (a
+-- respawn, a reset): then it goes too. Once it lies still it is fixed
+-- there (it can't sink or slip through the floor, nothing nudges it).
+local function keepPiece(piece: BasePart)
+	local body = bursting
+	Debris:AddItem(piece, PIECE_LIFETIME)
+	if body then
+		local gone = false
+		local function remove()
+			if gone or piece.Parent == nil then
+				return
+			end
+			gone = true
+			TweenService:Create(piece, TweenInfo.new(0.6), { Transparency = 1 }):Play()
+			Debris:AddItem(piece, 0.65)
+		end
+		body.Destroying:Once(remove)
+		body.AncestryChanged:Connect(function()
+			if body.Parent == nil then
+				remove()
+			end
+		end)
+	end
+	-- (fixed once still; put back on the floor if it ever fell through it)
+	local spawnedY = piece.Position.Y
+	local floor = floorUnder(piece.Position)
+	local floorY = if floor then floor.Position.Y else spawnedY - 50
+	task.spawn(function()
+		local still = 0
+		local last = piece.Position
+		while piece.Parent and not piece.Anchored do
+			task.wait(0.2)
+			if not piece:IsDescendantOf(workspace) then
+				break
+			end
+			local position = piece.Position
+			if position.Y < floorY - 2 then
+				piece.AssemblyLinearVelocity = Vector3.zero
+				piece.CFrame = CFrame.new(Vector3.new(last.X, floorY + 0.1, last.Z))
+					* piece.CFrame.Rotation
+				piece.Anchored = true
+				break
+			end
+			if position.Y > floorY - 0.5 then
+				last = position
+			end
+			if
+				piece.AssemblyLinearVelocity.Magnitude < 0.3
+				and piece.AssemblyAngularVelocity.Magnitude < 0.5
+			then
+				still += 0.2
+				if still >= 0.8 then
+					piece.Anchored = true
+				end
+			else
+				still = 0
+			end
+		end
+	end)
+end
+
 local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
 	piece.CanCollide = true
 	piece.CanQuery = false
@@ -652,7 +716,7 @@ local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Rand
 	piece.AssemblyLinearVelocity = velocity
 	piece.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 28)
 	piece.Parent = workspace
-	Debris:AddItem(piece, PIECE_LIFETIME)
+	keepPiece(piece)
 end
 
 -- Two parts stuck together into one piece (the other one rides along).
@@ -786,7 +850,7 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 				part.AssemblyLinearVelocity = direction * speed * random:NextNumber(0.55, 1)
 				part.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(6, 22)
 				part.Parent = workspace
-				Debris:AddItem(part, PIECE_LIFETIME)
+				keepPiece(part)
 				if soft == "Brain" then
 					-- (its surface detail first: then it squashes with it)
 					Squish.detail(part, "Brain")
@@ -811,6 +875,7 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 end
 
 local function burst(model: Model, head: BasePart, torso: BasePart, random: Random)
+	bursting = model
 	local at = head.Position
 	-- Away from the attacker: he stands past the head, so toward the body.
 	local flat = Vector3.new(torso.Position.X - at.X, 0, torso.Position.Z - at.Z)
