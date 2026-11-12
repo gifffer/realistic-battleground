@@ -46,16 +46,6 @@ local ParkourController = require(script.Parent.ParkourController)
 
 local player = Players.LocalPlayer
 
--- The M1 combo with a weapon in hand (Client/Animation/BouncerClips): two
--- swings, then a big one overhead. Their blow lands at the same time as a
--- punch's (Config.Combat.HIT_DELAY).
-local WEAPON_SWINGS: { [string]: string } = {
-	Brawler_M1_1 = "Weapon_Swing1",
-	Brawler_M1_2 = "Weapon_Swing2",
-	Brawler_M1_3 = "Weapon_Swing1",
-	Brawler_M1_4 = "Weapon_Swing3",
-}
-
 -- Seconds to fade a clip in / out, per clip (default otherwise).
 local DEFAULT_FADE = 0.2
 local FADE_IN: { [string]: number } = {
@@ -604,12 +594,7 @@ end
 -- the action playing on it. Unknown clip or model: does nothing.
 function CharacterAnimationController.playAction(model: Model, name: string)
 	local entry = tracked[model]
-	-- A weapon in hand (Shared/Weapons): the M1s are swings of it, not punches.
-	local clipName = name
-	if model:GetAttribute("Weapon") ~= nil and string.sub(name, 1, 11) == "Brawler_M1_" then
-		clipName = WEAPON_SWINGS[name] or name
-	end
-	local clip = findClip(clipName)
+	local clip = findClip(name)
 	if clip == nil then
 		warnMissingClip(name)
 		return
@@ -628,7 +613,7 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 		layer.fadeOut = ACTION_FADE_IN -- cut the old one fast
 	end
 	local fadeIn = if REACTIONS[name] then REACTION_FADE_IN else ACTION_FADE_IN
-	table.insert(entry.action, newLayer(clipName, clip, fadeIn, ACTION_FADE_OUT))
+	table.insert(entry.action, newLayer(name, clip, fadeIn, ACTION_FADE_OUT))
 	entry.lastAction = name
 	-- (An emote is not a fight: no fists up after it.)
 	if string.sub(name, 1, 6) ~= "Emote_" then
@@ -644,7 +629,7 @@ function CharacterAnimationController.stopAction(model: Model, name: string)
 		return
 	end
 	for _, layer in entry.action do
-		if layer.name == name or layer.name == WEAPON_SWINGS[name] then
+		if layer.name == name then
 			layer.target = 0
 			layer.fadeOut = ACTION_FADE_OUT
 		end

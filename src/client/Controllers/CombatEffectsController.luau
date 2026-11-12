@@ -203,7 +203,7 @@ local function onCombatantAdded(instance: Instance)
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
 	KitEffects.watch(model) -- bleeding drips, Street Fury
-	WeaponFx.watch(model) -- a bone (weapon) in the hand
+	WeaponFx.watch(model) -- a bone (to throw) in the hand
 	Wounds.watch(model) -- bruises and cuts where they were hit
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
@@ -824,11 +824,43 @@ end
 
 function CombatEffectsController.start()
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
-	Remotes.WeaponBroke.OnClientEvent:Connect(function(model: unknown, id: unknown)
-		if typeof(model) == "Instance" and model:IsA("Model") and typeof(id) == "string" then
-			WeaponFx.broke(model, id)
+	-- Something thrown (Shared/Weapons): flying, then broken where it hit.
+	Remotes.WeaponThrown.OnClientEvent:Connect(
+		function(
+			thrower: unknown,
+			id: unknown,
+			throwId: unknown,
+			origin: unknown,
+			velocity: unknown
+		)
+			if
+				typeof(thrower) == "Instance"
+				and thrower:IsA("Model")
+				and typeof(id) == "string"
+				and typeof(throwId) == "number"
+				and typeof(origin) == "Vector3"
+				and typeof(velocity) == "Vector3"
+			then
+				WeaponFx.thrown(thrower, id, throwId, origin, velocity)
+			end
 		end
-	end)
+	)
+	Remotes.WeaponBroke.OnClientEvent:Connect(
+		function(id: unknown, throwId: unknown, position: unknown, velocity: unknown)
+			if
+				typeof(id) == "string"
+				and typeof(position) == "Vector3"
+				and typeof(velocity) == "Vector3"
+			then
+				WeaponFx.broke(
+					id,
+					if typeof(throwId) == "number" then throwId else nil,
+					position,
+					velocity
+				)
+			end
+		end
+	)
 	local tag = Config.Combat.TAG
 	CollectionService:GetInstanceAddedSignal(tag):Connect(onCombatantAdded)
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)

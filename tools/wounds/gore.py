@@ -20,16 +20,20 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
   ArmEnd     the Bouncer's finisher: the top of the right arm torn off at the
              shoulder (in the R6 arm's space: 1 x 2 x 1, its top at Y = 1):
              the raw end (Flesh, FleshDark), torn skin hanging over the edges
-             (Skin), the ball of the upper arm bone sticking out (Bone), torn
-             tendons (Tendon)
-  Humerus    the same upper arm bone, whole, pulled out of the torn arm and
-             held as a club (Shared/Weapons "Bone"): its own space, along Y,
-             the ball (head) at the top, the elbow end at the bottom, scraps
-             of flesh still on it (Bone, Flesh, Tendon)
+             (Skin), the real humerus (Z-Anatomy) with its head sticking out
+             (Bone), torn tendons (Tendon)
+  Humerus    the same upper arm bone, whole: the real right humerus of
+             Z-Anatomy (anatomy/arm.npz), pulled out of the torn arm to be
+             thrown (Shared/Weapons "Bone"): its own space, along Y, the
+             head at the top, scraps of flesh still on it (Bone, Flesh,
+             Tendon)
+  HumerusA / HumerusB   the same bone snapped in two (head half / elbow
+             half), same space: when it hits something it breaks there
   Shoulder   ...and what it leaves on the torso (R6 torso space, its right
-             side at X = 1): the open socket (Flesh, FleshDark), the cup of the
-             shoulder blade and the end of the collarbone (Bone), torn skin
-             around it (Skin), shreds of muscle hanging (Flesh)
+             side at X = 1): the open socket (Flesh, FleshDark), the real
+             outer shoulder blade (its socket, the acromion) and the end of
+             the collarbone (Bone, Z-Anatomy), torn skin around it (Skin),
+             shreds of muscle hanging (Flesh)
   Splat<i> / Streak<i> / Pool<i>   blood on the floor (Blood): flat blots
              with droplets, stretched drops, a pool; 1 stud across, laid in
              X-Z (the game sizes and turns them)
@@ -50,6 +54,7 @@ from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANATOMY = os.path.join(HERE, "anatomy", "head.npz")
+ARM_ANATOMY = os.path.join(HERE, "anatomy", "arm.npz")  # extract_arm.py
 GORE_ORIGIN = Vector((0.0, 0.0, -14.0))  # kit space: away from the inserts / frames
 SLOT_STEP = 3.0
 CUT_Y = -0.27  # the head bursts above this; below stays (the jaw)
@@ -314,15 +319,12 @@ def torn_arm(rng):
     bmesh.ops.create_cube(flesh, size=1.0)
     bmesh.ops.subdivide_edges(flesh, edges=flesh.edges[:], cuts=5, use_grid_fill=True)
     for v in flesh.verts:
-        v.co = Vector((v.co.x * 1.02, 1.0 + v.co.y * 0.14, v.co.z * 1.02))
-    lumpy(flesh, rng, 0.03, 9.0)
+        v.co = Vector((v.co.x * 1.02, 1.0 + v.co.y * 0.1, v.co.z * 1.02))
+    lumpy(flesh, rng, 0.05, 7.0)
     dark = blob(rng, (0.12, 1.04, 0.06), (0.3, 0.08, 0.3), 12, 6, 0.025)
-    # the ball of the upper arm bone (humerus), out of the middle, a bit to
-    # the inside (the arm's -X: toward the body it came off)
-    bone = bm_join_all([
-        rod((-0.08, 0.7, 0.02), (-0.1, 1.2, 0.03), 0.13, 0.15, 12),
-        blob(rng, (-0.12, 1.33, 0.04), (0.22, 0.2, 0.21), 14, 10, 0.01),
-    ])
+    # the real humerus (Z-Anatomy), its head out of the torn end
+    arm = load_arm()
+    bone = arm["armhead"]
     tendons = bm_join_all([
         rod((rng.uniform(-0.3, 0.3), 1.0, rng.uniform(-0.3, 0.3)),
             (rng.uniform(-0.45, 0.45), 1.0 + rng.uniform(0.12, 0.3), rng.uniform(-0.45, 0.45)), 0.025, 0.012, 6)
@@ -350,17 +352,30 @@ def torn_arm(rng):
 
     # ---- the torso's right side: the socket left open (centred (1, 0.55, 0))
     sx = 1.0
-    socket = blob(rng, (sx + 0.02, 0.5, 0), (0.07, 0.45, 0.42), 16, 10, 0.03)
-    deep = blob(rng, (sx + 0.05, 0.52, 0.02), (0.05, 0.26, 0.24), 12, 8, 0.02)
-    glenoid = bm_join_all([
-        blob(rng, (sx + 0.08, 0.55, 0.04), (0.05, 0.17, 0.12), 12, 8, 0.0),  # the cup
-        rod((sx - 0.15, 0.92, -0.32), (sx + 0.09, 0.95, -0.22), 0.07, 0.06, 10),  # collarbone's end
-        blob(rng, (sx + 0.06, 0.94, 0.12), (0.09, 0.06, 0.16), 10, 6, 0.01),  # acromion
+    # (thin: the bones stand out of it)
+    # torn muscle all round the edge, the hole dark in the middle (where the
+    # shoulder blade's socket shows)
+    socket = bm_join_all([
+        blob(rng, (sx + 0.01, 0.5 + math.sin(a) * 0.33, math.cos(a) * 0.31),
+             (0.05, rng.uniform(0.1, 0.15), rng.uniform(0.1, 0.15)), 10, 8, 0.02)
+        for a in [2 * math.pi * k / 14 + rng.uniform(-0.1, 0.1) for k in range(14)]
     ])
+    deep = blob(rng, (sx + 0.015, 0.5, 0.0), (0.025, 0.36, 0.34), 14, 8, 0.012)
+    # the real outer shoulder blade (its socket, the acromion) and the end of
+    # the collarbone (Z-Anatomy)
+    glenoid = bm_join_all([arm["scapula"], arm["clavicle"]])
+    # The socket (glenoid: the outermost bone at its height) moved to the
+    # middle of the wound, just out of the side: it shows, empty, where the
+    # head of the arm bone was.
+    band = [v.co for v in glenoid.verts if 0.5 < v.co.y < 0.75]
+    edge = max(c.x for c in band)
+    cup = [c for c in band if c.x > edge - 0.05]
+    centre = sum(cup, Vector()) / len(cup)
+    bmesh.ops.translate(glenoid, vec=Vector((sx + 0.06, 0.5, 0.0)) - centre, verts=glenoid.verts)
     hanging = bm_join_all([
         rod((sx + 0.06, rng.uniform(0.2, 0.5), rng.uniform(-0.3, 0.3)),
             (sx + rng.uniform(0.08, 0.18), rng.uniform(-0.25, 0.05), rng.uniform(-0.35, 0.35)),
-            rng.uniform(0.04, 0.07), 0.02, 6)
+            rng.uniform(0.025, 0.04), 0.012, 6)
         for _ in range(4)
     ] + [
         blob(rng, (sx + 0.06, rng.uniform(0.15, 0.9), rng.uniform(-0.35, 0.35)),
@@ -382,30 +397,39 @@ def torn_arm(rng):
     return arm_end, shoulder
 
 
+def load_arm():
+    data = np.load(ARM_ANATOMY)
+    return {g: bm_of(data[f"{g}__0__v"], data[f"{g}__0__f"]) for g in ("humerus", "armhead", "scapula", "clavicle")}
+
+
 def humerus(rng):
-    """The whole upper arm bone (1.7 studs, along Y): the round head on top
-    (turned a little to the inside), a slightly curved shaft, the wide elbow
-    end with its two knuckles; torn flesh and tendons still on the head."""
-    bone = bm_join_all([
-        rod((0, -0.62, 0), (0, 0.0, 0.015), 0.085, 0.075, 12),
-        rod((0, 0.0, 0.015), (-0.02, 0.5, 0.0), 0.075, 0.095, 12),
-        blob(rng, (-0.06, 0.66, 0.0), (0.17, 0.16, 0.16), 16, 12, 0.006),  # the head
-        blob(rng, (0.05, 0.58, -0.05), (0.07, 0.06, 0.07), 8, 6, 0.0),     # greater tubercle
-        blob(rng, (0, -0.7, 0), (0.2, 0.07, 0.1), 12, 8, 0.0),             # the elbow end
-        blob(rng, (-0.09, -0.78, 0.0), (0.075, 0.06, 0.075), 10, 8, 0.0),  # trochlea
-        blob(rng, (0.09, -0.78, -0.01), (0.065, 0.055, 0.065), 10, 8, 0.0),  # capitulum
-    ])
+    """The whole right humerus (Z-Anatomy), 1.7 studs along Y, the head up;
+    torn flesh and tendons still on its head."""
+    bone = load_arm()["humerus"]
     flesh = bm_join_all([
-        blob(rng, (rng.uniform(-0.12, 0.08), 0.55 + rng.uniform(-0.1, 0.1), rng.uniform(-0.12, 0.12)),
+        blob(rng, (rng.uniform(-0.15, 0.05), 0.62 + rng.uniform(-0.12, 0.08), rng.uniform(-0.1, 0.1)),
              (rng.uniform(0.04, 0.08), rng.uniform(0.04, 0.09), rng.uniform(0.04, 0.08)), 8, 6, 0.01)
         for _ in range(6)
     ])
     tendons = bm_join_all([
-        rod((rng.uniform(-0.1, 0.1), 0.5, rng.uniform(-0.1, 0.1)),
-            (rng.uniform(-0.25, 0.25), 0.5 + rng.uniform(-0.25, 0.05), rng.uniform(-0.25, 0.25)), 0.02, 0.01, 6)
+        rod((rng.uniform(-0.1, 0.05), 0.6, rng.uniform(-0.08, 0.08)),
+            (rng.uniform(-0.25, 0.2), 0.6 + rng.uniform(-0.25, 0.05), rng.uniform(-0.2, 0.2)), 0.02, 0.01, 6)
         for _ in range(3)
     ])
     return {"Bone": bone, "Flesh": flesh, "Tendon": tendons}
+
+
+def snapped(bone, rng):
+    """The bone broken in two a little below its middle: a jagged break."""
+    halves = []
+    for side in (1, -1):
+        part = bm_copy(bone)
+        y = -0.12
+        # a slanted, toothed break: two planes
+        cut(part, [((0, y, 0), (0.25 * side, -1 * side, 0.1 * side))], fill=True)
+        rough_rim(part, rng, 0.06, lambda co: abs(co.y - y) < 0.2)
+        halves.append(part)
+    return halves[0], halves[1]
 
 
 def bm_join_all(parts):
@@ -521,7 +545,11 @@ def build(add_object):
     arm_end, shoulder = torn_arm(random.Random(7171))
     piece("ArmEnd", arm_end, "limb")
     piece("Shoulder", shoulder, "limb")
-    piece("Humerus", humerus(random.Random(5151)), "limb")
+    bone = humerus(random.Random(5151))
+    top, bottom = snapped(bone["Bone"], random.Random(5252))  # (before: piece() frees the meshes)
+    piece("Humerus", bone, "limb")
+    piece("HumerusA", {"Bone": top}, "limb")
+    piece("HumerusB", {"Bone": bottom}, "limb")
     return slots, kinds
 
 

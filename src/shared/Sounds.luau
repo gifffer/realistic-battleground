@@ -134,7 +134,7 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "HeavySwing",
 	},
 	VictimPlea = { -- what the one on the ground says before the bat comes down
-		ids = { 76456045012714 },
+		ids = {}, -- (no voice for now)
 		volume = 0.9,
 		pitch = 1,
 		pitchVariation = 0,

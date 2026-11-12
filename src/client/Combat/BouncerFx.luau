@@ -8,7 +8,7 @@
 --     whoever is close (more the closer).
 --   • Hammer fists: sweat and spit thrown off the head.
 --   • A shove: the feet scraping back, a puff of dust under them.
---   • A choke: the face going red then purple with each squeeze, spit at the
+--   • A choke: the face going red-violet then deep violet with each squeeze, spit at the
 --     lips; for the one choked, the edges of the screen closing in (black at
 --     the end of a Sleeper Hold). It all fades back when they breathe again.
 --   • The Awakening: a stamp of dust at his feet when he squares up, his
@@ -31,8 +31,9 @@ local player = Players.LocalPlayer
 
 local DUST = Color3.fromRGB(150, 142, 128)
 local SPIT = Color3.fromRGB(226, 226, 220)
-local CHOKED_RED = Color3.fromRGB(176, 58, 58)
-local CHOKED_PURPLE = Color3.fromRGB(118, 52, 92)
+-- (a choked face: red-violet, then deep violet - never a plain red)
+local CHOKED_RED = Color3.fromRGB(148, 52, 96)
+local CHOKED_PURPLE = Color3.fromRGB(98, 40, 104)
 local SHAKE_RANGE = 40 -- studs: farther, the camera doesn't feel a slam
 
 ------------------------------------------------------------------------------

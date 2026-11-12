@@ -98,6 +98,7 @@ local HEAVY_MOVES = table.freeze({
 	BodySlam_Hold = true,
 	Powerbomb_Hold = true,
 	ThrowOut_Hold = true,
+	BoneThrow = true, -- (a bone thrown into them, Shared/Weapons)
 })
 -- Moves with their own victim reaction (instead of the usual one by zone).
 local REACTIONS: { [string]: string } = {

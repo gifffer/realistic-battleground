@@ -193,7 +193,17 @@ return table.freeze({
 	-- A fighter was eliminated: one line in the kill feed (top right).
 	KillFeed = event("KillFeed"),
 
-	-- server → all clients  (model: Model, weaponId: string)
-	-- A weapon in someone's hand broke on a blow (it snaps, the pieces fall).
+	-- client → server  (aim: Vector3)
+	-- Throw what we hold (Shared/Weapons) where we aim. Checked and rate-limited.
+	ThrowWeapon = event("ThrowWeapon"),
+
+	-- server → all clients  (thrower: Model, weaponId: string, throwId: number,
+	--                        origin: Vector3, velocity: Vector3)
+	-- It left the hand: every client shows it flying (the same arc).
+	WeaponThrown = event("WeaponThrown"),
+
+	-- server → all clients  (weaponId: string, throwId: number?, position: Vector3,
+	--                        velocity: Vector3)
+	-- It broke there (hit someone / a wall / the floor, or dropped): two halves.
 	WeaponBroke = event("WeaponBroke"),
 })

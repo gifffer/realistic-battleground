@@ -900,7 +900,6 @@ function Combat.register(model: Model, player: Player?)
 		holding = nil,
 		heldBy = nil,
 		weapon = nil,
-		weaponHits = 0,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -953,25 +952,29 @@ local function tearLiverOut(victim: Model)
 	)
 end
 
--- Weapons (Shared/Weapons): one in the right hand ("Weapon" attribute, the
--- clients show it and swing it). Gone when it breaks (every client sees it
--- snap: Remotes.WeaponBroke), or when its holder is knocked out or dies.
+-- Thrown things (Shared/Weapons): one in the right hand ("Weapon"
+-- attribute: the clients show it). A left click throws it (throwWeapon); it
+-- breaks in two on what it hits first (Remotes.WeaponBroke: every client
+-- shows the two halves there). Knocked out or dead: dropped, it breaks at
+-- their feet.
+local throwSeq = 0
+
 local function giveWeapon(state: CombatState, id: string)
 	state.weapon = id
-	state.weaponHits = 0
 	setAttribute(state.model, "Weapon", id)
 end
 
-local function dropWeapon(state: CombatState, broke: boolean)
+local function dropWeapon(state: CombatState, breakIt: boolean)
 	local id = state.weapon
 	if id == nil then
 		return
 	end
 	state.weapon = nil
-	state.weaponHits = 0
-	-- (the snap first: the clients still have it in the hand to break)
-	if broke then
-		Remotes.WeaponBroke:FireAllClients(state.model, id)
+	-- (the break first: the clients still have it in the hand to take it from)
+	if breakIt then
+		local hand = state.model:FindFirstChild("Right Arm")
+		local at = if hand and hand:IsA("BasePart") then hand.Position else state.root.Position
+		Remotes.WeaponBroke:FireAllClients(id, nil, at, Vector3.new(0, -4, 0))
 	end
 	setAttribute(state.model, "Weapon", nil)
 end
@@ -1588,14 +1591,8 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				-- A weapon in hand (a bone...): heavier blows, more blood.
-				local weapon = Weapons.get(state.weapon)
-				local hit = resolveHit(state, victim, {
-					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed] * (if weapon
-						then weapon.damageMultiplier
-						else 1),
-					-- (the 4th keeps its own head-crit rule, Config.Injuries)
-					bloodChance = if weapon and not isFinisher then weapon.bloodChance else nil,
+				resolveHit(state, victim, {
+					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed],
 					zone = landed,
 					stun = if isFinisher then C.FINISHER_STUN else C.HIT_STUN,
 					headStun = true,
@@ -1607,13 +1604,6 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					knockback = if isFinisher then C.KNOCKBACK_SPEED else nil,
 					attackId = attackId,
 				})
-				-- It wears out on what it hits.
-				if hit and weapon and state.weapon == weapon.id then
-					state.weaponHits += 1
-					if state.weaponHits >= weapon.durability then
-						dropWeapon(state, true)
-					end
-				end
 			end
 		end
 		resolved()
@@ -1815,7 +1805,7 @@ local function update(dt: number)
 
 		-- Knocked out or dead: the weapon in hand is gone.
 		if state.weapon and (not isAlive(state) or Knockout.isKnockedOut(model)) then
-			dropWeapon(state, false)
+			dropWeapon(state, true)
 		end
 
 		local player = state.player
@@ -1874,6 +1864,109 @@ local blockLimiter = RateLimiter.new(10, 6)
 local dashLimiter = RateLimiter.new(3, 1)
 local moveLimiter = RateLimiter.new(4, 2)
 local awakenLimiter = RateLimiter.new(2, 0.5)
+
+-- The thing in `state`'s hand leaves it towards `direction` (an arc): the
+-- server flies it frame by frame; the first thing it touches - someone, a
+-- wall, the floor - is where it breaks (and a body takes the blow).
+local function throwWeapon(state: CombatState, direction: Vector3)
+	local weapon = Weapons.get(state.weapon)
+	if
+		weapon == nil
+		or not isAlive(state)
+		or isStunned(state)
+		or isBusy(state)
+		or state.blocking
+		or now() < state.nextAttackAt - C.ATTACK_GRACE
+	then
+		return
+	end
+	local time = now()
+	Knockout.endProtection(state.model)
+	state.combo = 0
+	state.lastAttackAt = time
+	state.nextAttackAt = time + weapon.recovery
+	state.attackingUntil = time + weapon.release
+	state.attackToken += 1
+	local token = state.attackToken
+	Remotes.CombatAction:FireAllClients(state.model, "Bone_Throw")
+	task.delay(weapon.release, function()
+		if state.attackToken ~= token or not isAlive(state) or state.weapon ~= weapon.id then
+			return -- (stunned during the wind-up: he still holds it)
+		end
+		state.weapon = nil
+		setAttribute(state.model, "Weapon", nil)
+		throwSeq += 1
+		local throwId = throwSeq
+		-- From his right hand, up by his head, towards the aim.
+		local root = state.root
+		local origin = (root.CFrame * CFrame.new(0.9, 1.4, -0.6)).Position
+		local position = origin
+		local velocity = direction.Unit * weapon.speed + Vector3.new(0, weapon.lift, 0)
+		Remotes.WeaponThrown:FireAllClients(state.model, weapon.id, throwId, origin, velocity)
+		local ignore: { Instance } = { state.model }
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = ignore
+		params.RespectCanCollide = false
+		local started = now()
+		local connection: RBXScriptConnection? = nil
+		local function broke(at: Vector3, moving: Vector3)
+			if connection then
+				connection:Disconnect()
+			end
+			Remotes.WeaponBroke:FireAllClients(weapon.id, throwId, at, moving)
+		end
+		connection = RunService.Heartbeat:Connect(function(dt: number)
+			local step = velocity * dt
+			local hit = workspace:Raycast(position, step, params)
+			if hit then
+				local part = hit.Instance
+				local model = part:FindFirstAncestorOfClass("Model")
+				local victim = if model then states[model] else nil
+				if
+					victim
+					and victim ~= state
+					and part.CanCollide == false
+					and PART_ZONES[part.Name] == nil
+				then
+					-- (an accessory, a hat: let it fly on)
+					table.insert(ignore, part)
+					params.FilterDescendantsInstances = ignore
+					position += step
+					return
+				end
+				if victim and victim ~= state and isAlive(victim) then
+					local zone: Types.HitZone = PART_ZONES[part.Name] or "Torso"
+					resolveHit(state, victim, {
+						damage = weapon.damage * C.ZONE_DAMAGE[zone],
+						zone = zone,
+						stun = weapon.stun,
+						headStun = true,
+						legSlow = true,
+						kind = "Hit",
+						blockCost = C.BLOCK_STAMINA_COST * 2,
+						knockback = 14,
+						bloodChance = weapon.bloodChance,
+						moveId = "BoneThrow",
+					})
+				elseif part.CanCollide == false and model == nil then
+					-- (a see-through trigger, a zone: not a wall)
+					table.insert(ignore, part)
+					params.FilterDescendantsInstances = ignore
+					position += step
+					return
+				end
+				broke(hit.Position, velocity)
+				return
+			end
+			position += step
+			velocity += Vector3.new(0, -weapon.gravity * dt, 0)
+			if now() - started > weapon.lifetime then
+				broke(position, velocity)
+			end
+		end)
+	end)
+end
 
 local function onAttack(player: Player, aim: unknown, attackId: unknown)
 	local character = player.Character
@@ -2023,6 +2116,15 @@ function Combat.start()
 		end
 	end)
 	Remotes.Attack.OnServerEvent:Connect(onAttack)
+	Remotes.ThrowWeapon.OnServerEvent:Connect(function(player: Player, aim: unknown)
+		local character = player.Character
+		local state = if character then states[character] else nil
+		if state == nil or not attackLimiter.allow(player) then
+			return
+		end
+		local direction = AimRule.validate(aim, state.root.CFrame.LookVector)
+		throwWeapon(state, direction or state.root.CFrame.LookVector)
+	end)
 	Remotes.SetBlocking.OnServerEvent:Connect(onSetBlocking)
 	Remotes.Dash.OnServerEvent:Connect(onDash)
 	Remotes.UseMove.OnServerEvent:Connect(onUseMove)

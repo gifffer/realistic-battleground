@@ -64,10 +64,8 @@ export type CombatState = {
 	holding: CombatState?,
 	heldBy: CombatState?,
 
-	-- A weapon in the right hand (Shared/Weapons id), and the hits it has
-	-- landed (it breaks at its durability).
+	-- A thing to throw in the right hand (Shared/Weapons id).
 	weapon: string?,
-	weaponHits: number,
 }
 
 -- What one hit does. An M1 builds one, every kit move hit builds one

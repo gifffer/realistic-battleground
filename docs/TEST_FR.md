@@ -371,14 +371,14 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 
 **Ré-importer `assets/wounds/WoundKit.fbx` avant** (Import 3D dans `Assets > Wounds`, voir `WOUNDS_FR.md`) : il contient les pièces du bras arraché et l'os entier.
 Dans **Studio**, tous les kits sont débloqués pour tester (`Config.Dev.UNLOCK_KITS_IN_STUDIO`) ; dans le jeu publié, le Bouncer demande le **niveau 5** et **500 coins**.
-Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**. Pas de sons pour l'instant (ce sera la prochaine étape).
+Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**. Pas de sons pour l'instant (ce sera la prochaine étape) ; plus aucune voix sur la victime du finisher à la batte.
 
 | # | Test | Résultat attendu |
 |---|---|---|
 | V1 | Menu KITS | La carte **BOUNCER** avec ses 4 attaques ; dans le jeu publié : UNLOCKS AT LEVEL 5 / BUY · 500. |
 | V2 | Marcher, courir | Un peu plus lent qu'avec les autres kits. |
 | V3 | **1** (Shove) | Il recule le poids, ramène les mains, puis fait un pas et enfonce les deux paumes dans la poitrine : la victime part **loin** en arrière, ses pieds **raclent le sol** (petite poussière). |
-| V4 | **2** (Chokehold) au contact | Il attrape et se met **derrière** la victime, **son avant-bras en travers de la gorge**, sa tête à côté de la sienne ; la victime **tire sur son bras** avec les deux mains, les jambes se débattent. **3 serrées** : à chaque fois le visage **rougit puis vire au violet**, un peu de salive. Il la lâche : elle se plie en avant, les mains à la gorge ; la couleur revient en quelques secondes. Si c'est toi qu'on étrangle : l'écran **s'assombrit** à chaque serrée, puis revient. |
+| V4 | **2** (Chokehold) au contact | Il attrape et se met **derrière** la victime, **son avant-bras en travers de la gorge**, sa tête à côté de la sienne ; la victime **tire sur son bras** avec les deux mains, les jambes se débattent. **3 serrées** : à chaque fois le visage vire au **violet-rouge** puis **violet foncé**, un peu de salive. Il la lâche : elle se plie en avant, les mains à la gorge ; la couleur revient en quelques secondes. Si c'est toi qu'on étrangle : l'écran **s'assombrit** à chaque serrée, puis revient. |
 | V5 | **2** dans le vide | Il tend les bras, attrape le vide et revient en garde (pas d'étranglement dans l'air). |
 | V6 | **2** sur quelqu'un qui **bloque** (F) | La saisie passe quand même (pas de parade possible). |
 | V7 | Pendant une saisie, un 3ᵉ joueur frappe le Bouncer | Il lâche tout de suite, les animations des deux s'arrêtent, les deux peuvent bouger. |
@@ -395,14 +395,14 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | V18 | Un joueur qui arrive après | Il voit le corps sans bras droit, l'épaule ouverte, et le bras par terre avec l'os qui dépasse. |
 | V19 | 3ᵉ joueur tue l'attaquant **avant** l'arrachage | Tout s'arrête, la victime retombe KO, avec ses deux bras. |
 
-### Os ramassable (arme)
+### Os à lancer (usage unique)
 
 | # | Test | Résultat attendu |
 |---|---|---|
 | W1 | Après le finisher, s'approcher du **bras par terre** | Un bouton **« Take the bone »** apparaît (maintenir **E**). |
-| W2 | Maintenir E | Tu tiens **l'os** dans la main droite (pas le bras) : l'os entier, la tête ronde en avant comme une massue, un peu de chair dessus. Sur le bras au sol, **l'os a disparu** (il ne reste que le bout à vif). Les autres joueurs voient la même chose. |
-| W3 | Clic gauche avec l'os | Plus de coups de poing : **deux coups en diagonale** (l'os s'abat sur la tête), puis au 4ᵉ un **gros coup par-dessus la tête**. Plus de dégâts (x1,5) et plus souvent du sang. |
-| W4 | Toucher 6 fois | **L'os se casse** : deux morceaux tombent de la main, des éclats volent ; tu repars aux poings. |
-| W5 | Se faire mettre KO / mourir avec l'os | L'os disparaît. |
-| W6 | Un 2ᵉ joueur essaie de prendre l'os déjà pris | Plus de bouton. |
-| W7 | En duel | Impossible de prendre un os. |
+| W2 | Maintenir E | Tu tiens **le vrai humérus** (Z-Anatomy) dans la main droite, la main **autour de l'os** près du coude, la tête ronde vers l'avant. Sur le bras au sol, l'os a disparu. Les autres joueurs voient la même chose. |
+| W3 | Clic gauche | Il **lance** l'os par-dessus l'épaule (poids sur l'arrière, pas en avant, le bras fouette) : l'os vole en tournant sur lui-même, en arc. |
+| W4 | L'os touche quelqu'un | Il prend un gros coup (sang souvent à la tête) et **l'os se casse en deux** sur lui : les deux moitiés rebondissent, éclats, gouttes de sang. |
+| W5 | L'os touche un mur / le sol | Il **se casse en deux** là où il touche. Les moitiés restent ~20 s. |
+| W6 | Se faire mettre KO / mourir en tenant l'os | Il tombe et se casse à tes pieds. |
+| W7 | Un 2ᵉ joueur essaie de prendre l'os déjà pris | Plus de bouton. En duel : impossible de prendre un os. |
