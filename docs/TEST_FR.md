@@ -250,7 +250,7 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | G6 | Frapper ailleurs sur la même partie | Une **nouvelle** plaie (3 max par partie ; au-delà, la plus proche grandit). |
 | G7 | 2 joueurs | Les deux écrans voient **les mêmes** plaies, au même endroit. |
 | G8 | Mourir / réapparaître | Le corps redevient intact. |
-| G9 | Regarder de près une tête ou un torse blessé | La tête et le torse gardent **exactement leur forme** (tête bien ronde, ni facettes ni lignes, même matière). Seule la plaie change. Le visage est à sa place. Le t-shirt et le pantalon sont alignés autour de la plaie. |
+| G9 | Regarder de près une tête ou un torse blessé | La tête et le torse gardent **exactement leur forme et leur aspect** : tête bien ronde, torse aux arêtes arrondies, ni facettes ni lignes, ni grain sur la peau. Seule la plaie change. Le visage est à sa place. Le t-shirt et le pantalon sont alignés autour de la plaie. |
 | G11 | Entrer en jeu avec un avatar à tête spéciale ou avec de gros accessoires | La tête devient la tête **classique** (même visage, même couleur). Les cheveux, chapeaux et lunettes restent ; les gros accessoires et ceux du dos, de la taille ou des épaules disparaissent. |
 | G10 | Ta propre tête blessée, en 1re personne | Rien ne gêne la vue. |
 

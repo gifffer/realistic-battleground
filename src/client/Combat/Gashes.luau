@@ -285,15 +285,12 @@ local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
 	local faceW = math.abs(right:Dot(part.Size))
 	local faceH = math.abs(face.up:Dot(part.Size))
 	-- Keep the whole cut (with its skin edge) on this face.
+	-- (inside the flat part of the face: not on its bevelled edges)
 	local ext = turnedExtent(shape.extent, data.angle)
-	local x = math.clamp(p:Dot(right), -(faceW / 2 - ext.X), faceW / 2 - ext.X)
-	local y = math.clamp(p:Dot(face.up), -(faceH / 2 - ext.Y), faceH / 2 - ext.Y)
-	if faceW / 2 < ext.X then
-		x = 0
-	end
-	if faceH / 2 < ext.Y then
-		y = 0
-	end
+	local roomX = faceW / 2 - WoundShapes.chamfer - ext.X
+	local roomY = faceH / 2 - WoundShapes.chamfer - ext.Y
+	local x = if roomX > 0 then math.clamp(p:Dot(right), -roomX, roomX) else 0
+	local y = if roomY > 0 then math.clamp(p:Dot(face.up), -roomY, roomY) else 0
 	local depth = math.abs(face.normal:Dot(half))
 	local origin = face.normal * depth + right * x + face.up * y
 	local z = face.normal
@@ -404,10 +401,13 @@ local function paint(
 		local imageW, imageH, left, top
 		local region = picture.region
 		if region then
-			imageW = faceW * TEMPLATE_W / region[3]
-			imageH = faceH * TEMPLATE_H / region[4]
-			left = region[1] / TEMPLATE_W * imageW
-			top = region[2] / TEMPLATE_H * imageH
+			-- The template's region covers the face up to the middle of its
+			-- bevelled edges (WoundShapes.inset in from each side).
+			local inset = WoundShapes.inset
+			imageW = (faceW - 2 * inset) * TEMPLATE_W / region[3]
+			imageH = (faceH - 2 * inset) * TEMPLATE_H / region[4]
+			left = region[1] / TEMPLATE_W * imageW - inset
+			top = region[2] / TEMPLATE_H * imageH - inset
 		else
 			imageW, imageH, left, top = faceW, faceH, 0, 0
 		end
@@ -461,12 +461,20 @@ local function setUp(piece: BasePart, part: BasePart, parent: Instance)
 	piece.Parent = parent
 end
 
+-- Roblox draws a character's body with the clothes painted on it, without
+-- the grain of the "Plastic" material: its copy uses SmoothPlastic then.
+local function skinMaterial(part: BasePart): Enum.Material
+	return if part.Material == Enum.Material.Plastic
+		then Enum.Material.SmoothPlastic
+		else part.Material
+end
+
 local function newTile(part: BasePart, size: Vector3, offset: CFrame, parent: Instance): BasePart
 	local tile = Instance.new("Part")
 	tile.Name = "Skin"
 	tile.Size = size
 	tile.Color = part.Color
-	tile.Material = part.Material -- exactly like the real part
+	tile.Material = skinMaterial(part) -- looks exactly like the real part
 	tile.Reflectance = part.Reflectance
 	tile.TopSurface = Enum.SurfaceType.Smooth
 	tile.BottomSurface = Enum.SurfaceType.Smooth
@@ -517,59 +525,6 @@ local function rectangles(keep: { { boolean } }, columns: number, rows: number):
 	return out
 end
 
-local function buildBoxSkin(
-	model: Model,
-	part: BasePart,
-	key: string,
-	cuts: { Placed },
-	parent: Instance
-)
-	local half = part.Size / 2
-	for _, face in FACES do
-		local normal, up = face.normal, face.up
-		local right = (-normal):Cross(up)
-		local faceW = math.abs(right:Dot(part.Size))
-		local faceH = math.abs(up:Dot(part.Size))
-		local depth = math.abs(normal:Dot(half))
-		local pictures = picturesFor(model, key, face.name)
-		local mine = {}
-		for _, cut in cuts do
-			if cut.face == face.name then
-				table.insert(mine, cut)
-			end
-		end
-		local columns = if #mine > 0 then math.max(1, math.round(faceW / CELL)) else 1
-		local rows = if #mine > 0 then math.max(1, math.round(faceH / CELL)) else 1
-		local cw, ch = faceW / columns, faceH / rows
-		local keep: { { boolean } } = {}
-		for i = 1, columns do
-			keep[i] = {}
-			for j = 1, rows do
-				local a, b = (i - 0.5) * cw, (j - 0.5) * ch -- from the top-left
-				local at = normal * depth + right * (a - faceW / 2) + up * (faceH / 2 - b)
-				keep[i][j] = #mine == 0 or not cutAt(mine, at, false)
-			end
-		end
-		for _, rect in rectangles(keep, columns, rows) do
-			local a0, b0 = (rect.i - 1) * cw, (rect.j - 1) * ch
-			local w, h = rect.w * cw, rect.h * ch
-			local center = normal * (depth - THICKNESS / 2)
-				+ right * (a0 + w / 2 - faceW / 2)
-				+ up * (faceH / 2 - b0 - h / 2)
-			-- The tile's front (-Z) faces out; its Y is the picture's up.
-			local offset = CFrame.fromMatrix(center, up:Cross(-normal), up, -normal)
-			local tile = newTile(part, Vector3.new(w + PAD, h + PAD, THICKNESS), offset, parent)
-			paint(tile, pictures, faceW, faceH, a0, b0, w, h)
-		end
-	end
-	-- A skin-coloured core deep inside: a hairline gap between two tiles
-	-- shows skin, never the sky through the body.
-	local core = part.Size - Vector3.new(0.32, 0.32, 0.32)
-	if core.X > 0.05 and core.Y > 0.05 and core.Z > 0.05 then
-		newTile(part, core, CFrame.identity, parent).Name = "Core"
-	end
-end
-
 -- One piece of the head shell from the kit, put on the head: turned to
 -- `angle` around it (0 = the face), its middle at height `y`, `height` tall
 -- (band pieces are 1 stud high in the kit), `widthScale` times as wide
@@ -578,6 +533,7 @@ local function shellPiece(
 	part: BasePart,
 	found: Kit,
 	name: string,
+	home: Vector3, -- where the piece sits in the kit (WoundShapes.headOrigin...)
 	angle: number,
 	y: number,
 	height: number,
@@ -587,7 +543,7 @@ local function shellPiece(
 ): BasePart
 	local item = found.shell[name]
 	local relative = found.frame:ToObjectSpace(item.CFrame)
-	local origin = WoundShapes.headOrigin + Vector3.new(0, WoundShapes.markerDrop, 0)
+	local origin = home + Vector3.new(0, WoundShapes.markerDrop, 0)
 	local position = relative.Position / found.unit - origin
 	local rotation = relative.Rotation
 	-- Stretch the piece's own axes: the one running up the head (kit Y) to
@@ -615,7 +571,7 @@ local function shellPiece(
 		* CFrame.new(position.X * widthScale, position.Y * height + y, position.Z)
 		* rotation
 	piece.Color = part.Color
-	piece.Material = part.Material -- exactly like the real head
+	piece.Material = skinMaterial(part) -- looks exactly like the real head
 	piece.Reflectance = part.Reflectance
 	piece.Name = "Skin"
 	setUp(piece, part, parent)
@@ -716,6 +672,7 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 				part,
 				found,
 				name,
+				WoundShapes.headOrigin,
 				angle,
 				top - height / 2,
 				height,
@@ -803,12 +760,113 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 			column(mid, sector, "Shell_Band24", 1, nil, rows)
 		end
 		-- the rounded edges above and below
-		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, 1, false, parent)
-		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, 1, true, parent)
+		shellPiece(
+			part,
+			found,
+			"Shell_Bevel24",
+			WoundShapes.headOrigin,
+			mid,
+			0,
+			1,
+			1,
+			false,
+			parent
+		)
+		shellPiece(part, found, "Shell_Bevel24", WoundShapes.headOrigin, mid, 0, 1, 1, true, parent)
 		bevelFaces(mid, sector)
 	end
-	shellPiece(part, found, "Shell_Cap", 0, 0, 1, 1, false, parent)
-	shellPiece(part, found, "Shell_Cap", 0, 0, 1, 1, true, parent)
+	shellPiece(part, found, "Shell_Cap", WoundShapes.headOrigin, 0, 0, 1, 1, false, parent)
+	shellPiece(part, found, "Shell_Cap", WoundShapes.headOrigin, 0, 0, 1, 1, true, parent)
+end
+
+-- The bevelled frame of a block part (see the kit), or nil.
+local FRAME_OF: { [string]: string } = {
+	Torso = "Shell_FrameTorso",
+	RightArm = "Shell_FrameRight",
+	RightLeg = "Shell_FrameRight",
+	LeftArm = "Shell_FrameLeft",
+	LeftLeg = "Shell_FrameLeft",
+}
+
+-- A torso (or a limb) rebuilt like Roblox draws it: a box with bevelled
+-- edges. The bevelled frame comes from the kit, with the shirt / pants
+-- painted on it; the inside of each face is flat tiles (with the hole of a
+-- cut, the clothes drawn on them).
+local function buildBoxSkin(
+	model: Model,
+	part: BasePart,
+	key: string,
+	cuts: { Placed },
+	found: Kit,
+	parent: Instance
+)
+	local half = part.Size / 2
+	local frameName = FRAME_OF[key]
+	local frameHome = if frameName then WoundShapes.frames[frameName] else nil
+	local framePiece: BasePart? = if frameName then found.shell[frameName] else nil
+	local hasFrame = frameHome ~= nil and framePiece ~= nil
+	local bevel = if hasFrame then WoundShapes.chamfer else 0
+	for _, face in FACES do
+		local normal, up = face.normal, face.up
+		local right = (-normal):Cross(up)
+		local faceW = math.abs(right:Dot(part.Size))
+		local faceH = math.abs(up:Dot(part.Size))
+		local depth = math.abs(normal:Dot(half))
+		local pictures = picturesFor(model, key, face.name)
+		local mine = {}
+		for _, cut in cuts do
+			if cut.face == face.name then
+				table.insert(mine, cut)
+			end
+		end
+		-- the flat inside of the face: from `bevel` to faceW - bevel
+		local innerW, innerH = faceW - 2 * bevel, faceH - 2 * bevel
+		local columns = if #mine > 0 then math.max(1, math.round(innerW / CELL)) else 1
+		local rows = if #mine > 0 then math.max(1, math.round(innerH / CELL)) else 1
+		local cw, ch = innerW / columns, innerH / rows
+		local keep: { { boolean } } = {}
+		for i = 1, columns do
+			keep[i] = {}
+			for j = 1, rows do
+				local a, b = bevel + (i - 0.5) * cw, bevel + (j - 0.5) * ch -- from the top-left
+				local at = normal * depth + right * (a - faceW / 2) + up * (faceH / 2 - b)
+				keep[i][j] = #mine == 0 or not cutAt(mine, at, false)
+			end
+		end
+		for _, rect in rectangles(keep, columns, rows) do
+			local a0, b0 = bevel + (rect.i - 1) * cw, bevel + (rect.j - 1) * ch
+			local w, h = rect.w * cw, rect.h * ch
+			local center = normal * (depth - THICKNESS / 2)
+				+ right * (a0 + w / 2 - faceW / 2)
+				+ up * (faceH / 2 - b0 - h / 2)
+			-- The tile's front (-Z) faces out; its Y is the picture's up.
+			local offset = CFrame.fromMatrix(center, up:Cross(-normal), up, -normal)
+			local tile = newTile(part, Vector3.new(w + PAD, h + PAD, THICKNESS), offset, parent)
+			paint(tile, pictures, faceW, faceH, a0, b0, w, h)
+		end
+	end
+	if hasFrame and frameName and frameHome then
+		local edges = shellPiece(part, found, frameName, frameHome, 0, 0, 1, 1, false, parent)
+		-- The clothes over the bevels: the shirt (torso, arms) or the pants.
+		local shirt = model:FindFirstChildOfClass("Shirt")
+		local pants = model:FindFirstChildOfClass("Pants")
+		local isLeg = string.find(key, "Leg") ~= nil
+		local image = ""
+		if not isLeg and shirt and shirt.ShirtTemplate ~= "" then
+			image = shirt.ShirtTemplate
+		elseif (isLeg or key == "Torso") and pants and pants.PantsTemplate ~= "" then
+			image = pants.PantsTemplate
+		end
+		if image ~= "" and edges:IsA("MeshPart") then
+			edges.TextureID = image -- (its transparent pixels show the skin)
+		end
+	end
+	-- A skin-coloured core deep inside: a hairline gap between two tiles
+	-- shows skin, never the sky through the body.
+	local core = part.Size - Vector3.new(0.32, 0.32, 0.32)
+	if core.X > 0.05 and core.Y > 0.05 and core.Z > 0.05 then
+		newTile(part, core, CFrame.identity, parent).Name = "Core"
+	end
 end
 
 -- The 3D wound model of one cut, from the kit, fitted on the part.
@@ -967,7 +1025,7 @@ local function refresh(model: Model, partName: string)
 	if isHead then
 		buildHeadSkin(part, cuts, found, folder)
 	else
-		buildBoxSkin(model, part, key, cuts, folder)
+		buildBoxSkin(model, part, key, cuts, found, folder)
 	end
 	for _, cut in cuts do
 		buildInsert(part, cut, found, folder)

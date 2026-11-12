@@ -25,6 +25,13 @@ local WoundShapes = {
 	headBand = 0.3,
 	headBevel = 0.3,
 	headOrigin = Vector3.new(-4, 0, 0),
+	chamfer = 0.065,
+	inset = 0.034,
+	frames = {
+		Shell_FrameTorso = Vector3.new(-8, 0, 0),
+		Shell_FrameRight = Vector3.new(-11, 0, 0),
+		Shell_FrameLeft = Vector3.new(-13, 0, 0),
+	},
 	shapes = {
 		LacS = {
 			index = 0,

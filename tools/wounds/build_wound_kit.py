@@ -420,6 +420,122 @@ def build_head_shell():
     return {name: shell_piece(data, name) for name, data in pieces.items()}
 
 
+# --- Block frames (torso, limbs) ------------------------------------------------
+# Roblox draws an R6 torso / arm / leg as a box whose edges are cut at 45 deg
+# by CHAMFER (avatar/meshes/torso.mesh), the clothes stretched over it. The
+# game rebuilds a cut torso as: flat tiles for the inside of each face (with
+# the hole), plus this FRAME: the 12 bevelled edges and 8 corners, textured
+# with the shirt / pants template (MeshPart.TextureID), so the edges look
+# exactly like before. Built in the part's own axes (X right, Y up, -Z front),
+# then turned like the head pieces (angle 0: X and Z flipped).
+CHAMFER = 0.065
+INSET = 0.034  # the template's face region reaches this far into the bevel
+TEMPLATE_W, TEMPLATE_H = 585, 559
+REGIONS = {  # same as Gashes.luau: {x, y, w, h} pixels per face
+    "Torso": {"Front": (231, 74, 128, 128), "Back": (427, 74, 128, 128), "Left": (361, 74, 64, 128),
+              "Right": (165, 74, 64, 128), "Top": (231, 8, 128, 64), "Bottom": (231, 204, 128, 64)},
+    "Right": {"Front": (217, 355, 64, 128), "Back": (85, 355, 64, 128), "Left": (19, 355, 64, 128),
+              "Right": (151, 355, 64, 128), "Top": (217, 289, 64, 64), "Bottom": (217, 485, 64, 64)},
+    "Left": {"Front": (308, 355, 64, 128), "Back": (440, 355, 64, 128), "Left": (374, 355, 64, 128),
+             "Right": (506, 355, 64, 128), "Top": (308, 289, 64, 64), "Bottom": (308, 485, 64, 64)},
+}
+FACES = {  # outward normal, picture "up" (as in Gashes.luau)
+    "Front": ((0, 0, -1), (0, 1, 0)), "Back": ((0, 0, 1), (0, 1, 0)),
+    "Left": ((-1, 0, 0), (0, 1, 0)), "Right": ((1, 0, 0), (0, 1, 0)),
+    "Top": ((0, 1, 0), (0, 0, 1)), "Bottom": ((0, -1, 0), (0, 0, -1)),
+}
+PRIORITY = ["Front", "Back", "Left", "Right", "Top", "Bottom"]  # whose picture a bevel shows
+
+
+def face_uv(face, regions, size, p):
+    """UV of point p (part axes) in the template, seen on `face` (clamped to
+    that face's region: a bevel shows the edge of the picture)."""
+    n, up = (Vector(v) for v in FACES[face])
+    right = (-n).cross(up)
+    half = Vector(size) / 2
+    sw = abs(right.dot(half)) - INSET
+    sh = abs(up.dot(half)) - INSET
+    a = (p.dot(right) + sw) / (2 * sw)  # 0 = your left
+    b = (sh - p.dot(up)) / (2 * sh)  # 0 = top
+    x, y, w, h = regions[face]
+    px = x + min(max(a, 0), 1) * w
+    py = y + min(max(b, 0), 1) * h
+    return (px / TEMPLATE_W, 1 - py / TEMPLATE_H)  # Blender UVs: v up
+
+
+def frame(size, regions):
+    hx, hy, hz = (d / 2 for d in size)
+    c = CHAMFER
+    verts, normals, uvs, faces = [], [], [], []
+
+    def on(face, sx, sy, sz):
+        """The corner of `face`'s flat inside toward signs (sx, sy, sz)."""
+        n = FACES[face][0]
+        x = sx * (hx if n[0] else hx - c)
+        y = sy * (hy if n[1] else hy - c)
+        z = sz * (hz if n[2] else hz - c)
+        return Vector((x, y, z)), Vector(n)
+
+    def poly(points, owner_faces):
+        primary = min(owner_faces, key=PRIORITY.index)
+        idx = []
+        for (p, n) in points:
+            verts.append(tuple(p))
+            normals.append(tuple(n))
+            uvs.append(face_uv(primary, regions, size, p))
+            idx.append(len(verts) - 1)
+        # wind it to face outward (away from the centre)
+        centre = sum((Vector(verts[i]) for i in idx), Vector()) / len(idx)
+        a, b2, c2 = (Vector(verts[i]) for i in idx[:3])
+        if (b2 - a).cross(c2 - a).dot(centre) < 0:
+            idx.reverse()
+        faces.append(tuple(idx))
+
+    axis_faces = {0: ("Left", "Right"), 1: ("Bottom", "Top"), 2: ("Front", "Back")}
+    sign_face = {(0, -1): "Left", (0, 1): "Right", (1, -1): "Bottom", (1, 1): "Top", (2, -1): "Front", (2, 1): "Back"}
+    # 12 edges: two faces (axes i, j with signs), running along the third axis k
+    for i, j in ((0, 1), (0, 2), (1, 2)):
+        k = 3 - i - j
+        for si in (-1, 1):
+            for sj in (-1, 1):
+                fa, fb = sign_face[(i, si)], sign_face[(j, sj)]
+                pts = []
+                for sk in (-1, 1):
+                    s3 = [0, 0, 0]
+                    s3[i], s3[j], s3[k] = si, sj, sk
+                    pts.append((sk, on(fa, *s3), on(fb, *s3)))
+                (_, a0, b0), (_, a1, b1) = pts
+                poly([a0, a1, b1, b0], (fa, fb))
+    # 8 corners
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            for sz in (-1, 1):
+                fx, fy, fz = sign_face[(0, sx)], sign_face[(1, sy)], sign_face[(2, sz)]
+                poly([on(fx, sx, sy, sz), on(fy, sx, sy, sz), on(fz, sx, sy, sz)], (fx, fy, fz))
+    # part axes -> kit axes (as the head pieces at angle 0): X and Z flipped
+    verts = [(-x, y, -z) for x, y, z in verts]
+    normals = [(-x, y, -z) for x, y, z in normals]
+    mesh = bpy.data.meshes.new("frame")
+    mesh.from_pydata(verts, [], faces)
+    mesh.validate()
+    # (that turn is a rotation: the faces still point outward)
+    uv = mesh.uv_layers.new(name="UVMap")
+    for poly_ in mesh.polygons:
+        for li in poly_.loop_indices:
+            uv.data[li].uv = uvs[mesh.loops[li].vertex_index]
+    for poly_ in mesh.polygons:
+        poly_.use_smooth = True
+    mesh.normals_split_custom_set_from_vertices(normals)
+    return mesh
+
+
+FRAMES = {  # name: (size, regions, where in the kit)
+    "Shell_FrameTorso": ((2, 2, 1), "Torso", (-8.0, 0.0, 0.0)),
+    "Shell_FrameRight": ((1, 2, 1), "Right", (-11.0, 0.0, 0.0)),
+    "Shell_FrameLeft": ((1, 2, 1), "Left", (-13.0, 0.0, 0.0)),
+}
+
+
 # --- Scene & export ---------------------------------------------------------------
 def material(layer):
     mat = bpy.data.materials.get("W_" + layer) or bpy.data.materials.new("W_" + layer)
@@ -472,6 +588,13 @@ def main():
     for name, mesh in build_head_shell().items():
         ob = bpy.data.objects.new(name, mesh)
         ob.location = Vector(HEAD_ORIGIN)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.data.materials.append(material("Skin"))
+        objects.append(ob)
+    # The bevelled frames of the torso and limbs.
+    for name, (size, regions, where) in FRAMES.items():
+        ob = bpy.data.objects.new(name, frame(size, REGIONS[regions]))
+        ob.location = Vector(where)
         bpy.context.scene.collection.objects.link(ob)
         ob.data.materials.append(material("Skin"))
         objects.append(ob)
@@ -529,6 +652,11 @@ def main():
         f"\theadBand = {lua_number(HEAD_BAND)},",
         f"\theadBevel = {lua_number(HEAD_BEVEL)},",
         f"\theadOrigin = Vector3.new({', '.join(lua_number(x) for x in HEAD_ORIGIN)}),",
+        f"\tchamfer = {lua_number(CHAMFER)},",
+        f"\tinset = {lua_number(INSET)},",
+        "\tframes = {",
+        *[f"\t\t{n} = Vector3.new({', '.join(lua_number(x) for x in w)})," for n, (_s, _r, w) in FRAMES.items()],
+        "\t},",
         "\tshapes = {",
     ]
     for name, idx, kind, size, head, v, pts, reach in shapes:
