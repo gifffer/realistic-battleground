@@ -179,7 +179,7 @@ end
 -- (its hold clip comes right after) or anything landing on a held fighter
 -- (its hold clip is playing).
 function KitEffects.keepsPose(moveId: string?, victim: Model): boolean
-	if victim:GetAttribute("Held") == true then
+	if victim:GetAttribute("Held") ~= nil then
 		return true
 	end
 	local move = if moveId then moveById[moveId] else nil

@@ -75,6 +75,35 @@ local function giveBack(state: CombatState)
 	end
 end
 
+-- Room to lay the slammed body down at `lying` (in front of him): no wall
+-- between, nothing where it would lie, a floor under it at his feet' level.
+local function roomToLay(
+	state: CombatState,
+	victim: CombatState,
+	anchor: CFrame,
+	lying: CFrame
+): boolean
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { state.model, victim.model }
+	params.RespectCanCollide = true
+	local from = anchor.Position
+	local to = Vector3.new(lying.X, from.Y, lying.Z)
+	if workspace:Raycast(from, (to - from) + (to - from).Unit * 2.5, params) then
+		return false -- a wall in front of him
+	end
+	local overlap = OverlapParams.new()
+	overlap.FilterType = Enum.RaycastFilterType.Exclude
+	overlap.FilterDescendantsInstances = { state.model, victim.model }
+	overlap.RespectCanCollide = true
+	if #workspace:GetPartBoundsInBox(lying, Vector3.new(2.2, 5, 0.8), overlap) > 0 then
+		return false
+	end
+	local floor =
+		workspace:Raycast(lying.Position + Vector3.new(0, 1.5, 0), Vector3.new(0, -3, 0), params)
+	return floor ~= nil and math.abs(floor.Position.Y - (from.Y - 3)) < 0.8
+end
+
 -- Holds `victim` for the grab `grab` of `move` (caught just now).
 local function hold(
 	tools: Tools,
@@ -103,7 +132,10 @@ local function hold(
 	state.root.CFrame = anchor
 	victim.root.Anchored = true
 	victim.root.CFrame = place
-	tools.setAttribute(victim.model, "Held", true)
+	-- (their hold clips, for the clients to stop if it's cut short)
+	tools.setAttribute(victim.model, "Held", grab.victimAnimation)
+	tools.setAttribute(state.model, "Holding", grab.animation)
+	local duelIds = { state.model:GetAttribute("DuelId"), victim.model:GetAttribute("DuelId") }
 	Remotes.CombatAction:FireAllClients(state.model, grab.animation)
 	Remotes.CombatAction:FireAllClients(victim.model, grab.victimAnimation)
 
@@ -128,30 +160,39 @@ local function hold(
 		end
 		victim.heldUntil = 0
 		if time < ends then
-			-- (cut short: both free now, the victim only dazed a moment)
-			state.finishingUntil = math.min(state.finishingUntil, time)
-			state.attackingUntil = math.min(state.attackingUntil, time)
-			state.nextAttackAt = math.min(state.nextAttackAt, time)
+			-- (cut short: both free now, the victim only dazed a moment.
+			-- Only what the hold itself set: a duel's freeze stays.)
+			if state.finishingUntil == ends then
+				state.finishingUntil = time
+			end
+			if state.attackingUntil == ends then
+				state.attackingUntil = time
+			end
+			if state.nextAttackAt == ends then
+				state.nextAttackAt = time
+			end
 			victim.stunnedUntil = math.min(victim.stunnedUntil, time + LET_GO_STUN)
 		end
 		tools.setAttribute(victim.model, "Held", nil)
+		tools.setAttribute(state.model, "Holding", nil)
 		-- (a cinematic finisher may have taken him over meanwhile: it holds him)
 		if state.root.Parent and time >= state.cinematicUntil then
 			state.root.Anchored = false
 			giveBack(state)
 		end
-		if victim.root.Parent and time >= victim.cinematicUntil then
-			if laid then
+		if victim.root.Parent and victim.model:GetAttribute("BeingFinished") ~= true then
+			local lying = anchor
+				* CFrame.new(0, -2.5, -(grab.distance + 2))
+				* CFrame.fromMatrix(
+					Vector3.zero,
+					Vector3.new(-1, 0, 0),
+					Vector3.new(0, 0, -1),
+					Vector3.new(0, -1, 0)
+				)
+			if laid and roomToLay(state, victim, anchor, lying) then
 				-- On its back where the slam put it: its head away from him,
 				-- its torso on the floor (the slam clips end in this pose).
-				victim.root.CFrame = anchor
-					* CFrame.new(0, -2.5, -(grab.distance + 2))
-					* CFrame.fromMatrix(
-						Vector3.zero,
-						Vector3.new(-1, 0, 0),
-						Vector3.new(0, 0, -1),
-						Vector3.new(0, -1, 0)
-					)
+				victim.root.CFrame = lying
 			end
 			victim.root.Anchored = false
 			giveBack(victim)
@@ -159,15 +200,23 @@ local function hold(
 	end
 
 	-- Cut short: he's stunned (hit by someone) or dies, either one is
-	-- knocked out or leaves.
-	connection = RunService.Heartbeat:Connect(function()
-		if
-			state.attackToken ~= token
+	-- knocked out, goes limp (a duel round lost), leaves, is taken into a
+	-- duel or moved away by another system.
+	local function cancelled(): boolean
+		return state.attackToken ~= token
 			or not tools.isAlive(state)
 			or not tools.isAlive(victim)
 			or Knockout.isKnockedOut(state.model)
 			or Knockout.isKnockedOut(victim.model)
-		then
+			or Ragdoll.isRagdolled(state.model)
+			or Ragdoll.isRagdolled(victim.model)
+			or state.model:GetAttribute("DuelId") ~= duelIds[1]
+			or victim.model:GetAttribute("DuelId") ~= duelIds[2]
+			or (victim.root.Position - place.Position).Magnitude > 3
+	end
+
+	connection = RunService.Heartbeat:Connect(function()
+		if cancelled() then
 			release(false)
 		end
 	end)
@@ -175,6 +224,10 @@ local function hold(
 	for _, hit in grab.hits do
 		task.delay(hit.at, function()
 			if released then
+				return
+			end
+			if cancelled() then
+				release(false)
 				return
 			end
 			if hit.knockdown or hit.knockback then
@@ -220,6 +273,10 @@ function Grab.run(
 				and candidate.holding == nil
 				and time >= candidate.heldUntil
 				and time >= candidate.knockedDownUntil -- (not one lying on the floor)
+				and not Ragdoll.isRagdolled(model)
+				and time >= candidate.cinematicUntil
+				and not Knockout.isProtected(model)
+				and model:GetAttribute("DuelId") == state.model:GetAttribute("DuelId")
 			then
 				local distance = (candidate.root.Position - state.root.Position).Magnitude
 				if distance < best then

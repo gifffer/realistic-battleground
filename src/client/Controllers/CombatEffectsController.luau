@@ -206,6 +206,22 @@ local function onCombatantAdded(instance: Instance)
 		refreshState(visual)
 	end)
 	refreshState(visual)
+	-- A grab's hold (Server/Combat/Grab): "Held" / "Holding" = the hold clip
+	-- playing. When it ends (maybe cut short), the clip stops and our own
+	-- attacks are free again.
+	for _, name in { "Held", "Holding" } do
+		local playing = model:GetAttribute(name)
+		model:GetAttributeChangedSignal(name):Connect(function()
+			local value = model:GetAttribute(name)
+			if typeof(playing) == "string" and value == nil then
+				CharacterAnimationController.stopAction(model, playing)
+				if model == player.Character then
+					CombatController.releaseAttacks()
+				end
+			end
+			playing = value
+		end)
+	end
 end
 
 local function onCombatantRemoved(instance: Instance)
