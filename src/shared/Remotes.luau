@@ -172,6 +172,22 @@ return table.freeze({
 	-- Everything about your duels (see Types.DuelEventKind for the data).
 	DuelEvent = event("DuelEvent"),
 
+	-- client → server  (itemId: string)
+	-- Buy a cosmetic in the SHOP (coins, level checked by the server).
+	BuyCosmetic = event("BuyCosmetic"),
+
+	-- client → server  (category: string, itemId: string)  ("" = take it off)
+	-- Equip a cosmetic you own.
+	EquipCosmetic = event("EquipCosmetic"),
+
+	-- client → server  ()
+	-- "B pressed": play my equipped emote (not while fighting).
+	Emote = event("Emote"),
+
+	-- server → all clients  (effect: string, position: Vector3)
+	-- A finisher with a kill effect equipped: every client plays it there.
+	KillEffect = event("KillEffect"),
+
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?,
 	--                        victimLevel: number?, killerLevel: number?)
 	-- A fighter was eliminated: one line in the kill feed (top right).

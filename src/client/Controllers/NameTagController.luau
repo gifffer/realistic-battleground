@@ -2,6 +2,7 @@
 -- NameTagController: a small name over every OTHER player's head.
 --
 --                    31 Vex
+--                 BARE KNUCKLE
 --                   ┌──────┐
 --                   │ head │
 --
@@ -23,6 +24,9 @@
 --   characters the same "DuelId" attribute, and the opponent is already
 --   named at the top of the screen (DuelController).
 -- • The level follows the player's "Level" attribute (set by the server).
+-- • Their title (bought in the SHOP) sits in small caps under the name,
+--   from the player's "Title" attribute (set by the server; nil = no
+--   title, no line). It fades with the distance like the level.
 --
 -- The tags are BillboardGuis in OUR PlayerGui (only we see them), with
 -- their Adornee set to the other player's Head.
@@ -59,11 +63,13 @@ type Tag = {
 	gui: BillboardGui,
 	levelLabel: TextLabel,
 	nameLabel: TextLabel,
+	titleLabel: TextLabel,
 	tier: number, -- index in TIERS
 	hidden: boolean,
 	-- Last transparencies we tweened to (so we only tween on a change).
 	nameTarget: number,
 	levelTarget: number,
+	titleTarget: number,
 	connections: { RBXScriptConnection },
 }
 
@@ -102,11 +108,17 @@ end
 -- Building one tag
 ------------------------------------------------------------------------------
 
-local function buildGui(owner: Player, head: BasePart): (BillboardGui, TextLabel, TextLabel)
+local function buildGui(
+	owner: Player,
+	head: BasePart
+): (BillboardGui, TextLabel, TextLabel, TextLabel)
+	-- 20 px for the name row, with 12 px above AND below it: the title line
+	-- goes below, and the empty strip above keeps the name exactly where it
+	-- was (a BillboardGui is centred on its spot).
 	local gui = Theme.make("BillboardGui", {
 		Name = "NameTag_" .. owner.Name,
 		Adornee = head,
-		Size = UDim2.fromOffset(200, 20),
+		Size = UDim2.fromOffset(200, 44),
 		-- About half a head above the top of the head, whatever its rotation.
 		StudsOffsetWorldSpace = Vector3.new(0, 1.7, 0),
 		AlwaysOnTop = false, -- walls hide it
@@ -118,7 +130,8 @@ local function buildGui(owner: Player, head: BasePart): (BillboardGui, TextLabel
 	}) :: BillboardGui
 	local row = Theme.make("Frame", {
 		Name = "Row",
-		Size = UDim2.fromScale(1, 1),
+		Position = UDim2.fromOffset(0, 12),
+		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
 		Parent = gui,
 	}, {
@@ -164,7 +177,20 @@ local function buildGui(owner: Player, head: BasePart): (BillboardGui, TextLabel
 		-- The name grows with its text but never past NAME_MAX_WIDTH.
 		Theme.make("UISizeConstraint", { MaxSize = Vector2.new(NAME_MAX_WIDTH, 20) }),
 	}) :: TextLabel
-	return gui, levelLabel, nameLabel
+	-- The title: small tracked caps under the name, as quiet as the level.
+	local titleLabel = Theme.text({
+		Name = "Title",
+		Position = UDim2.fromOffset(0, 32),
+		Size = UDim2.new(1, 0, 0, 11),
+		TextSize = 9,
+		TextColor3 = C.Ink,
+		TextTransparency = 1,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Text = "",
+		Parent = gui,
+	}) :: TextLabel
+	return gui, levelLabel, nameLabel, titleLabel
 end
 
 ------------------------------------------------------------------------------
@@ -179,6 +205,17 @@ end
 local function refreshLevel(tag: Tag)
 	local level = levelOf(tag.owner)
 	tag.levelLabel.Text = if level then tostring(level) else ""
+end
+
+-- The title text, or nil when they have none equipped.
+local function titleOf(owner: Player): string?
+	local title = owner:GetAttribute("Title")
+	return if typeof(title) == "string" and title ~= "" then title else nil
+end
+
+local function refreshTitle(tag: Tag)
+	local title = titleOf(tag.owner)
+	tag.titleLabel.Text = if title then Theme.track(title, "three") else ""
 end
 
 -- Which tier the tag is in, from the camera's distance to the head.
@@ -204,6 +241,9 @@ local function applyLook(tag: Tag, seconds: number)
 	local nameTarget = if tag.hidden then 1 else tier.name
 	local showLevel = not tag.hidden and tier.level ~= nil and levelOf(tag.owner) ~= nil
 	local levelTarget = if showLevel then tier.level :: number else 1
+	-- The title fades like the level (and is gone when far, or when none).
+	local showTitle = not tag.hidden and tier.level ~= nil and titleOf(tag.owner) ~= nil
+	local titleTarget = if showTitle then tier.level :: number else 1
 
 	if nameTarget ~= tag.nameTarget then
 		tag.nameTarget = nameTarget
@@ -211,6 +251,15 @@ local function applyLook(tag: Tag, seconds: number)
 			tag.nameLabel,
 			seconds,
 			{ TextTransparency = nameTarget },
+			Enum.EasingStyle.Linear
+		)
+	end
+	if titleTarget ~= tag.titleTarget then
+		tag.titleTarget = titleTarget
+		Theme.tween(
+			tag.titleLabel,
+			seconds,
+			{ TextTransparency = titleTarget },
 			Enum.EasingStyle.Linear
 		)
 	end
@@ -285,23 +334,43 @@ local function tryTag(owner: Player, character: Model)
 	end
 	removeTag(owner)
 
-	local gui, levelLabel, nameLabel = buildGui(owner, head)
+	local gui, levelLabel, nameLabel, titleLabel = buildGui(owner, head)
 	local tag: Tag = {
 		owner = owner,
 		character = character,
 		gui = gui,
 		levelLabel = levelLabel,
 		nameLabel = nameLabel,
+		titleLabel = titleLabel,
 		tier = 1,
 		hidden = false,
 		nameTarget = 1, -- built invisible: the first applyLook fades it in
 		levelTarget = 1,
+		titleTarget = 1,
 		connections = {},
 	}
 	tags[owner] = tag
 	tag.tier = tierFor(tag)
 	tag.hidden = shouldHide(tag)
 	refreshLevel(tag)
+	refreshTitle(tag)
+	table.insert(
+		tag.connections,
+		owner:GetAttributeChangedSignal("Title"):Connect(function()
+			if titleOf(owner) ~= nil then
+				refreshTitle(tag) -- new text first, then it fades in
+			end
+			applyLook(tag, TIER_TWEEN)
+			if titleOf(owner) == nil then
+				-- Taken off: fade the old text out, then clear it.
+				task.delay(TIER_TWEEN, function()
+					if titleOf(owner) == nil then
+						refreshTitle(tag)
+					end
+				end)
+			end
+		end)
+	)
 	table.insert(
 		tag.connections,
 		owner:GetAttributeChangedSignal("Level"):Connect(function()

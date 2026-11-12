@@ -38,6 +38,9 @@ local template: Types.PlayerProfile = {
 	rankedLosses = 0,
 	-- Added with the daily quests (step 9).
 	quests = { day = 0, list = {} },
+	-- Added with the shop (step 10).
+	ownedCosmetics = {},
+	equipped = { Title = "", Outfit = "", KillEffect = "", Emote = "EmoteShrug" },
 }
 
 return template

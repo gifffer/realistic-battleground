@@ -1450,6 +1450,23 @@ function Combat.resetForRound(model: Model)
 	state.finishingUntil = 0
 end
 
+-- Is `model` free to do something that isn't fighting (an emote)? Not
+-- while attacking, recovering, stunned, blocking, knocked down, sliding...
+function Combat.isIdle(model: Model): boolean
+	local state = states[model]
+	if state == nil then
+		return false
+	end
+	local time = now()
+	return isAlive(state)
+		and not isStunned(state)
+		and not state.blocking
+		and not isBusy(state)
+		and time >= state.nextAttackAt
+		and time >= state.attackingUntil
+		and not Ragdoll.isRagdolled(model)
+end
+
 -- `model` can't move, attack, block or dash for `seconds` (a duel countdown).
 function Combat.freeze(model: Model, seconds: number)
 	local state = states[model]

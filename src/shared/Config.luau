@@ -56,6 +56,8 @@ return table.freeze({
 		-- POSITION (US layout): KeyCode.Z is the key left of X, labelled
 		-- W on an AZERTY keyboard and Z on a QWERTY one.
 		CAMERA_TOGGLE = Enum.KeyCode.Z,
+		-- Play the equipped emote (Shop). Not while fighting.
+		EMOTE = Enum.KeyCode.B,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,

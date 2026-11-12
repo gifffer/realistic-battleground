@@ -145,7 +145,10 @@ local function keyCap(parent: Instance, text: string, size: Vector2): (Frame, UI
 	}) :: UIStroke
 	local label = Theme.text({
 		Name = "KeyText",
+		-- (Seen in game: the digit sat 1 px right of the cap's centre.)
+		Position = UDim2.fromOffset(-1, 0),
 		Size = UDim2.fromScale(1, 1),
+		TextYAlignment = Enum.TextYAlignment.Center,
 		FontFace = Theme.Fonts.NumberMedium,
 		TextSize = 10,
 		TextStrokeTransparency = 1,
@@ -273,17 +276,6 @@ local function build()
 		ZIndex = 0,
 		Parent = gui,
 	})
-
-	-- Legibility: a square dark corner whose edges can't be seen.
-	Theme.make("Frame", {
-		Name = "ScrimCorner",
-		AnchorPoint = Vector2.new(1, 1),
-		Position = UDim2.fromScale(1, 1),
-		Size = UDim2.fromOffset(600, 600),
-		BackgroundColor3 = C.Scrim,
-		ZIndex = 0,
-		Parent = gui,
-	}, { Theme.gradient(225, { { 0, 0.4 }, { 0.35, 0.66 }, { 0.62, 1 }, { 1, 1 } }) })
 
 	block = Theme.make("Frame", {
 		Name = "KitBlock",
