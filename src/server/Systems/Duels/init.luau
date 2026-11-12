@@ -56,6 +56,8 @@ type Pending = { from: Player, expires: number }
 local Duels = {}
 
 local matches: { [Player]: Match } = {}
+-- Players on their result screen, not yet back in the free arena: still busy.
+local returning: { [Player]: boolean } = {}
 local pending: { [Player]: Pending } = {} -- challenged player → challenge
 local lastChallengeAt: { [string]: number } = {} -- "challengerId:targetId" → time
 local queue: { { player: Player, since: number } } = {}
@@ -88,6 +90,7 @@ local function isFree(player: Player): boolean
 	local character = aliveCharacter(player)
 	return player.Parent == Players
 		and matches[player] == nil
+		and not returning[player]
 		and character ~= nil
 		and not Knockout.isKnockedOut(character)
 end
@@ -302,6 +305,8 @@ endMatch = function(match: Match, winner: Player, forfeit: boolean)
 	local loser = other(match, winner)
 	matches[match.a] = nil
 	matches[match.b] = nil
+	returning[match.a] = true
+	returning[match.b] = true
 
 	-- Ranked: ELO and ranked record.
 	local eloBefore: { [Player]: number } = { [winner] = eloOf(winner), [loser] = eloOf(loser) }
@@ -381,6 +386,7 @@ endMatch = function(match: Match, winner: Player, forfeit: boolean)
 	-- Back to the free arena after the result screen.
 	task.delay(D.RESULT_TIME, function()
 		for _, player in { match.a, match.b } do
+			returning[player] = nil
 			if player.Parent ~= Players then
 				continue
 			end

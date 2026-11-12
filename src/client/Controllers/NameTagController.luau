@@ -19,6 +19,9 @@
 -- • Walls hide it (AlwaysOnTop = false).
 -- • Hidden while that player is knocked out AND the FINISH prompt is on
 --   them (the prompt takes that spot), and while YOU are knocked out.
+-- • Hidden on your duel opponent: during a duel the server gives both
+--   characters the same "DuelId" attribute, and the opponent is already
+--   named at the top of the screen (DuelController).
 -- • The level follows the player's "Level" attribute (set by the server).
 --
 -- The tags are BillboardGuis in OUR PlayerGui (only we see them), with
@@ -231,8 +234,18 @@ local function applyLook(tag: Tag, seconds: number)
 	end
 end
 
+-- Are `model` and our own character in the same duel? (Same "DuelId".)
+local function isDuelOpponent(model: Model): boolean
+	local mine = player.Character
+	local duelId = if mine then mine:GetAttribute("DuelId") else nil
+	return duelId ~= nil and model:GetAttribute("DuelId") == duelId
+end
+
 local function shouldHide(tag: Tag): boolean
 	if isKnockedOut(player.Character) then
+		return true
+	end
+	if isDuelOpponent(tag.character) then
 		return true
 	end
 	return isKnockedOut(tag.character) and finishPromptOn(tag.character)

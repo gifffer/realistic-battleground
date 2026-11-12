@@ -231,8 +231,8 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
    simple, fenêtre **Kits**.
 5. ✅ **Blessures** : saignement, boiterie, marques, effets faible vie, petite régénération.
 6. ✅ **Boxer** (Jab Rush, Uppercut, Slip, Liver Shot + Knockout Mode avec le Knockout Combo), gratuit.
-7. **Progression** : XP (kill, finisher, assist, dégâts, temps de jeu), niveaux 1–100, coins, profil, nom + niveau au-dessus des têtes, classement Tab, déblocage des futurs kits (niveau + coins). ← en cours
-8. **Duels** : défi (non classé), arènes, best of 3, récompenses, puis **Ranked** (matchmaking + ELO).
+7. ✅ **Progression** : XP (kill, finisher, assist, dégâts, temps de jeu), niveaux 1–100, coins, profil, nom + niveau au-dessus des têtes, classement Tab, déblocage des futurs kits (niveau + coins).
+8. **Duels** : défi (non classé), arènes, best of 3, récompenses, puis **Ranked** (matchmaking + ELO 1000, rangs Bronze → Diamond). ← en cours
 9. **Quêtes quotidiennes**.
 10. **Boutique** : cosmétiques, achats Robux.
 11. **Polish** : map finale, sons, VFX, équilibrage, optimisation, tests à 16 joueurs.

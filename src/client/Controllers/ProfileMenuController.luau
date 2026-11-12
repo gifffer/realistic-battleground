@@ -1,6 +1,6 @@
 --!strict
--- ProfileMenuController: the PROFILE section of the menu (02 PROFILE,
--- between KITS and SETTINGS).
+-- ProfileMenuController: the PROFILE section of the menu (03 PROFILE,
+-- between DUEL and SETTINGS).
 --
 --   PROFILE                                              820
 --   GIFFFER · LIFETIME RECORD                          COINS
@@ -11,15 +11,21 @@
 --   64 XP TO LEVEL 9                          TOTAL 1 382 XP
 --
 --   RECORD
---   KILLS        | DEATHS      | K/D         | WINS
---   64           | 41          | 1.56        | 9
+--   KILLS        | DEATHS      | K/D         | DUEL WINS
+--   64           | 41          | 1.56        | 24
+--
+--   RANKED                               ELO     WINS     LOSSES
+--   SILVER                              1112       15          9
+--   188 ELO to Gold
 --
 --   NEXT UNLOCK                                LEVEL   COINS
 --   MMA FIGHTER                                   10     500
 --   Clean strikes, then takes it to the ground.
 --
 -- Everything comes from the save (PlayerDataController): total XP (the
--- level is worked out with Shared/Progression), coins, lifetime stats.
+-- level is worked out with Shared/Progression), coins, lifetime stats,
+-- ranked duels (ELO, ranked wins / losses; the rank comes from
+-- Shared/DuelRanks). "DUEL WINS" is stats.wins: only duels add to it.
 -- The client never computes rewards: it only shows what the server saved.
 --
 -- Other controllers can use (the KITS header shows the same wallet):
@@ -33,6 +39,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local DuelRanks = require(ReplicatedStorage.Shared.DuelRanks)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local ProgressionCurve = require(ReplicatedStorage.Shared.Progression)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -168,7 +175,10 @@ type View = {
 	coins: number,
 	kills: number,
 	deaths: number,
-	wins: number,
+	wins: number, -- duel wins (stats.wins)
+	elo: number,
+	rankedWins: number,
+	rankedLosses: number,
 }
 
 local function readView(): View
@@ -185,6 +195,12 @@ local function readView(): View
 			needed = ProgressionCurve.xpToNext(level)
 		end
 	end
+	-- ELO before the save is here: the "Elo" attribute (else the start value).
+	local eloAttribute = player:GetAttribute("Elo")
+	local elo = if data
+		then data.elo
+		elseif typeof(eloAttribute) == "number" then eloAttribute
+		else Config.Duels.START_ELO
 	return {
 		level = level,
 		xp = xp,
@@ -194,6 +210,9 @@ local function readView(): View
 		kills = if data then data.stats.kills else 0,
 		deaths = if data then data.stats.deaths else 0,
 		wins = if data then data.stats.wins else 0,
+		elo = elo,
+		rankedWins = if data then data.rankedWins else 0,
+		rankedLosses = if data then data.rankedLosses else 0,
 	}
 end
 
@@ -235,6 +254,11 @@ local fillRatio = 0 -- how full the XP bar should be (0..1)
 local toGo: TextLabel
 local total: TextLabel
 local cells: { Cell } = {}
+local rankedName: TextLabel
+local rankedSentence: TextLabel
+local rankedElo: TextLabel
+local rankedWins: TextLabel
+local rankedLosses: TextLabel
 local nextHead: Frame
 local nextRow: Frame
 local nextName: TextLabel
@@ -430,7 +454,7 @@ local function buildRecord()
 			formatRatio,
 		},
 		{
-			"WINS",
+			"DUEL WINS", -- stats.wins: only duels add to it
 			function(view: View): number
 				return view.wins
 			end,
@@ -481,11 +505,82 @@ local function buildRecord()
 	end
 end
 
+-- A number in a row's column (right-aligned under its column head).
+local function columnValue(parent: Instance, name: string, right: number, width: number): TextLabel
+	return Theme.text({
+		Name = name,
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, right, 0, 6),
+		Size = UDim2.fromOffset(width, 13),
+		FontFace = Theme.Fonts.Number,
+		TextColor3 = C.Ink2,
+		TextStrokeTransparency = 1,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = parent,
+	}) :: TextLabel
+end
+
+-- RANKED: your rank, how far the next one is, ELO and ranked record.
+-- Same row pattern as NEXT UNLOCK (name, sentence, numbers on the right).
+local function buildRanked()
+	sectionHead(body, 230, "RANKED", {
+		{ "ELO", -146, 64 },
+		{ "WINS", -82, 64 },
+		{ "LOSSES", 0, 82 },
+	})
+	local row = Theme.make("Frame", {
+		Name = "RankedRow",
+		Position = UDim2.fromOffset(0, 249),
+		Size = UDim2.new(1, 0, 0, 42),
+		BackgroundTransparency = 1,
+		Parent = body,
+	})
+	rankedName = Theme.text({
+		Name = "Name",
+		Position = UDim2.fromOffset(0, 6),
+		Size = UDim2.fromOffset(300, 13),
+		TextStrokeTransparency = 1,
+		Parent = row,
+	}) :: TextLabel
+	rankedSentence = Theme.text({
+		Name = "Sentence",
+		Position = UDim2.fromOffset(0, 22),
+		Size = UDim2.fromOffset(300, 14),
+		FontFace = Theme.Fonts.Body,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
+		TextStrokeTransparency = 1,
+		Parent = row,
+	}) :: TextLabel
+	rankedElo = columnValue(row, "Elo", -146, 64)
+	rankedElo.TextColor3 = C.Ink -- the number that matters most here
+	rankedWins = columnValue(row, "Wins", -82, 64)
+	rankedLosses = columnValue(row, "Losses", 0, 82)
+end
+
+-- "GOLD" → "Gold" (the rank inside a normal sentence).
+local function capitalized(word: string): string
+	return string.upper(string.sub(word, 1, 1)) .. string.lower(string.sub(word, 2))
+end
+
+-- "188 ELO to Gold", "Top rank", or "No ranked match yet".
+local function rankedSentenceFor(view: View): string
+	if view.rankedWins + view.rankedLosses == 0 then
+		return "No ranked match yet"
+	end
+	local progress = DuelRanks.progress(view.elo)
+	local nextRank, nextMinElo = progress.nextRank, progress.nextMinElo
+	if nextRank == nil or nextMinElo == nil then
+		return "Top rank"
+	end
+	return `{nextMinElo - view.elo} ELO to {capitalized(nextRank)}`
+end
+
 local function buildNextUnlock()
-	nextHead = sectionHead(body, 236, "NEXT UNLOCK", { { "LEVEL", -82, 64 }, { "COINS", 0, 82 } })
+	nextHead = sectionHead(body, 315, "NEXT UNLOCK", { { "LEVEL", -82, 64 }, { "COINS", 0, 82 } })
 	nextRow = Theme.make("Frame", {
 		Name = "NextRow",
-		Position = UDim2.fromOffset(0, 255),
+		Position = UDim2.fromOffset(0, 334),
 		Size = UDim2.new(1, 0, 0, 42),
 		BackgroundTransparency = 1,
 		Parent = body,
@@ -507,21 +602,8 @@ local function buildNextUnlock()
 		TextStrokeTransparency = 1,
 		Parent = nextRow,
 	}) :: TextLabel
-	local function column(name: string, right: number, width: number): TextLabel
-		return Theme.text({
-			Name = name,
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, right, 0, 6),
-			Size = UDim2.fromOffset(width, 13),
-			FontFace = Theme.Fonts.Number,
-			TextColor3 = C.Ink2,
-			TextStrokeTransparency = 1,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Parent = nextRow,
-		}) :: TextLabel
-	end
-	nextLevel = column("Level", -82, 64)
-	nextPrice = column("Price", 0, 82)
+	nextLevel = columnValue(nextRow, "Level", -82, 64)
+	nextPrice = columnValue(nextRow, "Price", 0, 82)
 end
 
 -- Puts the save's numbers on screen. `animate`: the record values count
@@ -558,6 +640,13 @@ local function refresh(animate: boolean)
 			cell.shown = value
 		end
 	end
+
+	-- RANKED. ELO is written without a thousands separator ("1136").
+	rankedName.Text = Theme.track(DuelRanks.rankOf(view.elo), "four")
+	rankedSentence.Text = rankedSentenceFor(view)
+	rankedElo.Text = tostring(math.floor(view.elo))
+	rankedWins.Text = formatNumber(view.rankedWins)
+	rankedLosses.Text = formatNumber(view.rankedLosses)
 
 	-- NEXT UNLOCK: hidden (no gap) when there is nothing left to unlock.
 	local kit = nextUnlock(view.level)
@@ -603,12 +692,13 @@ local function build(content: Frame)
 	wallet = ProfileMenuController.createWallet(content.Parent :: Instance)
 	body = Theme.make("CanvasGroup", {
 		Name = "Body",
-		Size = UDim2.new(1, 0, 0, 380),
+		Size = UDim2.new(1, 0, 0, 392),
 		BackgroundTransparency = 1,
 		Parent = content,
 	}) :: CanvasGroup
 	buildLevel()
 	buildRecord()
+	buildRanked()
 	buildNextUnlock()
 	built = true
 	refresh(false)
@@ -623,8 +713,8 @@ function ProfileMenuController.start()
 		id = SECTION_ID,
 		label = "PROFILE",
 		subtitle = string.upper(player.DisplayName) .. " · LIFETIME RECORD",
-		order = 50, -- between KITS (10) and SETTINGS (100)
-		size = Vector2.new(560, 480),
+		order = 50, -- between DUEL (30) and SETTINGS (100)
+		size = Vector2.new(560, 492), -- 12 px taller for the RANKED row
 		scrimWidth = 1100,
 		build = build,
 	})
@@ -638,6 +728,9 @@ function ProfileMenuController.start()
 		refresh(MenuController.getOpen() == SECTION_ID)
 	end)
 	player:GetAttributeChangedSignal("Level"):Connect(function()
+		refresh(MenuController.getOpen() == SECTION_ID)
+	end)
+	player:GetAttributeChangedSignal("Elo"):Connect(function()
 		refresh(MenuController.getOpen() == SECTION_ID)
 	end)
 end
