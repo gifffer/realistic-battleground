@@ -40,7 +40,7 @@ local BLOOD = Color3.fromRGB(86, 8, 8)
 
 -- Size of a level-1 bruise, studs (it grows with its level).
 local BASE_SIZE: { [string]: number } = {
-	Head = 0.22,
+	Head = 0.18,
 	Torso = 0.4,
 }
 local LIMB_SIZE = 0.34
@@ -169,12 +169,13 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 	-- Swelling: a lump of skin under it (the face swells; the body a little).
 	local thick = 0
 	if (head and level >= 2) or level >= 3 then
-		thick = (if head then 0.045 else 0.025) * (level - 1)
+		-- (a slight puffiness, not a ball: it barely stands out)
+		thick = (if head then 0.018 else 0.012) * (level - 1)
 		-- (an ellipsoid: a block shown as a sphere stretched to its size)
 		local lump = newPart(
 			"Swelling",
 			Enum.PartType.Block,
-			Vector3.new(thick * 2, size * 0.95, size * 0.8),
+			Vector3.new(thick * 2, size * 0.8, size * 0.55),
 			part.Color
 		)
 		local shape = Instance.new("SpecialMesh")
@@ -200,7 +201,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 			-- (on the lump: higher toward its middle)
 			local rise = 0
 			if thick > 0 then
-				local e = (du / (size * 0.475)) ^ 2 + (dv / (size * 0.4)) ^ 2
+				local e = (du / (size * 0.275)) ^ 2 + (dv / (size * 0.4)) ^ 2
 				rise = thick * math.sqrt(math.max(0, 1 - e))
 			end
 			local edge = r / (size * 0.62)
