@@ -1,8 +1,8 @@
 --!strict
 -- BULL: a fighter who fights like one. Horns on his head (Client/Combat/
 -- KitLooks), all weight and rage: he charges, gores, stamps the ground and
--- tosses people over. Walks faster than the others. (His finisher comes
--- later.)
+-- tosses people over. Walks faster than the others. Finisher: gored on
+-- his horns, lifted, shaken, slammed down.
 --
 -- Pure data, read by Shared/Kits (see KitTypes). `at` values = the impact
 -- keyframes of the animations (Client/Animation/CombatClips).
@@ -18,6 +18,14 @@ local kit: KitTypes.KitDef = {
 	order = 4,
 	available = true,
 	walkSpeed = 1.15, -- (a bull: walks faster than the others)
+
+	-- Cinematic kill (Shared/Finishers "Gore").
+	finisher = {
+		animation = "Bull_Finisher",
+		impact = 3.4,
+		duration = 4.4,
+		cinematic = "Gore",
+	},
 
 	moves = {
 		{

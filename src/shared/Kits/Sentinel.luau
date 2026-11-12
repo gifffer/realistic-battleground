@@ -24,6 +24,14 @@ local kit: KitTypes.KitDef = {
 	walkSpeed = 0.9,
 	noSprint = true,
 
+	-- Cinematic kill (Shared/Finishers "Incinerate").
+	finisher = {
+		animation = "Sentinel_Finisher",
+		impact = 2.9,
+		duration = 4.2,
+		cinematic = "Incinerate",
+	},
+
 	moves = {
 		{
 			id = "HeatVision",

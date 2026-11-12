@@ -24,6 +24,7 @@ local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
 local CameraController = require(script.Parent.CameraController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
@@ -47,7 +48,28 @@ local SHAKES: { [string]: Shake } = {
 	Gut = { at = 0, strength = 4, punch = 8 }, -- the hand into the side
 	Dig = { at = 0, strength = 1.2, punch = 1 },
 	Rip = { at = 0, strength = 2.5, punch = 4 },
+	Grab = { at = 0, strength = 1, punch = 1 },
+	Beam = { at = 0, strength = 1.5, punch = 3 },
+	Burnt = { at = 0, strength = 3, punch = 6 },
+	Gore = { at = 0, strength = 4.5, punch = 9 }, -- the horns go in
+	Shake = { at = 0, strength = 2, punch = 2 },
+	Slam = { at = 0, strength = 5, punch = 10 },
+	Stomp = { at = 0, strength = 1.5, punch = 2 },
 }
+-- The Sentinel's and the Bull's finishers: their effects are KitVFX's.
+local KIT_EVENTS = table.freeze({
+	Grab = true,
+	Charge = true,
+	Beam = true,
+	Burnt = true,
+	Snort = true,
+	Gore = true,
+	Shake = true,
+	Slam = true,
+	Stomp = true,
+})
+-- (and how much blood each of the Bull's blows draws)
+local GORE_BLOOD: { [string]: number } = { Gore = 3, Shake = 1, Slam = 2 }
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
@@ -223,6 +245,13 @@ local function playEvent(
 	victim: Model
 )
 	local kind = event.kind
+	if KIT_EVENTS[kind] then
+		KitVFX.finisherEvent(kind, attacker, victim)
+		for _ = 1, GORE_BLOOD[kind] or 0 do
+			KitEffects.bloodSpray(victim, attacker, "Torso")
+		end
+		return
+	end
 	if kind == "Prop" then
 		local away = cinematic.duration
 		for _, other in cinematic.events do
@@ -326,10 +355,15 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	run.cancelled = true
 	KitEffects.stopAction(attacker) -- the bat
 	LiverRip.cancel(attacker)
-	for _, clip in { "Brawler_FinisherBat", "Boxer_FinisherCombo" } do
+	KitVFX.cancelFinisher(attacker)
+	for _, clip in
+		{ "Brawler_FinisherBat", "Boxer_FinisherCombo", "Sentinel_Finisher", "Bull_Finisher" }
+	do
 		CharacterAnimationController.stopAction(attacker, clip)
 	end
-	CharacterAnimationController.stopAction(run.victim, "Boxer_FinisherVictim")
+	for _, clip in { "Boxer_FinisherVictim", "Sentinel_FinisherVictim", "Bull_FinisherVictim" } do
+		CharacterAnimationController.stopAction(run.victim, clip)
+	end
 	if run.stopCamera then
 		run.stopCamera()
 	end

@@ -709,6 +709,10 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	-- Cinematic finishers: not predicted, played only when the server starts them.
 	Brawler_FinisherBat = true,
 	Boxer_FinisherCombo = true,
+	Sentinel_Finisher = true,
+	Sentinel_FinisherVictim = true, -- lifted by the throat
+	Bull_Finisher = true,
+	Bull_FinisherVictim = true, -- on his horns
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,

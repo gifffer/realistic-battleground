@@ -2725,6 +2725,333 @@ local function bullStrides()
 	end
 end
 
+------------------------------------------------------------------------------
+-- Finishers (Shared/Finishers "Incinerate" / "Gore"), from CinematicController
+------------------------------------------------------------------------------
+
+local finisherTokens: { [Model]: number } = {}
+
+-- Glowing eyes on `head` for `time` seconds, fading in (the charge).
+local function chargeEyes(head: BasePart, time: number, fadeIn: number): { BasePart }
+	local eyes: { BasePart } = {}
+	for _, side in { -1, 1 } do
+		local eye = newPart(Vector3.new(0.13, 0.08, 0.04), LASER, Enum.Material.Neon)
+		eye.Transparency = 1
+		eye.Anchored = false
+		eye.Massless = true
+		eye.CFrame = head.CFrame * CFrame.new(side * 0.17, 0.11, -0.6)
+		local joint = Instance.new("WeldConstraint")
+		joint.Part0 = head
+		joint.Part1 = eye
+		joint.Parent = eye
+		eye.Parent = fx
+		tween(eye, fadeIn, { Transparency = 0 })
+		task.delay(time, function()
+			tween(eye, 0.4, { Transparency = 1 })
+		end)
+		Debris:AddItem(eye, time + 0.5)
+		table.insert(eyes, eye)
+	end
+	return eyes
+end
+
+-- The heat vision point blank into the victim's face until `time` runs out:
+-- the face chars where it lands, smoke and sparks pour off it.
+local function pointBlank(attacker: Model, victim: Model, time: number, token: number)
+	local head = part(attacker, "Head")
+	local face = part(victim, "Head")
+	if head == nil or face == nil then
+		return
+	end
+	local eyes = chargeEyes(head, time, 0.05)
+	local loop = SoundController.play("LaserBeam", attacker)
+	if loop then
+		loop.Looped = true
+	end
+	local beams: { { part: Part, width: number } } = {}
+	for _ = 1, #eyes do
+		for _, spec in BEAM_LAYERS do
+			local layer =
+				newPart(Vector3.new(spec.width, spec.width, 1), spec.color, Enum.Material.Neon)
+			layer.Transparency = spec.transparency
+			layer.Parent = fx
+			table.insert(beams, { part = layer, width = spec.width })
+		end
+	end
+	local hot = Instance.new("Attachment")
+	hot.Parent = workspace.Terrain
+	local fountain = stream(hot, {
+		texture = TEX.sparks,
+		color = WHITE,
+		color2 = EMBER,
+		size = { 0.35, 0.18, 0 },
+		transparency = { 0, 0.3, 1 },
+		speed = NumberRange.new(6, 18),
+		lifetime = NumberRange.new(0.25, 0.5),
+		spread = 70,
+		acceleration = Vector3.new(0, -60, 0),
+		glow = 1,
+		count = 0,
+	}, 120)
+	local smoke = stream(hot, {
+		texture = TEX.smoke,
+		color = Color3.fromRGB(60, 56, 54),
+		size = { 0.5, 1.8, 2.6 },
+		transparency = { 0.4, 0.65, 1 },
+		speed = NumberRange.new(1.5, 4),
+		lifetime = NumberRange.new(0.9, 1.6),
+		spread = 30,
+		acceleration = Vector3.new(0, 4, 0),
+		count = 0,
+	}, 30)
+	local glow = Instance.new("PointLight")
+	glow.Color = EMBER
+	glow.Brightness = 6
+	glow.Range = 12
+	glow.Parent = hot
+	local started = os.clock()
+	local lastBurn = 0
+	local connection: RBXScriptConnection? = nil
+	connection = RunService.RenderStepped:Connect(function()
+		local now = os.clock()
+		if
+			now - started > time
+			or finisherTokens[attacker] ~= token
+			or face.Parent == nil
+			or head.Parent == nil
+		then
+			if connection then
+				connection:Disconnect()
+			end
+			if loop then
+				loop:Stop()
+			end
+			fountain.Rate = 0
+			smoke.Rate = 0
+			tween(glow, 0.4, { Brightness = 0 })
+			for _, beam in beams do
+				tween(beam.part, 0.15, { Transparency = 1 })
+				Debris:AddItem(beam.part, 0.2)
+			end
+			Debris:AddItem(hot, 1.8)
+			return
+		end
+		-- (into the face: its front, toward him)
+		local target = (face.CFrame * CFrame.new(0, 0.05, -0.55)).Position
+		local pulse = 0.85 + math.sin(now * 40) * 0.08 + math.random() * 0.12
+		local index = 0
+		for _, eye in eyes do
+			local from = eye.Position
+			local frame = CFrame.lookAt((from + target) / 2, target)
+			local length = (target - from).Magnitude
+			for _ = 1, #BEAM_LAYERS do
+				index += 1
+				local beam = beams[index]
+				beam.part.CFrame = frame
+				beam.part.Size = Vector3.new(beam.width * pulse, beam.width * pulse, length)
+			end
+		end
+		hot.WorldCFrame = facing(target, (head.Position - target))
+		if now - lastBurn > 0.09 then
+			lastBurn = now
+			local spot = face.CFrame
+				* CFrame.new(random:NextNumber(-0.35, 0.35), random:NextNumber(-0.3, 0.35), -0.6)
+			burn(victim, face, spot.Position)
+		end
+	end)
+end
+
+-- The head burnt black (the Sentinel's finisher; the server's
+-- "Incinerated"): charred skin with glowing cracks cooling down, the hair
+-- burnt off, smoke rising for a while.
+local charred: { [Model]: boolean } = {}
+local function incinerate(model: Model)
+	if charred[model] then
+		return
+	end
+	local head = part(model, "Head")
+	if head == nil then
+		return
+	end
+	charred[model] = true
+	model.Destroying:Once(function()
+		charred[model] = nil
+	end)
+	head.Material = Enum.Material.CrackedLava
+	head.Color = Color3.fromRGB(96, 34, 20)
+	task.delay(1.8, function()
+		if head.Parent then
+			head.Material = Enum.Material.Basalt
+			TweenService:Create(head, TweenInfo.new(2), { Color = Color3.fromRGB(34, 27, 25) })
+				:Play()
+		end
+	end)
+	for _, item in head:GetChildren() do
+		if item:IsA("Decal") then
+			TweenService:Create(item, TweenInfo.new(0.6), { Transparency = 0.85 }):Play()
+		end
+	end
+	-- the hair / hat burns away in a puff
+	for _, accessory in model:GetChildren() do
+		local handle = if accessory:IsA("Accessory")
+			then accessory:FindFirstChild("Handle")
+			else nil
+		if handle and handle:IsA("BasePart") then
+			emit(handle.Position, {
+				texture = TEX.fire,
+				color = EMBER,
+				color2 = LASER_DEEP,
+				size = { 0.5, 0.2, 0 },
+				transparency = { 0.1, 1 },
+				speed = NumberRange.new(2, 5),
+				lifetime = NumberRange.new(0.3, 0.6),
+				spread = 80,
+				glow = 1,
+				count = 14,
+			})
+			TweenService:Create(handle, TweenInfo.new(0.5), { Transparency = 1 }):Play()
+		end
+	end
+	for _ = 1, 10 do
+		local spot = head.CFrame * CFrame.new(random:NextUnitVector() * 0.6)
+		burn(model, head, spot.Position)
+	end
+	local top = Instance.new("Attachment")
+	top.Position = Vector3.new(0, 0.5, 0)
+	top.Parent = head
+	local smoke = stream(top, {
+		texture = TEX.smoke,
+		color = Color3.fromRGB(58, 54, 52),
+		size = { 0.4, 1.6, 2.8 },
+		transparency = { 0.45, 0.7, 1 },
+		speed = NumberRange.new(1, 3),
+		lifetime = NumberRange.new(1.2, 2.2),
+		spread = 25,
+		acceleration = Vector3.new(0, 3, 0),
+		count = 0,
+	}, 16)
+	local embers = stream(top, {
+		texture = TEX.sparkle,
+		color = EMBER,
+		size = { 0.12, 0 },
+		transparency = { 0, 1 },
+		speed = NumberRange.new(1, 3),
+		lifetime = NumberRange.new(0.6, 1.2),
+		spread = 60,
+		acceleration = Vector3.new(0, 2, 0),
+		glow = 1,
+		count = 0,
+	}, 12)
+	animate(9, function(alpha)
+		smoke.Rate = 16 * (1 - alpha)
+		embers.Rate = if alpha < 0.35 then 12 * (1 - alpha / 0.35) else 0
+	end, function()
+		smoke.Rate = 0
+		embers.Rate = 0
+	end)
+end
+
+-- One moment of a Sentinel / Bull finisher (CinematicController; the
+-- blood of the gore is its, through KitEffects).
+function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model)
+	local token = finisherTokens[attacker] or 0
+	if kind == "Grab" then
+		token += 1
+		finisherTokens[attacker] = token
+		SoundController.play("HeavyHit", victim)
+		local neck = part(victim, "Head")
+		if neck then
+			flash(neck.Position - Vector3.new(0, 0.5, 0), WHITE, 1.2, 0.15)
+		end
+	elseif kind == "Charge" then
+		local head = part(attacker, "Head")
+		if head then
+			SoundController.play("LaserCharge", attacker)
+			chargeEyes(head, 0.6, 0.5)
+			gather(head, Vector3.new(0, 0.1, -0.5), 2.4, 0.55, LASER, 80)
+			for step = 1, 4 do
+				task.delay(0.25 + step * 0.07, function()
+					if finisherTokens[attacker] == token then
+						crackle(head.Position + head.CFrame.LookVector * 0.6, 0.8, 1, LASER)
+					end
+				end)
+			end
+		end
+	elseif kind == "Beam" then
+		pointBlank(attacker, victim, 1.35, token)
+	elseif kind == "Burnt" then
+		local face = part(victim, "Head")
+		if face then
+			flash(face.Position, EMBER, 2.5, 0.3)
+			shockSphere(face.Position, 0.4, 2.5, 0.3, EMBER)
+		end
+	elseif kind == "Snort" then
+		token += 1
+		finisherTokens[attacker] = token
+		snort(attacker, 2)
+		local head = part(attacker, "Head")
+		if head then
+			rageEyes(head, 3.6)
+		end
+		local spot = feet(attacker)
+		if spot then
+			smokePuff(
+				spot + Vector3.new(0, 0.3, 0),
+				8,
+				0.8,
+				dustColor(floorAt(spot)),
+				-forwardOf(attacker) + Vector3.yAxis,
+				10
+			)
+		end
+	elseif kind == "Gore" then
+		SoundController.play("FleshTear", victim)
+		SoundController.play("HeavyHit", victim)
+		hornTrails(attacker, 0.2)
+		local torso = part(victim, "Torso")
+		if torso then
+			local toward = forwardOf(attacker)
+			flash(torso.Position, Color3.fromRGB(255, 220, 200), 2, 0.2)
+			ring(
+				axisFrame(torso.Position, toward),
+				0.6,
+				4.5,
+				0.35,
+				WHITE,
+				{ neon = true, width = 0.14, height = 0.08 }
+			)
+		end
+		shake(attacker:GetPivot().Position, 2.2, 35, 0.35)
+	elseif kind == "Shake" then
+		local torso = part(victim, "Torso")
+		if torso then
+			streaks(torso.Position, Vector3.yAxis, 6, 1, 2.5, 25, WHITE, 0.3)
+		end
+		snort(attacker, 0.8)
+		shake(attacker:GetPivot().Position, 1, 25, 0.2)
+	elseif kind == "Slam" then
+		SoundController.play("Slam", attacker)
+		local torso = part(victim, "Torso")
+		local spot = if torso
+			then torso.Position
+			else (feet(attacker) or attacker:GetPivot().Position)
+		groundImpact(spot, { size = 1.5, flashColor = Color3.fromRGB(255, 200, 150) })
+	elseif kind == "Stomp" then
+		SoundController.play("Stomp", attacker)
+		local spot = feet(attacker)
+		if spot then
+			groundRing(spot, 0.5, 6, 0.45, dustColor(floorAt(spot)), { width = 0.7, height = 0.5 })
+			cracks(spot, 4, 2, 6)
+		end
+		snort(attacker, 1.6)
+	end
+end
+
+-- The finisher was cut short: its pending effects stop.
+function KitVFX.cancelFinisher(attacker: Model)
+	finisherTokens[attacker] = (finisherTokens[attacker] or 0) + 1
+end
+
 -- Listen to the server's smashes, follow the Bulls' strides.
 function KitVFX.start()
 	Remotes.WallBroken.OnClientEvent:Connect(
@@ -2739,6 +3066,24 @@ function KitVFX.start()
 		end
 	)
 	RunService.Heartbeat:Connect(bullStrides)
+	-- the Sentinel's finisher: heads burnt black (also on bodies seen later)
+	local function watchBody(instance: Instance)
+		if not instance:IsA("Model") then
+			return
+		end
+		if instance:GetAttribute("Incinerated") == true then
+			incinerate(instance)
+		end
+		instance:GetAttributeChangedSignal("Incinerated"):Connect(function()
+			if instance:GetAttribute("Incinerated") == true then
+				incinerate(instance)
+			end
+		end)
+	end
+	CollectionService:GetInstanceAddedSignal(Config.Combat.TAG):Connect(watchBody)
+	for _, model in CollectionService:GetTagged(Config.Combat.TAG) do
+		watchBody(model)
+	end
 end
 
 return table.freeze(KitVFX)

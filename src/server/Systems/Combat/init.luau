@@ -934,6 +934,37 @@ local function tearLiverOut(victim: Model)
 	)
 end
 
+-- The Bull's finisher: his two horns go into the belly. Two "Tear" cuts
+-- (Gashes draws the holes, through the clothes).
+local function goreWounds(victim: Model)
+	for _, point in { Vector3.new(0.42, -0.45, -0.5), Vector3.new(-0.42, -0.4, -0.5) } do
+		for candidate = 1, Gash.MAX_PER_PART do
+			local name = Gash.attribute("Torso", candidate)
+			if victim:GetAttribute(name) == nil then
+				setAttribute(
+					victim,
+					name,
+					Gash.encode({
+						kind = "Tear",
+						size = "L",
+						point = point,
+						angle = random:NextNumber(-0.4, 0.4),
+						seed = random:NextInteger(1, 2 ^ 30),
+					})
+				)
+				break
+			end
+		end
+	end
+end
+
+-- Where the victim's body is in the last frame of its clip (anchor space of
+-- the victim's root): the ragdoll starts from there, not from standing.
+local KILL_POSE: { [string]: CFrame } = {
+	Incinerate = CFrame.new(-0.64, 0.48, -0.6), -- held up by the throat
+	Gore = CFrame.new(0, -2.35, 0.2) * CFrame.Angles(math.rad(88), 0, 0), -- on its back in the floor
+}
+
 -- A cinematic finisher (Shared/Finishers): both fighters are placed and held
 -- still (anchored) for the cutscene, the attacker can't be touched, the
 -- victim dies at the killing blow. Every client plays the camera / effects
@@ -1151,6 +1182,14 @@ local function startCinematic(
 		)
 	end
 
+	if cinematic.id == "Gore" then
+		-- the horns going in (Shared/Finishers "Gore" at 0.7 s)
+		task.delay(0.7, function()
+			if not over and target.Parent then
+				goreWounds(target)
+			end
+		end)
+	end
 	task.delay(cinematic.kill, function()
 		if over then
 			return
@@ -1161,7 +1200,12 @@ local function startCinematic(
 		end
 		killed = true
 		if victimPlace then
-			-- Limp: it folds and drops where it stands.
+			-- Limp: it folds and drops where it stands (where its clip left
+			-- it: held up, slammed down...).
+			local pose = KILL_POSE[cinematic.id]
+			if pose then
+				victimRoot.CFrame = victimPlace * pose
+			end
 			victimRoot.Anchored = false
 			Ragdoll.enable(target)
 		end
@@ -1172,6 +1216,9 @@ local function startCinematic(
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
+			elseif cinematic.id == "Incinerate" then
+				-- (every client chars the head: KitVFX)
+				setAttribute(target, "Incinerated", true)
 			end
 		end
 		-- (the attacker stays held until the end of the cutscene)

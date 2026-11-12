@@ -387,7 +387,6 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 - [ ] **2 — Horn Hook** : coup de cornes vers le haut : anneau d'air, colonne de poussière, la cible décolle.
 - [ ] **3 — Stampede** : il se cabre (cailloux qui flottent), puis frappe le sol : gros impact (dalles, fissures, poussière) + son ; ralentit les cibles autour. Imblocable.
 - [ ] **4 — Bull Toss** : son à l'attrapé ET au lancer, anneau d'air vers le haut au lancer.
-- [ ] Le finisher du Bull n'existe pas encore (finisher par défaut).
 
 ### Murs cassables
 - [ ] La **Gore Charge** traverse les murs : le mur se troue (seulement la partie touchée), débris de la couleur / matière du mur, poussière.
@@ -395,3 +394,8 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 - [ ] Le sol, les sols surélevés / toits, les murs des arènes de duel et les murs invisibles ne cassent jamais.
 - [ ] Les murs se reconstruisent ~25 s après le dernier coup (pas si quelqu'un est dedans).
 - [ ] Pour protéger une partie de la map : tag CollectionService `Unbreakable` ou attribut `Unbreakable = true` (sur la part ou un de ses parents).
+
+### Finishers (adversaire KO + M1)
+- [ ] **Sentinel — Incinerate** : il attrape l'adversaire par la gorge et le soulève du sol, gros plan sur ses yeux qui chargent (son de charge), puis lasers à bout portant dans le visage (le visage se carbonise, étincelles, fumée), la tête finit calcinée (noire, braises, cheveux brûlés, fumée), il lâche le corps.
+- [ ] **Bull — Gore** : il souffle, gratte le sol, plante ses cornes dans le ventre (deux trous, beaucoup de sang), le soulève sur ses cornes, le secoue (le sang gicle à chaque secousse), l'écrase au sol (gros impact, fissures), puis frappe du pied.
+- [ ] Coupés en cours (l'attaquant meurt...) : tout s'arrête proprement, la caméra revient.

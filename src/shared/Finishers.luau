@@ -6,6 +6,8 @@
 --                    shoulder, then swept low across the head of the
 --                    opponent lying on the ground, from his right to his
 --                    left: the head bursts.
+--   "Incinerate"     Sentinel: lifted by the throat, heat vision point blank.
+--   "Gore"           Bull: gored, lifted on the horns, shaken, slammed down.
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
 --                    to the body, hook, hook, cross, then a left hook into
 --                    their right side under the ribs: the hand goes in and
@@ -202,6 +204,141 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(-0.3, -1.3, -1.9),
 				fov = 60,
 			},
+		},
+	},
+}
+
+-- Sentinel: "Incinerate" - he grabs them by the throat, lifts them off
+-- their feet, his eyes charge, and he burns their head point blank; drops
+-- what's left. Bull: "Gore" - horns into the belly, lifted up on them,
+-- shaken like a rag, slammed down into the floor.
+cinematics.Incinerate = {
+	id = "Incinerate",
+	duration = 4.2,
+	kill = 2.9,
+	placement = "front",
+	victimAnimation = "Sentinel_FinisherVictim",
+	events = {
+		{ time = 0.4, kind = "Grab" },
+		{ time = 1.0, kind = "Charge" },
+		{ time = 1.55, kind = "Beam" },
+		{ time = 2.9, kind = "Burnt" },
+	},
+	shots = {
+		-- Over his right shoulder: he grabs them by the throat.
+		{
+			time = 0,
+			from = Vector3.new(2.2, 1.2, 3.2),
+			to = Vector3.new(1.8, 1.0, 2.6),
+			look = Vector3.new(0, 0.8, -2.2),
+			fov = 58,
+		},
+		-- Low, from the side: lifted off their feet.
+		{
+			time = 0.75,
+			from = Vector3.new(4.8, -1.6, -1.0),
+			to = Vector3.new(4.4, -1.8, -1.2),
+			look = Vector3.new(0, 1.2, -1.4),
+			fov = 55,
+		},
+		-- Close on his eyes, charging.
+		{
+			time = 1.0,
+			from = Vector3.new(-1.8, 1.6, -0.9),
+			to = Vector3.new(-1.6, 1.55, -0.75),
+			look = Vector3.new(0, 1.5, 0),
+			fov = 40,
+		},
+		-- In profile: the beams point blank into the face.
+		{
+			time = 1.55,
+			from = Vector3.new(-4.2, 1.6, -0.9),
+			to = Vector3.new(-3.9, 1.5, -0.9),
+			look = Vector3.new(0.2, 1.7, -1.0),
+			fov = 50,
+		},
+		-- Past his left shoulder, close on the face burning.
+		{
+			time = 2.25,
+			from = Vector3.new(-1.8, 2.2, 0.6),
+			to = Vector3.new(-1.5, 2.1, 0.4),
+			look = Vector3.new(0.6, 2.0, -1.6),
+			fov = 45,
+		},
+		-- Wide: the smoking body drops, him standing over it.
+		{
+			time = 2.95,
+			from = Vector3.new(5, 1.5, -6),
+			to = Vector3.new(5.5, 1.8, -3),
+			look = Vector3.new(0, -0.5, -1.8),
+			fov = 60,
+		},
+	},
+}
+cinematics.Gore = {
+	id = "Gore",
+	duration = 4.4,
+	kill = 3.4,
+	placement = "front",
+	victimAnimation = "Bull_FinisherVictim",
+	events = {
+		{ time = 0.1, kind = "Snort" },
+		{ time = 0.7, kind = "Gore" }, -- the horns go in
+		{ time = 1.65, kind = "Shake" },
+		{ time = 1.9, kind = "Shake" },
+		{ time = 2.15, kind = "Shake" },
+		{ time = 2.4, kind = "Shake" },
+		{ time = 3.4, kind = "Slam" }, -- slammed into the floor
+		{ time = 3.9, kind = "Stomp" },
+	},
+	shots = {
+		-- Low, three-quarter: he paws the floor, head down.
+		{
+			time = 0,
+			from = Vector3.new(4.2, -0.8, -3.6),
+			to = Vector3.new(3.9, -0.9, -3.0),
+			look = Vector3.new(0, -0.3, -1),
+			fov = 58,
+		},
+		-- From the side: the horns go in.
+		{
+			time = 0.6,
+			from = Vector3.new(5.2, 0.2, -1.2),
+			to = Vector3.new(4.8, 0, -1.2),
+			look = Vector3.new(0, 0, -1.3),
+			fov = 52,
+		},
+		-- From the floor, looking up: lifted up on the horns.
+		{
+			time = 1.15,
+			from = Vector3.new(3.4, -2.0, 1.6),
+			to = Vector3.new(3.0, -2.2, 1.3),
+			look = Vector3.new(0, 2, -1.4),
+			fov = 60,
+		},
+		-- In front: shaken like a rag, blood flying.
+		{
+			time = 1.6,
+			from = Vector3.new(0.5, 1.2, -6.5),
+			to = Vector3.new(0.3, 1.0, -6.0),
+			look = Vector3.new(0, 1.5, -1.5),
+			fov = 62,
+		},
+		-- Wide from the side: slammed down.
+		{
+			time = 2.75,
+			from = Vector3.new(6.5, 1.0, -1.5),
+			to = Vector3.new(6, 0.4, -1.6),
+			look = Vector3.new(0, -1.2, -2),
+			fov = 60,
+		},
+		-- From above: the body in the cracked floor, him over it.
+		{
+			time = 3.5,
+			from = Vector3.new(3.5, 4.5, -5.5),
+			to = Vector3.new(3.8, 5, -4.5),
+			look = Vector3.new(0, -2.5, -2.2),
+			fov = 60,
 		},
 	},
 }
