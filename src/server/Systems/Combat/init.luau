@@ -584,6 +584,17 @@ local function landingZone(
 	return "Torso" :: Types.HitZone
 end
 
+-- Is `point` in front of `victim`? (You can't block a hit in the back.)
+local function isInFrontOf(victim: CombatState, point: Vector3): boolean
+	local offset = point - victim.root.Position
+	local flat = Vector3.new(offset.X, 0, offset.Z)
+	if flat.Magnitude < 1e-3 then
+		return true
+	end
+	local look = victim.root.CFrame.LookVector
+	return flat.Unit:Dot(Vector3.new(look.X, 0, look.Z).Unit) > 0
+end
+
 -- Is `attacker` in front of `victim`? (You can't block a hit in the back.)
 local function isInFront(victim: CombatState, attacker: CombatState): boolean
 	local offset = attacker.root.Position - victim.root.Position
@@ -610,7 +621,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local time = now()
 	local zone = spec.zone
 	-- Which side of the victim the blow arrives from (picks the reaction).
-	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, attacker.root.Position)
+	-- (a thrown thing hits from where it is, not from its thrower)
+	local from = spec.from or attacker.root.Position
+	local side: Types.HitSide = HitSide.compute(victim.root.CFrame, from)
 	-- Blood / torn skin of a hit that lands (decided below, sent with it).
 	local blood = false
 	local skinTearSeed: number? = nil
@@ -675,7 +688,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	-- attacker's move is cut (its next hits don't land), and the slipper
 	-- can't be hit by anyone until the counter lands.
 	if
-		time < victim.slipUntil
+		not spec.from -- (a thrown thing can't be slipped and countered)
+		and time < victim.slipUntil
 		and isInFront(victim, attacker)
 		and not isStunned(victim)
 		and not isBusy(victim)
@@ -691,9 +705,13 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		-- 2a. A grab: hands, not a blow. Nothing to parry, it goes through
 		-- the guard (only a hit that stuns him first, or a dash, beats it).
 		stopBlocking(victim)
-	elseif victim.blocking and isInFront(victim, attacker) then
+	elseif victim.blocking and isInFrontOf(victim, from) then
 		-- 2. Parry: block started just before the hit → attacker is stunned.
-		if victim.parryReady and time - victim.blockStartedAt <= C.PARRY_WINDOW then
+		if
+			not spec.from
+			and victim.parryReady
+			and time - victim.blockStartedAt <= C.PARRY_WINDOW
+		then
 			stun(attacker, C.PARRY_STUN)
 			event("Parried", false, false)
 			return false
@@ -1916,47 +1934,55 @@ local function throwWeapon(state: CombatState, direction: Vector3)
 			end
 			Remotes.WeaponBroke:FireAllClients(weapon.id, throwId, at, moving)
 		end
-		connection = RunService.Heartbeat:Connect(function(dt: number)
-			local step = velocity * dt
-			local hit = workspace:Raycast(position, step, params)
-			if hit then
+		-- What the bone meets going from `a` along `step`: passes through
+		-- hats / accessories and see-through decoration (cast again past
+		-- them); stops on a body part (a hit) or anything solid.
+		local function fly(a: Vector3, step: Vector3): boolean
+			for _ = 1, 6 do
+				local hit = workspace:Raycast(a, step, params)
+				if hit == nil then
+					return false
+				end
 				local part = hit.Instance
 				local model = part:FindFirstAncestorOfClass("Model")
 				local victim = if model then states[model] else nil
-				if
-					victim
-					and victim ~= state
-					and part.CanCollide == false
-					and PART_ZONES[part.Name] == nil
-				then
-					-- (an accessory, a hat: let it fly on)
+				local bodyPart = victim ~= nil and victim ~= state and PART_ZONES[part.Name] ~= nil
+				if not bodyPart and (part.CanCollide == false or (victim and victim ~= state)) then
 					table.insert(ignore, part)
 					params.FilterDescendantsInstances = ignore
-					position += step
-					return
+					step -= hit.Position - a
+					a = hit.Position
+				else
+					if victim and bodyPart and isAlive(victim) then
+						local zone: Types.HitZone = PART_ZONES[part.Name] or "Torso"
+						resolveHit(state, victim, {
+							damage = weapon.damage * C.ZONE_DAMAGE[zone],
+							zone = zone,
+							stun = weapon.stun,
+							headStun = true,
+							legSlow = true,
+							kind = "Hit",
+							blockCost = C.BLOCK_STAMINA_COST * 2,
+							knockback = 14,
+							bloodChance = weapon.bloodChance,
+							moveId = "BoneThrow",
+							from = a,
+						})
+					end
+					broke(hit.Position, velocity)
+					return true
 				end
-				if victim and victim ~= state and isAlive(victim) then
-					local zone: Types.HitZone = PART_ZONES[part.Name] or "Torso"
-					resolveHit(state, victim, {
-						damage = weapon.damage * C.ZONE_DAMAGE[zone],
-						zone = zone,
-						stun = weapon.stun,
-						headStun = true,
-						legSlow = true,
-						kind = "Hit",
-						blockCost = C.BLOCK_STAMINA_COST * 2,
-						knockback = 14,
-						bloodChance = weapon.bloodChance,
-						moveId = "BoneThrow",
-					})
-				elseif part.CanCollide == false and model == nil then
-					-- (a see-through trigger, a zone: not a wall)
-					table.insert(ignore, part)
-					params.FilterDescendantsInstances = ignore
-					position += step
-					return
-				end
-				broke(hit.Position, velocity)
+			end
+			return false
+		end
+		-- (from his body to his hand first: not through a wall he stands at,
+		-- nor past someone right against him)
+		if fly(root.Position, origin - root.Position) then
+			return
+		end
+		connection = RunService.Heartbeat:Connect(function(dt: number)
+			local step = velocity * dt
+			if fly(position, step) then
 				return
 			end
 			position += step

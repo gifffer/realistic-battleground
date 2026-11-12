@@ -64,6 +64,7 @@ local function quiet(part: BasePart)
 	part.CanCollide = false
 	part.CanQuery = false
 	part.CanTouch = false
+	part.Massless = true
 end
 
 -- A piece of the bone ("Humerus", "HumerusA", "HumerusB"), its bone space

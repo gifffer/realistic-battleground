@@ -94,6 +94,9 @@ export type HitSpec = {
 	-- A grab's catch (Combat/Grab): goes through a guard and can't be
 	-- parried (no blow to parry); no push, only the stun.
 	grab: boolean?,
+	-- A thrown thing (Shared/Weapons): where it hit from. It can't be
+	-- parried or slipped (no one to stun / counter there); a block faces it.
+	from: Vector3?,
 }
 
 return nil
