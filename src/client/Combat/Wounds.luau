@@ -206,6 +206,16 @@ local function picture(
 		ageingImage(image, age, dark)
 	end
 	image.Parent = gui
+	-- (a picture ignores LocalTransparencyModifier: hidden with your own
+	-- limb in first person)
+	local function follow()
+		gui.Enabled = part.LocalTransparencyModifier < 0.99
+	end
+	local link = part:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(follow)
+	plate.Destroying:Once(function()
+		link:Disconnect()
+	end)
+	follow()
 end
 
 -- A small flat oval of bruise lying on the skin at `at` (part space),
@@ -458,7 +468,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 			local id = blobs[random:NextInteger(1, #blobs)]
 			return if id ~= 0 then id else blobs[1]
 		end
-		local raise = thick * 0.95 + 0.006
+		local raise = 0.006 -- (place() already lifts over the swelling)
 		local function at2(du: number, dv: number, lift: number): (Vector3, Vector3)
 			return place(du, dv, raise + lift)
 		end
