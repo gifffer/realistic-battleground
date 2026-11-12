@@ -199,6 +199,7 @@ local function keyCap(parent: Instance, text: string, filled: boolean, dim: bool
 		})
 	end
 	Theme.text({
+		Position = UDim2.fromOffset(1, 1), -- (digits sit high and left: centred)
 		Size = UDim2.fromScale(1, 1),
 		FontFace = Theme.Fonts.NumberMedium,
 		TextSize = 10,
