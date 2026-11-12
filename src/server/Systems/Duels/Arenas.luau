@@ -55,6 +55,7 @@ end
 local function buildOne(folder: Instance, index: number): Arena
 	local model = Instance.new("Model")
 	model.Name = `DuelArena{index}`
+	model:SetAttribute("Unbreakable", true) -- (heavy moves don't smash its walls)
 	local center = ORIGIN + Vector3.new((index - 1) * SPACING, 0, 0)
 	local floorColor = Color3.fromRGB(92, 92, 96)
 	local wallColor = Color3.fromRGB(58, 58, 62)

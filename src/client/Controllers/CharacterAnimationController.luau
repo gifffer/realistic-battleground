@@ -62,6 +62,7 @@ local FADE_IN: { [string]: number } = {
 	LimpIdle = 0.3,
 	Walk = 0.15,
 	Run = 0.15,
+	BullRun = 0.15,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
@@ -263,10 +264,12 @@ local function movementClip(entry: Tracked, state: string?): string?
 		-- Walk ↔ run with a gap between the two speeds ("hysteresis"), so a
 		-- speed hovering around one value doesn't flicker between the clips.
 		local current = entry.movement[#entry.movement]
-		local running = current ~= nil and current.target == 1 and current.name == "Run"
-		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED)
-			then "Run"
-			else "Walk"
+		local running = current ~= nil
+			and current.target == 1
+			and (current.name == "Run" or current.name == "BullRun")
+		-- (the Bull runs his own way: head down, horns first)
+		local run = if entry.model:GetAttribute("Kit") == "Bull" then "BullRun" else "Run"
+		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED) then run else "Walk"
 	end
 	return nil
 end
@@ -320,6 +323,13 @@ local function playbackRate(entry: Tracked, name: string): number
 			horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED * 1.35,
 			0.8,
 			1.5
+		)
+	elseif name == "BullRun" then
+		-- (authored for the Bull's sprint: faster than everyone's)
+		return math.clamp(
+			horizontalSpeed(entry.root) / (Config.Character.SPRINT_SPEED * 1.15) * 1.35,
+			0.8,
+			1.6
 		)
 	elseif name == "Vault" then
 		return 1 / Config.Climb.VAULT_DURATION
@@ -511,7 +521,7 @@ local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
 		else state == "Sprint"
 	-- Our Run clip already leans the body: no extra lean on top of it.
 	local current = entry.movement[#entry.movement]
-	local ownRun = current ~= nil and current.name == "Run"
+	local ownRun = current ~= nil and (current.name == "Run" or current.name == "BullRun")
 	if sprinting and not ownRun and horizontalSpeed(entry.root) > MOVING_SPEED then
 		target = math.clamp(horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED, 0, 1)
 	end

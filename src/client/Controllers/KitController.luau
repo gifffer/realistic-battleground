@@ -21,7 +21,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local CollectionService = game:GetService("CollectionService")
 local Config = require(ReplicatedStorage.Shared.Config)
+local Breakable = require(ReplicatedStorage.Shared.Util.Breakable)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -130,6 +132,36 @@ local function chargeInterrupted(character: Model): boolean
 		or character:GetAttribute("KnockedOut") == true
 end
 
+-- A charge that smashes walls (Bull): the server breaks them, but its
+-- answer comes a few ms later; meanwhile our own body would hit the wall
+-- and stop. So we let it through on our side right away (its collision off
+-- for us only), and put it back if the server didn't break it after all.
+local wallParams = OverlapParams.new()
+wallParams.FilterType = Enum.RaycastFilterType.Exclude
+wallParams.RespectCanCollide = true
+local opened: { [BasePart]: boolean } = {}
+local function openWalls(character: Model, root: BasePart, radius: number)
+	wallParams.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
+	local look = root.CFrame.LookVector
+	local feetY = root.Position.Y - 3
+	for _, part in workspace:GetPartBoundsInRadius(root.Position + look * 2.5, radius, wallParams) do
+		if
+			not opened[part]
+			and not part:IsDescendantOf(character)
+			and Breakable.check(part, feetY)
+		then
+			opened[part] = true
+			part.CanCollide = false
+			task.delay(1.5, function()
+				opened[part] = nil
+				if part.Parent and part:GetAttribute("Broken") ~= true then
+					part.CanCollide = true
+				end
+			end)
+		end
+	end
+end
+
 -- Charge: push our character forward during the charge window.
 local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
 	local charge = move.charge
@@ -153,6 +185,10 @@ local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
 		if chargeInterrupted(character) then
 			brake()
 			return
+		end
+		local breaks = charge.breaks
+		if breaks and elapsed >= charge.from then
+			openWalls(character, root, breaks)
 		end
 		if not pushing and elapsed >= charge.from then
 			pushing = true

@@ -648,6 +648,130 @@ local clips: { [string]: R6Pose.Clip } = {
 		},
 	},
 
+	-- BullRun: the Bull's sprint (Kit "Bull"), replaces Run. Bent far over,
+	-- head down so the horns go first, arms low and wide pumping like
+	-- pistons, long stomping strides with a heavy bob: he's going to smash
+	-- through whatever is in front. (Authored with filmstrips; feet checked
+	-- on the ground at contact.)
+	BullRun = {
+		length = 0.6,
+		looped = true,
+		keyframes = {
+			{
+				time = 0.0,
+				pose = {
+					Root = { rot = Vector3.new(-41, -12, 0), pos = Vector3.new(0, -0.42, 0) },
+					Neck = { rot = Vector3.new(6, 10, 0) },
+					RightShoulder = { rot = Vector3.new(-65, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(35, 0, -26) },
+					RightHip = { rot = Vector3.new(92, 0, 4), pos = Vector3.new(0, 0, -0.25) },
+					LeftHip = { rot = Vector3.new(-4, 0, -4), pos = Vector3.new(0, 0, 0.25) },
+				},
+			},
+			{
+				time = 0.075,
+				pose = {
+					Root = { rot = Vector3.new(-44, -8.49, 3.54), pos = Vector3.new(0, -0.3, 0) },
+					Neck = { rot = Vector3.new(6, 7.07, -2.12) },
+					RightShoulder = { rot = Vector3.new(-50.4, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(20.4, 0, -26) },
+					RightHip = {
+						rot = Vector3.new(77.9, 0, 4),
+						pos = Vector3.new(0, 0.0566, -0.177),
+					},
+					LeftHip = {
+						rot = Vector3.new(10.1, 0, -4),
+						pos = Vector3.new(0, -0.0566, 0.177),
+					},
+				},
+			},
+			{
+				time = 0.15,
+				pose = {
+					Root = { rot = Vector3.new(-47, 0, 5), pos = Vector3.new(0, -0.18, 0) },
+					Neck = { rot = Vector3.new(6, 0, -3) },
+					RightShoulder = { rot = Vector3.new(-15, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(-15, 0, -26) },
+					RightHip = { rot = Vector3.new(44, 0, 4), pos = Vector3.new(0, 0.08, 0) },
+					LeftHip = { rot = Vector3.new(44, 0, -4), pos = Vector3.new(0, -0.08, 0) },
+				},
+			},
+			{
+				time = 0.225,
+				pose = {
+					Root = { rot = Vector3.new(-44, 8.49, 3.54), pos = Vector3.new(0, -0.3, 0) },
+					Neck = { rot = Vector3.new(6, -7.07, -2.12) },
+					RightShoulder = { rot = Vector3.new(20.4, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(-50.4, 0, -26) },
+					RightHip = {
+						rot = Vector3.new(10.1, 0, 4),
+						pos = Vector3.new(0, 0.0566, 0.177),
+					},
+					LeftHip = {
+						rot = Vector3.new(77.9, 0, -4),
+						pos = Vector3.new(0, -0.0566, -0.177),
+					},
+				},
+			},
+			{
+				time = 0.3,
+				pose = {
+					Root = { rot = Vector3.new(-41, 12, 0), pos = Vector3.new(0, -0.42, 0) },
+					Neck = { rot = Vector3.new(6, -10, 0) },
+					RightShoulder = { rot = Vector3.new(35, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(-65, 0, -26) },
+					RightHip = { rot = Vector3.new(-4, 0, 4), pos = Vector3.new(0, 0, 0.25) },
+					LeftHip = { rot = Vector3.new(92, 0, -4), pos = Vector3.new(0, 0, -0.25) },
+				},
+			},
+			{
+				time = 0.375,
+				pose = {
+					Root = { rot = Vector3.new(-44, 8.49, -3.54), pos = Vector3.new(0, -0.3, 0) },
+					Neck = { rot = Vector3.new(6, -7.07, 2.12) },
+					RightShoulder = { rot = Vector3.new(20.4, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(-50.4, 0, -26) },
+					RightHip = {
+						rot = Vector3.new(10.1, 0, 4),
+						pos = Vector3.new(0, -0.0566, 0.177),
+					},
+					LeftHip = {
+						rot = Vector3.new(77.9, 0, -4),
+						pos = Vector3.new(0, 0.0566, -0.177),
+					},
+				},
+			},
+			{
+				time = 0.45,
+				pose = {
+					Root = { rot = Vector3.new(-47, 0, -5), pos = Vector3.new(0, -0.18, 0) },
+					Neck = { rot = Vector3.new(6, 0, 3) },
+					RightShoulder = { rot = Vector3.new(-15, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(-15, 0, -26) },
+					RightHip = { rot = Vector3.new(44, 0, 4), pos = Vector3.new(0, -0.08, 0) },
+					LeftHip = { rot = Vector3.new(44, 0, -4), pos = Vector3.new(0, 0.08, 0) },
+				},
+			},
+			{
+				time = 0.525,
+				pose = {
+					Root = { rot = Vector3.new(-44, -8.49, -3.54), pos = Vector3.new(0, -0.3, 0) },
+					Neck = { rot = Vector3.new(6, 7.07, 2.12) },
+					RightShoulder = { rot = Vector3.new(-50.4, 0, 26) },
+					LeftShoulder = { rot = Vector3.new(20.4, 0, -26) },
+					RightHip = {
+						rot = Vector3.new(77.9, 0, 4),
+						pos = Vector3.new(0, -0.0566, -0.177),
+					},
+					LeftHip = {
+						rot = Vector3.new(10.1, 0, -4),
+						pos = Vector3.new(0, 0.0566, 0.177),
+					},
+				},
+			},
+		},
+	},
+
 	-- ADDED on top of Roblox's run animation: lean into the sprint.
 	-- Its weight follows the speed (see CharacterAnimationController).
 	SprintLean = {

@@ -32,6 +32,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Destruction = require(script.Parent.Parent.Destruction)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Stamina = require(script.Parent.Parent.Stamina)
 local Hitbox = require(script.Parent.Hitbox)
@@ -142,6 +143,11 @@ local function strike(
 	local c = context()
 	local boxCFrame = cframe or state.root.CFrame * CFrame.new(0, 0, -hit.forward)
 	local victims, partsByModel = Hitbox.query(boxCFrame, hit.hitbox, state.model)
+	if hit.breaks then
+		-- a heavy blow: the walls around go too
+		local push = state.root.CFrame.LookVector * 35 + Vector3.new(0, 18, 0)
+		Destruction.blast(boxCFrame.Position, hit.breaks, push, state.model)
+	end
 	local reached = {}
 	for _, victimModel in victims do
 		local victim = c.getState(victimModel)
@@ -229,6 +235,17 @@ local function runCharge(state: CombatState, move: Kits.MoveDef, token: number)
 		end
 		if elapsed < charge.from then
 			return
+		end
+		local breaks = charge.breaks
+		if breaks then
+			-- through the walls in the way
+			local look = state.root.CFrame.LookVector
+			Destruction.blast(
+				state.root.Position + look * 2.5,
+				breaks,
+				look * 55 + Vector3.new(0, 12, 0),
+				state.model
+			)
 		end
 		local reached = strike(state, charge.hit, move.id, nil)
 		if #reached > 0 then

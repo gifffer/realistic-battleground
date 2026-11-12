@@ -31,6 +31,7 @@ export type HitDef = {
 	-- laceration), "Slash" = a broken bottle (clean, longer cut).
 	cuts: ("Lac" | "Slash")?,
 	launch: number?, -- with knockdown: thrown UP at this speed (studs/s): uppercuts
+	breaks: number?, -- smashes the map (walls...) within this radius of the hitbox centre (Server Destruction)
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 }
 
@@ -45,7 +46,8 @@ export type MoveDef = {
 	hits: { HitDef },
 	-- Charge (tackle): the attacker rushes forward from `from` to `to`
 	-- seconds; the hit lands on the first fighter touched on the way.
-	charge: { speed: number, from: number, to: number, hit: HitDef }?,
+	-- (breaks: smashes the walls it runs into, within this radius ahead)
+	charge: { speed: number, from: number, to: number, hit: HitDef, breaks: number? }?,
 	-- After a charge connects: a follow-up strike on the fallen victim.
 	followUp: { animation: string, delay: number, at: number, damage: number }?,
 	prop: string?, -- object held during the move ("Bottle", "BrokenBottle")

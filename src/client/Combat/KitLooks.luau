@@ -5,8 +5,8 @@
 --               nose ring, and his breath steaming now and then;
 --   • SENTINEL  a real cloth cape (simulated: it falls, swings, flies back
 --               when he runs, catches the wind and the shockwaves), gold
---               clasps and chain, a small emblem, and red-glowing eyes.
--- The horns, rings, eyes... are plain parts welded to the head / torso
+--               clasps and chain, a small emblem.
+-- The horns, rings, clasps... are plain parts welded to the head / torso
 -- (under them: a burst head (HeadBlast) takes the horns with it).
 --
 -- The cape is a grid of points (Verlet cloth): its top row is pinned to
@@ -21,7 +21,6 @@
 --
 --   KitLooks.start()                           watch every fighter
 --   KitLooks.gust(position, strength, radius)  a blast of air from there
---   KitLooks.eyes(model)                       the Sentinel's glowing eyes
 --   KitLooks.hornTips(model)                   the Bull's horn tips
 
 local CollectionService = game:GetService("CollectionService")
@@ -39,7 +38,7 @@ local RIDGE = Color3.fromRGB(150, 130, 104)
 local GOLD = Color3.fromRGB(212, 168, 70)
 local CAPE = Color3.fromRGB(128, 14, 22)
 local TRIM = Color3.fromRGB(200, 156, 64)
-local EYE = Color3.fromRGB(255, 44, 30)
+local GEM = Color3.fromRGB(255, 44, 30)
 
 local random = Random.new()
 
@@ -247,27 +246,8 @@ local function breathe(head: BasePart)
 end
 
 ------------------------------------------------------------------------------
--- SENTINEL: eyes, clasps, emblem
+-- SENTINEL: clasps, emblem
 ------------------------------------------------------------------------------
-
-local function buildEyes(head: BasePart, folder: Instance)
-	for _, side in { -1, 1 } do
-		local eye = newPart("SentinelEye", Vector3.new(0.13, 0.08, 0.04), EYE)
-		eye.Material = Enum.Material.Neon
-		eye.Transparency = 0.15
-		eye.CastShadow = false
-		weld(eye, head, CFrame.new(side * 0.17, 0.11, -0.6), folder)
-		if side == 1 then
-			local glow = Instance.new("PointLight")
-			glow.Name = "EyeGlow"
-			glow.Color = EYE
-			glow.Brightness = 0.5
-			glow.Range = 3
-			glow.Shadows = false
-			glow.Parent = eye
-		end
-	end
-end
 
 local function buildTrimmings(torso: BasePart, folder: Instance)
 	-- gold clasps at the collarbones, a chain between them
@@ -277,7 +257,7 @@ local function buildTrimmings(torso: BasePart, folder: Instance)
 		clasp.Material = Enum.Material.Metal
 		clasp.Reflectance = 0.3
 		weld(clasp, torso, CFrame.new(at) * CFrame.Angles(0, math.rad(90), 0), folder)
-		local gem = newPart("ClaspGem", Vector3.one * 0.1, EYE, Enum.PartType.Ball)
+		local gem = newPart("ClaspGem", Vector3.one * 0.1, GEM, Enum.PartType.Ball)
 		gem.Material = Enum.Material.Neon
 		weld(gem, torso, CFrame.new(at + Vector3.new(0, 0, -0.06)), folder)
 	end
@@ -447,7 +427,6 @@ local BODY_BOXES: { { name: string, half: Vector3, mode: string } } = {
 local function buildCape(model: Model): Instance?
 	local torso = model:FindFirstChild("Torso")
 	local root = model:FindFirstChild("HumanoidRootPart")
-	local head = model:FindFirstChild("Head")
 	if torso == nil or not torso:IsA("BasePart") or root == nil or not root:IsA("BasePart") then
 		return nil
 	end
@@ -456,16 +435,6 @@ local function buildCape(model: Model): Instance?
 	local look = Instance.new("Folder")
 	look.Name = "KitLook"
 	buildTrimmings(torso, look)
-	if head and head:IsA("BasePart") then
-		local eyes = Instance.new("Folder")
-		eyes.Name = "KitLook"
-		buildEyes(head, eyes)
-		eyes.Parent = head
-		-- (removed with the cape)
-		look.Destroying:Connect(function()
-			eyes:Destroy()
-		end)
-	end
 	look.Parent = torso
 
 	local folder = Instance.new("Folder")
@@ -878,24 +847,6 @@ function KitLooks.gust(position: Vector3, strength: number, radius: number)
 			cloth.gust += direction * strength * (1 - distance / radius)
 		end
 	end
-end
-
--- The Sentinel's eyes (empty if he has none).
-function KitLooks.eyes(model: Model): { BasePart }
-	local found: { BasePart } = {}
-	local head = model:FindFirstChild("Head")
-	if head then
-		for _, look in head:GetChildren() do
-			if look.Name == "KitLook" then
-				for _, part in look:GetChildren() do
-					if part.Name == "SentinelEye" and part:IsA("BasePart") then
-						table.insert(found, part)
-					end
-				end
-			end
-		end
-	end
-	return found
 end
 
 -- The tips of the Bull's horns (empty if he has none).

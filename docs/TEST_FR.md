@@ -372,9 +372,9 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 Équipe le kit dans le menu Kits (gratuits), puis teste sur un mannequin.
 
 ### Sentinel
-- [ ] **Look** : cape rouge en tissu simulé (elle pend, se balance, vole en arrière quand tu bouges, réagit au vent de la map et aux ondes de choc), fermoirs dorés + chaîne, emblème, yeux rouges lumineux.
+- [ ] **Look** : cape rouge en tissu simulé (elle pend, se balance, vole en arrière quand tu bouges, réagit au vent de la map et aux ondes de choc), fermoirs dorés + chaîne, emblème. Plus de points rouges sur la tête (les yeux ne s'allument que pendant le laser).
 - [ ] **Vitesse** : il marche un peu plus lentement que les autres et ne peut pas sprinter.
-- [ ] **1 — Heat Vision** : 1 s de charge (les yeux s'allument, énergie aspirée, petits éclairs, son de charge), puis deux lasers tout droit là où il regardait au départ (ils ne suivent PAS la souris). Immobile pendant la charge et le tir, pas de dash. Il faut rester ~0,5 s dans le laser avant les dégâts. Pas de son quand ça touche : la peau se carbonise là où le laser touche (marques noires, fumée). Le laser traverse les joueurs mais s'arrête sur les murs (traînée en fusion puis carbonisée).
+- [ ] **1 — Heat Vision** : 1 s de charge (les yeux s'allument, énergie aspirée, petits éclairs, son de charge), puis deux lasers tout droit là où il regardait au départ (ils ne suivent PAS la souris). Immobile pendant la charge et le tir, pas de dash. Il faut rester ~0,5 s dans le laser avant les dégâts. Pas de son quand ça touche : la peau se carbonise là où le laser touche, À PLAT sur la peau (bord rouge-brun, centre noir, bord incandescent qui refroidit) ; rester au même endroit aggrave la même brûlure au lieu d'en empiler. Le laser traverse les joueurs mais s'arrête sur les murs (traînée en fusion puis carbonisée).
 - [ ] **2 — Thunder Clap** : éclairs dans les mains, puis clap : flash, sphère d'énergie, anneaux en cône, lignes d'air, éclairs, poussière poussée devant.
 - [ ] **3 — Skyfall** : impact au DÉCOLLAGE (cratère, fissures lumineuses, dalles soulevées, cailloux) + son, traînée en vol, poing qui se charge en descente, gros impact à l'ATTERRISSAGE + son, écran qui tremble.
 - [ ] **4 — Haymaker** : le poing se charge (énergie aspirée, éclairs), impact : flash, anneaux, lignes d'air, étincelles + son.
@@ -382,8 +382,16 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 ### Bull
 - [ ] **Look** : cornes courbées avec anneaux à la base, anneau doré dans le nez, vapeur qui sort du nez de temps en temps.
 - [ ] **Vitesse** : il marche plus vite que les autres.
-- [ ] **1 — Gore Charge** : son de charge, yeux rouges, il gratte le sol, puis charge : nuage de poussière, fissures à chaque pas, traînées sur les cornes. La cible saigne.
+- [ ] **Course (Shift)** : course de taureau (penché, tête baissée cornes devant, grosses foulées), poussière + petites fissures à chaque pas, vapeur du nez.
+- [ ] **1 — Gore Charge** : son de charge (coupé à la fin de l'attaque, ~1,2 s), yeux rouges, il gratte le sol, puis charge : nuage de poussière, fissures à chaque pas, traînées sur les cornes. La cible saigne.
 - [ ] **2 — Horn Hook** : coup de cornes vers le haut : anneau d'air, colonne de poussière, la cible décolle.
 - [ ] **3 — Stampede** : il se cabre (cailloux qui flottent), puis frappe le sol : gros impact (dalles, fissures, poussière) + son ; ralentit les cibles autour. Imblocable.
 - [ ] **4 — Bull Toss** : son à l'attrapé ET au lancer, anneau d'air vers le haut au lancer.
 - [ ] Le finisher du Bull n'existe pas encore (finisher par défaut).
+
+### Murs cassables
+- [ ] La **Gore Charge** traverse les murs : le mur se troue (seulement la partie touchée), débris de la couleur / matière du mur, poussière.
+- [ ] Les gros impacts cassent aussi les murs proches : Thunder Clap, Skyfall (atterrissage), Haymaker, Horn Hook, Stampede.
+- [ ] Le sol, les sols surélevés / toits, les murs des arènes de duel et les murs invisibles ne cassent jamais.
+- [ ] Les murs se reconstruisent ~25 s après le dernier coup (pas si quelqu'un est dedans).
+- [ ] Pour protéger une partie de la map : tag CollectionService `Unbreakable` ou attribut `Unbreakable = true` (sur la part ou un de ses parents).

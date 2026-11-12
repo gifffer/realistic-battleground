@@ -27,6 +27,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -35,6 +36,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local KitLooks = require(script.Parent.KitLooks)
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local KitVFX = {}
 
@@ -1059,51 +1061,210 @@ local function rageEyes(head: BasePart, time: number)
 end
 
 ------------------------------------------------------------------------------
--- Burns (heat vision): charred marks where the beam touches a body
+-- Burns (heat vision): the skin chars where the beam touches a body
 ------------------------------------------------------------------------------
+-- Drawn like the bruises (Wounds): thin layers lying ON the visible skin
+-- (the classic head is round: the point is put back on its curve), a wide
+-- seared red-brown edge to a small black middle, a glowing rim that cools.
+-- The beam staying on the same spot makes that burn worse (bigger, darker)
+-- instead of piling up new ones.
 
-local MAX_BURNS = 24
+local MAX_BURNS = 30
+local SEAR = Color3.fromRGB(122, 52, 32) -- seared skin
+local SCORCH = Color3.fromRGB(60, 30, 20)
 local burnCount: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+type BurnSpot = { at: Vector3, out: Vector3, size: number, level: number }
+local burnSpots: { [BasePart]: { BurnSpot } } = setmetatable({}, { __mode = "k" }) :: any
 
-local function burn(body: Model, limb: BasePart, position: Vector3, normal: Vector3)
+-- The skin of a body part at `p` (part space): where, and which way is out.
+local function onSkin(limb: BasePart, p: Vector3): (Vector3, Vector3)
+	if limb.Name == "Head" then
+		-- (the round classic head: radius 0.6, straight from -0.3 to 0.3)
+		local flatP = Vector3.new(p.X, 0, p.Z)
+		local out = if flatP.Magnitude > 1e-3 then flatP.Unit else Vector3.new(0, 0, -1)
+		local y = math.clamp(p.Y, -0.36, 0.36)
+		local over = math.max(0, math.abs(y) - 0.3)
+		local radius = 0.3 + math.sqrt(math.max(0, 0.09 - over * over))
+		return out * radius + Vector3.new(0, y, 0), out
+	end
+	-- a block: the side face the point is on (not the top / bottom)
+	local half = limb.Size / 2
+	local x, z = p.X / half.X, p.Z / half.Z
+	if math.abs(x) > math.abs(z) then
+		local side = if x >= 0 then 1 else -1
+		return Vector3.new(
+			side * half.X,
+			math.clamp(p.Y, -half.Y * 0.85, half.Y * 0.85),
+			math.clamp(p.Z, -half.Z * 0.7, half.Z * 0.7)
+		),
+			Vector3.new(side, 0, 0)
+	end
+	local side = if z >= 0 then 1 else -1
+	return Vector3.new(
+		math.clamp(p.X, -half.X * 0.8, half.X * 0.8),
+		math.clamp(p.Y, -half.Y * 0.85, half.Y * 0.85),
+		side * half.Z
+	),
+		Vector3.new(0, 0, side)
+end
+
+-- A thin disc lying on the skin of `limb` at `at` (part space), facing `out`.
+local function skinDisc(
+	limb: BasePart,
+	folder: Instance,
+	at: Vector3,
+	out: Vector3,
+	diameter: number,
+	squash: number,
+	color: Color3,
+	transparency: number,
+	roll: number,
+	material: Enum.Material?
+): Part
+	local upAxis = Vector3.new(0, 1, 0) - out * out.Y
+	upAxis = if upAxis.Magnitude > 1e-3 then upAxis.Unit else Vector3.new(0, 0, 1)
+	local disc = newPart(
+		Vector3.new(0.01, diameter, diameter * squash),
+		color,
+		material,
+		Enum.PartType.Cylinder
+	)
+	disc.Name = "Burn"
+	disc.Transparency = transparency
+	disc.Anchored = false
+	disc.Massless = true
+	disc.CFrame = limb.CFrame * CFrame.fromMatrix(at, out, upAxis) * CFrame.Angles(roll, 0, 0)
+	local joint = Instance.new("WeldConstraint")
+	joint.Part0 = limb
+	joint.Part1 = disc
+	joint.Parent = disc
+	disc.Parent = folder
+	return disc
+end
+
+local BURN_LAYERS = {
+	{ scale = 1.4, squash = 0.82, color = SEAR, transparency = 0.74 },
+	{ scale = 1.05, squash = 0.78, color = SEAR:Lerp(SCORCH, 0.5), transparency = 0.5 },
+	{ scale = 0.72, squash = 0.76, color = SCORCH, transparency = 0.28 },
+	{ scale = 0.42, squash = 0.72, color = CHAR, transparency = 0.1 },
+}
+
+local function burn(body: Model, limb: BasePart, position: Vector3)
+	local at, out = onSkin(limb, limb.CFrame:PointToObjectSpace(position))
+	local worldOut = limb.CFrame:VectorToWorldSpace(out)
+	local folder: Instance? = limb:FindFirstChild("Burns")
+	if folder == nil then
+		local made = Instance.new("Folder")
+		made.Name = "Burns"
+		made.Parent = limb
+		folder = made
+	end
+	local spots = burnSpots[limb]
+	if spots == nil then
+		spots = {}
+		burnSpots[limb] = spots
+	end
+	local seed = random:NextNumber(0, math.pi * 2)
+	local upAxis = Vector3.new(0, 1, 0)
+	local across = out:Cross(upAxis)
+	across = if across.Magnitude > 1e-3 then across.Unit else Vector3.new(1, 0, 0)
+	-- The same spot again: that burn gets worse.
+	for _, spot in spots do
+		if (spot.at - at).Magnitude < spot.size * 0.6 then
+			if spot.level < 4 then
+				spot.level += 1
+				local r = spot.size * 0.25
+				local p, o = onSkin(
+					limb,
+					spot.at + across * random:NextNumber(-r, r) + upAxis * random:NextNumber(-r, r)
+				)
+				skinDisc(
+					limb,
+					folder :: Instance,
+					p + o * (0.016 + spot.level * 0.002),
+					o,
+					spot.size * random:NextNumber(0.3, 0.5),
+					random:NextNumber(0.65, 0.9),
+					CHAR,
+					0.15,
+					seed
+				)
+			end
+			emit(position, {
+				texture = TEX.smoke,
+				color = Color3.fromRGB(70, 64, 60),
+				size = { 0.2, 0.7, 1.1 },
+				transparency = { 0.45, 0.7, 1 },
+				speed = NumberRange.new(1, 2.5),
+				lifetime = NumberRange.new(0.7, 1.2),
+				spread = 25,
+				direction = worldOut,
+				acceleration = Vector3.new(0, 3, 0),
+				count = 1,
+			})
+			return
+		end
+	end
 	local count = burnCount[body] or 0
 	if count >= MAX_BURNS then
 		return
 	end
 	burnCount[body] = count + 1
-	local size = random:NextNumber(0.24, 0.42)
-	local mark =
-		newPart(Vector3.new(0.03, size, size), CHAR, Enum.Material.Slate, Enum.PartType.Cylinder)
-	mark.Name = "Burn"
-	mark.Anchored = false
-	mark.Massless = true
-	mark.CFrame = facing(position + normal * 0.012, normal) * CFrame.Angles(0, math.rad(90), 0)
-	local joint = Instance.new("WeldConstraint")
-	joint.Part0 = limb
-	joint.Part1 = mark
-	joint.Parent = mark
-	mark.Parent = limb
-	-- the burning rim cools down: orange → red → gone
-	local rim = newPart(
-		Vector3.new(0.035, size * 0.75, size * 0.75),
+	local size = (if limb.Name == "Head" then 0.2 elseif limb.Name == "Torso" then 0.36 else 0.3)
+		* random:NextNumber(0.9, 1.15)
+	table.insert(spots, { at = at, out = out, size = size, level = 1 })
+	for index, layer in BURN_LAYERS do
+		-- (each layer a little off-centre: an uneven burn)
+		local nudge = across * random:NextNumber(-0.07, 0.07) * size
+			+ upAxis * random:NextNumber(-0.07, 0.07) * size
+		local p, o = onSkin(limb, at + nudge)
+		skinDisc(
+			limb,
+			folder :: Instance,
+			p + o * (0.006 + index * 0.0025),
+			o,
+			size * layer.scale,
+			layer.squash,
+			layer.color,
+			layer.transparency,
+			seed + index * 0.7
+		)
+	end
+	-- a couple of black blotches off-centre
+	for _ = 1, 2 do
+		local r = size * 0.45
+		local p, o =
+			onSkin(limb, at + across * random:NextNumber(-r, r) + upAxis * random:NextNumber(-r, r))
+		skinDisc(
+			limb,
+			folder :: Instance,
+			p + o * 0.0165,
+			o,
+			size * random:NextNumber(0.18, 0.3),
+			0.8,
+			CHAR,
+			0.25,
+			seed
+		)
+	end
+	-- the rim still glowing, cooling down
+	local ember = skinDisc(
+		limb,
+		folder :: Instance,
+		at + out * 0.02,
+		out,
+		size * 0.62,
+		0.78,
 		EMBER,
-		Enum.Material.Neon,
-		Enum.PartType.Cylinder
+		0.05,
+		seed,
+		Enum.Material.Neon
 	)
-	rim.Anchored = false
-	rim.Massless = true
-	rim.CFrame = mark.CFrame * CFrame.new(0.004, 0, 0)
-	local rimJoint = Instance.new("WeldConstraint")
-	rimJoint.Part0 = limb
-	rimJoint.Part1 = rim
-	rimJoint.Parent = rim
-	rim.Parent = limb
-	animate(1.6, function(alpha)
-		rim.Color = EMBER:Lerp(LASER_DEEP, alpha)
-		rim.Transparency = alpha ^ 1.5
-		rim.Size = Vector3.new(0.035, size * (0.75 - 0.3 * alpha), size * (0.75 - 0.3 * alpha))
+	animate(1.4, function(alpha)
+		ember.Color = EMBER:Lerp(LASER_DEEP, alpha)
+		ember.Transparency = 0.05 + 0.95 * alpha ^ 1.3
 	end, function()
-		rim:Destroy()
+		ember:Destroy()
 	end)
 	emit(position, {
 		texture = TEX.smoke,
@@ -1113,7 +1274,7 @@ local function burn(body: Model, limb: BasePart, position: Vector3, normal: Vect
 		speed = NumberRange.new(1, 3),
 		lifetime = NumberRange.new(0.8, 1.4),
 		spread = 25,
-		direction = normal,
+		direction = worldOut,
 		acceleration = Vector3.new(0, 3, 0),
 		count = 2,
 	})
@@ -1144,12 +1305,12 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	folder.Name = "HeatVision"
 	folder.Parent = fx
 
-	-- The eyes: his own glowing ones (cape kit), or new ones.
-	local eyes = KitLooks.eyes(model)
-	local ownEyes = #eyes > 0
-	if not ownEyes then
+	-- The eyes light up only for this (fading in with the charge).
+	local eyes: { BasePart } = {}
+	do
 		for _, side in { -1, 1 } do
 			local eye = newPart(Vector3.new(0.13, 0.08, 0.04), LASER, Enum.Material.Neon)
+			eye.Transparency = 1
 			eye.Anchored = false
 			eye.Massless = true
 			eye.CFrame = head.CFrame * CFrame.new(side * 0.17, 0.11, -0.6)
@@ -1290,6 +1451,7 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		end
 		-- the eyes cool down, steaming a little
 		for _, eye in eyes do
+			tween(eye, 0.5, { Transparency = 1 })
 			emit(eye.Position, {
 				texture = TEX.smoke,
 				color = Color3.fromRGB(120, 110, 108),
@@ -1325,6 +1487,9 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		end
 		if not firing then
 			glow.Brightness = 7 * charged ^ 2
+			for _, eye in eyes do
+				eye.Transparency = 1 - charged
+			end
 			-- crackling just before it fires
 			if charged > 0.6 and math.random() < 0.18 then
 				crackle(eyes[1].Position, 0.8, 1, LASER)
@@ -1441,7 +1606,7 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 					and limb:IsA("BasePart")
 				then
 					lastBurn = now
-					burn(owner, limb, touch.Position, touch.Normal)
+					burn(owner, limb, touch.Position)
 					sparks(touch.Position, 6, EMBER, touch.Normal, 14, 50)
 				end
 			end
@@ -1742,6 +1907,25 @@ end
 
 local function goreCharge(model: Model, move: Kits.MoveDef, token: number)
 	snort(model, 1.4)
+	-- The charge's roar: only as long as the move (the file is longer),
+	-- faded out at its end or when it's cut.
+	local roar = SoundController.play("BullCharge", model)
+	if roar then
+		local sound = roar
+		local volume = sound.Volume
+		animate(move.duration, function(alpha)
+			if not alive(model, token) and sound.Volume > 0 then
+				tween(sound, 0.15, { Volume = 0 })
+			end
+			local left = (1 - alpha) * move.duration
+			if left < 0.2 then
+				sound.Volume = math.min(sound.Volume, volume * left / 0.2)
+			end
+		end, function()
+			sound:Stop()
+			sound:Destroy()
+		end)
+	end
 	local head = part(model, "Head")
 	local charge = move.charge
 	if head then
@@ -2116,6 +2300,177 @@ end
 -- The move was refused / cut short: its pending effects don't play.
 function KitVFX.stop(model: Model)
 	tokens[model] = (tokens[model] or 0) + 1
+end
+
+------------------------------------------------------------------------------
+-- Smashed walls (Server Destruction → Remotes.WallBroken)
+------------------------------------------------------------------------------
+
+local MAX_CHUNKS = 90 -- debris pieces per smash, at most
+
+type BrokenPiece = { cframe: CFrame, size: Vector3, color: Color3, material: Enum.Material }
+
+-- Every broken piece bursts into chunks of itself (its colour, material),
+-- thrown away from `point` and along `push`; dust where it stood.
+local function wallDebris(pieces: { BrokenPiece }, point: Vector3, push: Vector3)
+	if #pieces == 0 then
+		return
+	end
+	local budget = math.max(1, math.floor(MAX_CHUNKS / #pieces))
+	local made = 0
+	for index, piece in pieces do
+		local size = piece.size
+		local nx = math.clamp(math.ceil(size.X / 1.8), 1, 3)
+		local ny = math.clamp(math.ceil(size.Y / 1.8), 1, 3)
+		local nz = math.clamp(math.ceil(size.Z / 1.8), 1, 3)
+		local cell = Vector3.new(size.X / nx, size.Y / ny, size.Z / nz)
+		local cells: { Vector3 } = {}
+		for ix = 1, nx do
+			for iy = 1, ny do
+				for iz = 1, nz do
+					table.insert(
+						cells,
+						Vector3.new((ix - 0.5) * cell.X, (iy - 0.5) * cell.Y, (iz - 0.5) * cell.Z)
+							- size / 2
+					)
+				end
+			end
+		end
+		for k = 1, math.min(#cells, budget) do
+			if made >= MAX_CHUNKS then
+				break
+			end
+			made += 1
+			local offset = cells[random:NextInteger(1, #cells)]
+			local chunk = newPart(cell * random:NextNumber(0.6, 0.95), piece.color, piece.material)
+			chunk.Anchored = false
+			chunk.CanCollide = true
+			chunk.CastShadow = true
+			chunk.CustomPhysicalProperties = PhysicalProperties.new(0.3, 0.6, 0.2)
+			chunk.CFrame = piece.cframe
+				* CFrame.new(offset)
+				* CFrame.Angles(random:NextNumber(-0.3, 0.3), random:NextNumber(-0.3, 0.3), 0)
+			local away = chunk.Position - point
+			away = if away.Magnitude > 0.1 then away.Unit else random:NextUnitVector()
+			chunk.AssemblyLinearVelocity = away * random:NextNumber(12, 30)
+				+ push * random:NextNumber(0.4, 1)
+				+ Vector3.new(0, random:NextNumber(4, 16), 0)
+			chunk.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(5, 15)
+			chunk.Parent = fx
+			local life = random:NextNumber(5, 7)
+			task.delay(life - 1, function()
+				if chunk.Parent then
+					tween(chunk, 1, { Transparency = 1 })
+				end
+			end)
+			Debris:AddItem(chunk, life)
+			if k == 1 and index <= 8 then
+				smokePuff(piece.cframe.Position, 4, 1.2, DUST:Lerp(piece.color, 0.5), away, 8)
+			end
+		end
+	end
+	sparks(
+		point,
+		10,
+		Color3.fromRGB(255, 220, 170),
+		if push.Magnitude > 0 then push.Unit else Vector3.yAxis,
+		30,
+		60
+	)
+	shake(point, 1.6, 45, 0.3)
+end
+
+------------------------------------------------------------------------------
+-- The Bull sprinting: the ground shakes under each stride
+------------------------------------------------------------------------------
+
+local BULL_STRIDE = 0.3 -- seconds between two hoofs at full sprint
+local nextStride: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+local strideSide: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+local nextSnort: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+local function bullStrides()
+	local now = os.clock()
+	local camera = workspace.CurrentCamera
+	local eye = if camera then camera.CFrame.Position else Vector3.zero
+	for _, instance in CollectionService:GetTagged(Config.Combat.TAG) do
+		if not instance:IsA("Model") or instance:GetAttribute("Kit") ~= "Bull" then
+			continue
+		end
+		local model = instance
+		local root = part(model, "HumanoidRootPart")
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if root == nil or humanoid == nil or humanoid.FloorMaterial == Enum.Material.Air then
+			continue
+		end
+		local velocity = root.AssemblyLinearVelocity
+		local speed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+		-- (sprinting: the BullRun clip is on)
+		if speed < 14 or (root.Position - eye).Magnitude > 120 then
+			continue
+		end
+		if now < (nextStride[model] or 0) then
+			continue
+		end
+		nextStride[model] = now
+			+ BULL_STRIDE * Config.Character.SPRINT_SPEED * 1.15 / math.max(speed, 1)
+		local side = -(strideSide[model] or 1)
+		strideSide[model] = side
+		local spot = root.Position - Vector3.new(0, 3, 0) + root.CFrame.RightVector * side * 0.5
+		local floor = floorAt(spot)
+		if floor == nil then
+			continue
+		end
+		local dust = dustColor(floor)
+		emit(floor.position + Vector3.new(0, 0.3, 0), {
+			texture = TEX.smoke,
+			color = dust,
+			size = { 0.6, 1.8, 2.6 },
+			transparency = { 0.35, 0.6, 1 },
+			speed = NumberRange.new(3, 7),
+			lifetime = NumberRange.new(0.6, 1.1),
+			spread = 50,
+			direction = (-flat(root.CFrame.LookVector) + Vector3.yAxis).Unit,
+			acceleration = Vector3.new(0, 2, 0),
+			drag = 3,
+			count = 4,
+		})
+		groundRing(
+			floor.position,
+			0.3,
+			2.6,
+			0.3,
+			dust,
+			{ width = 0.35, height = 0.3, segments = 16, transparency = 0.4 }
+		)
+		cracks(floor.position, 3, 1.3, 3.5)
+		if side > 0 then
+			rocks(floor.position, 2, 0.45)
+		end
+		if model ~= Players.LocalPlayer.Character then
+			shake(floor.position, 0.5, 18, 0.12)
+		end
+		if now >= (nextSnort[model] or 0) then
+			nextSnort[model] = now + random:NextNumber(1.2, 2)
+			snort(model, 0.8)
+		end
+	end
+end
+
+-- Listen to the server's smashes, follow the Bulls' strides.
+function KitVFX.start()
+	Remotes.WallBroken.OnClientEvent:Connect(
+		function(pieces: unknown, point: unknown, push: unknown)
+			if
+				typeof(pieces) == "table"
+				and typeof(point) == "Vector3"
+				and typeof(push) == "Vector3"
+			then
+				wallDebris(pieces :: { BrokenPiece }, point, push)
+			end
+		end
+	)
+	RunService.Heartbeat:Connect(bullStrides)
 end
 
 return table.freeze(KitVFX)
