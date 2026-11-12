@@ -412,5 +412,22 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | V7 | Bout est de la rue Kerr (à côté de CHECKS CASHED) | Plus de « ROAD CLOSED » ni de barrières : un kiosque à journaux éclairé (« NEWS LOTTO SMOKES ») contre le mur, un banc, une vieille pub de diner en hauteur. |
 | V8 | Parcours de test (Studio) | Toujours au sud, sans chevaucher la ville (déplacé un peu plus au sud). |
 
+### v5 : portes de saloon, PNJ, train
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| N1 | Entrer chez DUFFY'S par l'entrée d'angle | Deux battants de saloon (à mi-hauteur, à lattes). Ils ne bloquent jamais : tu passes à travers, ils s'ouvrent **dans le sens opposé à toi** (~80°), restent ouverts tant que tu es dans l'embrasure, puis reviennent en battant plusieurs fois de part et d'autre avant de s'arrêter. Pareil en sortant (ils s'ouvrent vers l'extérieur). Les autres portes (vitrées) marchent comme avant. |
+| N2 | Le bar | Un barman (Duffy, tablier sombre) derrière le comptoir essuie le comptoir avec un chiffon ; 2–3 clients (tabourets, box, billard) : assis, accoudés, bras croisés ou sur leur téléphone. Tous en R6 bloc, comme des joueurs. |
+| N3 | THREADBARE et REWIND | Un vendeur derrière chaque comptoir (col à la couleur de la boutique, badge). Le prompt **[E] BROWSE…** marche toujours normalement. |
+| N4 | S'approcher d'un PNJ (moins de ~12 studs) | Il tourne la tête vers toi (doucement, jamais à 180°). À ~8 studs, bulle de chat : vendeur « Fresh threads, cheap. » / « Got moves? Pick one. », barman « What'll it be? »… Une seule fois, puis plus avant ~40 s. |
+| N5 | Frapper / utiliser un move sur un PNJ, foncer dedans | Rien : pas de dégâts, pas de verrouillage, pas de nom ni de barre de vie au-dessus, il ne bouge pas d'un pouce. |
+| T1 | Forcer un train (Studio, barre de commande côté **serveur**) : `workspace:SetAttribute("TrainForce", true)` | 5 s d'alerte : les deux signaux au bout du pont passent du vert (au repos) au rouge clignotant, la caméra tremble un peu si tu es près des voies (à moins de 60 studs). Puis une locomotive rouge (phares allumés, numéro 4417) + un wagon couvert tagué + un wagon-citerne sortent du tunnel, traversent le pont à ~70 studs/s, roues qui tournent, et rentrent dans l'autre tunnel. Le tremblement grandit quand le train approche. |
+| T2 | Rester sur la voie | Touché une seule fois par passage : −60 PV, projeté sur le côté (hors des rails) et vers l'avant, au sol quelques secondes, puis tu te relèves. |
+| T3 | Se faire toucher avec peu de PV (ou KO sur la voie) | Mort directe, fil des kills : « <toi> was hit by a train ». Si quelqu'un t'a frappé juste avant : « <lui> threw <toi> under a train » (il a le kill). |
+| T4 | Sans rien forcer | En Studio : un train ~15 s après la construction de la ville puis toutes les ~35 s. En jeu publié : 40–70 s après le lancement, puis toutes les 70–130 s, en alternant le sens. |
+| T5 | En duel | Jamais touché par le train. |
+
+Les sons `TrainHorn` et `TrainRumble` sont vides : le train passe en silence tant qu'ils n'ont pas d'ID.
+
 Les sons `Rain` et `Thunder` (`src/shared/Sounds.luau`) sont vides pour l'instant : donne-moi des IDs et je les mets.
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.

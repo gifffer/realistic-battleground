@@ -41,6 +41,8 @@
 --   Combat.setBlocking(model, bool)
 --   Combat.onDamaged(callback)         every damage dealt (for kills, step 3)
 --   Combat.setKit(model, kitId)        the kit used by keys 1–4 / G (Kits system)
+--   Combat.environmentHit(model, damage, velocity, knockdownTime, cause)
+--                                      a hit from the WORLD, no attacker (the train)
 --
 -- Kit moves (keys 1–4) and the Awakening (G) are in Combat/Moves.luau. Every
 -- hit, M1 or move, is decided by resolveHit below from a HitSpec (State.luau).
@@ -1505,6 +1507,64 @@ function Combat.freeze(model: Model, seconds: number)
 	local untilTime = now() + seconds
 	state.finishingUntil = math.max(state.finishingUntil, untilTime) -- speed 0, busy
 	state.nextAttackAt = math.max(state.nextAttackAt, untilTime)
+end
+
+-- A hit from the world itself, with no attacker: the city's train (Server/Systems/Train).
+-- Not a punch: it can't be blocked, parried or dodged. What it does:
+--   • `damage` (none during spawn protection);
+--   • if that would bring them to 0 HP, or if they were already knocked out (lying on the
+--     track), they DIE at once (no KO, no finisher): Knockout.killByEnvironment(cause), the
+--     kill feed says "<name> was hit by a train";
+--   • otherwise they are knocked down (limp) for `knockdownTime` seconds and thrown at
+--     `velocity` (studs per second), then get up like after a tackle.
+-- Returns true if it hit them. Ignored for a model that is not a fighter, dead, in a duel,
+-- or in a finisher's cutscene (anchored, being finished).
+function Combat.environmentHit(
+	model: Model,
+	damage: number,
+	velocity: Vector3,
+	knockdownTime: number,
+	cause: Types.KillFeedKind
+): boolean
+	local state = states[model]
+	if state == nil or not isAlive(state) then
+		return false
+	end
+	local player = state.player
+	if
+		model:GetAttribute("DuelId") ~= nil or (player and player:GetAttribute("InDuel") == true)
+	then
+		return false
+	end
+	if Combat.isInCinematic(model) or model:GetAttribute("BeingFinished") == true then
+		return false
+	end
+	local protected = Knockout.isProtected(model)
+	local lethal = not protected
+		and (Knockout.isKnockedOut(model) or state.humanoid.Health - damage <= 0)
+	if lethal then
+		stopBlocking(state)
+		state.attackToken += 1 -- cancels a punch they were winding up
+		state.slipUntil = 0
+		-- limp first (the server then owns the body), thrown, then dead (Knockout keeps the
+		-- ragdoll on: a dead body always goes limp)
+		Ragdoll.enable(model)
+		state.root.AssemblyLinearVelocity = velocity
+		if Knockout.killByEnvironment(model, cause) then
+			return true
+		end
+		-- (Knockout refused, which should not happen after the checks above: don't leave
+		-- them limp forever, treat it as a plain knockdown instead)
+	end
+	if not protected and damage > 0 then
+		state.lastDamagedAt = now()
+		state.regenCarry = 0
+		-- (never 0 here: a lethal hit was handled above)
+		state.humanoid.Health = math.max(1, state.humanoid.Health - damage)
+		addFury(state, damage * KC.FURY_PER_DAMAGE_TAKEN)
+	end
+	knockDown(state, knockdownTime, velocity)
+	return true
 end
 
 -- The kit `model` fights with (keys 1–4, G). Unknown or not yet available

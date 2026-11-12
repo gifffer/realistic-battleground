@@ -198,6 +198,16 @@ local sounds: { [string]: SoundInfo } = {
 	-- A distant thunder rumble (one shot), heard 1 to 4 s after the flash. Put 2 or 3 different
 	-- ones: a random one plays each time, at a random volume between 60 and 100 %.
 	Thunder = { ids = {}, volume = 0.9, pitch = 1, pitchVariation = 0.08 },
+
+	-- Train (Server/Systems/Train, played by Client/Controllers/TrainController) -------------
+	-- In 3D, from the tunnel portal the train comes out of, then from the locomotive.
+	-- Empty = silent, the train still runs (and still hurts).
+	-- A loud diesel horn (one shot, 2-3 s): heard when the signals start blinking, and again
+	-- when the locomotive comes out of the tunnel.
+	TrainHorn = { ids = {}, volume = 1, pitch = 1, pitchVariation = 0.03 },
+	-- A heavy rolling / clattering LOOP (pick a seamless one): plays while the train is out,
+	-- louder the closer you are.
+	TrainRumble = { ids = {}, volume = 0.9, pitch = 1, pitchVariation = 0 },
 }
 
 return table.freeze(sounds)

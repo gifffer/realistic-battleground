@@ -1,17 +1,27 @@
 --!strict
--- CityDoors: the glass double doors of the city's shops (the bar, THREADBARE, REWIND...)
--- open by themselves when a player comes near, and close again when nobody is near.
+-- CityDoors: the doors of the city's shops.
+--
+-- Two kinds of doors:
+--   • GLASS doors (THREADBARE, REWIND, the bar's back door...): double doors that open by
+--     themselves when a player comes near, and close again when nobody is near.
+--   • SALOON doors (the main corner entrance of DUFFY'S bar): two waist-high swinging half
+--     doors, like in a western. They never block anyone: you just walk through, they swing
+--     open AWAY from you, and when you are gone they flap back past the middle a few times
+--     before settling (a damped spring).
 --
 -- How the doors are made (Server/Systems/City builds them from the generated data):
---   every part of a door leaf (frame, glass, push bars) has the tag "CityDoor" and these
---   attributes:
---     DoorGroup  string  the two leaves of one doorway share it ("B1_S_12"...)
+--   every part of a door leaf (frame, glass, push bars, louvres) has the tag "CityDoor" and
+--   these attributes:
+--     DoorGroup  string  the leaves of one doorway share it ("B1_S_12"...)
 --     HingeX     number  world X of the leaf's hinge line (a vertical line)
 --     HingeZ     number  world Z of the hinge line
---     OpenAngle  number  degrees to turn about that line when open (+90 or -90: always INTO
---                        the shop, so a door never swings into the street)
+--     OpenAngle  number  degrees to turn about that line when open. Glass doors: +90 or -90,
+--                        always INTO the shop, so a door never swings into the street.
+--                        Saloon doors: only its size is used (how far they swing, max 80°);
+--                        the direction is chosen each time (away from the person).
+--     DoorStyle  string  optional: "Saloon" for swinging half doors (anything else = glass)
 --
--- What this system does, every 0.15 seconds, for each doorway:
+-- GLASS doors, checked every 0.15 seconds:
 --   • someone's HumanoidRootPart within OPEN_RANGE studs of the doorway's centre → OPEN:
 --     the leaves stop colliding at once (nobody bumps into a moving door), then turn 90°.
 --   • nobody within OPEN_RANGE → CLOSE: the leaves turn back, then collide again.
@@ -20,41 +30,82 @@
 --     ragdoll's sprawled arms): a closing door never sweeps through a player.
 --     The leaves only collide again once closed AND if still nobody is near (a body flung
 --     into the doorway during the 0.35 s swing just walks through, then the door reopens).
--- A body flying through a CLOSED door in a knockback fight is just stopped by it (it collides).
--- No sound: Shared/Sounds has no door sound yet (add one there and play it in setOpen).
+--   A body flying through a CLOSED glass door in a knockback fight is just stopped by it.
+--
+-- SALOON doors (never collide):
+--   • every 0.1 s: is someone within SALOON_RANGE studs? If the doors are (almost) closed,
+--     the side of the doorway the nearest one stands on picks the swing direction: each
+--     leaf turns so that its free end moves AWAY from that person. That direction is kept
+--     while someone is near (walking through does not flip the doors into you).
+--   • every frame while the doors move: a spring pulls the swing angle towards its target
+--     (SALOON_OPEN when someone is near, 0 when not). It is under-damped: on its way back to
+--     0 it overshoots to the other side, and again, smaller each time, until it rests.
+--     A hinge stop holds the leaves at SALOON_STOP degrees (they bounce off it a little).
+--   • the parts are moved at most 30 times a second (each move replicates to every player)
+--     and not at all once the doors are at rest (closed, or held open).
+--
+-- No sound: Shared/Sounds has no door sound yet (add one and play it in setOpen / on a flap).
 -- Done on the server: anchored parts moved by the server replicate to every player.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local CityDoors = {}
 
 local TAG = "CityDoor"
-local CHECK_EVERY = 0.15 -- seconds between two checks
+local CHECK_EVERY = 0.15 -- seconds between two checks (glass doors)
 local OPEN_RANGE = 10 -- studs from the doorway's centre (flat distance)
 local HEIGHT_RANGE = 10 -- and at most this far above / below it
 local TWEEN_INFO = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
+-- Saloon doors.
+local SALOON_CHECK_EVERY = 0.1 -- seconds between two "is someone near?" checks
+local SALOON_RANGE = 6 -- studs from the doorway's centre (flat distance)
+local SALOON_HEIGHT_RANGE = 6
+local SALOON_OPEN = 80 -- degrees, the swing while someone is passing
+local SALOON_STOP = 86 -- degrees, the hinge stop (never further)
+local SALOON_STIFFNESS = 55 -- spring strength: higher = faster swings (period ≈ 2π/√k s)
+local SALOON_DAMPING = 3.4 -- friction: lower = more flaps before resting
+local SALOON_PUSH = 260 -- degrees per second given at once when pushed open (a shove)
+local SALOON_SEND_EVERY = 1 / 30 -- seconds between two moves of the parts
+local SALOON_REST_ANGLE = 0.4 -- degrees: below this (and slow), the doors are at rest
+local SALOON_REST_SPEED = 3 -- degrees per second
+
 type Leaf = {
 	part: BasePart,
 	closed: CFrame, -- where the part is when the door is closed (as built)
-	opened: CFrame, -- where it is when the door is open
+	opened: CFrame, -- where it is when the door is open (glass doors)
 	collides: boolean, -- its CanCollide when closed
+	hingeX: number,
+	hingeZ: number,
+	-- Saloon: +1 or -1, the way this part turns for the current swing direction.
+	sign: number,
 }
 
 type Door = {
 	leaves: { Leaf },
 	centre: Vector3, -- average position of the parts (closed)
+	saloon: boolean,
+	-- glass doors
 	isOpen: boolean,
 	passable: boolean, -- closed but not colliding yet (someone was near when it closed)
 	version: number, -- changes on every open / close (an old tween's callback is ignored)
+	-- saloon doors (degrees, degrees per second)
+	angle: number,
+	speed: number,
+	target: number,
+	awake: boolean, -- moving: updated every frame
+	sinceSend: number, -- seconds since the parts were last moved
 }
 
 local doors: { [string]: Door } = {}
+-- Saloon doors currently swinging (updated every frame).
+local awakeSaloons: { [Door]: boolean } = {}
 
--- The open CFrame of a part: turned by `angle` degrees about the vertical line (hingeX, hingeZ).
-local function openedCFrame(closed: CFrame, hingeX: number, hingeZ: number, angle: number): CFrame
+-- The CFrame of a part turned by `angle` degrees about the vertical line (hingeX, hingeZ).
+local function turnedCFrame(closed: CFrame, hingeX: number, hingeZ: number, angle: number): CFrame
 	local pivot = Vector3.new(hingeX, closed.Position.Y, hingeZ)
 	local turn = CFrame.new(pivot) * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(-pivot)
 	return turn * closed
@@ -84,19 +135,39 @@ local function addPart(instance: Instance)
 		return
 	end
 	local openAngle = if typeof(angle) == "number" then angle else 90
+	local isSaloon = part:GetAttribute("DoorStyle") == "Saloon"
 	local door = doors[group]
 	if door == nil then
-		door =
-			{ leaves = {}, centre = part.Position, isOpen = false, passable = false, version = 0 }
+		door = {
+			leaves = {},
+			centre = part.Position,
+			saloon = isSaloon,
+			isOpen = false,
+			passable = false,
+			version = 0,
+			angle = 0,
+			speed = 0,
+			target = 0,
+			awake = false,
+			sinceSend = 0,
+		}
 		doors[group] = door
+	end
+	if isSaloon then
+		door.saloon = true
+		-- swinging half doors never block anyone (you walk through them)
+		part.CanCollide = false
 	end
 	-- (a part tagged while its door is open would be recorded open: doors start closed, and
 	-- the City is built before any player reaches a door, so this does not happen)
 	table.insert(door.leaves, {
 		part = part,
 		closed = part.CFrame,
-		opened = openedCFrame(part.CFrame, hingeX, hingeZ, openAngle),
+		opened = turnedCFrame(part.CFrame, hingeX, hingeZ, openAngle),
 		collides = part.CanCollide,
+		hingeX = hingeX,
+		hingeZ = hingeZ,
+		sign = 1,
 	})
 	recomputeCentre(door)
 end
@@ -126,16 +197,32 @@ local function rootPositions(): { Vector3 }
 	return positions
 end
 
-local function isSomeoneNear(door: Door, positions: { Vector3 }): boolean
+-- The nearest position within (range, heightRange) of the doorway's centre, or nil.
+local function nearest(
+	door: Door,
+	positions: { Vector3 },
+	range: number,
+	heightRange: number
+): Vector3?
+	local best: Vector3? = nil
+	local bestDistance = range
 	for _, position in positions do
 		local offset = position - door.centre
-		local flat = Vector3.new(offset.X, 0, offset.Z)
-		if flat.Magnitude <= OPEN_RANGE and math.abs(offset.Y) <= HEIGHT_RANGE then
-			return true
+		local flat = Vector3.new(offset.X, 0, offset.Z).Magnitude
+		if flat <= bestDistance and math.abs(offset.Y) <= heightRange then
+			best, bestDistance = position, flat
 		end
 	end
-	return false
+	return best
 end
+
+local function isSomeoneNear(door: Door, positions: { Vector3 }): boolean
+	return nearest(door, positions, OPEN_RANGE, HEIGHT_RANGE) ~= nil
+end
+
+------------------------------------------------------------------------------
+-- Glass doors
+------------------------------------------------------------------------------
 
 -- Opens or closes one doorway.
 local function setOpen(door: Door, open: boolean)
@@ -169,9 +256,12 @@ local function setOpen(door: Door, open: boolean)
 	end
 end
 
-local function check()
+local function checkGlass()
 	local positions = rootPositions()
 	for _, door in doors do
+		if door.saloon then
+			continue
+		end
 		local near = isSomeoneNear(door, positions)
 		if near and not door.isOpen then
 			setOpen(door, true)
@@ -187,6 +277,128 @@ local function check()
 	end
 end
 
+------------------------------------------------------------------------------
+-- Saloon doors
+------------------------------------------------------------------------------
+
+-- Picks, for every part, the way it turns so that its leaf's free end moves AWAY from
+-- `from` (the person pushing). Turning a point by a small angle +a about a vertical line
+-- moves it along (d.Z, 0, -d.X), where d = point - hinge: if that points towards the
+-- person, the part must turn the other way (-1).
+local function chooseSwingSide(door: Door, from: Vector3)
+	local toPerson = from - door.centre
+	for _, leaf in door.leaves do
+		local d = leaf.closed.Position - Vector3.new(leaf.hingeX, 0, leaf.hingeZ)
+		local moves = Vector3.new(d.Z, 0, -d.X)
+		leaf.sign = if moves:Dot(toPerson) > 0 then -1 else 1
+	end
+end
+
+local function wake(door: Door)
+	if not door.awake then
+		door.awake = true
+		door.sinceSend = SALOON_SEND_EVERY -- move the parts on the next frame
+		awakeSaloons[door] = true
+	end
+end
+
+-- Moves the parts of a saloon door to its current angle (one call for all of them).
+local partsBuffer: { BasePart } = {}
+local cframesBuffer: { CFrame } = {}
+local function placeSaloon(door: Door)
+	table.clear(partsBuffer)
+	table.clear(cframesBuffer)
+	for _, leaf in door.leaves do
+		if leaf.part.Parent then
+			table.insert(partsBuffer, leaf.part)
+			table.insert(
+				cframesBuffer,
+				turnedCFrame(leaf.closed, leaf.hingeX, leaf.hingeZ, leaf.sign * door.angle)
+			)
+		end
+	end
+	if #partsBuffer > 0 then
+		workspace:BulkMoveTo(partsBuffer, cframesBuffer, Enum.BulkMoveMode.FireCFrameChanged)
+	end
+end
+
+local function checkSaloons()
+	local positions = rootPositions()
+	for _, door in doors do
+		if not door.saloon then
+			continue
+		end
+		local who = nearest(door, positions, SALOON_RANGE, SALOON_HEIGHT_RANGE)
+		if who then
+			if door.target == 0 then
+				-- a new push. If the doors are nearly closed, they open away from this person;
+				-- if they are still flapping, they keep their direction (no slap in the face)
+				if math.abs(door.angle) < 20 then
+					-- (all the leaves flip together: if the direction changes, the same
+					-- physical angle is the opposite number, so the doors don't jump)
+					local first = door.leaves[1]
+					local oldSign = if first then first.sign else 1
+					chooseSwingSide(door, who)
+					if first and first.sign ~= oldSign then
+						door.angle = -door.angle
+						door.speed = -door.speed
+					end
+					door.speed = math.max(door.speed, SALOON_PUSH)
+				end
+				door.target = SALOON_OPEN
+				wake(door)
+			end
+		elseif door.target ~= 0 then
+			door.target = 0 -- nobody: let them swing back
+			wake(door)
+		end
+	end
+end
+
+-- One frame of the spring for every swinging saloon door.
+local function stepSaloons(dt: number)
+	-- (small steps: a long frame must not make the spring explode)
+	local steps = math.clamp(math.ceil(dt / (1 / 120)), 1, 8)
+	local h = dt / steps
+	for door in awakeSaloons do
+		for _ = 1, steps do
+			local accel = -SALOON_STIFFNESS * (door.angle - door.target)
+				- SALOON_DAMPING * door.speed
+			door.speed += accel * h
+			door.angle += door.speed * h
+			-- the hinge stop, on both sides: bounce back a little
+			if door.angle > SALOON_STOP then
+				door.angle = SALOON_STOP
+				door.speed = -math.abs(door.speed) * 0.3
+			elseif door.angle < -SALOON_STOP then
+				door.angle = -SALOON_STOP
+				door.speed = math.abs(door.speed) * 0.3
+			end
+		end
+		-- at rest (closed, or held open by someone standing in the doorway): stop updating
+		-- until the target changes (checkSaloons wakes it up)
+		local resting = math.abs(door.angle - door.target) < SALOON_REST_ANGLE
+			and math.abs(door.speed) < SALOON_REST_SPEED
+		if resting then
+			door.angle = door.target
+			door.speed = 0
+			door.awake = false
+			awakeSaloons[door] = nil
+			placeSaloon(door) -- exactly there
+			continue
+		end
+		door.sinceSend += dt
+		if door.sinceSend >= SALOON_SEND_EVERY then
+			door.sinceSend = 0
+			placeSaloon(door)
+		end
+	end
+end
+
+------------------------------------------------------------------------------
+-- Lifecycle
+------------------------------------------------------------------------------
+
 function CityDoors.start()
 	-- the City builds its parts in the background: take the ones already tagged, then the
 	-- ones tagged later
@@ -195,9 +407,16 @@ function CityDoors.start()
 	end
 	CollectionService:GetInstanceAddedSignal(TAG):Connect(addPart)
 	CollectionService:GetInstanceRemovedSignal(TAG):Connect(removePart)
+	RunService.Heartbeat:Connect(stepSaloons)
+	task.spawn(function()
+		while true do
+			task.wait(SALOON_CHECK_EVERY)
+			checkSaloons()
+		end
+	end)
 	while true do
 		task.wait(CHECK_EVERY)
-		check()
+		checkGlass()
 	end
 end
 

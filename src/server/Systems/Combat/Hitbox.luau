@@ -55,7 +55,8 @@ function Hitbox.query(
 		local model = part:FindFirstAncestorOfClass("Model")
 		if model then
 			local parts = partsByModel[model]
-			if parts == nil then
+			-- (The city's NPCs — shopkeepers, bar patrons — are never targets: attribute Npc.)
+			if parts == nil and model:GetAttribute("Npc") ~= true then
 				local humanoid = model:FindFirstChildOfClass("Humanoid")
 				if humanoid and humanoid.Health > 0 then
 					parts = {}

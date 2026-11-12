@@ -407,4 +407,44 @@ return table.freeze({
 		-- workspace:SetAttribute("WeatherForce", "Rain")   ("Rain", "Storm", "Fog", "PowerCut").
 		STUDIO_FAST = true,
 	}),
+
+	-- The freight train that crosses the railway viaduct (Server/Systems/Train decides when,
+	-- every client draws its own copy: Client/Controllers/TrainController). It comes out of a
+	-- tunnel portal at one end of the viaduct and goes into the other one.
+	-- Times in seconds, distances in studs.
+	Train = table.freeze({
+		-- The first train comes this long after the city is built.
+		FIRST_PASS = NumberRange.new(40, 70),
+		-- Time between the end of a pass and the start of the next one.
+		INTERVAL = NumberRange.new(70, 130),
+		SPEED = 70, -- studs per second (crossing the ~250-stud viaduct takes about 4 s)
+		-- Total length of the train: locomotive + 2 cars (must match the model the client
+		-- builds in TrainController; it is published to the clients as TrainLength).
+		LENGTH = 72,
+		-- The train's box, for hits: half its width and its height above the rail top.
+		HALF_WIDTH = 4.2,
+		HEIGHT = 10,
+		-- Signals blink, the horn sounds and the ground starts to rumble this long before
+		-- the locomotive comes out of the tunnel.
+		WARN_TIME = 5,
+
+		-- Getting hit (once per pass, per fighter).
+		DAMAGE = 60,
+		KNOCKDOWN_TIME = 2.6, -- seconds on the ground (limp) after the hit
+		-- The body is thrown: forward with the train (× the train's speed), sideways off the
+		-- track and up.
+		FLING_FORWARD = 0.7,
+		FLING_SIDE = 55,
+		FLING_UP = 38,
+
+		-- Client: camera rumble for players this close to the track (it grows as the train
+		-- gets closer) and its strongest shake (1 = 0.1 stud).
+		SHAKE_RANGE = 60,
+		SHAKE_MAX = 2.2,
+
+		-- Studio only: the first train comes after 15 s and then every 35 s, to test.
+		-- You can also force one: in the Studio command bar (server), type
+		-- workspace:SetAttribute("TrainForce", true)
+		STUDIO_FAST = true,
+	}),
 })
