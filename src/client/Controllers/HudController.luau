@@ -680,7 +680,7 @@ local function formatNumber(value: number): string
 end
 
 local function isMajor(kind: Types.RewardKind): boolean
-	return kind == "Kill" or kind == "Assist"
+	return kind == "Kill" or kind == "Assist" or kind == "Quest"
 end
 
 local function reasonWord(kind: Types.RewardKind, xp: number): string
@@ -690,6 +690,8 @@ local function reasonWord(kind: Types.RewardKind, xp: number): string
 		return "ASSIST"
 	elseif kind == "Damage" then
 		return "DAMAGE"
+	elseif kind == "Quest" then
+		return "QUEST"
 	end
 	return "PLAYTIME"
 end
@@ -860,12 +862,19 @@ local function buildRewardRow(kind: Types.RewardKind, xp: number, coins: number)
 	return row
 end
 
+local pendingQuests: { { xp: number, coins: number } } = {}
+
 local function showReward(kind: Types.RewardKind, xp: number, coins: number)
 	touched() -- a reward brings the faded vitals back
 	-- Nothing new while the HUD is hidden (knocked out, menu) or the
 	-- scoreboard is held: those rewards are not replayed later (the XP line
 	-- still updates from the save).
 	if not gui.Enabled or rewardsHidden then
+		-- A completed daily quest is worth showing later: kept until the
+		-- HUD is back (see flushPendingQuests).
+		if kind == "Quest" then
+			table.insert(pendingQuests, { xp = xp, coins = coins })
+		end
 		return
 	end
 
@@ -898,12 +907,30 @@ local function showReward(kind: Types.RewardKind, xp: number, coins: number)
 	scheduleExit(row)
 end
 
+-- Quest completions that happened while the HUD was hidden, shown now.
+local function flushPendingQuests()
+	if #pendingQuests == 0 or not gui.Enabled or rewardsHidden then
+		return
+	end
+	local list = pendingQuests
+	pendingQuests = {}
+	for _, reward in list do
+		showReward("Quest", reward.xp, reward.coins)
+	end
+end
+
 local function onProgress(kind: unknown, xp: unknown, coins: unknown)
-	-- Only these four kinds get a line. Duel rewards ("DuelWin", "DuelLoss",
+	-- Only these kinds get a line (+ "Quest": a daily quest completed). Duel rewards ("DuelWin", "DuelLoss",
 	-- "RankedWin", "RankedLoss") are left out on purpose: the duel result
 	-- screen shows them.
 	if
-		(kind ~= "Kill" and kind ~= "Assist" and kind ~= "Damage" and kind ~= "Playtime")
+		(
+			kind ~= "Kill"
+			and kind ~= "Assist"
+			and kind ~= "Damage"
+			and kind ~= "Playtime"
+			and kind ~= "Quest"
+		)
 		or typeof(xp) ~= "number"
 		or typeof(coins) ~= "number"
 		or xp ~= xp -- NaN
@@ -989,6 +1016,9 @@ function HudController.start()
 		updateIdle()
 		if bleeding then
 			updateBleeding(false)
+		end
+		if #pendingQuests > 0 then
+			flushPendingQuests()
 		end
 	end)
 
