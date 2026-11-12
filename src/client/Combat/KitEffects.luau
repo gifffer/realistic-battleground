@@ -677,32 +677,58 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 	if part == nil or not part:IsA("BasePart") then
 		return
 	end
-	local point, toward = impactPoint(part, attacker)
+	local _, toward = impactPoint(part, attacker)
 	local much = (amount or 1) * (if zone == "Head" then 1.25 else 1)
-	-- out of the wound, away from the blow (and up: it's thrown)
-	Blood.spray(point, -toward + Vector3.new(0, 0.35, 0), much, victim)
-	-- a little spatter back at the attacker
-	Blood.spray(point, toward + Vector3.new(0, 0.5, 0), much * 0.25, victim)
-	-- the wound: blood on the skin / clothes there
-	Blood.splat(point, toward, 0.22 + 0.06 * much, Vector3.new(0, -3, 0), part)
-	-- the fist that did it, bloody (the closest hand of the attacker)
+	-- The wound, on the real skin facing the blow (the classic head is
+	-- round, 0.6 across; its part is a wider box).
+	local point: Vector3
+	local normal = toward
+	if part.Name == "Head" then
+		point = part.Position + toward * 0.62
+	else
+		local only = RaycastParams.new()
+		only.FilterType = Enum.RaycastFilterType.Include
+		only.FilterDescendantsInstances = { part }
+		local hit = workspace:Raycast(part.Position + toward * 4, -toward * 4, only)
+		point = if hit then hit.Position else part.Position + toward * 0.5
+		normal = if hit then hit.Normal else toward
+	end
+	local random = Random.new()
+	local side = toward:Cross(Vector3.yAxis)
+	local out = point + normal * 0.08 -- (just outside the skin, not inside the body)
+	-- most of it thrown back out of the struck skin, up and fanned sideways
+	Blood.spray(
+		out,
+		normal + side * random:NextNumber(-1, 1) + Vector3.new(0, 0.6, 0),
+		much * 0.8,
+		victim
+	)
+	-- some carried along the blow, along the skin
+	Blood.spray(
+		out,
+		side * (if random:NextNumber() < 0.5 then 1 else -1) - toward * 0.3 + Vector3.new(0, 0.4, 0),
+		much * 0.35,
+		victim,
+		true
+	)
+	-- the wound itself: blood on the skin / clothes there
+	Blood.splat(point, normal, 0.22 + 0.06 * much, Vector3.new(0, -3, 0), part)
+	-- the fist (or foot) that did it, bloody: its end, if it's close
 	local best: BasePart? = nil
+	local bestDistance = math.huge
 	for _, name in { "Right Arm", "Left Arm", "Right Leg", "Left Leg" } do
 		local limb = attacker:FindFirstChild(name)
 		if limb and limb:IsA("BasePart") then
-			local tip = (limb.CFrame * CFrame.new(0, -0.9, 0)).Position
-			if
-				best == nil
-				or (tip - point).Magnitude
-					< ((best.CFrame * CFrame.new(0, -0.9, 0)).Position - point).Magnitude
-			then
-				best = limb
+			local tip = (limb.CFrame * CFrame.new(0, -limb.Size.Y / 2, 0)).Position
+			local distance = (tip - point).Magnitude
+			if distance < bestDistance then
+				best, bestDistance = limb, distance
 			end
 		end
 	end
-	if best and Random.new():NextNumber() < 0.6 then
-		local tip = best.CFrame * CFrame.new(0, -0.85, -0.5)
-		Blood.splat(tip.Position, tip.LookVector, 0.18 + 0.04 * much, Vector3.zero, best)
+	if best and bestDistance < 3 and random:NextNumber() < 0.6 then
+		local tip = (best.CFrame * CFrame.new(0, -best.Size.Y / 2, 0)).Position
+		Blood.splat(tip, -best.CFrame.UpVector, 0.16 + 0.04 * much, Vector3.zero, best)
 	end
 end
 

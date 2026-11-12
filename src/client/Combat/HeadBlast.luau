@@ -67,8 +67,11 @@ end
 -- Out of sight for good (Transparency, not LocalTransparencyModifier: the
 -- bruise marks of Wounds reset that one).
 local function hide(item: Instance)
-	if item:IsA("BasePart") or item:IsA("Decal") then
-		(item :: any).Transparency = 1
+	if item:IsA("BasePart") then
+		item.Transparency = 1
+		item.CanQuery = false -- (blood falls through it, not on it)
+	elseif item:IsA("Decal") then
+		item.Transparency = 1
 	elseif item:IsA("SurfaceGui") then
 		item.Enabled = false
 	end
@@ -159,7 +162,7 @@ local function mark(
 	piece.Transparency = 0.05
 	-- (each new one a hair higher: no flicker where they overlap)
 	markCount += 1
-	local lift = 0.012 + (markCount % 12) * 0.002
+	local lift = 0.066 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
 	local up = hit.Normal
 	if length and along and along.Magnitude > 1e-3 then
 		local forward = (along - up * along:Dot(up)).Unit
@@ -251,7 +254,7 @@ local function blot(
 	if forward.Magnitude < 1e-3 then
 		forward = Vector3.new(1, 0, 0)
 	end
-	local lift = 0.006 + (markCount % 12) * 0.002
+	local lift = 0.064 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
 	-- (the kit's X along `forward`, its Y along the floor's normal)
 	local right = forward.Unit
 	part.CFrame = CFrame.fromMatrix(hit.Position + up * lift, right, up) * layer.offset.Rotation
@@ -330,6 +333,14 @@ local function welded(part: BasePart, to: BasePart, cframe: CFrame, parent: Inst
 	weld.Part1 = part
 	weld.Parent = part
 	part.Parent = parent
+end
+
+-- Shown round (a sphere mesh filling the part): unlike a Ball part, it
+-- can be squashed (Squish).
+local function roundMesh(part: BasePart)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = part
 end
 
 local function newPart(name: string, size: Vector3, color: Color3, wet: boolean): Part
@@ -606,7 +617,7 @@ local function pump(model: Model, mouth: Attachment, random: Random)
 			emitter.Speed = NumberRange.new(3 + 6 * fade, 6 + 9 * fade)
 			emitter.Rate = 160 * fade -- a spurt
 			-- (thick blood: real drops and strings with each beat)
-			local up = mouth.WorldCFrame.LookVector
+			local up = mouth.WorldCFrame.UpVector -- (out of the neck, like the spurts)
 			Blood.spray(mouth.WorldPosition, up + Vector3.new(0, 0.6, 0), 1.2 * fade + 0.4, model)
 			task.wait(0.14)
 			emitter.Rate = 10 * fade -- between two
@@ -711,10 +722,10 @@ local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: 
 			if random:NextNumber() < 0.65 then BRAIN else BRAIN_BLOODY,
 			true
 		)
-		lump.Shape = Enum.PartType.Ball
+		roundMesh(lump) -- (a Ball part can't be squashed: a sphere mesh can)
 		if random:NextNumber() < 0.5 then
 			local more = newPart("Brain", Vector3.new(size, size, size) * 0.7, BRAIN, true)
-			more.Shape = Enum.PartType.Ball
+			roundMesh(more) -- (a Ball part can't be squashed: a sphere mesh can)
 			stuck(lump, more, CFrame.new(size * 0.4, 0, size * 0.2))
 		end
 		fly(lump, at, outward(random, away, 1.1, 15), random)
@@ -722,9 +733,9 @@ local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: 
 	end
 	-- An eye.
 	local eye = newPart("Eye", Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(238, 234, 226), true)
-	eye.Shape = Enum.PartType.Ball
+	roundMesh(eye) -- (a Ball part can't be squashed: a sphere mesh can)
 	local iris = newPart("Iris", Vector3.new(0.09, 0.09, 0.09), Color3.fromRGB(40, 32, 28), true)
-	iris.Shape = Enum.PartType.Ball
+	roundMesh(iris) -- (a Ball part can't be squashed: a sphere mesh can)
 	stuck(eye, iris, CFrame.new(0, 0, -0.07))
 	local nerve = newPart("Nerve", Vector3.new(0.04, 0.04, 0.22), FLESH, true)
 	stuck(eye, nerve, CFrame.new(0, 0, 0.18))
@@ -777,11 +788,12 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 				part.Parent = workspace
 				Debris:AddItem(part, PIECE_LIFETIME)
 				if soft == "Brain" then
+					-- (its surface detail first: then it squashes with it)
+					Squish.detail(part, "Brain")
 					Squish.soft(
 						part,
 						{ softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 }
 					)
-					Squish.detail(part, "Brain")
 				elseif soft == "Eye" then
 					Squish.soft(
 						part,
@@ -845,9 +857,11 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 
 	-- Real drops and thick strings of blood thrown out all around (they land
 	-- and splash on the floor, the walls, the attacker), more away from him.
-	Blood.spray(at, Vector3.new(0, 1, 0) + away, 7, model)
-	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 4, model)
-	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 2.5, model)
+	-- (kept under the shared cap of drops in flight; the haze is the
+	-- burst's own mist below)
+	Blood.spray(at, Vector3.new(0, 1, 0) + away, 4, model, true)
+	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 2.5, model, true)
+	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 1.5, model, true)
 	-- In the air: a spray of fine drops, and a red mist.
 	local point = Instance.new("Attachment")
 	point.WorldPosition = at

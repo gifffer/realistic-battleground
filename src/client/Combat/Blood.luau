@@ -18,7 +18,7 @@
 --     the next seconds, then fades out a long while later.
 --   • A fine red MIST hangs a moment in the air on hard blows.
 --
---   Blood.spray(point, direction, amount, source)  a wound opening: drops
+--   Blood.spray(point, direction, amount, source, noMist?)  a wound opening: drops
 --       (and strands if amount >= 1) out of `point` along `direction`;
 --       `amount` 1 = a punch that cuts, 2-3 = a heavy blow, 5+ = gore.
 --   Blood.splat(position, normal, size, velocity?, onto?)  a splash on a
@@ -43,7 +43,9 @@ Blood.DRY = Color3.fromRGB(48, 6, 6) -- dried
 
 local MAX_DROPS = 220 -- flying at once
 local MAX_STRANDS = 24
-local MAX_SPLATS = 420 -- pieces of blood on surfaces at once (oldest go)
+local MAX_SPLATS = 1400 -- pieces of blood on floors / walls at once (oldest fade out)
+local MAX_BODY_SPLATS = 220 -- on bodies (their own list: floor spam never takes them)
+local MAX_NEW_PER_FRAME = 90 -- new pieces a frame, at most (the rest is skipped)
 local FLOOR_LIFETIME = 45 -- seconds a splat stays (fading the last third)
 local BODY_LIFETIME = 35
 local DRY_TIME = 14 -- seconds to darken and lose its shine
@@ -95,14 +97,22 @@ end
 ------------------------------------------------------------------------------
 
 local splats: { BasePart } = {}
+local bodySplats: { BasePart } = {}
 local layer = 0 -- each new piece a hair higher: no flicker where they overlap
+local madeThisFrame = 0
+RunService.Heartbeat:Connect(function()
+	madeThisFrame = 0
+end)
 
-local function keep(piece: BasePart, lifetime: number)
-	table.insert(splats, piece)
-	if #splats > MAX_SPLATS then
-		local oldest = table.remove(splats, 1)
-		if oldest then
-			oldest:Destroy()
+local function keep(piece: BasePart, lifetime: number, onBody: boolean)
+	local list = if onBody then bodySplats else splats
+	table.insert(list, piece)
+	if #list > (if onBody then MAX_BODY_SPLATS else MAX_SPLATS) then
+		local oldest = table.remove(list, 1)
+		if oldest and oldest.Parent then
+			-- (faded out, not popped)
+			TweenService:Create(oldest, TweenInfo.new(0.3), { Transparency = 1 }):Play()
+			Debris:AddItem(oldest, 0.35)
 		end
 	end
 	-- wet → dry
@@ -129,18 +139,40 @@ local function puddle(
 	color: Color3,
 	onto: BasePart?,
 	lifetime: number
-): Part
-	layer = (layer + 1) % 16
-	local lift = 0.012 + layer * 0.0016
+): Part?
+	if madeThisFrame >= MAX_NEW_PER_FRAME then
+		return nil
+	end
+	-- On a body part: only if it lies on it (not hanging past its edge).
+	if onto then
+		local l = onto.CFrame:PointToObjectSpace(at)
+		local h = onto.Size / 2
+		local r = math.max(width, length) * 0.5
+		local ln = onto.CFrame:VectorToObjectSpace(normal)
+		local function inside(value: number, extent: number, facing: number): boolean
+			-- (along the face's normal it may sit on the face itself)
+			return math.abs(facing) > 0.7 or math.abs(value) + r * 0.6 <= extent + 0.02
+		end
+		if not (inside(l.X, h.X, ln.X) and inside(l.Y, h.Y, ln.Y) and inside(l.Z, h.Z, ln.Z)) then
+			return nil
+		end
+	end
+	madeThisFrame += 1
+	layer = (layer + 1) % 64
+	local lift = 0.012 + layer * 0.0008
 	local forward = along - normal * along:Dot(normal)
 	if forward.Magnitude < 1e-3 then
 		forward = normal:Cross(Vector3.new(0.37, 0.71, 0.6))
 	end
 	forward = forward.Unit
 	local side = normal:Cross(forward)
-	-- (a cylinder: its axis X along the normal; Y across, Z along)
+	-- (a flattened sphere mesh - a true ellipse, a cylinder would stay
+	-- round: X along the normal, Y across, Z along)
 	local piece = newPiece("Blood", Vector3.new(0.01, width, length), color)
-	piece.Shape = Enum.PartType.Cylinder
+	piece.Archivable = false -- (copies of a body don't copy its blood)
+	local disc = Instance.new("SpecialMesh")
+	disc.MeshType = Enum.MeshType.Sphere
+	disc.Parent = piece
 	piece.CFrame = CFrame.fromMatrix(at + normal * lift, normal, side)
 	if onto then
 		piece.Anchored = false
@@ -149,10 +181,11 @@ local function puddle(
 		weld.Part0 = onto
 		weld.Part1 = piece
 		weld.Parent = piece
-		local holder = onto:FindFirstChild("Blood")
-		if holder == nil then
+		local holder = onto:FindFirstChild("BloodSplats")
+		if holder == nil or not holder:IsA("Folder") then
 			local made = Instance.new("Folder")
-			made.Name = "Blood"
+			made.Name = "BloodSplats"
+			made.Archivable = false
 			made.Parent = onto
 			holder = made
 		end
@@ -160,7 +193,7 @@ local function puddle(
 	else
 		piece.Parent = folder
 	end
-	keep(piece, lifetime)
+	keep(piece, lifetime, onto ~= nil)
 	return piece
 end
 
@@ -182,10 +215,17 @@ local function run(
 	down = down.Unit
 	local length = random:NextNumber(0.3, 1.6) * math.clamp(width * 4, 0.6, 2)
 	local time = length * random:NextNumber(1.5, 3)
-	local trail = puddle(at, normal, down, width * 0.45, 0.02, color, onto, lifetime)
-	trail.Shape = Enum.PartType.Block
-	trail.Size = Vector3.new(0.01, width * 0.45, 0.02)
+	local trail: Part? = puddle(at, normal, down, width * 0.45, 0.02, color, onto, lifetime)
 	local bead = puddle(at, normal, down, width * 0.7, width * 0.85, color, onto, lifetime)
+	if trail == nil or bead == nil then
+		return
+	end
+	-- (the trail itself a straight band, not an ellipse)
+	local mesh = trail:FindFirstChildOfClass("SpecialMesh")
+	if mesh then
+		mesh:Destroy()
+	end
+	trail.Size = Vector3.new(0.01, width * 0.45, 0.02)
 	local base = trail.CFrame
 	local beadBase = bead.CFrame
 	local started = os.clock()
@@ -218,19 +258,24 @@ function Blood.splat(
 	onto: BasePart?
 )
 	local body = if onto then isBody(onto) else nil
-	local stuckTo = if body then onto else nil
+	-- (stuck to a body, or to anything that moves: it goes with it)
+	local stuckTo = if onto and (body ~= nil or not onto.Anchored) then onto else nil
 	local lifetime = if body then BODY_LIFETIME else FLOOR_LIFETIME
 	local v = velocity or Vector3.zero
 	local tangent = v - normal * v:Dot(normal)
 	local slide = tangent.Magnitude
 	local along = if slide > 1e-3 then tangent.Unit else normal:Cross(Vector3.new(0.6, 0.37, 0.71))
+	if slide <= 1e-3 then
+		along = if along.Magnitude > 1e-3 then along.Unit else normal:Cross(Vector3.xAxis).Unit
+	end
 	local across = normal:Cross(along)
 	if across.Magnitude > 1e-3 then
 		across = across.Unit
 	end
 	local fresh = Blood.FRESH:Lerp(Blood.DARK, random:NextNumber(0, 0.5))
 	-- 1. the blob: a few overlapping round puddles, the middle darker
-	for index = 1, math.clamp(math.floor(size * 6), 2, 5) do
+	-- (a small drop: one puddle; a big splash: up to 5)
+	for index = 1, math.clamp(math.floor(size * 6), 1, 5) do
 		local offset = along * random:NextNumber(-0.25, 0.25) * size
 			+ across * random:NextNumber(-0.25, 0.25) * size
 		local d = size * random:NextNumber(0.45, 0.85) * (1 - index * 0.06)
@@ -246,7 +291,7 @@ function Blood.splat(
 		)
 	end
 	-- 2. a fast drop leaves a streak with a drop at its end (the "!")
-	if slide > 5 and size > 0.06 then
+	if slide > 5 and size > 0.15 then
 		local length = size * math.clamp(slide / 9, 1.2, 4)
 		puddle(
 			position + along * length * 0.45,
@@ -270,7 +315,10 @@ function Blood.splat(
 		)
 	end
 	-- 3. satellites thrown out around it, more ahead
-	for _ = 1, math.clamp(math.floor(size * 30), 2, 9) do
+	-- (only a big drop landing hard throws satellites)
+	local impact = math.clamp((v.Magnitude - 8) / 20, 0, 1)
+	local satellites = if size < 0.12 then 0 else math.min(9, math.floor(size * 30 * impact))
+	for _ = 1, satellites do
 		local ahead = if slide > 2 then random:NextNumber(0, 1.6) else random:NextNumber(-1, 1)
 		local offset = along * ahead * size * 1.5 + across * random:NextNumber(-1, 1) * size * 1.1
 		local d = size * random:NextNumber(0.08, 0.22)
@@ -425,7 +473,11 @@ local function step(dt: number)
 		table.insert(
 			frames,
 			if speed > 0.1
-				then CFrame.lookAt(drop.position, drop.position + drop.velocity)
+				then CFrame.lookAt(
+					drop.position,
+					drop.position + drop.velocity,
+					if math.abs(drop.velocity.Unit.Y) > 0.99 then Vector3.xAxis else Vector3.yAxis
+				)
 				else CFrame.new(drop.position)
 		)
 		index += 1
@@ -486,6 +538,7 @@ RunService.Heartbeat:Connect(step)
 ------------------------------------------------------------------------------
 
 function Blood.mist(point: Vector3, direction: Vector3, amount: number)
+	local k = math.sqrt(math.min(amount, 2.5)) -- (a fine haze, never a red cloud)
 	local attachment = Instance.new("Attachment")
 	local d = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.yAxis
 	local up = if math.abs(d.Y) > 0.99 then Vector3.xAxis else Vector3.yAxis
@@ -495,13 +548,13 @@ function Blood.mist(point: Vector3, direction: Vector3, amount: number)
 	mist.Texture = SMOKE
 	mist.Color = ColorSequence.new(Blood.FRESH, Blood.DARK)
 	mist.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.2),
-		NumberSequenceKeypoint.new(0.3, 0.9 * math.sqrt(amount)),
-		NumberSequenceKeypoint.new(1, 1.6 * math.sqrt(amount)),
+		NumberSequenceKeypoint.new(0, 0.15),
+		NumberSequenceKeypoint.new(0.3, 0.45 * k),
+		NumberSequenceKeypoint.new(1, 0.8 * k),
 	})
 	mist.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.45),
-		NumberSequenceKeypoint.new(0.4, 0.75),
+		NumberSequenceKeypoint.new(0, 0.6),
+		NumberSequenceKeypoint.new(0.4, 0.82),
 		NumberSequenceKeypoint.new(1, 1),
 	})
 	mist.Speed = NumberRange.new(3, 10)
@@ -514,7 +567,7 @@ function Blood.mist(point: Vector3, direction: Vector3, amount: number)
 	mist.Rotation = NumberRange.new(0, 360)
 	mist.Rate = 0
 	mist.Parent = attachment
-	mist:Emit(math.floor(4 + 4 * amount))
+	mist:Emit(math.min(math.floor(4 + 3 * amount), 14))
 	Debris:AddItem(attachment, 1.2)
 end
 
@@ -530,7 +583,13 @@ local function cone(d: Vector3, spread: number): Vector3
 	)
 end
 
-function Blood.spray(point: Vector3, direction: Vector3, amount: number, source: Model?)
+function Blood.spray(
+	point: Vector3,
+	direction: Vector3,
+	amount: number,
+	source: Model?,
+	noMist: boolean?
+)
 	local d = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.yAxis
 	-- many small drops, a few big gobs
 	local count = math.floor(8 + 14 * amount)
@@ -552,7 +611,7 @@ function Blood.spray(point: Vector3, direction: Vector3, amount: number, source:
 			Blood.strand(point + d * 0.05, velocity, random:NextNumber(0.045, 0.08), source)
 		end
 	end
-	if amount >= 1.5 then
+	if amount >= 1.5 and not noMist then
 		Blood.mist(point, d, amount)
 	end
 end

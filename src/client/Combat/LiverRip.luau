@@ -147,7 +147,10 @@ local function newLiver(): BasePart
 	end
 	local lump = Instance.new("Part")
 	lump.Name = "Liver"
-	lump.Shape = Enum.PartType.Ball
+	-- (a sphere mesh, not a Ball part: it can be squashed)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = lump
 	lump.Size = Vector3.new(1, 0.5, 0.65)
 	lump.Material = Enum.Material.SmoothPlastic
 	lump.Color = LIVER
@@ -215,11 +218,8 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	weld.Part0 = arm
 	weld.Part1 = liver
 	weld.Parent = liver
-	-- soft and wet: it jiggles in his hand, slaps and slumps on the floor
-	Squish.soft(liver, { softness = 0.45, sag = 0.2, stiffness = 200, lifetime = LIFETIME })
-	Squish.detail(liver, "Liver")
 	-- dripping thick drops while he holds it
-	task.spawn(function()
+	task.defer(function() -- (once it is in the workspace, below)
 		while liver.Parent and liver:FindFirstChild("Held") do
 			Blood.drop(
 				liver.Position - Vector3.new(0, 0.3, 0),
@@ -235,6 +235,10 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	drops.EmissionDirection = Enum.NormalId.Bottom
 	drops.Speed = NumberRange.new(0.5, 2)
 	liver.Parent = workspace
+	-- soft and wet: it jiggles in his hand, slaps and slumps on the floor
+	-- (its surface detail first, in the workspace: then it squashes too)
+	Squish.detail(liver, "Liver")
+	Squish.soft(liver, { softness = 0.45, sag = 0.2, stiffness = 200, lifetime = LIFETIME })
 	held[attacker] = liver
 	attacker.Destroying:Once(function()
 		if held[attacker] == liver then
