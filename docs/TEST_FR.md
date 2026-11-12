@@ -371,15 +371,19 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 
 Équipe le kit dans le menu Kits (gratuits), puis teste sur un mannequin.
 
-### Sentinel (cape rouge courte, yeux qui brillent pendant le laser)
-- [ ] **1 — Heat Vision** : les yeux chauffent ~0,5 s, puis deux lasers partent tout droit là où il regardait au départ (ils ne suivent PAS la souris). Il est presque immobile pendant le tir. Il faut rester ~0,5 s dans le laser avant les premiers dégâts, puis ~3,5 dégâts toutes les 0,25 s. Le laser s'arrête sur les murs (traces brûlées au sol / sur le mur).
-- [ ] **2 — Thunder Clap** : bras écartés puis clap : anneaux d'onde de choc devant, poussière, la cible est renversée.
-- [ ] **3 — Skyfall** : saut très haut vers l'avant, atterrissage poing au sol : cratère, fissures, cailloux, onde de choc, l'écran tremble près de l'impact. Imblocable.
-- [ ] **4 — Haymaker** : grosse préparation (le poing se charge de lumière), impact avec flash et anneaux, gros recul.
+### Sentinel
+- [ ] **Look** : cape rouge en tissu simulé (elle pend, se balance, vole en arrière quand tu bouges, réagit au vent de la map et aux ondes de choc), fermoirs dorés + chaîne, emblème, yeux rouges lumineux.
+- [ ] **Vitesse** : il marche un peu plus lentement que les autres et ne peut pas sprinter.
+- [ ] **1 — Heat Vision** : 1 s de charge (les yeux s'allument, énergie aspirée, petits éclairs, son de charge), puis deux lasers tout droit là où il regardait au départ (ils ne suivent PAS la souris). Immobile pendant la charge et le tir, pas de dash. Il faut rester ~0,5 s dans le laser avant les dégâts. Pas de son quand ça touche : la peau se carbonise là où le laser touche (marques noires, fumée). Le laser traverse les joueurs mais s'arrête sur les murs (traînée en fusion puis carbonisée).
+- [ ] **2 — Thunder Clap** : éclairs dans les mains, puis clap : flash, sphère d'énergie, anneaux en cône, lignes d'air, éclairs, poussière poussée devant.
+- [ ] **3 — Skyfall** : impact au DÉCOLLAGE (cratère, fissures lumineuses, dalles soulevées, cailloux) + son, traînée en vol, poing qui se charge en descente, gros impact à l'ATTERRISSAGE + son, écran qui tremble.
+- [ ] **4 — Haymaker** : le poing se charge (énergie aspirée, éclairs), impact : flash, anneaux, lignes d'air, étincelles + son.
 
-### Bull (cornes de taureau)
-- [ ] **1 — Gore Charge** : il souffle de la vapeur par le nez, charge tête baissée (poussière tout du long), la cible saigne.
-- [ ] **2 — Horn Hook** : coup de tête vers le haut, la cible décolle.
-- [ ] **3 — Stampede** : il se cabre et frappe le sol : grosse onde de choc, fissures, cailloux ; ralentit les cibles autour. Imblocable.
-- [ ] **4 — Bull Toss** : attrape à la taille puis jette par-dessus sa tête.
+### Bull
+- [ ] **Look** : cornes courbées avec anneaux à la base, anneau doré dans le nez, vapeur qui sort du nez de temps en temps.
+- [ ] **Vitesse** : il marche plus vite que les autres.
+- [ ] **1 — Gore Charge** : son de charge, yeux rouges, il gratte le sol, puis charge : nuage de poussière, fissures à chaque pas, traînées sur les cornes. La cible saigne.
+- [ ] **2 — Horn Hook** : coup de cornes vers le haut : anneau d'air, colonne de poussière, la cible décolle.
+- [ ] **3 — Stampede** : il se cabre (cailloux qui flottent), puis frappe le sol : gros impact (dalles, fissures, poussière) + son ; ralentit les cibles autour. Imblocable.
+- [ ] **4 — Bull Toss** : son à l'attrapé ET au lancer, anneau d'air vers le haut au lancer.
 - [ ] Le finisher du Bull n'existe pas encore (finisher par défaut).
