@@ -8,7 +8,10 @@
 -- <Part>  "Head" / "Torso" / "LeftLeg" / "RightLeg" (/ "LeftArm" / "RightArm")
 -- <kind>  "Lac" = laceration (a bottle smashed on them), "Slash" = a cut
 --         from a broken bottle, "Tear" = torn open by a hand (the Boxer's
---         finisher: the liver torn out, only "L", torso only)
+--         finisher: the liver torn out, only "L", torso only), "Burn" =
+--         burnt through by the Sentinel's heat vision (the skin gone, charred
+--         at the edge, what's under it shows: the skull on the head, cooked
+--         muscle on the body; no bleeding: cauterized)
 -- <size>  "S" / "M" / "L" (grows when the same spot is hit again)
 -- x y z   where on the part (studs, in the part's space; the head: its
 --         round visible shape, radius ~0.6)
@@ -17,7 +20,7 @@
 
 local Gash = {}
 
-export type Kind = "Lac" | "Slash" | "Tear"
+export type Kind = "Lac" | "Slash" | "Tear" | "Burn"
 export type Size = "S" | "M" | "L"
 export type Data = {
 	kind: Kind,
@@ -77,7 +80,7 @@ function Gash.decode(text: unknown): Data?
 		return nil
 	end
 	local kind, size = fields[1], fields[2]
-	if kind ~= "Lac" and kind ~= "Slash" and kind ~= "Tear" then
+	if kind ~= "Lac" and kind ~= "Slash" and kind ~= "Tear" and kind ~= "Burn" then
 		return nil
 	end
 	if size ~= "S" and size ~= "M" and size ~= "L" then

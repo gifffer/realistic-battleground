@@ -1189,31 +1189,6 @@ local function onSkin(limb: BasePart, p: Vector3, margin: number?): (Vector3, Ve
 		Vector3.new(0, 0, side)
 end
 
-local function skinBall(
-	limb: BasePart,
-	folder: Instance,
-	at: Vector3,
-	size: number,
-	color: Color3
-): Part
-	local ball = newPart(Vector3.new(size, size * 0.55, size), color, Enum.Material.SmoothPlastic)
-	ball.Name = "Blister"
-	local shape = Instance.new("SpecialMesh")
-	shape.MeshType = Enum.MeshType.Sphere
-	shape.Parent = ball
-	ball.Reflectance = 0.22
-	ball.Transparency = 0.18
-	ball.Anchored = false
-	ball.Massless = true
-	ball.CFrame = limb.CFrame * CFrame.new(at)
-	local joint = Instance.new("WeldConstraint")
-	joint.Part0 = limb
-	joint.Part1 = ball
-	joint.Parent = ball
-	ball.Parent = folder
-	return ball
-end
-
 -- Thin smoke rising off a fresh burn for a few seconds.
 local function smoulder(limb: BasePart, at: Vector3, out: Vector3, time: number)
 	local point = Instance.new("Attachment")
@@ -1276,243 +1251,49 @@ local function skinOval(
 	return piece
 end
 
--- A laser burn, the way a beam this thin and this hot really burns: it
--- doesn't leave a round scorch, it CUTS.
---   • where it passed: a narrow groove, cauterized - black carbon down its
---     middle, its edges glowing orange for a moment, then cooling;
---   • along it, a pale rim of cooked flesh (coagulated, tan-white), then a
---     thin band of reddened skin;
---   • blisters here and there beside it;
---   • held on one spot, it bores in: a hole, raw red inside its charred
---     lip, getting deeper (darker, wider) the longer it stays;
---   • thin smoke rising off it for a few seconds.
--- The beam sweeping over someone draws the groove along its path (the
--- points of a body are joined while it stays on the same part).
-local CARBON = Color3.fromRGB(20, 15, 13)
-local COOKED = Color3.fromRGB(206, 178, 146) -- coagulated tissue at the rim
-local RAW_INSIDE = Color3.fromRGB(116, 18, 16)
-local MAX_BURN_PIECES = 320 -- per body
-local BLISTER = Color3.fromRGB(238, 226, 184)
-
-type Track = { limb: BasePart, at: Vector3, time: number, dwell: number, depth: number }
-local tracks: { [Model]: Track } = {}
-local burnPieces: { [Model]: number } = {}
-
-local function folderOf(limb: BasePart): Instance
-	local found = limb:FindFirstChild("Burns")
-	if found then
-		return found
+-- Where the beam touches a body: the skin glowing hot for a moment, smoke
+-- rising off it. (The burn itself - the skin burnt through, the skull or
+-- cooked muscle showing - is a "Burn" wound from the server, drawn by
+-- Gashes: the same for everyone, and it stays.)
+local lastGlow: { [Model]: number } = {}
+local function burn(body: Model, limb: BasePart, position: Vector3, _force: boolean?)
+	local now = os.clock()
+	if now - (lastGlow[body] or 0) < 0.1 then
+		return
 	end
-	local made = Instance.new("Folder")
-	made.Name = "Burns"
-	made.Parent = limb
-	return made
-end
-
--- Counts `count` more pieces on `body`; false past its cap (unless forced).
-local function room(body: Model, count: number, force: boolean?): boolean
-	local used = burnPieces[body]
-	if used == nil then
-		used = 0
+	if lastGlow[body] == nil then
 		body.Destroying:Once(function()
-			burnPieces[body] = nil
-			tracks[body] = nil
+			lastGlow[body] = nil
 		end)
 	end
-	if used + count > MAX_BURN_PIECES and not force then
-		return false
+	lastGlow[body] = now
+	local p, o = onSkin(limb, limb.CFrame:PointToObjectSpace(position), 0.06)
+	local folder: Instance? = limb:FindFirstChild("Burns")
+	if folder == nil then
+		local made = Instance.new("Folder")
+		made.Name = "Burns"
+		made.Parent = limb
+		folder = made
 	end
-	burnPieces[body] = used + count
-	return true
-end
-
--- The red, inflamed tint of this skin.
-local function inflamed(limb: BasePart): Color3
-	return limb.Color:Lerp(Color3.fromRGB(176, 52, 44), 0.6)
-end
-
--- One glowing edge, cooling.
-local function cooling(piece: BasePart, time: number)
-	animate(time, function(alpha)
-		piece.Color = EMBER:Lerp(LASER_DEEP, alpha)
-		piece.Transparency = 0.05 + 0.95 * alpha ^ 1.4
-	end, function()
-		piece:Destroy()
-	end)
-end
-
--- The groove from `a` to `b` (part space, both on the skin).
-local function groove(body: Model, limb: BasePart, a: Vector3, b: Vector3, force: boolean?)
-	local length = (b - a).Magnitude
-	local steps = math.clamp(math.ceil(length / 0.07), 1, 12)
-	if not room(body, steps * 3 + 2, force) then
-		return
-	end
-	local folder = folderOf(limb)
-	local halo = inflamed(limb)
-	local link = length / steps
-	for step = 1, steps do
-		local t = (step - 0.5) / steps
-		local p, o = onSkin(limb, a:Lerp(b, t), 0.04)
-		local along = b - a
-		-- (three layers from the outside in, each a chain of ovals along it)
-		skinOval(limb, folder, p + o * 0.006, o, along, 0.24, link * 1.8 + 0.06, halo, 0.8)
-		skinOval(limb, folder, p + o * 0.0075, o, along, 0.13, link * 1.6 + 0.04, COOKED, 0.38)
-		skinOval(limb, folder, p + o * 0.009, o, along, 0.06, link * 1.5 + 0.02, CARBON, 0.04)
-		if step % 2 == 1 then
-			local edge = skinOval(
-				limb,
-				folder,
-				p + o * 0.0105,
-				o,
-				along,
-				0.035,
-				link * 1.6,
-				EMBER,
-				0.05,
-				Enum.Material.Neon
-			)
-			cooling(edge, random:NextNumber(0.8, 1.4))
-		end
-	end
-	-- a blister beside it now and then
-	if random:NextNumber() < 0.35 then
-		local mid, o = onSkin(limb, a:Lerp(b, random:NextNumber()), 0.06)
-		local side = o:Cross(b - a)
-		side = if side.Magnitude > 1e-3 then side.Unit else Vector3.yAxis
-		local at = mid
-			+ side
-				* random:NextNumber(0.09, 0.13)
-				* (if random:NextNumber() < 0.5 then 1 else -1)
-		local p, out = onSkin(limb, at, 0.05)
-		skinBall(limb, folder, p + out * 0.008, random:NextNumber(0.045, 0.075), BLISTER)
-	end
-end
-
--- Where the beam first bites: a small charred hole, raw inside its lip.
-local function bore(
-	body: Model,
-	limb: BasePart,
-	p: Vector3,
-	o: Vector3,
-	depth: number,
-	force: boolean?
-)
-	if not room(body, 9, force) then
-		return
-	end
-	local folder = folderOf(limb)
-	local s = 0.1 + depth * 0.035 -- (wider and deeper the longer it stays)
-	local function spin(): Vector3
-		return o:Cross(random:NextUnitVector())
-	end
-	-- each layer a little off-centre and stretched its own way: an uneven
-	-- wound, not a target
-	local function nudge(amount: number): Vector3
-		local v = random:NextUnitVector() * s * amount
-		return v - o * v:Dot(o)
-	end
-	skinOval(
+	local glow = skinOval(
 		limb,
-		folder,
-		p + nudge(0.35) + o * 0.006,
+		folder :: Instance,
+		p + o * 0.01,
 		o,
-		spin(),
-		s * random:NextNumber(2.2, 2.8),
-		s * random:NextNumber(2.6, 3.2),
-		inflamed(limb),
-		0.8
-	)
-	skinOval(
-		limb,
-		folder,
-		p + nudge(0.2) + o * 0.0078,
-		o,
-		spin(),
-		s * random:NextNumber(1.5, 1.8),
-		s * random:NextNumber(1.7, 2.1),
-		COOKED,
-		0.42
-	)
-	skinOval(
-		limb,
-		folder,
-		p + nudge(0.12) + o * 0.0092,
-		o,
-		spin(),
-		s * random:NextNumber(1.1, 1.3),
-		s * random:NextNumber(1.25, 1.5),
-		CARBON,
-		0.08
-	)
-	-- charred flecks thrown around the lip
-	for _ = 1, 3 do
-		local q, n = onSkin(limb, p + nudge(1.1), 0.05)
-		skinOval(
-			limb,
-			folder,
-			q + n * 0.0095,
-			n,
-			spin(),
-			s * random:NextNumber(0.25, 0.45),
-			s * random:NextNumber(0.35, 0.6),
-			CARBON,
-			0.2
-		)
-	end
-	skinOval(
-		limb,
-		folder,
-		p + nudge(0.08) + o * 0.0106,
-		o,
-		spin(),
-		s * 0.75,
-		s * 0.9,
-		RAW_INSIDE:Lerp(CARBON, math.min(0.7, depth * 0.15)),
-		0.05
-	)
-	local lip = skinOval(
-		limb,
-		folder,
-		p + o * 0.012,
-		o,
-		spin(),
-		s * 1.0,
-		s * 1.15,
+		Vector3.yAxis,
+		0.22,
+		0.24,
 		EMBER,
 		0.1,
 		Enum.Material.Neon
 	)
-	cooling(lip, 1.2)
-end
-
--- The beam touching `limb` at `position` (world). `force`: always drawn
--- (a finisher's), past the cap.
-local function burn(body: Model, limb: BasePart, position: Vector3, force: boolean?)
-	local p, o = onSkin(limb, limb.CFrame:PointToObjectSpace(position), 0.06)
-	local now = os.clock()
-	local track = tracks[body]
-	if track and track.limb == limb and now - track.time < 0.35 then
-		local moved = (p - track.at).Magnitude
-		if moved < 0.07 then
-			-- held on one spot: it bores in deeper
-			track.dwell += now - track.time
-			track.time = now
-			if track.dwell > 0.3 then
-				track.dwell = 0
-				track.depth += 1
-				bore(body, limb, p, o, track.depth, force)
-			end
-			return
-		elseif moved < 1 then
-			groove(body, limb, track.at, p, force)
-			tracks[body] = { limb = limb, at = p, time = now, dwell = 0, depth = 0 }
-			return
-		end
-	end
-	-- first touch (or a jump): it bites in
-	bore(body, limb, p, o, 0, force)
-	smoulder(limb, p + o * 0.03, o, 3.5)
+	animate(0.5, function(alpha)
+		glow.Color = EMBER:Lerp(LASER_DEEP, alpha)
+		glow.Transparency = 0.1 + 0.9 * alpha
+	end, function()
+		glow:Destroy()
+	end)
+	smoulder(limb, p + o * 0.03, o, 1.5)
 	emit(limb.CFrame * p, {
 		texture = TEX.smoke,
 		color = Color3.fromRGB(70, 64, 60),
@@ -1525,7 +1306,6 @@ local function burn(body: Model, limb: BasePart, position: Vector3, force: boole
 		acceleration = Vector3.new(0, 3, 0),
 		count = 2,
 	})
-	tracks[body] = { limb = limb, at = p, time = now, dwell = 0, depth = 0 }
 end
 
 ------------------------------------------------------------------------------

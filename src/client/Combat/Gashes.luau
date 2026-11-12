@@ -70,6 +70,43 @@ local LOOKS: { [string]: Look } = {
 	},
 }
 
+-- A burn ("Burn": the Sentinel's heat vision) is the same hole in the
+-- skin, burnt: the skin's edge charred black, the burnt skin under it a
+-- leathery tan, the fat cooked, and at the bottom what was under the skin -
+-- the skull on the head, cooked muscle on the body. No blood (cauterized).
+local CHARRED = Color3.fromRGB(26, 19, 16)
+local BURN_LOOKS: { [string]: Look } = {
+	Lip = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
+	Dermis = {
+		color = Color3.fromRGB(176, 140, 104),
+		reflectance = 0.03,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Fat = {
+		color = Color3.fromRGB(176, 128, 58),
+		reflectance = 0.12,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Flesh = {
+		color = Color3.fromRGB(116, 42, 30),
+		reflectance = 0.08,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Muscle = {
+		color = Color3.fromRGB(96, 30, 22),
+		reflectance = 0.08,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Bone = {
+		color = Color3.fromRGB(214, 198, 168),
+		reflectance = 0.04,
+		material = Enum.Material.SmoothPlastic,
+	},
+}
+-- (the bottom of a burn on the head: the skull, a little scorched)
+local SKULL = Color3.fromRGB(206, 190, 160)
+local BURN_BACKING = Color3.fromRGB(58, 22, 14)
+
 local BACKING_COLOR = Color3.fromRGB(46, 4, 4) -- deep inside a cut
 local BACKING_DEPTH = 0.14 -- under the skin, below the deepest insert (0.115)
 
@@ -295,7 +332,9 @@ type Placed = {
 }
 
 local function shapeFor(data: Gash.Data, head: boolean): (string, WoundShapes.Shape?)
-	local name = data.kind .. data.size .. (if head then "_Head" else "")
+	-- (a burn uses the laceration's hole: ragged and round-ish)
+	local kind = if data.kind == "Burn" then "Lac" else data.kind
+	local name = kind .. data.size .. (if head then "_Head" else "")
 	return name, WoundShapes.shapes[name]
 end
 
@@ -947,11 +986,17 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		return
 	end
 	local origin = Vector3.new(cut.shape.index * WoundShapes.spacing, WoundShapes.markerDrop, 0)
+	local burnt = cut.data.kind == "Burn"
+	local onHead = cut.face == nil
 	for _, item in pieces do
 		local layer = string.match(item.Name, "_(%a+)$") or ""
-		local look = LOOKS[layer]
+		local look = if burnt then BURN_LOOKS[layer] else LOOKS[layer]
 		if look == nil then
-			continue
+			continue -- (a burn: no blood in it)
+		end
+		if burnt and onHead and layer == "Flesh" then
+			-- (on the head the skin is thin: under it, the skull)
+			look = { color = SKULL, reflectance = 0.04, material = Enum.Material.SmoothPlastic }
 		end
 		local relative = found.frame:ToObjectSpace(item.CFrame)
 		local position = relative.Position / found.unit - origin
@@ -978,7 +1023,9 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		local backing = Instance.new("Part")
 		backing.Name = "Backing"
 		backing.Size = Vector3.new(width / plates + 0.01, 2 * reachY + 0.06, 0.02)
-		backing.Color = BACKING_COLOR
+		backing.Color = if burnt
+			then (if onHead then SKULL:Lerp(CHARRED, 0.25) else BURN_BACKING)
+			else BACKING_COLOR
 		backing.Material = Enum.Material.SmoothPlastic
 		if cut.face == nil then
 			local radius = WoundShapes.headRadius

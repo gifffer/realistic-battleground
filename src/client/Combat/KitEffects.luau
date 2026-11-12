@@ -497,6 +497,9 @@ local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
 				or string.match(name, "^" .. Gash.SHARD_PREFIX .. "(%a+)_%d+$")
 			local partName = if key then Gash.PART_OF[key] else nil
 			local cut = Gash.decode(value)
+			if cut and cut.kind == "Burn" then
+				cut = nil -- (a burn doesn't bleed: cauterized)
+			end
 			local shard = if cut then nil else Gash.decodeShard(value)
 			local point = if cut then cut.point elseif shard then shard.point else nil
 			local part = if partName then model:FindFirstChild(partName) else nil

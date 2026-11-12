@@ -477,6 +477,76 @@ local function addGash(
 	end
 end
 
+-- Heat vision burning through the skin of `partName` where it touches
+-- (`world`): a "Burn" (Gashes draws the hole: charred edge, the skull or
+-- cooked muscle under it). The beam staying on the same spot makes that
+-- burn grow (S, M, L); a part full of wounds: the nearest burn grows.
+local BURN_MERGE = 0.35 -- studs
+local function addBurn(victim: Model, partName: string, world: Vector3)
+	if not INJ.SKIN_TEAR then
+		return
+	end
+	local part = victim:FindFirstChild(partName)
+	local key = Gash.KEY_OF[partName]
+	if part == nil or not part:IsA("BasePart") or key == nil then
+		return
+	end
+	-- On the skin: the round head's surface, or the side face it's on.
+	local p = part.CFrame:PointToObjectSpace(world)
+	local point: Vector3
+	if partName == "Head" then
+		local flat = Vector3.new(p.X, 0, p.Z)
+		flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+		point = flat * 0.6 + Vector3.new(0, math.clamp(p.Y, -0.25, 0.25), 0)
+	else
+		local half = part.Size / 2
+		if math.abs(p.X) / half.X > math.abs(p.Z) / half.Z then
+			point = Vector3.new(math.sign(p.X) * half.X, math.clamp(p.Y, -half.Y, half.Y), p.Z)
+		else
+			point = Vector3.new(p.X, math.clamp(p.Y, -half.Y, half.Y), math.sign(p.Z) * half.Z)
+		end
+	end
+	local free: number? = nil
+	local closest: number? = nil
+	local closestDistance = math.huge
+	for index = 1, Gash.MAX_PER_PART do
+		local old = Gash.decode(victim:GetAttribute(Gash.attribute(key, index)))
+		if old == nil then
+			free = free or index
+		else
+			local distance = (old.point - point).Magnitude
+			local near = old.kind == "Burn" and distance < BURN_MERGE
+			if (near or free == nil) and distance < closestDistance then
+				closest, closestDistance = index, distance
+			end
+		end
+	end
+	local attribute: string
+	local data: Gash.Data
+	if closest and (closestDistance < BURN_MERGE or free == nil) then
+		attribute = Gash.attribute(key, closest)
+		local old = Gash.decode(victim:GetAttribute(attribute))
+		if old == nil or (old.kind == "Burn" and old.size == "L") then
+			return -- (as deep as it gets)
+		end
+		data = old
+		data.kind = "Burn"
+		data.size = if old.kind == "Burn" then Gash.bigger(old.size) else old.size
+	elseif free then
+		attribute = Gash.attribute(key, free)
+		data = {
+			kind = "Burn",
+			size = "S",
+			point = point,
+			angle = random:NextNumber(-90, 90),
+			seed = random:NextInteger(1, 2 ^ 30),
+		}
+	else
+		return
+	end
+	setAttribute(victim, attribute, Gash.encode(data))
+end
+
 -- Bits of glass stuck in the skin ("Shard_<Part>_<n>", Shared/Util/Gash):
 -- a bottle bursting on someone leaves a few, often without a real cut.
 local function addShards(victim: CombatState, attacker: CombatState, zone: string, count: number)
@@ -1434,6 +1504,25 @@ local function startCinematic(
 		)
 	end
 
+	if cinematic.id == "Incinerate" then
+		-- the point-blank beam burning through the face (Shared/Finishers
+		-- "Incinerate": the beam from 1.55 s to the kill)
+		for step, offset in
+			{
+				Vector3.new(0, 0.05, -1),
+				Vector3.new(0.25, 0.12, -1),
+				Vector3.new(-0.25, 0, -1),
+				Vector3.new(0, 0.1, -1),
+			}
+		do
+			task.delay(1.65 + step * 0.28, function()
+				local head = target:FindFirstChild("Head")
+				if not over and head and head:IsA("BasePart") and state.attackToken == token then
+					addBurn(target, "Head", (head.CFrame * CFrame.new(offset)).Position)
+				end
+			end)
+		end
+	end
 	if cinematic.id == "Gore" then
 		-- the horns going in (Shared/Finishers "Gore" at 0.7 s)
 		task.delay(0.7, function()
@@ -2200,6 +2289,7 @@ function Combat.start()
 		aimZone = aimZone,
 		landingZone = landingZone,
 		addFury = addFury,
+		addBurn = addBurn,
 	})
 	Knockout.onGetUp(onGetUp)
 	Knockout.onKill(function(killer)

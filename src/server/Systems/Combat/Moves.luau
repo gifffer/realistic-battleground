@@ -66,6 +66,8 @@ export type Context = {
 		allowed: { string }
 	) -> Types.HitZone,
 	addFury: (state: CombatState, amount: number) -> (),
+	-- heat vision burning through the skin there (a "Burn" wound)
+	addBurn: (victim: Model, partName: string, world: Vector3) -> (),
 }
 
 local Moves = {}
@@ -265,6 +267,9 @@ end
 -- when it started (locked: it doesn't follow the aim), stopped by walls.
 -- Someone in it heats up; only after `warmup` seconds in it do the hits
 -- land, one every `tick`. Out of it, they cool down twice as fast.
+local burnParams = RaycastParams.new()
+burnParams.FilterType = Enum.RaycastFilterType.Include
+
 local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 	local c = context()
 	local beam = move.beam
@@ -334,7 +339,21 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 				if warmed >= beam.warmup then
 					local zone: Types.HitZone =
 						zoneFor(state, beam.hit, victimModel, partsByModel[victimModel], direction)
-					c.resolveHit(state, victim, specFor(beam.hit, zone, move.id))
+					if c.resolveHit(state, victim, specFor(beam.hit, zone, move.id)) then
+						-- where it touches them, it burns through the skin
+						burnParams.FilterDescendantsInstances = { victimModel }
+						local spot = workspace:Raycast(origin, direction * length, burnParams)
+						if spot then
+							local hit = spot.Instance
+							local name = hit.Name
+							if hit.Parent and hit.Parent:IsA("Accessory") then
+								name = "Head" -- (a hat, hair: the head under it)
+							elseif name == "HumanoidRootPart" then
+								name = "Torso"
+							end
+							c.addBurn(victimModel, name, spot.Position)
+						end
+					end
 				end
 			end
 		end
