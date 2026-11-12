@@ -31,7 +31,7 @@ local WoundShapes = {
 		Shell_FrameTorso = Vector3.new(-8, 0, 0),
 		Shell_FrameRight = Vector3.new(-11, 0, 0),
 		Shell_FrameLeft = Vector3.new(-13, 0, 0),
-	},
+	} :: { [string]: Vector3 },
 	shapes = {
 		LacS = {
 			index = 0,

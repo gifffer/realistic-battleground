@@ -444,12 +444,11 @@ FACES = {  # outward normal, picture "up" (as in Gashes.luau)
     "Left": ((-1, 0, 0), (0, 1, 0)), "Right": ((1, 0, 0), (0, 1, 0)),
     "Top": ((0, 1, 0), (0, 0, 1)), "Bottom": ((0, -1, 0), (0, 0, -1)),
 }
-PRIORITY = ["Front", "Back", "Left", "Right", "Top", "Bottom"]  # whose picture a bevel shows
 
 
 def face_uv(face, regions, size, p):
     """UV of point p (part axes) in the template, seen on `face` (clamped to
-    that face's region: a bevel shows the edge of the picture)."""
+    that face's region)."""
     n, up = (Vector(v) for v in FACES[face])
     right = (-n).cross(up)
     half = Vector(size) / 2
@@ -476,13 +475,13 @@ def frame(size, regions):
         z = sz * (hz if n[2] else hz - c)
         return Vector((x, y, z)), Vector(n)
 
-    def poly(points, owner_faces):
-        primary = min(owner_faces, key=PRIORITY.index)
+    def poly(points):
+        """points: (position, normal, face whose picture it shows)."""
         idx = []
-        for (p, n) in points:
+        for (p, n, face) in points:
             verts.append(tuple(p))
             normals.append(tuple(n))
-            uvs.append(face_uv(primary, regions, size, p))
+            uvs.append(face_uv(face, regions, size, p))
             idx.append(len(verts) - 1)
         # wind it to face outward (away from the centre)
         centre = sum((Vector(verts[i]) for i in idx), Vector()) / len(idx)
@@ -491,27 +490,42 @@ def frame(size, regions):
             idx.reverse()
         faces.append(tuple(idx))
 
-    axis_faces = {0: ("Left", "Right"), 1: ("Bottom", "Top"), 2: ("Front", "Back")}
     sign_face = {(0, -1): "Left", (0, 1): "Right", (1, -1): "Bottom", (1, 1): "Top", (2, -1): "Front", (2, 1): "Back"}
-    # 12 edges: two faces (axes i, j with signs), running along the third axis k
+    # 12 edges: faces A and B (axes i, j with signs), running along axis k.
+    # Each bevel is cut along its middle: each half shows its own face's
+    # picture, the middle being the edge of both pictures (INSET ~ CHAMFER/2),
+    # like Roblox. The normals blend from one face to the other.
     for i, j in ((0, 1), (0, 2), (1, 2)):
         k = 3 - i - j
         for si in (-1, 1):
             for sj in (-1, 1):
                 fa, fb = sign_face[(i, si)], sign_face[(j, sj)]
-                pts = []
+                ends = []
                 for sk in (-1, 1):
                     s3 = [0, 0, 0]
                     s3[i], s3[j], s3[k] = si, sj, sk
-                    pts.append((sk, on(fa, *s3), on(fb, *s3)))
-                (_, a0, b0), (_, a1, b1) = pts
-                poly([a0, a1, b1, b0], (fa, fb))
-    # 8 corners
+                    (pa, na), (pb, nb) = on(fa, *s3), on(fb, *s3)
+                    mid, nm = (pa + pb) / 2, (na + nb).normalized()
+                    ends.append((pa, na, pb, nb, mid, nm))
+                (a0, na0, b0, nb0, m0, nm0), (a1, na1, b1, nb1, m1, nm1) = ends
+                poly([(a0, na0, fa), (a1, na1, fa), (m1, nm1, fa), (m0, nm0, fa)])
+                poly([(m0, nm0, fb), (m1, nm1, fb), (b1, nb1, fb), (b0, nb0, fb)])
+    # 8 corners: 3 quads (one per face) meeting in the middle of the corner.
     for sx in (-1, 1):
         for sy in (-1, 1):
             for sz in (-1, 1):
                 fx, fy, fz = sign_face[(0, sx)], sign_face[(1, sy)], sign_face[(2, sz)]
-                poly([on(fx, sx, sy, sz), on(fy, sx, sy, sz), on(fz, sx, sy, sz)], (fx, fy, fz))
+                px, py, pz = on(fx, sx, sy, sz), on(fy, sx, sy, sz), on(fz, sx, sy, sz)
+                centre = (px[0] + py[0] + pz[0]) / 3
+                nc = (px[1] + py[1] + pz[1]).normalized()
+
+                def half(p, q):
+                    return (p[0] + q[0]) / 2, (p[1] + q[1]).normalized()
+
+                for own, a, b in ((px, py, pz), (py, pz, px), (pz, px, py)):
+                    face = fx if own is px else fy if own is py else fz
+                    ma, mb = half(own, a), half(own, b)
+                    poly([(own[0], own[1], face), (ma[0], ma[1], face), (centre, nc, face), (mb[0], mb[1], face)])
     # part axes -> kit axes (as the head pieces at angle 0): X and Z flipped
     verts = [(-x, y, -z) for x, y, z in verts]
     normals = [(-x, y, -z) for x, y, z in normals]
@@ -656,7 +670,7 @@ def main():
         f"\tinset = {lua_number(INSET)},",
         "\tframes = {",
         *[f"\t\t{n} = Vector3.new({', '.join(lua_number(x) for x in w)})," for n, (_s, _r, w) in FRAMES.items()],
-        "\t},",
+        "\t} :: { [string]: Vector3 },",
         "\tshapes = {",
     ]
     for name, idx, kind, size, head, v, pts, reach in shapes:

@@ -140,6 +140,7 @@ type Kit = {
 	pieces: { [string]: { BasePart } }, -- inserts
 	shell: { [string]: BasePart }, -- head shell pieces
 	shellComplete: boolean, -- false: an old WoundKit (no head cuts then)
+	framesComplete: boolean, -- false: an old WoundKit (no torso cuts then)
 }
 local kit: Kit? = nil
 local warnedMarkers = false
@@ -184,6 +185,7 @@ local function findKit(): Kit?
 		pieces = {},
 		shell = {},
 		shellComplete = true,
+		framesComplete = true,
 	}
 	for _, item in model:GetDescendants() do
 		if item:IsA("BasePart") and string.sub(item.Name, 1, 6) == "Shell_" then
@@ -209,10 +211,18 @@ local function findKit(): Kit?
 			found.shellComplete = false
 		end
 	end
-	if not found.shellComplete and not warnedOldKit then
+	for name in WoundShapes.frames do
+		local piece: BasePart? = found.shell[name]
+		if piece == nil then
+			found.framesComplete = false
+		end
+	end
+	if not (found.shellComplete and found.framesComplete) and not warnedOldKit then
 		warnedOldKit = true
 		warn(
-			"[Gashes] WoundKit is out of date (no Shell_ pieces): head cuts are off. "
+			"[Gashes] WoundKit is out of date (Shell_ pieces missing): "
+				.. (if found.shellComplete then "" else "head cuts are off. ")
+				.. (if found.framesComplete then "" else "torso cuts are off. ")
 				.. "Delete it and import assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
 		)
 	end
@@ -409,7 +419,9 @@ local function paint(
 			left = region[1] / TEMPLATE_W * imageW - inset
 			top = region[2] / TEMPLATE_H * imageH - inset
 		else
-			imageW, imageH, left, top = faceW, faceH, 0, 0
+			-- a T-shirt picture covers the front like a template region does
+			local inset = WoundShapes.inset
+			imageW, imageH, left, top = faceW - 2 * inset, faceH - 2 * inset, -inset, -inset
 		end
 		label.Size = UDim2.fromScale(imageW / w, imageH / h)
 		label.Position = UDim2.fromScale(-(left + a0) / w, -(top + b0) / h)
@@ -1000,7 +1012,7 @@ local function refresh(model: Model, partName: string)
 				if
 					placed
 					and found.pieces[placed.shapeName]
-					and (found.shellComplete or not isHead)
+					and (if isHead then found.shellComplete else found.framesComplete)
 				then
 					table.insert(cuts, placed)
 				end

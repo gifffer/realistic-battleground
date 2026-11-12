@@ -13,6 +13,7 @@
 --   • Gives every fighter the CLASSIC R6 head (their face and skin colour
 --     stay): the glass cuts are drawn on an exact copy of that head (see
 --     Client/Combat/Gashes), so it must be the same for everyone.
+--   • Removes R6 body packages (CharacterMesh): the classic blocky body.
 --   • Keeps only the accessories worn on the head (hair, hats, glasses /
 --     face accessories) that aren't too big, without collisions: big or
 --     body accessories get in the way of the fights (and of the cuts).
@@ -137,6 +138,12 @@ local function isKeptAccessory(accessory: Accoutrement): boolean
 end
 
 local function checkAccessory(child: Instance)
+	-- R6 body packages reshape the torso / limbs: everyone keeps the classic
+	-- blocky body (the glass cuts redraw it exactly, see Gashes).
+	if child:IsA("CharacterMesh") then
+		child:Destroy()
+		return
+	end
 	if not child:IsA("Accoutrement") then
 		return
 	end

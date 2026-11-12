@@ -251,7 +251,7 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | G7 | 2 joueurs | Les deux écrans voient **les mêmes** plaies, au même endroit. |
 | G8 | Mourir / réapparaître | Le corps redevient intact. |
 | G9 | Regarder de près une tête ou un torse blessé | La tête et le torse gardent **exactement leur forme et leur aspect** : tête bien ronde, torse aux arêtes arrondies, ni facettes ni lignes, ni grain sur la peau. Seule la plaie change. Le visage est à sa place. Le t-shirt et le pantalon sont alignés autour de la plaie. |
-| G11 | Entrer en jeu avec un avatar à tête spéciale ou avec de gros accessoires | La tête devient la tête **classique** (même visage, même couleur). Les cheveux, chapeaux et lunettes restent ; les gros accessoires et ceux du dos, de la taille ou des épaules disparaissent. |
+| G11 | Entrer en jeu avec un avatar à tête spéciale ou avec de gros accessoires | La tête devient la tête **classique** (même visage, même couleur). Les cheveux, chapeaux et lunettes restent ; les gros accessoires et ceux du dos, de la taille ou des épaules disparaissent. Un package de corps R6 est retiré (corps en blocs classique). |
 | G10 | Ta propre tête blessée, en 1re personne | Rien ne gêne la vue. |
 
 Les plaies demandent d'importer `WoundKit` (voir `docs/WOUNDS_FR.md`). **Il faut le ré-importer** après cette mise à jour : il contient maintenant les morceaux de la tête.

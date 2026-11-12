@@ -34,7 +34,7 @@ Sans `WoundKit`, le jeu marche quand même. Il y a le sang, mais pas de plaie vi
 
 Chaque combattant reçoit la **tête Roblox classique** : son visage et sa couleur de peau restent. C'est nécessaire parce que la partie blessée est remplacée par une copie exacte, percée là où se trouve la plaie (Roblox ne permet pas de percer une partie). La copie est faite aux mesures exactes de la tête classique, donc on ne voit pas la différence.
 
-On garde aussi les **accessoires de tête** : cheveux, chapeaux, lunettes et accessoires du visage. Seuls ceux qui ne sont pas trop gros restent (3 studs maximum par côté). Ils ne bloquent rien. Les autres accessoires (dos, taille, épaules, cou, vêtements 3D) sont retirés. Ce réglage se trouve dans `src/server/Systems/Characters.luau`.
+On garde aussi les **accessoires de tête** : cheveux, chapeaux, lunettes et accessoires du visage. Seuls ceux qui ne sont pas trop gros restent (3 studs maximum par côté). Ils ne bloquent rien. Les autres accessoires (dos, taille, épaules, cou, vêtements 3D) sont retirés. Les packages de corps R6 sont retirés aussi, pour garder le corps en blocs classique. Ce réglage se trouve dans `src/server/Systems/Characters.luau`.
 
 ## Comment ça marche
 
