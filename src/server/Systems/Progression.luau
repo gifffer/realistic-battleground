@@ -41,6 +41,8 @@ local DAMAGE_PAYOUT_INTERVAL = 5
 
 local Progression = {}
 
+local grantedCallbacks: { (Player, Types.RewardKind, number, number) -> () } = {}
+
 -- Per victim body: who (players) damaged it, and when.
 local contributors: { [Model]: { [Player]: number } } = {}
 -- Per player: damage dealt to players, not yet turned into XP.
@@ -79,6 +81,15 @@ function Progression.grant(player: Player, kind: Types.RewardKind, xp: number, c
 		setLevelAttribute(player, data.xp)
 	end
 	Remotes.Progress:FireClient(player, kind, xp, coins)
+	for _, callback in grantedCallbacks do
+		task.spawn(callback, player, kind, xp, coins)
+	end
+end
+
+-- `callback(player, kind, xp, coins)` after every reward (daily quests count
+-- kills, assists and duel wins from here: the same anti-farm applies).
+function Progression.onGranted(callback: (Player, Types.RewardKind, number, number) -> ())
+	table.insert(grantedCallbacks, callback)
 end
 
 ------------------------------------------------------------------------------

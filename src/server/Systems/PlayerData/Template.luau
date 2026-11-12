@@ -36,6 +36,8 @@ local template: Types.PlayerProfile = {
 	elo = 1000,
 	rankedWins = 0,
 	rankedLosses = 0,
+	-- Added with the daily quests (step 9).
+	quests = { day = 0, list = {} },
 }
 
 return template

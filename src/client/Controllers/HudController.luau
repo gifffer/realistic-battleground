@@ -680,7 +680,7 @@ local function formatNumber(value: number): string
 end
 
 local function isMajor(kind: Types.RewardKind): boolean
-	return kind == "Kill" or kind == "Assist"
+	return kind == "Kill" or kind == "Assist" or kind == "Quest"
 end
 
 local function reasonWord(kind: Types.RewardKind, xp: number): string
@@ -690,6 +690,8 @@ local function reasonWord(kind: Types.RewardKind, xp: number): string
 		return "ASSIST"
 	elseif kind == "Damage" then
 		return "DAMAGE"
+	elseif kind == "Quest" then
+		return "QUEST"
 	end
 	return "PLAYTIME"
 end
@@ -899,11 +901,17 @@ local function showReward(kind: Types.RewardKind, xp: number, coins: number)
 end
 
 local function onProgress(kind: unknown, xp: unknown, coins: unknown)
-	-- Only these four kinds get a line. Duel rewards ("DuelWin", "DuelLoss",
+	-- Only these kinds get a line (+ "Quest": a daily quest completed). Duel rewards ("DuelWin", "DuelLoss",
 	-- "RankedWin", "RankedLoss") are left out on purpose: the duel result
 	-- screen shows them.
 	if
-		(kind ~= "Kill" and kind ~= "Assist" and kind ~= "Damage" and kind ~= "Playtime")
+		(
+			kind ~= "Kill"
+			and kind ~= "Assist"
+			and kind ~= "Damage"
+			and kind ~= "Playtime"
+			and kind ~= "Quest"
+		)
 		or typeof(xp) ~= "number"
 		or typeof(coins) ~= "number"
 		or xp ~= xp -- NaN

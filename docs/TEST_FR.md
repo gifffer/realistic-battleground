@@ -313,3 +313,15 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | D8 | Quitter le jeu en plein duel | L'autre gagne par **forfait**. |
 | D9 | SETTINGS → **BLOCK DUEL REQUESTS** | Les autres voient BLOCKS DUELS et ne peuvent plus te défier. |
 | D10 | PROFILE | Ligne **RANKED** (rang, ELO, victoires / défaites classées) et **DUEL WINS**. |
+
+## Étape 9 — Quêtes quotidiennes (`feature/daily-quests`)
+
+Comme le reste de la progression, ça compte **contre de vrais joueurs** (test à 2).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| Q1 | Menu → **QUESTS** | 3 quêtes du jour, chacune avec sa phrase (« Get 5 kills », « Land 20 hits to the head »…), sa récompense (+XP · +coins), un compteur 0 / 5 et une ligne de progression. En bas : « NEW QUESTS IN hh:mm:ss » (minuit UTC). |
+| Q2 | Faire ce que demande une quête | Le compteur avance (même menu ouvert). |
+| Q3 | Atteindre l'objectif | En bas à gauche : **QUEST +110 XP · +55 COINS**, la quête passe à **DONE**. |
+| Q4 | Quitter puis revenir le même jour | Mêmes quêtes, même progression. |
+| Q5 | Après minuit UTC | 3 nouvelles quêtes. |
