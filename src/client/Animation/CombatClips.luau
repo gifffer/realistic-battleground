@@ -6152,7 +6152,7 @@ local clips: { [string]: R6Pose.Clip } = {
 	-- Boxer: hauls them up by the collar, two hooks to the body, right hook,
 	-- left hook, cross; then a left hook into their right side under the
 	-- ribs: the hand goes in, tears the liver out, he holds it out at arm's
-	-- length and looks at it, then throws it down.
+	-- length and looks at it, then opens his hand: it drops to the floor.
 	Boxer_FinisherCombo = {
 		length = 4.1,
 		looped = false,
@@ -6381,14 +6381,14 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.65,
+				time = 3.7,
 				pose = {
-					Root = { rot = Vector3.new(-4, 14, 0), pos = Vector3.new(0, -0.1, 0) },
-					Neck = { rot = Vector3.new(10, -10, 0) },
-					RightShoulder = { rot = Vector3.new(70, 0, -20) },
-					LeftShoulder = { rot = Vector3.new(82, 0, 8) },
-					RightHip = { rot = Vector3.new(-12, 0, -2) },
-					LeftHip = { rot = Vector3.new(16, 0, 4) },
+					Root = { rot = Vector3.new(-2, 14, 0), pos = Vector3.new(0, -0.05, 0.05) },
+					Neck = { rot = Vector3.new(18, 26, 0) },
+					RightShoulder = { rot = Vector3.new(18, 0, -10) },
+					LeftShoulder = { rot = Vector3.new(94, 0, 16) },
+					RightHip = { rot = Vector3.new(-8, 0, -2) },
+					LeftHip = { rot = Vector3.new(10, 0, 2) },
 				},
 			},
 			{

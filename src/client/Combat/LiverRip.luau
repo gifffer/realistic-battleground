@@ -35,7 +35,9 @@ local POUR_TIME = 3.5 -- seconds the hole pours blood
 -- space; the server's "Tear" cut is there too).
 local WOUND = Vector3.new(0.5, -0.3, -0.5)
 
-local held: { [Model]: BasePart } = setmetatable({}, { __mode = "k" }) :: any
+-- The liver each attacker holds. (A plain table, emptied by drop / cancel
+-- or when he goes: a weak one could lose it - then it was never let go.)
+local held: { [Model]: BasePart } = {}
 
 local function wound(victim: Model): CFrame?
 	local torso = victim:FindFirstChild("Torso")
@@ -210,10 +212,16 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	drops.Speed = NumberRange.new(0.5, 2)
 	liver.Parent = workspace
 	held[attacker] = liver
+	attacker.Destroying:Once(function()
+		if held[attacker] == liver then
+			held[attacker] = nil
+		end
+	end)
 	Debris:AddItem(liver, LIFETIME + 6)
 end
 
--- Thrown down at his feet: it lands with a wet slap and a splash.
+-- He opens his hand: the liver drops to the floor; a wet slap and a
+-- splash when it lands.
 function LiverRip.drop(attacker: Model)
 	local liver: BasePart? = held[attacker]
 	held[attacker] = nil
@@ -226,12 +234,17 @@ function LiverRip.drop(attacker: Model)
 	end
 	liver.Massless = false
 	liver.CanCollide = true
-	local forward = attacker:GetPivot().LookVector
-	liver.AssemblyLinearVelocity = forward * 6
-		+ Vector3.new(0, -8, 0)
-		+ attacker:GetPivot().RightVector * -3
-	liver.AssemblyAngularVelocity = Vector3.new(4, 2, 6)
-	task.delay(0.35, function()
+	-- (it slips out of the fist: a little forward, turning over)
+	liver.AssemblyLinearVelocity = attacker:GetPivot().LookVector * 1.2 + Vector3.new(0, -1, 0)
+	liver.AssemblyAngularVelocity = Vector3.new(2.5, 0.8, 3)
+	-- When it reaches the floor (a free fall from where it is).
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { liver, attacker }
+	local floor = workspace:Raycast(liver.Position, Vector3.new(0, -20, 0), params)
+	local height = if floor then math.max(0, liver.Position.Y - floor.Position.Y - 0.25) else 3
+	local fall = math.sqrt(2 * height / workspace.Gravity) + 1 / workspace.Gravity
+	task.delay(fall, function()
 		if liver.Parent then
 			SoundController.play("OrganDrop", attacker)
 			HeadBlast.splash(

@@ -8,7 +8,7 @@
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
 --                    to the body, hook, hook, cross, then a left hook into
 --                    their right side under the ribs: the hand goes in and
---                    tears the liver out; he looks at it and throws it down.
+--                    tears the liver out; he looks at it, lets it drop.
 --
 -- One timeline, read by the server (placement, the killing blow) and by
 -- every client (camera, sounds, blood, the bat). Times in seconds from the
@@ -133,7 +133,7 @@ local cinematics: { [string]: Cinematic } = {
 			{ time = 2.25, kind = "Gut" }, -- the hand goes in under the ribs
 			{ time = 2.42, kind = "Dig" },
 			{ time = 2.62, kind = "Rip" }, -- the liver torn out, in his hand
-			{ time = 3.62, kind = "Drop" }, -- thrown on the floor
+			{ time = 3.55, kind = "Drop" }, -- he lets go: it drops to the floor
 		},
 		shots = {
 			-- Over his shoulder: he hauls them up.
@@ -185,9 +185,17 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(-1.4, 0.4, -1.12),
 				fov = 45,
 			},
-			-- Wide: the body on the floor, the liver thrown down by it.
+			-- Low, from his left: the liver drops from his hand to the floor.
 			{
-				time = 3.5,
+				time = 3.45,
+				from = Vector3.new(-3.7, -1.2, -3.3),
+				to = Vector3.new(-3.5, -1.35, -3.0),
+				look = Vector3.new(-1.4, -1.15, -1.2),
+				fov = 58,
+			},
+			-- Wide: the body on the floor, the liver by it.
+			{
+				time = 3.95,
 				from = Vector3.new(4.6, 1.0, -4.6),
 				to = Vector3.new(5.2, 1.4, -2.2),
 				look = Vector3.new(-0.3, -1.3, -1.9),
