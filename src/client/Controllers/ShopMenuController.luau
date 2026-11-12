@@ -34,6 +34,9 @@
 -- level, ownedCosmetics, equipped). The SERVER checks everything again
 -- (Server/Systems/Shop): Remotes.BuyCosmetic(id), Remotes.EquipCosmetic
 -- (category, id or "" = take it off). The wallet (coins) sits top right.
+--
+-- The shop counters in the city (clothes shop, emote shop) open this same
+-- section on the right category: ShopMenuController.openAt("Outfit").
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1022,6 +1025,47 @@ refreshAll = function(animate: boolean)
 			end
 		end
 	end
+end
+
+------------------------------------------------------------------------------
+-- Public API
+------------------------------------------------------------------------------
+
+-- Opens the menu on the SHOP section with `category` already selected in the
+-- roster. Used by the shop counters in the city (ShopFrontController): the
+-- clothes shop opens OUTFITS, the emote shop opens EMOTES. The menu opens
+-- with its normal animation; the SHOP entry in the menu list stays as it is.
+function ShopMenuController.openAt(category: Cosmetics.Category)
+	-- Find the roster entry of this category (nothing happens for an unknown one).
+	local info: CategoryInfo? = nil
+	for _, candidate in CATEGORIES do
+		if candidate.id == category then
+			info = candidate
+			break
+		end
+	end
+	if info == nil then
+		return
+	end
+
+	if MenuController.getOpen() == "Shop" then
+		-- The shop is already on screen: switch like a click on the roster
+		-- (the old items slide out, the new ones in).
+		selectCategory(info)
+		return
+	end
+
+	-- The shop is not on screen: select the category first, so the panel is
+	-- already right when the menu fades in (no slide needed).
+	if info ~= selected then
+		selected = info
+		if built then
+			refreshRoster(false)
+			renderDetail(false)
+		end
+		-- (Not built yet: build() draws `selected` the first time it opens.)
+	end
+	MenuController.open("Shop")
 end
 
 ------------------------------------------------------------------------------

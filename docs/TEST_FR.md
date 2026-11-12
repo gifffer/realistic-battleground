@@ -369,11 +369,11 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 
 ## Étape 11 — Map : Marrow District (`feature/city-map`)
 
-**Avant de tester** : dans Studio, `Lighting` → `Technology` = **Future** (un script ne peut pas le régler ; sans ça, pas d'ombres de lampadaires ni de halo des néons).
+**Avant de tester** : vérifie dans Studio que `Lighting` → `Technology` = **Future**. Rojo le règle maintenant (`default.project.json`) ; sinon mets-le à la main (un script ne peut pas le changer). Si ce n'est pas Future, l'Output affiche un avertissement `[Ambience] Lighting.Technology is ...` : sans Future, pas de flaques de lumière sous les lampadaires ni de halo des néons.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| C1 | Lancer le jeu | Le quartier se construit en quelques secondes autour de toi (le sol et les spawns d'abord). 4 rues, 2 ruelles, carrefour avec taxi accidenté et chantier, parking « Lot 9 », terrain de basket grillagé sous un pont ferroviaire, cour de chargement, chantier, casse. Tu apparais dans une rue (12 points). |
+| C1 | Lancer le jeu | Le quartier se construit en quelques secondes autour de toi (le sol et les spawns d'abord). 4 rues, 2 ruelles, carrefour avec taxi accidenté et chantier, parking « Lot 9 », terrain de basket grillagé sous un pont ferroviaire, cour de chargement, chantier, casse. Tu apparais dans une des 10 zones (rue, ruelle, parking, terrain, cour, sous le pont), jamais sur le tablier du pont. La Baseplate grise de Studio a disparu, la route n'a pas de quadrillage qui clignote. |
 | C2 | Après-midi | Ciel couvert, lumière grise et terne, brume au loin. Façades en brique sale, fenêtres en retrait (certaines condamnées ou cassées), clims, gouttières, escaliers de secours, châteaux d'eau sur les toits. |
 | C3 | Nuit (attendre ~6 min ou changer `DAY_TIME` dans `Server/Systems/Ambience`) | Lampadaires orangés (quelques-uns grésillent, d'autres sont morts), environ un tiers des fenêtres allumées (chaud, bleu télé, néon froid), néons « DUFFY'S BAR », « DELI »… |
 | C4 | Grimper | Toit du garage, de l'entrepôt, du vieux hall, puis le tablier du pont : chaque marche est un vault ou un mantle. Le pont s'atteint aussi par l'escalier et par l'échafaudage du terrain. |
@@ -381,6 +381,23 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | C6 | Sans rien forcer | Un premier événement arrive 3–5 min après le lancement, puis 4–7 min de calme entre deux. |
 | C7 | En duel | Pas de texte d'événement à l'écran. |
 | C8 | Parcours de test (Studio) | Toujours là, au sud du quartier. |
+| C9 | Les 2 mannequins d'entraînement | Ils sont au milieu du terrain de basket (la Cage), debout sur le sol, éclairés. Pas sous la map. |
+| C10 | Nuit, loin des lampadaires | Ton personnage (et les autres) reste lisible : une petite lumière chaude et douce l'éclaire (seulement la nuit et pendant une coupure de courant). |
+| C11 | Nuit : toits du garage et de l'entrepôt bas, cour de chargement, ruelle, parvis de la Cage | Chaque zone de combat a sa propre lumière (projecteur, ampoule sur un fil, tube sous le pont) : plus de grande zone bleu noir. |
+| C12 | Depuis le pont, sauter vers l'entrepôt au nord (S1) | Impossible de monter sur son toit (mur invisible) : on ne sort plus de la map par là. |
+
+### Boutiques en ville (vêtements et émotes)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| S1 | Entrer dans la boutique de vêtements, s'approcher du comptoir | Au-dessus du comptoir : le nom de la boutique en petit, puis **[E] ── BROWSE CLOTHES** (style du jeu, pas la bulle grise de Roblox). Lisible même la nuit. |
+| S2 | Appuyer sur **E** | Le menu s'ouvre (animation normale) sur **SHOP**, catégorie **OUTFITS** déjà sélectionnée. Le prompt disparaît tant que le menu est ouvert. |
+| S3 | Même chose au comptoir de la boutique d'émotes | **BROWSE EMOTES** → SHOP sur **EMOTES**. Si le menu est déjà sur SHOP, la liste glisse vers la bonne catégorie. |
+| S4 | Fermer le menu (CLOSE) près du comptoir | Le prompt revient. Le menu → **SHOP** marche toujours comme avant. |
+| S5 | En duel, mort ou KO près d'un comptoir | Aucun prompt, E ne fait rien. |
+| S6 | Mobile / émulateur tactile (Studio : Device) | Le prompt affiche **TAP** ; toucher le prompt ouvre la boutique. |
+| S7 | Mannequins de la boutique de vêtements | Chacun porte une tenue du SHOP (haut + pantalon aux couleurs de GREY SWEATS, OLIVE…). S'il n'y a pas de mannequin, rien ne casse. |
+| S8 | Le bar | On peut y entrer par l'angle (porte large de 8) ; comptoir, tabourets, billard, juke-box, lumière chaude ; pas de prompt de boutique dedans. |
 
 Les sons `Rain` et `Thunder` (`src/shared/Sounds.luau`) sont vides pour l'instant : donne-moi des IDs et je les mets.
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.

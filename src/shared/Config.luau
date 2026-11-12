@@ -388,7 +388,8 @@ return table.freeze({
 		POWER_WARMUP = 6,
 		-- Not if the night ends in less than this (the dawn would come in the dark).
 		POWER_MIN_NIGHT_LEFT = 75,
-		SUBSTATION = Vector3.new(142, 0, -173),
+		-- In the compact city: the lot office, north edge of Lot 9 (the road is at Y 1.2).
+		SUBSTATION = Vector3.new(60, 1.2, -116),
 		-- Speed of the restore wave, in studs per second.
 		POWER_WAVE_SPEED = 66,
 

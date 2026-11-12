@@ -72,18 +72,35 @@ local function wallColor(height: number): Color3
 	return COLOR_JUMP
 end
 
--- Where the course starts: on the ground, next to the first spawn.
+-- With the city built (Server/Systems/City), the course sits just south of it, outside its
+-- walls, on its own floor: the city removes Studio's Baseplate, so there is no ground there.
+-- CITY_ORIGIN is the course's first wall; the floor top is at the city's road height (Y 1.2).
+-- The city's ground ends at Z = 140 (its invisible wall is at Z = 137.5). Measured from the
+-- origin, the course goes from X -5 to +107 and from Z -63 (the last vault rail) to +31 (the
+-- towers): the floor below covers all of it, and its north edge (Z 144) stays out of the city.
+local CITY_ORIGIN = Vector3.new(-50, 1.2, 210)
+local CITY_FLOOR_SIZE = Vector3.new(124, 2, 104)
+-- Center of the floor's bottom face, measured from the origin (Y: the floor's top = origin).
+local CITY_FLOOR_OFFSET = Vector3.new(52, -CITY_FLOOR_SIZE.Y, -14)
+
+-- Where the course starts: on the ground, next to the first spawn (or south of the city).
 local function findOrigin(): Vector3
+	if workspace:FindFirstChild("City") then
+		return CITY_ORIGIN
+	end
 	local spawn = workspace:FindFirstChildWhichIsA("SpawnLocation", true)
 	local around = if spawn then spawn.Position else Vector3.zero
 	local start = around + Vector3.new(START_DISTANCE, 0, 0)
-	-- With the city built (Server/Systems/City), next to it, not inside.
-	if workspace:FindFirstChild("City") then
-		start = Vector3.new(-40, 0, 300)
-	end
 	-- Look for the ground under that point.
 	local hit = workspace:Raycast(start + Vector3.new(0, 200, 0), Vector3.new(0, -1000, 0))
 	return if hit then hit.Position else start
+end
+
+-- The course's own floor (only next to the city): its top is exactly at the origin's height.
+local function buildFloor(parent: Instance, origin: Vector3)
+	local floor =
+		block(parent, "CourseFloor", CITY_FLOOR_SIZE, origin + CITY_FLOOR_OFFSET, COLOR_NEUTRAL)
+	floor.Material = Enum.Material.Concrete
 end
 
 local function buildWalls(parent: Instance, origin: Vector3)
@@ -149,6 +166,9 @@ function DevCourse.start()
 	folder.Name = "DevTestCourse"
 
 	local origin = findOrigin()
+	if workspace:FindFirstChild("City") then
+		buildFloor(folder, origin)
+	end
 	buildWalls(folder, origin)
 	buildVaultRow(folder, origin + Vector3.new(0, 0, -ROW_SPACING))
 	buildTowerRow(folder, origin + Vector3.new(0, 0, ROW_SPACING))

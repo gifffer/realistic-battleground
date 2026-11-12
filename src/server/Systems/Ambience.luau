@@ -31,8 +31,10 @@
 -- which calls the functions at the bottom of this file. The weather is applied ON TOP of the
 -- day / night look: target = base look of the phase, then the weather changes it.
 --
--- Note: Lighting.Technology must be "Future" in the place file (it cannot be set from a
--- script). Without it the lamp shadows and the neon glow lose half their effect.
+-- Note: Lighting.Technology must be "Future". default.project.json sets it (Rojo writes it into
+-- the place); a script cannot change it. Without it the lamp pools, the shop light spilling on
+-- the sidewalk and the neon glow look much flatter and darker. Ambience.start() prints a warning
+-- in the output when it is not Future.
 
 local CollectionService = game:GetService("CollectionService")
 local Lighting = game:GetService("Lighting")
@@ -123,67 +125,72 @@ local function scale(color: Color3, factor: number): Color3
 end
 
 -- The base look of the afternoon or of the night (a new table each call: the weather
--- changes it freely).
+-- changes it freely). Values from DIRECTION2.md 6.2: still gloomy, but the night is no longer a
+-- flat dark blue. The ambient light is lifted and almost neutral, so a fighter in dark clothes
+-- stays readable away from the lamps, and the lamps and shop windows give the contrast.
 local function baseLook(night: boolean): Look
 	if night then
 		return {
 			lighting = {
 				ClockTime = 22.4,
-				Brightness = 0.35,
-				Ambient = rgb(20, 22, 28),
-				OutdoorAmbient = rgb(36, 40, 52),
-				ExposureCompensation = 0.2,
-				EnvironmentDiffuseScale = 0.2,
-				EnvironmentSpecularScale = 0.8,
-				ShadowSoftness = 0.2,
+				Brightness = 0.7,
+				Ambient = rgb(46, 46, 54),
+				OutdoorAmbient = rgb(84, 86, 104),
+				ExposureCompensation = 0.35,
+				EnvironmentDiffuseScale = 0.35,
+				EnvironmentSpecularScale = 0.9,
+				ShadowSoftness = 0.25,
 			},
 			atmosphere = {
-				Density = 0.42,
-				Offset = 0.05,
-				Color = rgb(54, 58, 72),
-				Decay = rgb(28, 30, 40),
+				-- A low Offset keeps the near streets clear; the haze builds up with distance.
+				Density = 0.32,
+				Offset = 0.02,
+				Color = rgb(72, 78, 98),
+				Decay = rgb(40, 44, 60),
 				Glare = 0,
-				Haze = 2.8,
+				Haze = 1.4,
 			},
-			clouds = { Cover = 0.9, Density = 0.8, Color = rgb(40, 40, 48) },
+			clouds = { Cover = 0.88, Density = 0.6, Color = rgb(54, 56, 66) },
 			grade = {
-				Brightness = 0,
-				Contrast = 0.18,
-				Saturation = -0.15,
-				TintColor = rgb(226, 230, 246),
+				Brightness = 0.04,
+				Contrast = 0.1,
+				Saturation = -0.08,
+				TintColor = rgb(232, 234, 246),
 			},
-			bloom = { Intensity = 0.9, Size = 28, Threshold = 1.2 },
+			-- (Threshold 1.6, was 1.3: lit sidewalks and zebras bloomed to white)
+			bloom = { Intensity = 0.6, Size = 24, Threshold = 1.6 },
 			sunRays = { Intensity = 0, Spread = 0.6 },
 		}
 	end
 	return {
 		lighting = {
 			ClockTime = 16.9,
-			Brightness = 1.5,
-			Ambient = rgb(62, 62, 66),
-			OutdoorAmbient = rgb(112, 112, 118),
-			ExposureCompensation = -0.15,
-			EnvironmentDiffuseScale = 0.35,
+			Brightness = 1.8,
+			Ambient = rgb(70, 70, 76),
+			OutdoorAmbient = rgb(120, 120, 126),
+			ExposureCompensation = 0,
+			EnvironmentDiffuseScale = 0.4,
 			EnvironmentSpecularScale = 0.6,
 			ShadowSoftness = 0.35,
 		},
+		-- (a little less haze and a little more contrast: the afternoon was a grey wash)
 		atmosphere = {
-			Density = 0.36,
-			Offset = 0.1,
-			Color = rgb(178, 176, 170),
-			Decay = rgb(104, 104, 108),
-			Glare = 0.15,
-			Haze = 2.2,
+			Density = 0.26,
+			Offset = 0.08,
+			Color = rgb(176, 174, 170),
+			Decay = rgb(100, 100, 106),
+			Glare = 0.1,
+			Haze = 1.2,
 		},
-		clouds = { Cover = 0.82, Density = 0.75, Color = rgb(140, 140, 144) },
+		clouds = { Cover = 0.8, Density = 0.7, Color = rgb(140, 140, 144) },
 		grade = {
-			Brightness = -0.02,
-			Contrast = 0.14,
-			Saturation = -0.28,
-			TintColor = rgb(238, 236, 232),
+			Brightness = 0,
+			Contrast = 0.16,
+			Saturation = -0.22,
+			TintColor = rgb(240, 238, 234),
 		},
-		bloom = { Intensity = 0.4, Size = 24, Threshold = 1.8 },
-		sunRays = { Intensity = 0.04, Spread = 0.6 },
+		bloom = { Intensity = 0.35, Size = 24, Threshold = 2 },
+		sunRays = { Intensity = 0.03, Spread = 0.6 },
 	}
 end
 
@@ -193,7 +200,8 @@ local function currentLook(): Look
 	if weather == "Rain" then
 		-- Darker sky, thicker air, the lamps get halos.
 		look.lighting.Brightness *= 0.7
-		look.lighting.OutdoorAmbient = scale(look.lighting.OutdoorAmbient, 0.85)
+		look.lighting.OutdoorAmbient =
+			scale(look.lighting.OutdoorAmbient, if targetNight then 0.9 else 0.85)
 		look.atmosphere.Density += 0.08
 		look.atmosphere.Haze += 0.8
 		look.clouds.Cover = 1
@@ -204,8 +212,8 @@ local function currentLook(): Look
 		look.bloom.Size += 6
 		look.sunRays.Intensity = 0
 	elseif weather == "Fog" then
-		-- About 90 studs of visibility: the lamps become orbs, the buildings silhouettes.
-		look.atmosphere.Density = 0.62
+		-- About 70 studs of visibility on this small map: the lamps become orbs.
+		look.atmosphere.Density = 0.5
 		look.atmosphere.Offset = 0
 		look.atmosphere.Haze = 3.6
 		look.atmosphere.Color = if targetNight then rgb(48, 52, 62) else rgb(160, 162, 164)
@@ -215,8 +223,8 @@ local function currentLook(): Look
 		look.sunRays.Intensity = 0
 	end
 	if not powerOn then
-		look.lighting.Ambient = scale(look.lighting.Ambient, 0.7)
-		look.lighting.OutdoorAmbient = scale(look.lighting.OutdoorAmbient, 0.7)
+		look.lighting.Ambient = scale(look.lighting.Ambient, 0.75)
+		look.lighting.OutdoorAmbient = scale(look.lighting.OutdoorAmbient, 0.75)
 	end
 	return look
 end
@@ -479,6 +487,12 @@ local function setWindow(window: BasePart, level: string)
 	if level == "candle" then
 		color = WINDOW_COLORS.warm
 	end
+	-- Attribute Glow (0..1, optional): a dimmer glow, e.g. the TV screens of the emote shop
+	-- that bloomed to white-blue right in front of the players.
+	local glow = window:GetAttribute("Glow")
+	if typeof(glow) == "number" then
+		color = Color3.new(color.R * glow, color.G * glow, color.B * glow)
+	end
 	window.Material = Enum.Material.Neon
 	window.Color = color
 	window.Reflectance = 0
@@ -642,22 +656,26 @@ local function applyWet(seconds: number)
 	local raining = weather == "Rain"
 	for _, puddle in tagged("CityPuddle") do
 		local transparency: number, reflectance: number
+		-- (At night there is little to reflect: a puddle that is too opaque and shiny reads as a
+		-- black hole in the road. They stay see-through.)
 		if raining then
-			transparency = if targetNight then 0.15 else 0.25
-			reflectance = if targetNight then 0.55 else 0.35
+			transparency = if targetNight then 0.35 else 0.25
+			reflectance = if targetNight then 0.4 else 0.35
 		elseif puddle:GetAttribute("RainOnly") == true then
 			transparency, reflectance = 1, 0
 		else
 			-- The ground is still damp from the last rain.
-			transparency = if targetNight then 0.3 else 0.5
-			reflectance = if targetNight then 0.45 else 0.25
+			transparency = if targetNight then 0.55 else 0.5
+			reflectance = 0.25
 		end
 		tweenTo(puddle, seconds, { Transparency = transparency, Reflectance = reflectance })
 	end
 	for _, slab in tagged("CityWetSurface") do
 		remember(slab)
 		local dry = builtNumber(slab, "BuiltReflectance", 0)
-		tweenTo(slab, seconds, { Reflectance = if raining then dry + 0.06 else dry })
+		-- Damp at night (+0.03), wet in the rain (+0.08), dry in the afternoon.
+		local wet = if raining then 0.08 elseif targetNight then 0.03 else 0
+		tweenTo(slab, seconds, { Reflectance = dry + wet })
 	end
 	for _, drip in tagged("CityDrip") do
 		local emitter = drip:FindFirstChild("FX")
@@ -773,7 +791,22 @@ function Ambience.init()
 	end
 end
 
+-- Warns (once, in the output) when the place does not use the Future lighting technology.
+-- Reading Lighting.Technology can fail in some contexts: then we stay silent.
+local function checkTechnology()
+	local ok, technology = pcall(function()
+		return Lighting.Technology
+	end)
+	if ok and technology ~= Enum.Technology.Future then
+		warn(
+			`[Ambience] Lighting.Technology is {technology.Name}, not Future: the city's lamps and`
+				.. " neons will look flat. Set it in Lighting's properties (or sync default.project.json)."
+		)
+	end
+end
+
 function Ambience.start()
+	checkTechnology()
 	-- Start in the afternoon right away.
 	setPhase("Day", DAY_TIME)
 	goTo(false, 0.1)

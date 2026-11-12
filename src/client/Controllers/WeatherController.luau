@@ -11,6 +11,9 @@
 --   • THUNDER (storms): a double white flash of the screen at the exact moment the server
 --     chose (the same for every player), then the rumble 1 to 4 s later.
 --   • A one-line notice top-left for 3 s: "RAIN", "STORM", "FOG", "POWER CUT". No banner.
+--   • CHARACTER FILL LIGHT (night and power cut): a soft, warm, short-range PointLight on every
+--     character's HumanoidRootPart (16 at most), only on this screen. Away from the lamps a
+--     fighter in dark clothes would melt into the blue night; this keeps everyone readable.
 --
 -- No images are used: the drops are plain squares stretched along their fall.
 -- Sounds come from Shared/Sounds.luau (Rain, Thunder): while their ids are empty, nothing
@@ -66,11 +69,29 @@ local lastCameraPosition: Vector3? = nil
 -- Ground height under you (for the splashes) and whether a roof is over the camera.
 local floorY = 0
 local covered = false
+-- A low ceiling right above the camera (inside a shop, the bar): no rain at all in there.
+local indoors = false
+-- A ceiling closer than this above the camera counts as "indoors" (the shop ceilings are about
+-- 9 above a standing camera; the viaduct deck is about 20 above the street).
+local INDOOR_CEILING = 14
 local nextProbe = 0
 -- Low graphics quality: half the drops.
 local lowQuality = false
 -- Counts the notices, so an old one doesn't hide a newer one.
 local noticeId = 0
+
+-- Character fill light (see the header).
+local FILL_NAME = "CityFillLight"
+local FILL_COLOR = Color3.fromRGB(255, 236, 220)
+local FILL_RANGE = 7 -- studs: it lights the character, barely the ground around it
+local FILL_BRIGHTNESS = 0.35
+local FILL_MAX = 16 -- one per player of a full server
+local FILL_CHECK_EVERY = 0.5 -- seconds between two checks
+-- Lighting.ClockTime of the night phase is 22.4, of the afternoon 16.9: anything from 19:00 to
+-- 06:00 counts as night.
+local NIGHT_FROM = 19
+local NIGHT_UNTIL = 6
+local nextFillCheck = 0
 
 ------------------------------------------------------------------------------
 -- Reading the server's attributes
@@ -280,6 +301,7 @@ local function probe(cameraPosition: Vector3)
 	floorY = if down then down.Position.Y else from.Y - 3
 	local up = workspace:Raycast(cameraPosition, Vector3.new(0, 40, 0), params)
 	covered = up ~= nil
+	indoors = up ~= nil and (up :: RaycastResult).Distance < INDOOR_CEILING
 end
 
 local function update(deltaTime: number)
@@ -328,14 +350,56 @@ local function update(deltaTime: number)
 
 	local ahead = cameraVelocity * W.RAIN_LEAD
 	rainBox.CFrame = CFrame.new(cameraPosition + ahead + Vector3.new(0, W.RAIN_HEIGHT, 0))
-	rainEmitter.Rate = W.RAIN_RATE * intensity * (if lowQuality then 0.5 else 1)
+	rainEmitter.Rate = if indoors
+		then 0
+		else W.RAIN_RATE * intensity * (if lowQuality then 0.5 else 1)
 	splashBox.CFrame = CFrame.new(cameraPosition.X, floorY + 0.2, cameraPosition.Z)
 	splashEmitter.Rate = if covered then 0 else W.SPLASH_RATE * intensity
 
 	if rainSound then
-		rainSound.Volume = Sounds.Rain.volume * intensity * (if covered then 0.5 else 1)
+		rainSound.Volume = Sounds.Rain.volume
+			* intensity
+			* (if indoors then 0.25 elseif covered then 0.5 else 1)
 		if not rainSound.IsPlaying then
 			rainSound:Play()
+		end
+	end
+end
+
+------------------------------------------------------------------------------
+-- Character fill light
+------------------------------------------------------------------------------
+
+-- True at night and during a power cut (when the fill light is wanted).
+local function fillWanted(): boolean
+	local clock = Lighting.ClockTime
+	local night = clock >= NIGHT_FROM or clock < NIGHT_UNTIL
+	return night or workspace:GetAttribute("Weather") == "PowerCut"
+end
+
+-- Gives every character a fill light (created once, then only switched on and off).
+local function updateFillLights()
+	local wanted = fillWanted()
+	local count = 0
+	for _, other in Players:GetPlayers() do
+		local character = other.Character
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if root and root:IsA("BasePart") then
+			local light = root:FindFirstChild(FILL_NAME)
+			if light == nil and wanted and count < FILL_MAX then
+				local newLight = Instance.new("PointLight")
+				newLight.Name = FILL_NAME
+				newLight.Color = FILL_COLOR
+				newLight.Range = FILL_RANGE
+				newLight.Brightness = FILL_BRIGHTNESS
+				newLight.Shadows = false
+				newLight.Parent = root
+				light = newLight
+			end
+			if light and light:IsA("PointLight") then
+				light.Enabled = wanted and count < FILL_MAX
+				count += 1
+			end
 		end
 	end
 end
@@ -365,6 +429,14 @@ function WeatherController.start()
 	workspace:GetAttributeChangedSignal("Weather"):Connect(onWeatherChanged)
 	workspace:GetAttributeChangedSignal("ThunderAt"):Connect(onThunderAt)
 	RunService.RenderStepped:Connect(update)
+	-- The fill lights are checked twice a second (players join, respawn, night falls).
+	RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if now >= nextFillCheck then
+			nextFillCheck = now + FILL_CHECK_EVERY
+			updateFillLights()
+		end
+	end)
 end
 
 return WeatherController

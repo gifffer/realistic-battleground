@@ -26,11 +26,22 @@ type DummyKind = "Passive" | "Attacking"
 
 local TrainingDummies = {}
 
--- Where to put the dummies: in front of the SpawnLocation if there is one.
+-- Where to put the dummies (they stand 6 studs left and right of this point, 3 above the
+-- ground):
+--   1. the spot the city gives (attribute DummySpot of Workspace > City: an open, lit place);
+--   2. otherwise in front of the first ENABLED SpawnLocation (the city disables the template's
+--      spawn and moves it under the map: a dummy there would fall into the void);
+--   3. otherwise near the world origin.
 local function getBasePosition(): Vector3
-	local spawn = workspace:FindFirstChildWhichIsA("SpawnLocation", true)
-	if spawn then
-		return spawn.Position + Vector3.new(0, 3, -16)
+	local city = workspace:FindFirstChild("City")
+	local spot = if city then city:GetAttribute("DummySpot") else nil
+	if typeof(spot) == "Vector3" then
+		return spot + Vector3.new(0, 3, 0)
+	end
+	for _, descendant in workspace:GetDescendants() do
+		if descendant:IsA("SpawnLocation") and descendant.Enabled then
+			return descendant.Position + Vector3.new(0, 3, -16)
+		end
 	end
 	return Vector3.new(0, 5, -16)
 end
