@@ -6,11 +6,12 @@
 -- of the body, its sleeve on), welds it in his right fist, and sets the
 -- attribute "ArmTorn" (= a seed) on the body. Every client then (Gashes
 -- watches the attribute):
---   • on the torso's right side: the open socket, the cup of the shoulder
---     blade and the end of the collarbone, torn skin around, shreds of
---     muscle hanging;
---   • on the arm's top: the raw end, the ball of the upper arm bone sticking
---     out, torn tendons, the skin torn over the edges;
+--   • on the torso's right side: the open socket, the real shoulder blade's
+--     cup and the end of the collarbone, the torn rotator cuff and pectoral
+--     round it, the fat and skin torn around;
+--   • on the arm's top: the real muscles of the upper arm (Z-Anatomy) torn
+--     at different heights round the real humerus' head, the yellow fat under
+--     the skin, the skin torn over the edges;
 --   • when it happens in front of us (not a body we only see later): a burst
 --     of blood, the shoulder pumping in spurts, a pool spreading under it,
 --     the arm dripping in his hand.
@@ -42,6 +43,11 @@ local FLESH = Color3.fromRGB(122, 28, 30)
 local FLESH_DARK = Color3.fromRGB(80, 14, 16)
 local BONE = Color3.fromRGB(226, 214, 190)
 local TENDON = Color3.fromRGB(214, 200, 182)
+-- The real muscles' cut (Z-Anatomy): raw red, a darker one beside it; the fat
+-- under the skin: yellow.
+local MUSCLE = Color3.fromRGB(150, 32, 34)
+local MUSCLE_DARK = Color3.fromRGB(112, 22, 26)
+local FAT = Color3.fromRGB(222, 190, 112)
 local PUMP_TIME = 4 -- seconds the shoulder pumps blood
 local DRIP_TIME = 10 -- seconds the arm drips
 -- The socket, torso space (its right side), facing out (+X).
@@ -92,6 +98,12 @@ local function painter(skin: Color3): (layer: string) -> (Color3, number)
 			return TENDON, 0.12
 		elseif layer == "FleshDark" then
 			return FLESH_DARK, 0.18
+		elseif layer == "Muscle" then
+			return MUSCLE, 0.16
+		elseif layer == "MuscleDark" then
+			return MUSCLE_DARK, 0.16
+		elseif layer == "Fat" then
+			return FAT, 0.08
 		end
 		return FLESH, 0.14
 	end

@@ -3,7 +3,9 @@ Takes the bones of the right shoulder out of Z-Anatomy (https://www.z-anatomy.co
 CC BY-SA 4.0) for the Bouncer's finisher (the arm torn off) and the bone you
 can pick up and throw (tools/wounds/gore.py):
 
-    venv/bin/python -I tools/wounds/extract_arm.py "<z-anatomy>/Z-Anatomy PC/Assets/Models/1.0 Models/SkeletalSystem100.fbx"
+    venv/bin/python -I tools/wounds/extract_arm.py \
+        "<z-anatomy>/Z-Anatomy PC/Assets/Models/1.0 Models/SkeletalSystem100.fbx" \
+        "<z-anatomy>/Z-Anatomy PC/Assets/Models/1.0 Models/MuscularSystem100.fbx"
 
 (the Z-Anatomy repository: https://github.com/LluisV/z-anatomy)
 
@@ -16,6 +18,11 @@ game's spaces, studs; X right of the character, Y up, Z toward the back):
   scapula    the outer part of the right shoulder blade (the socket the head
              sat in, the acromion over it), in the R6 torso's space
   clavicle   the outer end of the right collarbone, in the R6 torso's space
+  armmuscle<i>   the real muscles of the upper arm (deltoid, biceps, triceps,
+             brachialis, coracobrachialis) in the R6 arm, with the humerus,
+             widened to fill the blocky arm: the torn end shows their cut
+  shouldermuscle<i>  the muscles that stay on the body at the shoulder
+             (rotator cuff, pectoralis major, latissimus, teres), torso space
 Only needed again to change what is taken; gore.py reads the .npz.
 """
 
@@ -25,7 +32,23 @@ import bpy  # noqa: I001
 import numpy as np
 from mathutils import Vector
 
-FBX = sys.argv[-1]
+FBX = sys.argv[-2]
+MUSCLES = sys.argv[-1]
+ARM_MUSCLES = [
+    "Acromial part of deltoid muscle.r", "Clavicular part of deltoid muscle.r",
+    "Scapular spinal part of deltoid muscle.r", "Long head of biceps brachii.r",
+    "Short head of biceps brachii.r", "Long head of triceps brachii.r",
+    "Lateral head of triceps brachii.r", "Medial head of triceps brachii.r",
+    "Brachialis muscle.r", "Coracobrachialis muscle.r",
+]
+SHOULDER_MUSCLES = [
+    "Supraspinatus muscle.r", "Infraspinatus muscle.r", "Subscapularis muscle.r",
+    "Teres minor muscle.r", "Teres major muscle.r",
+    "Sternocostal head of pectoralis major muscle.r", "Clavicular head of pectoralis major muscle.r",
+]
+# The real upper arm is round and thin; the R6 arm a 1 x 1 block: the
+# muscles are widened across (not along) to fill it.
+ACROSS = 1.55
 OUT = "tools/wounds/anatomy/arm.npz"
 
 # The real torso -> the R6 torso (same as extract_anatomy.py).
@@ -102,6 +125,22 @@ def main():
     cv, cf = cut_keep(cv, cf, lambda p: p.x < -0.1)
     arrays["clavicle__0__v"] = np.array([to_torso(p) for p in cv], dtype=np.float32)
     arrays["clavicle__0__f"] = cf
+    # The muscles (another file): the arm's with the humerus' placement, the
+    # shoulder's in the torso.
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.fbx(filepath=MUSCLES)
+    for index, name in enumerate(ARM_MUSCLES):
+        mv, mf = mesh_of(name, 1400)
+        mc = np.array([to_char(p) for p in mv], dtype=np.float64)
+        placed = np.column_stack([(mc[:, 0] - axis_x) * k2 * ACROSS, (mc[:, 1] - hi) * k2 + 1.38, (mc[:, 2] - axis_z) * k2 * ACROSS])
+        arrays[f"armmuscle__{index}__v"] = placed.astype(np.float32)
+        arrays[f"armmuscle__{index}__f"] = mf
+    for index, name in enumerate(SHOULDER_MUSCLES):
+        mv, mf = mesh_of(name, 1400)
+        mv, mf = cut_keep(mv, mf, lambda p: p.x < -0.11 and p.z > 1.27)  # (by the joint)
+        if len(mf):
+            arrays[f"shouldermuscle__{index}__v"] = np.array([to_torso(p) for p in mv], dtype=np.float32)
+            arrays[f"shouldermuscle__{index}__f"] = mf
     for key in arrays:
         if key.endswith("__v"):
             print(key, arrays[key].shape, arrays[key].min(0).round(2), arrays[key].max(0).round(2))
