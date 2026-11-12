@@ -35,7 +35,7 @@ local POUR_TIME = 3.5 -- seconds the hole pours blood
 -- space; the server's "Tear" cut is there too).
 local WOUND = Vector3.new(0.5, -0.3, -0.5)
 
-local held: { [Model]: BasePart } = {}
+local held: { [Model]: BasePart } = setmetatable({}, { __mode = "k" }) :: any
 
 local function wound(victim: Model): CFrame?
 	local torso = victim:FindFirstChild("Torso")
@@ -161,8 +161,8 @@ function LiverRip.rip(victim: Model, attacker: Model)
 		if torso and torso:IsA("BasePart") then
 			local hole = Instance.new("Attachment")
 			hole.Name = "LiverHole"
+			-- (its Front = the torso's front: out of the hole)
 			hole.CFrame = CFrame.new(WOUND + Vector3.new(0, 0, -0.05))
-				* CFrame.Angles(0, math.pi, 0) -- (Front = out of the torso)
 			hole.Parent = torso
 			local pour = emitter(hole, 40)
 			task.spawn(function()

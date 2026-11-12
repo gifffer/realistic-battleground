@@ -296,7 +296,9 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 
 	for _, event in cinematic.events do
 		task.delay(event.time, function()
-			if not run.cancelled and attacker.Parent and victim.Parent then
+			-- (throwing the liver down needs only him there)
+			local victimThere = victim.Parent ~= nil or event.kind == "Drop"
+			if not run.cancelled and attacker.Parent and victimThere then
 				playEvent(cinematic, event, attacker, victim)
 			end
 		end)

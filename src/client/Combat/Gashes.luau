@@ -215,11 +215,24 @@ local function findKit(): Kit?
 			end
 		end
 	end
-	-- Every insert must be there (the kit replicates piece by piece).
-	for name in WoundShapes.shapes do
+	-- Every glass insert must be there (the kit replicates piece by piece).
+	-- The finishers' own ("Tear") may be missing from an older kit: only
+	-- that cut is skipped then.
+	local tearMissing = false
+	for name, shape in WoundShapes.shapes do
 		if found.pieces[name] == nil then
-			return nil
+			if shape.kind ~= "Tear" then
+				return nil
+			end
+			tearMissing = true
 		end
+	end
+	if tearMissing and not warnedOldKit then
+		warnedOldKit = true
+		warn(
+			"[Gashes] WoundKit is out of date (no TearL: the Boxer finisher's wound is off). "
+				.. "Delete it and import assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
+		)
 	end
 	for _, name in SHELL_PIECES do
 		local piece: BasePart? = found.shell[name]
