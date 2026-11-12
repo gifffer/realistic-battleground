@@ -1,12 +1,24 @@
 --!strict
--- KitVFX: the visual effects of the Sentinel's and the Bull's moves (heat
--- vision, thunderclap, skyfall, haymaker; gore charge, horn hook, stampede,
--- bull toss), shown by every client from the moves' animations
+-- KitVFX: the visual effects (and timed sounds) of the Sentinel's and the
+-- Bull's moves, shown by every client from the moves' animations
 -- (KitEffects.onAction) and hits (KitEffects.onHit).
 --
--- Building blocks: flashes of light, shockwave rings, dust, sparks, flying
--- rocks, cracks in the ground, trails, and a camera shake for whoever is
--- close. Everything is client-side and short-lived (Debris).
+-- A small toolbox, reused by every move (and meant for the next kits):
+--   flash / light            bursts of light
+--   shockSphere              an expanding energy shell
+--   ring / groundRing        hollow shockwave rings (in the air / on the floor)
+--   emit / dustRing          one-shot particles, dust rolling outward
+--   eruption                 slabs of the floor torn up around a crater
+--   cracks                   jagged (glowing) cracks running out on the floor
+--   rocks                    debris thrown up, the floor's colour / material
+--   streaks                  air / speed lines
+--   lightning                crackling bolts
+--   gather                   energy sucked in toward a part (charging)
+--   trail                    a streak behind a moving part
+--   burn                     a charred mark on a body (heat vision)
+--   shake / punch            camera shake / colour punch when close
+-- Every animated piece goes through one RenderStepped loop (animate), and
+-- everything is client-side and short-lived.
 --
 --   KitVFX.onAction(model, animation, move)   a move starts
 --   KitVFX.onHit(victim, attacker, moveId)    one of its hits lands
@@ -14,6 +26,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
+local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -21,29 +34,101 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local KitLooks = require(script.Parent.KitLooks)
 
 local KitVFX = {}
 
-local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
-local SPARKS = "rbxasset://textures/particles/sparkles_main.dds"
-local FIRE = "rbxasset://textures/particles/fire_main.dds"
+local TEX = {
+	smoke = "rbxasset://textures/particles/smoke_main.dds",
+	sparkle = "rbxasset://textures/particles/sparkles_main.dds",
+	fire = "rbxasset://textures/particles/fire_main.dds",
+	sparks = "rbxasset://textures/particles/fire_sparks_main.dds",
+	glow = "rbxasset://textures/particles/forcefield_glow_main.dds",
+	shock = "rbxasset://textures/particles/explosion01_shockwave_main.dds",
+	core = "rbxasset://textures/particles/explosion01_core_main.dds",
+	implode = "rbxasset://textures/particles/explosion01_implosion_main.dds",
+}
 
-local LASER_CORE = Color3.fromRGB(255, 236, 220)
-local LASER = Color3.fromRGB(255, 34, 22)
-local ENERGY = Color3.fromRGB(200, 226, 255)
-local DUST = Color3.fromRGB(150, 138, 118)
-local ROCK = Color3.fromRGB(96, 92, 88)
-local CRACK = Color3.fromRGB(28, 26, 24)
+local WHITE = Color3.new(1, 1, 1)
+local LASER_CORE = Color3.fromRGB(255, 244, 232)
+local LASER = Color3.fromRGB(255, 30, 18)
+local LASER_DEEP = Color3.fromRGB(150, 0, 6)
+local EMBER = Color3.fromRGB(255, 130, 40)
+local ENERGY = Color3.fromRGB(176, 214, 255)
+local ENERGY_DEEP = Color3.fromRGB(70, 130, 255)
+local DUST = Color3.fromRGB(160, 146, 124)
+local STEAM = Color3.fromRGB(236, 236, 240)
+local CHAR = Color3.fromRGB(24, 18, 16)
+local RAGE = Color3.fromRGB(255, 40, 20)
+local CRACK = Color3.fromRGB(22, 20, 18)
+
+local random = Random.new()
+
+local fx = Instance.new("Folder")
+fx.Name = "KitVFX"
+fx.Parent = workspace
 
 -- Each move started on a model gets a number: its delayed effects check it
--- (refused / interrupted: they don't play).
+-- (refused / cut short: they don't play).
 local tokens: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+------------------------------------------------------------------------------
+-- Animation loop
+------------------------------------------------------------------------------
+
+type Anim = { start: number, finish: number, step: (alpha: number) -> (), done: (() -> ())? }
+local anims: { Anim } = {}
+
+-- Calls `step(alpha)` every frame for `duration` seconds (alpha 0 → 1),
+-- then `done()`.
+local function animate(duration: number, step: (alpha: number) -> (), done: (() -> ())?)
+	local now = os.clock()
+	table.insert(
+		anims,
+		{ start = now, finish = now + math.max(duration, 1e-3), step = step, done = done }
+	)
+end
+
+RunService.RenderStepped:Connect(function()
+	local now = os.clock()
+	local index = 1
+	while index <= #anims do
+		local anim = anims[index]
+		local alpha = math.clamp((now - anim.start) / (anim.finish - anim.start), 0, 1)
+		local ok = pcall(anim.step, alpha)
+		if alpha >= 1 or not ok then
+			if anim.done then
+				pcall(anim.done)
+			end
+			anims[index] = anims[#anims]
+			anims[#anims] = nil
+		else
+			index += 1
+		end
+	end
+end)
+
+local function outQuart(t: number): number
+	return 1 - (1 - t) ^ 4
+end
+local function outQuad(t: number): number
+	return 1 - (1 - t) * (1 - t)
+end
+local function outBack(t: number): number
+	local c = 1.9
+	return 1 + (c + 1) * (t - 1) ^ 3 + c * (t - 1) ^ 2
+end
 
 ------------------------------------------------------------------------------
 -- Building blocks
 ------------------------------------------------------------------------------
 
-local function newPart(size: Vector3, color: Color3, material: Enum.Material?): Part
+local function newPart(
+	size: Vector3,
+	color: Color3,
+	material: Enum.Material?,
+	shape: Enum.PartType?
+): Part
 	local part = Instance.new("Part")
 	part.Anchored = true
 	part.CanCollide = false
@@ -53,6 +138,9 @@ local function newPart(size: Vector3, color: Color3, material: Enum.Material?): 
 	part.Size = size
 	part.Color = color
 	part.Material = material or Enum.Material.SmoothPlastic
+	if shape then
+		part.Shape = shape
+	end
 	return part
 end
 
@@ -69,17 +157,54 @@ local function tween(
 	):Play()
 end
 
--- The floor under `position` (through every fighter), or nil.
-local function floorAt(position: Vector3): RaycastResult?
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
-	params.RespectCanCollide = true
-	return workspace:Raycast(position + Vector3.new(0, 2, 0), Vector3.new(0, -12, 0), params)
+-- A frame at `position` whose look vector is `direction`.
+local function facing(position: Vector3, direction: Vector3): CFrame
+	local unit = if direction.Magnitude > 1e-6 then direction.Unit else Vector3.new(0, 0, -1)
+	local up = if math.abs(unit.Y) > 0.99 then Vector3.xAxis else Vector3.yAxis
+	return CFrame.lookAt(position, position + unit, up)
 end
 
--- A burst of light that fades.
-local function flash(
+-- A frame at `position` whose UP vector is `axis`.
+local function axisFrame(position: Vector3, axis: Vector3): CFrame
+	return facing(position, axis) * CFrame.Angles(-math.pi / 2, 0, 0)
+end
+
+local function flat(vector: Vector3): Vector3
+	local v = Vector3.new(vector.X, 0, vector.Z)
+	return if v.Magnitude > 1e-4 then v.Unit else Vector3.new(0, 0, -1)
+end
+
+type Floor = { position: Vector3, normal: Vector3, color: Color3, material: Enum.Material }
+
+-- The floor under `position` (through every fighter and effect), or nil.
+local floorParams = RaycastParams.new()
+floorParams.FilterType = Enum.RaycastFilterType.Exclude
+floorParams.RespectCanCollide = true
+local function floorAt(position: Vector3): Floor?
+	local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+	table.insert(ignore, fx)
+	floorParams.FilterDescendantsInstances = ignore
+	local hit =
+		workspace:Raycast(position + Vector3.new(0, 3, 0), Vector3.new(0, -16, 0), floorParams)
+	if hit == nil then
+		return nil
+	end
+	local instance = hit.Instance
+	local color = if instance:IsA("BasePart") then instance.Color else DUST
+	if instance:IsA("Terrain") then
+		color = workspace.Terrain:GetMaterialColor(
+			if hit.Material == Enum.Material.Air then Enum.Material.Grass else hit.Material
+		)
+	end
+	return { position = hit.Position, normal = hit.Normal, color = color, material = hit.Material }
+end
+
+-- Dust tinted like the floor it comes from.
+local function dustColor(floor: Floor?): Color3
+	return if floor then DUST:Lerp(floor.color, 0.45) else DUST
+end
+
+local function light(
 	position: Vector3,
 	color: Color3,
 	brightness: number,
@@ -89,229 +214,664 @@ local function flash(
 	local point = Instance.new("Attachment")
 	point.WorldPosition = position
 	point.Parent = workspace.Terrain
-	local light = Instance.new("PointLight")
-	light.Color = color
-	light.Brightness = brightness
-	light.Range = range
-	light.Shadows = false
-	light.Parent = point
-	tween(light, time, { Brightness = 0 })
-	local glow = newPart(Vector3.one * range * 0.12, color, Enum.Material.Neon)
-	glow.Shape = Enum.PartType.Ball
-	glow.Transparency = 0.25
-	glow.CFrame = CFrame.new(position)
-	glow.Parent = workspace
-	tween(glow, time * 0.6, { Transparency = 1, Size = Vector3.one * range * 0.3 })
+	local glow = Instance.new("PointLight")
+	glow.Color = color
+	glow.Brightness = brightness
+	glow.Range = range
+	glow.Shadows = false
+	glow.Parent = point
+	tween(glow, time, { Brightness = 0 })
 	Debris:AddItem(point, time + 0.1)
-	Debris:AddItem(glow, time)
 end
 
--- A shockwave ring: a disc facing along `facing` (its look vector),
--- growing from `from` to `to` studs across, fading out.
+-- A burst of light: a glowing ball that swells and fades, and its light.
+local function flash(position: Vector3, color: Color3, size: number, time: number)
+	light(position, color, 10, size * 6, time * 1.4)
+	local core = newPart(Vector3.one * size * 0.35, WHITE, Enum.Material.Neon, Enum.PartType.Ball)
+	core.CFrame = CFrame.new(position)
+	core.Parent = fx
+	local halo = newPart(Vector3.one * size * 0.6, color, Enum.Material.Neon, Enum.PartType.Ball)
+	halo.Transparency = 0.35
+	halo.CFrame = CFrame.new(position)
+	halo.Parent = fx
+	animate(time, function(alpha)
+		local e = outQuart(alpha)
+		core.Size = Vector3.one * size * (0.35 + 0.5 * e)
+		core.Transparency = alpha ^ 0.6
+		halo.Size = Vector3.one * size * (0.6 + 1.2 * e)
+		halo.Transparency = 0.35 + 0.65 * alpha ^ 0.8
+	end, function()
+		core:Destroy()
+		halo:Destroy()
+	end)
+end
+
+-- An expanding shell of energy (radius `from` → `to`).
+local function shockSphere(position: Vector3, from: number, to: number, time: number, color: Color3)
+	local shell =
+		newPart(Vector3.one * from * 2, color, Enum.Material.ForceField, Enum.PartType.Ball)
+	shell.CFrame = CFrame.new(position)
+	shell.Parent = fx
+	local inner = newPart(Vector3.one * from * 2, color, Enum.Material.Neon, Enum.PartType.Ball)
+	inner.Transparency = 0.6
+	inner.CFrame = CFrame.new(position)
+	inner.Parent = fx
+	animate(time, function(alpha)
+		local r = from + (to - from) * outQuart(alpha)
+		shell.Size = Vector3.one * r * 2
+		shell.Transparency = alpha ^ 1.5
+		inner.Size = Vector3.one * r * 1.6
+		inner.Transparency = 0.6 + 0.4 * math.min(1, alpha * 2.5)
+	end, function()
+		shell:Destroy()
+		inner:Destroy()
+	end)
+end
+
+type RingOptions = {
+	width: number?, -- radial thickness
+	height: number?, -- along the axis
+	neon: boolean?,
+	segments: number?,
+	transparency: number?,
+	material: Enum.Material?,
+}
+
+-- A hollow shockwave ring, centred on `frame`, lying in its XZ plane (its
+-- axis is frame.UpVector), growing from radius `from` to `to`.
 local function ring(
-	cframe: CFrame,
+	frame: CFrame,
 	from: number,
 	to: number,
 	time: number,
 	color: Color3,
-	neon: boolean,
-	thick: number?
+	options: RingOptions?
 )
-	local disc = newPart(
-		Vector3.new(thick or 0.15, from, from),
-		color,
-		if neon then Enum.Material.Neon else Enum.Material.SmoothPlastic
-	)
-	disc.Shape = Enum.PartType.Cylinder
-	disc.Transparency = if neon then 0.15 else 0.35
-	-- (a cylinder's axis is its X: turned to point along the look vector)
-	disc.CFrame = cframe * CFrame.Angles(0, math.rad(90), 0)
-	disc.Parent = workspace
-	tween(
-		disc,
-		time,
-		{ Size = Vector3.new(thick or 0.15, to, to), Transparency = 1 },
-		Enum.EasingStyle.Quart
-	)
-	Debris:AddItem(disc, time + 0.05)
+	local o: RingOptions = options or {}
+	local count = o.segments or 30
+	local width = o.width or 0.3
+	local height = o.height or 0.25
+	local start = o.transparency or (if o.neon then 0.1 else 0.3)
+	local material = o.material
+		or (if o.neon then Enum.Material.Neon else Enum.Material.SmoothPlastic)
+	local parts: { BasePart } = {}
+	local frames: { CFrame } = {}
+	for _ = 1, count do
+		local part = newPart(Vector3.new(0.1, height, width), color, material)
+		part.Transparency = start
+		part.Parent = fx
+		table.insert(parts, part)
+		table.insert(frames, frame)
+	end
+	animate(time, function(alpha)
+		local r = from + (to - from) * outQuart(alpha)
+		local arc = 2 * math.pi * r / count * 1.12
+		local transparency = start + (1 - start) * alpha ^ 1.4
+		local h = height * (1 - 0.6 * alpha)
+		for index, part in parts do
+			local angle = (index - 1) / count * math.pi * 2
+			frames[index] = frame * CFrame.Angles(0, angle, 0) * CFrame.new(0, 0, -r)
+			part.Size = Vector3.new(arc, h, width * (1 - 0.4 * alpha))
+			part.Transparency = transparency
+		end
+		workspace:BulkMoveTo(parts, frames, Enum.BulkMoveMode.FireCFrameChanged)
+	end, function()
+		for _, part in parts do
+			part:Destroy()
+		end
+	end)
 end
 
--- A flat ring lying on the floor under `position` (a ground shockwave).
+-- A ring flat on the floor under `position`.
 local function groundRing(
 	position: Vector3,
 	from: number,
 	to: number,
 	time: number,
 	color: Color3,
-	neon: boolean
+	options: RingOptions?
 )
 	local floor = floorAt(position)
-	local at = if floor then floor.Position + floor.Normal * 0.06 else position
-	local up = if floor then floor.Normal else Vector3.new(0, 1, 0)
-	ring(CFrame.lookAt(at, at + up), from, to, time, color, neon, 0.12)
-end
-
--- One-shot particles (smoke, sparks...) from `position`.
-local function burst(
-	position: Vector3,
-	count: number,
-	texture: string,
-	color: Color3,
-	size: Vector2, -- (start size, end size),
-	speed: NumberRange,
-	lifetime: NumberRange,
-	spread: number,
-	direction: Enum.NormalId?,
-	acceleration: Vector3?,
-	lightEmission: number?
-)
-	local point = Instance.new("Attachment")
-	point.WorldPosition = position
-	point.Parent = workspace.Terrain
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Texture = texture
-	emitter.Color = ColorSequence.new(color)
-	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, size.X),
-		NumberSequenceKeypoint.new(1, size.Y),
-	})
-	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.2),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	emitter.Speed = speed
-	emitter.Lifetime = lifetime
-	emitter.SpreadAngle = Vector2.new(spread, spread)
-	emitter.EmissionDirection = direction or Enum.NormalId.Top
-	emitter.Acceleration = acceleration or Vector3.zero
-	emitter.Drag = 2
-	emitter.LightEmission = lightEmission or 0
-	emitter.LightInfluence = if lightEmission and lightEmission > 0 then 0 else 1
-	emitter.RotSpeed = NumberRange.new(-90, 90)
-	emitter.Rotation = NumberRange.new(0, 360)
-	emitter.Rate = 0
-	emitter.Parent = point
-	emitter:Emit(count)
-	Debris:AddItem(point, lifetime.Max + 0.2)
-end
-
-local function dust(position: Vector3, count: number, spread: number, size: number)
-	burst(
-		position,
-		count,
-		SMOKE,
-		DUST,
-		Vector2.new(size, size * 3),
-		NumberRange.new(6, 16),
-		NumberRange.new(0.6, 1.4),
-		spread,
-		Enum.NormalId.Top,
-		Vector3.new(0, -4, 0)
+	local at = if floor then floor.position + floor.normal * 0.08 else position
+	ring(
+		axisFrame(at, if floor then floor.normal else Vector3.yAxis),
+		from,
+		to,
+		time,
+		color,
+		options
 	)
 end
 
--- Rocks thrown up out of the floor.
-local function rocks(position: Vector3, count: number, power: number)
-	local floor = floorAt(position)
-	local at = if floor then floor.Position else position
-	local color = if floor then floor.Instance.Color else ROCK
-	local random = Random.new()
-	for _ = 1, count do
-		local size = random:NextNumber(0.25, 0.7)
-		local rock = newPart(
-			Vector3.new(size, size * random:NextNumber(0.5, 1), size),
-			color,
-			Enum.Material.Slate
-		)
-		rock.Anchored = false
-		rock.CanCollide = true
-		-- (feather-light: a rock landing on a fighter doesn't shove them)
-		rock.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.5, 0.2)
-		rock.CFrame = CFrame.new(
-			at + Vector3.new(random:NextNumber(-1.5, 1.5), 0.4, random:NextNumber(-1.5, 1.5))
-		) * CFrame.Angles(random:NextNumber(0, 6.3), random:NextNumber(0, 6.3), 0)
-		local angle = random:NextNumber(0, math.pi * 2)
-		rock.AssemblyLinearVelocity = Vector3.new(math.cos(angle), 0, math.sin(angle))
-				* random:NextNumber(4, 12)
-				* power
-			+ Vector3.new(0, random:NextNumber(18, 34) * power, 0)
-		rock.AssemblyAngularVelocity = random:NextUnitVector() * 12
-		rock.Parent = workspace
-		Debris:AddItem(rock, 4)
+type EmitOptions = {
+	texture: string,
+	color: Color3,
+	color2: Color3?, -- (fades to this colour)
+	size: { number }, -- sizes over the lifetime (evenly spaced keypoints)
+	transparency: { number }?,
+	speed: NumberRange,
+	lifetime: NumberRange,
+	spread: number?,
+	direction: Vector3?,
+	acceleration: Vector3?,
+	drag: number?,
+	glow: number?, -- light emission (0..1)
+	count: number,
+	zOffset: number?,
+}
+
+local function sequence(values: { number }): NumberSequence
+	if #values == 1 then
+		return NumberSequence.new(values[1])
+	end
+	local keys = {}
+	for index, value in values do
+		table.insert(keys, NumberSequenceKeypoint.new((index - 1) / (#values - 1), value))
+	end
+	return NumberSequence.new(keys)
+end
+
+local function configure(emitter: ParticleEmitter, o: EmitOptions)
+	emitter.Texture = o.texture
+	emitter.Color = if o.color2
+		then ColorSequence.new(o.color, o.color2)
+		else ColorSequence.new(o.color)
+	emitter.Size = sequence(o.size)
+	emitter.Transparency = sequence(o.transparency or { 0.2, 1 })
+	emitter.Speed = o.speed
+	emitter.Lifetime = o.lifetime
+	emitter.SpreadAngle = Vector2.new(o.spread or 30, o.spread or 30)
+	emitter.EmissionDirection = Enum.NormalId.Front
+	emitter.Acceleration = o.acceleration or Vector3.zero
+	emitter.Drag = o.drag or 2
+	emitter.LightEmission = o.glow or 0
+	emitter.LightInfluence = if (o.glow or 0) > 0 then 0 else 1
+	emitter.RotSpeed = NumberRange.new(-120, 120)
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.ZOffset = o.zOffset or 0
+	emitter.Rate = 0
+end
+
+-- One-shot particles from `position`, along `o.direction` (up by default).
+local function emit(position: Vector3, o: EmitOptions)
+	local point = Instance.new("Attachment")
+	point.WorldCFrame = facing(position, o.direction or Vector3.yAxis)
+	point.Parent = workspace.Terrain
+	local emitter = Instance.new("ParticleEmitter")
+	configure(emitter, o)
+	emitter.Parent = point
+	emitter:Emit(o.count)
+	Debris:AddItem(point, o.lifetime.Max + 0.3)
+end
+
+-- Continuous particles on `parent` (an attachment) until destroyed.
+local function stream(parent: Attachment, o: EmitOptions, rate: number): ParticleEmitter
+	local emitter = Instance.new("ParticleEmitter")
+	configure(emitter, o)
+	emitter.Rate = rate
+	emitter.Parent = parent
+	return emitter
+end
+
+local function smokePuff(
+	position: Vector3,
+	count: number,
+	size: number,
+	color: Color3,
+	direction: Vector3?,
+	speed: number?
+)
+	emit(position, {
+		texture = TEX.smoke,
+		color = color,
+		size = { size, size * 2.6, size * 3.4 },
+		transparency = { 0.3, 0.55, 1 },
+		speed = NumberRange.new((speed or 10) * 0.5, speed or 10),
+		lifetime = NumberRange.new(0.7, 1.6),
+		spread = 70,
+		direction = direction,
+		acceleration = Vector3.new(0, 2, 0),
+		drag = 3,
+		count = count,
+	})
+end
+
+local function sparks(
+	position: Vector3,
+	count: number,
+	color: Color3,
+	direction: Vector3?,
+	speed: number?,
+	spread: number?
+)
+	emit(position, {
+		texture = TEX.sparks,
+		color = WHITE,
+		color2 = color,
+		size = { 0.35, 0.2, 0 },
+		transparency = { 0, 0.2, 1 },
+		speed = NumberRange.new((speed or 30) * 0.4, speed or 30),
+		lifetime = NumberRange.new(0.25, 0.6),
+		spread = spread or 80,
+		direction = direction,
+		acceleration = Vector3.new(0, -60, 0),
+		drag = 1.5,
+		glow = 1,
+		count = count,
+	})
+end
+
+-- Dust rolling outward all around `position` (a ground impact).
+local function dustRing(position: Vector3, radius: number, strength: number, color: Color3)
+	for index = 1, 10 do
+		local angle = index / 10 * math.pi * 2 + random:NextNumber(-0.2, 0.2)
+		local out = Vector3.new(math.cos(angle), 0.12, math.sin(angle))
+		emit(position + out * radius * 0.3 + Vector3.new(0, 0.6, 0), {
+			texture = TEX.smoke,
+			color = color,
+			size = { 1.2 * strength, 3.5 * strength, 5 * strength },
+			transparency = { 0.25, 0.5, 1 },
+			speed = NumberRange.new(14 * strength, 26 * strength),
+			lifetime = NumberRange.new(1, 2.2),
+			spread = 18,
+			direction = out,
+			acceleration = Vector3.new(0, 1.5, 0),
+			drag = 3.2,
+			count = 3,
+		})
 	end
 end
 
--- Dark cracks running out along the floor from `position`.
-local function cracks(position: Vector3, count: number, length: number, lifetime: number)
+-- Slabs of the floor torn up and tilted out around a crater; they sink
+-- back after `life` seconds.
+local function eruption(position: Vector3, radius: number, count: number, life: number)
 	local floor = floorAt(position)
 	if floor == nil then
 		return
 	end
-	local random = Random.new()
-	local up = floor.Normal
+	local material = if floor.material == Enum.Material.Air
+		then Enum.Material.Slate
+		else floor.material
+	if material == Enum.Material.Plastic or material == Enum.Material.SmoothPlastic then
+		material = Enum.Material.Slate
+	end
+	local up = floor.normal
+	local centre = floor.position
+	for index = 1, count do
+		local angle = index / count * math.pi * 2 + random:NextNumber(-0.25, 0.25)
+		local out = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		local size = Vector3.new(
+			random:NextNumber(0.9, 1.8),
+			random:NextNumber(0.5, 1.1),
+			random:NextNumber(1, 2)
+		)
+		size *= radius / 5
+		local slab = newPart(
+			size,
+			floor.color:Lerp(Color3.new(0, 0, 0), random:NextNumber(0, 0.25)),
+			material
+		)
+		slab.CastShadow = true
+		slab.Parent = fx
+		local at = centre + out * radius * random:NextNumber(0.75, 1.1)
+		-- (tilted outward, like the ground was pushed up from the middle)
+		local tilt = math.rad(random:NextNumber(20, 55))
+		local rest = CFrame.lookAt(at, at + out, up)
+			* CFrame.Angles(tilt, random:NextNumber(-0.3, 0.3), 0)
+			* CFrame.new(0, size.Y * 0.2, 0)
+		local buried = rest - up * (size.Y + 0.6)
+		slab.CFrame = buried
+		local delay = random:NextNumber(0, 0.05)
+		task.delay(delay, function()
+			animate(0.16, function(alpha)
+				slab.CFrame = buried:Lerp(rest, math.min(1, outBack(alpha)))
+			end)
+		end)
+		task.delay(life + delay, function()
+			animate(0.8, function(alpha)
+				slab.CFrame = rest:Lerp(buried, alpha * alpha)
+				slab.Transparency = alpha ^ 3
+			end, function()
+				slab:Destroy()
+			end)
+		end)
+	end
+end
+
+-- Jagged cracks running out on the floor (with a glowing core if `glow`).
+local function cracks(position: Vector3, count: number, length: number, life: number, glow: Color3?)
+	local floor = floorAt(position)
+	if floor == nil then
+		return
+	end
+	local up = floor.normal
+	local pieces: { BasePart } = {}
+	local glows: { BasePart } = {}
+	local function segment(a: Vector3, b: Vector3, width: number)
+		local crack = newPart(Vector3.new(width, 0.03, (b - a).Magnitude + width * 0.5), CRACK)
+		crack.CFrame = CFrame.lookAt((a + b) / 2, b, up)
+		crack.Parent = fx
+		table.insert(pieces, crack)
+		if glow then
+			local core = newPart(
+				Vector3.new(width * 0.45, 0.035, (b - a).Magnitude),
+				glow,
+				Enum.Material.Neon
+			)
+			core.CFrame = crack.CFrame + up * 0.004
+			core.Parent = fx
+			table.insert(glows, core)
+		end
+	end
+	local function line(
+		from: Vector3,
+		direction: Vector3,
+		reach: number,
+		width: number,
+		depth: number
+	)
+		local steps = 4
+		local point = from
+		local dir = direction
+		for step = 1, steps do
+			local side = dir:Cross(up).Unit
+			dir = (dir + side * random:NextNumber(-0.45, 0.45)).Unit
+			local nextPoint = point + dir * reach / steps
+			local w = width * (1 - (step - 1) / steps * 0.7)
+			segment(point, nextPoint, w)
+			-- a branch now and then
+			if depth == 0 and step == 2 and random:NextNumber() < 0.7 then
+				local branch = (dir + side * (if random:NextNumber() < 0.5 then 1 else -1) * 0.9).Unit
+				line(nextPoint, branch, reach * 0.45, w * 0.7, 1)
+			end
+			point = nextPoint
+		end
+	end
+	local origin = floor.position + up * 0.03
 	for index = 1, count do
 		local angle = (index / count + random:NextNumber(-0.04, 0.04)) * math.pi * 2
 		local direction = Vector3.new(math.cos(angle), 0, math.sin(angle))
-		local from = floor.Position + up * 0.03
-		local reach = length * random:NextNumber(0.6, 1.1)
-		-- (two segments with a kink: cracks are never straight)
-		local kink = from
-			+ direction * reach * 0.5
-			+ direction:Cross(up) * random:NextNumber(-0.4, 0.4)
-		for _, segment in { { from, kink }, { kink, from + direction * reach } } do
-			local a, b = segment[1], segment[2]
-			local crack =
-				newPart(Vector3.new(random:NextNumber(0.1, 0.22), 0.02, (b - a).Magnitude), CRACK)
-			crack.CFrame = CFrame.lookAt((a + b) / 2, b, up)
-			crack.Transparency = 0.1
-			crack.Parent = workspace
-			task.delay(lifetime * 0.7, function()
-				if crack.Parent then
-					tween(crack, lifetime * 0.3, { Transparency = 1 })
-				end
-			end)
-			Debris:AddItem(crack, lifetime)
-		end
+		direction = (direction - up * direction:Dot(up)).Unit
+		line(
+			origin + direction * length * 0.12,
+			direction,
+			length * random:NextNumber(0.7, 1.1),
+			0.28,
+			0
+		)
 	end
-	-- the crater in the middle
-	local crater = newPart(Vector3.new(0.02, length * 0.5, length * 0.5), CRACK)
-	crater.Shape = Enum.PartType.Cylinder
-	crater.Transparency = 0.35
-	crater.CFrame = CFrame.lookAt(floor.Position + up * 0.025, floor.Position + up)
-		* CFrame.Angles(0, math.rad(90), 0)
-	crater.Parent = workspace
-	task.delay(lifetime * 0.7, function()
-		if crater.Parent then
-			tween(crater, lifetime * 0.3, { Transparency = 1 })
-		end
+	-- the crater: a dark scorched patch in the middle
+	local crater =
+		newPart(Vector3.new(0.02, length * 0.55, length * 0.55), CRACK, nil, Enum.PartType.Cylinder)
+	crater.Transparency = 0.25
+	crater.CFrame = facing(floor.position + up * 0.025, up) * CFrame.Angles(0, math.rad(90), 0)
+	crater.Parent = fx
+	table.insert(pieces, crater)
+	if #glows > 0 then
+		local hot = glow :: Color3
+		animate(life * 0.45, function(alpha)
+			local color = hot:Lerp(Color3.fromRGB(60, 20, 10), alpha)
+			for _, core in glows do
+				core.Color = color
+				core.Transparency = alpha ^ 2
+			end
+		end, function()
+			for _, core in glows do
+				core:Destroy()
+			end
+		end)
+	end
+	task.delay(life * 0.75, function()
+		animate(life * 0.25, function(alpha)
+			for _, piece in pieces do
+				piece.Transparency = math.max(piece.Transparency, alpha)
+			end
+		end, function()
+			for _, piece in pieces do
+				piece:Destroy()
+			end
+		end)
 	end)
-	Debris:AddItem(crater, lifetime)
 end
 
--- A short white streak trailing behind `part` (a swing, a leap).
-local function trail(part: BasePart, color: Color3, time: number, width: number)
+-- Rocks thrown up out of the floor (its colour and material). Feather-
+-- light: one landing on a fighter doesn't shove them.
+local function rocks(position: Vector3, count: number, power: number)
+	local floor = floorAt(position)
+	local at = if floor then floor.position else position
+	local color = if floor then floor.color else Color3.fromRGB(96, 92, 88)
+	local material = Enum.Material.Slate
+	for index = 1, count do
+		local size = random:NextNumber(0.25, 0.75)
+		local rock = newPart(
+			Vector3.new(size, size * random:NextNumber(0.5, 1), size * random:NextNumber(0.7, 1.2)),
+			color,
+			material
+		)
+		rock.Anchored = false
+		rock.CanCollide = true
+		rock.CastShadow = true
+		rock.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0.5, 0.2)
+		local angle = random:NextNumber(0, math.pi * 2)
+		local out = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		rock.CFrame = CFrame.new(at + out * random:NextNumber(1, 2.5) + Vector3.new(0, 0.5, 0))
+			* CFrame.Angles(random:NextNumber(0, 6.3), random:NextNumber(0, 6.3), 0)
+		rock.AssemblyLinearVelocity = out * random:NextNumber(4, 14) * power
+			+ Vector3.new(0, random:NextNumber(20, 38) * power, 0)
+		rock.AssemblyAngularVelocity = random:NextUnitVector() * 14
+		rock.Parent = fx
+		-- some trail a little dust
+		if index % 3 == 0 then
+			local point = Instance.new("Attachment")
+			point.Parent = rock
+			stream(point, {
+				texture = TEX.smoke,
+				color = dustColor(floor),
+				size = { 0.3, 0.9 },
+				transparency = { 0.4, 1 },
+				speed = NumberRange.new(0),
+				lifetime = NumberRange.new(0.3, 0.5),
+				count = 0,
+			}, 30)
+		end
+		Debris:AddItem(rock, 4)
+		task.delay(3.2, function()
+			if rock.Parent then
+				tween(rock, 0.7, { Transparency = 1 })
+			end
+		end)
+	end
+end
+
+-- Air / speed lines flying along `direction` from around `origin`.
+local function streaks(
+	origin: Vector3,
+	direction: Vector3,
+	count: number,
+	spread: number,
+	length: number,
+	speed: number,
+	color: Color3,
+	time: number
+)
+	local d = direction.Unit
+	local base = facing(origin, d)
+	for _ = 1, count do
+		local offset = base.RightVector * random:NextNumber(-spread, spread)
+			+ base.UpVector * random:NextNumber(-spread, spread)
+		local start = origin + offset
+		local line = newPart(Vector3.new(0.06, 0.06, length), color, Enum.Material.Neon)
+		line.Transparency = 0.2
+		line.Parent = fx
+		local delay = random:NextNumber(0, time * 0.3)
+		local travel = speed * random:NextNumber(0.7, 1.2)
+		animate(time + delay, function(alpha)
+			local t = math.max(0, alpha * (time + delay) - delay) / time
+			local stretch = length * (0.4 + 1.2 * outQuad(t))
+			local at = start + d * (travel * time * outQuad(t))
+			line.CFrame = facing(at + d * stretch / 2, d)
+			line.Size = Vector3.new(0.06 * (1 - t * 0.6), 0.06 * (1 - t * 0.6), stretch)
+			line.Transparency = if t <= 0 then 1 else 0.2 + 0.8 * t
+		end, function()
+			line:Destroy()
+		end)
+	end
+end
+
+-- A crackling bolt from `a` to `b` (re-jagged a few times, then gone).
+local function lightning(a: Vector3, b: Vector3, color: Color3, width: number, time: number)
+	local segments = math.clamp(math.floor((b - a).Magnitude / 0.8), 3, 14)
+	local cores: { BasePart } = {}
+	local halos: { BasePart } = {}
+	for _ = 1, segments do
+		local core = newPart(Vector3.new(width, width, 1), WHITE, Enum.Material.Neon)
+		core.Parent = fx
+		table.insert(cores, core)
+		local halo = newPart(Vector3.new(width * 3, width * 3, 1), color, Enum.Material.Neon)
+		halo.Transparency = 0.6
+		halo.Parent = fx
+		table.insert(halos, halo)
+	end
+	local frames: { CFrame } = {}
+	local both: { BasePart } = {}
+	local lastShape = -1
+	local axis = facing(a, b - a)
+	local length = (b - a).Magnitude
+	animate(time, function(alpha)
+		local shape = math.floor(alpha * 4)
+		if shape ~= lastShape then
+			lastShape = shape
+			table.clear(frames)
+			table.clear(both)
+			local points: { Vector3 } = {}
+			for index = 0, segments do
+				local t = index / segments
+				local wobble = math.sin(t * math.pi) * length * 0.13
+				local offset = axis.RightVector * random:NextNumber(-wobble, wobble)
+					+ axis.UpVector * random:NextNumber(-wobble, wobble)
+				table.insert(points, a + (b - a) * t + offset)
+			end
+			for index = 1, segments do
+				local p, q = points[index], points[index + 1]
+				local mid = facing((p + q) / 2, q - p)
+				local span = (q - p).Magnitude + width
+				cores[index].Size = Vector3.new(width, width, span)
+				halos[index].Size = Vector3.new(width * 3, width * 3, span)
+				table.insert(both, cores[index])
+				table.insert(frames, mid)
+				table.insert(both, halos[index])
+				table.insert(frames, mid)
+			end
+			workspace:BulkMoveTo(both, frames, Enum.BulkMoveMode.FireCFrameChanged)
+		end
+		for index = 1, segments do
+			cores[index].Transparency = alpha ^ 2
+			halos[index].Transparency = 0.6 + 0.4 * alpha
+		end
+	end, function()
+		for index = 1, segments do
+			cores[index]:Destroy()
+			halos[index]:Destroy()
+		end
+	end)
+end
+
+-- A few short bolts crackling around `position`.
+local function crackle(position: Vector3, radius: number, count: number, color: Color3)
+	for _ = 1, count do
+		local from = position + random:NextUnitVector() * radius * 0.3
+		local to = position + random:NextUnitVector() * radius
+		lightning(from, to, color, 0.05, random:NextNumber(0.08, 0.16))
+	end
+end
+
+-- Energy sucked in toward `part` (+ `offset`) for `time` seconds: particles
+-- from a sphere of `radius` flowing inward (a charge building up).
+local function gather(
+	part: BasePart,
+	offset: Vector3,
+	radius: number,
+	time: number,
+	color: Color3,
+	rate: number
+)
+	local shell = newPart(Vector3.one * radius * 2, color, nil, Enum.PartType.Ball)
+	shell.Transparency = 1
+	shell.Anchored = false
+	shell.Massless = true
+	shell.CFrame = part.CFrame * CFrame.new(offset)
+	local joint = Instance.new("WeldConstraint")
+	joint.Part0 = part
+	joint.Part1 = shell
+	joint.Parent = shell
+	shell.Parent = fx
+	local emitter = Instance.new("ParticleEmitter")
+	configure(emitter, {
+		texture = TEX.sparkle,
+		color = WHITE,
+		color2 = color,
+		size = { 0.12, 0.3, 0 },
+		transparency = { 0.6, 0, 0.2 },
+		speed = NumberRange.new(radius / 0.4),
+		lifetime = NumberRange.new(0.38, 0.4),
+		spread = 0,
+		glow = 1,
+		count = 0,
+	})
+	emitter.Shape = Enum.ParticleEmitterShape.Sphere
+	emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface
+	emitter.ShapeInOut = Enum.ParticleEmitterShapeInOut.Inward
+	emitter.LockedToPart = true
+	emitter.Rate = rate
+	emitter.Parent = shell
+	task.delay(time, function()
+		emitter.Rate = 0
+	end)
+	Debris:AddItem(shell, time + 0.5)
+end
+
+-- A glowing streak trailing behind `part` for `time` seconds.
+local function trail(
+	part: BasePart,
+	color: Color3,
+	time: number,
+	width: number,
+	lifetime: number?,
+	offset: Vector3?
+)
+	local at = offset or Vector3.zero
 	local a = Instance.new("Attachment")
-	a.Position = Vector3.new(0, width / 2, 0)
+	a.Position = at + Vector3.new(0, width / 2, 0)
 	a.Parent = part
 	local b = Instance.new("Attachment")
-	b.Position = Vector3.new(0, -width / 2, 0)
+	b.Position = at - Vector3.new(0, width / 2, 0)
 	b.Parent = part
 	local streak = Instance.new("Trail")
 	streak.Attachment0 = a
 	streak.Attachment1 = b
-	streak.Color = ColorSequence.new(color)
-	streak.Transparency = NumberSequence.new(0.3, 1)
-	streak.Lifetime = 0.25
-	streak.LightEmission = 0.6
+	streak.Color = ColorSequence.new(WHITE, color)
+	streak.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.15),
+		NumberSequenceKeypoint.new(0.4, 0.55),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	streak.WidthScale = NumberSequence.new(1, 0.1)
+	streak.Lifetime = lifetime or 0.25
+	streak.LightEmission = 0.8
+	streak.LightInfluence = 0
 	streak.FaceCamera = true
 	streak.Parent = part
-	Debris:AddItem(a, time + 0.3)
-	Debris:AddItem(b, time + 0.3)
-	Debris:AddItem(streak, time + 0.3)
+	task.delay(time, function()
+		streak.Enabled = false
+	end)
+	Debris:AddItem(a, time + (lifetime or 0.25) + 0.1)
+	Debris:AddItem(b, time + (lifetime or 0.25) + 0.1)
+	Debris:AddItem(streak, time + (lifetime or 0.25) + 0.1)
 end
 
--- Camera shake for us if we're close to `position` (stronger closer).
-local shakeUntil, shakeStrength = 0, 0
+-- Camera shake (position only: a rotating shake would shift the aim) for
+-- us if we're close to `position`, stronger closer.
+local shakeUntil, shakeStrength, shakeSeed = 0, 0, 0
 local function shake(position: Vector3, strength: number, radius: number, time: number)
 	local camera = workspace.CurrentCamera
 	if camera == nil then
@@ -324,6 +884,7 @@ local function shake(position: Vector3, strength: number, radius: number, time: 
 	local amount = strength * (1 - distance / radius)
 	shakeStrength = math.max(if os.clock() < shakeUntil then shakeStrength else 0, amount)
 	shakeUntil = math.max(shakeUntil, os.clock() + time)
+	shakeSeed = random:NextNumber(0, 100)
 end
 RunService:BindToRenderStep("KitVFXShake", Enum.RenderPriority.Camera.Value + 2, function()
 	local left = shakeUntil - os.clock()
@@ -331,15 +892,90 @@ RunService:BindToRenderStep("KitVFXShake", Enum.RenderPriority.Camera.Value + 2,
 	if left <= 0 or camera == nil then
 		return
 	end
-	local power = shakeStrength * math.min(1, left * 4)
-	local random = Random.new()
-	camera.CFrame = camera.CFrame
-		* CFrame.Angles(
-			math.rad(random:NextNumber(-power, power)),
-			math.rad(random:NextNumber(-power, power)),
-			math.rad(random:NextNumber(-power, power) * 0.5)
-		)
+	local t = os.clock() * 28
+	local power = shakeStrength * 0.12 * math.min(1, left * 5)
+	local offset = Vector3.new(math.noise(t, shakeSeed), math.noise(shakeSeed, t), 0) * 2 * power
+	camera.CFrame += camera.CFrame:VectorToWorldSpace(offset)
 end)
+
+-- A colour punch on our screen if we're close to a big impact.
+local function punch(position: Vector3, radius: number, tint: Color3, strength: number)
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local distance = (camera.CFrame.Position - position).Magnitude
+	if distance > radius then
+		return
+	end
+	local s = strength * (1 - distance / radius)
+	local correction = Instance.new("ColorCorrectionEffect")
+	correction.Name = "KitVFXPunch"
+	correction.Brightness = 0.18 * s
+	correction.Contrast = 0.35 * s
+	correction.Saturation = -0.2 * s
+	correction.TintColor = WHITE:Lerp(tint, 0.5 * s)
+	correction.Parent = Lighting
+	tween(correction, 0.4, { Brightness = 0, Contrast = 0, Saturation = 0, TintColor = WHITE })
+	Debris:AddItem(correction, 0.45)
+end
+
+-- Everything a big ground impact does.
+type ImpactOptions = {
+	size: number, -- 1 = a stomp, 1.6 = a crater
+	glow: Color3?, -- energy colour (cracks glow, energy rings)
+	flashColor: Color3?,
+}
+local function groundImpact(position: Vector3, o: ImpactOptions)
+	local s = o.size
+	local floor = floorAt(position)
+	local at = if floor then floor.position else position
+	local dust = dustColor(floor)
+	flash(
+		at + Vector3.new(0, 0.8, 0),
+		o.flashColor or o.glow or Color3.fromRGB(255, 220, 180),
+		4 * s,
+		0.35
+	)
+	if o.glow then
+		shockSphere(at, 1, 9 * s, 0.45, o.glow)
+		groundRing(at, 1.5, 17 * s, 0.55, o.glow, { neon = true, width = 0.5, height = 0.35 })
+	end
+	groundRing(
+		at,
+		2,
+		22 * s,
+		0.75,
+		dust,
+		{ width = 1.2 * s, height = 1.4 * s, transparency = 0.25 }
+	)
+	task.delay(0.06, function()
+		groundRing(
+			at,
+			1,
+			12 * s,
+			0.6,
+			WHITE,
+			{ neon = true, width = 0.18, height = 0.12, transparency = 0.3 }
+		)
+	end)
+	dustRing(at, 3 * s, s, dust)
+	smokePuff(at + Vector3.new(0, 1, 0), math.floor(12 * s), 1.5 * s, dust, Vector3.yAxis, 16 * s)
+	eruption(at, 4.2 * s, math.floor(10 * s), 5)
+	cracks(at, math.floor(6 * s) + 2, 6.5 * s, 9, o.glow)
+	rocks(at, math.floor(10 * s), 0.7 + 0.3 * s)
+	sparks(
+		at + Vector3.new(0, 0.5, 0),
+		math.floor(16 * s),
+		o.glow or EMBER,
+		Vector3.yAxis,
+		36 * s,
+		70
+	)
+	shake(at, 3 * s, 55 * s, 0.55)
+	punch(at, 30 * s, o.glow or Color3.fromRGB(255, 220, 190), math.min(1, 0.5 * s))
+	KitLooks.gust(at, 60 * s, 30 * s)
+end
 
 local function part(model: Model, name: string): BasePart?
 	local found = model:FindFirstChild(name)
@@ -357,6 +993,11 @@ local function feet(model: Model): Vector3?
 	return if root then root.Position - Vector3.new(0, 3, 0) else nil
 end
 
+local function forwardOf(model: Model): Vector3
+	local root = part(model, "HumanoidRootPart")
+	return if root then flat(root.CFrame.LookVector) else Vector3.new(0, 0, -1)
+end
+
 -- Runs `fn` `delay` seconds later, if the move on `model` is still the same.
 local function later(model: Model, token: number, delay: number, fn: () -> ())
 	task.delay(delay, function()
@@ -366,94 +1007,244 @@ local function later(model: Model, token: number, delay: number, fn: () -> ())
 	end)
 end
 
-------------------------------------------------------------------------------
--- SENTINEL
-------------------------------------------------------------------------------
+local function alive(model: Model, token: number): boolean
+	return tokens[model] == token and model.Parent ~= nil
+end
 
--- Heat vision: the eyes glow red, then two beams burn straight ahead (the
--- way he faced when it started) until `beam.to`.
-local function heatVision(model: Model, move: Kits.MoveDef, token: number)
-	local beam = move.beam
-	local head = part(model, "Head")
-	local root = part(model, "HumanoidRootPart")
-	if beam == nil or head == nil or root == nil then
-		return
-	end
-	local look = root.CFrame.LookVector
-	local direction = Vector3.new(look.X, 0, look.Z)
-	direction = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.new(0, 0, -1)
-	local folder = Instance.new("Folder")
-	folder.Name = "HeatVision"
-	folder.Parent = workspace
-
-	-- The eyes: two glowing points on the face, a red light.
-	local eyes: { BasePart } = {}
+-- Glowing eyes on `head` for `time` seconds (the Bull's rage).
+local function rageEyes(head: BasePart, time: number)
 	for _, side in { -1, 1 } do
-		local eye = newPart(Vector3.one * 0.14, LASER, Enum.Material.Neon)
-		eye.Shape = Enum.PartType.Ball
+		local eye = newPart(Vector3.new(0.14, 0.08, 0.04), RAGE, Enum.Material.Neon)
 		eye.Anchored = false
 		eye.Massless = true
-		eye.CFrame = head.CFrame * CFrame.new(side * 0.17, 0.12, -0.58)
+		eye.CFrame = head.CFrame * CFrame.new(side * 0.18, 0.12, -0.6)
 		local joint = Instance.new("WeldConstraint")
 		joint.Part0 = head
 		joint.Part1 = eye
 		joint.Parent = eye
-		eye.Parent = folder
-		table.insert(eyes, eye)
+		eye.Parent = fx
+		local point = Instance.new("Attachment")
+		point.Parent = eye
+		stream(point, {
+			texture = TEX.glow,
+			color = RAGE,
+			size = { 0.5, 0.2 },
+			transparency = { 0.5, 1 },
+			speed = NumberRange.new(0),
+			lifetime = NumberRange.new(0.15, 0.25),
+			glow = 1,
+			count = 0,
+		}, 25)
+		task.delay(time, function()
+			tween(eye, 0.3, { Transparency = 1 })
+		end)
+		Debris:AddItem(eye, time + 0.35)
+	end
+end
+
+------------------------------------------------------------------------------
+-- Burns (heat vision): charred marks where the beam touches a body
+------------------------------------------------------------------------------
+
+local MAX_BURNS = 24
+local burnCount: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+local function burn(body: Model, limb: BasePart, position: Vector3, normal: Vector3)
+	local count = burnCount[body] or 0
+	if count >= MAX_BURNS then
+		return
+	end
+	burnCount[body] = count + 1
+	local size = random:NextNumber(0.24, 0.42)
+	local mark =
+		newPart(Vector3.new(0.03, size, size), CHAR, Enum.Material.Slate, Enum.PartType.Cylinder)
+	mark.Name = "Burn"
+	mark.Anchored = false
+	mark.Massless = true
+	mark.CFrame = facing(position + normal * 0.012, normal) * CFrame.Angles(0, math.rad(90), 0)
+	local joint = Instance.new("WeldConstraint")
+	joint.Part0 = limb
+	joint.Part1 = mark
+	joint.Parent = mark
+	mark.Parent = limb
+	-- the burning rim cools down: orange → red → gone
+	local rim = newPart(
+		Vector3.new(0.035, size * 0.75, size * 0.75),
+		EMBER,
+		Enum.Material.Neon,
+		Enum.PartType.Cylinder
+	)
+	rim.Anchored = false
+	rim.Massless = true
+	rim.CFrame = mark.CFrame * CFrame.new(0.004, 0, 0)
+	local rimJoint = Instance.new("WeldConstraint")
+	rimJoint.Part0 = limb
+	rimJoint.Part1 = rim
+	rimJoint.Parent = rim
+	rim.Parent = limb
+	animate(1.6, function(alpha)
+		rim.Color = EMBER:Lerp(LASER_DEEP, alpha)
+		rim.Transparency = alpha ^ 1.5
+		rim.Size = Vector3.new(0.035, size * (0.75 - 0.3 * alpha), size * (0.75 - 0.3 * alpha))
+	end, function()
+		rim:Destroy()
+	end)
+	emit(position, {
+		texture = TEX.smoke,
+		color = Color3.fromRGB(70, 64, 60),
+		size = { 0.25, 0.9, 1.4 },
+		transparency = { 0.35, 0.6, 1 },
+		speed = NumberRange.new(1, 3),
+		lifetime = NumberRange.new(0.8, 1.4),
+		spread = 25,
+		direction = normal,
+		acceleration = Vector3.new(0, 3, 0),
+		count = 2,
+	})
+end
+
+------------------------------------------------------------------------------
+-- SENTINEL
+------------------------------------------------------------------------------
+
+local BEAM_LAYERS = {
+	{ color = LASER_CORE, width = 0.1, transparency = 0 },
+	{ color = LASER, width = 0.26, transparency = 0.25 },
+	{ color = LASER_DEEP, width = 0.7, transparency = 0.8 },
+}
+
+-- Heat vision: the eyes charge up (energy sucked in, red light, sparks),
+-- then two beams burn straight ahead the way he faced when it started.
+-- Fighters don't stop it (it burns through: charred marks where it touches
+-- them, after a moment in it); a wall does (scorched, molten trail).
+local function heatVision(model: Model, move: Kits.MoveDef, token: number)
+	local beam = move.beam
+	local head = part(model, "Head")
+	if beam == nil or head == nil then
+		return
+	end
+	local direction = forwardOf(model)
+	local folder = Instance.new("Folder")
+	folder.Name = "HeatVision"
+	folder.Parent = fx
+
+	-- The eyes: his own glowing ones (cape kit), or new ones.
+	local eyes = KitLooks.eyes(model)
+	local ownEyes = #eyes > 0
+	if not ownEyes then
+		for _, side in { -1, 1 } do
+			local eye = newPart(Vector3.new(0.13, 0.08, 0.04), LASER, Enum.Material.Neon)
+			eye.Anchored = false
+			eye.Massless = true
+			eye.CFrame = head.CFrame * CFrame.new(side * 0.17, 0.11, -0.6)
+			local joint = Instance.new("WeldConstraint")
+			joint.Part0 = head
+			joint.Part1 = eye
+			joint.Parent = eye
+			eye.Parent = folder
+			table.insert(eyes, eye)
+		end
+	end
+	-- a flare in front of each eye, growing with the charge
+	local flares: { BasePart } = {}
+	for _ = 1, #eyes do
+		local flare = newPart(Vector3.one * 0.05, LASER, Enum.Material.Neon, Enum.PartType.Ball)
+		flare.Transparency = 0.3
+		flare.Parent = folder
+		table.insert(flares, flare)
 	end
 	local glow = Instance.new("PointLight")
 	glow.Color = LASER
 	glow.Brightness = 0
-	glow.Range = 8
-	glow.Parent = eyes[1]
-	tween(glow, beam.from, { Brightness = 6 })
-	SoundController.play("LaserCharge", model)
+	glow.Range = 10
+	glow.Shadows = false
+	glow.Parent = head
 
-	-- The beams (core + glow, per eye) and what they hit.
-	local beams: { { core: Part, outer: Part } } = {}
-	for _ = 1, 2 do
-		local outer = newPart(Vector3.new(0.34, 0.34, 1), LASER, Enum.Material.Neon)
-		outer.Transparency = 0.55
-		local core = newPart(Vector3.new(0.1, 0.1, 1), LASER_CORE, Enum.Material.Neon)
-		table.insert(beams, { core = core, outer = outer })
+	local charge = SoundController.play("LaserCharge", model)
+	gather(head, Vector3.new(0, 0.1, -0.5), 2.6, beam.from, LASER, 70)
+	-- heat haze around the head while charging
+	local haze = Instance.new("Attachment")
+	haze.Position = Vector3.new(0, 0.1, -0.6)
+	haze.Parent = head
+	local hazeEmitter = stream(haze, {
+		texture = TEX.glow,
+		color = EMBER,
+		color2 = LASER,
+		size = { 0.4, 1.1, 0 },
+		transparency = { 0.85, 0.7, 1 },
+		speed = NumberRange.new(0.5, 1.5),
+		lifetime = NumberRange.new(0.3, 0.5),
+		spread = 180,
+		glow = 1,
+		count = 0,
+	}, 30)
+
+	-- The beams: a white-hot core, a red body, a wide faint glow (per eye).
+	type Layer = { part: Part, width: number }
+	local beams: { { Layer } } = {}
+	for _ = 1, #eyes do
+		local layers: { Layer } = {}
+		for _, spec in BEAM_LAYERS do
+			local layer =
+				newPart(Vector3.new(spec.width, spec.width, 1), spec.color, Enum.Material.Neon)
+			layer.Transparency = spec.transparency
+			table.insert(layers, { part = layer, width = spec.width })
+		end
+		table.insert(beams, layers)
 	end
+	-- the hot spot where it lands
 	local impact = Instance.new("Attachment")
 	impact.Parent = workspace.Terrain
-	local sparks = Instance.new("ParticleEmitter")
-	sparks.Texture = SPARKS
-	sparks.Color = ColorSequence.new(Color3.fromRGB(255, 200, 120), LASER)
-	sparks.Size = NumberSequence.new(0.35, 0)
-	sparks.Speed = NumberRange.new(8, 20)
-	sparks.SpreadAngle = Vector2.new(70, 70)
-	sparks.Lifetime = NumberRange.new(0.2, 0.5)
-	sparks.Acceleration = Vector3.new(0, -40, 0)
-	sparks.LightEmission = 1
-	sparks.Rate = 0
-	sparks.Parent = impact
-	local smoke = Instance.new("ParticleEmitter")
-	smoke.Texture = SMOKE
-	smoke.Color = ColorSequence.new(Color3.fromRGB(70, 66, 64))
-	smoke.Size = NumberSequence.new(0.6, 2.4)
-	smoke.Transparency = NumberSequence.new(0.4, 1)
-	smoke.Speed = NumberRange.new(1.5, 4)
-	smoke.Lifetime = NumberRange.new(0.8, 1.4)
-	smoke.Rate = 0
-	smoke.Parent = impact
+	local fountain = stream(impact, {
+		texture = TEX.sparks,
+		color = WHITE,
+		color2 = EMBER,
+		size = { 0.4, 0.2, 0 },
+		transparency = { 0, 0.3, 1 },
+		speed = NumberRange.new(10, 26),
+		lifetime = NumberRange.new(0.25, 0.6),
+		spread = 60,
+		acceleration = Vector3.new(0, -70, 0),
+		drag = 1,
+		glow = 1,
+		count = 0,
+	}, 0)
+	local smoke = stream(impact, {
+		texture = TEX.smoke,
+		color = Color3.fromRGB(64, 58, 56),
+		size = { 0.6, 2, 3 },
+		transparency = { 0.45, 0.7, 1 },
+		speed = NumberRange.new(2, 5),
+		lifetime = NumberRange.new(0.9, 1.6),
+		spread = 25,
+		acceleration = Vector3.new(0, 4, 0),
+		count = 0,
+	}, 0)
+	local molten = newPart(Vector3.one * 0.7, EMBER, Enum.Material.Neon, Enum.PartType.Ball)
+	molten.Transparency = 1
+	molten.Parent = folder
 	local heat = Instance.new("PointLight")
-	heat.Color = Color3.fromRGB(255, 120, 40)
+	heat.Color = EMBER
 	heat.Brightness = 0
-	heat.Range = 10
+	heat.Range = 12
+	heat.Shadows = false
 	heat.Parent = impact
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { model, folder }
 	local startedAt = os.clock()
-	local lastScorch = 0
+	local lastScorch, lastBurn = 0, 0
+	local contact: { [Model]: number } = {}
 	local firing = false
 	local loop: Sound? = nil
 	local connection: RBXScriptConnection? = nil
+	local finished = false
+
 	local function finish()
+		if finished then
+			return
+		end
+		finished = true
 		if connection then
 			connection:Disconnect()
 			connection = nil
@@ -461,49 +1252,103 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		if loop then
 			loop:Stop()
 		end
-		sparks.Rate = 0
+		if charge then
+			charge:Stop()
+		end
+		fountain.Rate = 0
 		smoke.Rate = 0
+		hazeEmitter.Rate = 0
+		Debris:AddItem(haze, 0.6)
 		tween(heat, 0.3, { Brightness = 0 })
-		for _, pair in beams do
-			tween(pair.core, 0.15, { Transparency = 1 })
-			tween(pair.outer, 0.15, { Transparency = 1 })
+		tween(glow, 0.6, { Brightness = 0 })
+		tween(molten, 0.3, { Transparency = 1 })
+		for _, layers in beams do
+			for _, layer in layers do
+				tween(layer.part, 0.12, { Transparency = 1 })
+			end
 		end
-		tween(glow, 0.4, { Brightness = 0 })
+		for _, flare in flares do
+			tween(flare, 0.4, { Transparency = 1 })
+		end
+		-- the eyes cool down, steaming a little
 		for _, eye in eyes do
-			tween(eye, 0.4, { Transparency = 1 })
+			emit(eye.Position, {
+				texture = TEX.smoke,
+				color = Color3.fromRGB(120, 110, 108),
+				size = { 0.15, 0.6 },
+				transparency = { 0.5, 1 },
+				speed = NumberRange.new(0.5, 1.5),
+				lifetime = NumberRange.new(0.6, 1),
+				spread = 20,
+				acceleration = Vector3.new(0, 2, 0),
+				count = 3,
+			})
 		end
-		Debris:AddItem(folder, 0.6)
-		Debris:AddItem(impact, 1.6)
+		task.delay(0.65, function()
+			glow:Destroy()
+		end)
+		Debris:AddItem(folder, 0.7)
+		Debris:AddItem(impact, 1.8)
 	end
+
 	connection = RunService.RenderStepped:Connect(function()
-		local elapsed = os.clock() - startedAt
-		if tokens[model] ~= token or head.Parent == nil or elapsed > beam.to then
+		local now = os.clock()
+		local elapsed = now - startedAt
+		if not alive(model, token) or head.Parent == nil or elapsed > beam.to then
 			finish()
 			return
 		end
-		if elapsed < beam.from then
-			return
+		local charged = math.clamp(elapsed / beam.from, 0, 1)
+		for index, flare in flares do
+			local eye = eyes[index]
+			local size = if firing then 0.32 + math.random() * 0.08 else 0.05 + 0.28 * charged ^ 2
+			flare.Size = Vector3.one * size
+			flare.CFrame = eye.CFrame * CFrame.new(0, 0, -0.03)
 		end
 		if not firing then
+			glow.Brightness = 7 * charged ^ 2
+			-- crackling just before it fires
+			if charged > 0.6 and math.random() < 0.18 then
+				crackle(eyes[1].Position, 0.8, 1, LASER)
+			end
+			if elapsed < beam.from then
+				return
+			end
 			firing = true
+			if charge then
+				charge:Stop()
+			end
 			loop = SoundController.play("LaserBeam", model)
 			if loop then
 				loop.Looped = true
 			end
-			flash(head.Position + direction, LASER, 8, 10, 0.3)
-			for _, pair in beams do
-				pair.outer.Parent = folder
-				pair.core.Parent = folder
+			hazeEmitter.Rate = 10
+			flash(head.Position + direction * 0.8, LASER, 3, 0.3)
+			ring(
+				axisFrame(head.Position + direction * 1, direction),
+				0.3,
+				3.5,
+				0.35,
+				LASER,
+				{ neon = true, width = 0.12, height = 0.08 }
+			)
+			shake(head.Position, 1, 30, 0.25)
+			for _, layers in beams do
+				for _, layer in layers do
+					layer.part.Parent = folder
+				end
 			end
-			sparks.Rate = 160
-			smoke.Rate = 25
-			heat.Brightness = 5
+			fountain.Rate = 140
+			smoke.Rate = 22
+			heat.Brightness = 6
+			glow.Brightness = 9
 		end
-		-- (one hit point for both eyes: they converge on it)
+
+		-- Where it goes: through the fighters, stopped by the first thing
+		-- that isn't one (like the server).
 		local origin = head.Position + direction * 0.5
-		-- (like the server: fighters don't stop it, it burns through them;
-		-- the first thing that isn't a fighter does)
-		local skipped: { Instance } = { model, folder }
+		local skipped: { Instance } = { model, fx }
+		local touched: { RaycastResult } = {}
 		local hit: RaycastResult? = nil
 		for _ = 1, 8 do
 			params.FilterDescendantsInstances = skipped
@@ -511,123 +1356,245 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			local owner = if hit then hit.Instance:FindFirstAncestorOfClass("Model") else nil
 			if hit and owner and owner:FindFirstChildOfClass("Humanoid") then
 				table.insert(skipped, owner)
+				table.insert(touched, hit)
 				hit = nil
 			else
 				break
 			end
 		end
 		local target = if hit then hit.Position else origin + direction * beam.range
-		local flicker = 0.85 + math.random() * 0.3
-		for index, pair in beams do
+		local pulse = 0.85 + math.sin(now * 40) * 0.08 + math.random() * 0.12
+		for index, layers in beams do
 			local from = eyes[index].Position
 			local length = (target - from).Magnitude
 			local frame = CFrame.lookAt(from + (target - from) / 2, target)
-			pair.core.CFrame = frame
-			pair.core.Size = Vector3.new(0.1 * flicker, 0.1 * flicker, length)
-			pair.outer.CFrame = frame
-			pair.outer.Size = Vector3.new(0.34 * flicker, 0.34 * flicker, length)
+			for _, layer in layers do
+				layer.part.CFrame = frame
+				layer.part.Size = Vector3.new(layer.width * pulse, layer.width * pulse, length)
+			end
 		end
-		impact.WorldPosition = target
-		if hit then
-			impact.WorldCFrame = CFrame.lookAt(target, target + hit.Normal)
-				* CFrame.Angles(math.rad(-90), 0, 0)
-			-- Scorch marks where it burns the ground / a wall.
-			if os.clock() - lastScorch > 0.08 then
-				lastScorch = os.clock()
-				local scorch = newPart(Vector3.new(0.02, 0.9, 0.9), Color3.fromRGB(26, 20, 18))
-				scorch.Shape = Enum.PartType.Cylinder
-				scorch.Transparency = 0.25
-				scorch.CFrame = CFrame.lookAt(target + hit.Normal * 0.02, target + hit.Normal)
-					* CFrame.Angles(0, math.rad(90), 0)
-				scorch.Parent = workspace
-				local ember = newPart(
-					Vector3.new(0.025, 0.45, 0.45),
-					Color3.fromRGB(255, 120, 40),
-					Enum.Material.Neon
-				)
-				ember.Shape = Enum.PartType.Cylinder
-				ember.CFrame = scorch.CFrame * CFrame.new(0.005, 0, 0)
-				ember.Parent = workspace
-				tween(ember, 1.2, { Transparency = 1 })
-				task.delay(6, function()
-					if scorch.Parent then
-						tween(scorch, 3, { Transparency = 1 })
-					end
+		impact.WorldCFrame = if hit then facing(target, hit.Normal) else CFrame.new(target)
+		fountain.Rate = if hit then 140 else 0
+		molten.CFrame = CFrame.new(target)
+		molten.Transparency = if hit then 0.15 else 1
+		molten.Size = Vector3.one * (0.6 + math.random() * 0.25)
+
+		-- Molten, then charred, trail on the floor / wall.
+		if hit and now - lastScorch > 0.05 then
+			lastScorch = now
+			local size = random:NextNumber(0.6, 0.95)
+			local scorch = newPart(
+				Vector3.new(0.02, size, size),
+				EMBER,
+				Enum.Material.Neon,
+				Enum.PartType.Cylinder
+			)
+			scorch.CFrame = facing(target + hit.Normal * 0.02, hit.Normal)
+				* CFrame.Angles(0, math.rad(90), 0)
+			scorch.Parent = fx
+			animate(1.4, function(alpha)
+				if alpha < 0.5 then
+					scorch.Color = EMBER:Lerp(LASER_DEEP, alpha * 2)
+				else
+					scorch.Material = Enum.Material.Slate
+					scorch.Color = LASER_DEEP:Lerp(CHAR, (alpha - 0.5) * 2)
+				end
+			end)
+			task.delay(7, function()
+				animate(2.5, function(alpha)
+					scorch.Transparency = alpha
+				end, function()
+					scorch:Destroy()
 				end)
-				Debris:AddItem(scorch, 9.2)
-				Debris:AddItem(ember, 1.3)
+			end)
+		end
+		-- Charred skin where it touches someone (after a moment in it, like
+		-- the server's warm-up), smoke rising off them.
+		local inBeam: { [Model]: boolean } = {}
+		for _, touch in touched do
+			local owner = touch.Instance:FindFirstAncestorOfClass("Model")
+			if owner then
+				inBeam[owner] = true
+				contact[owner] = (contact[owner] or now)
+				local limb = touch.Instance
+				if
+					now - contact[owner] >= beam.warmup
+					and now - lastBurn > 0.12
+					and limb:IsA("BasePart")
+				then
+					lastBurn = now
+					burn(owner, limb, touch.Position, touch.Normal)
+					sparks(touch.Position, 6, EMBER, touch.Normal, 14, 50)
+				end
+			end
+		end
+		for owner in contact do
+			if not inBeam[owner] then
+				contact[owner] = nil
 			end
 		end
 	end)
 end
 
 local function thunderClap(model: Model, token: number)
+	-- the hands crackle as the arms open
+	for step = 1, 4 do
+		later(model, token, 0.05 + step * 0.06, function()
+			for _, arm in { "Right Arm", "Left Arm" } do
+				local hand = fist(model, arm)
+				if hand then
+					crackle(hand, 1, 1, ENERGY)
+				end
+			end
+		end)
+	end
 	later(model, token, 0.34, function()
-		local root = part(model, "HumanoidRootPart")
 		local right, left = fist(model, "Right Arm"), fist(model, "Left Arm")
-		if root == nil or right == nil or left == nil then
+		if right == nil or left == nil then
 			return
 		end
 		local hands = (right + left) / 2
-		local forward = root.CFrame.LookVector
+		local forward = forwardOf(model)
 		SoundController.play("ThunderClap", model)
-		flash(hands, ENERGY, 10, 16, 0.35)
-		for index = 0, 2 do
-			local at = hands + forward * (1 + index * 2.2)
-			task.delay(index * 0.05, function()
-				ring(CFrame.lookAt(at, at + forward), 1, 9 + index * 3, 0.45, ENERGY, true, 0.18)
+		flash(hands, ENERGY, 5, 0.35)
+		shockSphere(hands, 0.5, 6, 0.35, ENERGY)
+		-- the blast: rings in a cone, air lines, lightning, dust pushed ahead
+		for index = 0, 3 do
+			task.delay(index * 0.04, function()
+				local at = hands + forward * (1 + index * 2.4)
+				ring(
+					axisFrame(at, forward),
+					0.5 + index * 0.5,
+					4 + index * 2.6,
+					0.45,
+					if index % 2 == 0 then WHITE else ENERGY,
+					{
+						neon = true,
+						width = 0.22,
+						height = 0.14,
+					}
+				)
 			end)
 		end
-		-- the air pushes the dust ahead
+		streaks(hands + forward, forward, 16, 2.2, 3, 45, WHITE, 0.4)
+		for _ = 1, 4 do
+			local reach = forward * random:NextNumber(7, 12)
+				+ Vector3.new(
+					random:NextNumber(-3, 3),
+					random:NextNumber(-1, 2),
+					random:NextNumber(-3, 3)
+				)
+			lightning(hands, hands + reach, ENERGY_DEEP, 0.08, 0.22)
+		end
 		local ground = feet(model)
 		if ground then
-			for step = 1, 4 do
-				dust(ground + forward * step * 2.2, 6, 25, 0.8)
+			local floor = floorAt(ground)
+			for step = 1, 5 do
+				smokePuff(
+					ground + forward * step * 2.4 + Vector3.new(0, 0.6, 0),
+					4,
+					1,
+					dustColor(floor),
+					forward,
+					20
+				)
 			end
+			groundRing(
+				ground + forward * 2,
+				1,
+				9,
+				0.5,
+				dustColor(floor),
+				{ width = 0.8, height = 0.6 }
+			)
 		end
-		shake(hands, 1.4, 30, 0.3)
+		shake(hands, 1.8, 35, 0.35)
+		punch(hands, 22, ENERGY, 0.6)
+		KitLooks.gust(hands - forward * 2, 70, 30)
 	end)
 end
 
 local function skyfall(model: Model, move: Kits.MoveDef, token: number)
 	local leap = move.leap
+	local jumpAt = if leap then leap.at else 0.18
 	local hitAt = if move.hits[1] then move.hits[1].at else 0.84
-	later(model, token, if leap then leap.at else 0.18, function()
-		local ground = feet(model)
+	-- crouching: the floor starts to shake, pebbles lift
+	local ground = feet(model)
+	if ground then
+		emit(ground + Vector3.new(0, 0.3, 0), {
+			texture = TEX.smoke,
+			color = dustColor(floorAt(ground)),
+			size = { 0.6, 1.6 },
+			transparency = { 0.5, 1 },
+			speed = NumberRange.new(2, 5),
+			lifetime = NumberRange.new(0.4, 0.8),
+			spread = 80,
+			count = 8,
+		})
+	end
+	later(model, token, jumpAt, function()
+		local spot = feet(model)
 		local torso = part(model, "Torso")
-		if ground then
-			groundRing(ground, 2, 10, 0.4, DUST, false)
-			dust(ground, 18, 60, 1)
-			rocks(ground, 5, 0.6)
+		SoundController.play("SkyfallJump", model)
+		if spot then
+			groundImpact(spot, { size = 1, glow = ENERGY })
 		end
 		if torso then
-			trail(torso, ENERGY, hitAt - (if leap then leap.at else 0.18), 1.6)
+			trail(torso, ENERGY, hitAt - jumpAt, 1.8, 0.35)
+			local wind = Instance.new("Attachment")
+			wind.Parent = torso
+			stream(wind, {
+				texture = TEX.sparkle,
+				color = WHITE,
+				color2 = ENERGY,
+				size = { 0.2, 0 },
+				transparency = { 0.3, 1 },
+				speed = NumberRange.new(2, 6),
+				lifetime = NumberRange.new(0.2, 0.4),
+				spread = 180,
+				glow = 1,
+				count = 0,
+			}, 40)
+			Debris:AddItem(wind, hitAt - jumpAt)
+		end
+	end)
+	-- coming down: the fist glows, speed lines
+	later(model, token, hitAt - 0.22, function()
+		local arm = part(model, "Right Arm")
+		local root = part(model, "HumanoidRootPart")
+		if arm then
+			gather(arm, Vector3.new(0, -1, 0), 1.6, 0.22, ENERGY, 60)
+			trail(arm, ENERGY, 0.25, 0.8, 0.2, Vector3.new(0, -1, 0))
+		end
+		if root then
+			streaks(
+				root.Position + Vector3.new(0, 4, 0),
+				Vector3.new(0, 1, 0),
+				10,
+				1.6,
+				4,
+				30,
+				WHITE,
+				0.35
+			)
 		end
 	end)
 	later(model, token, hitAt, function()
-		local ground = feet(model)
-		if ground == nil then
+		local spot = feet(model)
+		if spot == nil then
 			return
 		end
 		SoundController.play("Slam", model)
-		flash(ground + Vector3.new(0, 1, 0), ENERGY, 12, 22, 0.45)
-		groundRing(ground, 2, 26, 0.55, ENERGY, true)
-		task.delay(0.06, function()
-			groundRing(ground, 2, 20, 0.7, DUST, false)
-		end)
-		dust(ground, 40, 80, 1.4)
-		rocks(ground, 16, 1)
-		cracks(ground, 9, 6, 8)
-		shake(ground, 3, 50, 0.5)
+		groundImpact(spot + forwardOf(model) * 1, { size = 1.7, glow = ENERGY })
 	end)
 end
 
 local function haymaker(model: Model, token: number)
+	local impactAt = 0.55
 	local arm = part(model, "Right Arm")
 	if arm then
 		-- the fist charges up during the wind-up
-		local charge = newPart(Vector3.one * 0.3, ENERGY, Enum.Material.Neon)
-		charge.Shape = Enum.PartType.Ball
+		local charge = newPart(Vector3.one * 0.3, ENERGY, Enum.Material.Neon, Enum.PartType.Ball)
 		charge.Transparency = 0.4
 		charge.Anchored = false
 		charge.Massless = true
@@ -636,46 +1603,81 @@ local function haymaker(model: Model, token: number)
 		joint.Part0 = arm
 		joint.Part1 = charge
 		joint.Parent = charge
-		local light = Instance.new("PointLight")
-		light.Color = ENERGY
-		light.Brightness = 0
-		light.Range = 7
-		light.Parent = charge
-		charge.Parent = workspace
-		tween(charge, 0.5, { Size = Vector3.one * 1.1, Transparency = 0.15 })
-		tween(light, 0.5, { Brightness = 5 })
-		later(model, token, 0.56, function()
-			tween(charge, 0.15, { Transparency = 1, Size = Vector3.one * 2 })
-			tween(light, 0.2, { Brightness = 0 })
+		local glow = Instance.new("PointLight")
+		glow.Color = ENERGY
+		glow.Brightness = 0
+		glow.Range = 8
+		glow.Shadows = false
+		glow.Parent = charge
+		charge.Parent = fx
+		tween(charge, impactAt, { Size = Vector3.one * 1.2, Transparency = 0.1 })
+		tween(glow, impactAt, { Brightness = 6 })
+		gather(arm, Vector3.new(0, -1, 0), 2.4, impactAt, ENERGY, 80)
+		for step = 1, 5 do
+			later(model, token, step * 0.09, function()
+				local hand = fist(model, "Right Arm")
+				if hand then
+					crackle(hand, 1.2, 2, ENERGY)
+				end
+			end)
+		end
+		later(model, token, impactAt, function()
+			tween(charge, 0.15, { Transparency = 1, Size = Vector3.one * 2.5 })
+			tween(glow, 0.2, { Brightness = 0 })
 		end)
-		Debris:AddItem(charge, 1)
-		trail(arm, ENERGY, 0.65, 0.8)
+		Debris:AddItem(charge, impactAt + 0.4)
+		later(model, token, impactAt - 0.15, function()
+			trail(arm, ENERGY, 0.3, 0.9, 0.2, Vector3.new(0, -0.8, 0))
+		end)
 	end
 	local ground = feet(model)
 	if ground then
-		dust(ground, 8, 40, 0.6)
+		-- the stance digs in: dust swirling at the feet
+		groundRing(ground, 0.5, 4, 0.5, dustColor(floorAt(ground)), { width = 0.5, height = 0.4 })
 	end
-	later(model, token, 0.55, function()
-		local root = part(model, "HumanoidRootPart")
+	later(model, token, impactAt, function()
 		local hand = fist(model, "Right Arm")
-		if root == nil or hand == nil then
+		if hand == nil then
 			return
 		end
-		local forward = root.CFrame.LookVector
-		flash(hand + forward, ENERGY, 12, 16, 0.3)
-		ring(CFrame.lookAt(hand + forward, hand + forward * 2), 1, 8, 0.35, ENERGY, true, 0.2)
-		task.delay(0.05, function()
-			ring(
-				CFrame.lookAt(hand + forward * 3, hand + forward * 4),
+		local forward = forwardOf(model)
+		SoundController.play("Haymaker", model)
+		flash(hand + forward * 0.5, ENERGY, 4, 0.3)
+		shockSphere(hand + forward, 0.3, 3.5, 0.3, ENERGY)
+		-- the air blast: rings along the punch, air lines, sparks
+		for index = 0, 3 do
+			task.delay(index * 0.035, function()
+				local at = hand + forward * (1 + index * 1.8)
+				ring(
+					axisFrame(at, forward),
+					0.4 + index * 0.3,
+					2.5 + index * 1.6,
+					0.4,
+					if index == 0 then WHITE else ENERGY,
+					{
+						neon = true,
+						width = 0.18,
+						height = 0.12,
+					}
+				)
+			end)
+		end
+		streaks(hand + forward, forward, 14, 1.4, 2.5, 50, WHITE, 0.35)
+		sparks(hand + forward, 18, ENERGY, forward, 40, 45)
+		local spot = feet(model)
+		if spot then
+			smokePuff(
+				spot + forward * 3 + Vector3.new(0, 0.5, 0),
+				8,
 				1,
-				12,
-				0.45,
-				Color3.new(1, 1, 1),
-				true,
-				0.12
+				dustColor(floorAt(spot)),
+				forward,
+				22
 			)
-		end)
-		shake(hand, 1.8, 30, 0.3)
+		end
+		shake(hand, 2, 32, 0.3)
+		punch(hand, 18, ENERGY, 0.5)
+		KitLooks.gust(hand - forward, 50, 22)
 	end)
 end
 
@@ -684,142 +1686,312 @@ end
 ------------------------------------------------------------------------------
 
 -- Steam snorted out of the nose.
-local function snort(model: Model)
+local function snort(model: Model, strength: number)
 	local head = part(model, "Head")
 	if head == nil then
 		return
 	end
 	SoundController.play("BullSnort", model)
-	for _, side in { -0.12, 0.12 } do
-		local at = (head.CFrame * CFrame.new(side, -0.15, -0.6)).Position
-		burst(
-			at,
-			6,
-			SMOKE,
-			Color3.fromRGB(220, 220, 225),
-			Vector2.new(0.3, 1.4),
-			NumberRange.new(3, 6),
-			NumberRange.new(0.5, 0.9),
-			15,
-			Enum.NormalId.Bottom,
-			Vector3.new(0, 1, 0)
-		)
+	for _, side in { -0.1, 0.1 } do
+		local at = (head.CFrame * CFrame.new(side, -0.14, -0.62)).Position
+		local out = (head.CFrame.LookVector - head.CFrame.UpVector * 0.6).Unit
+		emit(at, {
+			texture = TEX.smoke,
+			color = STEAM,
+			size = { 0.2 * strength, 1.2 * strength, 1.8 * strength },
+			transparency = { 0.35, 0.6, 1 },
+			speed = NumberRange.new(4 * strength, 8 * strength),
+			lifetime = NumberRange.new(0.5, 0.9),
+			spread = 12,
+			direction = out,
+			acceleration = Vector3.new(0, 2, 0),
+			drag = 3,
+			count = math.floor(6 * strength),
+		})
+	end
+end
+
+-- The horn tips leave streaks for `time` seconds.
+local function hornTrails(model: Model, time: number)
+	for _, tip in KitLooks.hornTips(model) do
+		trail(tip, Color3.fromRGB(255, 236, 210), time, 0.35, 0.22)
 	end
 end
 
 local function goreCharge(model: Model, move: Kits.MoveDef, token: number)
-	snort(model)
+	snort(model, 1.4)
+	local head = part(model, "Head")
 	local charge = move.charge
-	local ground = feet(model)
-	if ground then
-		dust(ground, 10, 50, 0.8)
+	if head then
+		rageEyes(head, if charge then charge.to else 1)
+	end
+	-- pawing the ground before the rush
+	for _, at in { 0.04, 0.14 } do
+		later(model, token, at, function()
+			local spot = feet(model)
+			if spot then
+				local floor = floorAt(spot)
+				smokePuff(
+					spot + Vector3.new(0, 0.3, 0),
+					6,
+					0.7,
+					dustColor(floor),
+					-forwardOf(model) + Vector3.yAxis,
+					10
+				)
+				groundRing(spot, 0.5, 3, 0.3, dustColor(floor), { width = 0.4, height = 0.3 })
+			end
+		end)
 	end
 	if charge == nil then
 		return
 	end
-	-- dust kicked up all along the charge, the hooves pounding
 	later(model, token, charge.from, function()
 		local root = part(model, "HumanoidRootPart")
 		if root == nil then
 			return
 		end
+		local floor = floorAt(root.Position - Vector3.new(0, 3, 0))
+		-- a cloud of dust kicked up behind, debris from the hooves
 		local kick = Instance.new("Attachment")
-		kick.Position = Vector3.new(0, -2.8, 0.6)
+		kick.CFrame = CFrame.new(0, -2.7, 0.8) * CFrame.Angles(math.rad(25), 0, 0)
 		kick.Parent = root
-		local emitter = Instance.new("ParticleEmitter")
-		emitter.Texture = SMOKE
-		emitter.Color = ColorSequence.new(DUST)
-		emitter.Size = NumberSequence.new(0.8, 2.6)
-		emitter.Transparency = NumberSequence.new(0.35, 1)
-		emitter.Speed = NumberRange.new(2, 6)
-		emitter.SpreadAngle = Vector2.new(40, 40)
-		emitter.Lifetime = NumberRange.new(0.6, 1.1)
-		emitter.Rate = 60
-		emitter.Parent = kick
-		Debris:AddItem(kick, charge.to - charge.from + 0.05)
-		local head = part(model, "Head")
-		if head then
-			trail(head, Color3.fromRGB(255, 255, 255), charge.to - charge.from, 1.2)
-		end
-		for step = 0, 3 do
-			later(model, token, step * 0.18, function()
+		local back = Instance.new("Attachment")
+		back.CFrame = CFrame.new(0, -2.7, 0.8) * CFrame.Angles(math.rad(160), 0, 0)
+		back.Parent = root
+		stream(back, {
+			texture = TEX.smoke,
+			color = dustColor(floor),
+			size = { 1, 3, 4.5 },
+			transparency = { 0.3, 0.6, 1 },
+			speed = NumberRange.new(3, 8),
+			lifetime = NumberRange.new(0.7, 1.3),
+			spread = 35,
+			acceleration = Vector3.new(0, 2, 0),
+			drag = 2.5,
+			count = 0,
+		}, 70)
+		stream(kick, {
+			texture = TEX.sparkle,
+			color = Color3.fromRGB(120, 100, 80),
+			size = { 0.2, 0.15 },
+			transparency = { 0, 1 },
+			speed = NumberRange.new(8, 16),
+			lifetime = NumberRange.new(0.3, 0.6),
+			spread = 30,
+			acceleration = Vector3.new(0, -60, 0),
+			count = 0,
+		}, 40)
+		local length = charge.to - charge.from
+		Debris:AddItem(kick, length + 0.05)
+		Debris:AddItem(back, length + 0.05)
+		hornTrails(model, length)
+		trail(head or root, Color3.fromRGB(255, 220, 200), length, 1.6, 0.3)
+		-- hoofprints cracking the floor, the air pushed ahead
+		local steps = math.floor(length / 0.14)
+		for step = 0, steps do
+			later(model, token, step * 0.14, function()
 				local spot = feet(model)
 				if spot then
-					groundRing(spot, 1, 4, 0.3, DUST, false)
+					local side = if step % 2 == 0 then 0.5 else -0.5
+					local root2 = part(model, "HumanoidRootPart")
+					local offset = if root2 then root2.CFrame.RightVector * side else Vector3.zero
+					cracks(spot + offset, 3, 1.2, 4)
+					groundRing(
+						spot + offset,
+						0.3,
+						2.2,
+						0.25,
+						dustColor(floor),
+						{ width = 0.3, height = 0.25, segments = 16 }
+					)
 				end
 			end)
+		end
+		for step = 0, 3 do
+			later(model, token, step * (length / 4), function()
+				local front = part(model, "Head")
+				if front then
+					local forward = forwardOf(model)
+					ring(axisFrame(front.Position + forward * 1.5, forward), 1, 3.5, 0.3, WHITE, {
+						neon = true,
+						width = 0.1,
+						height = 0.06,
+						transparency = 0.5,
+					})
+					streaks(front.Position + forward * 2, -forward, 4, 1.5, 3, 20, WHITE, 0.3)
+				end
+			end)
+		end
+	end)
+	-- skidding to a stop
+	later(model, token, charge.to, function()
+		local spot = feet(model)
+		if spot then
+			smokePuff(
+				spot + Vector3.new(0, 0.4, 0),
+				10,
+				1,
+				dustColor(floorAt(spot)),
+				forwardOf(model),
+				14
+			)
 		end
 	end)
 end
 
 local function hornHook(model: Model, token: number)
+	snort(model, 1)
 	local ground = feet(model)
 	if ground then
-		dust(ground, 8, 40, 0.7)
+		smokePuff(
+			ground + Vector3.new(0, 0.3, 0),
+			6,
+			0.8,
+			dustColor(floorAt(ground)),
+			Vector3.yAxis,
+			8
+		)
 	end
-	local head = part(model, "Head")
-	if head then
-		later(model, token, 0.18, function()
-			trail(head, Color3.fromRGB(255, 240, 220), 0.3, 1.4)
-		end)
-	end
+	later(model, token, 0.16, function()
+		hornTrails(model, 0.3)
+	end)
 	later(model, token, 0.32, function()
 		local root = part(model, "HumanoidRootPart")
 		if root == nil then
 			return
 		end
-		local at = root.Position + root.CFrame.LookVector * 2.5
-		dust(at - Vector3.new(0, 2.6, 0), 14, 30, 0.9)
+		local forward = forwardOf(model)
+		local at = root.Position + forward * 2.5
+		-- the upward toss: a vertical air ring, a column of dust, lines going up
 		ring(
-			CFrame.lookAt(at, at + Vector3.new(0, 1, 0)),
-			1,
-			7,
-			0.35,
-			Color3.fromRGB(255, 240, 220),
-			true,
-			0.12
+			axisFrame(at + Vector3.new(0, 0.5, 0), Vector3.yAxis),
+			0.8,
+			5,
+			0.4,
+			WHITE,
+			{ neon = true, width = 0.16, height = 0.1 }
 		)
-		shake(at, 1.2, 25, 0.25)
+		ring(
+			axisFrame(at + Vector3.new(0, 1.5, 0), (forward + Vector3.yAxis * 2).Unit),
+			0.6,
+			3.5,
+			0.35,
+			Color3.fromRGB(255, 236, 210),
+			{
+				neon = true,
+				width = 0.12,
+				height = 0.08,
+			}
+		)
+		streaks(at, Vector3.yAxis, 12, 1.2, 3, 40, WHITE, 0.4)
+		local spot = feet(model)
+		if spot then
+			local floor = floorAt(spot)
+			smokePuff(
+				spot + forward * 2.5 + Vector3.new(0, 0.5, 0),
+				14,
+				1,
+				dustColor(floor),
+				Vector3.yAxis,
+				24
+			)
+			groundRing(
+				spot + forward * 2.5,
+				1,
+				7,
+				0.45,
+				dustColor(floor),
+				{ width = 0.8, height = 0.6 }
+			)
+			rocks(spot + forward * 2.5, 5, 0.7)
+		end
+		shake(at, 1.6, 30, 0.3)
+		KitLooks.gust(at, 40, 20)
 	end)
 end
 
 local function stampede(model: Model, token: number)
-	snort(model)
-	local ground = feet(model)
-	if ground then
-		dust(ground, 8, 40, 0.7)
+	snort(model, 1.6)
+	local head = part(model, "Head")
+	if head then
+		rageEyes(head, 0.8)
 	end
-	later(model, token, 0.5, function()
+	-- rearing up: pebbles start to float, dust swirls
+	later(model, token, 0.15, function()
 		local spot = feet(model)
-		local root = part(model, "HumanoidRootPart")
-		if spot == nil or root == nil then
+		if spot == nil then
 			return
 		end
-		spot += root.CFrame.LookVector * 1
+		local floor = floorAt(spot)
+		emit(spot + Vector3.new(0, 0.2, 0), {
+			texture = TEX.sparkle,
+			color = if floor then floor.color else DUST,
+			size = { 0.25, 0.2 },
+			transparency = { 0, 0.2, 1 },
+			speed = NumberRange.new(1, 3),
+			lifetime = NumberRange.new(0.35, 0.5),
+			spread = 70,
+			acceleration = Vector3.new(0, 4, 0),
+			count = 20,
+		})
+		groundRing(
+			spot,
+			3,
+			0.5,
+			0.35,
+			dustColor(floor),
+			{ width = 0.4, height = 0.3, transparency = 0.5 }
+		)
+	end)
+	later(model, token, 0.5, function()
+		local spot = feet(model)
+		if spot == nil then
+			return
+		end
 		SoundController.play("Stomp", model)
-		flash(spot + Vector3.new(0, 0.5, 0), Color3.fromRGB(255, 210, 160), 6, 16, 0.35)
-		groundRing(spot, 2, 26, 0.6, DUST, false)
-		task.delay(0.08, function()
-			groundRing(spot, 2, 18, 0.5, Color3.fromRGB(255, 220, 180), true)
-		end)
-		dust(spot, 46, 85, 1.5)
-		rocks(spot, 18, 0.9)
-		cracks(spot, 10, 7, 8)
-		shake(spot, 3.2, 50, 0.55)
+		groundImpact(
+			spot + forwardOf(model) * 1,
+			{ size = 1.5, flashColor = Color3.fromRGB(255, 200, 150) }
+		)
 	end)
 end
 
 local function bullToss(model: Model, token: number)
+	snort(model, 1)
 	later(model, token, 0.22, function()
-		local ground = feet(model)
-		if ground then
-			dust(ground, 10, 40, 0.8)
+		SoundController.play("BullToss", model)
+		local spot = feet(model)
+		local forward = forwardOf(model)
+		if spot then
+			local floor = floorAt(spot)
+			smokePuff(
+				spot + forward * 2 + Vector3.new(0, 0.4, 0),
+				10,
+				0.9,
+				dustColor(floor),
+				Vector3.yAxis,
+				10
+			)
+			groundRing(
+				spot + forward * 1.5,
+				0.6,
+				5,
+				0.4,
+				dustColor(floor),
+				{ width = 0.6, height = 0.5 }
+			)
+		end
+		local hand = fist(model, "Right Arm")
+		if hand then
+			flash(hand, Color3.fromRGB(255, 230, 200), 1.5, 0.2)
 		end
 	end)
-	later(model, token, 0.55, function()
+	later(model, token, 0.5, function()
+		hornTrails(model, 0.3)
 		local torso = part(model, "Torso")
 		if torso then
-			trail(torso, Color3.fromRGB(255, 240, 220), 0.3, 1.8)
+			trail(torso, Color3.fromRGB(255, 236, 210), 0.3, 1.8, 0.25)
 		end
 	end)
 	later(model, token, 0.7, function()
@@ -827,21 +1999,25 @@ local function bullToss(model: Model, token: number)
 		if root == nil then
 			return
 		end
-		local at = root.Position + Vector3.new(0, 1.5, 0)
+		SoundController.play("BullToss", model)
+		local at = root.Position + Vector3.new(0, 2.5, 0)
 		ring(
-			CFrame.lookAt(at, at + root.CFrame.LookVector),
+			axisFrame(at, Vector3.yAxis),
 			1,
-			9,
-			0.4,
-			Color3.fromRGB(255, 240, 220),
-			true,
-			0.14
+			7,
+			0.45,
+			WHITE,
+			{ neon = true, width = 0.18, height = 0.1 }
 		)
-		local ground = feet(model)
-		if ground then
-			dust(ground, 16, 60, 1)
+		streaks(root.Position, Vector3.yAxis, 14, 1.5, 3.5, 45, WHITE, 0.45)
+		local spot = feet(model)
+		if spot then
+			local floor = floorAt(spot)
+			dustRing(spot, 2, 0.8, dustColor(floor))
+			groundRing(spot, 1, 9, 0.5, dustColor(floor), { width = 1, height = 0.8 })
 		end
-		shake(at, 1.5, 30, 0.3)
+		shake(at, 1.8, 30, 0.35)
+		KitLooks.gust(at, 45, 22)
 	end)
 end
 
@@ -879,42 +2055,40 @@ function KitVFX.onAction(model: Model, animation: string, move: Kits.MoveDef?)
 end
 
 -- Extra effects where some of these moves land.
-function KitVFX.onHit(victim: Model, _attacker: Model, moveId: string)
+function KitVFX.onHit(victim: Model, attacker: Model, moveId: string)
 	local torso = part(victim, "Torso")
 	if torso == nil then
 		return
 	end
-	if moveId == "HeatVision" then
-		-- burnt: a glow and smoke where it burns
-		burst(
-			torso.Position,
-			6,
-			SMOKE,
-			Color3.fromRGB(60, 56, 54),
-			Vector2.new(0.4, 1.6),
-			NumberRange.new(2, 5),
-			NumberRange.new(0.6, 1.1),
-			30
+	local from = part(attacker, "HumanoidRootPart")
+	local direction = if from then flat(torso.Position - from.Position) else Vector3.yAxis
+	if moveId == "GoreCharge" or moveId == "HornHook" or moveId == "BullToss" then
+		flash(torso.Position, Color3.fromRGB(255, 225, 190), 2.2, 0.22)
+		smokePuff(torso.Position, 8, 0.8, DUST, direction, 12)
+		ring(
+			axisFrame(torso.Position, direction),
+			0.5,
+			4,
+			0.3,
+			WHITE,
+			{ neon = true, width = 0.14, height = 0.08 }
 		)
-		burst(
-			torso.Position,
-			10,
-			FIRE,
-			Color3.fromRGB(255, 140, 60),
-			Vector2.new(0.3, 0),
-			NumberRange.new(3, 7),
-			NumberRange.new(0.2, 0.4),
-			50,
-			nil,
-			nil,
-			1
+		shake(torso.Position, 1.2, 25, 0.25)
+	elseif moveId == "Haymaker" or moveId == "ThunderClap" or moveId == "Skyfall" then
+		flash(torso.Position, ENERGY, 2.5, 0.25)
+		sparks(torso.Position, 14, ENERGY, direction, 30, 50)
+		ring(
+			axisFrame(torso.Position, direction),
+			0.5,
+			4.5,
+			0.3,
+			ENERGY,
+			{ neon = true, width = 0.14, height = 0.08 }
 		)
-	elseif moveId == "GoreCharge" or moveId == "HornHook" or moveId == "BullToss" then
-		dust(torso.Position - Vector3.new(0, 2, 0), 10, 50, 0.8)
-		flash(torso.Position, Color3.fromRGB(255, 230, 200), 5, 10, 0.2)
-	elseif moveId == "Haymaker" or moveId == "ThunderClap" then
-		flash(torso.Position, ENERGY, 8, 12, 0.25)
+	elseif moveId == "Stampede" then
+		smokePuff(torso.Position - Vector3.new(0, 2, 0), 6, 0.8, DUST, Vector3.yAxis, 8)
 	end
+	-- (heat vision: no hit effect here, the beam chars them where it touches)
 end
 
 -- The move was refused / cut short: its pending effects don't play.

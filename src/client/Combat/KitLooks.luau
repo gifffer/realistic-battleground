@@ -1,13 +1,28 @@
 --!strict
 -- KitLooks: what some kits put on the fighter who wears them (drawn by
 -- every client, from the "Kit" attribute the server sets on the fighter):
---   • BULL      a pair of bull horns on the head;
---   • SENTINEL  a short cape on the back, swaying with the speed.
--- Plain parts welded to the body (not accessories: the server keeps only
--- small head accessories). Under the head / torso, so a burst head
--- (HeadBlast) takes the horns with it.
+--   • BULL      a pair of curved bull horns (ridged at the base), a gold
+--               nose ring, and his breath steaming now and then;
+--   • SENTINEL  a real cloth cape (simulated: it falls, swings, flies back
+--               when he runs, catches the wind and the shockwaves), gold
+--               clasps and chain, a small emblem, and red-glowing eyes.
+-- The horns, rings, eyes... are plain parts welded to the head / torso
+-- (under them: a burst head (HeadBlast) takes the horns with it).
 --
---   KitLooks.start()   watch every fighter
+-- The cape is a grid of points (Verlet cloth): its top row is pinned to
+-- the shoulders, the rest falls with gravity, is pushed by the air (the
+-- wind, the speed, the shockwaves), keeps its shape with distance
+-- constraints and stays out of the body (boxes of the torso, legs, arms)
+-- and above the floor. Drawn with two wedges per triangle.
+--
+-- Wind: workspace.GlobalWind (the map's / biome's wind), plus a Vector3
+-- "Wind" attribute on workspace for events (a storm...), plus gusts from
+-- the moves' shockwaves (KitLooks.gust).
+--
+--   KitLooks.start()                           watch every fighter
+--   KitLooks.gust(position, strength, radius)  a blast of air from there
+--   KitLooks.eyes(model)                       the Sentinel's glowing eyes
+--   KitLooks.hornTips(model)                   the Bull's horn tips
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,11 +32,16 @@ local Config = require(ReplicatedStorage.Shared.Config)
 
 local KitLooks = {}
 
-local HORN = Color3.fromRGB(226, 214, 186) -- ivory
-local HORN_BASE = Color3.fromRGB(150, 128, 98)
-local HORN_TIP = Color3.fromRGB(70, 60, 52)
-local CAPE = Color3.fromRGB(122, 16, 22)
-local CAPE_INSIDE = Color3.fromRGB(70, 8, 12)
+local HORN = Color3.fromRGB(232, 222, 196) -- ivory
+local HORN_BASE = Color3.fromRGB(128, 106, 80)
+local HORN_TIP = Color3.fromRGB(48, 40, 36)
+local RIDGE = Color3.fromRGB(150, 130, 104)
+local GOLD = Color3.fromRGB(212, 168, 70)
+local CAPE = Color3.fromRGB(128, 14, 22)
+local TRIM = Color3.fromRGB(200, 156, 64)
+local EYE = Color3.fromRGB(255, 44, 30)
+
+local random = Random.new()
 
 local function newPart(name: string, size: Vector3, color: Color3, shape: Enum.PartType?): Part
 	local part = Instance.new("Part")
@@ -49,47 +69,135 @@ local function weld(part: BasePart, to: BasePart, offset: CFrame, parent: Instan
 	part.Parent = parent
 end
 
--- A bull horn on `head`, out of its `side` (1 = right, -1 = left): tapered
--- pieces along a curve (out to the side, then up, the tip turning in and
--- forward), a ball at each joint so it reads as one smooth horn.
-local HORN_CURVE = { -- head space (studs; its centre the origin, -Z its face)
-	Vector3.new(0.38, 0.4, -0.04),
-	Vector3.new(0.68, 0.47, -0.1),
-	Vector3.new(0.94, 0.6, -0.18),
-	Vector3.new(1.1, 0.83, -0.27),
-	Vector3.new(1.13, 1.06, -0.37),
-	Vector3.new(1.05, 1.24, -0.47),
+-- A cylinder from `a` to `b` (its axis is its X: turned to point along).
+local function along(a: Vector3, b: Vector3): CFrame
+	return CFrame.lookAt((a + b) / 2, b) * CFrame.Angles(0, math.rad(90), 0)
+end
+
+------------------------------------------------------------------------------
+-- BULL
+------------------------------------------------------------------------------
+
+-- The horn's centre line (head space, studs: its centre the origin, -Z its
+-- face, +X its right): out to the side, up, the tip turning in and forward.
+local HORN_CURVE = {
+	Vector3.new(0.36, 0.38, -0.02),
+	Vector3.new(0.66, 0.46, -0.08),
+	Vector3.new(0.95, 0.58, -0.16),
+	Vector3.new(1.13, 0.82, -0.26),
+	Vector3.new(1.16, 1.07, -0.37),
+	Vector3.new(1.06, 1.27, -0.49),
+	Vector3.new(0.94, 1.36, -0.58),
 }
-local HORN_WIDTH = { 0.27, 0.23, 0.19, 0.14, 0.09 }
+local HORN_STEPS = 3 -- smooth points between two curve points
+local HORN_WIDTH = 0.3 -- at the base (the tip is a point)
+
+local function catmull(p0: Vector3, p1: Vector3, p2: Vector3, p3: Vector3, t: number): Vector3
+	local t2, t3 = t * t, t * t * t
+	return 0.5
+		* (
+			(2 * p1)
+			+ (p2 - p0) * t
+			+ (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
+			+ (3 * p1 - p0 - 3 * p2 + p3) * t3
+		)
+end
+
+local function hornPoints(side: number): { Vector3 }
+	local points: { Vector3 } = {}
+	for _, p in HORN_CURVE do
+		table.insert(points, Vector3.new(p.X * side, p.Y, p.Z))
+	end
+	local count = #points
+	local smooth: { Vector3 } = {}
+	for index = 1, count - 1 do
+		local p0 = points[math.max(1, index - 1)]
+		local p1, p2 = points[index], points[index + 1]
+		local p3 = points[math.min(count, index + 2)]
+		for step = 0, HORN_STEPS - 1 do
+			table.insert(smooth, catmull(p0, p1, p2, p3, step / HORN_STEPS))
+		end
+	end
+	table.insert(smooth, points[count])
+	return smooth
+end
+
+local function hornColor(t: number): Color3
+	if t < 0.25 then
+		return HORN_BASE:Lerp(HORN, t / 0.25)
+	elseif t > 0.62 then
+		return HORN:Lerp(HORN_TIP, (t - 0.62) / 0.38)
+	end
+	return HORN
+end
 
 local function horn(head: BasePart, side: number, folder: Instance)
-	local function point(index: number): Vector3
-		local p = HORN_CURVE[index]
-		return Vector3.new(p.X * side, p.Y, p.Z)
-	end
-	for index = 1, #HORN_CURVE - 1 do
-		local a, b = point(index), point(index + 1)
-		local width = HORN_WIDTH[index]
-		local color = if index == 1
-			then HORN_BASE
-			elseif index == #HORN_WIDTH then HORN_TIP
-			else HORN
-		-- (a cylinder lies along its X: turned to point from a to b)
+	local points = hornPoints(side)
+	local count = #points
+	-- the root, sunk into the head
+	local root = newPart("HornRoot", Vector3.new(0.36, 0.3, 0.36), HORN_BASE, Enum.PartType.Ball)
+	weld(root, head, CFrame.new(points[1] - Vector3.new(0.04 * side, 0.02, 0)), folder)
+	for index = 1, count - 1 do
+		local a, b = points[index], points[index + 1]
+		local t = (index - 1) / (count - 1)
+		-- (tapering faster toward the tip, like a real horn)
+		local width = HORN_WIDTH * (1 - t) ^ 0.8 + 0.035
+		local color = hornColor(t)
 		local piece = newPart(
 			`Horn{index}`,
 			Vector3.new((b - a).Magnitude + 0.02, width, width),
 			color,
 			Enum.PartType.Cylinder
 		)
-		weld(piece, head, CFrame.lookAt((a + b) / 2, b) * CFrame.Angles(0, math.rad(90), 0), folder)
+		piece.Reflectance = 0.04
+		weld(piece, head, along(a, b), folder)
 		local joint = newPart(`HornJoint{index}`, Vector3.one * width, color, Enum.PartType.Ball)
+		joint.Reflectance = 0.04
 		weld(joint, head, CFrame.new(a), folder)
+		-- ridges around the base: rings a little wider and darker
+		if index >= 2 and index <= 6 and index % 2 == 0 then
+			local ridge = newPart(
+				"HornRidge",
+				Vector3.new(0.035, width * 1.12, width * 1.12),
+				RIDGE,
+				Enum.PartType.Cylinder
+			)
+			weld(ridge, head, along(a, b), folder)
+		end
 	end
-	local tip = newPart("HornTip", Vector3.one * 0.07, HORN_TIP, Enum.PartType.Ball)
-	weld(tip, head, CFrame.new(point(#HORN_CURVE)), folder)
+	local tip = newPart("HornTip", Vector3.one * 0.06, HORN_TIP, Enum.PartType.Ball)
+	weld(tip, head, CFrame.new(points[count]), folder)
 end
 
-local function buildHorns(model: Model): Instance?
+-- A gold ring through the nose (a loop of small cylinders).
+local NOSE_RING_CENTRE = Vector3.new(0, -0.17, -0.63)
+local NOSE_RING_RADIUS = 0.11
+local function noseRing(head: BasePart, folder: Instance)
+	local segments = 12
+	local function point(index: number): Vector3
+		local angle = index / segments * math.pi * 2
+		return NOSE_RING_CENTRE
+			+ Vector3.new(math.sin(angle), math.cos(angle), 0) * NOSE_RING_RADIUS
+	end
+	for index = 0, segments - 1 do
+		local a, b = point(index), point(index + 1)
+		local piece = newPart(
+			"NoseRing",
+			Vector3.new((b - a).Magnitude + 0.012, 0.04, 0.04),
+			GOLD,
+			Enum.PartType.Cylinder
+		)
+		piece.Material = Enum.Material.Metal
+		piece.Reflectance = 0.25
+		piece.CastShadow = false
+		weld(piece, head, along(a, b), folder)
+	end
+end
+
+-- The Bulls on screen: their breath steams every few seconds.
+local bulls: { [Model]: { head: BasePart, nextBreath: number } } = {}
+
+local function buildBull(model: Model): Instance?
 	local head = model:FindFirstChild("Head")
 	if head == nil or not head:IsA("BasePart") then
 		return nil
@@ -98,70 +206,575 @@ local function buildHorns(model: Model): Instance?
 	folder.Name = "KitLook"
 	horn(head, 1, folder)
 	horn(head, -1, folder)
+	noseRing(head, folder)
 	folder.Parent = head
+	bulls[model] = { head = head, nextBreath = os.clock() + random:NextNumber(1, 3) }
 	return folder
 end
 
--- Capes being drawn: their hinge joints, swung each frame from the speed.
-type Cape = { model: Model, root: BasePart, upper: Motor6D, lower: Motor6D }
-local capes: { [Model]: Cape } = {}
+local STEAM = "rbxasset://textures/particles/smoke_main.dds"
+local function breathe(head: BasePart)
+	for _, side in { -0.1, 0.1 } do
+		local point = Instance.new("Attachment")
+		point.CFrame = CFrame.new(side, -0.12, -0.62) * CFrame.Angles(math.rad(-35), 0, 0)
+		point.Parent = head
+		local steam = Instance.new("ParticleEmitter")
+		steam.Texture = STEAM
+		steam.Color = ColorSequence.new(Color3.fromRGB(235, 235, 240))
+		steam.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.12),
+			NumberSequenceKeypoint.new(1, 0.9),
+		})
+		steam.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.55),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		steam.Speed = NumberRange.new(1.5, 3)
+		steam.SpreadAngle = Vector2.new(12, 12)
+		steam.Lifetime = NumberRange.new(0.6, 1)
+		steam.Drag = 3
+		steam.Acceleration = Vector3.new(0, 1.2, 0)
+		steam.RotSpeed = NumberRange.new(-40, 40)
+		steam.Rotation = NumberRange.new(0, 360)
+		steam.EmissionDirection = Enum.NormalId.Front
+		steam.Rate = 0
+		steam.Parent = point
+		steam:Emit(4)
+		task.delay(1.2, function()
+			point:Destroy()
+		end)
+	end
+end
+
+------------------------------------------------------------------------------
+-- SENTINEL: eyes, clasps, emblem
+------------------------------------------------------------------------------
+
+local function buildEyes(head: BasePart, folder: Instance)
+	for _, side in { -1, 1 } do
+		local eye = newPart("SentinelEye", Vector3.new(0.13, 0.08, 0.04), EYE)
+		eye.Material = Enum.Material.Neon
+		eye.Transparency = 0.15
+		eye.CastShadow = false
+		weld(eye, head, CFrame.new(side * 0.17, 0.11, -0.6), folder)
+		if side == 1 then
+			local glow = Instance.new("PointLight")
+			glow.Name = "EyeGlow"
+			glow.Color = EYE
+			glow.Brightness = 0.5
+			glow.Range = 3
+			glow.Shadows = false
+			glow.Parent = eye
+		end
+	end
+end
+
+local function buildTrimmings(torso: BasePart, folder: Instance)
+	-- gold clasps at the collarbones, a chain between them
+	local left, right = Vector3.new(-0.74, 0.86, -0.5), Vector3.new(0.74, 0.86, -0.5)
+	for _, at in { left, right } do
+		local clasp = newPart("Clasp", Vector3.new(0.22, 0.22, 0.08), GOLD, Enum.PartType.Cylinder)
+		clasp.Material = Enum.Material.Metal
+		clasp.Reflectance = 0.3
+		weld(clasp, torso, CFrame.new(at) * CFrame.Angles(0, math.rad(90), 0), folder)
+		local gem = newPart("ClaspGem", Vector3.one * 0.1, EYE, Enum.PartType.Ball)
+		gem.Material = Enum.Material.Neon
+		weld(gem, torso, CFrame.new(at + Vector3.new(0, 0, -0.05)), folder)
+	end
+	local sag = Vector3.new(0, 0.82, -0.52)
+	for _, segment in { { left, sag }, { sag, right } } do
+		local a, b = segment[1], segment[2]
+		local chain = newPart(
+			"Chain",
+			Vector3.new((b - a).Magnitude, 0.035, 0.035),
+			GOLD,
+			Enum.PartType.Cylinder
+		)
+		chain.Material = Enum.Material.Metal
+		chain.Reflectance = 0.3
+		weld(chain, torso, along(a, b), folder)
+	end
+	-- the emblem on the chest: a gold diamond, a red core
+	local plate = newPart("Emblem", Vector3.new(0.42, 0.42, 0.05), GOLD)
+	plate.Material = Enum.Material.Metal
+	plate.Reflectance = 0.25
+	weld(plate, torso, CFrame.new(0, 0.32, -0.52) * CFrame.Angles(0, 0, math.rad(45)), folder)
+	local core = newPart("EmblemCore", Vector3.new(0.22, 0.22, 0.05), CAPE)
+	core.Material = Enum.Material.Neon
+	core.Color = Color3.fromRGB(200, 24, 30)
+	weld(core, torso, CFrame.new(0, 0.32, -0.54) * CFrame.Angles(0, 0, math.rad(45)), folder)
+end
+
+------------------------------------------------------------------------------
+-- SENTINEL: the cloth cape
+------------------------------------------------------------------------------
+
+local COLS = 5 -- points across
+local ROWS = 8 -- points down
+local LENGTH = 3.3 -- studs, shoulders to hem
+local HEM_WIDTH = 2.6 -- the cape flares out toward the hem
+local THICKNESS = 0.045
+local STEP = 1 / 60 -- the simulation's fixed time step
+local ITERATIONS = 6 -- constraint passes per step
+local GRAVITY_SCALE = 0.55 -- (cloth falls slower than a brick: air)
+local AERO = 1.8 -- push of the air on the cloth's faces
+local DRAG = 0.18 -- air dragging along the cloth
+local DAMPING = 0.992
+local MARGIN = 0.09 -- distance kept from the body
+local SIMULATE_DISTANCE = 220 -- studs from the camera
+local SLOW_DISTANCE = 90 -- beyond: simulated every few frames
+
+-- The top row, pinned (torso space): over the shoulders, across the back.
+local PINS: { Vector3 } = {}
+for column = 1, COLS do
+	local t = (column - 1) / (COLS - 1)
+	local x = -0.94 + 1.88 * t
+	local edge = column == 1 or column == COLS
+	table.insert(PINS, Vector3.new(x, if edge then 1.0 else 1.02, if edge then 0.3 else 0.54))
+end
+
+type Constraint = { a: number, b: number, rest: number, stiffness: number }
+type Cloth = {
+	model: Model,
+	torso: BasePart,
+	root: BasePart,
+	folder: Folder,
+	pos: { Vector3 },
+	prev: { Vector3 },
+	constraints: { Constraint },
+	wedges: { WedgePart },
+	trim: { Part },
+	moved: { BasePart },
+	frames: { CFrame },
+	gust: Vector3,
+	seed: number,
+	accumulator: number,
+	lastPin: Vector3,
+	skip: number,
+}
+
+local function index(row: number, column: number): number
+	return (row - 1) * COLS + column
+end
+
+local cloths: { [Model]: Cloth } = {}
+
+-- Every point hanging straight down from its pin (start / after a teleport).
+local function hang(cloth: Cloth)
+	local frame = cloth.torso.CFrame
+	local drop = LENGTH / (ROWS - 1)
+	for row = 1, ROWS do
+		for column = 1, COLS do
+			local pin = PINS[column]
+			local t = (row - 1) / (ROWS - 1)
+			local spread = 1 + (HEM_WIDTH / 1.88 - 1) * t
+			local localPoint = Vector3.new(
+				pin.X * spread,
+				pin.Y - drop * (row - 1),
+				math.max(pin.Z, 0.54) + 0.05 * t
+			)
+			local world = frame * localPoint
+			cloth.pos[index(row, column)] = world
+			cloth.prev[index(row, column)] = world
+		end
+	end
+	cloth.lastPin = frame.Position
+end
+
+local function buildConstraints(): { Constraint }
+	local list: { Constraint } = {}
+	local drop = LENGTH / (ROWS - 1)
+	local function across(row: number): number
+		local t = (row - 1) / (ROWS - 1)
+		return (1.88 + (HEM_WIDTH - 1.88) * t) / (COLS - 1)
+	end
+	for row = 1, ROWS do
+		for column = 1, COLS do
+			local here = index(row, column)
+			if column < COLS then
+				table.insert(
+					list,
+					{ a = here, b = index(row, column + 1), rest = across(row), stiffness = 1 }
+				)
+			end
+			if row < ROWS then
+				table.insert(
+					list,
+					{ a = here, b = index(row + 1, column), rest = drop, stiffness = 1 }
+				)
+				if column < COLS then
+					local w = (across(row) + across(row + 1)) / 2
+					local diagonal = math.sqrt(w * w + drop * drop)
+					table.insert(list, {
+						a = here,
+						b = index(row + 1, column + 1),
+						rest = diagonal,
+						stiffness = 0.6,
+					})
+					table.insert(list, {
+						a = index(row, column + 1),
+						b = index(row + 1, column),
+						rest = diagonal,
+						stiffness = 0.6,
+					})
+				end
+			end
+			-- bending: a little stiffness, so it folds softly, not like paper
+			if row + 2 <= ROWS then
+				table.insert(
+					list,
+					{ a = here, b = index(row + 2, column), rest = drop * 2, stiffness = 0.35 }
+				)
+			end
+			if column + 2 <= COLS then
+				table.insert(list, {
+					a = here,
+					b = index(row, column + 2),
+					rest = across(row) * 2,
+					stiffness = 0.2,
+				})
+			end
+		end
+	end
+	return list
+end
+local CONSTRAINTS = buildConstraints()
 
 local function buildCape(model: Model): Instance?
 	local torso = model:FindFirstChild("Torso")
 	local root = model:FindFirstChild("HumanoidRootPart")
+	local head = model:FindFirstChild("Head")
 	if torso == nil or not torso:IsA("BasePart") or root == nil or not root:IsA("BasePart") then
 		return nil
 	end
-	local folder = Instance.new("Folder")
-	folder.Name = "KitLook"
-	-- Two panels hinged at the shoulders and in the middle (it bends).
-	local upper = newPart("CapeUpper", Vector3.new(1.9, 1.3, 0.06), CAPE)
-	upper.Material = Enum.Material.Fabric
-	local lower = newPart("CapeLower", Vector3.new(1.75, 1.4, 0.06), CAPE)
-	lower.Material = Enum.Material.Fabric
-	local lining = newPart("Lining", Vector3.new(1.7, 1.25, 0.02), CAPE_INSIDE)
-	lining.Material = Enum.Material.Fabric
-	upper.Parent = folder
-	lower.Parent = folder
-	-- Shoulders, back of the torso.
-	local shoulderHinge = Instance.new("Motor6D")
-	shoulderHinge.Name = "CapeHinge"
-	shoulderHinge.Part0 = torso
-	shoulderHinge.Part1 = upper
-	shoulderHinge.C0 = CFrame.new(0, 0.95, 0.56)
-	shoulderHinge.C1 = CFrame.new(0, 0.62, 0)
-	shoulderHinge.Parent = upper
-	local middleHinge = Instance.new("Motor6D")
-	middleHinge.Name = "CapeBend"
-	middleHinge.Part0 = upper
-	middleHinge.Part1 = lower
-	middleHinge.C0 = CFrame.new(0, -0.62, 0)
-	middleHinge.C1 = CFrame.new(0, 0.68, 0)
-	middleHinge.Parent = lower
-	local liningWeld = Instance.new("Weld")
-	liningWeld.Part0 = upper
-	liningWeld.Part1 = lining
-	liningWeld.C0 = CFrame.new(0, 0, -0.04)
-	liningWeld.Parent = lining
-	lining.Parent = folder
-	-- A small clasp at each shoulder.
-	for _, side in { -1, 1 } do
-		local clasp = newPart(
-			"Clasp",
-			Vector3.new(0.16, 0.16, 0.16),
-			Color3.fromRGB(196, 160, 72),
-			Enum.PartType.Ball
-		)
-		clasp.Material = Enum.Material.Metal
-		weld(clasp, torso, CFrame.new(side * 0.78, 0.92, -0.46), folder)
+	-- Welded things go under the body; the cloth (anchored, moved every
+	-- frame) in its own folder in the workspace.
+	local look = Instance.new("Folder")
+	look.Name = "KitLook"
+	buildTrimmings(torso, look)
+	if head and head:IsA("BasePart") then
+		local eyes = Instance.new("Folder")
+		eyes.Name = "KitLook"
+		buildEyes(head, eyes)
+		eyes.Parent = head
+		-- (removed with the cape)
+		look.Destroying:Connect(function()
+			eyes:Destroy()
+		end)
 	end
-	folder.Parent = torso
-	capes[model] = { model = model, root = root, upper = shoulderHinge, lower = middleHinge }
-	return folder
+	look.Parent = torso
+
+	local folder = Instance.new("Folder")
+	folder.Name = `Cape_{model.Name}`
+	local wedges: { WedgePart } = {}
+	for _ = 1, (COLS - 1) * (ROWS - 1) * 4 do
+		local wedge = Instance.new("WedgePart")
+		wedge.Name = "Cloth"
+		wedge.Anchored = true
+		wedge.CanCollide = false
+		wedge.CanQuery = false
+		wedge.CanTouch = false
+		wedge.Color = CAPE
+		wedge.Material = Enum.Material.Fabric
+		wedge.Size = Vector3.new(THICKNESS, 0.1, 0.1)
+		wedge.Parent = folder
+		table.insert(wedges, wedge)
+	end
+	local trim: { Part } = {}
+	for _ = 1, COLS - 1 do
+		local edge = Instance.new("Part")
+		edge.Name = "Hem"
+		edge.Shape = Enum.PartType.Cylinder
+		edge.Anchored = true
+		edge.CanCollide = false
+		edge.CanQuery = false
+		edge.CanTouch = false
+		edge.Color = TRIM
+		edge.Material = Enum.Material.Metal
+		edge.Size = Vector3.new(0.1, 0.09, 0.09)
+		edge.Parent = folder
+		table.insert(trim, edge)
+	end
+	folder.Parent = workspace
+
+	local cloth: Cloth = {
+		model = model,
+		torso = torso,
+		root = root,
+		folder = folder,
+		pos = {},
+		prev = {},
+		constraints = CONSTRAINTS,
+		wedges = wedges,
+		trim = trim,
+		moved = {},
+		frames = {},
+		gust = Vector3.zero,
+		seed = random:NextNumber(0, 1000),
+		accumulator = 0,
+		lastPin = torso.Position,
+		skip = 0,
+	}
+	hang(cloth)
+	cloths[model] = cloth
+	-- (the look and the cloth go together)
+	look.Destroying:Connect(function()
+		folder:Destroy()
+		if cloths[model] == cloth then
+			cloths[model] = nil
+		end
+	end)
+	return look
 end
 
+-- Pushes `p` out of a box (CFrame `frame`, half sizes `half`). `back`:
+-- push it out through the back (+Z) when it's not in the front half (the
+-- cape goes behind the torso, never through it to the front).
+local function pushOut(p: Vector3, frame: CFrame, half: Vector3, back: boolean): (Vector3, boolean)
+	local l = frame:PointToObjectSpace(p)
+	local dx = half.X - math.abs(l.X)
+	local dy = half.Y - math.abs(l.Y)
+	local dz = half.Z - math.abs(l.Z)
+	if dx <= 0 or dy <= 0 or dz <= 0 then
+		return p, false
+	end
+	if back and l.Z > -half.Z * 0.4 then
+		l = Vector3.new(l.X, l.Y, half.Z)
+	elseif dx < dy and dx < dz then
+		l = Vector3.new(if l.X >= 0 then half.X else -half.X, l.Y, l.Z)
+	elseif dy < dz then
+		l = Vector3.new(l.X, if l.Y >= 0 then half.Y else -half.Y, l.Z)
+	else
+		l = Vector3.new(l.X, l.Y, if l.Z >= 0 then half.Z else -half.Z)
+	end
+	return frame * l, true
+end
+
+local BODY_BOXES: { { name: string, half: Vector3, back: boolean } } = {
+	{ name = "Torso", half = Vector3.new(1, 1, 0.5), back = true },
+	{ name = "Left Leg", half = Vector3.new(0.5, 1, 0.5), back = true },
+	{ name = "Right Leg", half = Vector3.new(0.5, 1, 0.5), back = true },
+	{ name = "Left Arm", half = Vector3.new(0.5, 1, 0.5), back = false },
+	{ name = "Right Arm", half = Vector3.new(0.5, 1, 0.5), back = false },
+}
+
+local floorParams = RaycastParams.new()
+floorParams.FilterType = Enum.RaycastFilterType.Exclude
+floorParams.RespectCanCollide = true
+
+local function windAt(cloth: Cloth, time: number): Vector3
+	local wind = workspace.GlobalWind
+	local event = workspace:GetAttribute("Wind")
+	if typeof(event) == "Vector3" then
+		wind += event
+	end
+	-- turbulence: never perfectly still, stronger in a strong wind
+	local s = cloth.seed
+	local turbulence = Vector3.new(
+		math.noise(time * 0.8, s, 0.5),
+		math.noise(s, time * 1.1, 1.5) * 0.5,
+		math.noise(time * 0.9, s + 7, 2.5)
+	) * (wind.Magnitude * 0.45 + 2.5)
+	return wind + turbulence + cloth.gust
+end
+
+local function simulate(cloth: Cloth, dt: number, time: number)
+	local pos, prev = cloth.pos, cloth.prev
+	local frame = cloth.torso.CFrame
+	-- Teleported / respawned: hang it again.
+	if (frame.Position - cloth.lastPin).Magnitude > 12 then
+		hang(cloth)
+	end
+	cloth.lastPin = frame.Position
+
+	local gravity = Vector3.new(0, -workspace.Gravity * GRAVITY_SCALE, 0)
+	local wind = windAt(cloth, time)
+	-- The floor under him.
+	floorParams.FilterDescendantsInstances = { cloth.model, cloth.folder }
+	local floor = workspace:Raycast(cloth.root.Position, Vector3.new(0, -8, 0), floorParams)
+	local floorY = if floor then floor.Position.Y + 0.06 else -math.huge
+	local boxes: { { frame: CFrame, half: Vector3, back: boolean } } = {}
+	for _, box in BODY_BOXES do
+		local part = cloth.model:FindFirstChild(box.name)
+		if part and part:IsA("BasePart") then
+			table.insert(boxes, {
+				frame = part.CFrame,
+				half = box.half + Vector3.new(MARGIN, MARGIN, MARGIN),
+				back = box.back,
+			})
+		end
+	end
+
+	-- Forces (gravity, air) and motion of the free points.
+	for row = 2, ROWS do
+		for column = 1, COLS do
+			local i = index(row, column)
+			local p = pos[i]
+			-- the cloth's normal here (from its neighbours)
+			local left = pos[index(row, math.max(1, column - 1))]
+			local right = pos[index(row, math.min(COLS, column + 1))]
+			local up = pos[index(row - 1, column)]
+			local down = pos[index(math.min(ROWS, row + 1), column)]
+			local normal = (right - left):Cross(down - up)
+			normal = if normal.Magnitude > 1e-6 then normal.Unit else Vector3.zero
+			local velocity = (p - prev[i]) / dt
+			local relative = wind - velocity
+			local push = normal * normal:Dot(relative) * AERO + relative * DRAG
+			if push.Magnitude > 600 then
+				push = push.Unit * 600
+			end
+			local nextPosition = p + (p - prev[i]) * DAMPING + (gravity + push) * dt * dt
+			prev[i] = p
+			pos[i] = nextPosition
+		end
+	end
+	-- The top row follows the shoulders.
+	for column = 1, COLS do
+		local i = index(1, column)
+		prev[i] = pos[i]
+		pos[i] = frame * PINS[column]
+	end
+
+	-- Keep the cloth's shape.
+	for _ = 1, ITERATIONS do
+		for _, c in cloth.constraints do
+			local a, b = c.a, c.b
+			local pa, pb = pos[a], pos[b]
+			local delta = pb - pa
+			local length = delta.Magnitude
+			if length > 1e-6 then
+				local pinnedA = a <= COLS
+				local pinnedB = b <= COLS
+				local correction = delta * ((length - c.rest) / length * c.stiffness)
+				if pinnedA and not pinnedB then
+					pos[b] = pb - correction
+				elseif pinnedB and not pinnedA then
+					pos[a] = pa + correction
+				elseif not pinnedA and not pinnedB then
+					pos[a] = pa + correction * 0.5
+					pos[b] = pb - correction * 0.5
+				end
+			end
+		end
+	end
+
+	-- Out of the body and above the floor (a little friction when touching).
+	for i = COLS + 1, COLS * ROWS do
+		local p = pos[i]
+		local touched = false
+		for _, box in boxes do
+			local pushed, hit = pushOut(p, box.frame, box.half, box.back)
+			if hit then
+				p = pushed
+				touched = true
+			end
+		end
+		if p.Y < floorY then
+			p = Vector3.new(p.X, floorY, p.Z)
+			touched = true
+		end
+		if touched then
+			prev[i] = prev[i]:Lerp(p, 0.25)
+		end
+		pos[i] = p
+	end
+end
+
+-- The wedges of the triangle a, b, c (two right-angled wedges make it).
+local function triangle(cloth: Cloth, slot: number, a: Vector3, b: Vector3, c: Vector3)
+	local ab, ac, bc = b - a, c - a, c - b
+	local abd, acd, bcd = ab:Dot(ab), ac:Dot(ac), bc:Dot(bc)
+	if abd > acd and abd > bcd then
+		c, a = a, c
+	elseif acd > bcd and acd > abd then
+		a, b = b, a
+	end
+	ab, ac, bc = b - a, c - a, c - b
+	local w1, w2 = cloth.wedges[slot], cloth.wedges[slot + 1]
+	local right = ac:Cross(ab)
+	if right.Magnitude < 1e-6 or bc.Magnitude < 1e-6 then
+		w1.Size = Vector3.new(THICKNESS, 0.001, 0.001)
+		w2.Size = Vector3.new(THICKNESS, 0.001, 0.001)
+		table.insert(cloth.moved, w1)
+		table.insert(cloth.frames, CFrame.new(a))
+		table.insert(cloth.moved, w2)
+		table.insert(cloth.frames, CFrame.new(a))
+		return
+	end
+	right = right.Unit
+	local up = bc:Cross(right).Unit
+	local back = bc.Unit
+	local height = math.max(0.001, math.abs(ab:Dot(up)))
+	w1.Size = Vector3.new(THICKNESS, height, math.max(0.001, math.abs(ab:Dot(back))))
+	w2.Size = Vector3.new(THICKNESS, height, math.max(0.001, math.abs(ac:Dot(back))))
+	table.insert(cloth.moved, w1)
+	table.insert(cloth.frames, CFrame.fromMatrix((a + b) / 2, right, up, back))
+	table.insert(cloth.moved, w2)
+	table.insert(cloth.frames, CFrame.fromMatrix((a + c) / 2, -right, up, -back))
+end
+
+local function draw(cloth: Cloth)
+	table.clear(cloth.moved)
+	table.clear(cloth.frames)
+	local pos = cloth.pos
+	local slot = 1
+	for row = 1, ROWS - 1 do
+		for column = 1, COLS - 1 do
+			local a = pos[index(row, column)]
+			local b = pos[index(row, column + 1)]
+			local c = pos[index(row + 1, column)]
+			local d = pos[index(row + 1, column + 1)]
+			triangle(cloth, slot, a, b, c)
+			triangle(cloth, slot + 2, b, d, c)
+			slot += 4
+		end
+	end
+	-- the gold hem
+	for column = 1, COLS - 1 do
+		local a, b = pos[index(ROWS, column)], pos[index(ROWS, column + 1)]
+		local edge = cloth.trim[column]
+		edge.Size = Vector3.new((b - a).Magnitude + 0.06, 0.09, 0.09)
+		table.insert(cloth.moved, edge)
+		table.insert(cloth.frames, along(a, b))
+	end
+	workspace:BulkMoveTo(cloth.moved, cloth.frames, Enum.BulkMoveMode.FireCFrameChanged)
+end
+
+local function updateCloths(dt: number)
+	local camera = workspace.CurrentCamera
+	local eye = if camera then camera.CFrame.Position else Vector3.zero
+	local time = os.clock()
+	for model, cloth in cloths do
+		if cloth.torso.Parent == nil or cloth.root.Parent == nil or model.Parent == nil then
+			cloth.folder:Destroy()
+			cloths[model] = nil
+			continue
+		end
+		cloth.gust *= math.exp(-dt * 2.2)
+		local distance = (cloth.torso.Position - eye).Magnitude
+		if distance > SIMULATE_DISTANCE then
+			continue
+		end
+		local every = if distance > SLOW_DISTANCE then 3 else 1
+		cloth.skip += 1
+		if cloth.skip < every then
+			cloth.accumulator += dt
+			continue
+		end
+		cloth.skip = 0
+		cloth.accumulator = math.min(cloth.accumulator + dt, STEP * 4)
+		while cloth.accumulator >= STEP do
+			cloth.accumulator -= STEP
+			simulate(cloth, STEP, time)
+		end
+		draw(cloth)
+	end
+end
+
+------------------------------------------------------------------------------
+
 local BUILDERS: { [string]: (Model) -> Instance? } = {
-	Bull = buildHorns,
+	Bull = buildBull,
 	Sentinel = buildCape,
 }
 
@@ -173,7 +786,7 @@ local function refresh(model: Model)
 		old:Destroy()
 		worn[model] = nil
 	end
-	capes[model] = nil
+	bulls[model] = nil
 	local kitId = model:GetAttribute("Kit")
 	local build = if typeof(kitId) == "string" then BUILDERS[kitId] else nil
 	if build then
@@ -193,36 +806,81 @@ local function watch(model: Instance)
 	end)
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
+			local old = worn[model]
+			if old then
+				old:Destroy()
+			end
 			worn[model] = nil
-			capes[model] = nil
+			bulls[model] = nil
 		end
 	end)
 	task.defer(refresh, model) -- (once its body has loaded)
 end
 
--- The capes swing back with the speed, and flutter a little. (a negative
--- X angle lifts the hem backwards, away from the torso)
-local function swayCapes(dt: number)
-	local time = os.clock()
-	for model, cape in capes do
-		if cape.root.Parent == nil or cape.upper.Parent == nil then
-			capes[model] = nil
+local function breatheBulls()
+	local camera = workspace.CurrentCamera
+	local now = os.clock()
+	for model, bull in bulls do
+		if bull.head.Parent == nil then
+			bulls[model] = nil
 			continue
 		end
-		local velocity = cape.root.AssemblyLinearVelocity
-		local back = cape.root.CFrame.LookVector
-		local speed = math.max(0, velocity:Dot(back)) + math.abs(velocity.Y) * 0.4
-		local lift = math.clamp(6 + speed * 2.4, 6, 70)
-		local flutter = math.sin(time * (6 + speed * 0.3)) * math.min(8, 1 + speed * 0.3)
-		-- (smoothed: no snapping when stopping)
-		local current = cape.upper.Transform
-		local target = CFrame.Angles(-math.rad(lift + flutter * 0.4), 0, 0)
-		cape.upper.Transform = current:Lerp(target, math.min(1, dt * 8))
-		cape.lower.Transform = cape.lower.Transform:Lerp(
-			CFrame.Angles(-math.rad(lift * 0.35 + flutter), 0, 0),
-			math.min(1, dt * 8)
-		)
+		if now >= bull.nextBreath then
+			bull.nextBreath = now + random:NextNumber(3, 5.5)
+			if camera and (camera.CFrame.Position - bull.head.Position).Magnitude < 70 then
+				breathe(bull.head)
+			end
+		end
 	end
+end
+
+-- A blast of air from `position` (a shockwave): capes within `radius` fly
+-- away from it, more the closer they are.
+function KitLooks.gust(position: Vector3, strength: number, radius: number)
+	for _, cloth in cloths do
+		local offset = cloth.torso.Position - position
+		local distance = offset.Magnitude
+		if distance < radius then
+			local direction = if distance > 0.5
+				then offset.Unit
+				else cloth.torso.CFrame.LookVector * -1
+			direction = (direction + Vector3.new(0, 0.35, 0)).Unit
+			cloth.gust += direction * strength * (1 - distance / radius)
+		end
+	end
+end
+
+-- The Sentinel's eyes (empty if he has none).
+function KitLooks.eyes(model: Model): { BasePart }
+	local found: { BasePart } = {}
+	local head = model:FindFirstChild("Head")
+	if head then
+		for _, look in head:GetChildren() do
+			if look.Name == "KitLook" then
+				for _, part in look:GetChildren() do
+					if part.Name == "SentinelEye" and part:IsA("BasePart") then
+						table.insert(found, part)
+					end
+				end
+			end
+		end
+	end
+	return found
+end
+
+-- The tips of the Bull's horns (empty if he has none).
+function KitLooks.hornTips(model: Model): { BasePart }
+	local found: { BasePart } = {}
+	local head = model:FindFirstChild("Head")
+	local look = head and head:FindFirstChild("KitLook")
+	if look then
+		for _, part in look:GetChildren() do
+			if part.Name == "HornTip" and part:IsA("BasePart") then
+				table.insert(found, part)
+			end
+		end
+	end
+	return found
 end
 
 function KitLooks.start()
@@ -231,7 +889,8 @@ function KitLooks.start()
 	for _, model in CollectionService:GetTagged(tag) do
 		watch(model)
 	end
-	RunService.RenderStepped:Connect(swayCapes)
+	RunService.RenderStepped:Connect(updateCloths)
+	RunService.Heartbeat:Connect(breatheBulls)
 end
 
 return KitLooks

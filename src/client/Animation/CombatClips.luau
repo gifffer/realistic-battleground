@@ -6771,7 +6771,7 @@ local clips: { [string]: R6Pose.Clip } = {
 	-- EMOTE (shop): come here. Chin up, beckons twice, a slow shrug.
 	-- SENTINEL / BULL kits (authored with filmstrips, start and end in Guard).
 	Sentinel_HeatVision = {
-		length = 2.6,
+		length = 3.15,
 		looped = false,
 		keyframes = {
 			{
@@ -6786,18 +6786,40 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 0.3,
+				time = 0.35,
 				pose = {
-					Root = { rot = Vector3.new(-6, 0, 0), pos = Vector3.new(0, -0.06, 0) },
-					Neck = { rot = Vector3.new(-16, 0, 0) },
-					RightShoulder = { rot = Vector3.new(8, 0, 14) },
-					LeftShoulder = { rot = Vector3.new(8, 0, -14) },
-					RightHip = { rot = Vector3.new(10, 0, 0) },
-					LeftHip = { rot = Vector3.new(10, 0, 0) },
+					Root = { rot = Vector3.new(-7, 0, 0), pos = Vector3.new(0, -0.1, 0) },
+					Neck = { rot = Vector3.new(-18, 0, 0) },
+					RightShoulder = { rot = Vector3.new(12, 0, 16) },
+					LeftShoulder = { rot = Vector3.new(12, 0, -16) },
+					RightHip = { rot = Vector3.new(24, 0, 0) },
+					LeftHip = { rot = Vector3.new(24, 0, 0) },
 				},
 			},
 			{
-				time = 0.45,
+				time = 0.7,
+				pose = {
+					Root = { rot = Vector3.new(-9, 1.5, 0), pos = Vector3.new(0, -0.16, 0.02) },
+					Neck = { rot = Vector3.new(-22, -1.5, 0) },
+					RightShoulder = { rot = Vector3.new(18, 0, 22) },
+					LeftShoulder = { rot = Vector3.new(18, 0, -22) },
+					RightHip = { rot = Vector3.new(30, 0, 0) },
+					LeftHip = { rot = Vector3.new(30, 0, 2) },
+				},
+			},
+			{
+				time = 0.9,
+				pose = {
+					Root = { rot = Vector3.new(-10, -1.5, 0), pos = Vector3.new(0, -0.18, 0.02) },
+					Neck = { rot = Vector3.new(-24, 1.5, 0) },
+					RightShoulder = { rot = Vector3.new(20, 0, 24) },
+					LeftShoulder = { rot = Vector3.new(20, 0, -24) },
+					RightHip = { rot = Vector3.new(32, 0, -2) },
+					LeftHip = { rot = Vector3.new(34, 0, 0) },
+				},
+			},
+			{
+				time = 1.0,
 				tangent = "flat",
 				pose = {
 					Root = { rot = Vector3.new(3, 0, 0), pos = Vector3.new(0, 0.02, 0.06) },
@@ -6809,7 +6831,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 0.9,
+				time = 1.5,
 				pose = {
 					Root = { rot = Vector3.new(2.5, 1.5, 0), pos = Vector3.new(0, 0, 0.05) },
 					Neck = { rot = Vector3.new(-2.5, -1.5, 0) },
@@ -6820,7 +6842,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 1.4,
+				time = 2.0,
 				pose = {
 					Root = { rot = Vector3.new(2.5, -1.5, 0), pos = Vector3.new(0, 0, 0.05) },
 					Neck = { rot = Vector3.new(-2.5, 1.5, 0) },
@@ -6831,7 +6853,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 1.9,
+				time = 2.5,
 				pose = {
 					Root = { rot = Vector3.new(2.5, 1.5, 0), pos = Vector3.new(0, 0, 0.05) },
 					Neck = { rot = Vector3.new(-2.5, -1.5, 0) },
@@ -6842,7 +6864,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.45,
+				time = 3.0,
 				tangent = "flat",
 				pose = {
 					Root = { rot = Vector3.new(2, 0, 0), pos = Vector3.new(0, 0, 0.04) },
@@ -6854,7 +6876,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.6,
+				time = 3.15,
 				pose = {
 					Root = { rot = Vector3.new(-8, -12, 0) },
 					Neck = { rot = Vector3.new(6, 10, 0) },

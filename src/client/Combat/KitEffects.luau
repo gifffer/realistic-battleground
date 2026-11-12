@@ -89,7 +89,7 @@ local HEAVY_MOVES = table.freeze({
 local REACTIONS: { [string]: string } = {
 	LiverShot = "HitLiver",
 }
--- Sound when the move LANDS.
+-- Sound when the move LANDS ("" = none).
 local HIT_SOUNDS: { [string]: string } = {
 	BottleSmash = "BottleBreak",
 	Headbutt = "Headbutt",
@@ -104,6 +104,7 @@ local HIT_SOUNDS: { [string]: string } = {
 	UppercutPlus = "HeavyHit",
 	KnockoutCombo = "HeavyHit",
 	SlipPlus_Counter = "HeavyHit",
+	HeatVision = "", -- (no sound: the skin just chars where it touches)
 	ThunderClap = "HeavyHit",
 	Skyfall = "HeavyHit",
 	Haymaker = "HeavyHit",
@@ -112,7 +113,7 @@ local HIT_SOUNDS: { [string]: string } = {
 	Stampede = "KickLow",
 	BullToss = "Tackle",
 }
--- Sound when the move STARTS (the swing).
+-- Sound when the move STARTS (the swing; "" = none).
 local START_SOUNDS: { [string]: string } = {
 	Brawler_Bottle = "HeavySwing",
 	Brawler_BrokenBottle = "Slash",
@@ -130,13 +131,16 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
-	Sentinel_ThunderClap = "HeavySwing",
-	Sentinel_Skyfall = "Dash",
-	Sentinel_Haymaker = "HeavySwing",
-	Bull_GoreCharge = "Dash",
+	-- (the Sentinel and Bull moves play their own sounds at the right
+	-- moment: KitVFX)
+	Sentinel_HeatVision = "",
+	Sentinel_ThunderClap = "",
+	Sentinel_Skyfall = "",
+	Sentinel_Haymaker = "",
+	Bull_GoreCharge = "BullCharge",
 	Bull_HornHook = "HeavySwing",
-	Bull_Stampede = "Swing",
-	Bull_Toss = "Dash",
+	Bull_Stampede = "",
+	Bull_Toss = "",
 }
 
 function KitEffects.isMoveAnimation(animation: string): boolean
@@ -619,7 +623,7 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	swingToken[model] = token
 	KitVFX.onAction(model, animation, move)
 	local sound = START_SOUNDS[animation]
-	if sound and not silent then
+	if sound and sound ~= "" and not silent then
 		SoundController.play(sound, model)
 		-- A flurry (jab rush, kick combo...): every blow whooshes, not just
 		-- the first one.
@@ -651,7 +655,10 @@ end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
-	SoundController.play(HIT_SOUNDS[moveId] or "Hit", victim)
+	local hitSound = HIT_SOUNDS[moveId] or "Hit"
+	if hitSound ~= "" then
+		SoundController.play(hitSound, victim)
+	end
 	KitVFX.onHit(victim, attacker, moveId)
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")

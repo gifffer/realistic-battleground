@@ -104,6 +104,8 @@ export type KitDef = {
 	description: string,
 	order: number, -- position in the Kits menu
 	available: boolean, -- false = shown as "coming soon", can't be equipped
+	walkSpeed: number?, -- walking speed × this while equipped (default 1)
+	noSprint: boolean?, -- true = can't sprint with it
 	-- To unlock (step 7): reach this level, then buy it for this many coins.
 	-- nil = free, everyone has it (the two base kits).
 	unlockLevel: number?,

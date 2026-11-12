@@ -3,9 +3,12 @@
 -- down like a meteor, a punch that sends people flying. A short cape (Client/
 -- Combat/KitLooks); his eyes glow red when he looks to burn.
 --
--- Heat vision is strong but not instant: the beam goes straight ahead of
--- him (it doesn't follow the aim), he can't move while it fires, and it
--- only starts burning someone who stays in it (Shared/Kits/KitTypes: beam).
+-- Heat vision is strong but not instant: the eyes charge for a second
+-- (everyone sees it coming), the beam goes straight ahead of him (it doesn't
+-- follow the aim), he can't move while it charges and fires, and it only
+-- starts burning someone who stays in it (Shared/Kits/KitTypes: beam).
+--
+-- Heavy: he walks a little slower than the others and can't sprint.
 --
 -- Pure data, read by Shared/Kits (see KitTypes). `at` values = the impact
 -- keyframes of the animations (Client/Animation/CombatClips).
@@ -18,6 +21,8 @@ local kit: KitTypes.KitDef = {
 	description = "Not quite human. Heat vision, thunderclaps, and fists like meteors.",
 	order = 3,
 	available = true,
+	walkSpeed = 0.9,
+	noSprint = true,
 
 	moves = {
 		{
@@ -25,13 +30,13 @@ local kit: KitTypes.KitDef = {
 			name = "HEAT VISION",
 			description = "Eyes glow, then burn straight ahead. Only hurts those who stay in it.",
 			animation = "Sentinel_HeatVision",
-			duration = 2.6,
+			duration = 3.15,
 			cooldown = 12,
 			stamina = 25,
 			hits = {},
 			beam = {
-				from = 0.45, -- (the eyes glow first: a warning)
-				to = 2.45,
+				from = 1, -- (the eyes charge first: a warning)
+				to = 3,
 				range = 45,
 				radius = 1.1,
 				warmup = 0.55, -- seconds in the beam before it burns

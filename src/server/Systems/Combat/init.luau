@@ -1608,6 +1608,10 @@ local function update(dt: number)
 				"Channel",
 				if time < state.channelUntil then 0.08 else nil
 			)
+			-- The kit's own pace (the Sentinel heavy, the Bull fast).
+			local kit = Kits.get(state.kitId)
+			Movement.setSpeedModifier(player, "Kit", if kit then kit.walkSpeed else nil)
+			Movement.setSprintLock(player, "Kit", kit ~= nil and kit.noSprint == true)
 			-- (clients don't predict a dash the server would refuse)
 			setAttribute(state.model, "Channeling", time < state.channelUntil)
 			-- Kneeling for a finisher: stay in place.

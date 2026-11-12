@@ -1,7 +1,8 @@
 --!strict
 -- BULL: a fighter who fights like one. Horns on his head (Client/Combat/
 -- KitLooks), all weight and rage: he charges, gores, stamps the ground and
--- tosses people over. (His finisher comes later.)
+-- tosses people over. Walks faster than the others. (His finisher comes
+-- later.)
 --
 -- Pure data, read by Shared/Kits (see KitTypes). `at` values = the impact
 -- keyframes of the animations (Client/Animation/CombatClips).
@@ -16,6 +17,7 @@ local kit: KitTypes.KitDef = {
 	description = "Horns, weight and rage. Charges, gores and tramples.",
 	order = 4,
 	available = true,
+	walkSpeed = 1.15, -- (a bull: walks faster than the others)
 
 	moves = {
 		{
