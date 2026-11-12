@@ -13,12 +13,13 @@ Une bouteille ne casse pas un crâne et n'ouvre pas une cage thoracique. Le jeu 
 - Tout disparaît au kill ou à la réapparition.
 
 ![Les 12 plaies (en haut : corps, en bas : tête)](wounds_kit.png)
-![Rendu de contrôle : la tête en tuiles avec une lacération et une entaille, placées comme dans le jeu](wounds_head.png)
+![Rendu de contrôle : à gauche la tête refaite par le jeu avec deux plaies, à droite la vraie tête Roblox. La forme est identique.](wounds_head.png)
 
 ## Importer les plaies dans Studio (une seule fois)
 
 1. Télécharge **`assets/wounds/WoundKit.fbx`** : sur GitHub, ouvre le fichier puis clique **Download raw file**.
 2. Dans Studio, dans `ReplicatedStorage > Assets`, crée un Folder **`Wounds`**.
+   Si un ancien **`WoundKit`** est déjà dedans, **supprime-le** d'abord : le nouveau contient en plus les morceaux de la tête.
 3. **Import 3D** (menu File, ou onglet Avatar), choisis `WoundKit.fbx`, puis clique **Import** sans rien changer.
 4. Glisse le modèle **`WoundKit`** qui apparaît dans le Workspace vers `ReplicatedStorage > Assets > Wounds`.
 5. Ne supprime **rien** dedans, surtout pas **Kit_Origin**, **Kit_Up** et **Kit_Out** : le jeu s'en sert pour se repérer.
@@ -28,11 +29,17 @@ Tu peux supprimer le dossier `ReplicatedStorage > Assets > Anatomy` : il ne sert
 
 Sans `WoundKit`, le jeu marche quand même. Il y a le sang, mais pas de plaie visible.
 
+## La tête classique pour tout le monde
+
+Chaque combattant reçoit la **tête Roblox classique** : son visage et sa couleur de peau restent. C'est nécessaire parce que la partie blessée est remplacée par une copie exacte, percée là où se trouve la plaie (Roblox ne permet pas de percer une partie). La copie est faite aux mesures exactes de la tête classique, donc on ne voit pas la différence.
+
+On garde aussi les **accessoires de tête** : cheveux, chapeaux, lunettes et accessoires du visage. Seuls ceux qui ne sont pas trop gros restent (3 studs maximum par côté). Ils ne bloquent rien. Les autres accessoires (dos, taille, épaules, cou, vêtements 3D) sont retirés. Ce réglage se trouve dans `src/server/Systems/Characters.luau`.
+
 ## Comment ça marche
 
 - **Serveur** : chaque plaie est un attribut du personnage, `Gash_<Partie>_<n>`. Par exemple, `Gash_Head_1 = "Slash|M|0.31|0.12|-0.52|-30|81234"` veut dire : entaille, taille M, position sur la tête, angle, graine aléatoire. Voir `src/shared/Util/Gash.luau`.
 - **Client** (`src/client/Combat/Gashes.luau`) :
-  - il cache la vraie partie du corps et la remplace par une **peau en tuiles**, avec la même couleur et les mêmes images (visage, vêtements) ;
+  - il cache la vraie partie du corps et la remplace par une **copie exacte** : même forme, couleur et matière, avec le visage et les vêtements. Pour la tête, ce sont des morceaux 3D lisses de la tête classique (`Shell_*` dans `WoundKit`) ; pour le torse, des tuiles ;
   - il enlève les tuiles **en suivant le contour exact** de la plaie ;
   - il pose dedans le **modèle 3D** de la plaie.
 - **Modèles** : `tools/wounds/build_wound_kit.py` (Blender en Python) fabrique `WoundKit.fbx` et `src/shared/WoundShapes.luau`, qui contient les contours. Pour les refaire :

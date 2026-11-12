@@ -4,6 +4,7 @@
 -- X along the skin, Y up the skin; head versions: X = arc length).
 -- `index`: the insert's origin sits at (index * spacing, markerDrop, 0)
 -- from the Kit_Origin marker, in the kit's axes (Kit_Up = Y, Kit_Out = Z).
+-- The head shell pieces (Shell_*) are around headOrigin (+ markerDrop in Y).
 
 export type Shape = {
 	index: number,
@@ -12,13 +13,18 @@ export type Shape = {
 	head: boolean, -- bent for the round head
 	lip: number, -- width of the skin edge around the hole (studs)
 	extent: Vector2, -- half size of the whole insert on the skin (X, Y)
+	low: number, -- how far it reaches below its centre (blood drips)
+	high: number, -- how far it reaches above its centre
 	points: { Vector2 }, -- the hole cut in the skin (the edge without its thin splits)
 }
 
 local WoundShapes = {
 	spacing = 2,
-	headRadius = 0.605,
+	headRadius = 0.6,
 	markerDrop = 3,
+	headBand = 0.3,
+	headBevel = 0.3,
+	headOrigin = Vector3.new(-4, 0, 0),
 	shapes = {
 		LacS = {
 			index = 0,
@@ -27,6 +33,8 @@ local WoundShapes = {
 			head = false,
 			lip = 0.045,
 			extent = Vector2.new(0.1302, 0.0976),
+			low = 0.0923,
+			high = 0.0976,
 			points = {
 				Vector2.new(0.0858, 0),
 				Vector2.new(0.0821, 0.0032),
@@ -109,6 +117,8 @@ local WoundShapes = {
 			head = false,
 			lip = 0.05,
 			extent = Vector2.new(0.2502, 0.1865),
+			low = 0.1865,
+			high = 0.1331,
 			points = {
 				Vector2.new(0.1268, 0),
 				Vector2.new(0.1331, 0.0047),
@@ -191,6 +201,8 @@ local WoundShapes = {
 			head = false,
 			lip = 0.055,
 			extent = Vector2.new(0.2664, 0.2529),
+			low = 0.2529,
+			high = 0.1665,
 			points = {
 				Vector2.new(0.1925, 0),
 				Vector2.new(0.1882, 0.0065),
@@ -273,6 +285,8 @@ local WoundShapes = {
 			head = false,
 			lip = 0.04,
 			extent = Vector2.new(0.19, 0.065),
+			low = 0.065,
+			high = 0.0601,
 			points = {
 				Vector2.new(0.15, 0),
 				Vector2.new(0.1494, 0),
@@ -355,6 +369,8 @@ local WoundShapes = {
 			head = false,
 			lip = 0.045,
 			extent = Vector2.new(0.27, 0.1481),
+			low = 0.1481,
+			high = 0.0884,
 			points = {
 				Vector2.new(0.225, 0),
 				Vector2.new(0.2241, 0.0001),
@@ -437,6 +453,8 @@ local WoundShapes = {
 			head = false,
 			lip = 0.05,
 			extent = Vector2.new(0.35, 0.1776),
+			low = 0.1776,
+			high = 0.1018,
 			points = {
 				Vector2.new(0.3, 0),
 				Vector2.new(0.2989, 0.0001),
@@ -518,7 +536,9 @@ local WoundShapes = {
 			size = "S",
 			head = true,
 			lip = 0.045,
-			extent = Vector2.new(0.1595, 0.1167),
+			extent = Vector2.new(0.1595, 0.1011),
+			low = 0.1011,
+			high = 0.0931,
 			points = {
 				Vector2.new(0.0864, 0),
 				Vector2.new(0.0854, 0.0033),
@@ -600,7 +620,9 @@ local WoundShapes = {
 			size = "M",
 			head = true,
 			lip = 0.05,
-			extent = Vector2.new(0.2199, 0.1815),
+			extent = Vector2.new(0.2199, 0.1528),
+			low = 0.1528,
+			high = 0.1212,
 			points = {
 				Vector2.new(0.1362, 0),
 				Vector2.new(0.1377, 0.0049),
@@ -682,7 +704,9 @@ local WoundShapes = {
 			size = "L",
 			head = true,
 			lip = 0.055,
-			extent = Vector2.new(0.3549, 0.249),
+			extent = Vector2.new(0.3549, 0.2021),
+			low = 0.2021,
+			high = 0.1324,
 			points = {
 				Vector2.new(0.1922, 0),
 				Vector2.new(0.1913, 0.0066),
@@ -764,7 +788,9 @@ local WoundShapes = {
 			size = "S",
 			head = true,
 			lip = 0.04,
-			extent = Vector2.new(0.19, 0.1357),
+			extent = Vector2.new(0.19, 0.1046),
+			low = 0.1046,
+			high = 0.0662,
 			points = {
 				Vector2.new(0.15, 0),
 				Vector2.new(0.1494, 0.0001),
@@ -846,7 +872,9 @@ local WoundShapes = {
 			size = "M",
 			head = true,
 			lip = 0.045,
-			extent = Vector2.new(0.27, 0.1563),
+			extent = Vector2.new(0.27, 0.1266),
+			low = 0.1266,
+			high = 0.0837,
 			points = {
 				Vector2.new(0.225, 0),
 				Vector2.new(0.2241, 0.0001),
@@ -928,7 +956,9 @@ local WoundShapes = {
 			size = "L",
 			head = true,
 			lip = 0.05,
-			extent = Vector2.new(0.35, 0.2109),
+			extent = Vector2.new(0.35, 0.1622),
+			low = 0.1622,
+			high = 0.1069,
 			points = {
 				Vector2.new(0.3, 0),
 				Vector2.new(0.2989, 0.0002),

@@ -3,9 +3,11 @@
 --
 -- The server stores each cut as a "Gash_<Part>_<n>" attribute (where, how
 -- big, which glass: Shared/Util/Gash). For a body part with cuts:
---   1. the real part is hidden and replaced by a SKIN SHELL made of flat
---      tiles, with the fighter's skin colour and their face / shirt /
---      pants drawn on them (from far, nothing changes),
+--   1. the real part is hidden and replaced by an exact copy of it, the
+--      SKIN SHELL (Roblox can't cut a hole in a part): same shape, colour
+--      and material, the face / shirt / pants drawn on it. The torso: flat
+--      tiles. The head: smooth pieces of the classic round head (made in
+--      Blender, exact measures), so it doesn't change shape at all,
 --   2. the tiles are left out where the cut is (the hole follows the cut's
 --      outline, cell by cell),
 --   3. in the hole sits a WOUND INSERT, a small 3D model made in Blender
@@ -68,22 +70,22 @@ local LOOKS: { [string]: Look } = {
 local BACKING_COLOR = Color3.fromRGB(46, 4, 4) -- deep inside a cut
 local BACKING_DEPTH = 0.14 -- under the skin, below the deepest insert (0.115)
 
--- Skin shell.
+-- Skin shell: its outer surface is exactly the real part's.
 local THICKNESS = 0.04
-local LIFT = 0.004 -- the shell's outer face sits this far above the real part
 local CELL = 0.035 -- size of the cells the hole is cut from (studs)
 -- Cells this close OUTSIDE the hole go too: the steps of the cells then
 -- lie under the insert's skin edge, which covers them.
 local HIDE_MARGIN = 0.02
--- The round R6 head, as drawn here: a cylinder with rounded top and bottom.
-local HEAD_RADIUS = WoundShapes.headRadius - LIFT -- the head you see (~0.6)
-local HEAD_BEVEL = 0.22 -- radius of the rounded top / bottom edge
-local HEAD_SECTORS = 24
-local HEAD_COLUMN = 0.045 -- column width near a cut (studs of arc)
+-- The classic R6 head (measured from Roblox's head.mesh): radius 0.6, a
+-- straight part 0.6 high, edges rounded by 0.3, flat caps.
+local HEAD_RADIUS = WoundShapes.headRadius
+local HEAD_BAND = WoundShapes.headBand -- half height of the straight part
+local HEAD_SECTORS = 24 -- Shell_Band24 / Shell_Bevel24 pieces around the head
+local HEAD_FINE = 4 -- a sector next to a cut: 4 thin Shell_Band96 columns
 -- Head inserts are bent around the head for a level cut: turning them more
 -- than this would sink their ends into the skin.
 local HEAD_MAX_TURN = 8
-local PAD = 0.004 -- tiles are this much bigger than their cell (no cracks)
+local SHELL_PIECES = { "Shell_Band24", "Shell_Band96", "Shell_Bevel24", "Shell_Cap" }
 
 -- Clothing templates (585 x 559 pixels): where each face of a part is,
 -- {x, y, width, height} in pixels (the official R6 template).
@@ -129,7 +131,12 @@ local FACES: { Face } = {
 
 ------------------------------------------------------------------------------
 -- The wound kit (imported model) and where its inserts are.
-type Kit = { frame: CFrame, unit: number, pieces: { [string]: { BasePart } } }
+type Kit = {
+	frame: CFrame,
+	unit: number,
+	pieces: { [string]: { BasePart } }, -- inserts
+	shell: { [string]: BasePart }, -- head shell pieces
+}
 local kit: Kit? = nil
 local warnedMarkers = false
 
@@ -170,9 +177,12 @@ local function findKit(): Kit?
 		frame = CFrame.fromMatrix(origin.Position, y:Cross(z), y, z),
 		unit = toUp.Magnitude, -- 1 kit stud, in studs (the importer may scale)
 		pieces = {},
+		shell = {},
 	}
 	for _, item in model:GetDescendants() do
-		if item:IsA("BasePart") then
+		if item:IsA("BasePart") and string.sub(item.Name, 1, 6) == "Shell_" then
+			found.shell[item.Name] = item
+		elseif item:IsA("BasePart") then
 			local insert = string.match(item.Name, "^(.+)_%a+$")
 			if insert and WoundShapes.shapes[insert] then
 				local list = found.pieces[insert] or {}
@@ -184,6 +194,12 @@ local function findKit(): Kit?
 	-- Every insert must be there (the kit replicates piece by piece).
 	for name in WoundShapes.shapes do
 		if found.pieces[name] == nil then
+			return nil
+		end
+	end
+	for _, name in SHELL_PIECES do
+		local piece: BasePart? = found.shell[name]
+		if piece == nil then
 			return nil
 		end
 	end
@@ -265,7 +281,7 @@ local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
 	if faceH / 2 < ext.Y then
 		y = 0
 	end
-	local depth = math.abs(face.normal:Dot(half)) + LIFT
+	local depth = math.abs(face.normal:Dot(half))
 	local origin = face.normal * depth + right * x + face.up * y
 	local z = face.normal
 	local yAxis = face.up
@@ -291,9 +307,9 @@ local function placeOnHead(_part: BasePart, data: Gash.Data): Placed?
 	local angle = math.atan2(p.X, -p.Z) -- 0 = the face, + = toward its right (+X)
 	-- Head cuts lie almost level (the insert is bent around the head).
 	local turn = math.clamp(data.angle, -HEAD_MAX_TURN, HEAD_MAX_TURN)
-	local ext = turnedExtent(shape.extent, turn)
-	local band = 0.6 - HEAD_BEVEL
-	local y = math.clamp(p.Y, -(band - ext.Y), band - ext.Y)
+	-- The whole cut (its blood drips too) stays on the straight part.
+	local low, high = -HEAD_BAND + shape.low, HEAD_BAND - shape.high
+	local y = if low <= high then math.clamp(p.Y, low, high) else (low + high) / 2
 	local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
 	local yAxis = Vector3.new(0, 1, 0)
 	local origin = out * WoundShapes.headRadius + Vector3.new(0, y, 0)
@@ -358,8 +374,6 @@ local function paint(
 	if #pictures == 0 then
 		return
 	end
-	-- The SurfaceGui covers the whole tile, a hair bigger than its cell.
-	a0, b0, w, h = a0 - PAD / 2, b0 - PAD / 2, w + PAD, h + PAD
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Front
 	gui.LightInfluence = 1
@@ -437,7 +451,8 @@ local function newTile(part: BasePart, size: Vector3, offset: CFrame, parent: In
 	tile.Name = "Skin"
 	tile.Size = size
 	tile.Color = part.Color
-	tile.Material = Enum.Material.SmoothPlastic
+	tile.Material = part.Material -- exactly like the real part
+	tile.Reflectance = part.Reflectance
 	tile.TopSurface = Enum.SurfaceType.Smooth
 	tile.BottomSurface = Enum.SurfaceType.Smooth
 	tile.CFrame = part.CFrame * offset
@@ -516,150 +531,188 @@ local function buildBoxSkin(
 			keep[i] = {}
 			for j = 1, rows do
 				local a, b = (i - 0.5) * cw, (j - 0.5) * ch -- from the top-left
-				local at = normal * (depth + LIFT) + right * (a - faceW / 2) + up * (faceH / 2 - b)
+				local at = normal * depth + right * (a - faceW / 2) + up * (faceH / 2 - b)
 				keep[i][j] = #mine == 0 or not cutAt(mine, at, false)
 			end
 		end
 		for _, rect in rectangles(keep, columns, rows) do
 			local a0, b0 = (rect.i - 1) * cw, (rect.j - 1) * ch
 			local w, h = rect.w * cw, rect.h * ch
-			local center = normal * (depth + LIFT - THICKNESS / 2)
+			local center = normal * (depth - THICKNESS / 2)
 				+ right * (a0 + w / 2 - faceW / 2)
 				+ up * (faceH / 2 - b0 - h / 2)
 			-- The tile's front (-Z) faces out; its Y is the picture's up.
 			local offset = CFrame.fromMatrix(center, up:Cross(-normal), up, -normal)
-			-- (a hair bigger: no cracks between tiles)
-			local tile = newTile(part, Vector3.new(w + PAD, h + PAD, THICKNESS), offset, parent)
+			-- (exact size: overlapping tiles would flicker along their seams)
+			local tile = newTile(part, Vector3.new(w, h, THICKNESS), offset, parent)
 			paint(tile, pictures, faceW, faceH, a0, b0, w, h)
 		end
 	end
+	-- A skin-coloured core deep inside: a hairline gap between two tiles
+	-- shows skin, never the sky through the body.
+	local core = part.Size - Vector3.new(0.32, 0.32, 0.32)
+	if core.X > 0.05 and core.Y > 0.05 and core.Z > 0.05 then
+		newTile(part, core, CFrame.identity, parent).Name = "Core"
+	end
 end
 
--- The round head: columns around it (thin where a cut is), rounded rims, caps.
-local function buildHeadSkin(part: BasePart, cuts: { Placed }, parent: Instance)
-	local s = 1 -- the R6 head has one size (see placeOnHead)
-	local radius = HEAD_RADIUS * s
-	local outer = radius + LIFT
-	local band = (0.6 - HEAD_BEVEL) * s -- half height of the straight side
+-- One piece of the head shell from the kit, put on the head: turned to
+-- `angle` around it (0 = the face), its middle at height `y`, `height` tall
+-- (band pieces are 1 stud high in the kit), turned over for the bottom.
+local function shellPiece(
+	part: BasePart,
+	found: Kit,
+	name: string,
+	angle: number,
+	y: number,
+	height: number,
+	bottom: boolean,
+	parent: Instance
+): BasePart
+	local item = found.shell[name]
+	local relative = found.frame:ToObjectSpace(item.CFrame)
+	local origin = WoundShapes.headOrigin + Vector3.new(0, WoundShapes.markerDrop, 0)
+	local position = relative.Position / found.unit - origin
+	local rotation = relative.Rotation
+	-- Stretch the piece's own axis that runs up the head (kit Y) to `height`.
+	local function stretch(axis: Vector3): number
+		local upness = math.abs(axis.Y)
+		return upness * height + (1 - upness)
+	end
+	local piece = item:Clone()
+	piece:ClearAllChildren()
+	piece.Size = item.Size
+		/ found.unit
+		* Vector3.new(
+			stretch(rotation.XVector),
+			stretch(rotation.YVector),
+			stretch(rotation.ZVector)
+		)
+	local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
+	local up = Vector3.new(0, 1, 0)
+	local around = CFrame.fromMatrix(Vector3.zero, up:Cross(out), up, out)
+	local flip = if bottom then CFrame.Angles(0, 0, math.pi) else CFrame.identity
+	piece.CFrame = part.CFrame
+		* around
+		* flip
+		* CFrame.new(position.X, position.Y * height + y, position.Z)
+		* rotation
+	piece.Color = part.Color
+	piece.Material = part.Material -- exactly like the real head
+	piece.Reflectance = part.Reflectance
+	piece.Name = "Skin"
+	setUp(piece, part, parent)
+	piece.CastShadow = true
+	return piece
+end
+
+-- The face picture on a slice of the head's front: an invisible flat card
+-- just over the skin carries it (a picture can't bend around the head).
+local function faceCard(
+	part: BasePart,
+	image: string,
+	angle: number,
+	width: number,
+	top: number,
+	height: number,
+	parent: Instance
+)
+	local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
+	local up = Vector3.new(0, 1, 0)
+	local chord = 2 * HEAD_RADIUS * math.sin(width / 2)
+	local card = Instance.new("Part")
+	card.Name = "FaceCard"
+	card.Transparency = 1
+	card.Size = Vector3.new(chord, height, 0.01)
+	card.CFrame = part.CFrame
+		* CFrame.fromMatrix(
+			out * (HEAD_RADIUS + 0.002) + Vector3.new(0, top - height / 2, 0),
+			up:Cross(-out),
+			up,
+			-out
+		)
+	setUp(card, part, parent)
+	-- The picture covers the front of the head (1.2 x 1.2), seen from the
+	-- front; this card shows the slice in front of it.
+	local projected = chord * math.cos(angle)
+	local leftEdge = HEAD_RADIUS * math.sin(angle) + projected / 2 -- your left = the head's +X
+	local span = 2 * HEAD_RADIUS
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.LightInfluence = 1
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 100
+	gui.ClipsDescendants = true
+	local label = Instance.new("ImageLabel")
+	label.BackgroundTransparency = 1
+	label.Image = image
+	label.Size = UDim2.fromScale(span / projected, span / height)
+	label.Position = UDim2.fromScale(
+		-(HEAD_RADIUS - leftEdge) / projected,
+		-(HEAD_RADIUS - top) / height -- the picture's top = the top of the head
+	)
+	label.Parent = gui
+	gui.Parent = card
+end
+
+-- The round head rebuilt from the kit's smooth pieces: the straight part in
+-- 24 columns (4 thin ones next to a cut, with the hole left out), the
+-- rounded edges and the caps. Same shape as the real head, no seams.
+local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, parent: Instance)
 	local face = part:FindFirstChildOfClass("Decal")
 	local faceImage = if face then face.Texture else ""
 	local sector = 2 * math.pi / HEAD_SECTORS
-	local rows = math.max(1, math.round(2 * band / CELL))
-	local rowH = 2 * band / rows
+	local rows = math.max(1, math.round(2 * HEAD_BAND / CELL))
+	local rowH = 2 * HEAD_BAND / rows
 
-	local function addColumn(angle: number, width: number)
-		-- width in radians; cells from the top down
+	local function column(angle: number, width: number, name: string)
 		local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
 		local keep: { { boolean } } = { {} }
 		local hasCut = false
 		for j = 1, rows do
-			local y = band - (j - 0.5) * rowH
-			local cut = #cuts > 0 and cutAt(cuts, out * outer + Vector3.new(0, y, 0), true)
+			local y = HEAD_BAND - (j - 0.5) * rowH
+			local cut = #cuts > 0 and cutAt(cuts, out * HEAD_RADIUS + Vector3.new(0, y, 0), true)
 			keep[1][j] = not cut
 			hasCut = hasCut or cut
 		end
-		local arc = width * outer
-		local rects: { Rect } = if hasCut
+		local runs: { Rect } = if hasCut
 			then rectangles(keep, 1, rows)
 			else { { i = 1, j = 1, w = 1, h = rows } }
-		for _, rect in rects do
-			local top = band - (rect.j - 1) * rowH
-			local h = rect.h * rowH
-			local center = out * (outer - THICKNESS / 2) + Vector3.new(0, top - h / 2, 0)
-			local up = Vector3.new(0, 1, 0)
-			local offset = CFrame.fromMatrix(center, up:Cross(-out), up, -out)
-			local tileW, tileH = arc + 0.012, h + PAD
-			local tile = newTile(part, Vector3.new(tileW, tileH, THICKNESS), offset, parent)
-			-- The face picture covers the front of the head, seen from the
-			-- front: this column shows a slice of it (narrower near the sides).
+		for _, run in runs do
+			local top = HEAD_BAND - (run.j - 1) * rowH
+			local height = run.h * rowH
+			shellPiece(part, found, name, angle, top - height / 2, height, false, parent)
 			if faceImage ~= "" and math.cos(angle) > 0.2 then
-				local projected = tileW * math.cos(angle)
-				local tileTop = top + PAD / 2
-				local leftEdge = outer * math.sin(angle) + projected / 2 -- your left = the head's +X
-				local span = 2 * outer
-				local gui = Instance.new("SurfaceGui")
-				gui.Face = Enum.NormalId.Front
-				gui.LightInfluence = 1
-				gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-				gui.PixelsPerStud = 100
-				gui.ClipsDescendants = true
-				local label = Instance.new("ImageLabel")
-				label.BackgroundTransparency = 1
-				label.Image = faceImage
-				label.Size = UDim2.fromScale(span / projected, span / tileH)
-				label.Position = UDim2.fromScale(
-					-(outer - leftEdge) / projected,
-					-(outer - tileTop) / tileH -- the picture's top = the top of the head
-				)
-				label.Parent = gui
-				gui.Parent = tile
+				faceCard(part, faceImage, angle, width, top, height, parent)
 			end
 		end
 	end
 
 	for index = 0, HEAD_SECTORS - 1 do
-		local from = index * sector
-		local mid = from + sector / 2
+		local mid = (index + 0.5) * sector
 		-- Is a cut near this sector? Then thin columns, to cut it finely.
 		local near = false
 		for _, cut in cuts do
-			local reach = (cut.shape.extent.Magnitude + 0.06) / outer
+			local reach = (cut.shape.extent.X + 0.06) / HEAD_RADIUS
 			local delta = math.abs((mid - cut.center.X + math.pi) % (2 * math.pi) - math.pi)
 			if delta < reach + sector / 2 then
 				near = true
 			end
 		end
-		local count = if near then math.max(1, math.round(sector * outer / HEAD_COLUMN)) else 1
-		for k = 0, count - 1 do
-			addColumn(from + (k + 0.5) * sector / count, sector / count)
-		end
-	end
-
-	-- Rounded rims (3 rings above, 3 below) and flat caps.
-	for _, sign in { 1, -1 } do
-		for _, tilt in { math.rad(15), math.rad(45), math.rad(75) } do
-			local radial = radius
-				- HEAD_BEVEL * s
-				+ HEAD_BEVEL * s * math.cos(tilt)
-				+ LIFT * math.cos(tilt)
-			local y = sign * (band + HEAD_BEVEL * s * math.sin(tilt) + LIFT * math.sin(tilt))
-			local height = HEAD_BEVEL * s * math.rad(30) + 0.01
-			for index = 0, HEAD_SECTORS - 1 do
-				local angle = (index + 0.5) * sector
-				local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
-				local normal = (out * math.cos(tilt) + Vector3.new(0, sign * math.sin(tilt), 0)).Unit
-				local along = Vector3.new(0, 1, 0):Cross(out) -- around the head
-				local up = normal:Cross(along).Unit
-				if up.Y < 0 then
-					up = -up
-				end
-				local center = out * radial + Vector3.new(0, y, 0) - normal * THICKNESS / 2
-				local offset = CFrame.fromMatrix(center, up:Cross(-normal), up, -normal)
-				newTile(
-					part,
-					Vector3.new(2 * math.pi * radial / HEAD_SECTORS + 0.012, height, THICKNESS),
-					offset,
-					parent
-				)
+		if near then
+			for k = 0, HEAD_FINE - 1 do
+				local angle = index * sector + (k + 0.5) * sector / HEAD_FINE
+				column(angle, sector / HEAD_FINE, "Shell_Band96")
 			end
+		else
+			column(mid, sector, "Shell_Band24")
 		end
-		-- the cap: a disc (a cylinder part lies along its X axis: turn it up)
-		local cap = Instance.new("Part")
-		cap.Shape = Enum.PartType.Cylinder
-		cap.Name = "Skin"
-		cap.Size = Vector3.new(
-			THICKNESS,
-			2 * (radius - HEAD_BEVEL * s) + 0.02,
-			2 * (radius - HEAD_BEVEL * s) + 0.02
-		)
-		cap.Color = part.Color
-		cap.Material = Enum.Material.SmoothPlastic
-		cap.CFrame = part.CFrame
-			* CFrame.new(0, sign * (0.6 * s + LIFT - THICKNESS / 2), 0)
-			* CFrame.Angles(0, 0, math.rad(90))
-		setUp(cap, part, parent)
-		cap.CastShadow = true
+		-- the rounded edges above and below
+		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, false, parent)
+		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, true, parent)
 	end
+	shellPiece(part, found, "Shell_Cap", 0, 0, 1, false, parent)
+	shellPiece(part, found, "Shell_Cap", 0, 0, 1, true, parent)
 end
 
 -- The 3D wound model of one cut, from the kit, fitted on the part.
@@ -781,7 +834,7 @@ local function refresh(model: Model, partName: string)
 	local folder = Instance.new("Folder")
 	folder.Name = "Gashes"
 	if isHead then
-		buildHeadSkin(part, cuts, folder)
+		buildHeadSkin(part, cuts, found, folder)
 	else
 		buildBoxSkin(model, part, key, cuts, folder)
 	end

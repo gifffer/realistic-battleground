@@ -250,10 +250,11 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | G6 | Frapper ailleurs sur la même partie | Une **nouvelle** plaie (3 max par partie ; au-delà, la plus proche grandit). |
 | G7 | 2 joueurs | Les deux écrans voient **les mêmes** plaies, au même endroit. |
 | G8 | Mourir / réapparaître | Le corps redevient intact. |
-| G9 | Regarder de près une tête ou un torse blessé | La tête reste **ronde**, sans bord carré. Le visage est à sa place (yeux, bouche). Le t-shirt et le pantalon sont alignés autour de la plaie. Si un motif est décalé ou à l'envers, envoie une capture. |
+| G9 | Regarder de près une tête ou un torse blessé | La tête et le torse gardent **exactement leur forme** (tête bien ronde, ni facettes ni lignes, même matière). Seule la plaie change. Le visage est à sa place. Le t-shirt et le pantalon sont alignés autour de la plaie. |
+| G11 | Entrer en jeu avec un avatar à tête spéciale ou avec de gros accessoires | La tête devient la tête **classique** (même visage, même couleur). Les cheveux, chapeaux et lunettes restent ; les gros accessoires et ceux du dos, de la taille ou des épaules disparaissent. |
 | G10 | Ta propre tête blessée, en 1re personne | Rien ne gêne la vue. |
 
-Les plaies demandent d'importer `WoundKit` une fois (voir `docs/WOUNDS_FR.md`).
+Les plaies demandent d'importer `WoundKit` (voir `docs/WOUNDS_FR.md`). **Il faut le ré-importer** après cette mise à jour : il contient maintenant les morceaux de la tête.
 
 Note : le sang réaliste et les plaies demandent de remplir honnêtement le **questionnaire de
 maturité** de l'expérience (Creator Dashboard). Pour un public plus jeune, mettre

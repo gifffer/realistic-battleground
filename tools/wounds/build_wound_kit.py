@@ -50,7 +50,13 @@ OUT = sys.argv[1]
 PREVIEW = "--preview" in sys.argv
 LUA_OUT = "src/shared/WoundShapes.luau"
 
-HEAD_RADIUS = 0.605  # outer radius of the head's skin shell (game: Gashes.luau)
+# The classic R6 head (Roblox's avatar/heads/head.mesh, measured): a
+# cylinder of radius 0.6 whose straight part is 0.6 high (y -0.3..0.3), with
+# edges rounded by a radius of 0.3 up to flat caps of radius 0.3 at y = +-0.6.
+HEAD_RADIUS = 0.6
+HEAD_BAND = 0.3  # half height of the straight part
+HEAD_BEVEL = 0.3  # radius of the rounded edges
+HEAD_ORIGIN = (-4.0, 0.0, 0.0)  # where the head-shell pieces sit in the kit (insert axes)
 SPACING = 2.0
 N = 72  # points on an outline
 
@@ -281,6 +287,8 @@ def build_insert(kind, size, v, head, seed):
         i = rng.choice(lowest)
         start = outer[i]
         length = rng.uniform(0.035, 0.09) * (1.4 if size == "L" else 1.0)
+        if head:
+            length *= 0.6  # the face is short: the blood stays on the straight part
         w = rng.uniform(0.007, 0.012)
         steps = 10
         phase = rng.uniform(0, 6.3)
@@ -303,7 +311,8 @@ def build_insert(kind, size, v, head, seed):
 
     # How far the insert reaches on the skin (drips included), before bending.
     reach_x = max(abs(vert.co.x) for bm in b.parts.values() for vert in bm.verts)
-    reach_y = max(abs(vert.co.y) for bm in b.parts.values() for vert in bm.verts)
+    reach_low = -min(vert.co.y for bm in b.parts.values() for vert in bm.verts)
+    reach_high = max(vert.co.y for bm in b.parts.values() for vert in bm.verts)
 
     # Head version: bend everything around the head's vertical axis.
     meshes = {}
@@ -316,7 +325,99 @@ def build_insert(kind, size, v, head, seed):
                 r = HEAD_RADIUS + z
                 vert.co = Vector((r * math.sin(th), y, r * math.cos(th) - HEAD_RADIUS))
         meshes[layer] = bm
-    return hole, meshes, (reach_x, reach_y)
+    return hole, meshes, (reach_x, reach_low, reach_high)
+
+
+# --- Head shell -------------------------------------------------------------------
+# Smooth pieces of the classic head, used by the game to rebuild a cut head
+# exactly as it was (only the cut is open). Insert axes (X along, Y up, Z out
+# of the head); the head's centre is the origin; each piece is centred on the
+# angle 0 (its middle faces +Z). Normals are the true ones of the round
+# shape, so the pieces join without any visible seam.
+#   Shell_Band24   1/24 of the straight part, 1 stud high (the game scales Y)
+#   Shell_Band96   1/96 of it (thin columns next to a cut)
+#   Shell_Bevel24  1/24 of the top rounded edge (the bottom one: turned over)
+#   Shell_Cap      the flat top (the bottom one: turned over)
+def shell_piece(points_normals_faces, name):
+    verts, normals, faces = points_normals_faces
+    mesh = bpy.data.meshes.new(name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.validate()
+    outward_check(mesh, name)
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+    mesh.normals_split_custom_set_from_vertices(normals)
+    return mesh
+
+
+def band(arc_deg, segments):
+    half = math.radians(arc_deg) / 2
+    verts, normals, faces = [], [], []
+    for i in range(segments + 1):
+        a = -half + 2 * half * i / segments
+        out = (math.sin(a), 0, math.cos(a))
+        for y in (-0.5, 0.5):
+            verts.append((HEAD_RADIUS * out[0], y, HEAD_RADIUS * out[2]))
+            normals.append(out)
+    for i in range(segments):
+        a0, a1, b0, b1 = 2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 3
+        faces.append((a0, b0, b1, a1))  # counter-clockwise seen from outside
+    return verts, normals, faces
+
+
+def bevel(arc_deg, segments, rings):
+    half = math.radians(arc_deg) / 2
+    verts, normals, faces = [], [], []
+    for i in range(segments + 1):
+        a = -half + 2 * half * i / segments
+        out = (math.sin(a), math.cos(a))
+        for j in range(rings + 1):
+            t = math.radians(90) * j / rings  # 0 = side, 90 = top
+            r = HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t)
+            y = HEAD_BAND + HEAD_BEVEL * math.sin(t)
+            verts.append((r * out[0], y, r * out[1]))
+            normals.append((math.cos(t) * out[0], math.sin(t), math.cos(t) * out[1]))
+    row = rings + 1
+    for i in range(segments):
+        for j in range(rings):
+            p, q = i * row + j, (i + 1) * row + j
+            faces.append((p, q, q + 1, p + 1))
+    return verts, normals, faces
+
+
+def cap(segments):
+    r = HEAD_RADIUS - HEAD_BEVEL
+    top = HEAD_BAND + HEAD_BEVEL
+    verts, normals, faces = [(0, top, 0)], [(0, 1, 0)], []
+    for i in range(segments):
+        a = 2 * math.pi * i / segments
+        verts.append((r * math.sin(a), top, r * math.cos(a)))
+        normals.append((0, 1, 0))
+    for i in range(segments):
+        faces.append((0, 1 + (i + 1) % segments, 1 + i))
+    return verts, normals, faces
+
+
+def outward_check(mesh, name):
+    """Every face must face away from the head's axis (one-sided in Roblox)."""
+    flipped = []
+    for poly in mesh.polygons:
+        c = poly.center
+        away = Vector((c.x, c.y if name == "Shell_Cap" else 0, c.z))
+        if poly.normal.dot(away) <= 0:
+            poly.flip()
+            flipped.append(poly.index)
+    print(name, "faces flipped to face out:", len(flipped))
+
+
+def build_head_shell():
+    pieces = {
+        "Shell_Band24": band(15, 8),
+        "Shell_Band96": band(3.75, 2),
+        "Shell_Bevel24": bevel(15, 8, 10),
+        "Shell_Cap": cap(64),
+    }
+    return {name: shell_piece(data, name) for name, data in pieces.items()}
 
 
 # --- Scene & export ---------------------------------------------------------------
@@ -367,6 +468,13 @@ def main():
                 objects.append(add_object(f"{name}_{layer}", bm, offset, layer))
             shapes.append((name, index, kind, size, head, v, pts, reach))
             index += 1
+    # The head shell pieces.
+    for name, mesh in build_head_shell().items():
+        ob = bpy.data.objects.new(name, mesh)
+        ob.location = Vector(HEAD_ORIGIN)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.data.materials.append(material("Skin"))
+        objects.append(ob)
     # Markers: origin, 1 stud up, 1 stud out of the skin.
     # (Below the inserts: Kit_Origin is the point (0, -3, 0) of the inserts' axes.)
     for name, at in (("Kit_Origin", (0, -3, 0)), ("Kit_Up", (0, -2, 0)), ("Kit_Out", (0, -3, 1))):
@@ -400,6 +508,7 @@ def main():
         "-- X along the skin, Y up the skin; head versions: X = arc length).",
         "-- `index`: the insert's origin sits at (index * spacing, markerDrop, 0)",
         "-- from the Kit_Origin marker, in the kit's axes (Kit_Up = Y, Kit_Out = Z).",
+        "-- The head shell pieces (Shell_*) are around headOrigin (+ markerDrop in Y).",
         "",
         "export type Shape = {",
         "\tindex: number,",
@@ -408,6 +517,8 @@ def main():
         "\thead: boolean, -- bent for the round head",
         "\tlip: number, -- width of the skin edge around the hole (studs)",
         "\textent: Vector2, -- half size of the whole insert on the skin (X, Y)",
+        "\tlow: number, -- how far it reaches below its centre (blood drips)",
+        "\thigh: number, -- how far it reaches above its centre",
         "\tpoints: { Vector2 }, -- the hole cut in the skin (the edge without its thin splits)",
         "}",
         "",
@@ -415,10 +526,14 @@ def main():
         f"\tspacing = {lua_number(SPACING)},",
         f"\theadRadius = {lua_number(HEAD_RADIUS)},",
         "\tmarkerDrop = 3,",
+        f"\theadBand = {lua_number(HEAD_BAND)},",
+        f"\theadBevel = {lua_number(HEAD_BEVEL)},",
+        f"\theadOrigin = Vector3.new({', '.join(lua_number(x) for x in HEAD_ORIGIN)}),",
         "\tshapes = {",
     ]
     for name, idx, kind, size, head, v, pts, reach in shapes:
-        ex, ey = reach
+        ex, low, high = reach
+        ey = max(low, high)
         lines.append(f"\t\t{name} = {{")
         lines.append(f"\t\t\tindex = {idx},")
         lines.append(f'\t\t\tkind = "{kind}",')
@@ -426,6 +541,8 @@ def main():
         lines.append(f"\t\t\thead = {'true' if head else 'false'},")
         lines.append(f"\t\t\tlip = {lua_number(v['lip'])},")
         lines.append(f"\t\t\textent = Vector2.new({lua_number(ex)}, {lua_number(ey)}),")
+        lines.append(f"\t\t\tlow = {lua_number(low)},")
+        lines.append(f"\t\t\thigh = {lua_number(high)},")
         lines.append("\t\t\tpoints = {")
         for p in pts:
             lines.append(f"\t\t\t\tVector2.new({lua_number(p.x)}, {lua_number(p.y)}),")
