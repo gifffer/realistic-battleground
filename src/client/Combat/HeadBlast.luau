@@ -83,6 +83,7 @@ end
 ------------------------------------------------------------------------------
 
 local marks: { BasePart } = {}
+local markCount = 0 -- (never goes down: each new mark a hair higher)
 
 -- The floor under `position` (through every fighter), or nil.
 local function floorUnder(position: Vector3): RaycastResult?
@@ -123,7 +124,8 @@ local function mark(
 	piece.Reflectance = 0.08 -- wet
 	piece.Transparency = 0.08
 	-- (each new one a hair higher: no flicker where they overlap)
-	local lift = 0.012 + (#marks % 12) * 0.002
+	markCount += 1
+	local lift = 0.012 + (markCount % 12) * 0.002
 	local up = hit.Normal
 	if length and along and along.Magnitude > 1e-3 then
 		local forward = (along - up * along:Dot(up)).Unit
@@ -483,9 +485,11 @@ local function stuck(main: BasePart, other: BasePart, offset: CFrame)
 	other.CanQuery = false
 	other.CanTouch = false
 	other.Massless = true
-	local weld = Instance.new("WeldConstraint")
+	-- (a Weld with its offset: right wherever the main part is put later)
+	local weld = Instance.new("Weld")
 	weld.Part0 = main
 	weld.Part1 = other
+	weld.C0 = offset
 	weld.Parent = other
 	other.Parent = main
 end

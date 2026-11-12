@@ -928,46 +928,82 @@ local function startCinematic(
 		overlap.FilterType = Enum.RaycastFilterType.Exclude
 		overlap.FilterDescendantsInstances = { state.model, target }
 		overlap.RespectCanCollide = true
+		-- Where he'd stand (his feet on the floor there, if there is one).
 		local function standingAt(direction: Vector3): Vector3
-			return Vector3.new(head.X, root.Position.Y, head.Z)
+			local stand = Vector3.new(head.X, root.Position.Y, head.Z)
 				+ direction * Finishers.HEAD_DISTANCE
+			local floor =
+				workspace:Raycast(stand + Vector3.new(0, 2, 0), Vector3.new(0, -8, 0), params)
+			return if floor then Vector3.new(stand.X, floor.Position.Y + 3, stand.Z) else stand
 		end
+		-- A floor at the feet' height under `at` (studs, y of the root - 3).
+		local function floorAt(at: Vector3, rootY: number): boolean
+			local hit =
+				workspace:Raycast(Vector3.new(at.X, rootY - 1, at.Z), Vector3.new(0, -3, 0), params)
+			return hit ~= nil and math.abs(hit.Position.Y - (rootY - 3)) < 0.8
+		end
+		-- Room for him there, and for the body laid out beyond the head.
 		local function isClear(stand: Vector3): boolean
 			local from = Vector3.new(head.X, stand.Y + 1, head.Z)
 			if workspace:Raycast(from, stand + Vector3.new(0, 1, 0) - from, params) then
 				return false -- a wall between the head and there
 			end
-			-- room for a body (above the floor: root at 3 studs over it)
-			local box = workspace:GetPartBoundsInBox(
-				CFrame.new(stand + Vector3.new(0, -0.2, 0)),
-				Vector3.new(1.8, 4.4, 1.2),
-				overlap
-			)
-			if #box > 0 then
+			if
+				#workspace:GetPartBoundsInBox(
+					CFrame.new(stand + Vector3.new(0, -0.2, 0)),
+					Vector3.new(1.8, 4.4, 1.2),
+					overlap
+				) > 0
+			then
 				return false
 			end
-			-- and a floor under it
-			return workspace:Raycast(stand, Vector3.new(0, -5, 0), params) ~= nil
+			local look = Vector3.new(head.X - stand.X, 0, head.Z - stand.Z)
+			if look.Magnitude < 0.1 then
+				return false
+			end
+			look = look.Unit
+			local bodyAt = stand + look * 5.75 + Vector3.new(0, -2.4, 0)
+			if
+				#workspace:GetPartBoundsInBox(
+					CFrame.lookAt(bodyAt, bodyAt + look),
+					Vector3.new(2.2, 0.8, 5.1),
+					overlap
+				) > 0
+			then
+				return false -- (a wall where the body would lie)
+			end
+			return floorAt(stand, stand.Y)
+				and floorAt(stand + look * Finishers.HEAD_DISTANCE, stand.Y)
+				and floorAt(stand + look * 7.6, stand.Y)
 		end
-		local stand = standingAt(own)
+		local stand: Vector3? = nil
 		for _, direction in candidates do
-			if isClear(standingAt(direction)) then
-				stand = standingAt(direction)
+			local at = standingAt(direction)
+			if isClear(at) then
+				stand = at
 				break
 			end
 		end
-		anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
-		-- The victim laid out flat on its back in front of him, head toward
-		-- him (lying however it fell, even still standing, the shots and the
-		-- bat would miss it): its head at (0, -2.45, -HEAD_DISTANCE).
-		victimPlace = anchor
-			* CFrame.new(0, -2.45, -(Finishers.HEAD_DISTANCE + 1.5))
-			* CFrame.fromMatrix(
-				Vector3.zero,
-				Vector3.new(1, 0, 0), -- its right: his right
-				Vector3.new(0, 0, 1), -- its head: toward him
-				Vector3.new(0, -1, 0) -- its back: on the floor (face up)
-			)
+		if stand then
+			anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
+			-- The victim laid out flat on its back in front of him, head
+			-- toward him (lying however it fell, even still standing, the
+			-- shots and the bat would miss it): its head at
+			-- (0, -2.45, -HEAD_DISTANCE).
+			victimPlace = anchor
+				* CFrame.new(0, -2.45, -(Finishers.HEAD_DISTANCE + 1.5))
+				* CFrame.fromMatrix(
+					Vector3.zero,
+					Vector3.new(1, 0, 0), -- its right: his right
+					Vector3.new(0, 0, 1), -- its head: toward him
+					Vector3.new(0, -1, 0) -- its back: on the floor (face up)
+				)
+		else
+			-- Nowhere to lay it out (walls, a ledge): it stays as it lies,
+			-- he stands on his own side of the head.
+			local fallback = standingAt(own)
+			anchor = CFrame.lookAt(fallback, Vector3.new(head.X, fallback.Y, head.Z))
+		end
 	else
 		-- Where he is, facing the body; the victim hauled up in front of him.
 		local toward = Vector3.new(
