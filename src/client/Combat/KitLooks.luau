@@ -418,8 +418,9 @@ local CONSTRAINTS = buildConstraints()
 local BODY_BOXES: { { name: string, half: Vector3, mode: string } } = {
 	{ name = "Torso", half = Vector3.new(1, 1, 0.5), mode = "torso" },
 	{ name = "Head", half = Vector3.new(0.62, 0.62, 0.62), mode = "torso" },
-	{ name = "Left Leg", half = Vector3.new(0.5, 1, 0.5), mode = "leg" },
-	{ name = "Right Leg", half = Vector3.new(0.5, 1, 0.5), mode = "leg" },
+	-- (the legs a little fatter: the hem never brushes into the feet)
+	{ name = "Left Leg", half = Vector3.new(0.56, 1.08, 0.58), mode = "leg" },
+	{ name = "Right Leg", half = Vector3.new(0.56, 1.08, 0.58), mode = "leg" },
 	{ name = "Left Arm", half = Vector3.new(0.5, 1, 0.5), mode = "free" },
 	{ name = "Right Arm", half = Vector3.new(0.5, 1, 0.5), mode = "free" },
 }
@@ -633,10 +634,11 @@ local function simulate(cloth: Cloth, frame: CFrame, dt: number, wind: Vector3, 
 				touched = true
 			end
 		end
-		-- never in front of the back above the hips (no flipping over the
-		-- head onto his chest)
+		-- never in front of the back plane, from the shoulders to the hem: no
+		-- flipping over the head onto his chest, no slipping between / into
+		-- the legs when the air pushes it forward (walking backward)
 		local l = frame:PointToObjectSpace(p)
-		if l.Y > -1 and math.abs(l.X) < 1.2 and l.Z < BACK_Z then
+		if math.abs(l.X) < 1.2 and l.Z < BACK_Z then
 			p = frame * Vector3.new(l.X, l.Y, BACK_Z)
 			touched = true
 		end

@@ -68,6 +68,7 @@ local kit: KitTypes.KitDef = {
 					stun = 0,
 					hitbox = Vector3.new(11, 7, 12),
 					forward = 6.5,
+					bloodChance = { Head = 0.7, Torso = 0.5 },
 					breaks = 6, -- (the blast smashes the walls ahead)
 					knockdown = 0.9,
 					knockback = 46,
@@ -92,6 +93,7 @@ local kit: KitTypes.KitDef = {
 					stun = 0,
 					hitbox = Vector3.new(15, 8, 15),
 					forward = 0,
+					bloodChance = { Head = 0.9, Torso = 0.8, Legs = 0.5 },
 					breaks = 9, -- (the landing craters the walls around)
 					knockdown = 1.1,
 					knockback = 22,
@@ -120,7 +122,7 @@ local kit: KitTypes.KitDef = {
 					knockdown = 1.5,
 					knockback = 78,
 					launch = 26,
-					bloodChance = { Head = 0.5 },
+					bloodChance = { Head = 1, Torso = 0.9 },
 				},
 			},
 		},
