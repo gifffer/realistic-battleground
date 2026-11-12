@@ -15,6 +15,7 @@
 --   Wounds.watch(model)   start drawing the marks of this fighter
 
 local Gashes = require(script.Parent.Gashes)
+local GlassShards = require(script.Parent.GlassShards)
 
 local Wounds = {}
 
@@ -137,6 +138,7 @@ end
 
 function Wounds.watch(model: Model)
 	Gashes.watch(model) -- glass cuts, drawn for real
+	GlassShards.watch(model) -- bits of glass stuck in the skin
 	for partName in SPOTS do
 		local attribute = attributeOf(partName)
 		model:GetAttributeChangedSignal(attribute):Connect(function()

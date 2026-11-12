@@ -300,6 +300,9 @@ return table.freeze({
 		-- fill in the experience's maturity questionnaire accordingly, or turn
 		-- this off.
 		SKIN_TEAR = true,
+		-- A smashed bottle leaves bits of glass stuck in the skin; this often it
+		-- only grazes them (glass, no torn cut).
+		GLASS_GRAZE_CHANCE = 0.35,
 		-- A new cut closer than this (studs) to an old one of the same glass
 		-- makes the old one bigger instead.
 		GASH_MERGE_DISTANCE = 0.3,
