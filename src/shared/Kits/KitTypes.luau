@@ -53,8 +53,9 @@ export type GrabDef = {
 	animation: string, -- his clip while holding (Client/Animation/CombatClips)
 	victimAnimation: string, -- theirs
 	hits: { HitDef },
-	-- Released lying on their back (a slam: their clip ends on the floor).
-	laid: boolean?,
+	-- A slam: released lying on their back, their root put here (relative
+	-- to his root): where their clip ends on the floor.
+	laidAt: CFrame?,
 }
 
 export type MoveDef = {

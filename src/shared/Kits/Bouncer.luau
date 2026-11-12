@@ -14,6 +14,13 @@ local WIDE = Vector3.new(6, 5, 5.5)
 local HEAD = Vector3.new(5, 6, 5.5)
 local GRAB = Vector3.new(4.5, 5, 4.5) -- arm's length, straight ahead
 
+-- Where a slammed body is left (relative to his root, Client/Animation/
+-- BouncerClips ends there): across in front of him on its back, head to his
+-- left (Body Slam); along, head away from him, legs on his shoulders
+-- (Powerbomb).
+local SLAM_LAID = CFrame.new(0.2, -2.5, -2.4, 0, -1, 0, 0, 0, -1, 1, 0, 0)
+local POWERBOMB_LAID = CFrame.new(0, -2.5, -2.5, -1, 0, 0, 0, 0, -1, 0, -1, 0)
+
 -- One squeeze of a choke: little damage, the breath goes out of them.
 local function squeeze(at: number, damage: number): KitTypes.HitDef
 	return {
@@ -114,7 +121,7 @@ local kit: KitTypes.KitDef = {
 				facing = "toward",
 				animation = "Bouncer_Slam",
 				victimAnimation = "Bouncer_SlamVictim",
-				laid = true,
+				laidAt = SLAM_LAID,
 				hits = {
 					{
 						at = 1.0,
@@ -244,7 +251,7 @@ local kit: KitTypes.KitDef = {
 			{
 				id = "Powerbomb",
 				name = "POWERBOMB",
-				description = "Up over his head, then down with all his weight.",
+				description = "Head between his legs, up on his shoulders, then down on their back.",
 				animation = "Bouncer_Grab",
 				duration = 0.7,
 				cooldown = 10,
@@ -255,15 +262,15 @@ local kit: KitTypes.KitDef = {
 					hitbox = GRAB,
 					forward = 2.4,
 					damage = 2,
-					duration = 1.0,
-					distance = 1.5,
+					duration = 1.15,
+					distance = 1.3,
 					facing = "toward",
-					animation = "Bouncer_Slam",
-					victimAnimation = "Bouncer_SlamVictim",
-					laid = true,
+					animation = "Bouncer_Powerbomb",
+					victimAnimation = "Bouncer_PowerbombVictim",
+					laidAt = POWERBOMB_LAID,
 					hits = {
 						{
-							at = 1.0,
+							at = 1.15,
 							damage = 18,
 							zone = "Torso",
 							stun = 0,

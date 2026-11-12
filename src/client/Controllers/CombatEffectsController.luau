@@ -44,6 +44,7 @@ local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
+local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -215,6 +216,9 @@ local function onCombatantAdded(instance: Instance)
 			local value = model:GetAttribute(name)
 			if typeof(playing) == "string" and value == nil then
 				CharacterAnimationController.stopAction(model, playing)
+				if name == "Held" then
+					BouncerFx.onReleased(model) -- (a choked face gets its colour back)
+				end
 				if model == player.Character then
 					CombatController.releaseAttacks()
 				end
@@ -652,6 +656,7 @@ local function onCombatEvent(
 		end)
 		if moveId then
 			KitEffects.onHit(victim, attacker, moveId, zone)
+			BouncerFx.onHit(victim, attacker, moveId, shake)
 			if iAmAttacker then
 				CombatController.notifyMoveLanded(moveId)
 			end
@@ -774,6 +779,7 @@ local function onCombatAction(model: Model, action: string)
 		dashedAt[model] = os.clock()
 	end
 	CharacterAnimationController.playAction(model, action)
+	BouncerFx.onAction(model, action)
 	if
 		action == "GetUp"
 		or string.sub(action, 1, 6) == "Emote_"

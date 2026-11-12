@@ -181,17 +181,10 @@ local function hold(
 			giveBack(state)
 		end
 		if victim.root.Parent and victim.model:GetAttribute("BeingFinished") ~= true then
-			local lying = anchor
-				* CFrame.new(0, -2.5, -(grab.distance + 2))
-				* CFrame.fromMatrix(
-					Vector3.zero,
-					Vector3.new(-1, 0, 0),
-					Vector3.new(0, 0, -1),
-					Vector3.new(0, -1, 0)
-				)
-			if laid and roomToLay(state, victim, anchor, lying) then
-				-- On its back where the slam put it: its head away from him,
-				-- its torso on the floor (the slam clips end in this pose).
+			local laidAt = grab.laidAt
+			local lying = if laidAt then anchor * laidAt else nil
+			if laid and lying and roomToLay(state, victim, anchor, lying) then
+				-- On its back where the slam put it (its clip ends in this pose).
 				victim.root.CFrame = lying
 			end
 			victim.root.Anchored = false
@@ -231,7 +224,7 @@ local function hold(
 				return
 			end
 			if hit.knockdown or hit.knockback then
-				release(grab.laid == true)
+				release(grab.laidAt ~= nil)
 			end
 			local zone: Types.HitZone = hit.zone or "Torso"
 			tools.resolveHit(state, victim, tools.specFor(hit, zone, move.id .. "_Hold"))
@@ -242,7 +235,7 @@ local function hold(
 	end
 	-- (a hair after the last hit, which may be at `duration`)
 	task.delay(grab.duration + 0.05, function()
-		release(grab.laid == true)
+		release(grab.laidAt ~= nil)
 	end)
 end
 
