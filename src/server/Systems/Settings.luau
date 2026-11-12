@@ -22,6 +22,7 @@ end
 -- Setting name → function that says if a value is acceptable.
 local VALIDATORS: { [string]: (value: unknown) -> boolean } = {
 	firstPerson = isBoolean,
+	blockDuels = isBoolean,
 }
 
 local Settings = {}
@@ -45,6 +46,10 @@ local function onUpdateSetting(player: Player, name: unknown, value: unknown)
 		-- `name` was checked against VALIDATORS just above.
 		(data.settings :: any)[name] = value
 	end)
+	-- Others' Duel menus show who blocks duel requests.
+	if name == "blockDuels" then
+		player:SetAttribute("BlocksDuels", value == true)
+	end
 end
 
 function Settings.start()

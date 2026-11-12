@@ -575,7 +575,12 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		damage *= awakening.awakening.damageMultiplier
 	end
 
-	-- 0. On the ground (finish them instead), or just spawned (protected).
+	-- 0. Not in the same fight: a duel is only between its two fighters
+	-- ("DuelId" attribute, nil for everyone in the free arena).
+	if victim.model:GetAttribute("DuelId") ~= attacker.model:GetAttribute("DuelId") then
+		return false
+	end
+	-- On the ground (finish them instead), or just spawned (protected).
 	if Knockout.isKnockedOut(victim.model) then
 		return false
 	end
@@ -815,8 +820,11 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
 	-- A player fights with the kit saved in their profile.
+	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
-	Combat.setKit(model, if data then data.equippedKit else Kits.DEFAULT)
+	local saved = if data then Kits.get(data.equippedKit) else nil
+	local usable = data ~= nil and saved ~= nil and Kits.owns(data, saved)
+	Combat.setKit(model, if usable and data then data.equippedKit else Kits.DEFAULT)
 	CollectionService:AddTag(model, C.TAG)
 	Knockout.register(model, player)
 
@@ -1031,6 +1039,60 @@ end
 
 function Combat.onDamaged(callback: (DamageInfo) -> ()): Signal.Connection
 	return damaged.connect(callback)
+end
+
+-- Puts `model` back to a clean state for a new duel round: full health and
+-- stamina, no stun, bleeding, slowdown, limp, wound, cooldown, Awakening or
+-- Fury, standing up.
+function Combat.resetForRound(model: Model)
+	local state = states[model]
+	if state == nil then
+		return
+	end
+	if Ragdoll.isRagdolled(model) then
+		Ragdoll.disable(model, state.player)
+	end
+	state.humanoid.Health = state.humanoid.MaxHealth
+	local player = state.player
+	if player then
+		Stamina.refill(player)
+	end
+	stopBlocking(state)
+	state.stunnedUntil = 0
+	state.attackToken += 1
+	state.knockdownToken += 1
+	state.knockedDownUntil = 0
+	state.knockbackUntil = 0
+	state.legSlowUntil = 0
+	state.slowUntil = 0
+	state.slipUntil = 0
+	state.bleedPerSecond = 0
+	state.bleedUntil = 0
+	setAttribute(model, "Bleeding", false)
+	healInjuries(state)
+	state.fury = 0
+	setAttribute(model, "Fury", 0)
+	state.awakenedUntil = 0
+	setAttribute(model, "Awakened", false)
+	for moveId in state.cooldowns do
+		setAttribute(model, `CD_{moveId}`, nil)
+	end
+	table.clear(state.cooldowns)
+	state.combo = 0
+	state.nextAttackAt = 0
+	state.attackingUntil = 0
+	state.finishingUntil = 0
+end
+
+-- `model` can't move, attack, block or dash for `seconds` (a duel countdown).
+function Combat.freeze(model: Model, seconds: number)
+	local state = states[model]
+	if state == nil then
+		return
+	end
+	local untilTime = now() + seconds
+	state.finishingUntil = math.max(state.finishingUntil, untilTime) -- speed 0, busy
+	state.nextAttackAt = math.max(state.nextAttackAt, untilTime)
 end
 
 -- The kit `model` fights with (keys 1–4, G). Unknown or not yet available

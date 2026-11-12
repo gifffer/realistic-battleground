@@ -1,12 +1,16 @@
 --!strict
 -- KillFeedController: the eliminations, top right. Plain lines, no boxes:
 --
---        gifffer  finished  Dummy    0:04  |
---   Vex  fled — kill to  Rook_77         0:11
---          Rook_77  eliminated  Mara     0:26
+--      8 gifffer  finished  Dummy    0:04  |
+--   31 Vex  fled — kill to  17 Rook_77   0:11
+--       17 Rook_77  eliminated  12 Mara  0:26
 --
 -- • Names in condensed type, verbs lighter and lower-case, the age of the
 --   line in small monospaced numbers.
+-- • Each player's name has their level just before it, small and grey
+--   ("8 gifffer"). It is the level at the moment of the event (sent by the
+--   server with the line) and never changes afterwards. No level for a
+--   training dummy (it isn't a player).
 -- • YOUR name is bold white, and your lines get a thin tick on the right.
 -- • Each line sits on a dark band that fades out to the left, so it stays
 --   readable on a bright scene and almost invisible on a dark one.
@@ -14,6 +18,10 @@
 --   FEED_TIME seconds; never more than FEED_LINES lines.
 --
 -- One line per Remotes.KillFeed message from the server.
+--
+-- KillFeedController.setHidden(true / false) hides the whole feed for a
+-- moment (the scoreboard does it while Tab is held: the board sits in the
+-- same corner).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -31,6 +39,19 @@ local C = Theme.Colors
 
 local ROW_HEIGHT = 22
 local OLD_ROW_TRANSPARENCY = 0.28
+-- Room around the feed inside the fading layer (the dark bands and the
+-- tick stick out on the right of the feed; a CanvasGroup cuts what is
+-- outside it).
+-- (Wide enough on the left for the longest line: two long names + verb.)
+local LAYER_MARGIN = 40
+local LAYER_EXTRA_LEFT = 260
+
+-- What a line is made of, in order: names (with their level) and verbs.
+type Part = {
+	text: string,
+	kind: "name" | "you" | "verb",
+	level: number?, -- names only: shown just before the name
+}
 
 type Row = {
 	frame: Frame,
@@ -44,7 +65,9 @@ type Row = {
 local KillFeedController = {}
 
 local gui: ScreenGui
+local layer: CanvasGroup? = nil -- the whole feed, fades as one (setHidden)
 local feed: Frame
+local hidden = false
 local rows: { Row } = {} -- newest first
 local order = 0
 
@@ -65,21 +88,87 @@ local function piece(text: string, kind: "name" | "you" | "verb", layout: number
 	})
 end
 
--- The pieces of a line: { {text, kind}, ... }
-local function phrase(kind: Types.KillFeedKind, victim: string, killer: string?): { { string } }
-	local function name(text: string): { string }
-		return { text, if text == player.DisplayName then "you" else "name" }
+-- A name with its level in front: "8 gifffer". The level label is left
+-- out when there is no level (a dummy). Returns the group and its labels
+-- (so the line can fade them).
+local function nameGroup(part: Part, layout: number): (Frame, { TextLabel })
+	local group = Theme.make("Frame", {
+		Name = "NameGroup",
+		LayoutOrder = layout,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, ROW_HEIGHT),
+		BackgroundTransparency = 1,
+	}, {
+		Theme.make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 4),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	}) :: Frame
+	local labels: { TextLabel } = {}
+	if part.level then
+		local level = Theme.text({
+			Name = "Lv",
+			LayoutOrder = 1,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, ROW_HEIGHT),
+			FontFace = Theme.Fonts.Number,
+			TextSize = 10,
+			TextColor3 = C.Ink2,
+			TextTransparency = 1,
+			Text = tostring(part.level),
+			Parent = group,
+		}, {
+			-- 2 px lower: the small number sits on the name's baseline.
+			Theme.make("UIPadding", { PaddingTop = UDim.new(0, 2) }),
+		}) :: TextLabel
+		table.insert(labels, level)
+	end
+	local name = piece(part.text, part.kind, 2)
+	name.Name = "Name"
+	name.Parent = group
+	table.insert(labels, name)
+	return group, labels
+end
+
+-- The parts of a line, in reading order.
+local function phrase(
+	kind: Types.KillFeedKind,
+	victim: string,
+	killer: string?,
+	victimLevel: number?,
+	killerLevel: number?
+): { Part }
+	local function name(text: string, level: number?): Part
+		return {
+			text = text,
+			kind = if text == player.DisplayName then "you" else "name",
+			level = level,
+		}
+	end
+	local function verb(text: string): Part
+		return { text = text, kind = "verb" }
 	end
 	if kind == "Finished" and killer then
-		return { name(killer), { "finished", "verb" }, name(victim) }
+		return { name(killer, killerLevel), verb("finished"), name(victim, victimLevel) }
 	elseif kind == "Fled" and killer then
-		return { name(victim), { "fled — kill to", "verb" }, name(killer) }
+		return { name(victim, victimLevel), verb("fled — kill to"), name(killer, killerLevel) }
 	elseif kind == "Fled" then
-		return { name(victim), { "fled", "verb" } }
+		return { name(victim, victimLevel), verb("fled") }
 	elseif killer then
-		return { name(killer), { "eliminated", "verb" }, name(victim) }
+		return { name(killer, killerLevel), verb("eliminated"), name(victim, victimLevel) }
 	end
-	return { name(victim), { "died", "verb" } }
+	return { name(victim, victimLevel), verb("died") }
+end
+
+-- A level from the remote: a whole number, or nil (dummy / bad data).
+local function readLevel(value: unknown): number?
+	-- value == value: not NaN; the math.huge check: not infinite.
+	if typeof(value) == "number" and value == value and math.abs(value) ~= math.huge then
+		return math.floor(value)
+	end
+	return nil
 end
 
 local function formatAge(seconds: number): string
@@ -107,12 +196,24 @@ local function removeRow(row: Row)
 	row.frame:Destroy()
 end
 
-local function addLine(kind: unknown, victim: unknown, killer: unknown)
+local function addLine(
+	kind: unknown,
+	victim: unknown,
+	killer: unknown,
+	victimLevel: unknown,
+	killerLevel: unknown
+)
 	if typeof(kind) ~= "string" or typeof(victim) ~= "string" then
 		return
 	end
 	local killerName = if typeof(killer) == "string" then killer else nil
-	local pieces = phrase(kind :: Types.KillFeedKind, victim, killerName)
+	local parts = phrase(
+		kind :: Types.KillFeedKind,
+		victim,
+		killerName,
+		readLevel(victimLevel),
+		if killerName then readLevel(killerLevel) else nil
+	)
 	local mine = victim == player.DisplayName or killerName == player.DisplayName
 
 	order -= 1
@@ -150,10 +251,18 @@ local function addLine(kind: unknown, victim: unknown, killer: unknown)
 	})
 
 	local texts: { TextLabel } = {}
-	for index, part in pieces do
-		local label = piece(part[1], part[2] :: any, index)
-		label.Parent = content
-		table.insert(texts, label)
+	for index, part in parts do
+		if part.kind == "verb" then
+			local label = piece(part.text, part.kind, index)
+			label.Parent = content
+			table.insert(texts, label)
+		else
+			local group, labels = nameGroup(part, index)
+			group.Parent = content
+			for _, label in labels do
+				table.insert(texts, label)
+			end
+		end
 	end
 	local age = Theme.text({
 		Name = "Age",
@@ -229,6 +338,30 @@ local function updateAges()
 	end
 end
 
+-- Hides (true) or shows again (false) the whole feed, with a short fade.
+-- Used by the scoreboard while Tab is held. Lines keep arriving and
+-- ageing while hidden; they are simply not drawn.
+function KillFeedController.setHidden(value: boolean)
+	if hidden == value then
+		return
+	end
+	hidden = value
+	if layer == nil then
+		return -- not built yet: start() reads `hidden`
+	end
+	if value then
+		Theme.tween(
+			layer,
+			0.1,
+			{ GroupTransparency = 1 },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
+	else
+		Theme.tween(layer, 0.1, { GroupTransparency = 0 })
+	end
+end
+
 function KillFeedController.start()
 	gui = Theme.make("ScreenGui", {
 		Name = "KillFeed",
@@ -237,13 +370,27 @@ function KillFeedController.start()
 		DisplayOrder = 6,
 		Parent = player:WaitForChild("PlayerGui"),
 	})
+	-- The fading layer: the feed's corner plus a margin all around.
+	local group = Theme.make("CanvasGroup", {
+		Name = "Layer",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.fromOffset(
+			360 + 40 + LAYER_MARGIN + LAYER_EXTRA_LEFT,
+			36 + K.FEED_LINES * ROW_HEIGHT + LAYER_MARGIN
+		),
+		BackgroundTransparency = 1,
+		GroupTransparency = if hidden then 1 else 0,
+		Parent = gui,
+	}) :: CanvasGroup
+	layer = group
 	feed = Theme.make("Frame", {
 		Name = "Feed",
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, -40, 0, 36),
 		Size = UDim2.fromOffset(360, K.FEED_LINES * ROW_HEIGHT),
 		BackgroundTransparency = 1,
-		Parent = gui,
+		Parent = group,
 	}, {
 		Theme.make("UIListLayout", {
 			SortOrder = Enum.SortOrder.LayoutOrder,

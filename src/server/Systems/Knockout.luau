@@ -63,6 +63,16 @@ local getUpCallbacks: { (Model) -> () } = {}
 -- Called with the killer's model when they get a kill (Combat heals their injuries).
 local killCallbacks: { (Model) -> () } = {}
 
+-- Every elimination (Progression gives XP for it).
+export type Elimination = {
+	kind: Types.KillFeedKind,
+	victim: Model,
+	victimPlayer: Player?,
+	killerPlayer: Player?, -- nil: no player gets the kill
+}
+local eliminationCallbacks: { (Elimination) -> () } = {}
+local interceptor: ((victim: Model, attacker: Model?) -> boolean)? = nil
+
 local function now(): number
 	return os.clock()
 end
@@ -78,8 +88,26 @@ local function displayName(model: Model): string
 	return if player then player.DisplayName else model.Name
 end
 
-local function feed(kind: Types.KillFeedKind, victim: string, killer: string?)
-	Remotes.KillFeed:FireAllClients(kind, victim, killer)
+-- A player's level (Progression sets the "Level" attribute), nil for dummies.
+local function levelOf(player: Player?): number?
+	local level = if player then player:GetAttribute("Level") else nil
+	return if typeof(level) == "number" then level else nil
+end
+
+local function feed(
+	kind: Types.KillFeedKind,
+	victim: string,
+	killer: string?,
+	victimPlayer: Player?,
+	killerPlayer: Player?
+)
+	Remotes.KillFeed:FireAllClients(
+		kind,
+		victim,
+		killer,
+		levelOf(victimPlayer),
+		levelOf(killerPlayer)
+	)
 end
 
 -- Who gets the kill: whoever is finishing them; else the last PLAYER who hit
@@ -113,8 +141,22 @@ local function killerName(model: Model?, player: Player?): string?
 end
 
 -- Kill rewards: health for the killer, stats in the saves.
-local function rewardKill(killer: Model?, killerPlayer: Player?, victim: FighterInfo)
+local function rewardKill(
+	killer: Model?,
+	killerPlayer: Player?,
+	victim: FighterInfo,
+	kind: Types.KillFeedKind
+)
 	local victimPlayer = victim.player
+	local elimination: Elimination = {
+		kind = kind,
+		victim = victim.model,
+		victimPlayer = victimPlayer,
+		killerPlayer = if killerPlayer ~= victimPlayer then killerPlayer else nil,
+	}
+	for _, callback in eliminationCallbacks do
+		task.spawn(callback, elimination)
+	end
 	if victimPlayer then
 		PlayerData.update(victimPlayer, function(data)
 			data.stats.deaths += 1
@@ -220,6 +262,13 @@ local function getUp(info: FighterInfo)
 	end
 end
 
+-- In a duel (or on its result screen): the Duels system handles it.
+local function inDuel(info: FighterInfo): boolean
+	local player = info.player
+	return info.model:GetAttribute("DuelId") ~= nil
+		or (player ~= nil and player:GetAttribute("InDuel") == true)
+end
+
 local function onDied(info: FighterInfo)
 	if info.dead then
 		return
@@ -231,12 +280,13 @@ local function onDied(info: FighterInfo)
 	setAttribute(info.model, "KnockedOut", false)
 	setAttribute(info.model, "KOEndsAt", nil)
 	setAttribute(info.model, "BeingFinished", false)
-	feed(
-		if info.finishedBy then "Finished" else "Died",
-		displayName(info.model),
-		killerName(killer, killerPlayer)
-	)
-	rewardKill(killer, killerPlayer, info)
+	-- A duel settles its own deaths (round lost): no kill feed, no kill.
+	if inDuel(info) then
+		return
+	end
+	local kind: Types.KillFeedKind = if info.finishedBy then "Finished" else "Died"
+	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
+	rewardKill(killer, killerPlayer, info, kind)
 end
 
 ------------------------------------------------------------------------------
@@ -322,12 +372,24 @@ function Knockout.noteHit(victim: Model, attacker: Model)
 			info.lastPlayerHitAt = now()
 		end
 	end
+	-- "In combat" until then (the Duel menu greys out CHALLENGE), for both.
+	local untilTime = workspace:GetServerTimeNow() + Config.Duels.IN_COMBAT_TIME
+	for _, model in { victim, attacker } do
+		local player = Players:GetPlayerFromCharacter(model)
+		if player then
+			player:SetAttribute("CombatUntil", untilTime)
+		end
+	end
 end
 
 -- 0 HP: knocked out instead of dead.
 function Knockout.knockOut(victim: Model, attacker: Model?)
 	local info = fighters[victim]
 	if info == nil or info.knockedOut or info.dead then
+		return
+	end
+	-- Another system decides what 0 HP means here (a duel round ends).
+	if interceptor and interceptor(victim, attacker) then
 		return
 	end
 	if attacker then
@@ -423,6 +485,29 @@ function Knockout.finish(victim: Model, attacker: Model)
 end
 
 -- `callback(model)` when a KO'd fighter gets back up.
+-- `handler(victim, attacker)` is asked first each time someone would be
+-- knocked out; returning true means "handled, don't knock them out"
+-- (Duels: in a duel, 0 HP ends the round instead).
+function Knockout.setInterceptor(handler: (victim: Model, attacker: Model?) -> boolean)
+	interceptor = handler
+end
+
+-- os.clock() of the last hit `model` took (from anyone), -inf if never.
+function Knockout.lastHitAt(model: Model): number
+	local info = fighters[model]
+	return if info then info.lastHitAt else -math.huge
+end
+
+-- The free-arena spawn point farthest from the enemies (respawns, end of a duel).
+function Knockout.pickSpawn(player: Player): SpawnLocation?
+	return pickSpawn(player)
+end
+
+-- `callback(elimination)` for every fighter eliminated (see Elimination).
+function Knockout.onEliminated(callback: (Elimination) -> ())
+	table.insert(eliminationCallbacks, callback)
+end
+
 -- `callback(killerModel)` each time a fighter gets a kill (and its heal).
 function Knockout.onKill(callback: (Model) -> ())
 	table.insert(killCallbacks, callback)
@@ -440,8 +525,8 @@ end
 local function onLeaving(player: Player)
 	local character = player.Character
 	local info = if character then fighters[character] else nil
-	if info == nil or info.dead then
-		return
+	if info == nil or info.dead or inDuel(info) then
+		return -- (a duel handles leaving: forfeit)
 	end
 	local inFight = info.knockedOut
 		or now() - info.lastHitAt <= K.COMBAT_TAG_TIME
@@ -451,8 +536,8 @@ local function onLeaving(player: Player)
 	end
 	local killer, killerPlayer = creditedKiller(info)
 	info.dead = true
-	feed("Fled", displayName(info.model), killerName(killer, killerPlayer))
-	rewardKill(killer, killerPlayer, info)
+	feed("Fled", displayName(info.model), killerName(killer, killerPlayer), player, killerPlayer)
+	rewardKill(killer, killerPlayer, info, "Fled")
 end
 
 function Knockout.init()

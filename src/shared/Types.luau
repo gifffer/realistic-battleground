@@ -13,6 +13,7 @@ export type PlayerStats = {
 -- from server to server.
 export type PlayerSettings = {
 	firstPerson: boolean, -- false = over-the-shoulder third person
+	blockDuels: boolean, -- true = nobody can challenge you to a duel
 }
 
 -- A player's save. Everything here must be JSON-friendly (DataStores store
@@ -23,6 +24,12 @@ export type PlayerProfile = {
 	stats: PlayerStats,
 	settings: PlayerSettings,
 	equippedKit: string, -- id of the kit used in fights (Shared/Kits)
+	xp: number, -- total XP ever earned (the level comes from it: Shared/Progression)
+	ownedKits: { [string]: boolean }, -- kits bought (free kits don't need to be here)
+	-- Ranked duels (step 8).
+	elo: number,
+	rankedWins: number,
+	rankedLosses: number,
 }
 
 -- What the server sends to the owning client.
@@ -59,6 +66,36 @@ export type HitZone = "Head" | "Torso" | "Legs"
 -- (Shared/Util/HitSide). Picks the hit reaction: a punch on the left
 -- cheek doesn't throw the head the same way as one on the right.
 export type HitSide = "Front" | "Back" | "Left" | "Right"
+
+-- Why a player earned XP / coins (Remotes.Progress, shown in the HUD).
+export type RewardKind =
+	"Kill"
+	| "Assist"
+	| "Damage"
+	| "Playtime"
+	| "DuelWin"
+	| "DuelLoss"
+	| "RankedWin"
+	| "RankedLoss"
+
+-- Duel messages from the server to one player (Remotes.DuelEvent).
+--   Challenged   someone challenges you      { from: number (UserId), name, expiresAt }
+--   Declined     your challenge was refused / expired   { userId, name, reason }
+--   Queue        ranked search state         { searching: boolean, since: number? }
+--   Waiting      all arenas busy, you're in line        { opponent, ranked }
+--   Start        the match begins            { opponent: number, ranked: boolean }
+--   Round        a round is about to start   { round, score: {mine, theirs}, fightAt }
+--   RoundEnd     a round is over             { round, won: boolean, score, last }
+--   End          the match is over           { won, ranked, score, xp, coins, eloBefore?, eloAfter?, forfeit, returnAt }
+export type DuelEventKind =
+	"Challenged"
+	| "Declined"
+	| "Queue"
+	| "Waiting"
+	| "Start"
+	| "Round"
+	| "RoundEnd"
+	| "End"
 
 -- A line of the kill feed (Remotes.KillFeed).
 --   Finished  killer finished a KO'd victim

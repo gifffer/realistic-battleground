@@ -23,13 +23,18 @@ local function onEquipKit(player: Player, kitId: unknown)
 	if typeof(kitId) ~= "string" or not limiter.allow(player) then
 		return
 	end
-	-- Only real kits that are playable (not "coming soon" ones).
-	local kit = KitDefs.get(kitId)
-	if kit == nil or not kit.available then
+	-- The kit is locked during a duel.
+	if player:GetAttribute("InDuel") == true then
 		return
 	end
-	local saved = PlayerData.update(player, function(data)
-		data.equippedKit = kitId
+	-- Only real kits that are playable (not "coming soon" ones).
+	local kit = KitDefs.get(kitId)
+	local data = PlayerData.getData(player)
+	if kit == nil or not kit.available or data == nil or not KitDefs.owns(data, kit) then
+		return -- unknown, coming soon, or not bought yet
+	end
+	local saved = PlayerData.update(player, function(current)
+		current.equippedKit = kitId
 	end)
 	if not saved then
 		return

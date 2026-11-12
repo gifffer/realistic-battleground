@@ -81,6 +81,10 @@ export type KitDef = {
 	description: string,
 	order: number, -- position in the Kits menu
 	available: boolean, -- false = shown as "coming soon", can't be equipped
+	-- To unlock (step 7): reach this level, then buy it for this many coins.
+	-- nil = free, everyone has it (the two base kits).
+	unlockLevel: number?,
+	price: number?,
 	moves: { MoveDef },
 	awakening: AwakeningDef?,
 	finisher: FinisherDef?,

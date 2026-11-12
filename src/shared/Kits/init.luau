@@ -50,6 +50,15 @@ function Kits.list(): { KitDef }
 	return ordered
 end
 
+-- Does this save own `kit`? Free kits (no price, no level) belong to
+-- everyone; the others once bought (data.ownedKits).
+function Kits.owns(data: { ownedKits: { [string]: boolean } }, kit: KitDef): boolean
+	if kit.price == nil and kit.unlockLevel == nil then
+		return true
+	end
+	return data.ownedKits[kit.id] == true
+end
+
 -- How a fighter with kit `id` finishes a knocked-out opponent: the kit's
 -- own finisher, or the default one (kneel and strike, Config.Knockout).
 local DEFAULT_FINISHER: FinisherDef = table.freeze({
