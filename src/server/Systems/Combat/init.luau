@@ -52,6 +52,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
+local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
@@ -266,22 +267,18 @@ local function startBleeding(
 	)
 end
 
--- Attribute holding the wound count of a body part. Attribute names can't
--- contain spaces: "Right Leg" → "Wound_RightLeg".
-local function woundAttribute(part: string): string
-	return "Wound_" .. string.gsub(part, " ", "")
-end
-
 -- Injuries left by a hit that landed (step 5):
---   • a visible mark on the body part hit ("Wound_<Part>" attribute = how
---     many, clients draw them),
+--   • a bruise where it landed (addBruise, "Bruise_<Part>_<n>"),
 --   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
+-- (addBruise is below skinPoint: declared here, set there.)
+local addBruise: (victim: CombatState, attacker: CombatState, partName: string, damage: number) -> ()
 local function injure(
 	victim: CombatState,
+	attacker: CombatState,
 	zone: Types.HitZone,
 	damage: number,
 	side: Types.HitSide,
-	mark: boolean -- add a bruise / cut mark (Wound_<Part>)
+	mark: boolean -- leave a bruise (glass leaves its cut instead)
 )
 	local part = "Torso"
 	if zone == "Head" then
@@ -295,13 +292,8 @@ local function injure(
 			setAttribute(victim.model, "Limping", true)
 		end
 	end
-	if not mark then
-		return
-	end
-	local count = math.min(INJ.MAX_WOUNDS_PER_PART, (victim.wounds[part] or 0) + 1)
-	if count ~= victim.wounds[part] then
-		victim.wounds[part] = count
-		setAttribute(victim.model, woundAttribute(part), count)
+	if mark then
+		addBruise(victim, attacker, part, damage)
 	end
 end
 
@@ -324,7 +316,8 @@ local function skinPoint(
 	part: BasePart,
 	key: string,
 	attacker: CombatState,
-	spread: number
+	spread: number,
+	heightRange: { number }? -- (studs from the part's centre; default: GASH_HEIGHT)
 ): Vector3
 	-- Toward the attacker, flat, in the part's space, turned up to `spread`.
 	local toward = part.CFrame:VectorToObjectSpace(attacker.root.Position - part.Position)
@@ -332,7 +325,7 @@ local function skinPoint(
 	local direction = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
 	direction = CFrame.Angles(0, random:NextNumber(-spread, spread), 0)
 		:VectorToWorldSpace(direction)
-	local heights = GASH_HEIGHT[key]
+	local heights = heightRange or GASH_HEIGHT[key]
 	local y = random:NextNumber(heights[1], heights[2])
 	local point: Vector3
 	if key == "Head" then
@@ -352,6 +345,61 @@ local function skinPoint(
 		point = Vector3.new(x, y, front * half.Z)
 	end
 	return point
+end
+
+-- Bruises: where on each part a blow lands (heights, studs from the centre:
+-- the face from the jaw to the brow, the chest to the belly, the limbs).
+local BRUISE_HEIGHT: { [string]: { number } } = {
+	Head = { -0.26, 0.24 },
+	Torso = { -0.7, 0.6 },
+	LeftLeg = { -0.6, 0.5 },
+	RightLeg = { -0.6, 0.5 },
+	LeftArm = { -0.5, 0.5 },
+	RightArm = { -0.5, 0.5 },
+}
+local BRUISE_MERGE = { Head = 0.24, Torso = 0.38 } -- closer than this: the same bruise
+local HEAVY_BLOW = 12 -- damage: a blow this hard bruises two levels at once
+
+-- A bruise where the blow landed, facing the attacker. Hit again near it,
+-- the same bruise grows (bigger, darker, swollen); else a new one (at most
+-- Bruise.MAX_PER_PART: past that, the nearest grows).
+addBruise = function(victim: CombatState, attacker: CombatState, partName: string, damage: number)
+	local key = Gash.KEY_OF[partName]
+	local part = victim.model:FindFirstChild(partName)
+	if key == nil or part == nil or not part:IsA("BasePart") then
+		return
+	end
+	local point = skinPoint(part, key, attacker, 0.45, BRUISE_HEIGHT[key])
+	local grow = if damage >= HEAVY_BLOW then 2 else 1
+	local nearest, nearestIndex, nearestDistance = nil :: Bruise.Data?, 0, math.huge
+	local free = 0
+	for index = 1, Bruise.MAX_PER_PART do
+		local data = Bruise.decode(victim.model:GetAttribute(Bruise.attribute(key, index)))
+		if data then
+			local distance = (data.point - point).Magnitude
+			if distance < nearestDistance then
+				nearest, nearestIndex, nearestDistance = data, index, distance
+			end
+		elseif free == 0 then
+			free = index
+		end
+	end
+	local merge = BRUISE_MERGE[key] or 0.32
+	if nearest and (nearestDistance <= merge or free == 0) then
+		nearest.level = math.min(Bruise.MAX_LEVEL, nearest.level + grow)
+		setAttribute(victim.model, Bruise.attribute(key, nearestIndex), Bruise.encode(nearest))
+		return
+	end
+	setAttribute(
+		victim.model,
+		Bruise.attribute(key, free),
+		Bruise.encode({
+			point = point,
+			level = math.min(Bruise.MAX_LEVEL, grow),
+			born = workspace:GetServerTimeNow(),
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
 end
 
 local function addGash(
@@ -466,16 +514,12 @@ local function healInjuries(state: CombatState)
 	state.legDamage = 0
 	state.limping = false
 	setAttribute(state.model, "Limping", false)
-	for part in state.wounds do
-		setAttribute(state.model, woundAttribute(part), nil)
-	end
-	-- Cuts in the skin ("Gash_<Part>_<n>"): a new body.
+	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
-		if Gash.isInjuryAttribute(name) then
+		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
 			setAttribute(state.model, name, nil)
 		end
 	end
-	table.clear(state.wounds)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
 end
 
@@ -747,7 +791,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
-	injure(victim, zone :: Types.HitZone, damage, side, spec.cuts == nil)
+	injure(victim, attacker, zone :: Types.HitZone, damage, side, spec.cuts == nil)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -833,7 +877,6 @@ function Combat.register(model: Model, player: Player?)
 		knockedDownUntil = 0,
 		legDamage = 0,
 		limping = false,
-		wounds = {},
 		lastDamagedAt = -math.huge,
 		regenCarry = 0,
 		slipUntil = 0,
@@ -1199,11 +1242,11 @@ local function aimZone(attacker: CombatState, victim: Model, direction: Vector3)
 	return PART_ZONES[part.Name]
 end
 
--- Removes every glass cut of this fighter (the training dummies heal
+-- Removes every cut and bruise of this fighter (the training dummies heal
 -- completely when left alone).
 function Combat.clearCuts(model: Model)
 	for name in model:GetAttributes() do
-		if Gash.isInjuryAttribute(name) then
+		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
 			setAttribute(model, name, nil)
 		end
 	end

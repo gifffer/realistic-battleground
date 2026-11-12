@@ -333,7 +333,7 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | # | Test | Résultat attendu |
 |---|---|---|
 | F1 | **Street Brawler** sur un KO (couché **ou resté debout**) — **ré-importer `WoundKit` avant** | Bandes noires. La victime est allongée sur le dos devant lui, tête vers lui. Plan large de côté : le corps au sol, le perso sort une **grosse batte**. Gros plan sur la victime (vue de sa gauche) qui lève la tête et tend la main en suppliant (on l'entend) ; le bras ne bouche pas l'image. Plan du sol : il lève la batte **à deux mains** (main gauche sur le manche, sous la droite), elle détourne la tête, il l'abat à deux mains. Plan de côté tenu : la **tête explose** en vraies pièces — morceaux de crâne (peau dehors, os dedans), cerveau, yeux, dents ; gerbe de sang, fine brume ; au sol, une éclaboussure et des traînées **sur le sol, jamais sur le corps**. Il reste la vraie mâchoire du bas avec ses dents, la peau du menton déchirée, les vertèbres ; le cou gicle par saccades, une flaque s'étend. Caméra normale ensuite (~3,3 s). |
-| F2 | **Boxer** sur un KO | Il **relève** l'adversaire par le col, deux crochets au foie (l'adversaire se plie), crochet droit, crochet gauche (la tête part d'un côté puis de l'autre, un peu de sang), direct, puis s'accroupit et place un énorme **uppercut** : l'adversaire décolle, vole et retombe mort plus loin (~3,4 s). |
+| F2 | **Boxer** sur un KO — **ré-importer `WoundKit` avant** | Il **relève** l'adversaire, deux coups au corps, crochet droit, crochet gauche, direct (la tête part d'un côté puis de l'autre, un peu de sang). Puis un **crochet du gauche dans son flanc droit, sous les côtes** : le poing rentre (craquement, ton son du coup final, gerbe de sang, éclats de côte), fouille, et **arrache le vrai foie** (avec la vésicule verte). Il le tient dans le poing, il dégouline, il le regarde ; la victime s'effondre, un **trou** dans le flanc droit avec des **côtes cassées** dedans, à travers le t-shirt, qui gicle par saccades, flaque dessous. Il **jette le foie** au sol (bruit mouillé, éclaboussure). ~4,1 s. |
 | F3 | Pendant un finisher, un 3ᵉ joueur frappe l'attaquant | Rien ne se passe : l'attaquant est intouchable pendant la scène. |
 | F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. |
 | F5 | Un 3ᵉ joueur qui regarde | Pas de cinématique pour lui (sa caméra reste normale), mais il voit l'animation, la batte, le sang et entend les coups. |
@@ -341,5 +341,16 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
 | F8 | Pendant la cinématique | Impossible de dasher, bloquer ou attaquer ; on ne peut pas lancer un duel avec l'attaquant. |
 | F9 | Un joueur qui arrive après (ou qui était loin) | Il voit le corps sans tête, le cou ouvert, sans l'explosion. |
+
+### Bleus
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Frapper un Dummy au visage (M1, Boxer, Street Brawler) | Un **bleu** apparaît **là où le coup touche**, du côté de l'attaquant : tache irrégulière, plus foncée au centre, qui s'estompe sur les bords. |
+| B2 | Regarder le bleu ~20 s puis ~1 min | Il passe du **rouge** au **violet**, puis au **bleu-violet**. |
+| B3 | Retaper au même endroit | Le même bleu **grandit et fonce** ; sur le visage, ça **gonfle** (joue, œil, arcade). Un coup très fort sur un bleu déjà gros **ouvre l'arcade** (petite coupure, filet de sang). |
+| B4 | Frapper le torse / les jambes d'un Dummy | Bleus sur le torse / la jambe touchée (4 max par partie, sinon le plus proche grossit). |
+| B5 | Un joueur avec un t-shirt / un pantalon | Pas de bleu visible à travers les vêtements ; ceux du visage, oui. |
+| B6 | Kill / réapparition / Dummy laissé tranquille | Les bleus disparaissent. |
 
 Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.

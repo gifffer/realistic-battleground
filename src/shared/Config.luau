@@ -306,8 +306,6 @@ return table.freeze({
 		-- A new cut closer than this (studs) to an old one of the same glass
 		-- makes the old one bigger instead.
 		GASH_MERGE_DISTANCE = 0.3,
-		-- Visible marks (bruises, cuts) on a body part: at most this many.
-		MAX_WOUNDS_PER_PART = 3,
 		-- At or under this health, a fighter groans when hit (Sounds.HurtGrunt).
 		HURT_SOUND_HEALTH = 70,
 	}),
