@@ -42,7 +42,7 @@ local MAX_DISTANCE = 90 -- studs: beyond this the tag is not drawn at all
 local TIER_CHECK = 0.25 -- seconds between two distance checks
 local TIER_TWEEN = 0.2
 local HIDE_TWEEN = 0.15
-local NAME_MAX_WIDTH = 140 -- pixels; longer names end with "…"
+local NAME_MAX_WIDTH = 170 -- pixels; longer names end with "…"
 
 -- Distance tiers: up to `distance` studs → these transparencies.
 -- `level = nil` means the level is not shown at all.
@@ -106,7 +106,7 @@ local function buildGui(owner: Player, head: BasePart): (BillboardGui, TextLabel
 	local gui = Theme.make("BillboardGui", {
 		Name = "NameTag_" .. owner.Name,
 		Adornee = head,
-		Size = UDim2.fromOffset(160, 20),
+		Size = UDim2.fromOffset(200, 20),
 		-- About half a head above the top of the head, whatever its rotation.
 		StudsOffsetWorldSpace = Vector3.new(0, 1.7, 0),
 		AlwaysOnTop = false, -- walls hide it
