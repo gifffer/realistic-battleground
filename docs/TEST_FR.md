@@ -252,6 +252,9 @@ Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seu
 | G8 | Mourir / réapparaître | Le corps redevient intact. |
 | G9 | Regarder de près une tête ou un torse blessé | La tête et le torse gardent **exactement leur forme et leur aspect** : tête bien ronde, torse aux arêtes arrondies, ni facettes ni lignes, ni grain sur la peau. Seule la plaie change. Le visage est à sa place. Le t-shirt et le pantalon sont alignés autour de la plaie. |
 | G11 | Entrer en jeu avec un avatar à tête spéciale ou avec de gros accessoires | La tête devient la tête **classique** (même visage, même couleur). Les cheveux, chapeaux et lunettes restent ; les gros accessoires et ceux du dos, de la taille ou des épaules disparaissent. Un package de corps R6 est retiré (corps en blocs classique). |
+| G12 | Bouteille (touche 1) plusieurs fois | Des **bouts de verre** restent plantés dans la peau (un peu de sang autour, parfois une petite coulure). Environ 1 fois sur 3, c'est seulement du verre, sans vraie plaie. À la casse, beaucoup d'éclats volent : des gros et des petits qui brillent et restent un moment au sol. |
+| G13 | Plaie en bas du torse, puis attendre | Les gouttes de sang tombent **de la plaie**, pas de la tête. |
+| G14 | Plaie près du visage, regarder de près | Le visage est d'un seul morceau : **aucune ligne** sur les yeux ni sur la bouche, **aucune rayure** près de la plaie. |
 | G10 | Ta propre tête blessée, en 1re personne | Rien ne gêne la vue. |
 
 Les plaies demandent d'importer `WoundKit` (voir `docs/WOUNDS_FR.md`). **Il faut le ré-importer** après cette mise à jour : il contient maintenant les morceaux de la tête.

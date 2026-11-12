@@ -7,6 +7,8 @@ Une bouteille ne casse pas un crâne et n'ouvre pas une cage thoracique. Le jeu 
 | **Bouteille fracassée** (touche 1) | **Lacération** : déchirure irrégulière, souvent en étoile | Bord de peau déchiré, bord rose de la peau coupée, chair rouge, gras jaune (sur le corps), du sang dans la plaie et qui coule |
 | **Bouteille cassée** (Broken Bottle) | **Entaille** : longue, bords nets, en fuseau | Pareil, plus long et plus fin. Une entaille profonde (taille L) montre le **muscle** sur le corps, ou tout juste **l'os du crâne** au fond sur la tête (peau fine) |
 
+- Une bouteille fracassée laisse aussi des **bouts de verre plantés** dans la peau. Environ 1 fois sur 3, il n'y a que du verre, sans vraie plaie (`GLASS_GRAZE_CHANCE` dans `Config.luau`).
+- Le sang qui coule tombe **de la plaie**.
 - Frapper **au même endroit** agrandit la plaie : **S → M → L**. Ailleurs, ça fait une nouvelle plaie (3 au maximum par partie du corps).
 - La plaie se trouve **du côté où se tient l'attaquant**, à une hauteur au hasard : front, tempe ou joue pour la tête ; poitrine, ventre ou dos pour le torse.
 - Le **visage**, le **t-shirt** et le **pantalon** restent dessinés autour de la plaie.

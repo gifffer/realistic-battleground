@@ -6,7 +6,7 @@
 --     bottle neck during Broken Bottle. Built from a few parts, welded to
 --     the hand for the length of the move, then removed.
 --   • Glass: the bottle bursts into shards on the victim's head.
---   • Blood: a fighter with the "Bleeding" attribute drips from the head,
+--   • Blood: a fighter with the "Bleeding" attribute drips from the wound,
 --     and the drops leave small dark stains on the floor that fade away.
 --   • Street Fury: an awakened fighter breathes heavy vapour and carries a
 --     faint dark-red glow (nothing flashy: it's a street fight).
@@ -28,12 +28,14 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
+local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local KitEffects = {}
 
 -- Colours (dark, desaturated: realistic, not neon).
 local GLASS_COLOR = Color3.fromRGB(74, 92, 58) -- green-brown beer bottle
+local GLASS_SHINE = Color3.fromRGB(150, 172, 128) -- thin bits: lighter, they catch the light
 local LABEL_COLOR = Color3.fromRGB(150, 128, 92) -- the paper label
 local BLOOD_COLOR = Color3.fromRGB(92, 12, 10)
 local FURY_LIGHT = Color3.fromRGB(150, 36, 28)
@@ -265,6 +267,7 @@ local function burst(
 		piece.Material = material
 		piece.Color = color
 		piece.Transparency = if material == Enum.Material.Glass then 0.3 else 0
+		piece.Reflectance = if material == Enum.Material.Glass then 0.3 else 0 -- glass glints
 		piece.CanCollide = true
 		piece.CanQuery = false
 		piece.CanTouch = false
@@ -338,14 +341,44 @@ local function stain(position: Vector3, size: number)
 	end)
 end
 
--- One drop of blood falling from the head.
+-- One drop of blood falling from the wound: a glass cut (Gash_*), else the
+-- part that was hit ("BleedPart"), else the head.
+local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
+	local spots: { { part: BasePart, point: Vector3 } } = {}
+	for name, value in model:GetAttributes() do
+		local key = string.match(name, "^" .. Gash.PREFIX .. "(%a+)_%d+$")
+		local partName = if key then Gash.PART_OF[key] else nil
+		local data = Gash.decode(value)
+		local part = if partName then model:FindFirstChild(partName) else nil
+		if data and part and part:IsA("BasePart") then
+			table.insert(spots, { part = part, point = data.point })
+		end
+	end
+	if #spots > 0 then
+		local spot = spots[random:NextInteger(1, #spots)]
+		-- just under the cut, a little out of the skin
+		local outward = Vector3.new(spot.point.X, 0, spot.point.Z)
+		outward = if outward.Magnitude > 1e-3 then outward.Unit else Vector3.new(0, 0, -1)
+		local at = spot.point + outward * 0.06 + Vector3.new(0, -0.08, 0)
+		return (spot.part.CFrame * CFrame.new(at)).Position, spot.part
+	end
+	local bleedPart = model:GetAttribute("BleedPart")
+	local part = model:FindFirstChild(if typeof(bleedPart) == "string" then bleedPart else "Head")
+	if part == nil or not part:IsA("BasePart") then
+		return nil, nil
+	end
+	local depth = if part.Name == "Head" then 0.8 else part.Size.Z / 2 + 0.06
+	local y = if part.Name == "Head" then -0.2 else random:NextNumber(-0.5, 0.5)
+	return (part.CFrame * CFrame.new(random:NextNumber(-0.3, 0.3), y, -depth)).Position, part
+end
+
 local function drip(model: Model)
-	local head = model:FindFirstChild("Head")
-	if head == nil or not head:IsA("BasePart") then
+	local random = Random.new()
+	local start, part = dripStart(model, random)
+	if start == nil or part == nil then
 		return
 	end
-	local random = Random.new()
-	local start = (head.CFrame * CFrame.new(random:NextNumber(-0.3, 0.3), -0.2, -0.8)).Position
+	local head = part -- (the drop leaves with the speed of that part)
 	local drop = Instance.new("Part")
 	drop.Name = "BloodDrop"
 	drop.Shape = Enum.PartType.Ball
@@ -506,7 +539,10 @@ function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: 
 			end
 		end
 		if headPosition then
-			burst(headPosition, 14, GLASS_COLOR, Enum.Material.Glass, 0.16, 16, 2.5)
+			-- Big pieces, then a spray of small glittering bits that stay on
+			-- the floor a while.
+			burst(headPosition, 12, GLASS_COLOR, Enum.Material.Glass, 0.16, 16, 4)
+			burst(headPosition, 22, GLASS_SHINE, Enum.Material.Glass, 0.06, 20, 6)
 		end
 	end
 	if zone == "Legs" then

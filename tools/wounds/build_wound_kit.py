@@ -410,14 +410,58 @@ def outward_check(mesh, name):
     print(name, "faces flipped to face out:", len(flipped))
 
 
+def face_sheet(segments, band_rows, bevel_rings):
+    """The front half of the head (straight part + rounded edges), UV-mapped
+    exactly like Roblox puts a face on the classic head (measured from
+    head.mesh: a flat projection from the front, u = 0.5 - x / 1.2,
+    v = 0.5 - y / 1.2). The game paints the face on it, so the face is drawn
+    in one piece, without seams."""
+    verts, normals, faces, uvs = [], [], [], []
+    profile = []  # (radius, y, normal radial part, normal y), bottom to top
+    for j in range(bevel_rings, 0, -1):  # bottom rounded edge
+        t = math.radians(90) * j / bevel_rings
+        profile.append((HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t), -HEAD_BAND - HEAD_BEVEL * math.sin(t), math.cos(t), -math.sin(t)))
+    for j in range(band_rows + 1):
+        profile.append((HEAD_RADIUS, -HEAD_BAND + 2 * HEAD_BAND * j / band_rows, 1.0, 0.0))
+    for j in range(1, bevel_rings + 1):  # top rounded edge
+        t = math.radians(90) * j / bevel_rings
+        profile.append((HEAD_RADIUS - HEAD_BEVEL + HEAD_BEVEL * math.cos(t), HEAD_BAND + HEAD_BEVEL * math.sin(t), math.cos(t), math.sin(t)))
+    rows = len(profile)
+    for i in range(segments + 1):
+        a = math.radians(-90 + 180 * i / segments)  # the front half (insert axes: +Z = the face)
+        sa, ca = math.sin(a), math.cos(a)
+        for r, y, nr, ny in profile:
+            # insert axes: X = the head's left as you look at it... see below
+            x, z = r * sa, r * ca
+            verts.append((x, y, z))
+            normals.append((nr * sa, ny, nr * ca))
+            # In the game the kit's +X is the head's -X (angle 0 turns it):
+            # the head's x = -x here.
+            uvs.append((0.5 + x / (2 * HEAD_RADIUS), 1 - (0.5 - y / (2 * HEAD_RADIUS))))
+    for i in range(segments):
+        for j in range(rows - 1):
+            p, q = i * rows + j, (i + 1) * rows + j
+            faces.append((p, q, q + 1, p + 1))
+    return verts, normals, faces, uvs
+
+
 def build_head_shell():
     pieces = {
         "Shell_Band24": band(15, 8),
         "Shell_Band96": band(3.75, 2),
+        "Shell_Band192": band(1.875, 2),
         "Shell_Bevel24": bevel(15, 8, 10),
         "Shell_Cap": cap(192),  # same rim points as the 24 bevels (8 each): no crack
     }
-    return {name: shell_piece(data, name) for name, data in pieces.items()}
+    out = {name: shell_piece(data, name) for name, data in pieces.items()}
+    verts, normals, faces, uvs = face_sheet(96, 8, 12)
+    mesh = shell_piece((verts, normals, faces), "Shell_FaceSheet")
+    uv = mesh.uv_layers.new(name="UVMap")
+    for poly in mesh.polygons:
+        for li in poly.loop_indices:
+            uv.data[li].uv = uvs[mesh.loops[li].vertex_index]
+    out["Shell_FaceSheet"] = mesh
+    return out
 
 
 # --- Block frames (torso, limbs) ------------------------------------------------
