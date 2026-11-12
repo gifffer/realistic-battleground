@@ -45,23 +45,23 @@ local FAMILY = {
 	Roboto = "rbxasset://fonts/families/Roboto.json",
 }
 
--- Weights: bold and punchy (the owner found the thin, light look too
--- serious). The names stay the same so every screen follows: e.g.
+-- Weights: between the first thin look (too serious) and full bold (not
+-- serious enough): semi-bold labels, medium titles, a little spacing. The names stay the same so every screen follows: e.g.
 -- "NumberLight" is now a bold number too.
 Theme.Fonts = table.freeze({
-	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.Bold), -- caps labels, names
-	LabelBold = Font.new(FAMILY.Condensed, Enum.FontWeight.Heavy), -- feedback words
+	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.SemiBold), -- caps labels, names
+	LabelBold = Font.new(FAMILY.Condensed, Enum.FontWeight.Bold), -- feedback words
 	LabelRegular = Font.new(FAMILY.Condensed, Enum.FontWeight.Medium), -- kill feed verbs
 	Number = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- tabular numbers
-	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Bold), -- the big HP number
-	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.Bold), -- key caps
-	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Bold), -- titles
-	Body = Font.new(FAMILY.Roboto, Enum.FontWeight.Medium), -- sentences
+	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- the big HP number
+	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.SemiBold), -- key caps
+	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Medium), -- titles
+	Body = Font.new(FAMILY.Roboto, Enum.FontWeight.Regular), -- sentences
 })
 
 -- Every text a bit bigger than its layout asks (bold, tight text reads
 -- better slightly larger). Applied by Theme.text and Theme.keyCap.
-Theme.TEXT_SCALE = 1.12
+Theme.TEXT_SCALE = 1.06
 
 -- Soft shadow behind text drawn over the 3D world (never a hard outline).
 Theme.STROKE_TRANSPARENCY = 0.8
@@ -131,10 +131,10 @@ end
 --   "three" / "four" = small labels (a hair apart)
 --   "thin" / "en"    = titles (letters as drawn)
 local TRACK_SPACES: { [string]: string } = {
-	thin = "",
-	four = "\u{200A}",
-	three = "\u{200A}",
-	en = "",
+	thin = "\u{200A}",
+	four = "\u{2009}",
+	three = "\u{2009}",
+	en = "\u{200A}",
 }
 
 function Theme.track(text: string, kind: string): string
