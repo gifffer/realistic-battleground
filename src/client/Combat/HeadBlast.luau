@@ -29,6 +29,8 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
+local Blood = require(script.Parent.Blood)
+local Squish = require(script.Parent.Squish)
 
 local HeadBlast = {}
 
@@ -603,6 +605,9 @@ local function pump(model: Model, mouth: Attachment, random: Random)
 			local fade = 1 - (os.clock() - start) / PUMP_TIME
 			emitter.Speed = NumberRange.new(3 + 6 * fade, 6 + 9 * fade)
 			emitter.Rate = 160 * fade -- a spurt
+			-- (thick blood: real drops and strings with each beat)
+			local up = mouth.WorldCFrame.LookVector
+			Blood.spray(mouth.WorldPosition, up + Vector3.new(0, 0.6, 0), 1.2 * fade + 0.4, model)
 			task.wait(0.14)
 			emitter.Rate = 10 * fade -- between two
 			task.wait(BEAT - 0.14)
@@ -713,6 +718,7 @@ local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: 
 			stuck(lump, more, CFrame.new(size * 0.4, 0, size * 0.2))
 		end
 		fly(lump, at, outward(random, away, 1.1, 15), random)
+		Squish.soft(lump, { softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 })
 	end
 	-- An eye.
 	local eye = newPart("Eye", Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(238, 234, 226), true)
@@ -723,6 +729,7 @@ local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: 
 	local nerve = newPart("Nerve", Vector3.new(0.04, 0.04, 0.22), FLESH, true)
 	stuck(eye, nerve, CFrame.new(0, 0, 0.18))
 	fly(eye, at, outward(random, away, 1.4, 14), random)
+	Squish.soft(eye, { softness = 0.25, sag = 0.1, stiffness = 380, lifetime = 10 })
 	-- Teeth.
 	for _ = 1, 4 do
 		fly(
@@ -743,7 +750,8 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 		return false
 	end
 	local paint = painter(head.Color)
-	local function throw(names: { string }, speed: number, up: number)
+	-- `soft`: brain, eyes: soft, wet pieces (Squish), not hard plastic
+	local function throw(names: { string }, speed: number, up: number, soft: string?)
 		for _, name in names do
 			local piece = pieces[name]
 			if piece then
@@ -768,12 +776,24 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 				part.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(6, 22)
 				part.Parent = workspace
 				Debris:AddItem(part, PIECE_LIFETIME)
+				if soft == "Brain" then
+					Squish.soft(
+						part,
+						{ softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 }
+					)
+					Squish.detail(part, "Brain")
+				elseif soft == "Eye" then
+					Squish.soft(
+						part,
+						{ softness = 0.25, sag = 0.1, stiffness = 380, lifetime = 10 }
+					)
+				end
 			end
 		end
 	end
 	throw(GoreShapes.skull, 24, 1.1)
-	throw(GoreShapes.brain, 13, 0.8)
-	throw(GoreShapes.eye, 15, 1.2)
+	throw(GoreShapes.brain, 13, 0.8, "Brain")
+	throw(GoreShapes.eye, 15, 1.2, "Eye")
 	throw(GoreShapes.tooth, 20, 1.4)
 	return true
 end
@@ -823,7 +843,12 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 		end
 	end
 
-	-- In the air: a spray of drops, and a red mist.
+	-- Real drops and thick strings of blood thrown out all around (they land
+	-- and splash on the floor, the walls, the attacker), more away from him.
+	Blood.spray(at, Vector3.new(0, 1, 0) + away, 7, model)
+	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 4, model)
+	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 2.5, model)
+	-- In the air: a spray of fine drops, and a red mist.
 	local point = Instance.new("Attachment")
 	point.WorldPosition = at
 	point.Parent = workspace.Terrain

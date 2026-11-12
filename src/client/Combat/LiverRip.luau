@@ -18,7 +18,9 @@
 local Debris = game:GetService("Debris")
 
 local GoreKit = require(script.Parent.GoreKit)
+local Blood = require(script.Parent.Blood)
 local HeadBlast = require(script.Parent.HeadBlast)
+local Squish = require(script.Parent.Squish)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local LiverRip = {}
@@ -118,6 +120,9 @@ function LiverRip.gut(victim: Model, attacker: Model)
 	burst(at, 70, 14)
 	local back = (attacker:GetPivot().Position - at.Position)
 	local out = if back.Magnitude > 0.1 then back.Unit else at.LookVector
+	-- the hand going in: blood bursts out around the arm, onto him too
+	Blood.spray(at.Position, out + Vector3.new(0, 0.5, 0), 3.5, victim)
+	Blood.spray(at.Position, Vector3.new(0, -1, 0) + at.LookVector, 2, victim)
 	for _ = 1, 6 do
 		chip(
 			at.Position,
@@ -158,6 +163,8 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	SoundController.play("FleshTear", victim)
 	if at then
 		burst(at, 90, 10)
+		-- torn out: thick blood pulled out with it, strings, drops
+		Blood.spray(at.Position, at.LookVector + Vector3.new(0, 0.4, 0), 4.5, victim)
 		-- The hole pours, in spurts, for a while; a pool spreads under it.
 		local torso = victim:FindFirstChild("Torso")
 		if torso and torso:IsA("BasePart") then
@@ -208,6 +215,20 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	weld.Part0 = arm
 	weld.Part1 = liver
 	weld.Parent = liver
+	-- soft and wet: it jiggles in his hand, slaps and slumps on the floor
+	Squish.soft(liver, { softness = 0.45, sag = 0.2, stiffness = 200, lifetime = LIFETIME })
+	Squish.detail(liver, "Liver")
+	-- dripping thick drops while he holds it
+	task.spawn(function()
+		while liver.Parent and liver:FindFirstChild("Held") do
+			Blood.drop(
+				liver.Position - Vector3.new(0, 0.3, 0),
+				liver.AssemblyLinearVelocity * 0.5,
+				Random.new():NextNumber(0.06, 0.11)
+			)
+			task.wait(Random.new():NextNumber(0.08, 0.2))
+		end
+	end)
 	local drip = Instance.new("Attachment")
 	drip.Parent = liver
 	local drops = emitter(drip, 30)

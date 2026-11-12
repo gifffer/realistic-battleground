@@ -30,6 +30,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local Blood = require(script.Parent.Blood)
 
 local KitEffects = {}
 
@@ -450,25 +451,8 @@ local function drip(model: Model)
 	if start == nil or part == nil then
 		return
 	end
-	local head = part -- (the drop leaves with the speed of that part)
-	local drop = Instance.new("Part")
-	drop.Name = "BloodDrop"
-	drop.Shape = Enum.PartType.Ball
-	drop.Size = Vector3.new(0.09, 0.09, 0.09)
-	drop.Material = Enum.Material.SmoothPlastic
-	drop.Color = BLOOD_COLOR
-	drop.CanCollide = false
-	drop.CanQuery = false
-	drop.CanTouch = false
-	drop.CastShadow = false
-	drop.Position = start
-	drop.AssemblyLinearVelocity = head.AssemblyLinearVelocity * 0.5
-	drop.Parent = workspace
-	Debris:AddItem(drop, 0.8)
-	-- Where it will land: stain the floor a moment later.
-	task.delay(0.35, function()
-		stain(start, random:NextNumber(0.25, 0.55))
-	end)
+	-- (a real drop: it falls, stretches, splashes where it lands)
+	Blood.drop(start, part.AssemblyLinearVelocity * 0.5, random:NextNumber(0.05, 0.1))
 end
 
 ------------------------------------------------------------------------------
@@ -679,8 +663,12 @@ local function impactPoint(part: BasePart, attacker: Model): (Vector3, Vector3)
 	return part.Position + direction * 0.5, direction
 end
 
--- A hit that draws blood: a spray from the impact, a stain on the floor.
-function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
+-- A hit that draws blood (Blood): drops and strings of it thrown out of
+-- the wound away from the blow (a little back at the attacker too), the
+-- wound itself bloody, the attacker's fist bloody, the drops splashing
+-- where they land (floor, walls, bodies). `amount`: 1 a punch, more for
+-- heavy blows (2-3).
+function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amount: number?)
 	local partName = if zone == "Head"
 		then "Head"
 		elseif zone == "Legs" then "Right Leg"
@@ -689,17 +677,33 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string)
 	if part == nil or not part:IsA("BasePart") then
 		return
 	end
-	local point = impactPoint(part, attacker)
-	burst(
-		point,
-		if zone == "Head" then 9 else 6,
-		BLOOD_COLOR,
-		Enum.Material.SmoothPlastic,
-		0.1,
-		9,
-		1.4
-	)
-	stain(point, if zone == "Head" then 1.1 else 0.8)
+	local point, toward = impactPoint(part, attacker)
+	local much = (amount or 1) * (if zone == "Head" then 1.25 else 1)
+	-- out of the wound, away from the blow (and up: it's thrown)
+	Blood.spray(point, -toward + Vector3.new(0, 0.35, 0), much, victim)
+	-- a little spatter back at the attacker
+	Blood.spray(point, toward + Vector3.new(0, 0.5, 0), much * 0.25, victim)
+	-- the wound: blood on the skin / clothes there
+	Blood.splat(point, toward, 0.22 + 0.06 * much, Vector3.new(0, -3, 0), part)
+	-- the fist that did it, bloody (the closest hand of the attacker)
+	local best: BasePart? = nil
+	for _, name in { "Right Arm", "Left Arm", "Right Leg", "Left Leg" } do
+		local limb = attacker:FindFirstChild(name)
+		if limb and limb:IsA("BasePart") then
+			local tip = (limb.CFrame * CFrame.new(0, -0.9, 0)).Position
+			if
+				best == nil
+				or (tip - point).Magnitude
+					< ((best.CFrame * CFrame.new(0, -0.9, 0)).Position - point).Magnitude
+			then
+				best = limb
+			end
+		end
+	end
+	if best and Random.new():NextNumber() < 0.6 then
+		local tip = best.CFrame * CFrame.new(0, -0.85, -0.5)
+		Blood.splat(tip.Position, tip.LookVector, 0.18 + 0.04 * much, Vector3.zero, best)
+	end
 end
 
 -- Glass cutting the skin (face, torso or leg, from `zone`): a spray of blood
