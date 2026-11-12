@@ -655,20 +655,36 @@ local function keepPiece(piece: BasePart)
 				return
 			end
 			gone = true
-			TweenService:Create(piece, TweenInfo.new(0.6), { Transparency = 1 }):Play()
+			-- (every layer: a soft piece shows through its welded copy)
+			local fade = TweenInfo.new(0.6)
+			for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+				if item:IsA("BasePart") and item.Transparency < 1 then
+					TweenService:Create(item, fade, { Transparency = 1 }):Play()
+				end
+			end
 			Debris:AddItem(piece, 0.65)
 		end
 		body.Destroying:Once(remove)
-		body.AncestryChanged:Connect(function()
+		local watch: RBXScriptConnection? = nil
+		watch = body.AncestryChanged:Connect(function()
 			if body.Parent == nil then
 				remove()
+				if watch then
+					watch:Disconnect()
+				end
+			end
+		end)
+		piece.Destroying:Once(function()
+			if watch then
+				watch:Disconnect()
 			end
 		end)
 	end
-	-- (fixed once still; put back on the floor if it ever fell through it)
-	local spawnedY = piece.Position.Y
-	local floor = floorUnder(piece.Position)
-	local floorY = if floor then floor.Position.Y else spawnedY - 50
+	-- Fixed once it lies still on the floor (not on someone: they move);
+	-- put back if it ever tunnels through a surface.
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
 	task.spawn(function()
 		local still = 0
 		local last = piece.Position
@@ -677,24 +693,38 @@ local function keepPiece(piece: BasePart)
 			if not piece:IsDescendantOf(workspace) then
 				break
 			end
+			local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+			table.insert(ignore, piece)
+			params.FilterDescendantsInstances = ignore
 			local position = piece.Position
-			if position.Y < floorY - 2 then
+			-- (did it pass through a floor / wall since the last check?)
+			local crossed = workspace:Raycast(last, position - last, params)
+			if
+				crossed
+				and (position - last).Magnitude > 0.5
+				and (position - crossed.Position):Dot(crossed.Normal) < -0.3
+			then
 				piece.AssemblyLinearVelocity = Vector3.zero
-				piece.CFrame = CFrame.new(Vector3.new(last.X, floorY + 0.1, last.Z))
+				piece.CFrame = CFrame.new(crossed.Position + crossed.Normal * 0.15)
 					* piece.CFrame.Rotation
 				piece.Anchored = true
 				break
 			end
-			if position.Y > floorY - 0.5 then
-				last = position
-			end
+			last = position
 			if
 				piece.AssemblyLinearVelocity.Magnitude < 0.3
 				and piece.AssemblyAngularVelocity.Magnitude < 0.5
 			then
 				still += 0.2
 				if still >= 0.8 then
-					piece.Anchored = true
+					local below = workspace:Raycast(
+						position,
+						Vector3.new(0, -(piece.Size.Magnitude * 0.6 + 0.3), 0),
+						params
+					)
+					if below and not onCharacter(below.Instance) then
+						piece.Anchored = true
+					end
 				end
 			else
 				still = 0

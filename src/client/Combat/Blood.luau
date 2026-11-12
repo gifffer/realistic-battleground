@@ -129,18 +129,27 @@ local function keep(piece: BasePart, lifetime: number, onBody: boolean)
 end
 
 -- Where blood lands on a body: on the SKIN you see, not on the part's box.
--- The classic head is round (0.6 across, its part a wider box); a hat or
--- hair is on the head; the invisible root is the torso. Returns the part
--- it sticks to, the point on its surface and the way out of it (nil: no
--- skin there).
+-- The classic head is round (a cylinder 0.6 across, its top and bottom
+-- rounded off; its part a wider box); the invisible root is the torso; an
+-- accessory is on the part it's worn on - but hair and hats cover the skin
+-- (no blood on them). Returns the part it sticks to, the point on its
+-- surface and the way out of it; nil: no skin there (beside the head, under
+-- the chin, on hair).
 local function onSkin(part: BasePart, world: Vector3): (BasePart?, Vector3, Vector3)
 	local model = part:FindFirstAncestorOfClass("Model")
 	if part.Parent and part.Parent:IsA("Accessory") then
-		local owner = part.Parent.Parent
-		local head = if owner then owner:FindFirstChild("Head") else nil
-		if head and head:IsA("BasePart") then
-			part = head
+		local weld = part:FindFirstChild("AccessoryWeld")
+		local body: BasePart? = nil
+		if weld and weld:IsA("JointInstance") then
+			local other = if weld.Part0 == part then weld.Part1 else weld.Part0
+			if other and other:IsA("BasePart") then
+				body = other
+			end
 		end
+		if body == nil or body.Name == "Head" then
+			return nil, world, Vector3.yAxis -- (hair / a hat: covers the skin)
+		end
+		part = body
 	elseif part.Name == "HumanoidRootPart" and model then
 		local torso = model:FindFirstChild("Torso")
 		if torso and torso:IsA("BasePart") then
@@ -149,17 +158,33 @@ local function onSkin(part: BasePart, world: Vector3): (BasePart?, Vector3, Vect
 	end
 	local p = part.CFrame:PointToObjectSpace(world)
 	if part.Name == "Head" then
-		-- (round: straight from -0.3 to 0.3, rounded off above and below)
+		-- The exact surface: a core (a disc 0.3 across, from -0.3 to 0.3)
+		-- padded by 0.3 all round - the nearest point on it, out by 0.3.
 		local flatP = Vector3.new(p.X, 0, p.Z)
-		local out = if flatP.Magnitude > 1e-3 then flatP.Unit else Vector3.new(0, 0, -1)
-		local y = math.clamp(p.Y, -0.5, 0.5)
-		local over = math.max(0, math.abs(y) - 0.3)
-		local radius = 0.3 + math.sqrt(math.max(0, 0.09 - over * over))
-		local tilt = if over > 0 then Vector3.new(0, math.sign(y) * over / 0.3, 0) else Vector3.zero
-		local normal = (out + tilt).Unit
-		return part,
-			part.CFrame * (out * radius + Vector3.new(0, y, 0)),
-			part.CFrame:VectorToWorldSpace(normal)
+		local r = flatP.Magnitude
+		if r > 0.68 then
+			return nil, world, Vector3.yAxis -- (beside the head: through its empty box)
+		end
+		local out = if r > 1e-3 then flatP.Unit else Vector3.new(0, 0, -1)
+		local ay = math.abs(p.Y)
+		local sy = if p.Y < 0 then -1 else 1
+		local cr, cy = math.min(r, 0.3), math.min(ay, 0.3)
+		local d = Vector2.new(r - cr, ay - cy)
+		if d.Magnitude < 1e-3 then
+			-- (inside the core: out along the nearer side)
+			if r >= ay then
+				cr, d = 0.3, Vector2.new(1, 0)
+			else
+				cy, d = 0.3, Vector2.new(0, 1)
+			end
+		end
+		d = d.Unit
+		local normal = out * d.X + Vector3.yAxis * (sy * d.Y)
+		local point = out * (cr + d.X * 0.3) + Vector3.new(0, sy * (cy + d.Y * 0.3), 0)
+		if point.Y < -0.42 then
+			return nil, world, Vector3.yAxis -- (under the chin: the neck, the torso)
+		end
+		return part, part.CFrame * point, part.CFrame:VectorToWorldSpace(normal)
 	end
 	-- a block: the face the point is closest to
 	local half = part.Size / 2
@@ -200,9 +225,14 @@ local function puddle(
 		return nil
 	end
 	local stuck = onto
-	if onto then
+	if onto and isBody(onto) then
 		local skin, point, out = onSkin(onto, at)
 		if skin == nil then
+			return nil
+		end
+		-- (a lobe / satellite that wrapped past an edge onto another face of
+		-- a block - often one hidden under an arm, a leg, the head: dropped)
+		if skin.Name ~= "Head" and out:Dot(normal) < 0.7 then
 			return nil
 		end
 		stuck, at, normal = skin, point, out
@@ -228,7 +258,10 @@ local function puddle(
 	end
 	madeThisFrame += 1
 	layer = (layer + 1) % 64
-	local lift = 0.012 + layer * 0.0008
+	-- (on skin hardly lifted: it would float on the curved head)
+	local lift = if stuck and isBody(stuck)
+		then 0.005 + (layer % 16) * 0.0003
+		else 0.012 + layer * 0.0008
 	local forward = along - normal * along:Dot(normal)
 	if forward.Magnitude < 1e-3 then
 		forward = normal:Cross(Vector3.new(0.37, 0.71, 0.6))

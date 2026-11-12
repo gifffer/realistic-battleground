@@ -692,6 +692,23 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 		local hit = workspace:Raycast(part.Position + toward * 4, -toward * 4, only)
 		point = if hit then hit.Position else part.Position + toward * 0.5
 		normal = if hit then hit.Normal else toward
+		-- the side of the torso / the inner side of a leg is hidden (under
+		-- the arm, against the other leg): the front or back face instead,
+		-- at its edge on the blow's side
+		local right = part.CFrame.RightVector
+		if math.abs(normal:Dot(right)) > 0.9 then
+			local look = part.CFrame.LookVector
+			local facing = if toward:Dot(look) >= 0 then 1 else -1
+			local l = part.CFrame:PointToObjectSpace(point)
+			local half = part.Size / 2
+			point = part.CFrame
+				* Vector3.new(
+					math.sign(l.X) * (half.X - 0.15),
+					math.clamp(l.Y, -half.Y + 0.15, half.Y - 0.15),
+					-facing * half.Z
+				)
+			normal = look * facing
+		end
 	end
 	local random = Random.new()
 	local side = toward:Cross(Vector3.yAxis)
@@ -727,8 +744,13 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 		end
 	end
 	if best and bestDistance < 3 and random:NextNumber() < 0.6 then
-		local tip = (best.CFrame * CFrame.new(0, -best.Size.Y / 2, 0)).Position
-		Blood.splat(tip, -best.CFrame.UpVector, 0.16 + 0.04 * much, Vector3.zero, best)
+		-- (a fist: its end; a foot: its front, above the sole)
+		local isLeg = best.Name == "Right Leg" or best.Name == "Left Leg"
+		local tip = if isLeg
+			then (best.CFrame * CFrame.new(0, -best.Size.Y / 2 + 0.3, -best.Size.Z / 2)).Position
+			else (best.CFrame * CFrame.new(0, -best.Size.Y / 2, 0)).Position
+		local face = if isLeg then best.CFrame.LookVector else -best.CFrame.UpVector
+		Blood.splat(tip, face, 0.16 + 0.04 * much, Vector3.zero, best)
 	end
 end
 

@@ -174,6 +174,12 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 	local age = workspace:GetServerTimeNow() - data.born
 	local strength = 0.06 * (level - 1)
 	local at, out = onSkin(part, data.point)
+	if head then
+		-- (on the straight band of the round head, so it all fits on it)
+		local reach = math.min(0.3, size * 0.5 * 1.3)
+		local y = math.clamp(at.Y, -0.3 + reach * 0.5, 0.3 - reach * 0.5)
+		at = out * 0.6 + Vector3.new(0, y, 0)
+	end
 	-- The skin's axes there: Y up it, Z across it (`out` is X).
 	local upAxis = Vector3.new(0, 1, 0)
 	local across = out:Cross(upAxis)
@@ -184,18 +190,8 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 	if (head and level >= 2) or level >= 3 then
 		-- (a slight puffiness, not a ball: it barely stands out)
 		thick = (if head then 0.018 else 0.012) * (level - 1)
-		-- (an ellipsoid: a block shown as a sphere stretched to its size)
-		local lump = newPart(
-			"Swelling",
-			Enum.PartType.Block,
-			Vector3.new(thick * 2, size * 0.8, size * 0.55),
-			part.Color
-		)
-		local shape = Instance.new("SpecialMesh")
-		shape.MeshType = Enum.MeshType.Sphere
-		shape.Parent = lump
-		attach(lump, part, CFrame.fromMatrix(at, out, upAxis), folder)
 	end
+	local center = at -- (where the lump goes: the bruise's real centre)
 
 	-- Where a point (du across, dv up, from the bruise's centre) is on the
 	-- skin, and which way is out: around the round head's curve (and over
@@ -212,29 +208,53 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 			-- (on the lump: higher toward its middle)
 			local rise = 0
 			if thick > 0 then
-				local e = (du / (size * 0.4)) ^ 2 + (dv / (size * 0.45)) ^ 2
+				local e = (du / (size * 0.275)) ^ 2 + (dv / (size * 0.4)) ^ 2
 				rise = thick * math.sqrt(math.max(0, 1 - e))
 			end
-			return dir * (radius + rise + lift) + Vector3.new(0, y, 0), dir
+			-- (tilted with the head's curve on its rounded top / bottom)
+			local tilt = if over > 0
+				then Vector3.new(0, math.sign(y) * over / 0.3, 0)
+				else Vector3.zero
+			return dir * (radius + rise + lift) + Vector3.new(0, y, 0), (dir + tilt).Unit
 		end
 	else
 		local half = part.Size / 2
 		local wide = math.abs((half * across):Dot(across))
-		size = math.min(size, math.min(wide, half.Y) * 1.15)
-		local reach = size * 0.5
-		local roomAcross = math.max(0, wide - reach)
-		local roomUp = math.max(0, half.Y - reach)
+		-- (its widest: the wobbling outline reaches 0.8 × size, an oval's
+		-- half more: 1.06 × size from its centre - all kept on the face)
+		local room = math.min(wide, half.Y) - 0.03
+		size = math.min(size, room / 1.06)
+		local reach = size * 1.06
+		local roomAcross = math.max(0, wide - 0.03 - reach)
+		local roomUp = math.max(0, half.Y - 0.03 - reach)
 		local u = math.clamp(at:Dot(across), -roomAcross, roomAcross)
 		local v = math.clamp(at.Y, -roomUp, roomUp)
 		local face = out * math.abs((half * out):Dot(out))
+		center = face + across * u + upAxis * v
 		place = function(du: number, dv: number, lift: number): (Vector3, Vector3)
 			-- (never past the face's edges)
 			local a = math.clamp(u + du, -wide + 0.03, wide - 0.03)
 			local b = math.clamp(v + dv, -half.Y + 0.03, half.Y - 0.03)
-			local e = (du / (size * 0.4)) ^ 2 + (dv / (size * 0.45)) ^ 2
+			local e = (du / (size * 0.275)) ^ 2 + (dv / (size * 0.4)) ^ 2
 			local rise = thick * 0.95 * math.sqrt(math.max(0, 1 - e))
 			return face + across * a + upAxis * b + out * (lift + rise), out
 		end
+	end
+
+	-- Swelling: a lump of skin under it (the face swells; the body a little;
+	-- a slight puffiness, not a ball). An ellipsoid: a block shown as a
+	-- sphere stretched to its size.
+	if thick > 0 then
+		local lump = newPart(
+			"Swelling",
+			Enum.PartType.Block,
+			Vector3.new(thick * 2, size * 0.8, size * 0.55),
+			part.Color
+		)
+		local shape = Instance.new("SpecialMesh")
+		shape.MeshType = Enum.MeshType.Sphere
+		shape.Parent = lump
+		attach(lump, part, CFrame.fromMatrix(center, out, upAxis), folder)
 	end
 
 	-- Its outline isn't a circle: the radius wobbles around it (a few
@@ -259,7 +279,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 	-- Blood under the skin: many small soft ovals overlapping, see-through,
 	-- so it's mottled and darker where they pile up (the middle), paler and
 	-- broken up toward its uneven edge.
-	local count = 30 + 8 * level
+	local count = 16 + 5 * level
 	for index = 1, count do
 		local theta = random:NextNumber(0, math.pi * 2)
 		local limit = edgeAt(theta)
@@ -272,7 +292,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 			folder,
 			pos,
 			o,
-			size * random:NextNumber(0.3, 0.5) * (1.05 - 0.25 * edge),
+			size * random:NextNumber(0.38, 0.6) * (1.05 - 0.25 * edge),
 			random:NextNumber(0.6, 0.95),
 			math.clamp(0.72 + 0.24 * edge - strength + random:NextNumber(-0.04, 0.04), 0.55, 0.95),
 			0.75 + 0.4 * edge + random:NextNumber(-0.08, 0.08),
@@ -282,7 +302,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 		)
 	end
 	-- Where the blood pooled deeper: a few darker patches near the middle.
-	for index = 1, 2 + level do
+	for index = 1, 1 + level do
 		local theta = random:NextNumber(0, math.pi * 2)
 		local r = edgeAt(theta) * random:NextNumber(0, 0.45)
 		local pos, o =
@@ -302,7 +322,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 		)
 	end
 	-- Pinpoint bleeding (petechiae): tiny dark-red dots scattered in it.
-	for index = 1, 6 + 3 * level do
+	for index = 1, 4 + 2 * level do
 		local theta = random:NextNumber(0, math.pi * 2)
 		local r = edgeAt(theta) * random:NextNumber(0.15, 0.95)
 		local pos, o =
@@ -323,7 +343,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 		)
 	end
 	-- A faint tint at the rim: blue-purple where the blood is spreading.
-	for index = 1, 4 do
+	for index = 1, 3 do
 		local theta = random:NextNumber(0, math.pi * 2)
 		local r = edgeAt(theta) * random:NextNumber(0.8, 1.02)
 		local pos, o =
@@ -346,7 +366,7 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 	-- A hard blow on the face splits the skin: a short cut across it, a run
 	-- of blood down from it.
 	if head and level >= 3 then
-		local skin = at + out * (thick * 0.9 + 0.012)
+		local skin = at + out * (thick + 0.026) -- (above every layer of the bruise)
 		local frame = CFrame.fromMatrix(skin + upAxis * size * 0.12, out, upAxis)
 		local cut =
 			newPart("Split", Enum.PartType.Block, Vector3.new(0.012, 0.022, size * 0.3), CUT)
