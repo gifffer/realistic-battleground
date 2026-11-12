@@ -96,6 +96,63 @@ function Gash.decode(text: unknown): Data?
 	}
 end
 
+------------------------------------------------------------------------------
+-- Glass shards stuck in the skin (a bottle bursting on someone leaves bits
+-- of glass in them, often without a real cut):
+--   "Shard_<Part>_<n>" = "<x>|<y>|<z>|<yaw>|<tilt>|<seed>"
+-- x y z  where on the part (studs, part space, on the skin: like a gash)
+-- yaw    turn around the skin's normal, degrees; tilt: lean, degrees
+export type Shard = { point: Vector3, yaw: number, tilt: number, seed: number }
+
+Gash.SHARD_PREFIX = "Shard_"
+Gash.MAX_SHARDS_PER_PART = 6
+
+function Gash.shardAttribute(key: string, index: number): string
+	return `{Gash.SHARD_PREFIX}{key}_{index}`
+end
+
+function Gash.encodeShard(shard: Shard): string
+	local p = shard.point
+	return table.concat({
+		round(p.X),
+		round(p.Y),
+		round(p.Z),
+		string.format("%d", math.round(shard.yaw)),
+		string.format("%d", math.round(shard.tilt)),
+		string.format("%d", shard.seed),
+	}, "|")
+end
+
+function Gash.decodeShard(text: unknown): Shard?
+	if typeof(text) ~= "string" then
+		return nil
+	end
+	local fields = string.split(text, "|")
+	if #fields ~= 6 then
+		return nil
+	end
+	local numbers = {}
+	for index, field in fields do
+		local value = tonumber(field)
+		if value == nil then
+			return nil
+		end
+		numbers[index] = value
+	end
+	return {
+		point = Vector3.new(numbers[1], numbers[2], numbers[3]),
+		yaw = numbers[4],
+		tilt = numbers[5],
+		seed = numbers[6],
+	}
+end
+
+-- Is this attribute name a cut or a shard (cleared together)?
+function Gash.isInjuryAttribute(name: string): boolean
+	return string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX
+		or string.sub(name, 1, #Gash.SHARD_PREFIX) == Gash.SHARD_PREFIX
+end
+
 -- "S" -> "M" -> "L" -> "L"
 function Gash.bigger(size: Size): Size
 	return if size == "S" then "M" else "L"

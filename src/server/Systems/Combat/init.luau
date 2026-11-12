@@ -306,27 +306,20 @@ local GASH_HEIGHT: { [string]: { number } } = { -- studs from the part's centre
 }
 local HEAD_RADIUS = 0.6 -- the round head you see (the head part is 2x1x1)
 
-local function addGash(
-	victim: CombatState,
+-- A point of the skin of `part` (part space) on the side facing the
+-- attacker, turned by up to `spread` radians, at a random height of the zone.
+local function skinPoint(
+	part: BasePart,
+	key: string,
 	attacker: CombatState,
-	zone: string, -- Types.HitZone
-	kind: "Lac" | "Slash"
-)
-	-- (Glass moves aim at the head or the torso: Moves' AIMABLE_ZONES.)
-	if zone ~= "Head" and zone ~= "Torso" then
-		return
-	end
-	local partName = zone
-	local part = victim.model:FindFirstChild(partName)
-	local key = Gash.KEY_OF[partName]
-	if part == nil or not part:IsA("BasePart") or key == nil then
-		return
-	end
-	-- Toward the attacker, flat, in the part's space, turned up to ~25°.
+	spread: number
+): Vector3
+	-- Toward the attacker, flat, in the part's space, turned up to `spread`.
 	local toward = part.CFrame:VectorToObjectSpace(attacker.root.Position - part.Position)
 	local flat = Vector3.new(toward.X, 0, toward.Z)
 	local direction = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
-	direction = CFrame.Angles(0, random:NextNumber(-0.45, 0.45), 0):VectorToWorldSpace(direction)
+	direction = CFrame.Angles(0, random:NextNumber(-spread, spread), 0)
+		:VectorToWorldSpace(direction)
 	local heights = GASH_HEIGHT[key]
 	local y = random:NextNumber(heights[1], heights[2])
 	local point: Vector3
@@ -346,6 +339,26 @@ local function addGash(
 		)
 		point = Vector3.new(x, y, front * half.Z)
 	end
+	return point
+end
+
+local function addGash(
+	victim: CombatState,
+	attacker: CombatState,
+	zone: string, -- Types.HitZone
+	kind: "Lac" | "Slash"
+)
+	-- (Glass moves aim at the head or the torso: Moves' AIMABLE_ZONES.)
+	if zone ~= "Head" and zone ~= "Torso" then
+		return
+	end
+	local partName = zone
+	local part = victim.model:FindFirstChild(partName)
+	local key = Gash.KEY_OF[partName]
+	if part == nil or not part:IsA("BasePart") or key == nil then
+		return
+	end
+	local point = skinPoint(part, key, attacker, 0.45)
 	-- A slash runs across, a bit diagonal; a laceration can point any way.
 	local angle = if kind == "Slash"
 		then random:NextNumber(12, 45) * (if random:NextInteger(0, 1) == 0 then -1 else 1)
@@ -401,6 +414,41 @@ local function addGash(
 	end
 end
 
+-- Bits of glass stuck in the skin ("Shard_<Part>_<n>", Shared/Util/Gash):
+-- a bottle bursting on someone leaves a few, often without a real cut.
+local function addShards(victim: CombatState, attacker: CombatState, zone: string, count: number)
+	if zone ~= "Head" and zone ~= "Torso" then
+		return
+	end
+	local part = victim.model:FindFirstChild(zone)
+	local key = Gash.KEY_OF[zone]
+	if part == nil or not part:IsA("BasePart") or key == nil then
+		return
+	end
+	for _ = 1, count do
+		local free: number? = nil
+		for index = 1, Gash.MAX_SHARDS_PER_PART do
+			if victim.model:GetAttribute(Gash.shardAttribute(key, index)) == nil then
+				free = index
+				break
+			end
+		end
+		if free == nil then
+			return -- (full: enough glass in there)
+		end
+		setAttribute(
+			victim.model,
+			Gash.shardAttribute(key, free),
+			Gash.encodeShard({
+				point = skinPoint(part, key, attacker, 0.9),
+				yaw = random:NextNumber(0, 360),
+				tilt = random:NextNumber(15, 55),
+				seed = random:NextInteger(1, 2 ^ 30),
+			})
+		)
+	end
+end
+
 -- A kill (or nothing at all, see onKill): every injury is healed.
 local function healInjuries(state: CombatState)
 	state.legDamage = 0
@@ -411,7 +459,7 @@ local function healInjuries(state: CombatState)
 	end
 	-- Cuts in the skin ("Gash_<Part>_<n>"): a new body.
 	for name in state.model:GetAttributes() do
-		if string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX then
+		if Gash.isInjuryAttribute(name) then
 			setAttribute(state.model, name, nil)
 		end
 	end
@@ -622,7 +670,21 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	-- them out.
 	if spec.cuts and INJ.SKIN_TEAR then
 		skinTearSeed = random:NextInteger(1, 2 ^ 30)
-		addGash(victim, attacker, zone, spec.cuts)
+		if spec.cuts == "Lac" then
+			-- A bottle bursting: bits of glass stuck in the skin, and most of
+			-- the time a torn cut (sometimes it only grazes).
+			addShards(victim, attacker, zone, random:NextInteger(1, 3))
+			if random:NextNumber() < INJ.GLASS_GRAZE_CHANCE then
+				skinTearSeed = nil -- (no torn skin flying off either)
+			else
+				addGash(victim, attacker, zone, spec.cuts)
+			end
+		else
+			addGash(victim, attacker, zone, spec.cuts)
+			if random:NextNumber() < 0.4 then
+				addShards(victim, attacker, zone, 1) -- a sliver of the jagged edge
+			end
+		end
 	end
 
 	if Knockout.isKnockedOut(victim.model) then
@@ -653,6 +715,12 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 	if bleed then
 		startBleeding(victim, attacker, bleed.perSecond, bleed.duration)
+		-- Where it bleeds from (the drops fall from there, see KitEffects).
+		setAttribute(
+			victim.model,
+			"BleedPart",
+			if zone == "Head" then "Head" elseif zone == "Legs" then "Right Leg" else "Torso"
+		)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
 	injure(victim, zone :: Types.HitZone, damage, side, spec.cuts == nil)
@@ -823,7 +891,7 @@ end
 -- completely when left alone).
 function Combat.clearCuts(model: Model)
 	for name in model:GetAttributes() do
-		if string.sub(name, 1, #Gash.PREFIX) == Gash.PREFIX then
+		if Gash.isInjuryAttribute(name) then
 			setAttribute(model, name, nil)
 		end
 	end
