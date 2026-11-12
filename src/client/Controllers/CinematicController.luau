@@ -3,7 +3,8 @@
 --
 -- When the server says a cinematic finisher starts (Remotes.FinisherStarted):
 --   • every client plays its effects at the right times: the bat in the
---     hand, the whoosh, the punches, the blood, the crushed skull;
+--     hand, the whoosh, the punches, the blood (the head bursting under
+--     the bat is HeadBlast's, from the server's "HeadBlown");
 --   • the two fighters' clients also play its CAMERA: black bars top and
 --     bottom, a few shots cut together (behind the attacker, from the
 --     ground, close on the impact, wide), the camera shaking and pushing in

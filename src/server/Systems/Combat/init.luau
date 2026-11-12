@@ -882,15 +882,62 @@ local function startCinematic(
 	if cinematic.placement == "head" then
 		-- Past the head of the body lying there (the body beyond it, the
 		-- camera shots count on it), looking down at it.
+		-- No room there (a wall, the edge of the map): his own side of the
+		-- head, then the sides; never inside a wall.
 		local head = victimHead.Position
 		local torso = target:FindFirstChild("Torso")
 		local body = if torso and torso:IsA("BasePart") then torso.Position else victimRoot.Position
-		local away = Vector3.new(head.X - body.X, 0, head.Z - body.Z)
-		if away.Magnitude < 0.1 then
-			away = Vector3.new(root.Position.X - head.X, 0, root.Position.Z - head.Z)
+		local function flat(v: Vector3): Vector3?
+			local f = Vector3.new(v.X, 0, v.Z)
+			return if f.Magnitude > 0.1 then f.Unit else nil
 		end
-		away = if away.Magnitude > 0.1 then away.Unit else -root.CFrame.LookVector
-		local stand = Vector3.new(head.X, root.Position.Y, head.Z) + away * Finishers.HEAD_DISTANCE
+		local past = flat(head - body)
+		local own = flat(root.Position - head) or -root.CFrame.LookVector
+		local candidates: { Vector3 } = {}
+		if past then
+			table.insert(candidates, past)
+		end
+		table.insert(candidates, own)
+		if past then
+			table.insert(candidates, past:Cross(Vector3.new(0, 1, 0)))
+			table.insert(candidates, -past:Cross(Vector3.new(0, 1, 0)))
+		end
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { state.model, target }
+		params.RespectCanCollide = true
+		local overlap = OverlapParams.new()
+		overlap.FilterType = Enum.RaycastFilterType.Exclude
+		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.RespectCanCollide = true
+		local function standingAt(direction: Vector3): Vector3
+			return Vector3.new(head.X, root.Position.Y, head.Z)
+				+ direction * Finishers.HEAD_DISTANCE
+		end
+		local function isClear(stand: Vector3): boolean
+			local from = Vector3.new(head.X, stand.Y + 1, head.Z)
+			if workspace:Raycast(from, stand + Vector3.new(0, 1, 0) - from, params) then
+				return false -- a wall between the head and there
+			end
+			-- room for a body (above the floor: root at 3 studs over it)
+			local box = workspace:GetPartBoundsInBox(
+				CFrame.new(stand + Vector3.new(0, -0.2, 0)),
+				Vector3.new(1.8, 4.4, 1.2),
+				overlap
+			)
+			if #box > 0 then
+				return false
+			end
+			-- and a floor under it
+			return workspace:Raycast(stand, Vector3.new(0, -5, 0), params) ~= nil
+		end
+		local stand = standingAt(own)
+		for _, direction in candidates do
+			if isClear(standingAt(direction)) then
+				stand = standingAt(direction)
+				break
+			end
+		end
 		anchor = CFrame.lookAt(stand, Vector3.new(head.X, stand.Y, head.Z))
 	else
 		-- Where he is, facing the body; the victim hauled up in front of him.

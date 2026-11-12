@@ -37,18 +37,30 @@ function HeadBlast.isBlown(model: Model): boolean
 	return Config.Injuries.SKIN_TEAR and model:GetAttribute(HeadBlast.ATTRIBUTE) ~= nil
 end
 
-local function hideAccessories(model: Model)
+-- Out of sight for good (Transparency, not LocalTransparencyModifier: the
+-- bruise marks of Wounds reset that one).
+local function hide(item: Instance)
+	if item:IsA("BasePart") or item:IsA("Decal") then
+		(item :: any).Transparency = 1
+	elseif item:IsA("SurfaceGui") then
+		item.Enabled = false
+	end
+end
+
+-- The head accessories, and everything stuck on the head (bruise marks,
+-- glass shards), even what comes later.
+local function hideAll(model: Model, head: BasePart)
 	for _, accessory in model:GetChildren() do
 		if accessory:IsA("Accessory") then
 			for _, item in accessory:GetDescendants() do
-				if item:IsA("BasePart") then
-					item.Transparency = 1
-				elseif item:IsA("Decal") then
-					item.Transparency = 1
-				end
+				hide(item)
 			end
 		end
 	end
+	for _, item in head:GetDescendants() do
+		hide(item)
+	end
+	head.DescendantAdded:Connect(hide)
 end
 
 local function welded(part: BasePart, to: BasePart, cframe: CFrame, parent: Instance)
@@ -280,9 +292,11 @@ local function burst(model: Model, head: BasePart, random: Random)
 		if handle and handle:IsA("BasePart") then
 			local copy = handle:Clone()
 			for _, item in copy:GetDescendants() do
-				if item:IsA("JointInstance") or item:IsA("WeldConstraint") then
-					item:Destroy()
-				elseif item:IsA("Attachment") then
+				if
+					item:IsA("JointInstance")
+					or item:IsA("WeldConstraint")
+					or item:IsA("Attachment")
+				then
 					item:Destroy()
 				end
 			end
@@ -347,7 +361,7 @@ function HeadBlast.apply(model: Model, live: boolean)
 	if live then
 		burst(model, head, random)
 	end
-	hideAccessories(model)
+	hideAll(model, head)
 	local mouth = buildStump(torso, head.Color, random)
 	if live then
 		pump(model, mouth)
