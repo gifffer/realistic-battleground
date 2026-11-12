@@ -32,6 +32,10 @@ export type PlayerProfile = {
 	rankedLosses: number,
 	-- Daily quests (step 9): today's 3 quests and their progress.
 	quests: DailyQuests,
+	-- Shop (step 10): cosmetics bought, and the one equipped per category
+	-- (Shared/Cosmetics ids; "" = none).
+	ownedCosmetics: { [string]: boolean },
+	equipped: { Title: string, Outfit: string, KillEffect: string, Emote: string },
 }
 
 export type QuestState = {

@@ -599,7 +599,10 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	local fadeIn = if REACTIONS[name] then REACTION_FADE_IN else ACTION_FADE_IN
 	table.insert(entry.action, newLayer(name, clip, fadeIn, ACTION_FADE_OUT))
 	entry.lastAction = name
-	entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
+	-- (An emote is not a fight: no fists up after it.)
+	if string.sub(name, 1, 6) ~= "Emote_" then
+		entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
+	end
 end
 
 -- Stops the action `name` on `model` (our move, refused by the server).

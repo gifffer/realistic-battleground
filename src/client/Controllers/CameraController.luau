@@ -47,6 +47,7 @@ local currentDrop = 0
 -- In first person, Roblox keeps the mouse locked UNLESS a visible GuiButton
 -- has Modal = true. This invisible button is that "key".
 local cursorUnlocker: TextButton
+local cursorDot: Frame? = nil
 
 local function isCursorFree(): boolean
 	return next(cursorFreeReasons) ~= nil
@@ -212,6 +213,47 @@ function CameraController.init()
 		}),
 	})
 	cursorUnlocker = gui.Unlocker
+
+	-- Our own small cursor: a grey dot with a dark ring. In first person
+	-- Roblox hides the mouse arrow even when the cursor is freed (LEFT CTRL,
+	-- menu), so this dot shows where the mouse is.
+	local dotGui = Theme.make("ScreenGui", {
+		Name = "CursorDot",
+		ResetOnSpawn = false,
+		IgnoreGuiInset = true,
+		DisplayOrder = 100, -- above every menu
+		Parent = player:WaitForChild("PlayerGui"),
+	})
+	cursorDot = Theme.make("Frame", {
+		Name = "Dot",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(7, 7),
+		BackgroundColor3 = Color3.fromRGB(150, 150, 150),
+		Visible = false,
+		Parent = dotGui,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		Theme.make("UIStroke", {
+			Thickness = 1.5,
+			Color = Color3.fromRGB(20, 20, 20),
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+	})
+end
+
+-- Every frame: the dot follows the mouse while the cursor is free in first
+-- person (in third person Roblox's own arrow shows).
+local function updateCursorDot()
+	local dot = cursorDot
+	if dot == nil then
+		return
+	end
+	local show = firstPerson and isCursorFree()
+	dot.Visible = show
+	if show then
+		local mouse = UserInputService:GetMouseLocation()
+		dot.Position = UDim2.fromOffset(mouse.X, mouse.Y)
+	end
 end
 
 function CameraController.start()
@@ -228,6 +270,7 @@ function CameraController.start()
 		end
 	end)
 
+	RunService.RenderStepped:Connect(updateCursorDot)
 	RunService:BindToRenderStep(
 		"ShoulderCamera",
 		Enum.RenderPriority.Camera.Value + 1,

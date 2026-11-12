@@ -179,6 +179,7 @@ function Theme.keyCap(text: string, props: { [string]: any }?): any
 		TextColor3 = Theme.Colors.Ink,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Center,
+		TextYAlignment = Enum.TextYAlignment.Center,
 		Text = text,
 	}
 	if props then
