@@ -668,7 +668,9 @@ local function onCombatEvent(
 		end
 		-- Blood and torn skin: decided by the server (same on every screen).
 		if bloodArg == true then
-			KitEffects.bloodSpray(victim, attacker, zone)
+			-- (more for the heavy blows and the kits' moves)
+			local amount = if strong then 2.6 elseif moveId then 1.7 else 1
+			KitEffects.bloodSpray(victim, attacker, zone, amount)
 		end
 		if typeof(skinTearSeedArg) == "number" then
 			KitEffects.skinTear(victim, attacker, skinTearSeedArg, zone)

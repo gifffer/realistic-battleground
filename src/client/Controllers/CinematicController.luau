@@ -249,7 +249,7 @@ local function playEvent(
 		SoundController.play("BodyShot", victim)
 	elseif kind == "Face" then
 		SoundController.play("HeavyHit", victim)
-		KitEffects.bloodSpray(victim, attacker, "Head")
+		KitEffects.bloodSpray(victim, attacker, "Head", 3)
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)

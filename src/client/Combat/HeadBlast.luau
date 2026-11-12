@@ -28,6 +28,8 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
+local Blood = require(script.Parent.Blood)
+local Squish = require(script.Parent.Squish)
 
 local HeadBlast = {}
 
@@ -44,7 +46,7 @@ local SCLERA = Color3.fromRGB(236, 230, 220)
 local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
-local PIECE_LIFETIME = 30 -- seconds the pieces stay on the floor
+local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
 local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
 -- Pools never pushed out by newer drops (they fade on their own).
@@ -64,8 +66,11 @@ end
 -- Out of sight for good (Transparency, not LocalTransparencyModifier: the
 -- bruise marks of Wounds reset that one).
 local function hide(item: Instance)
-	if item:IsA("BasePart") or item:IsA("Decal") then
-		(item :: any).Transparency = 1
+	if item:IsA("BasePart") then
+		item.Transparency = 1
+		item.CanQuery = false -- (blood falls through it, not on it)
+	elseif item:IsA("Decal") then
+		item.Transparency = 1
 	elseif item:IsA("SurfaceGui") then
 		item.Enabled = false
 	end
@@ -167,7 +172,7 @@ local function mark(
 	piece.Transparency = 0.05
 	-- (each new one a hair higher: no flicker where they overlap)
 	markCount += 1
-	local lift = 0.012 + (markCount % 12) * 0.002
+	local lift = 0.066 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
 	local up = hit.Normal
 	if length and along and along.Magnitude > 1e-3 then
 		local forward = (along - up * along:Dot(up)).Unit
@@ -253,7 +258,7 @@ local function blot(
 	if forward.Magnitude < 1e-3 then
 		forward = Vector3.new(1, 0, 0)
 	end
-	local lift = 0.006 + (markCount % 12) * 0.002
+	local lift = 0.064 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
 	-- (the kit's X along `forward`, its Y along the floor's normal)
 	local right = forward.Unit
 	part.CFrame = CFrame.fromMatrix(hit.Position + up * lift, right, up) * layer.offset.Rotation
@@ -332,6 +337,14 @@ local function welded(part: BasePart, to: BasePart, cframe: CFrame, parent: Inst
 	weld.Part1 = part
 	weld.Parent = part
 	part.Parent = parent
+end
+
+-- Shown round (a sphere mesh filling the part): unlike a Ball part, it
+-- can be squashed (Squish).
+local function roundMesh(part: BasePart)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = part
 end
 
 local function newPart(name: string, size: Vector3, color: Color3, wet: boolean): Part
@@ -573,6 +586,100 @@ end
 ------------------------------------------------------------------------------
 
 -- A flying piece (collides with the floor, never with fighters' clicks).
+-- The body whose head is bursting (its pieces go when it goes).
+local bursting: Model? = nil
+
+-- A piece of the head stays on the floor until the body is removed (a
+-- respawn, a reset): then it goes too. Once it lies still it is fixed
+-- there (it can't sink or slip through the floor, nothing nudges it).
+local function keepPiece(piece: BasePart)
+	local body = bursting
+	Debris:AddItem(piece, PIECE_LIFETIME)
+	if body then
+		local gone = false
+		local function remove()
+			if gone or piece.Parent == nil then
+				return
+			end
+			gone = true
+			-- (every layer: a soft piece shows through its welded copy)
+			local fade = TweenInfo.new(0.6)
+			for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+				if item:IsA("BasePart") and item.Transparency < 1 then
+					TweenService:Create(item, fade, { Transparency = 1 }):Play()
+				end
+			end
+			Debris:AddItem(piece, 0.65)
+		end
+		body.Destroying:Once(remove)
+		local watch: RBXScriptConnection? = nil
+		watch = body.AncestryChanged:Connect(function()
+			if body.Parent == nil then
+				remove()
+				if watch then
+					watch:Disconnect()
+				end
+			end
+		end)
+		piece.Destroying:Once(function()
+			if watch then
+				watch:Disconnect()
+			end
+		end)
+	end
+	-- Fixed once it lies still on the floor (not on someone: they move);
+	-- put back if it ever tunnels through a surface.
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	task.spawn(function()
+		local still = 0
+		local last = piece.Position
+		while piece.Parent and not piece.Anchored do
+			task.wait(0.2)
+			if not piece:IsDescendantOf(workspace) then
+				break
+			end
+			local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+			table.insert(ignore, piece)
+			params.FilterDescendantsInstances = ignore
+			local position = piece.Position
+			-- (did it pass through a floor / wall since the last check?)
+			local crossed = workspace:Raycast(last, position - last, params)
+			if
+				crossed
+				and (position - last).Magnitude > 0.5
+				and (position - crossed.Position):Dot(crossed.Normal) < -0.3
+			then
+				piece.AssemblyLinearVelocity = Vector3.zero
+				piece.CFrame = CFrame.new(crossed.Position + crossed.Normal * 0.15)
+					* piece.CFrame.Rotation
+				piece.Anchored = true
+				break
+			end
+			last = position
+			if
+				piece.AssemblyLinearVelocity.Magnitude < 0.3
+				and piece.AssemblyAngularVelocity.Magnitude < 0.5
+			then
+				still += 0.2
+				if still >= 0.8 then
+					local below = workspace:Raycast(
+						position,
+						Vector3.new(0, -(piece.Size.Magnitude * 0.6 + 0.3), 0),
+						params
+					)
+					if below and not onCharacter(below.Instance) then
+						piece.Anchored = true
+					end
+				end
+			else
+				still = 0
+			end
+		end
+	end)
+end
+
 local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
 	piece.CanCollide = true
 	piece.CanQuery = false
@@ -586,7 +693,7 @@ local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Rand
 	piece.AssemblyLinearVelocity = velocity
 	piece.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 28)
 	piece.Parent = workspace
-	Debris:AddItem(piece, PIECE_LIFETIME)
+	keepPiece(piece)
 end
 
 -- Two parts stuck together into one piece (the other one rides along).
@@ -656,23 +763,25 @@ local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: 
 			if random:NextNumber() < 0.65 then BRAIN else BRAIN_BLOODY,
 			true
 		)
-		lump.Shape = Enum.PartType.Ball
+		roundMesh(lump) -- (a Ball part can't be squashed: a sphere mesh can)
 		if random:NextNumber() < 0.5 then
 			local more = newPart("Brain", Vector3.new(size, size, size) * 0.7, BRAIN, true)
-			more.Shape = Enum.PartType.Ball
+			roundMesh(more) -- (a Ball part can't be squashed: a sphere mesh can)
 			stuck(lump, more, CFrame.new(size * 0.4, 0, size * 0.2))
 		end
 		fly(lump, at, outward(random, away, 1.1, 15), random)
+		Squish.soft(lump, { softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 })
 	end
 	-- An eye.
 	local eye = newPart("Eye", Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(238, 234, 226), true)
-	eye.Shape = Enum.PartType.Ball
+	roundMesh(eye) -- (a Ball part can't be squashed: a sphere mesh can)
 	local iris = newPart("Iris", Vector3.new(0.09, 0.09, 0.09), Color3.fromRGB(40, 32, 28), true)
-	iris.Shape = Enum.PartType.Ball
+	roundMesh(iris) -- (a Ball part can't be squashed: a sphere mesh can)
 	stuck(eye, iris, CFrame.new(0, 0, -0.07))
 	local nerve = newPart("Nerve", Vector3.new(0.04, 0.04, 0.22), FLESH, true)
 	stuck(eye, nerve, CFrame.new(0, 0, 0.18))
 	fly(eye, at, outward(random, away, 1.4, 14), random)
+	Squish.soft(eye, { softness = 0.25, sag = 0.1, stiffness = 380, lifetime = 10 })
 	-- Teeth.
 	for _ = 1, 4 do
 		fly(
@@ -693,7 +802,8 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 		return false
 	end
 	local paint = painter(head.Color)
-	local function throw(names: { string }, speed: number, up: number)
+	-- `soft`: brain, eyes: soft, wet pieces (Squish), not hard plastic
+	local function throw(names: { string }, speed: number, up: number, soft: string?)
 		for _, name in names do
 			local piece = pieces[name]
 			if piece then
@@ -717,18 +827,32 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 				part.AssemblyLinearVelocity = direction * speed * random:NextNumber(0.55, 1)
 				part.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(6, 22)
 				part.Parent = workspace
-				Debris:AddItem(part, PIECE_LIFETIME)
+				keepPiece(part)
+				if soft == "Brain" then
+					-- (its surface detail first: then it squashes with it)
+					Squish.detail(part, "Brain")
+					Squish.soft(
+						part,
+						{ softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 }
+					)
+				elseif soft == "Eye" then
+					Squish.soft(
+						part,
+						{ softness = 0.25, sag = 0.1, stiffness = 380, lifetime = 10 }
+					)
+				end
 			end
 		end
 	end
 	throw(GoreShapes.skull, 24, 1.1)
-	throw(GoreShapes.brain, 13, 0.8)
-	throw(GoreShapes.eye, 15, 1.2)
+	throw(GoreShapes.brain, 13, 0.8, "Brain")
+	throw(GoreShapes.eye, 15, 1.2, "Eye")
 	throw(GoreShapes.tooth, 20, 1.4)
 	return true
 end
 
 local function burst(model: Model, head: BasePart, torso: BasePart, random: Random)
+	bursting = model
 	local at = head.Position
 	-- Away from the attacker: he stands past the head, so toward the body.
 	local flat = Vector3.new(torso.Position.X - at.X, 0, torso.Position.Z - at.Z)
@@ -773,7 +897,14 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 		end
 	end
 
-	-- In the air: a spray of drops, and a red mist.
+	-- Real drops and thick strings of blood thrown out all around (they land
+	-- and splash on the floor, the walls, the attacker), more away from him.
+	-- (kept under the shared cap of drops in flight; the haze is the
+	-- burst's own mist below)
+	Blood.spray(at, Vector3.new(0, 1, 0) + away, 4, model, true)
+	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 2.5, model, true)
+	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 1.5, model, true)
+	-- In the air: a spray of fine drops, and a red mist.
 	local point = Instance.new("Attachment")
 	point.WorldPosition = at
 	point.Parent = workspace.Terrain

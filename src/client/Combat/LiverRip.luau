@@ -18,8 +18,10 @@
 local Debris = game:GetService("Debris")
 
 local GoreKit = require(script.Parent.GoreKit)
+local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
 local HeadBlast = require(script.Parent.HeadBlast)
+local Squish = require(script.Parent.Squish)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local LiverRip = {}
@@ -29,7 +31,7 @@ local GALLBLADDER = Color3.fromRGB(74, 100, 42)
 local BLOOD = Color3.fromRGB(78, 6, 6)
 local BLOOD_WET = Color3.fromRGB(104, 8, 8)
 local BONE = Color3.fromRGB(224, 212, 188)
-local LIFETIME = 30 -- seconds the liver stays on the floor
+local LIFETIME = 240 -- seconds at most the liver stays (it goes with the body before)
 
 -- Where the liver was: the victim's right, under the ribs, in front (torso
 -- space; the server's "Tear" cut is there too).
@@ -118,6 +120,9 @@ function LiverRip.gut(victim: Model, attacker: Model)
 	burst(at, 70, 14)
 	local back = (attacker:GetPivot().Position - at.Position)
 	local out = if back.Magnitude > 0.1 then back.Unit else at.LookVector
+	-- the hand going in: blood bursts out around the arm, onto him too
+	Blood.spray(at.Position, out + Vector3.new(0, 0.5, 0), 3.5, victim)
+	Blood.spray(at.Position, Vector3.new(0, -1, 0) + at.LookVector, 2, victim)
 	for _ = 1, 6 do
 		chip(
 			at.Position,
@@ -142,7 +147,10 @@ local function newLiver(): BasePart
 	end
 	local lump = Instance.new("Part")
 	lump.Name = "Liver"
-	lump.Shape = Enum.PartType.Ball
+	-- (a sphere mesh, not a Ball part: it can be squashed)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = lump
 	lump.Size = Vector3.new(1, 0.5, 0.65)
 	lump.Material = Enum.Material.SmoothPlastic
 	lump.Color = LIVER
@@ -158,6 +166,8 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	SoundController.play("FleshTear", victim)
 	if at then
 		burst(at, 90, 10)
+		-- torn out: thick blood pulled out with it, strings, drops
+		Blood.spray(at.Position, at.LookVector + Vector3.new(0, 0.4, 0), 4.5, victim)
 		-- The vessels of the liver torn: the hole spurts with each beat and
 		-- runs down the side, a pool spreads; it gets all over him.
 		BloodGush.torso(
@@ -186,12 +196,27 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	weld.Part0 = arm
 	weld.Part1 = liver
 	weld.Parent = liver
+	-- dripping thick drops while he holds it
+	task.defer(function() -- (once it is in the workspace, below)
+		while liver.Parent and liver:FindFirstChild("Held") do
+			Blood.drop(
+				liver.Position - Vector3.new(0, 0.3, 0),
+				liver.AssemblyLinearVelocity * 0.5,
+				Random.new():NextNumber(0.06, 0.11)
+			)
+			task.wait(Random.new():NextNumber(0.08, 0.2))
+		end
+	end)
 	local drip = Instance.new("Attachment")
 	drip.Parent = liver
 	local drops = emitter(drip, 30)
 	drops.EmissionDirection = Enum.NormalId.Bottom
 	drops.Speed = NumberRange.new(0.5, 2)
 	liver.Parent = workspace
+	-- soft and wet: it jiggles in his hand, slaps and slumps on the floor
+	-- (its surface detail first, in the workspace: then it squashes too)
+	Squish.detail(liver, "Liver")
+	Squish.soft(liver, { softness = 0.45, sag = 0.2, stiffness = 200, lifetime = LIFETIME })
 	held[attacker] = liver
 	attacker.Destroying:Once(function()
 		if held[attacker] == liver then
@@ -199,6 +224,18 @@ function LiverRip.rip(victim: Model, attacker: Model)
 		end
 	end)
 	Debris:AddItem(liver, LIFETIME + 6)
+	-- (it stays until the body it came from is removed)
+	local function remove()
+		if liver.Parent and not liver:FindFirstChild("Held") then
+			liver:Destroy()
+		end
+	end
+	victim.Destroying:Once(remove)
+	victim.AncestryChanged:Connect(function()
+		if victim.Parent == nil then
+			remove()
+		end
+	end)
 end
 
 -- He opens his hand: the liver drops to the floor; a wet slap and a
