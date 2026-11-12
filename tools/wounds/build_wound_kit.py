@@ -415,7 +415,7 @@ def build_head_shell():
         "Shell_Band24": band(15, 8),
         "Shell_Band96": band(3.75, 2),
         "Shell_Bevel24": bevel(15, 8, 10),
-        "Shell_Cap": cap(64),
+        "Shell_Cap": cap(192),  # same rim points as the 24 bevels (8 each): no crack
     }
     return {name: shell_piece(data, name) for name, data in pieces.items()}
 

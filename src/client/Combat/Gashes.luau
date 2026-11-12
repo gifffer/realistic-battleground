@@ -81,11 +81,14 @@ local HIDE_MARGIN = 0.02
 local HEAD_RADIUS = WoundShapes.headRadius
 local HEAD_BAND = WoundShapes.headBand -- half height of the straight part
 local HEAD_SECTORS = 24 -- Shell_Band24 / Shell_Bevel24 pieces around the head
-local HEAD_FINE = 4 -- a sector next to a cut: 4 thin Shell_Band96 columns
+local HEAD_FINE = 8 -- a sector with a cut in it: 8 thin columns (Shell_Band96, squeezed)
 -- Head inserts are bent around the head for a level cut: turning them more
 -- than this would sink their ends into the skin.
 local HEAD_MAX_TURN = 8
 local SHELL_PIECES = { "Shell_Band24", "Shell_Band96", "Shell_Bevel24", "Shell_Cap" }
+-- Torso tiles overlap their neighbours by this much: no crack at T-joints
+-- (the overlaps are identical skin and picture, nothing flickers).
+local PAD = 0.002
 
 -- Clothing templates (585 x 559 pixels): where each face of a part is,
 -- {x, y, width, height} in pixels (the official R6 template).
@@ -136,9 +139,11 @@ type Kit = {
 	unit: number,
 	pieces: { [string]: { BasePart } }, -- inserts
 	shell: { [string]: BasePart }, -- head shell pieces
+	shellComplete: boolean, -- false: an old WoundKit (no head cuts then)
 }
 local kit: Kit? = nil
 local warnedMarkers = false
+local warnedOldKit = false
 
 -- The kit, once it is there and complete (nil until then: it is looked for
 -- again on the next call, so a kit that replicates late still works).
@@ -178,6 +183,7 @@ local function findKit(): Kit?
 		unit = toUp.Magnitude, -- 1 kit stud, in studs (the importer may scale)
 		pieces = {},
 		shell = {},
+		shellComplete = true,
 	}
 	for _, item in model:GetDescendants() do
 		if item:IsA("BasePart") and string.sub(item.Name, 1, 6) == "Shell_" then
@@ -200,8 +206,15 @@ local function findKit(): Kit?
 	for _, name in SHELL_PIECES do
 		local piece: BasePart? = found.shell[name]
 		if piece == nil then
-			return nil
+			found.shellComplete = false
 		end
+	end
+	if not found.shellComplete and not warnedOldKit then
+		warnedOldKit = true
+		warn(
+			"[Gashes] WoundKit is out of date (no Shell_ pieces): head cuts are off. "
+				.. "Delete it and import assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
+		)
 	end
 	kit = found
 	return found
@@ -374,6 +387,8 @@ local function paint(
 	if #pictures == 0 then
 		return
 	end
+	-- The SurfaceGui covers the whole tile, a hair bigger than its cell.
+	a0, b0, w, h = a0 - PAD / 2, b0 - PAD / 2, w + PAD, h + PAD
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Front
 	gui.LightInfluence = 1
@@ -543,8 +558,7 @@ local function buildBoxSkin(
 				+ up * (faceH / 2 - b0 - h / 2)
 			-- The tile's front (-Z) faces out; its Y is the picture's up.
 			local offset = CFrame.fromMatrix(center, up:Cross(-normal), up, -normal)
-			-- (exact size: overlapping tiles would flicker along their seams)
-			local tile = newTile(part, Vector3.new(w, h, THICKNESS), offset, parent)
+			local tile = newTile(part, Vector3.new(w + PAD, h + PAD, THICKNESS), offset, parent)
 			paint(tile, pictures, faceW, faceH, a0, b0, w, h)
 		end
 	end
@@ -558,7 +572,8 @@ end
 
 -- One piece of the head shell from the kit, put on the head: turned to
 -- `angle` around it (0 = the face), its middle at height `y`, `height` tall
--- (band pieces are 1 stud high in the kit), turned over for the bottom.
+-- (band pieces are 1 stud high in the kit), `widthScale` times as wide
+-- (thinner columns next to a cut), turned over for the bottom.
 local function shellPiece(
 	part: BasePart,
 	found: Kit,
@@ -566,6 +581,7 @@ local function shellPiece(
 	angle: number,
 	y: number,
 	height: number,
+	widthScale: number,
 	bottom: boolean,
 	parent: Instance
 ): BasePart
@@ -574,10 +590,11 @@ local function shellPiece(
 	local origin = WoundShapes.headOrigin + Vector3.new(0, WoundShapes.markerDrop, 0)
 	local position = relative.Position / found.unit - origin
 	local rotation = relative.Rotation
-	-- Stretch the piece's own axis that runs up the head (kit Y) to `height`.
+	-- Stretch the piece's own axes: the one running up the head (kit Y) to
+	-- `height`, the one running around it (kit X) by `widthScale`.
 	local function stretch(axis: Vector3): number
-		local upness = math.abs(axis.Y)
-		return upness * height + (1 - upness)
+		local upness, around = math.abs(axis.Y), math.abs(axis.X)
+		return upness * height + around * widthScale + (1 - upness - around)
 	end
 	local piece = item:Clone()
 	piece:ClearAllChildren()
@@ -595,7 +612,7 @@ local function shellPiece(
 	piece.CFrame = part.CFrame
 		* around
 		* flip
-		* CFrame.new(position.X, position.Y * height + y, position.Z)
+		* CFrame.new(position.X * widthScale, position.Y * height + y, position.Z)
 		* rotation
 	piece.Color = part.Color
 	piece.Material = part.Material -- exactly like the real head
@@ -606,67 +623,68 @@ local function shellPiece(
 	return piece
 end
 
--- The face picture on a slice of the head's front: an invisible flat card
--- just over the skin carries it (a picture can't bend around the head).
+-- The face picture on a small piece of the head's front: an invisible flat
+-- card just over the skin carries it (a picture can't bend around the
+-- head). The picture covers the whole front of the head (1.2 x 1.2, its top
+-- at the top of the head) as seen from the front; the card shows the bit
+-- that lies in front of it.
+--   at      a point of the skin (the card's centre), normal: the skin's normal
+--   width   the card's size around the head, height: along the skin, upward
+--   yHigh, yLow: the heights (seen from the front) of the card's top / bottom
 local function faceCard(
 	part: BasePart,
 	image: string,
-	angle: number,
+	at: Vector3,
+	normal: Vector3,
 	width: number,
-	top: number,
 	height: number,
+	yHigh: number,
+	yLow: number,
 	parent: Instance
 )
-	local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
-	local up = Vector3.new(0, 1, 0)
-	local chord = 2 * HEAD_RADIUS * math.sin(width / 2)
+	local up = (Vector3.new(0, 1, 0) - normal * normal.Y).Unit -- "up" along the skin
 	local card = Instance.new("Part")
 	card.Name = "FaceCard"
 	card.Transparency = 1
-	card.Size = Vector3.new(chord, height, 0.01)
+	card.Size = Vector3.new(width, height, 0.01)
 	card.CFrame = part.CFrame
-		* CFrame.fromMatrix(
-			out * (HEAD_RADIUS + 0.002) + Vector3.new(0, top - height / 2, 0),
-			up:Cross(-out),
-			up,
-			-out
-		)
+		* CFrame.fromMatrix(at + normal * 0.002, up:Cross(-normal), up, -normal)
 	setUp(card, part, parent)
-	-- The picture covers the front of the head (1.2 x 1.2), seen from the
-	-- front; this card shows the slice in front of it.
-	local projected = chord * math.cos(angle)
-	local leftEdge = HEAD_RADIUS * math.sin(angle) + projected / 2 -- your left = the head's +X
+	local flat = Vector3.new(normal.X, 0, normal.Z).Unit
+	local projected = width * math.abs(flat.Z) -- its width seen from the front
+	local leftEdge = at.X + width / 2 * math.abs(flat.Z) -- your left = the head's +X
 	local span = 2 * HEAD_RADIUS
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Front
 	gui.LightInfluence = 1
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 100
+	gui.PixelsPerStud = 400 -- as sharp as the real face
 	gui.ClipsDescendants = true
 	local label = Instance.new("ImageLabel")
 	label.BackgroundTransparency = 1
 	label.Image = image
-	label.Size = UDim2.fromScale(span / projected, span / height)
+	label.Size = UDim2.fromScale(span / projected, span / (yHigh - yLow))
 	label.Position = UDim2.fromScale(
 		-(HEAD_RADIUS - leftEdge) / projected,
-		-(HEAD_RADIUS - top) / height -- the picture's top = the top of the head
+		-(HEAD_RADIUS - yHigh) / (yHigh - yLow)
 	)
 	label.Parent = gui
 	gui.Parent = card
 end
 
 -- The round head rebuilt from the kit's smooth pieces: the straight part in
--- 24 columns (4 thin ones next to a cut, with the hole left out), the
+-- 24 columns (8 thin ones where a cut is, with the hole left out), the
 -- rounded edges and the caps. Same shape as the real head, no seams.
 local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, parent: Instance)
 	local face = part:FindFirstChildOfClass("Decal")
 	local faceImage = if face then face.Texture else ""
 	local sector = 2 * math.pi / HEAD_SECTORS
-	local rows = math.max(1, math.round(2 * HEAD_BAND / CELL))
-	local rowH = 2 * HEAD_BAND / rows
+	local bevel = WoundShapes.headBevel
 
-	local function column(angle: number, width: number, name: string)
+	-- Which cells of a column are cut (true = keep the skin), from the top.
+	local function cells(angle: number, rows: number): ({ { boolean } }, boolean)
 		local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
+		local rowH = 2 * HEAD_BAND / rows
 		local keep: { { boolean } } = { {} }
 		local hasCut = false
 		for j = 1, rows do
@@ -675,22 +693,81 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 			keep[1][j] = not cut
 			hasCut = hasCut or cut
 		end
-		local runs: { Rect } = if hasCut
+		return keep, hasCut
+	end
+
+	local function column(
+		angle: number,
+		width: number,
+		name: string,
+		widthScale: number,
+		keep: { { boolean } }?,
+		rows: number
+	)
+		local rowH = 2 * HEAD_BAND / rows
+		local runs: { Rect } = if keep
 			then rectangles(keep, 1, rows)
 			else { { i = 1, j = 1, w = 1, h = rows } }
+		local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
 		for _, run in runs do
 			local top = HEAD_BAND - (run.j - 1) * rowH
 			local height = run.h * rowH
-			shellPiece(part, found, name, angle, top - height / 2, height, false, parent)
+			shellPiece(
+				part,
+				found,
+				name,
+				angle,
+				top - height / 2,
+				height,
+				widthScale,
+				false,
+				parent
+			)
 			if faceImage ~= "" and math.cos(angle) > 0.2 then
-				faceCard(part, faceImage, angle, width, top, height, parent)
+				local chord = 2 * HEAD_RADIUS * math.sin(width / 2)
+				local at = out * HEAD_RADIUS + Vector3.new(0, top - height / 2, 0)
+				faceCard(part, faceImage, at, out, chord, height, top, top - height, parent)
 			end
 		end
 	end
 
+	-- The face on the front of the rounded edges (eyebrows, chin...): 2 cards
+	-- per edge, along its curve.
+	local function bevelFaces(angle: number, width: number)
+		if faceImage == "" or math.cos(angle) <= 0.2 then
+			return
+		end
+		local out = Vector3.new(math.sin(angle), 0, -math.cos(angle))
+		for _, sign in { 1, -1 } do
+			for _, range in { { 0, 30 }, { 30, 60 } } do
+				local ta, tb = math.rad(range[1]), math.rad(range[2])
+				local tm = (ta + tb) / 2
+				local radius = HEAD_RADIUS - bevel + bevel * math.cos(tm)
+				local at = out * radius
+					+ Vector3.new(0, sign * (HEAD_BAND + bevel * math.sin(tm)), 0)
+				local normal = out * math.cos(tm) + Vector3.new(0, sign * math.sin(tm), 0)
+				local ya, yb = HEAD_BAND + bevel * math.sin(ta), HEAD_BAND + bevel * math.sin(tb)
+				local yHigh, yLow = if sign > 0 then yb else -ya, if sign > 0 then ya else -yb
+				faceCard(
+					part,
+					faceImage,
+					at,
+					normal,
+					2 * radius * math.sin(width / 2),
+					2 * bevel * math.sin((tb - ta) / 2),
+					yHigh,
+					yLow,
+					parent
+				)
+			end
+		end
+	end
+
+	local rows = math.max(1, math.round(2 * HEAD_BAND / CELL))
 	for index = 0, HEAD_SECTORS - 1 do
 		local mid = (index + 0.5) * sector
-		-- Is a cut near this sector? Then thin columns, to cut it finely.
+		-- Is a cut near this sector? Then thin columns and rows, to cut finely
+		-- (only if a cell really is cut: otherwise one whole column).
 		local near = false
 		for _, cut in cuts do
 			local reach = (cut.shape.extent.X + 0.06) / HEAD_RADIUS
@@ -699,20 +776,39 @@ local function buildHeadSkin(part: BasePart, cuts: { Placed }, found: Kit, paren
 				near = true
 			end
 		end
+		local fine = {}
+		local anyCut = false
 		if near then
 			for k = 0, HEAD_FINE - 1 do
 				local angle = index * sector + (k + 0.5) * sector / HEAD_FINE
-				column(angle, sector / HEAD_FINE, "Shell_Band96")
+				local keep, hasCut = cells(angle, rows * 2)
+				table.insert(fine, { angle = angle, keep = keep, hasCut = hasCut })
+				anyCut = anyCut or hasCut
+			end
+		end
+		if anyCut then
+			for _, column_ in fine do
+				-- Shell_Band96 (3.75 deg) squeezed to the thin column's width
+				local widthScale = 4 / HEAD_FINE
+				column(
+					column_.angle,
+					sector / HEAD_FINE,
+					"Shell_Band96",
+					widthScale,
+					if column_.hasCut then column_.keep else nil,
+					rows * 2
+				)
 			end
 		else
-			column(mid, sector, "Shell_Band24")
+			column(mid, sector, "Shell_Band24", 1, nil, rows)
 		end
 		-- the rounded edges above and below
-		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, false, parent)
-		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, true, parent)
+		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, 1, false, parent)
+		shellPiece(part, found, "Shell_Bevel24", mid, 0, 1, 1, true, parent)
+		bevelFaces(mid, sector)
 	end
-	shellPiece(part, found, "Shell_Cap", 0, 0, 1, false, parent)
-	shellPiece(part, found, "Shell_Cap", 0, 0, 1, true, parent)
+	shellPiece(part, found, "Shell_Cap", 0, 0, 1, 1, false, parent)
+	shellPiece(part, found, "Shell_Cap", 0, 0, 1, 1, true, parent)
 end
 
 -- The 3D wound model of one cut, from the kit, fitted on the part.
@@ -774,12 +870,41 @@ end
 ------------------------------------------------------------------------------
 type Opened = {
 	folder: Folder,
+	cuts: { Placed },
 	partTransparency: number,
 	face: Decal?, -- the face picture we hid, and its own transparency
 	faceTransparency: number,
 	connection: RBXScriptConnection?,
 }
 local opened: { [BasePart]: Opened } = {}
+
+-- The bruise / cut marks of Wounds (discs on the skin) hide where they
+-- would cover a cut.
+local function hideMarks(part: BasePart)
+	local marks = part:FindFirstChild("Wounds")
+	if marks == nil then
+		return
+	end
+	local state = opened[part]
+	for _, mark in marks:GetChildren() do
+		if mark:IsA("BasePart") then
+			local covered = false
+			if state then
+				local at = part.CFrame:PointToObjectSpace(mark.Position)
+				local radius = math.max(mark.Size.Y, mark.Size.Z) / 2
+				for _, cut in state.cuts do
+					if
+						(at - cut.frame.Position).Magnitude
+						< cut.shape.extent.Magnitude + radius
+					then
+						covered = true
+					end
+				end
+			end
+			mark.LocalTransparencyModifier = if covered then 1 else 0
+		end
+	end
+end
 
 local function close(part: BasePart)
 	local state = opened[part]
@@ -795,6 +920,7 @@ local function close(part: BasePart)
 	if state.face then
 		state.face.Transparency = state.faceTransparency
 	end
+	hideMarks(part) -- (shows them all again)
 end
 
 local function refresh(model: Model, partName: string)
@@ -811,8 +937,13 @@ local function refresh(model: Model, partName: string)
 			local data = Gash.decode(model:GetAttribute(Gash.attribute(key, index)))
 			if data then
 				local placed = if isHead then placeOnHead(part, data) else placeOnBox(part, data)
-				-- (no insert for it in this kit: no hole either)
-				if placed and found.pieces[placed.shapeName] then
+				-- (no insert for it in this kit, or an old kit without the head
+				-- pieces: no hole either)
+				if
+					placed
+					and found.pieces[placed.shapeName]
+					and (found.shellComplete or not isHead)
+				then
 					table.insert(cuts, placed)
 				end
 			end
@@ -843,6 +974,7 @@ local function refresh(model: Model, partName: string)
 	end
 	local state: Opened = {
 		folder = folder,
+		cuts = cuts,
 		partTransparency = partTransparency,
 		face = face,
 		faceTransparency = faceTransparency,
@@ -873,6 +1005,7 @@ local function refresh(model: Model, partName: string)
 	end
 	folder.Parent = part
 	opened[part] = state
+	hideMarks(part)
 end
 
 -- Fighters followed, to draw their cuts again if the kit arrives late.
@@ -930,6 +1063,14 @@ function Gashes.watch(model: Model)
 		elseif not watched[model] then
 			watched[model] = true -- back in the game (streaming)
 			refreshAll(model)
+		end
+	end)
+	-- A new bruise mark (Wounds) over a cut: hidden.
+	model.DescendantAdded:Connect(function(item: Instance)
+		local folder = item.Parent
+		local part = if folder and folder.Name == "Wounds" then folder.Parent else nil
+		if item:IsA("BasePart") and part and part:IsA("BasePart") then
+			hideMarks(part)
 		end
 	end)
 	-- The clothes may load a moment after the character: draw again then.

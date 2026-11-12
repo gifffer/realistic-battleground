@@ -43,34 +43,69 @@ local HEAD_ATTACHMENTS: { [string]: boolean } = {
 local MAX_ACCESSORY_SIDE = 3 -- studs: the biggest side of its handle
 local MAX_ACCESSORY_VOLUME = 6 -- cubic studs
 
--- The classic head: a Head part with a SpecialMesh of type Head.
-local function makeClassicHead(head: BasePart)
+-- The classic head: a Head part with ONE SpecialMesh, of type Head.
+local function makeClassicHead(head: BasePart, preferred: SpecialMesh?)
 	if head:IsA("MeshPart") then
 		return -- (not an R6 head: left alone)
 	end
-	local found = head:FindFirstChildOfClass("SpecialMesh")
-	local mesh: SpecialMesh
-	if found then
-		mesh = found
+	local mesh: SpecialMesh? = preferred
+	for _, child in head:GetChildren() do
+		if child:IsA("SpecialMesh") then
+			if mesh == nil then
+				mesh = child
+			elseif child ~= mesh then
+				child:Destroy() -- a second mesh (an avatar head added later)
+			end
+		end
+	end
+	local classic: SpecialMesh
+	if mesh then
+		classic = mesh
 	else
-		mesh = Instance.new("SpecialMesh")
-		mesh.Parent = head
+		classic = Instance.new("SpecialMesh")
+		classic.Parent = head
 	end
-	if mesh.MeshType ~= Enum.MeshType.Head then
-		mesh.MeshType = Enum.MeshType.Head
+	if classic.MeshType ~= Enum.MeshType.Head then
+		classic.MeshType = Enum.MeshType.Head
 	end
-	if mesh.MeshId ~= "" then
-		mesh.MeshId = ""
+	if classic.MeshId ~= "" then
+		classic.MeshId = ""
 	end
-	if mesh.TextureId ~= "" then
-		mesh.TextureId = ""
+	if classic.TextureId ~= "" then
+		classic.TextureId = ""
 	end
-	if mesh.Scale ~= HEAD_SCALE then
-		mesh.Scale = HEAD_SCALE
+	if classic.Scale ~= HEAD_SCALE then
+		classic.Scale = HEAD_SCALE
 	end
-	if mesh.Offset ~= Vector3.zero then
-		mesh.Offset = Vector3.zero
+	if classic.Offset ~= Vector3.zero then
+		classic.Offset = Vector3.zero
 	end
+end
+
+-- Keeps the head classic, even if the avatar loader changes it afterwards.
+-- (The connections die with the character.)
+local function watchHead(head: BasePart)
+	makeClassicHead(head)
+	local function watchMesh(mesh: SpecialMesh)
+		for _, property in { "MeshType", "MeshId", "Scale" } do
+			mesh:GetPropertyChangedSignal(property):Connect(function()
+				if mesh.Parent == head then
+					makeClassicHead(head, mesh)
+				end
+			end)
+		end
+	end
+	for _, child in head:GetChildren() do
+		if child:IsA("SpecialMesh") then
+			watchMesh(child)
+		end
+	end
+	head.ChildAdded:Connect(function(child: Instance)
+		if child:IsA("SpecialMesh") then
+			makeClassicHead(head, child)
+			watchMesh(child)
+		end
+	end)
 end
 
 local function isKeptAccessory(accessory: Accoutrement): boolean
@@ -78,16 +113,9 @@ local function isKeptAccessory(accessory: Accoutrement): boolean
 	if handle == nil or not handle:IsA("BasePart") then
 		return false
 	end
+	-- (Best effort for old hats whose handle is a Part with a mesh in it:
+	-- their real size can't be read here, only the handle's.)
 	local size = handle.Size
-	local mesh = handle:FindFirstChildOfClass("SpecialMesh")
-	if mesh then
-		-- (an old hat's mesh can be much bigger than its handle)
-		size = Vector3.new(
-			math.max(size.X, math.abs(mesh.Scale.X)),
-			math.max(size.Y, math.abs(mesh.Scale.Y)),
-			math.max(size.Z, math.abs(mesh.Scale.Z))
-		)
-	end
 	if math.max(size.X, size.Y, size.Z) > MAX_ACCESSORY_SIDE then
 		return false
 	end
@@ -116,11 +144,11 @@ local function checkAccessory(child: Instance)
 		child:Destroy()
 		return
 	end
-	-- Kept: it never collides or blocks a hit ray.
+	-- Kept: it never collides (a hit ray that meets it counts as a head
+	-- hit: see Combat's aimZone, so it stays queryable).
 	local handle = child:FindFirstChild("Handle")
 	if handle and handle:IsA("BasePart") then
 		handle.CanCollide = false
-		handle.CanQuery = false
 		handle.CanTouch = false
 		handle.Massless = true
 	end
@@ -135,17 +163,12 @@ local function cleanAppearance(character: Model)
 	character.ChildAdded:Connect(function(child: Instance)
 		checkAccessory(child)
 		if child.Name == "Head" and child:IsA("BasePart") then
-			makeClassicHead(child)
+			watchHead(child) -- (a head replaced by the avatar loader)
 		end
 	end)
 	local head = character:FindFirstChild("Head")
 	if head and head:IsA("BasePart") then
-		makeClassicHead(head)
-		head.ChildAdded:Connect(function(child: Instance)
-			if child:IsA("SpecialMesh") then
-				makeClassicHead(head)
-			end
-		end)
+		watchHead(head)
 	end
 end
 
