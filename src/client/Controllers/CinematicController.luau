@@ -105,9 +105,7 @@ end
 local function showOwnBody(character: Model)
 	for _, item in character:GetDescendants() do
 		if item:IsA("BasePart") then
-			item.LocalTransparencyModifier = 0
-		elseif item:IsA("Decal") then
-			item.LocalTransparencyModifier = 0
+			item.LocalTransparencyModifier = 0 -- (its decals, the face, follow it)
 		end
 	end
 end
