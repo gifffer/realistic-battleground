@@ -25,11 +25,12 @@ local function onEquipKit(player: Player, kitId: unknown)
 	end
 	-- Only real kits that are playable (not "coming soon" ones).
 	local kit = KitDefs.get(kitId)
-	if kit == nil or not kit.available then
-		return
+	local data = PlayerData.getData(player)
+	if kit == nil or not kit.available or data == nil or not KitDefs.owns(data, kit) then
+		return -- unknown, coming soon, or not bought yet
 	end
-	local saved = PlayerData.update(player, function(data)
-		data.equippedKit = kitId
+	local saved = PlayerData.update(player, function(current)
+		current.equippedKit = kitId
 	end)
 	if not saved then
 		return

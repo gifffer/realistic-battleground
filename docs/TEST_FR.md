@@ -274,3 +274,21 @@ Menu **KITS** → **BOXER** → **EQUIP** (gratuit). Les touches 1–4 et G chan
 | X7 | Menu KITS | « 2 OF 2 AVAILABLE », Boxer **EQUIPPED** une fois choisi, le choix reste au prochain lancement. |
 | X8 | Kit **Street Brawler**, adversaire KO devant toi, clic gauche | Finisher propre au kit : **écrasement du pied** sur la tête, rapide (~0,75 s, coup à 0,3 s). Le Boxer garde le finisher normal (genou au sol). |
 | X9 | Touche **W** (AZERTY) / **Z** (QWERTY) | Bascule **1ʳᵉ ↔ 3ᵉ personne**, le choix est sauvegardé (même réglage que dans SETTINGS, où la touche est rappelée). |
+
+## Étape 7 — Progression (`feature/progression`)
+
+À tester à **2 joueurs** (Test > Clients and Servers, 2 joueurs) : les dummies ne donnent rien.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| P1 | En jeu | En bas à gauche, au-dessus de la vie : **LV 1** et une fine ligne d'XP. |
+| P2 | Frapper l'autre joueur | Toutes les ~5 s : petite ligne **DAMAGE +x XP** au-dessus de la vie, la ligne d'XP avance. |
+| P3 | Le mettre KO puis l'achever | **FINISHER +75 XP · +15 COINS**. Sans finisher (il tombe de la map après tes coups) : **KILL +50 XP · +10 COINS**. |
+| P4 | À 3 : A frappe C, B l'achève | A reçoit **ASSIST +20 XP · +4 COINS**. |
+| P5 | Passer niveau 2 (≈ 3 kills) | Bandeau sobre **NEW LEVEL — LEVEL 2** en haut, ~2,5 s. Ton niveau s'affiche partout. |
+| P6 | Menu → **PROFILE** | Niveau, XP vers le prochain niveau (barre), coins, kills / deaths / K/D / wins à vie. |
+| P7 | Regarder l'autre joueur | Au-dessus de sa tête : **niveau + nom** (pas au-dessus de toi), discret de loin, caché derrière les murs. |
+| P8 | Maintenir **Tab** | Classement du serveur à droite : niveau, kills, morts de la partie, trié par kills ; ta ligne marquée. Le kill feed se cache pendant ce temps. |
+| P9 | Kill feed | Le niveau des joueurs est écrit à côté de leur nom. |
+| P10 | Jouer 5 min | **PLAYTIME +15 XP · +2 COINS**. |
+| P11 | Menu KITS | Coins affichés en haut. (Les états « UNLOCKS AT LEVEL 10 » / « BUY · 500 » serviront aux futurs kits : Street Brawler et Boxer restent gratuits.) |

@@ -136,7 +136,17 @@ return table.freeze({
 	-- Equip a kit from the Kits menu. Saved. Only kits that are available.
 	EquipKit = event("EquipKit"),
 
-	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?)
+	-- server → ONE client  (kind: Types.RewardKind, xp: number, coins: number)
+	-- "You earned this" (kill, assist...): the HUD shows "+50 XP · +10". The
+	-- new totals arrive with the save (ProfileUpdated) as usual.
+	Progress = event("Progress"),
+
+	-- client → server  (kitId: string)
+	-- Buy a kit from the Kits menu (level and coins checked by the server).
+	BuyKit = event("BuyKit"),
+
+	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?,
+	--                        victimLevel: number?, killerLevel: number?)
 	-- A fighter was eliminated: one line in the kill feed (top right).
 	KillFeed = event("KillFeed"),
 })

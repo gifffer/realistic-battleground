@@ -213,6 +213,33 @@ return table.freeze({
 		FOLLOW_UP_RANGE = 7,
 	}),
 
+	-- Progression (step 7): XP → levels, coins. Only fights against real
+	-- players count (no farming the training dummies).
+	Progression = table.freeze({
+		KILL_XP = 50,
+		KILL_COINS = 10,
+		FINISHER_BONUS_XP = 25, -- the kill was a finisher (not a fall / a flee)
+		FINISHER_BONUS_COINS = 5,
+		-- Assist: you damaged someone killed by another player, recently.
+		ASSIST_XP = 20,
+		ASSIST_COINS = 4,
+		ASSIST_TIME = 15, -- seconds: damage older than this doesn't count
+		-- Killing the same player again within this many seconds gives
+		-- nothing (no farming between two friends).
+		REPEAT_KILL_WINDOW = 180,
+		-- Damage dealt: 1 XP every DAMAGE_PER_XP damage (paid out every few seconds).
+		DAMAGE_PER_XP = 5,
+		-- Time played: every PLAYTIME_INTERVAL seconds.
+		PLAYTIME_INTERVAL = 300,
+		PLAYTIME_XP = 15,
+		PLAYTIME_COINS = 2,
+		-- Level curve: going from level n to n + 1 costs
+		-- round(LEVEL_BASE_XP × n ^ LEVEL_EXPONENT) XP. Level 2 = 150 XP (≈ 3 kills).
+		LEVEL_BASE_XP = 150,
+		LEVEL_EXPONENT = 0.8,
+		MAX_LEVEL = 100,
+	}),
+
 	-- Injuries (step 5). They last until you die or get a kill (which heals).
 	Injuries = table.freeze({
 		-- Legs: after this much damage taken on the legs (kicks), you LIMP.

@@ -63,6 +63,15 @@ local getUpCallbacks: { (Model) -> () } = {}
 -- Called with the killer's model when they get a kill (Combat heals their injuries).
 local killCallbacks: { (Model) -> () } = {}
 
+-- Every elimination (Progression gives XP for it).
+export type Elimination = {
+	kind: Types.KillFeedKind,
+	victim: Model,
+	victimPlayer: Player?,
+	killerPlayer: Player?, -- nil: no player gets the kill
+}
+local eliminationCallbacks: { (Elimination) -> () } = {}
+
 local function now(): number
 	return os.clock()
 end
@@ -78,8 +87,26 @@ local function displayName(model: Model): string
 	return if player then player.DisplayName else model.Name
 end
 
-local function feed(kind: Types.KillFeedKind, victim: string, killer: string?)
-	Remotes.KillFeed:FireAllClients(kind, victim, killer)
+-- A player's level (Progression sets the "Level" attribute), nil for dummies.
+local function levelOf(player: Player?): number?
+	local level = if player then player:GetAttribute("Level") else nil
+	return if typeof(level) == "number" then level else nil
+end
+
+local function feed(
+	kind: Types.KillFeedKind,
+	victim: string,
+	killer: string?,
+	victimPlayer: Player?,
+	killerPlayer: Player?
+)
+	Remotes.KillFeed:FireAllClients(
+		kind,
+		victim,
+		killer,
+		levelOf(victimPlayer),
+		levelOf(killerPlayer)
+	)
 end
 
 -- Who gets the kill: whoever is finishing them; else the last PLAYER who hit
@@ -113,8 +140,22 @@ local function killerName(model: Model?, player: Player?): string?
 end
 
 -- Kill rewards: health for the killer, stats in the saves.
-local function rewardKill(killer: Model?, killerPlayer: Player?, victim: FighterInfo)
+local function rewardKill(
+	killer: Model?,
+	killerPlayer: Player?,
+	victim: FighterInfo,
+	kind: Types.KillFeedKind
+)
 	local victimPlayer = victim.player
+	local elimination: Elimination = {
+		kind = kind,
+		victim = victim.model,
+		victimPlayer = victimPlayer,
+		killerPlayer = if killerPlayer ~= victimPlayer then killerPlayer else nil,
+	}
+	for _, callback in eliminationCallbacks do
+		task.spawn(callback, elimination)
+	end
 	if victimPlayer then
 		PlayerData.update(victimPlayer, function(data)
 			data.stats.deaths += 1
@@ -231,12 +272,9 @@ local function onDied(info: FighterInfo)
 	setAttribute(info.model, "KnockedOut", false)
 	setAttribute(info.model, "KOEndsAt", nil)
 	setAttribute(info.model, "BeingFinished", false)
-	feed(
-		if info.finishedBy then "Finished" else "Died",
-		displayName(info.model),
-		killerName(killer, killerPlayer)
-	)
-	rewardKill(killer, killerPlayer, info)
+	local kind: Types.KillFeedKind = if info.finishedBy then "Finished" else "Died"
+	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
+	rewardKill(killer, killerPlayer, info, kind)
 end
 
 ------------------------------------------------------------------------------
@@ -423,6 +461,11 @@ function Knockout.finish(victim: Model, attacker: Model)
 end
 
 -- `callback(model)` when a KO'd fighter gets back up.
+-- `callback(elimination)` for every fighter eliminated (see Elimination).
+function Knockout.onEliminated(callback: (Elimination) -> ())
+	table.insert(eliminationCallbacks, callback)
+end
+
 -- `callback(killerModel)` each time a fighter gets a kill (and its heal).
 function Knockout.onKill(callback: (Model) -> ())
 	table.insert(killCallbacks, callback)
@@ -451,8 +494,8 @@ local function onLeaving(player: Player)
 	end
 	local killer, killerPlayer = creditedKiller(info)
 	info.dead = true
-	feed("Fled", displayName(info.model), killerName(killer, killerPlayer))
-	rewardKill(killer, killerPlayer, info)
+	feed("Fled", displayName(info.model), killerName(killer, killerPlayer), player, killerPlayer)
+	rewardKill(killer, killerPlayer, info, "Fled")
 end
 
 function Knockout.init()

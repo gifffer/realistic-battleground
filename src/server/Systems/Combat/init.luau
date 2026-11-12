@@ -747,8 +747,11 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
 	-- A player fights with the kit saved in their profile.
+	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
-	Combat.setKit(model, if data then data.equippedKit else Kits.DEFAULT)
+	local saved = if data then Kits.get(data.equippedKit) else nil
+	local usable = data ~= nil and saved ~= nil and Kits.owns(data, saved)
+	Combat.setKit(model, if usable and data then data.equippedKit else Kits.DEFAULT)
 	CollectionService:AddTag(model, C.TAG)
 	Knockout.register(model, player)
 
