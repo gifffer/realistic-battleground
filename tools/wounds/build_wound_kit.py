@@ -39,6 +39,7 @@ turned and scaled the file. Insert number i sits at X = i * SPACING.
 """
 
 import math
+import os
 import random
 import sys
 
@@ -46,9 +47,13 @@ import bpy  # first: it makes the other Blender modules importable
 import bmesh  # noqa: E402
 from mathutils import Vector  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gore  # noqa: E402  (the burst head of the bat finisher)
+
 OUT = sys.argv[1]
 PREVIEW = "--preview" in sys.argv
 LUA_OUT = "src/shared/WoundShapes.luau"
+GORE_LUA_OUT = "src/shared/GoreShapes.luau"
 
 # The classic R6 head (Roblox's avatar/heads/head.mesh, measured): a
 # cylinder of radius 0.6 whose straight part is 0.6 high (y -0.3..0.3), with
@@ -80,6 +85,7 @@ COLORS = {  # preview only: the game sets the real colours
     "Blood": (0.25, 0.0, 0.0),
     "Marker": (1, 1, 1),
     "Skin": (0.80, 0.62, 0.50),
+    **{k: v for k, v in gore.COLORS.items()},
 }
 
 
@@ -676,6 +682,12 @@ def main():
         bpy.context.scene.collection.objects.link(ob)
         ob.data.materials.append(material("Skin"))
         objects.append(ob)
+    # The burst head (bat finisher): real anatomy, broken up.
+    before = len(bpy.context.scene.collection.objects)
+    gore_slots, gore_kinds = gore.build(
+        lambda name, bm, offset, layer: objects.append(add_object(name, bm, offset, layer))
+    )
+    print("gore objects:", len(bpy.context.scene.collection.objects) - before)
     # Markers: origin, 1 stud up, 1 stud out of the skin.
     # (Below the inserts: Kit_Origin is the point (0, -3, 0) of the inserts' axes.)
     for name, at in (("Kit_Origin", (0, -3, 0)), ("Kit_Up", (0, -2, 0)), ("Kit_Out", (0, -3, 1))):
@@ -757,6 +769,8 @@ def main():
     lines += ["\t} :: { [string]: Shape },", "}", "", "return WoundShapes", ""]
     with open(LUA_OUT, "w") as f:
         f.write("\n".join(lines))
+    with open(GORE_LUA_OUT, "w") as f:
+        f.write(gore.lua(gore_slots, gore_kinds))
     print("inserts:", len(shapes), "objects:", len(objects))
 
     if PREVIEW:

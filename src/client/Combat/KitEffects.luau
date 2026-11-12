@@ -238,10 +238,11 @@ local function buildBat(): Model
 		part.CFrame = CFrame.new(0, -center, 0) * alongY
 		part.Parent = model
 	end
-	-- A big bat, ~3.5 studs (the finisher's impact pose was solved with
-	-- this length: the barrel lands on the head).
-	piece("Knob", 0.1, 0.3, -0.18, BAT_WOOD, Enum.Material.Wood)
-	piece("Grip", 0.95, 0.17, 0.3, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
+	-- A big bat, ~4.2 studs (the finisher's poses were solved with these
+	-- lengths: the barrel lands on the head, both hands on the handle).
+	-- (a long handle: room for both fists, the left one under the right)
+	piece("Knob", 0.1, 0.3, -0.92, BAT_WOOD, Enum.Material.Wood)
+	piece("Grip", 1.7, 0.17, -0.02, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
 	piece("Handle", 0.55, 0.19, 1.05, BAT_WOOD, Enum.Material.Wood)
 	piece("Taper", 0.65, 0.28, 1.62, BAT_WOOD, Enum.Material.Wood)
 	piece("Barrel", 1.3, 0.42, 2.6, BAT_WOOD, Enum.Material.Wood)

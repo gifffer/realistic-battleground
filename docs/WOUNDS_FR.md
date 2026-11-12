@@ -9,6 +9,7 @@ Une bouteille ne casse pas un crâne et n'ouvre pas une cage thoracique. Le jeu 
 
 - Une bouteille fracassée laisse aussi des **bouts de verre plantés** dans la peau. Environ 1 fois sur 3, il n'y a que du verre, sans vraie plaie (`GLASS_GRAZE_CHANCE` dans `Config.luau`).
 - Le sang qui coule tombe **de la plaie**.
+- Le finisher à la batte du Street Brawler **fait exploser la tête** avec de vraies pièces anatomiques, elles aussi dans `WoundKit` (`Gore_*`) : morceaux de crâne (cuir chevelu dehors, vrai os dedans), cerveau avec ses plis, yeux, dents, et sur le corps la vraie mâchoire du bas avec ses dents, la peau du menton déchirée, les premières vertèbres. Les flaques et éclaboussures au sol sont aussi des formes du kit. Anatomie : **Z-Anatomy** (CC BY-SA 4.0, voir `tools/wounds/anatomy/README.md`). Sans ces pièces (ancien `WoundKit`), le jeu en dessine des plus simples.
 - Frapper **au même endroit** agrandit la plaie : **S → M → L**. Ailleurs, ça fait une nouvelle plaie (3 au maximum par partie du corps).
 - La plaie se trouve **du côté où se tient l'attaquant**, à une hauteur au hasard : front, tempe ou joue pour la tête ; poitrine, ventre ou dos pour le torse.
 - Le **visage**, le **t-shirt** et le **pantalon** restent dessinés autour de la plaie.
@@ -22,7 +23,7 @@ Une bouteille ne casse pas un crâne et n'ouvre pas une cage thoracique. Le jeu 
 
 1. Télécharge **`assets/wounds/WoundKit.fbx`** : sur GitHub, ouvre le fichier puis clique **Download raw file**.
 2. Dans Studio, dans `ReplicatedStorage > Assets`, crée un Folder **`Wounds`**.
-   Si un ancien **`WoundKit`** est déjà dedans, **supprime-le** d'abord : le nouveau contient en plus les morceaux de la tête.
+   Si un ancien **`WoundKit`** est déjà dedans, **supprime-le** d'abord : le nouveau contient en plus les pièces de la tête qui explose (`Gore_*`).
 3. **Import 3D** (menu File, ou onglet Avatar), choisis `WoundKit.fbx`, puis clique **Import** sans rien changer.
 4. Glisse le modèle **`WoundKit`** qui apparaît dans le Workspace vers `ReplicatedStorage > Assets > Wounds`.
 5. Ne supprime **rien** dedans, surtout pas **Kit_Origin**, **Kit_Up** et **Kit_Out** : le jeu s'en sert pour se repérer.

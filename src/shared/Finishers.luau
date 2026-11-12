@@ -79,19 +79,20 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(0, -1.3, -3.4),
 				fov = 62,
 			},
-			-- Close on the face of the one on the ground (they plead).
+			-- Close on the face of the one on the ground (they plead): from its
+			-- left, its raised right hand reaching out in the back of the shot.
 			{
 				time = 0.55,
-				from = Vector3.new(1.9, -1.1, -5.4),
-				to = Vector3.new(1.6, -1.3, -5.1),
+				from = Vector3.new(-1.9, -1.1, -5.4),
+				to = Vector3.new(-1.6, -1.3, -5.1),
 				look = "victim",
 				fov = 50,
 			},
 			-- From the ground, by the head: he raises the bat over it.
 			{
 				time = 0.95,
-				from = Vector3.new(2.4, -2.4, -5.7),
-				to = Vector3.new(2.1, -2.5, -5.3),
+				from = Vector3.new(-2.4, -2.4, -5.7),
+				to = Vector3.new(-2.1, -2.5, -5.3),
 				look = Vector3.new(0, 1.0, -0.8),
 				fov = 58,
 			},
@@ -99,8 +100,8 @@ local cinematics: { [string]: Cinematic } = {
 			-- bursts; held a while to see it (the spray, the pieces, the neck).
 			{
 				time = 1.5,
-				from = Vector3.new(3.6, -1.4, -4.4),
-				to = Vector3.new(3.1, -1.7, -4.9),
+				from = Vector3.new(-3.6, -1.4, -4.4),
+				to = Vector3.new(-3.1, -1.7, -4.9),
 				look = Vector3.new(0, -2.5, -4.2),
 				fov = 56,
 			},

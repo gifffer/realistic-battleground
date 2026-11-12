@@ -1,6 +1,12 @@
 --!strict
 -- HeadBlast: the head that bursts under the bat (Street Brawler finisher).
 --
+-- Made of the real pieces of WoundKit (GoreKit: real anatomy from
+-- Z-Anatomy - the skull's bones under the scalp, the brain and its folds,
+-- the eyes, the teeth, the lower jaw, the top of the spine - and blots of
+-- blood for the floor). Without them (no kit, an old kit) it draws simpler
+-- ones itself.
+--
 -- The server sets the attribute "HeadBlown" (= a seed) on the body when the
 -- bat lands. Every client then:
 --   • hides the head, its face and the head accessories (Gashes hides the
@@ -21,18 +27,22 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local GoreKit = require(script.Parent.GoreKit)
+local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 
 local HeadBlast = {}
 
 HeadBlast.ATTRIBUTE = "HeadBlown"
 
-local BLOOD = Color3.fromRGB(86, 10, 9) -- dark, as it is once out
-local BLOOD_WET = Color3.fromRGB(116, 12, 11) -- fresh, catching the light
+local BLOOD = Color3.fromRGB(78, 6, 6) -- dark, as it is once out
+local BLOOD_WET = Color3.fromRGB(104, 8, 8) -- fresh
 local FLESH = Color3.fromRGB(122, 28, 30)
 local FLESH_DARK = Color3.fromRGB(84, 16, 18)
 local BONE = Color3.fromRGB(224, 212, 188)
 local BONE_EDGE = Color3.fromRGB(196, 160, 140) -- broken edge, a bit of blood in it
-local BRAIN = Color3.fromRGB(198, 140, 136)
+local BRAIN = Color3.fromRGB(196, 136, 132)
+local SCLERA = Color3.fromRGB(236, 230, 220)
+local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
 local PIECE_LIFETIME = 10 -- seconds the pieces stay on the floor
@@ -85,17 +95,36 @@ end
 local marks: { BasePart } = {}
 local markCount = 0 -- (never goes down: each new mark a hair higher)
 
--- The floor under `position` (through every fighter), or nil.
+-- Is this part on a character (a body part, or anything in it: ragdoll
+-- colliders, accessories...)?
+local function onCharacter(part: Instance): boolean
+	local model = part:FindFirstAncestorOfClass("Model")
+	while model do
+		if model:FindFirstChildOfClass("Humanoid") then
+			return true
+		end
+		model = model:FindFirstAncestorOfClass("Model")
+	end
+	return false
+end
+
+-- The floor under `position` (through every body, never on one), or nil.
 local function floorUnder(position: Vector3): RaycastResult?
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
+	local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+	params.FilterDescendantsInstances = ignore
 	params.RespectCanCollide = true
-	local hit = workspace:Raycast(position + Vector3.new(0, 1, 0), Vector3.new(0, -14, 0), params)
-	if hit and hit.Instance.Parent and hit.Instance.Parent:FindFirstChildOfClass("Humanoid") then
-		return nil
+	local from = position + Vector3.new(0, 1, 0)
+	for _ = 1, 4 do
+		local hit = workspace:Raycast(from, Vector3.new(0, -14, 0), params)
+		if hit == nil or not onCharacter(hit.Instance) then
+			return hit
+		end
+		table.insert(ignore, hit.Instance) -- (a body: look under it)
+		params.FilterDescendantsInstances = ignore
 	end
-	return hit
+	return nil
 end
 
 -- A flat mark of blood on the floor: round (`length` = nil) or a streak
@@ -121,8 +150,8 @@ local function mark(
 	piece.CastShadow = false
 	piece.Material = Enum.Material.SmoothPlastic
 	piece.Color = color
-	piece.Reflectance = 0.08 -- wet
-	piece.Transparency = 0.08
+	piece.Reflectance = 0
+	piece.Transparency = 0.05
 	-- (each new one a hair higher: no flicker where they overlap)
 	markCount += 1
 	local lift = 0.012 + (markCount % 12) * 0.002
@@ -156,9 +185,82 @@ local function mark(
 	return piece
 end
 
+-- Keeps a floor mark in the list (oldest gone past the cap), fading it out.
+local function keepMark(piece: BasePart, lifetime: number?)
+	table.insert(marks, piece)
+	if #marks > MAX_MARKS then
+		local oldest = table.remove(marks, 1)
+		if oldest then
+			oldest:Destroy()
+		end
+	end
+	local life = lifetime or MARK_LIFETIME
+	task.delay(life * 0.7, function()
+		if piece.Parent then
+			TweenService:Create(piece, TweenInfo.new(life * 0.3), { Transparency = 1 }):Play()
+		end
+	end)
+	Debris:AddItem(piece, life)
+end
+
+-- A blot of blood from the kit (Splat / Streak / Pool) on the floor under
+-- `position`: `size` studs across, its length along `along` (a streak), or
+-- turned at random. nil without the kit or a floor.
+local function blot(
+	kind: { string },
+	position: Vector3,
+	size: number,
+	along: Vector3?,
+	random: Random,
+	lifetime: number?
+): BasePart?
+	local pieces = GoreKit.get()
+	if pieces == nil or #kind == 0 then
+		return nil
+	end
+	local piece = pieces[kind[random:NextInteger(1, #kind)]]
+	local hit = if piece then floorUnder(position) else nil
+	if piece == nil or hit == nil then
+		return nil
+	end
+	local layer = piece.layers[1]
+	local part = layer.source:Clone()
+	part:ClearAllChildren()
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = Enum.Material.SmoothPlastic
+	part.Color = if random:NextNumber() < 0.6 then BLOOD else BLOOD_WET
+	part.Reflectance = 0
+	part.Transparency = 0.04
+	-- (laid flat in X-Z in the kit: 1 stud across at most)
+	local across = math.max(layer.size.X, layer.size.Z)
+	part.Size = Vector3.new(layer.size.X, layer.size.Y, layer.size.Z) * (size / across)
+	markCount += 1
+	local up = hit.Normal
+	local forward = if along and along.Magnitude > 1e-3
+		then along - up * along:Dot(up)
+		else up:Cross(Vector3.new(random:NextNumber(-1, 1), 0.01, random:NextNumber(-1, 1)))
+	if forward.Magnitude < 1e-3 then
+		forward = Vector3.new(1, 0, 0)
+	end
+	local lift = 0.006 + (markCount % 12) * 0.002
+	-- (the kit's X along `forward`, its Y along the floor's normal)
+	local right = forward.Unit
+	part.CFrame = CFrame.fromMatrix(hit.Position + up * lift, right, up) * layer.offset.Rotation
+	part.Parent = workspace
+	keepMark(part, lifetime)
+	return part
+end
+
 -- An irregular splash: a blot made of a few overlapping round ones, and
 -- small drops around it.
 local function splash(position: Vector3, size: number, random: Random)
+	if blot(GoreShapes.splat, position, size * 1.3, nil, random) then
+		return
+	end
 	mark(position, size, nil, nil, BLOOD)
 	for _ = 1, random:NextInteger(3, 5) do
 		local angle = random:NextNumber(0, math.pi * 2)
@@ -195,7 +297,13 @@ local function castOff(from: Vector3, direction: Vector3, reach: number, random:
 		local at = from + direction * distance + sideways
 		local size = (1 - along * 0.75) * random:NextNumber(0.08, 0.16)
 		task.delay(distance / 22, function() -- (the time it flies)
-			mark(at, size, size * (1 + (1 - along) * 3.5), direction, BLOOD)
+			local stretched = size * (1 + (1 - along) * 3.5)
+			if
+				index > count * 0.6
+				or blot(GoreShapes.streak, at, stretched * 1.6, direction, random) == nil
+			then
+				mark(at, size, stretched, direction, BLOOD)
+			end
 		end)
 	end
 end
@@ -241,9 +349,86 @@ local function cylinder(
 	return part
 end
 
--- What's left on top of the torso: the neck torn open, the lower jaw with a
--- few teeth. Returns the point the blood comes out of.
-local function buildStump(torso: BasePart, skin: Color3, random: Random): Attachment
+-- The colour and shine of a kit layer (Skin: the fighter's own skin).
+local function painter(skin: Color3): (layer: string) -> (Color3, number)
+	return function(layer: string): (Color3, number)
+		if layer == "Skin" then
+			return skin, 0
+		elseif layer == "Bone" then
+			return BONE, 0.02
+		elseif layer == "Brain" then
+			return BRAIN, 0.08
+		elseif layer == "Sclera" then
+			return SCLERA, 0.1
+		elseif layer == "Iris" then
+			return IRIS, 0.15
+		elseif layer == "Tooth" then
+			return TOOTH, 0.05
+		elseif layer == "Blood" then
+			return BLOOD, 0
+		end
+		return FLESH, 0.06 -- Flesh (and anything new)
+	end
+end
+
+-- The blood run down the front of the chest, and where it pumps out of.
+local function neckBlood(torso: BasePart, random: Random, folder: Folder): Attachment
+	for index = 1, 3 do
+		welded(
+			newPart(
+				"Run",
+				Vector3.new(random:NextNumber(0.08, 0.16), random:NextNumber(0.4, 1.1), 0.012),
+				BLOOD_WET,
+				false
+			),
+			torso,
+			torso.CFrame
+				* CFrame.new(
+					(index - 2) * 0.28 + random:NextNumber(-0.06, 0.06),
+					0.55,
+					-torso.Size.Z / 2 - 0.007
+				),
+			folder
+		)
+	end
+	local mouth = Instance.new("Attachment")
+	mouth.Name = "HeadBlastBlood"
+	mouth.Position = Vector3.new(0, torso.Size.Y / 2 + 0.15, 0)
+	mouth.Parent = torso
+	return mouth
+end
+
+-- What's left on top of the torso, from the kit: the real lower jaw and its
+-- teeth in the skin of the chin, torn along the top, the wound inside, the
+-- top of the spine. nil without the kit.
+local function buildRealStump(torso: BasePart, skin: Color3, random: Random): Attachment?
+	local pieces = GoreKit.get()
+	local jaw = if pieces then pieces.Jaw else nil
+	if jaw == nil then
+		return nil
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = "HeadBlast"
+	-- (where the head sits on the torso: its neck joint at rest)
+	local headAt = torso.CFrame * CFrame.new(0, torso.Size.Y / 2 + 0.5, 0)
+	local main = GoreKit.spawn(jaw, headAt, painter(skin))
+	main.CanCollide = false
+	main.Massless = true
+	main.CastShadow = false
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = torso
+	weld.Part1 = main
+	weld.Parent = main
+	main.Parent = folder
+	local mouth = neckBlood(torso, random, folder)
+	folder.Parent = torso
+	return mouth
+end
+
+-- What's left on top of the torso (simple version, without the kit): the
+-- neck torn open, the lower jaw with a few teeth. Returns the point the
+-- blood comes out of.
+local function buildSimpleStump(torso: BasePart, skin: Color3, random: Random): Attachment
 	local folder = Instance.new("Folder")
 	folder.Name = "HeadBlast"
 	-- (torso space: Y up the body, -Z its front)
@@ -354,32 +539,13 @@ local function buildStump(torso: BasePart, skin: Color3, random: Random): Attach
 			folder
 		)
 	end
-	-- Blood run down the front of the chest.
-	for index = 1, 3 do
-		welded(
-			newPart(
-				"Run",
-				Vector3.new(random:NextNumber(0.08, 0.16), random:NextNumber(0.4, 1.1), 0.012),
-				BLOOD_WET,
-				true
-			),
-			torso,
-			torso.CFrame
-				* CFrame.new(
-					(index - 2) * 0.28 + random:NextNumber(-0.06, 0.06),
-					0.55,
-					-torso.Size.Z / 2 - 0.007
-				),
-			folder
-		)
-	end
+	local mouth = neckBlood(torso, random, folder)
 	folder.Parent = torso
-
-	local mouth = Instance.new("Attachment")
-	mouth.Name = "HeadBlastBlood"
-	mouth.Position = Vector3.new(0, torso.Size.Y / 2 + 0.3, 0)
-	mouth.Parent = torso
 	return mouth
+end
+
+local function buildStump(torso: BasePart, skin: Color3, random: Random): Attachment
+	return buildRealStump(torso, skin, random) or buildSimpleStump(torso, skin, random)
 end
 
 ------------------------------------------------------------------------------
@@ -419,7 +585,16 @@ local function pump(model: Model, mouth: Attachment, random: Random)
 	local emitter = bloodEmitter(mouth)
 	local below = mouth.WorldPosition
 	local pool: { BasePart } = {}
-	for index = 1, 3 do
+	local real = blot(GoreShapes.pool, below, 0.4, nil, random, 25)
+	if real then
+		local grown = real.Size * (random:NextNumber(3.2, 4.2) / 0.4)
+		TweenService:Create(
+			real,
+			TweenInfo.new(PUMP_TIME + 2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Size = grown }
+		):Play()
+	end
+	for index = 1, if real then 0 else 3 do
 		local offset =
 			Vector3.new(random:NextNumber(-0.35, 0.35), 0, random:NextNumber(-0.35, 0.35))
 		local piece =
@@ -504,15 +679,10 @@ local function outward(random: Random, away: Vector3, up: number, speed: number)
 		* random:NextNumber(0.4, 1)
 end
 
-local function burst(model: Model, head: BasePart, torso: BasePart, random: Random)
-	local at = head.Position
+-- Simpler pieces, without the kit: plates of scalp and bone, brain, an
+-- eye, teeth.
+local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: Random)
 	local skin = head.Color
-	-- Away from the attacker: he stands past the head, so toward the body.
-	local flat = Vector3.new(torso.Position.X - at.X, 0, torso.Position.Z - at.Z)
-	local away = if flat.Magnitude > 0.1 then flat.Unit * 0.7 else Vector3.zero
-
-	-- Skull: thin curved plates, scalp on the outside, bone on the inside;
-	-- a few bare bone splinters.
 	for index = 1, 15 do
 		local width = random:NextNumber(0.16, 0.36)
 		local depth = random:NextNumber(0.12, 0.3)
@@ -576,6 +746,66 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 			random
 		)
 	end
+end
+
+-- The real pieces of the head (from the kit), each from where it was in the
+-- head, thrown out from its centre (and away from the blow). false without
+-- the kit.
+local function realPieces(head: BasePart, away: Vector3, random: Random): boolean
+	local pieces = GoreKit.get()
+	if pieces == nil then
+		return false
+	end
+	local paint = painter(head.Color)
+	local function throw(names: { string }, speed: number, up: number)
+		for _, name in names do
+			local piece = pieces[name]
+			if piece then
+				local part = GoreKit.spawn(piece, head.CFrame, paint)
+				part.CanCollide = true
+				local from = head.CFrame:VectorToWorldSpace(piece.center)
+				local direction = if from.Magnitude > 0.05
+					then from.Unit
+					else random:NextUnitVector()
+				direction = (direction + away * 0.5 + Vector3.new(
+					0,
+					random:NextNumber(up * 0.4, up),
+					0
+				)).Unit
+				part.AssemblyLinearVelocity = direction * speed * random:NextNumber(0.55, 1)
+				part.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(6, 22)
+				part.Parent = workspace
+				Debris:AddItem(part, PIECE_LIFETIME)
+			end
+		end
+	end
+	throw(GoreShapes.skull, 24, 1.1)
+	throw(GoreShapes.brain, 13, 0.8)
+	throw(GoreShapes.eye, 15, 1.2)
+	throw(GoreShapes.tooth, 20, 1.4)
+	return true
+end
+
+local function burst(model: Model, head: BasePart, torso: BasePart, random: Random)
+	local at = head.Position
+	-- Away from the attacker: he stands past the head, so toward the body.
+	local flat = Vector3.new(torso.Position.X - at.X, 0, torso.Position.Z - at.Z)
+	local away = if flat.Magnitude > 0.1 then flat.Unit * 0.7 else Vector3.zero
+
+	if realPieces(head, away, random) then
+		-- (a few bone splinters and bits of brain more, smaller than the kit's)
+		for _ = 1, 8 do
+			local splinter = newPart(
+				"Splinter",
+				Vector3.new(random:NextNumber(0.03, 0.06), 0.025, random:NextNumber(0.08, 0.18)),
+				BONE,
+				false
+			)
+			fly(splinter, at, outward(random, away, 1.3, 26), random)
+		end
+	else
+		simplePieces(head, at, away, random)
+	end
 
 	-- The hair / hat: sent flying.
 	for _, accessory in model:GetChildren() do
@@ -620,16 +850,18 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 	mist.Speed = NumberRange.new(3, 9)
 	mist.Lifetime = NumberRange.new(0.5, 1.1)
 	mist.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.6),
-		NumberSequenceKeypoint.new(1, 2.4),
+		NumberSequenceKeypoint.new(0, 0.35),
+		NumberSequenceKeypoint.new(1, 1.3),
 	})
+	-- (a fine haze: thick, it reads as a dark flat blot from up close)
 	mist.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(0, 0.55),
 		NumberSequenceKeypoint.new(1, 1),
 	})
+	mist.LightInfluence = 0.6
 	mist.Acceleration = Vector3.new(0, -8, 0)
 	mist.Drag = 5
-	mist:Emit(36)
+	mist:Emit(20)
 	Debris:AddItem(point, 1.6)
 
 	-- On the floor: a big splash where the head was, drops thrown out in
