@@ -27,6 +27,34 @@ local Quests = {}
 
 local random = Random.new()
 
+-- Damage not yet counted (decimals: bleeding ticks, blocked hits...).
+local damageCarry: { [Player]: number } = {}
+-- When each player's kit move was last counted (once per move, not per hit).
+local lastMoveCounted: { [Player]: { [string]: number } } = {}
+-- Anti-farm between two players: at most PAIR_CAP[stat] counted per pair
+-- every PAIR_WINDOW seconds (two friends parrying each other all day...).
+local PAIR_WINDOW = 180
+local PAIR_CAP: { [string]: number } = { Parries = 4, HeadHits = 12, Damage = 300, KitMoves = 6 }
+local pairBudget: { [string]: { start: number, used: { [string]: number } } } = {}
+
+-- How much of `amount` still counts for this pair (and books it).
+local function pairAllowance(from: Player, to: Player, stat: string, amount: number): number
+	local key = `{from.UserId}:{to.UserId}`
+	local time = os.clock()
+	local budget = pairBudget[key]
+	if budget == nil or time - budget.start > PAIR_WINDOW then
+		budget = { start = time, used = {} }
+		pairBudget[key] = budget
+	end
+	local cap = PAIR_CAP[stat]
+	if cap == nil then
+		return amount
+	end
+	local allowed = math.max(0, math.min(amount, cap - (budget.used[stat] or 0)))
+	budget.used[stat] = (budget.used[stat] or 0) + allowed
+	return allowed
+end
+
 -- Draws today's quests if the save still holds another day's.
 local function ensureToday(player: Player)
 	local data = PlayerData.getData(player)
@@ -122,22 +150,60 @@ local function onCombatEvent(info: Combat.CombatEventInfo)
 		return
 	end
 	if info.kind == "Parried" then
-		Quests.add(victimPlayer, "Parries", 1) -- the one who blocked at the right time
+		-- The one who blocked at the right time.
+		Quests.add(
+			victimPlayer,
+			"Parries",
+			pairAllowance(victimPlayer, attackerPlayer, "Parries", 1)
+		)
 	elseif info.kind == "Hit" or info.kind == "Finisher" then
 		if info.zone == "Head" then
-			Quests.add(attackerPlayer, "HeadHits", 1)
+			Quests.add(
+				attackerPlayer,
+				"HeadHits",
+				pairAllowance(attackerPlayer, victimPlayer, "HeadHits", 1)
+			)
 		end
-		if info.moveId then
-			Quests.add(attackerPlayer, "KitMoves", 1)
+		-- A kit move the player used (not a counter or a follow-up), once
+		-- per use even if it hits several times.
+		local moveId = info.moveId
+		if
+			moveId
+			and not string.find(moveId, "_Counter", 1, true)
+			and not string.find(moveId, "_FollowUp", 1, true)
+		then
+			local counted = lastMoveCounted[attackerPlayer]
+			if counted == nil then
+				counted = {}
+				lastMoveCounted[attackerPlayer] = counted
+			end
+			local time = os.clock()
+			if time - (counted[moveId] or -math.huge) > 2 then
+				counted[moveId] = time
+				Quests.add(
+					attackerPlayer,
+					"KitMoves",
+					pairAllowance(attackerPlayer, victimPlayer, "KitMoves", 1)
+				)
+			end
 		end
 	end
 end
 
 local function onDamaged(info: Combat.DamageInfo)
-	local attackerPlayer = players(info.attacker, info.victim)
-	if attackerPlayer then
-		Quests.add(attackerPlayer, "Damage", math.floor(info.amount + 0.5))
+	local attackerPlayer, victimPlayer = players(info.attacker, info.victim)
+	if attackerPlayer == nil or victimPlayer == nil then
+		return
 	end
+	-- Whole points only; the decimals wait for the next hits.
+	local total = (damageCarry[attackerPlayer] or 0) + info.amount
+	local whole = math.floor(total)
+	damageCarry[attackerPlayer] = total - whole
+	Quests.add(
+		attackerPlayer,
+		"Damage",
+		pairAllowance(attackerPlayer, victimPlayer, "Damage", whole)
+	)
 end
 
 function Quests.start()
@@ -145,6 +211,10 @@ function Quests.start()
 	Combat.onEvent(onCombatEvent)
 	Combat.onDamaged(onDamaged)
 	PlayerData.onLoaded(ensureToday)
+	Players.PlayerRemoving:Connect(function(player)
+		damageCarry[player] = nil
+		lastMoveCounted[player] = nil
+	end)
 	-- Every minute: time played, and new quests after midnight UTC.
 	task.spawn(function()
 		while true do

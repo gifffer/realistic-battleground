@@ -172,7 +172,8 @@ local function refresh(animate: boolean)
 	end
 	local data = PlayerDataController.get()
 	local quests = if data then data.quests else nil
-	local list = if quests and quests.day == QuestDefs.today() then quests.list else {}
+	-- (The server's list as it is: the client's own clock may be off.)
+	local list = if quests then quests.list else {}
 	local label = emptyLabel
 	if label then
 		label.Visible = #list == 0
@@ -214,12 +215,11 @@ local function updateCountdown()
 	if label == nil or MenuController.getOpen() ~= SECTION_ID then
 		return
 	end
-	local left = (QuestDefs.today() + 1) * 86400 - os.time()
+	-- Server time (the same clock for everyone), not this computer's.
+	local now = math.floor(workspace:GetServerTimeNow())
+	local left = (math.floor(now / 86400) + 1) * 86400 - now
 	if left == lastShown then
 		return
-	end
-	if left > 86399 then
-		refresh(false) -- a new day just started
 	end
 	lastShown = left
 	label.Text = Theme.track(

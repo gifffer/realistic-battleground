@@ -862,12 +862,19 @@ local function buildRewardRow(kind: Types.RewardKind, xp: number, coins: number)
 	return row
 end
 
+local pendingQuests: { { xp: number, coins: number } } = {}
+
 local function showReward(kind: Types.RewardKind, xp: number, coins: number)
 	touched() -- a reward brings the faded vitals back
 	-- Nothing new while the HUD is hidden (knocked out, menu) or the
 	-- scoreboard is held: those rewards are not replayed later (the XP line
 	-- still updates from the save).
 	if not gui.Enabled or rewardsHidden then
+		-- A completed daily quest is worth showing later: kept until the
+		-- HUD is back (see flushPendingQuests).
+		if kind == "Quest" then
+			table.insert(pendingQuests, { xp = xp, coins = coins })
+		end
 		return
 	end
 
@@ -898,6 +905,18 @@ local function showReward(kind: Types.RewardKind, xp: number, coins: number)
 	end
 	layoutRewards(row)
 	scheduleExit(row)
+end
+
+-- Quest completions that happened while the HUD was hidden, shown now.
+local function flushPendingQuests()
+	if #pendingQuests == 0 or not gui.Enabled or rewardsHidden then
+		return
+	end
+	local list = pendingQuests
+	pendingQuests = {}
+	for _, reward in list do
+		showReward("Quest", reward.xp, reward.coins)
+	end
 end
 
 local function onProgress(kind: unknown, xp: unknown, coins: unknown)
@@ -997,6 +1016,9 @@ function HudController.start()
 		updateIdle()
 		if bleeding then
 			updateBleeding(false)
+		end
+		if #pendingQuests > 0 then
+			flushPendingQuests()
 		end
 	end)
 
