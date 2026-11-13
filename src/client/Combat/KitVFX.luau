@@ -33,6 +33,8 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Finishers = require(ReplicatedStorage.Shared.Finishers)
+local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
@@ -2515,7 +2517,10 @@ end
 -- Finishers (Shared/Finishers "Incinerate" / "Gore"), from CinematicController
 ------------------------------------------------------------------------------
 
-local finisherTokens: { [Model]: number } = {}
+local finisherTokens: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+-- (the Sentinel's: who he holds, and their heart beating until the beam)
+local finisherVictims: { [Model]: Model } = setmetatable({}, { __mode = "k" }) :: any
+local heartbeats: { [Model]: Sound } = setmetatable({}, { __mode = "k" }) :: any
 
 -- Glowing eyes on `head` for `time` seconds, fading in (the charge).
 local function chargeEyes(head: BasePart, time: number, fadeIn: number): { BasePart }
@@ -2541,18 +2546,284 @@ local function chargeEyes(head: BasePart, time: number, fadeIn: number): { BaseP
 	return eyes
 end
 
--- The heat vision point blank into the victim's face until `time` runs out:
--- the face chars where it lands, smoke and sparks pour off it.
-local function pointBlank(attacker: Model, victim: Model, time: number, token: number)
-	local head = part(attacker, "Head")
-	local face = part(victim, "Head")
-	if head == nil or face == nil then
+-- The Sentinel's bore (the server's "Bore" cut over the heart, drawn by
+-- Gashes) while the beam burns into it and once it stops: the inside of the
+-- hole glows with the beam's light, its rim red hot, then everything cools
+-- down to black over a few seconds, smoke pouring out, embers rising; a
+-- thin smoke for a while after (bodies seen later too, from the server's
+-- Finishers.BORED_ATTRIBUTE). One per body; everything is attached to its
+-- torso (gone with it).
+local BORE_RIM_COOL = 5 -- seconds for the rim to go from red hot to black
+local BORE_INSIDE_COOL = 1.2 -- (the inside: its glow is mostly the beam's)
+local BORE_SMOKE_TIME = 40 -- a last thin smoke until then (seconds)
+local BORE_STEP = 1 / 30 -- the colours are updated this often
+local HOT_DULL = Color3.fromRGB(120, 22, 8)
+local HOT_ORANGE = Color3.fromRGB(255, 104, 26)
+local HOT_WHITE = Color3.fromRGB(255, 222, 160)
+-- Layers of the bore's insert that are its rim (cool slower: they glow
+-- longer), the rest is the inside. (Lip / Dermis: an older kit's burn.)
+local BORE_RIM = table.freeze({ Char = true, Eschar = true, Lip = true, Dermis = true })
+
+type BorePiece = { part: BasePart, rim: boolean, color: Color3, material: Enum.Material }
+type Bore = {
+	model: Model,
+	torso: BasePart,
+	owner: Model?, -- the Sentinel burning it (his finisher cut short: it goes)
+	mouth: Attachment, -- on the hole, facing out of the chest
+	inside: Attachment, -- deep in the hole
+	smoke: ParticleEmitter,
+	embers: ParticleEmitter,
+	glow: PointLight, -- the light inside the hole
+	beamOn: boolean,
+	stoppedAt: number, -- os.clock() when the beam stopped
+	folder: Instance?, -- Gashes' folder the pieces come from
+	pieces: { BorePiece },
+	cold: boolean, -- the pieces have their own looks back
+}
+local bores: { [Model]: Bore } = {}
+local boreLoop: RBXScriptConnection? = nil
+local boreClock = 0
+
+-- The colour of something this hot (0 = its own colour, 1 = white hot).
+local function heatColor(own: Color3, heat: number): Color3
+	if heat < 0.35 then
+		return own:Lerp(HOT_DULL, heat / 0.35)
+	elseif heat < 0.75 then
+		return HOT_DULL:Lerp(HOT_ORANGE, (heat - 0.35) / 0.4)
+	end
+	return HOT_ORANGE:Lerp(HOT_WHITE, math.min(1, (heat - 0.75) / 0.25))
+end
+
+-- The insert pieces of the bore in Gashes' folder (rebuilt by Gashes when
+-- the cut grows: then picked again). An older kit draws a burn there: its
+-- pieces near the heart.
+local function borePieces(bore: Bore, folder: Instance)
+	for _, piece in bore.pieces do
+		if piece.part.Parent then
+			piece.part.Color = piece.color
+			piece.part.Material = piece.material
+		end
+	end
+	table.clear(bore.pieces)
+	bore.folder = folder
+	local heart = bore.torso.CFrame * Gash.HEART
+	for _, item in folder:GetChildren() do
+		if not item:IsA("BasePart") then
+			continue
+		end
+		local shape, layer = string.match(item.Name, "^(%a+)[SML]_(%a+)$")
+		if shape == nil or layer == nil then
+			continue
+		end
+		local near = (item.Position - heart).Magnitude < 0.8
+		if shape == "Bore" or ((shape == "Burn" or shape == "Lac") and near) then
+			table.insert(bore.pieces, {
+				part = item,
+				rim = BORE_RIM[layer] == true,
+				color = item.Color,
+				material = item.Material,
+			})
+		end
+	end
+end
+
+local function endBore(bore: Bore)
+	if bores[bore.model] == bore then
+		bores[bore.model] = nil
+	end
+	for _, piece in bore.pieces do
+		if piece.part.Parent then
+			piece.part.Color = piece.color
+			piece.part.Material = piece.material
+		end
+	end
+	table.clear(bore.pieces)
+	bore.smoke.Rate = 0
+	bore.embers.Rate = 0
+	bore.glow.Enabled = false
+	Debris:AddItem(bore.mouth, 3)
+	bore.inside:Destroy()
+	if next(bores) == nil and boreLoop then
+		boreLoop:Disconnect()
+		boreLoop = nil
+	end
+end
+
+local function updateBores(dt: number)
+	boreClock += dt
+	if boreClock < BORE_STEP then
 		return
 	end
+	boreClock = 0
+	local now = os.clock()
+	for _, bore in bores do
+		local torso = bore.torso
+		if torso.Parent == nil or bore.model.Parent == nil then
+			endBore(bore)
+			continue
+		end
+		local age = if bore.beamOn then 0 else now - bore.stoppedAt
+		if age > BORE_SMOKE_TIME then
+			endBore(bore)
+			continue
+		end
+		-- How hot: the rim and the inside (1 while the beam is in it).
+		local rim = if bore.beamOn then 1 else math.clamp(1 - age / BORE_RIM_COOL, 0, 1) ^ 1.6
+		local inside = if bore.beamOn then 1 else math.clamp(1 - age / BORE_INSIDE_COOL, 0, 1) ^ 2
+		local flicker = 0.85 + 0.15 * math.noise(now * 7, bore.stoppedAt)
+		-- The light inside, the smoke and the embers.
+		bore.glow.Brightness = if bore.beamOn
+			then 5 * flicker
+			else 3 * math.max(rim, inside) * flicker
+		bore.glow.Range = if bore.beamOn then 7 else 4
+		bore.smoke.Rate = if bore.beamOn
+			then 45
+			elseif age < 6 then 26 * (1 - age / 6) + 4
+			else 4 * (1 - (age - 6) / (BORE_SMOKE_TIME - 6))
+		bore.embers.Rate = if bore.beamOn then 22 else 18 * rim
+		-- The insert's pieces glowing, then their own looks back.
+		local folder = torso:FindFirstChild("Gashes")
+		if folder == nil then
+			continue -- (not drawn yet: no kit, or Gashes rebuilding it)
+		end
+		if folder ~= bore.folder then
+			borePieces(bore, folder)
+			bore.cold = false
+		end
+		if bore.cold then
+			continue
+		end
+		local any = false
+		for _, piece in bore.pieces do
+			local heat = if piece.rim then rim else inside
+			-- (the rim's crust glows in its cracks: never quite white)
+			if piece.rim then
+				heat *= 0.8
+			end
+			if heat > 0.02 then
+				any = true
+				piece.part.Color = heatColor(piece.color, heat)
+				piece.part.Material = if heat > 0.3 then Enum.Material.Neon else piece.material
+			else
+				piece.part.Color = piece.color
+				piece.part.Material = piece.material
+			end
+		end
+		bore.cold = not any and not bore.beamOn
+	end
+end
+
+-- The bore of `model` (made the first time): `age` = seconds since the beam
+-- stopped (nil: the beam is burning in it now).
+local function heatBore(model: Model, age: number?, owner: Model?): Bore?
+	local existing = bores[model]
+	if existing then
+		if age then
+			if existing.beamOn then
+				existing.beamOn = false
+				existing.stoppedAt = os.clock() - age
+			end
+		else
+			existing.beamOn = true
+		end
+		if owner then
+			existing.owner = owner
+		end
+		return existing
+	end
+	local torso = part(model, "Torso")
+	if torso == nil then
+		return nil
+	end
+	local mouth = Instance.new("Attachment")
+	mouth.Name = "Bore"
+	-- (facing out of the chest: the torso's front is its -Z)
+	mouth.CFrame = CFrame.lookAt(Gash.HEART, Gash.HEART + Vector3.new(0, 0, -1))
+	mouth.Parent = torso
+	local inside = Instance.new("Attachment")
+	inside.Name = "BoreInside"
+	inside.Position = Gash.HEART + Vector3.new(0, 0, 0.3)
+	inside.Parent = torso
+	local glow = Instance.new("PointLight")
+	glow.Color = EMBER
+	glow.Brightness = 0
+	glow.Range = 4
+	glow.Shadows = false
+	glow.Parent = inside
+	local smoke = stream(mouth, {
+		texture = TEX.smoke,
+		color = Color3.fromRGB(64, 60, 58),
+		color2 = Color3.fromRGB(120, 116, 112),
+		size = { 0.25, 1.1, 2.2 },
+		transparency = { 0.35, 0.6, 1 },
+		speed = NumberRange.new(1, 2.6),
+		lifetime = NumberRange.new(1.2, 2.4),
+		spread = 18,
+		acceleration = Vector3.new(0, 3.2, 0),
+		drag = 1.2,
+		count = 0,
+	}, 0)
+	local embers = stream(mouth, {
+		texture = TEX.sparkle,
+		color = HOT_WHITE,
+		color2 = EMBER,
+		size = { 0.1, 0.06, 0 },
+		transparency = { 0, 0.2, 1 },
+		speed = NumberRange.new(1.2, 3.5),
+		lifetime = NumberRange.new(0.6, 1.4),
+		spread = 35,
+		acceleration = Vector3.new(0, 2.5, 0),
+		drag = 1,
+		glow = 1,
+		count = 0,
+	}, 0)
+	local bore: Bore = {
+		model = model,
+		torso = torso,
+		owner = owner,
+		mouth = mouth,
+		inside = inside,
+		smoke = smoke,
+		embers = embers,
+		glow = glow,
+		beamOn = age == nil,
+		stoppedAt = os.clock() - (age or 0),
+		folder = nil,
+		pieces = {},
+		cold = false,
+	}
+	bores[model] = bore
+	model.Destroying:Once(function()
+		if bores[model] == bore then
+			endBore(bore)
+		end
+	end)
+	if boreLoop == nil then
+		boreLoop = RunService.Heartbeat:Connect(updateBores)
+	end
+	return bore
+end
+
+-- The heat vision point blank into the victim's heart until `time` runs
+-- out: both beams converge on the front of the chest and go into it (deeper
+-- as it burns), the hole lit from inside, sparks and thick smoke pouring out
+-- of it. No blood (cauterized), no burn marks around it: the hole is the
+-- server's bore.
+local function pointBlank(attacker: Model, victim: Model, time: number, token: number)
+	local head = part(attacker, "Head")
+	local torso = part(victim, "Torso")
+	if head == nil or torso == nil then
+		return
+	end
+	heatBore(victim, nil, attacker)
 	local eyes = chargeEyes(head, time, 0.05)
 	local loop = SoundController.play("LaserBeam", attacker)
 	if loop then
 		loop.Looped = true
+	end
+	local sizzle = SoundController.play("Sizzle", victim)
+	if sizzle then
+		sizzle.Looped = true
 	end
 	local beams: { { part: Part, width: number } } = {}
 	for _ = 1, #eyes do
@@ -2564,46 +2835,36 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 			table.insert(beams, { part = layer, width = spec.width })
 		end
 	end
+	-- (where the beams meet, on the skin: sparks spraying back off it)
 	local hot = Instance.new("Attachment")
 	hot.Parent = workspace.Terrain
 	local fountain = stream(hot, {
 		texture = TEX.sparks,
 		color = WHITE,
 		color2 = EMBER,
-		size = { 0.35, 0.18, 0 },
+		size = { 0.28, 0.14, 0 },
 		transparency = { 0, 0.3, 1 },
-		speed = NumberRange.new(6, 18),
-		lifetime = NumberRange.new(0.25, 0.5),
-		spread = 70,
+		speed = NumberRange.new(5, 14),
+		lifetime = NumberRange.new(0.2, 0.45),
+		spread = 60,
 		acceleration = Vector3.new(0, -60, 0),
 		glow = 1,
 		count = 0,
-	}, 120)
-	local smoke = stream(hot, {
-		texture = TEX.smoke,
-		color = Color3.fromRGB(60, 56, 54),
-		size = { 0.5, 1.8, 2.6 },
-		transparency = { 0.4, 0.65, 1 },
-		speed = NumberRange.new(1.5, 4),
-		lifetime = NumberRange.new(0.9, 1.6),
-		spread = 30,
-		acceleration = Vector3.new(0, 4, 0),
-		count = 0,
-	}, 30)
+	}, 70)
 	local glow = Instance.new("PointLight")
 	glow.Color = EMBER
-	glow.Brightness = 6
-	glow.Range = 12
+	glow.Brightness = 5
+	glow.Range = 10
+	glow.Shadows = false
 	glow.Parent = hot
 	local started = os.clock()
-	local lastBurn = 0
 	local connection: RBXScriptConnection? = nil
 	connection = RunService.RenderStepped:Connect(function()
 		local now = os.clock()
 		if
 			now - started > time
 			or finisherTokens[attacker] ~= token
-			or face.Parent == nil
+			or torso.Parent == nil
 			or head.Parent == nil
 		then
 			if connection then
@@ -2612,9 +2873,11 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 			if loop then
 				loop:Stop()
 			end
+			if sizzle then
+				sizzle:Stop()
+			end
 			fountain.Rate = 0
-			smoke.Rate = 0
-			tween(glow, 0.4, { Brightness = 0 })
+			tween(glow, 0.3, { Brightness = 0 })
 			for _, beam in beams do
 				tween(beam.part, 0.15, { Transparency = 1 })
 				Debris:AddItem(beam.part, 0.2)
@@ -2623,11 +2886,13 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 				tween(eye, 0.15, { Transparency = 1 })
 				Debris:AddItem(eye, 0.2)
 			end
-			Debris:AddItem(hot, 1.8)
+			Debris:AddItem(hot, 1)
 			return
 		end
-		-- (into the face: its front, toward him)
-		local target = (face.CFrame * CFrame.new(0, 0.05, -0.55)).Position
+		-- (into the heart: the front of the chest, then deeper into it)
+		local burnt = math.clamp((now - started) / time, 0, 1)
+		local skin = torso.CFrame * Gash.HEART
+		local target = torso.CFrame * (Gash.HEART + Vector3.new(0, 0, 0.5 * burnt))
 		local pulse = 0.85 + math.sin(now * 40) * 0.08 + math.random() * 0.12
 		local index = 0
 		for _, eye in eyes do
@@ -2641,126 +2906,8 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 				beam.part.Size = Vector3.new(beam.width * pulse, beam.width * pulse, length)
 			end
 		end
-		hot.WorldCFrame = facing(target, (head.Position - target))
-		if now - lastBurn > 0.09 then
-			lastBurn = now
-			local spot = face.CFrame
-				* CFrame.new(random:NextNumber(-0.35, 0.35), random:NextNumber(-0.3, 0.35), -0.6)
-			burn(victim, face, spot.Position, true)
-		end
-	end)
-end
-
--- The head burnt black (the Sentinel's finisher; the server's
--- "Incinerated"): charred skin with glowing cracks cooling down, the hair
--- burnt off, smoke rising for a while.
-local charred: { [Model]: boolean } = {}
-local function incinerate(model: Model, live: boolean)
-	if charred[model] then
-		return
-	end
-	local head = part(model, "Head")
-	if head == nil then
-		return
-	end
-	charred[model] = true
-	model.Destroying:Once(function()
-		charred[model] = nil
-	end)
-	local CHARRED = Color3.fromRGB(34, 27, 25)
-	-- (the classic head is a mesh: no material texture shows on it; Neon
-	-- does: it glows hot, then cools to dull char)
-	if live then
-		head.Material = Enum.Material.Neon
-		head.Color = Color3.fromRGB(200, 70, 20)
-		TweenService:Create(head, TweenInfo.new(1.8), { Color = Color3.fromRGB(96, 34, 20) }):Play()
-		task.delay(1.8, function()
-			if head.Parent then
-				head.Material = Enum.Material.SmoothPlastic
-				TweenService:Create(head, TweenInfo.new(2), { Color = CHARRED }):Play()
-			end
-		end)
-	else
-		head.Material = Enum.Material.SmoothPlastic
-		head.Color = CHARRED
-	end
-	for _, item in head:GetChildren() do
-		if item:IsA("Decal") then
-			if live then
-				TweenService:Create(item, TweenInfo.new(0.6), { Transparency = 0.85 }):Play()
-			else
-				item.Transparency = 0.85
-			end
-		end
-	end
-	-- the hair / hat (what's worn on the head) burns away in a puff
-	for _, accessory in model:GetChildren() do
-		local handle = if accessory:IsA("Accessory")
-			then accessory:FindFirstChild("Handle")
-			else nil
-		if
-			handle
-			and handle:IsA("BasePart")
-			and (handle.Position - head.Position).Magnitude < 2.2
-		then
-			if not live then
-				handle.Transparency = 1
-				continue
-			end
-			emit(handle.Position, {
-				texture = TEX.fire,
-				color = EMBER,
-				color2 = LASER_DEEP,
-				size = { 0.5, 0.2, 0 },
-				transparency = { 0.1, 1 },
-				speed = NumberRange.new(2, 5),
-				lifetime = NumberRange.new(0.3, 0.6),
-				spread = 80,
-				glow = 1,
-				count = 14,
-			})
-			TweenService:Create(handle, TweenInfo.new(0.5), { Transparency = 1 }):Play()
-		end
-	end
-	if not live then
-		return -- (a body seen later: already cold)
-	end
-	for _ = 1, 10 do
-		local spot = head.CFrame * CFrame.new(random:NextUnitVector() * 0.6)
-		burn(model, head, spot.Position, true)
-	end
-	local top = Instance.new("Attachment")
-	top.Position = Vector3.new(0, 0.5, 0)
-	top.Parent = head
-	local smoke = stream(top, {
-		texture = TEX.smoke,
-		color = Color3.fromRGB(58, 54, 52),
-		size = { 0.4, 1.6, 2.8 },
-		transparency = { 0.45, 0.7, 1 },
-		speed = NumberRange.new(1, 3),
-		lifetime = NumberRange.new(1.2, 2.2),
-		spread = 25,
-		acceleration = Vector3.new(0, 3, 0),
-		count = 0,
-	}, 16)
-	local embers = stream(top, {
-		texture = TEX.sparkle,
-		color = EMBER,
-		size = { 0.12, 0 },
-		transparency = { 0, 1 },
-		speed = NumberRange.new(1, 3),
-		lifetime = NumberRange.new(0.6, 1.2),
-		spread = 60,
-		acceleration = Vector3.new(0, 2, 0),
-		glow = 1,
-		count = 0,
-	}, 12)
-	animate(9, function(alpha)
-		smoke.Rate = 16 * (1 - alpha)
-		embers.Rate = if alpha < 0.35 then 12 * (1 - alpha / 0.35) else 0
-	end, function()
-		smoke.Rate = 0
-		embers.Rate = 0
+		hot.WorldCFrame = facing(skin, head.Position - skin)
+		glow.Brightness = 4 + 2 * pulse
 	end)
 end
 
@@ -3091,17 +3238,25 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model, anch
 	if kind == "Grab" then
 		token += 1
 		finisherTokens[attacker] = token
-		SoundController.play("HeavyHit", victim)
+		finisherVictims[attacker] = victim
+		SoundController.play("Grab", victim)
 		local neck = part(victim, "Head")
 		if neck then
-			flash(neck.Position - Vector3.new(0, 0.5, 0), WHITE, 1.2, 0.15)
+			flash(neck.Position - Vector3.new(0, 0.5, 0), WHITE, 1, 0.12)
+		end
+	elseif kind == "Lift" then
+		SoundController.play("Choke", victim)
+		-- (his heart still beating, for a moment)
+		local beat = SoundController.play("Heartbeat", victim)
+		if beat then
+			heartbeats[attacker] = beat
 		end
 	elseif kind == "Charge" then
 		local head = part(attacker, "Head")
 		if head then
 			local charge = SoundController.play("LaserCharge", attacker)
-			local eyes = chargeEyes(head, 0.6, 0.5)
-			gather(head, Vector3.new(0, 0.1, -0.5), 2.4, 0.55, LASER, 80, function()
+			local eyes = chargeEyes(head, 0.5, 0.45)
+			gather(head, Vector3.new(0, 0.1, -0.5), 2.4, 0.5, LASER, 90, function()
 				if finisherTokens[attacker] == token then
 					return false
 				end
@@ -3114,8 +3269,8 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model, anch
 				end
 				return true
 			end)
-			for step = 1, 4 do
-				task.delay(0.25 + step * 0.07, function()
+			for step = 1, 5 do
+				task.delay(0.15 + step * 0.06, function()
 					if finisherTokens[attacker] == token then
 						crackle(head.Position + head.CFrame.LookVector * 0.6, 0.8, 1, LASER)
 					end
@@ -3123,21 +3278,102 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model, anch
 			end
 		end
 	elseif kind == "Beam" then
-		pointBlank(attacker, victim, 1.35, token)
+		-- (until "Burnt": the beam stops there)
+		local cinematic = Finishers.get("Incinerate")
+		local stop = 1.5
+		if cinematic then
+			local beamAt, burntAt = 0, 0
+			for _, event in cinematic.events do
+				if event.kind == "Beam" then
+					beamAt = event.time
+				elseif event.kind == "Burnt" then
+					burntAt = event.time
+				end
+			end
+			if burntAt > beamAt then
+				stop = burntAt - beamAt
+			end
+		end
+		pointBlank(attacker, victim, stop, token)
+		local torso = part(victim, "Torso")
+		if torso then
+			local skin = torso.CFrame * Gash.HEART
+			flash(skin, LASER, 1.4, 0.15)
+			sparks(skin, 24, EMBER, torso.CFrame.LookVector, 16, 60)
+		end
+	elseif kind == "Ribs" or kind == "Heart" then
+		local torso = part(victim, "Torso")
+		if kind == "Ribs" then
+			SoundController.play("RibCrack", victim)
+		else
+			-- through the heart: it stops beating
+			local beat = heartbeats[attacker]
+			heartbeats[attacker] = nil
+			if beat then
+				beat:Stop()
+			end
+		end
+		if torso then
+			local skin = torso.CFrame * Gash.HEART
+			local out = torso.CFrame.LookVector
+			sparks(skin, if kind == "Heart" then 40 else 26, EMBER, out, 20, 50)
+			light(skin + out * 0.3, EMBER, if kind == "Heart" then 10 else 6, 10, 0.35)
+			smokePuff(skin + out * 0.2, 4, 0.35, Color3.fromRGB(70, 66, 62), out + Vector3.yAxis, 4)
+		end
 	elseif kind == "Burnt" then
-		local face = part(victim, "Head")
-		if face then
-			flash(face.Position, EMBER, 2.5, 0.3)
-			shockSphere(face.Position, 0.4, 2.5, 0.3, EMBER)
+		-- the beam stops: the hole glows, then cools down (heatBore)
+		heatBore(victim, 0, attacker)
+		local torso = part(victim, "Torso")
+		if torso then
+			local skin = torso.CFrame * Gash.HEART
+			local out = torso.CFrame.LookVector
+			flash(skin + out * 0.1, EMBER, 1.1, 0.25)
+			emit(skin + out * 0.1, {
+				texture = TEX.smoke,
+				color = STEAM,
+				color2 = Color3.fromRGB(110, 106, 102),
+				size = { 0.3, 1.2, 2 },
+				transparency = { 0.4, 0.7, 1 },
+				speed = NumberRange.new(2, 5),
+				lifetime = NumberRange.new(0.8, 1.4),
+				spread = 25,
+				direction = out + Vector3.yAxis * 0.5,
+				acceleration = Vector3.new(0, 3, 0),
+				count = 6,
+			})
+		end
+	elseif kind == "Toss" then
+		SoundController.play("HeavySwing", attacker)
+	elseif kind == "Thud" then
+		SoundController.play("BodySlam", victim)
+		local torso = part(victim, "Torso")
+		if torso then
+			local floor = floorAt(torso.Position)
+			local at = if floor then floor.position else torso.Position - Vector3.new(0, 0.5, 0)
+			dustRing(at, 1.6, 0.35, dustColor(floor))
+			-- (embers knocked up out of the hole)
+			sparks(torso.CFrame * Gash.HEART, 14, EMBER, Vector3.yAxis, 8, 40)
 		end
 	else
 		bullFinisherEvent(kind, attacker, victim, anchor, token)
 	end
 end
 
--- The finisher was cut short: its pending effects stop.
+-- The finisher was cut short: its pending effects stop (the Sentinel's
+-- bore goes: the server takes the cut back).
 function KitVFX.cancelFinisher(attacker: Model)
 	finisherTokens[attacker] = (finisherTokens[attacker] or 0) + 1
+	local beat = heartbeats[attacker]
+	heartbeats[attacker] = nil
+	if beat then
+		beat:Stop()
+	end
+	local victim = finisherVictims[attacker]
+	finisherVictims[attacker] = nil
+	local bore = if victim then bores[victim] else nil
+	if bore and bore.owner == attacker then
+		endBore(bore)
+	end
 end
 
 -- Listen to the server's smashes, follow the Bulls' strides.
@@ -3154,19 +3390,24 @@ function KitVFX.start()
 		end
 	)
 	RunService.Heartbeat:Connect(bullStrides)
-	-- the Sentinel's finisher: heads burnt black (also on bodies seen later)
+	-- the Sentinel's finisher: the hole in the chest smoking, cooling down
+	-- (also on bodies seen later: from when the beam stopped)
 	local function watchBody(instance: Instance)
 		if not instance:IsA("Model") then
 			return
 		end
-		if instance:GetAttribute("Incinerated") == true then
-			incinerate(instance, false)
-		end
-		instance:GetAttributeChangedSignal("Incinerated"):Connect(function()
-			if instance:GetAttribute("Incinerated") == true then
-				incinerate(instance, true)
+		local function bored()
+			local stopped = instance:GetAttribute(Finishers.BORED_ATTRIBUTE)
+			if typeof(stopped) ~= "number" or bores[instance] then
+				return -- (already burning / cooling: the live finisher's)
 			end
-		end)
+			local age = math.max(0, workspace:GetServerTimeNow() - stopped)
+			if age < BORE_SMOKE_TIME then
+				heatBore(instance, age, nil)
+			end
+		end
+		bored()
+		instance:GetAttributeChangedSignal(Finishers.BORED_ATTRIBUTE):Connect(bored)
 	end
 	-- (fighters, and the bodies a finisher left: Server/Systems/Corpses)
 	for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do

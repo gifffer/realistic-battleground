@@ -60,6 +60,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Weapons = require(ReplicatedStorage.Shared.Weapons)
+local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
@@ -1092,10 +1093,107 @@ local function goreWounds(victim: Model): string
 	return name
 end
 
+-- The Sentinel's finisher: the beam burning into the heart. One "Bore" on
+-- the torso at Gash.HEART (the wound kit's bore inserts are made for that
+-- spot, angle 0), deeper each time (S, M, L). Nothing bleeds: no blood, no
+-- injury, cauterized. The cuts already over that spot go (the bore takes
+-- their place); a full torso gives up the cut nearest the heart. Every
+-- attribute changed is written in `before` (its old value, or false) once,
+-- to be put back if the finisher is cut short. Returns the bore's attribute.
+local function boreFootprint(data: Gash.Data): Vector2
+	local shape = WoundShapes.shapes[data.kind .. data.size]
+	local extent = if shape then shape.extent else Vector2.new(0.3, 0.3)
+	local c, s = math.abs(math.cos(math.rad(data.angle))), math.abs(math.sin(math.rad(data.angle)))
+	return Vector2.new(c * extent.X + s * extent.Y, s * extent.X + c * extent.Y)
+end
+
+local function boreHeart(
+	victim: Model,
+	size: Gash.Size,
+	attribute: string?,
+	before: { [string]: any }
+): string?
+	local torso = victim:FindFirstChild("Torso")
+	if torso == nil or not torso:IsA("BasePart") then
+		return nil
+	end
+	local function remember(name: string)
+		if before[name] == nil then
+			local old = victim:GetAttribute(name)
+			before[name] = if old == nil then false else old
+		end
+	end
+	if attribute == nil then
+		local half = torso.Size / 2
+		local bore = boreFootprint({
+			kind = "Bore",
+			size = "L",
+			point = Gash.HEART,
+			angle = 0,
+			seed = 0,
+		})
+		local free: number? = nil
+		local nearest: number? = nil
+		local nearestDistance = math.huge
+		for index = 1, Gash.MAX_PER_PART do
+			local name = Gash.attribute("Torso", index)
+			local old = Gash.decode(victim:GetAttribute(name))
+			if old == nil then
+				free = free or index
+				continue
+			end
+			local p = old.point
+			local delta = p - Gash.HEART
+			-- On the front face too (the side faces' cuts never reach it),
+			-- and their outlines would cross: it goes.
+			local front = -p.Z / half.Z >= math.abs(p.X) / half.X
+			local footprint = boreFootprint(old)
+			if
+				front
+				and math.abs(delta.X) < bore.X + footprint.X
+				and math.abs(delta.Y) < bore.Y + footprint.Y
+			then
+				remember(name)
+				setAttribute(victim, name, nil)
+				free = free or index
+			elseif delta.Magnitude < nearestDistance then
+				nearest, nearestDistance = index, delta.Magnitude
+			end
+		end
+		local index = free or nearest
+		if index == nil then
+			return nil
+		end
+		attribute = Gash.attribute("Torso", index)
+	end
+	local name = attribute :: string
+	local old = Gash.decode(victim:GetAttribute(name))
+	remember(name)
+	setAttribute(
+		victim,
+		name,
+		Gash.encode({
+			kind = "Bore",
+			size = size,
+			point = Gash.HEART,
+			angle = 0,
+			seed = if old and old.kind == "Bore" then old.seed else random:NextInteger(1, 2 ^ 30),
+		})
+	)
+	return name
+end
+
+-- When the bore goes deeper, after the beam starts (seconds).
+local BORE_STEPS: { { after: number, size: Gash.Size } } = {
+	{ after = 0.3, size = "S" },
+	{ after = 0.7, size = "M" },
+	{ after = 1.1, size = "L" },
+}
+
 -- Where the victim's body is in the last frame of its clip (anchor space of
 -- the victim's root): the ragdoll starts from there, not from standing.
 local KILL_POSE: { [string]: CFrame } = {
-	Incinerate = CFrame.new(-0.64, 0.48, -0.6), -- held up by the throat
+	Incinerate = CFrame.new(-0.5, -2.46, 1.8) * CFrame.Angles(math.rad(88), 0, 0), -- thrown down on its back
 	Gore = Finishers.CHARGE.rip, -- thrown back high over his head
 }
 
@@ -1636,7 +1734,8 @@ local function startCinematic(
 	local over = false
 	local killed = false
 	local goreWound: string? = nil -- (the Bull's horns: taken back if cut short)
-	local burnsBefore: { [string]: any } = {} -- (and the Sentinel's burns)
+	-- (and the Sentinel's bore: every cut it changed, with its old value)
+	local woundsBefore: { [string]: any } = {}
 	-- Everything this cinematic holds, let go (once). Before the killing
 	-- blow, the victim drops back down, still KO'd (someone can finish them).
 	local function finish()
@@ -1652,7 +1751,7 @@ local function startCinematic(
 				setAttribute(target, goreWound, nil)
 			end
 			if target.Parent then
-				for attribute, previous in burnsBefore do
+				for attribute, previous in woundsBefore do
 					setAttribute(target, attribute, if previous == false then nil else previous)
 				end
 			end
@@ -1696,24 +1795,19 @@ local function startCinematic(
 	end
 
 	if cinematic.id == "Incinerate" then
-		-- the point-blank beam burning through the face (Shared/Finishers
-		-- "Incinerate": the beam from 1.55 s to the kill)
-		for step, offset in
-			{
-				Vector3.new(0, 0.05, -1),
-				Vector3.new(0.25, 0.12, -1),
-				Vector3.new(-0.25, 0, -1),
-				Vector3.new(0, 0.1, -1),
-			}
-		do
-			task.delay(1.65 + step * 0.28, function()
-				local head = target:FindFirstChild("Head")
-				if not over and head and head:IsA("BasePart") and state.attackToken == token then
-					local attribute, previous =
-						addBurn(target, "Head", (head.CFrame * CFrame.new(offset)).Position)
-					if attribute and burnsBefore[attribute] == nil then
-						burnsBefore[attribute] = if previous == nil then false else previous
-					end
+		-- the beam point blank into the heart (Shared/Finishers "Incinerate":
+		-- from "Beam"): the hole goes deeper as it burns, S -> M -> L
+		local beamAt = 0
+		for _, event in cinematic.events do
+			if event.kind == "Beam" then
+				beamAt = event.time
+			end
+		end
+		local boreAttribute: string? = nil
+		for _, step in BORE_STEPS do
+			task.delay(beamAt + step.after, function()
+				if not over and target.Parent and state.attackToken == token and isAlive(state) then
+					boreAttribute = boreHeart(target, step.size, boreAttribute, woundsBefore)
 				end
 			end)
 		end
@@ -1759,8 +1853,19 @@ local function startCinematic(
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
 			elseif cinematic.id == "Incinerate" then
-				-- (every client chars the head: KitVFX)
-				setAttribute(target, "Incinerated", true)
+				-- (every client lets the hole smoke and cool down, from when
+				-- the beam stopped: KitVFX, bodies seen later too)
+				local burntAt = cinematic.kill
+				for _, event in cinematic.events do
+					if event.kind == "Burnt" then
+						burntAt = event.time
+					end
+				end
+				setAttribute(
+					target,
+					Finishers.BORED_ATTRIBUTE,
+					workspace:GetServerTimeNow() - (cinematic.kill - burntAt)
+				)
 			elseif cinematic.id == "ArmRip" then
 				local throwIn: number? = nil
 				for _, event in cinematic.events do

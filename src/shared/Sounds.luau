@@ -243,6 +243,13 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0,
 	},
 	LaserBeam = { ids = { 139620337204036 }, volume = 0.8, pitch = 1, pitchVariation = 0 }, -- (looped while it fires)
+	Sizzle = { -- flesh searing under the beam (finisher; looped). No file yet: the beam, higher
+		ids = {},
+		volume = 0.55,
+		pitch = 1.8,
+		pitchVariation = 0.04,
+		fallback = "LaserBeam",
+	},
 	ThunderClap = { ids = { 139210252225248 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
 	SkyfallJump = { ids = { 74149238738530 }, volume = 1, pitch = 1, pitchVariation = 0.04 }, -- the take-off impact
 	Slam = { ids = { 91288569991875 }, volume = 1, pitch = 1, pitchVariation = 0.04 }, -- the skyfall landing
