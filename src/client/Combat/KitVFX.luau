@@ -38,6 +38,20 @@ local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local HeatBeam = require(ReplicatedStorage.Shared.Util.HeatBeam)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+
+-- The beam's end: its "cut off" sound starts a little BEFORE the beam goes
+-- (the file takes a moment to bite), and the hum fades out under it.
+local STOP_LEAD = 0.35
+local function laserStop(loop: Sound?, owner: Model)
+	SoundController.play("LaserStop", owner)
+	if loop then
+		local fade = TweenService:Create(loop, TweenInfo.new(0.2), { Volume = 0 })
+		fade.Completed:Once(function()
+			loop:Stop()
+		end)
+		fade:Play()
+	end
+end
 local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
 local KitLooks = require(script.Parent.KitLooks)
@@ -1442,6 +1456,7 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	local lastScorch, lastBurn, lastGlance = 0, 0, 0
 	local firing = false
 	local loop: Sound? = nil
+	local stopping = false -- (its stop sound already started)
 	local connection: RBXScriptConnection? = nil
 	local finished = false
 
@@ -1454,9 +1469,10 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			connection:Disconnect()
 			connection = nil
 		end
-		if loop then
+		if loop and not stopping then
+			laserStop(loop, model) -- (cut short: now)
+		elseif loop then
 			loop:Stop()
-			SoundController.play("LaserStop", model) -- (only once it really fired)
 		end
 		if charge then
 			charge:Stop()
@@ -1504,6 +1520,10 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		if not alive(model, token) or head.Parent == nil or elapsed > beam.to then
 			finish()
 			return
+		end
+		if firing and not stopping and elapsed > beam.to - STOP_LEAD then
+			stopping = true
+			laserStop(loop, model)
 		end
 		local charged = math.clamp(elapsed / beam.from, 0, 1)
 		for index, flare in flares do
@@ -2862,9 +2882,18 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 	glow.Shadows = false
 	glow.Parent = hot
 	local started = os.clock()
+	local stopping = false
 	local connection: RBXScriptConnection? = nil
 	connection = RunService.RenderStepped:Connect(function()
 		local now = os.clock()
+		if
+			not stopping
+			and now - started > time - STOP_LEAD
+			and finisherTokens[attacker] == token
+		then
+			stopping = true
+			laserStop(loop, attacker)
+		end
 		if
 			now - started > time
 			or finisherTokens[attacker] ~= token
@@ -2874,9 +2903,10 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 			if connection then
 				connection:Disconnect()
 			end
-			if loop then
+			if loop and not stopping then
+				laserStop(loop, attacker)
+			elseif loop then
 				loop:Stop()
-				SoundController.play("LaserStop", attacker)
 			end
 			if sizzle then
 				sizzle:Stop()

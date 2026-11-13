@@ -40,6 +40,7 @@ local MAX_CUT_PER_BLAST = 3 -- walls cut up by one blast, at most
 -- the map but go through fighters.
 local DEBRIS_GROUP = "Debris"
 local FIGHTER_GROUP = "Fighters"
+local DEAD_GROUP = "DeadBodies"
 
 type Toggle = { instance: Instance, property: string, value: any }
 type Saved = {
@@ -336,13 +337,28 @@ local function intoFighterGroup(model: Instance)
 	for _, descendant in model:GetDescendants() do
 		set(descendant)
 	end
-	model.DescendantAdded:Connect(set)
+	local added = model.DescendantAdded:Connect(set)
+	-- Dead: the body no longer touches the living (standing / crouching on a
+	-- ragdoll flung them), only the map.
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.Died:Once(function()
+			added:Disconnect()
+			for _, descendant in model:GetDescendants() do
+				if descendant:IsA("BasePart") then
+					descendant.CollisionGroup = DEAD_GROUP
+				end
+			end
+		end)
+	end
 end
 
 function Destruction.init()
 	PhysicsService:RegisterCollisionGroup(DEBRIS_GROUP)
 	PhysicsService:RegisterCollisionGroup(FIGHTER_GROUP)
 	PhysicsService:CollisionGroupSetCollidable(DEBRIS_GROUP, FIGHTER_GROUP, false)
+	PhysicsService:RegisterCollisionGroup(DEAD_GROUP)
+	PhysicsService:CollisionGroupSetCollidable(DEAD_GROUP, FIGHTER_GROUP, false)
 end
 
 function Destruction.start()
