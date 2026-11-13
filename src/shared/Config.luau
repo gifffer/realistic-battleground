@@ -449,31 +449,31 @@ return table.freeze({
 		-- = { spatter_round_1, _2, _3 }. footL / footR: 1 heavy, 2 partial,
 		-- 3 trace; pool / poolRim go in pairs (pool_2 with pool_rim_2).
 		IMAGES = table.freeze({
-			spatterRound = table.freeze({ 0, 0, 0 }), -- spatter_round_1..3
-			spatterOval = table.freeze({ 0, 0, 0 }), -- spatter_oval_1..3
-			spatterTail = table.freeze({ 0, 0, 0 }), -- spatter_tail_1..3
-			spatterStreak = table.freeze({ 0, 0 }), -- spatter_streak_1..2
-			satellites = table.freeze({ 0, 0, 0 }), -- satellites_1..3
-			drip = table.freeze({ 0, 0 }), -- drip_1..2
-			dripPool = table.freeze({ 0, 0 }), -- drip_pool_1..2
-			pool = table.freeze({ 0, 0, 0 }), -- pool_1..3
-			poolRim = table.freeze({ 0, 0, 0 }), -- pool_rim_1..3
-			poolLobe = table.freeze({ 0, 0, 0 }), -- pool_lobe_1..3
-			run = table.freeze({ 0, 0 }), -- run_1..2
-			smear = table.freeze({ 0, 0 }), -- smear_1..2
-			handL = table.freeze({ 0 }), -- handprint_L_1
-			handR = table.freeze({ 0 }), -- handprint_R_1
-			footL = table.freeze({ 0, 0, 0 }), -- foot_L_1..3
-			footR = table.freeze({ 0, 0, 0 }), -- foot_R_1..3
-			soak = table.freeze({ 0, 0, 0 }), -- soak_1..3
-			skinSmear = table.freeze({ 0, 0 }), -- skin_smear_1..2
-			knuckles = table.freeze({ 0, 0 }), -- knuckles_1..2
-			arterialArc = table.freeze({ 0, 0 }), -- arterial_arc_1..2
-			pDrop = table.freeze({ 0 }), -- p_drop
-			pDrops4x4 = table.freeze({ 0 }), -- p_drops_4x4
-			pGobs4x4 = table.freeze({ 0 }), -- p_gobs_4x4
-			pMist8x8 = table.freeze({ 0 }), -- p_mist_8x8
-			beamStream = table.freeze({ 0 }), -- beam_stream
+			spatterRound = table.freeze({ 129652093044803, 121498932398811, 81274669458734 }), -- spatter_round_1..3
+			spatterOval = table.freeze({ 133890404957396, 114674991406483, 75490293544153 }), -- spatter_oval_1..3
+			spatterTail = table.freeze({ 126762946376902, 81333818985950, 91190695364226 }), -- spatter_tail_1..3
+			spatterStreak = table.freeze({ 121791214831633, 95347309663029 }), -- spatter_streak_1..2
+			satellites = table.freeze({ 107693275017714, 110691209010386, 127425185904579 }), -- satellites_1..3
+			drip = table.freeze({ 101998939021063, 90667518738525 }), -- drip_1..2
+			dripPool = table.freeze({ 109255283220791, 115452152095923 }), -- drip_pool_1..2
+			pool = table.freeze({ 95384884943813, 80392551772155, 97179242410398 }), -- pool_1..3
+			poolRim = table.freeze({ 106826235132117, 89176067619082, 130214366446942 }), -- pool_rim_1..3
+			poolLobe = table.freeze({ 108586807874189, 106810200162755, 132219975415999 }), -- pool_lobe_1..3
+			run = table.freeze({ 117518789409851, 130904925174038 }), -- run_1..2
+			smear = table.freeze({ 108391533303885, 131202605979713 }), -- smear_1..2
+			handL = table.freeze({ 71377374998060 }), -- handprint_L_1
+			handR = table.freeze({ 84539848533298 }), -- handprint_R_1
+			footL = table.freeze({ 82397064928935, 90987243783719, 109215097479157 }), -- foot_L_1..3
+			footR = table.freeze({ 115787387957335, 134983683933176, 73258765967837 }), -- foot_R_1..3
+			soak = table.freeze({ 140519271845432, 104640502456555, 137232664976275 }), -- soak_1..3
+			skinSmear = table.freeze({ 110704894117972, 116898760772229 }), -- skin_smear_1..2
+			knuckles = table.freeze({ 78951370578961, 128504747370997 }), -- knuckles_1..2
+			arterialArc = table.freeze({ 107996161995401, 115760739284054 }), -- arterial_arc_1..2
+			pDrop = table.freeze({ 101151632642906 }), -- p_drop
+			pDrops4x4 = table.freeze({ 118856031934638 }), -- p_drops_4x4
+			pGobs4x4 = table.freeze({ 100815666699043 }), -- p_gobs_4x4
+			pMist8x8 = table.freeze({ 132573984669153 }), -- p_mist_8x8
+			beamStream = table.freeze({ 135594613079576 }), -- beam_stream
 		}),
 	}),
 
