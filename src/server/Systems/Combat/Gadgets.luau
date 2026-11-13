@@ -38,6 +38,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Knockout = require(script.Parent.Parent.Knockout)
+local Ragdoll = require(script.Parent.Parent.Ragdoll)
 local Clones = require(script.Parent.Clones)
 local MapBounds = require(script.Parent.MapBounds)
 local State = require(script.Parent.State)
@@ -551,6 +552,9 @@ local function usePortal(
 					and root:CanSetNetworkOwnership()
 					and owner
 					and owner.Character == state.model
+					-- (knocked down meanwhile: the server keeps the limp body,
+					-- Ragdoll gives it back when it gets up)
+					and not Ragdoll.isRagdolled(state.model)
 				then
 					root:SetNetworkOwner(owner)
 				end

@@ -585,8 +585,9 @@ Tester à **2 joueurs** (le bug venait d'un autre ordinateur), avec un peu de la
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| L1 | Mettre l'autre joueur KO, plusieurs fois, sous plusieurs angles | Il tombe mou, **les bras et les jambes restent attachés** au corps, sur les deux écrans. |
-| L2 | Tackle / Uppercut / Gravity Glove sur l'autre joueur (il tombe vivant), puis il se relève | Chute et relevé propres ; une fois debout il **contrôle de nouveau son perso** normalement (marcher, sauter, frapper). |
-| L3 | Faire chaque finisher (Batte, KnockoutCombo, Arm Rip, Incinerate, Gore, Portal Cut) sur le **Dummy** et sur un **joueur** | À la fin, le corps tombe **là où il est** : aucun membre ne part au loin puis revient. Le bras arraché (Arm Rip) reste dans la main puis est lancé normalement ; les jambes (Gore, Portal Cut) se séparent normalement. |
-| L4 | Gros combo sur le Dummy jusqu'au KO, puis attendre qu'il se relève | Pareil : membres en place, relevé propre. |
-| L5 | Duel : perdre une manche | Le perdant tombe, membres en place ; la manche suivante il est debout et contrôle son perso. |
+| M1 | Mettre l'autre joueur KO, plusieurs fois, sous plusieurs angles | Il tombe mou, **les bras et les jambes restent attachés** au corps, sur les deux écrans. |
+| M2 | Tackle / Uppercut / Gravity Glove sur l'autre joueur (il tombe vivant), puis il se relève | Chute et relevé propres ; une fois debout il **contrôle de nouveau son perso** normalement (marcher, sauter, frapper). |
+| M3 | Faire chaque finisher (Batte, KnockoutCombo, Arm Rip, Incinerate, Gore, Portal Cut) sur le **Dummy** et sur un **joueur** | À la fin, le corps tombe **là où il est** : aucun membre ne part au loin puis revient. Le bras arraché (Arm Rip) reste dans la main puis est lancé normalement ; les jambes (Gore, Portal Cut) se séparent normalement. |
+| M4 | Gros combo sur le Dummy jusqu'au KO, puis attendre qu'il se relève | Pareil : membres en place, relevé propre. |
+| M5 | Duel : perdre une manche | Le perdant tombe, membres en place ; la manche suivante il est debout et contrôle son perso. |
+| M6 | **Dr. Rift** : **4** (Portal Gun) pendant que l'autre joueur te frappe ; essayer d'être mis au sol (Tackle / Uppercut) **juste en sortant** du portail (fenêtre très courte, 0,1 s) | Si ça tombe dedans : corps mou, membres en place sur les deux écrans ; une fois relevé, tu contrôles de nouveau ton perso. Sinon, le passage au portail reste normal. |

@@ -552,6 +552,8 @@ end
 -- Farther than this (studs) from its loose joint (Server/Ragdoll), a limb
 -- of a limp body is out of place: no ball socket stretches that far.
 local LOOSE_LIMB_GAP = 3
+-- Name prefix of the loose joints the server adds (Server/Ragdoll).
+local RAGDOLL_TAG = "Ragdoll_"
 
 -- A limp body's limbs, put back on their loose joints if they are far off.
 -- (The joints let go while our clip still drew the limb somewhere else: a
@@ -564,7 +566,12 @@ local function snapLooseLimbs(model: Model)
 		return
 	end
 	for _, socket in torso:GetChildren() do
-		if not socket:IsA("BallSocketConstraint") or not socket.Enabled then
+		-- (only the ragdoll's own sockets, Server/Ragdoll)
+		if
+			not socket:IsA("BallSocketConstraint")
+			or not socket.Enabled
+			or string.sub(socket.Name, 1, #RAGDOLL_TAG) ~= RAGDOLL_TAG
+		then
 			continue
 		end
 		local a0, a1 = socket.Attachment0, socket.Attachment1

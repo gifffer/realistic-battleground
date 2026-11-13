@@ -61,6 +61,18 @@ local function serverOwnsAll(model: Model)
 			item:SetNetworkOwner(nil)
 		end
 	end
+	-- Each limb by name too, so this never depends on when the engine
+	-- splits the body into pieces.
+	for _, limbName in LIMBS do
+		local limb = model:FindFirstChild(limbName)
+		if limb == nil or not limb:IsA("BasePart") or limb.Anchored then
+			continue
+		end
+		local base: BasePart? = limb.AssemblyRootPart
+		if base and base:IsDescendantOf(model) and limb:CanSetNetworkOwnership() then
+			limb:SetNetworkOwner(nil)
+		end
+	end
 end
 
 -- An attachment on `part` at the joint position given by `cframe` (C0 / C1).
@@ -128,6 +140,12 @@ function Ragdoll.enable(model: Model)
 	-- The server simulates the fall, limbs included (same for everyone,
 	-- can't be cheated).
 	serverOwnsAll(model)
+	-- Again once the engine has surely split the body into pieces.
+	task.defer(function()
+		if model.Parent and Ragdoll.isRagdolled(model) then
+			serverOwnsAll(model)
+		end
+	end)
 	if root and root:IsA("BasePart") then
 		root.CanCollide = false
 		-- Now that the server owns the body, its state change takes effect:
