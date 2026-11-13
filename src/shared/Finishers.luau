@@ -282,14 +282,16 @@ local cinematics: { [string]: Cinematic } = {
 				look = Vector3.new(0, -2.5, -4.2),
 				fov = 56,
 			},
-			-- Low by the legs, past the open neck: him in his high finish, the
-			-- bat red and dripping.
+			-- Low, past the feet of the body, from his right (clear of the
+			-- body and above it, so it never fills the frame): him in his
+			-- high finish over it, the bat red and dripping (from his left
+			-- his head hides the bat).
 			{
 				time = 3.3,
-				from = Vector3.new(-1.3, -2.5, -6.9),
-				to = Vector3.new(-1.0, -2.4, -6.5),
-				look = Vector3.new(0.4, 0.6, -0.6),
-				fov = 52,
+				from = Vector3.new(2.4, -1.6, -7.8),
+				to = Vector3.new(2.0, -1.45, -7.2),
+				look = Vector3.new(0.2, 0.1, -1.4),
+				fov = 58,
 			},
 			-- Wide, rising and slowly turning: what's left, him with the red bat.
 			{

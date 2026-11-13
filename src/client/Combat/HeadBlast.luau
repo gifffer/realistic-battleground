@@ -52,6 +52,7 @@ local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
 local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
+local BIT_LIFETIME = 7 -- seconds the small bits stay (then fade)
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
 local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
 -- Pools never pushed out by newer drops (they fade on their own).
@@ -594,6 +595,37 @@ end
 -- The body whose head is bursting (its pieces go when it goes).
 local bursting: Model? = nil
 
+-- Fades a piece out, then removes it.
+local function fadeOut(piece: BasePart)
+	if not piece.Parent then
+		return
+	end
+	-- (every layer: a soft piece shows through its welded copy)
+	local fade = TweenInfo.new(0.6)
+	for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+		if item:IsA("BasePart") and item.Transparency < 1 then
+			TweenService:Create(item, fade, { Transparency = 1 }):Play()
+		end
+	end
+	Debris:AddItem(piece, 0.65)
+end
+
+-- How often a flying piece checks whether it lies still (seconds).
+local SETTLE_STEP = 0.2
+
+-- The characters a piece's rays ignore, shared by every piece: fetched at
+-- most once per check, not once per piece per check.
+local ignoredBodies: { Instance } = {}
+local ignoredAt = -math.huge
+local function bodiesToIgnore(): ({ Instance }, number)
+	local now = os.clock()
+	if now - ignoredAt >= SETTLE_STEP then
+		ignoredBodies = CollectionService:GetTagged(Config.Combat.TAG)
+		ignoredAt = now
+	end
+	return ignoredBodies, ignoredAt
+end
+
 -- A piece of the head stays on the floor until the body is removed (a
 -- respawn, a reset): then it goes too. Once it lies still it is fixed
 -- there (it can't sink or slip through the floor, nothing nudges it).
@@ -610,17 +642,7 @@ local function keepPiece(piece: BasePart)
 			-- (a body left by a finisher stays a while longer, as a copy:
 			-- Server/Systems/Corpses; its pieces stay as long)
 			task.delay(Corpse.timeLeft(body), function()
-				if not piece.Parent then
-					return
-				end
-				-- (every layer: a soft piece shows through its welded copy)
-				local fade = TweenInfo.new(0.6)
-				for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
-					if item:IsA("BasePart") and item.Transparency < 1 then
-						TweenService:Create(item, fade, { Transparency = 1 }):Play()
-					end
-				end
-				Debris:AddItem(piece, 0.65)
+				fadeOut(piece)
 			end)
 		end
 		body.Destroying:Once(remove)
@@ -647,14 +669,18 @@ local function keepPiece(piece: BasePart)
 	task.spawn(function()
 		local still = 0
 		local last = piece.Position
+		local filtered: number? = nil -- (when the list it filters was fetched)
 		while piece.Parent and not piece.Anchored do
-			task.wait(0.2)
+			task.wait(SETTLE_STEP)
 			if not piece:IsDescendantOf(workspace) then
 				break
 			end
-			local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
-			table.insert(ignore, piece)
-			params.FilterDescendantsInstances = ignore
+			local bodies, stamp = bodiesToIgnore()
+			if stamp ~= filtered then
+				filtered = stamp
+				params.FilterDescendantsInstances = bodies
+				params:AddToFilter(piece)
+			end
 			local position = piece.Position
 			-- (did it pass through a floor / wall since the last check?)
 			local crossed = workspace:Raycast(last, position - last, params)
@@ -674,7 +700,7 @@ local function keepPiece(piece: BasePart)
 				piece.AssemblyLinearVelocity.Magnitude < 0.3
 				and piece.AssemblyAngularVelocity.Magnitude < 0.5
 			then
-				still += 0.2
+				still += SETTLE_STEP
 				if still >= 0.8 then
 					local below = workspace:Raycast(
 						position,
@@ -692,7 +718,7 @@ local function keepPiece(piece: BasePart)
 	end)
 end
 
-local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
+local function launch(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
 	piece.CanCollide = true
 	piece.CanQuery = false
 	piece.CanTouch = false
@@ -705,7 +731,19 @@ local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Rand
 	piece.AssemblyLinearVelocity = velocity
 	piece.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 28)
 	piece.Parent = workspace
+end
+
+local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
+	launch(piece, at, velocity, random)
 	keepPiece(piece)
+end
+
+-- A small bit (splinter, crumb, shred): not kept, no settle check (many of
+-- them, too small to matter); it fades out after a few seconds.
+local function flyBit(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
+	launch(piece, at, velocity, random)
+	Debris:AddItem(piece, BIT_LIFETIME + 1)
+	task.delay(BIT_LIFETIME, fadeOut, piece)
 end
 
 -- Two parts stuck together into one piece (the other one rides along).
@@ -873,7 +911,7 @@ local function bits(at: Vector3, away: Vector3, skin: Color3, random: Random)
 			if random:NextNumber() < 0.75 then BONE else BONE_EDGE,
 			false
 		)
-		fly(splinter, at, outward(random, away, 1.3, 28), random)
+		flyBit(splinter, at, outward(random, away, 1.3, 28), random)
 	end
 	for _ = 1, 10 do
 		local size = random:NextNumber(0.06, 0.13)
@@ -884,8 +922,8 @@ local function bits(at: Vector3, away: Vector3, skin: Color3, random: Random)
 			true
 		)
 		roundMesh(crumb) -- (a sphere mesh: squashed by Squish)
-		fly(crumb, at, outward(random, away, 1, 17), random)
-		Squish.soft(crumb, { softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 10 })
+		flyBit(crumb, at, outward(random, away, 1, 17), random)
+		Squish.soft(crumb, { softness = 0.5, sag = 0.24, stiffness = 170, lifetime = BIT_LIFETIME })
 	end
 	for _ = 1, 6 do
 		local width = random:NextNumber(0.12, 0.24)
@@ -893,10 +931,10 @@ local function bits(at: Vector3, away: Vector3, skin: Color3, random: Random)
 		local shred = newPart("Scalp", Vector3.new(width, 0.04, depth), skin, false)
 		local under = newPart("Bone", Vector3.new(width * 0.9, 0.035, depth * 0.9), BONE_EDGE, true)
 		stuck(shred, under, CFrame.new(0, -0.035, 0))
-		fly(shred, at, outward(random, away, 1.5, 22), random)
+		flyBit(shred, at, outward(random, away, 1.5, 22), random)
 	end
 	for _ = 1, 2 do
-		fly(
+		flyBit(
 			newPart("Tooth", Vector3.new(0.07, 0.1, 0.06), TOOTH, false),
 			at,
 			outward(random, away, 1.6, 22),

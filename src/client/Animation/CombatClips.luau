@@ -6235,7 +6235,8 @@ local clips: { [string]: R6Pose.Clip } = {
 					LeftHip = { rot = Vector3.new(0.11, 0, -4.99), pos = Vector3.new(0, 0.309, 0) },
 				},
 			},
-			-- IMPACT (2.7 s); the follow-through after it slowed down (the hit lands heavy)
+			-- IMPACT (2.7 s), at full speed; the follow-through slows down after it
+			-- (the hit lands heavy)
 			{
 				time = 2.7,
 				pose = {
@@ -6247,8 +6248,28 @@ local clips: { [string]: R6Pose.Clip } = {
 					LeftHip = { rot = Vector3.new(11, 0, -4), pos = Vector3.new(0, 0.405, 0) },
 				},
 			},
+			-- (still at full speed just past the head: the key after the impact
+			-- sets its speed through it); then it brakes and eases into the
+			-- high finish (the speed only goes down from here)
 			{
-				time = 2.93,
+				time = 2.755,
+				pose = {
+					Root = {
+						rot = Vector3.new(-21.036, 3.662, 0),
+						pos = Vector3.new(-0.039, -0.395, -0.1),
+					},
+					Neck = { rot = Vector3.new(-30.88, -7.32, 0) },
+					RightShoulder = { rot = Vector3.new(69.28, -12.916, -72.88) },
+					LeftShoulder = { rot = Vector3.new(154.9, -18.384, 97.773) },
+					RightHip = {
+						rot = Vector3.new(21.044, 0, -1.66),
+						pos = Vector3.new(0, 0.356, 0),
+					},
+					LeftHip = { rot = Vector3.new(15.8, 0, 1.4), pos = Vector3.new(0, 0.356, 0) },
+				},
+			},
+			{
+				time = 2.8,
 				pose = {
 					Root = {
 						rot = Vector3.new(-19.06, 14.104, 0),
@@ -6262,7 +6283,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.15,
+				time = 3.0,
 				pose = {
 					Root = {
 						rot = Vector3.new(-12.79, 47.236, 0),
@@ -6276,7 +6297,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.35,
+				time = 3.25,
 				pose = {
 					Root = {
 						rot = Vector3.new(-7.66, 74.344, 0),
