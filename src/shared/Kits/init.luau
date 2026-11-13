@@ -45,6 +45,7 @@ end
 
 add(require(script.StreetBrawler))
 add(require(script.Boxer))
+add(require(script.Sentinel))
 add(require(script.Bouncer))
 
 function Kits.get(id: string?): KitDef?

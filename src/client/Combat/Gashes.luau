@@ -14,6 +14,9 @@
 --      (tools/wounds): the skin edge, the pink cut edge, the red flesh, yellow
 --      fat on the body, blood in it and running down. Deep slashes show the
 --      muscle (body) or the skull at the bottom (head).
+-- The Sentinel's finisher ("Bore") is a deep hole burnt over the heart: its
+-- insert is a closed cup (the ribs cut, the lung's edge, the heart burnt
+-- through), so the inside of the torso shell is opened around it.
 -- Everything here is visual and local: every client builds the same thing.
 --
 -- The wound models are imported in Studio once (docs/WOUNDS_FR.md):
@@ -21,6 +24,7 @@
 -- drawn (the blood effects still play).
 --
 --   Gashes.watch(model)   follow the cuts of this fighter
+--   Gashes.hasBore()      the kit has the Sentinel's bore inserts
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,6 +32,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
 local ArmRip = require(script.Parent.ArmRip)
+local Bisect = require(script.Parent.Bisect)
 local BloodGush = require(script.Parent.BloodGush)
 local BloodAge = require(script.Parent.BloodAge)
 local HeadBlast = require(script.Parent.HeadBlast)
@@ -70,6 +75,99 @@ local LOOKS: { [string]: Look } = {
 		material = Enum.Material.SmoothPlastic,
 	},
 }
+
+-- A burn ("Burn": the Sentinel's heat vision): the skin burnt clean away,
+-- like a deep friction / thermal wound - a thin raw red rim where the skin
+-- stops, and in the hole the pale, moist tissue under it: cream fascia with
+-- the whitish-yellow tendons showing, a little yellow fat, the skull on the
+-- head. Barely any blood (cauterized), no black crust.
+local CHARRED = Color3.fromRGB(26, 19, 16) -- (the bore's crust still uses it)
+local RAW_RIM = Color3.fromRGB(150, 36, 34)
+local RAW_WALL = Color3.fromRGB(186, 82, 74)
+local BURN_LOOKS: { [string]: Look } = {
+	-- (the burn inserts: BurnS / M / L, made for it)
+	Char = { color = RAW_RIM, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	Eschar = { color = RAW_WALL, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	-- (an older kit without them: the laceration's insert)
+	Lip = { color = RAW_RIM, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	Dermis = { color = RAW_WALL, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	Fat = {
+		color = Color3.fromRGB(226, 200, 140),
+		reflectance = 0.14,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Flesh = { -- the fascia: pale cream, a pink tinge
+		color = Color3.fromRGB(226, 204, 182),
+		reflectance = 0.12,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Muscle = { -- the floor with its ridges: whitish-yellow tendons
+		color = Color3.fromRGB(236, 222, 186),
+		reflectance = 0.16,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Bone = {
+		color = Color3.fromRGB(226, 214, 186),
+		reflectance = 0.06,
+		material = Enum.Material.SmoothPlastic,
+	},
+}
+-- (the bottom of a burn on the head: the skull)
+local SKULL = Color3.fromRGB(214, 200, 172)
+local BURN_BACKING = Color3.fromRGB(196, 150, 128)
+
+-- The Sentinel's bore ("Bore": BoreS / M / L): the beam went into the chest
+-- over the heart, so hot that nothing bled. Everything it touched is seared:
+-- the crust black, the cut skin cooked brown, the fat rendered, the muscle
+-- grey-brown; the ribs' bone off-white, their cartilage blue-white and
+-- glossy, the lung's edge pink-grey, the heart's muscle dark red, the inside
+-- of its chamber darker still. No blood layer at all.
+local BORE_LOOKS: { [string]: Look } = {
+	Char = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
+	Eschar = {
+		color = Color3.fromRGB(122, 80, 50),
+		reflectance = 0.04,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Fat = {
+		color = Color3.fromRGB(188, 138, 62),
+		reflectance = 0.16,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Muscle = {
+		color = Color3.fromRGB(104, 46, 36),
+		reflectance = 0.06,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Bone = {
+		color = Color3.fromRGB(226, 214, 190),
+		reflectance = 0.05,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Cartilage = {
+		color = Color3.fromRGB(198, 212, 220),
+		reflectance = 0.14,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Lung = {
+		color = Color3.fromRGB(178, 134, 138),
+		reflectance = 0.03,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Heart = {
+		color = Color3.fromRGB(92, 16, 18),
+		reflectance = 0.1,
+		material = Enum.Material.SmoothPlastic,
+	},
+	HeartDark = {
+		color = Color3.fromRGB(38, 7, 8),
+		reflectance = 0.02,
+		material = Enum.Material.SmoothPlastic,
+	},
+}
+-- Behind the bore's cup (never seen: the cup is closed; only if a crack
+-- showed between its rim and the skin's cells).
+local BORE_BACKING = Color3.fromRGB(30, 8, 6)
 
 local BACKING_COLOR = Color3.fromRGB(46, 4, 4) -- deep inside a cut
 local BACKING_DEPTH = 0.14 -- under the skin, below the deepest insert (0.115)
@@ -162,17 +260,64 @@ type Kit = {
 	framesComplete: boolean, -- false: an old WoundKit (no torso cuts then)
 }
 local kit: Kit? = nil
+-- A kit found without some of its later inserts (an old kit, or one still
+-- replicating): used as it is until something is added to it, then looked
+-- through again (and the fighters drawn again: Gashes.watch).
+local partial: Kit? = nil
+local partialFrom: Instance? = nil
+local onKitChanged: (() -> ())? = nil
 local warnedMarkers = false
 local warnedOldKit = false
+local warnedNoBurn = false
 
 -- The kit, once it is there and complete (nil until then: it is looked for
 -- again on the next call, so a kit that replicates late still works).
+-- Does the kit have the burn inserts (made after the first kits)?
+local burnInKit = false
+-- ...and the Sentinel's bore over the heart (BoreS / M / L, later still)?
+local boreInKit = false
+
+-- The WoundKit to use. A place may hold more than one (an older import
+-- left beside the new one): the one with the most inserts is used, never
+-- just the first found (an old one has no burn / bore inserts: burns and
+-- the bore were then drawn with the small laceration's insert).
+local function bestKitModel(): Instance?
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	if assets == nil then
+		return nil
+	end
+	local best: Instance? = nil
+	local bestCount = -1
+	for _, item in assets:GetDescendants() do
+		if item.Name ~= "WoundKit" or item:IsA("BasePart") then
+			continue
+		end
+		local inserts: { [string]: boolean } = {}
+		local count = 0
+		for _, piece in item:GetDescendants() do
+			if piece:IsA("BasePart") then
+				local insert = string.match(piece.Name, "^(.+)_%a+$")
+				if insert and WoundShapes.shapes[insert] and not inserts[insert] then
+					inserts[insert] = true
+					count += 1
+				end
+			end
+		end
+		if count > bestCount then
+			best, bestCount = item, count
+		end
+	end
+	return best
+end
+
 local function findKit(): Kit?
 	if kit then
 		return kit
 	end
-	local assets = ReplicatedStorage:FindFirstChild("Assets")
-	local model = if assets then assets:FindFirstChild("WoundKit", true) else nil
+	if partial and partialFrom and partialFrom:IsDescendantOf(ReplicatedStorage) then
+		return partial
+	end
+	local model = bestKitModel()
 	if model == nil then
 		return nil
 	end
@@ -224,11 +369,38 @@ local function findKit(): Kit?
 	local tearMissing = false
 	for name, shape in WoundShapes.shapes do
 		if found.pieces[name] == nil then
+			if shape.kind == "Burn" then
+				continue -- (an older kit: burns use the laceration's insert)
+			end
+			if shape.kind == "Bore" then
+				continue -- (an older kit: no bore, see Gashes.hasBore)
+			end
 			if shape.kind ~= "Tear" then
 				return nil
 			end
 			tearMissing = true
 		end
+	end
+	burnInKit = found.pieces.BurnS ~= nil and found.pieces.BurnL_Head ~= nil
+	boreInKit = found.pieces.BoreS ~= nil
+		and found.pieces.BoreM ~= nil
+		and found.pieces.BoreL ~= nil
+	if not (burnInKit and boreInKit) and not warnedNoBurn then
+		-- (said only if still so a moment later: not while it replicates)
+		warnedNoBurn = true
+		task.delay(10, function()
+			local again = findKit()
+			if again and not (burnInKit and boreInKit) then
+				warn(
+					"[Gashes] WoundKit is out of date (no "
+						.. (if burnInKit then "" else "Burn* ")
+						.. (if boreInKit then "" else "Bore* ")
+						.. "inserts): the heat vision's burns and the Sentinel's bore are "
+						.. "drawn with smaller stand-ins. Delete it and import "
+						.. "assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
+				)
+			end
+		end)
 	end
 	if tearMissing and not warnedOldKit then
 		warnedOldKit = true
@@ -258,7 +430,30 @@ local function findKit(): Kit?
 				.. "Delete it and import assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
 		)
 	end
-	kit = found
+	local complete = not tearMissing
+		and burnInKit
+		and boreInKit
+		and found.shellComplete
+		and found.framesComplete
+	if complete then
+		kit = found
+		partial = nil
+		partialFrom = nil
+	else
+		-- (not kept for good: the missing inserts may still arrive, in this
+		-- kit or in another one arriving later)
+		partial = found
+		partialFrom = model
+		local watchedFrom = ReplicatedStorage:FindFirstChild("Assets") or model
+		watchedFrom.DescendantAdded:Once(function()
+			if partial == found then
+				partial = nil
+				if onKitChanged then
+					onKitChanged()
+				end
+			end
+		end)
+	end
 	return found
 end
 
@@ -295,8 +490,24 @@ type Placed = {
 	center: Vector2, -- box: (u, v) from the face's top-left; head: (angle, y)
 }
 
-local function shapeFor(data: Gash.Data, head: boolean): (string, WoundShapes.Shape?)
-	local name = data.kind .. data.size .. (if head then "_Head" else "")
+-- The insert drawn for a cut: its own, or (a kit without it) the nearest
+-- one this kit has. Looked up in the kit used for this drawing (never in
+-- what an earlier look at a kit still arriving had found).
+local function shapeFor(data: Gash.Data, head: boolean, found: Kit): (string, WoundShapes.Shape?)
+	local suffix = if head then "_Head" else ""
+	local function has(name: string): boolean
+		return found.pieces[name] ~= nil and WoundShapes.shapes[name] ~= nil
+	end
+	local kind, size = data.kind, data.size
+	if kind == "Bore" and (head or not has("Bore" .. size)) then
+		-- (an older kit without the bore: a big burn there instead)
+		kind, size = "Burn", if size == "S" then "M" else "L"
+	end
+	-- (a burn: its own insert; an older kit without it: the laceration's)
+	if kind == "Burn" and not has("Burn" .. size .. suffix) then
+		kind = "Lac"
+	end
+	local name = kind .. size .. suffix
 	return name, WoundShapes.shapes[name]
 end
 
@@ -306,8 +517,8 @@ local function turnedExtent(extent: Vector2, angle: number): Vector2
 	return Vector2.new(c * extent.X + s * extent.Y, s * extent.X + c * extent.Y)
 end
 
-local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
-	local name, shape = shapeFor(data, false)
+local function placeOnBox(part: BasePart, data: Gash.Data, found: Kit): Placed?
+	local name, shape = shapeFor(data, false, found)
 	if shape == nil then
 		return nil
 	end
@@ -349,8 +560,8 @@ local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
 	}
 end
 
-local function placeOnHead(_part: BasePart, data: Gash.Data): Placed?
-	local name, shape = shapeFor(data, true)
+local function placeOnHead(_part: BasePart, data: Gash.Data, found: Kit): Placed?
+	local name, shape = shapeFor(data, true, found)
 	if shape == nil then
 		return nil
 	end
@@ -491,6 +702,10 @@ end
 
 ------------------------------------------------------------------------------
 -- Building.
+-- (a Weld with its offset written in, not a WeldConstraint: that one takes
+-- the offset the parts have when it comes on, and on a body posed by its
+-- clips (Motor6D.Transform) that can be another pose than the one the piece
+-- was placed for: the skin then sat beside the body, or far from it)
 local function setUp(piece: BasePart, part: BasePart, parent: Instance)
 	piece.Anchored = false
 	piece.CanCollide = false
@@ -498,9 +713,10 @@ local function setUp(piece: BasePart, part: BasePart, parent: Instance)
 	piece.CanTouch = false
 	piece.CastShadow = false
 	piece.Massless = true
-	local weld = Instance.new("WeldConstraint")
+	local weld = Instance.new("Weld")
 	weld.Part0 = part
 	weld.Part1 = piece
+	weld.C0 = part.CFrame:ToObjectSpace(piece.CFrame)
 	weld.Parent = piece
 	piece.Parent = parent
 end
@@ -838,6 +1054,118 @@ local FRAME_OF: { [string]: string } = {
 	LeftLeg = "Shell_FrameLeft",
 }
 
+-- One coordinate of a vector (1 = X, 2 = Y, 3 = Z).
+local function axisOf(v: Vector3, axis: number): number
+	return if axis == 1 then v.X elseif axis == 2 then v.Y else v.Z
+end
+
+-- The two axes across `axis`, in order (X: Y Z, Y: X Z, Z: X Y).
+local function across(axis: number): (number, number)
+	if axis == 1 then
+		return 2, 3
+	elseif axis == 2 then
+		return 1, 3
+	end
+	return 1, 2
+end
+
+-- A vector from its coordinate along `axis` and along the two across it.
+local function fromAxes(axis: number, along: number, u: number, v: number): Vector3
+	if axis == 1 then
+		return Vector3.new(along, u, v)
+	elseif axis == 2 then
+		return Vector3.new(u, along, v)
+	end
+	return Vector3.new(u, v, along)
+end
+
+-- How far under the skin the core starts (see buildBoxSkin): a cut deeper
+-- than this needs a hole in the core.
+local CORE_INSET = 0.16
+local CORE_MARGIN = 0.03 -- room left around a deep cut
+
+-- The core of a box part (size `core`, centred), with a tunnel through it
+-- where each deep cut is (the bore: on the torso's front). Several boxes
+-- then, merged into few.
+local function buildCore(part: BasePart, core: Vector3, cuts: { Placed }, parent: Instance)
+	local axis: number? = nil
+	local holes: { { number } } = {} -- {u0, u1, v0, v1} across `axis`
+	for _, cut in cuts do
+		local depth = cut.shape.depth
+		if depth == nil or depth <= CORE_INSET then
+			continue
+		end
+		local normal = cut.frame.ZVector
+		local cutAxis = if math.abs(normal.X) > 0.9
+			then 1
+			elseif math.abs(normal.Y) > 0.9 then 2
+			else 3
+		if axis ~= nil and axis ~= cutAxis then
+			continue -- (deep cuts on crossing faces: only the first one's axis)
+		end
+		axis = cutAxis
+		-- the face's width runs along X (front / back) or Z (sides), its
+		-- height along Y (cuts are never on the top / bottom)
+		local ext = turnedExtent(cut.shape.extent, cut.data.angle)
+		local a, b = across(cutAxis)
+		local halfA = if a == 2 then ext.Y else ext.X
+		local halfB = if b == 2 then ext.Y else ext.X
+		local center = cut.frame.Position
+		local ca, cb = axisOf(center, a), axisOf(center, b)
+		table.insert(holes, {
+			ca - halfA - CORE_MARGIN,
+			ca + halfA + CORE_MARGIN,
+			cb - halfB - CORE_MARGIN,
+			cb + halfB + CORE_MARGIN,
+		})
+	end
+	if axis == nil then
+		newTile(part, core, CFrame.identity, parent).Name = "Core"
+		return
+	end
+	local a, b = across(axis)
+	local halfU, halfV = axisOf(core, a) / 2, axisOf(core, b) / 2
+	local length = axisOf(core, axis)
+	-- The grid: the core's edges and the holes' edges inside it.
+	local function edges(half: number, first: number): { number }
+		local list = { -half, half }
+		for _, hole in holes do
+			for k = first, first + 1 do
+				if hole[k] > -half and hole[k] < half then
+					table.insert(list, hole[k])
+				end
+			end
+		end
+		table.sort(list)
+		return list
+	end
+	local us, vs = edges(halfU, 1), edges(halfV, 3)
+	local columns, rows = #us - 1, #vs - 1
+	local keep: { { boolean } } = {}
+	for i = 1, columns do
+		keep[i] = {}
+		local u = (us[i] + us[i + 1]) / 2
+		for j = 1, rows do
+			local v = (vs[j] + vs[j + 1]) / 2
+			-- (a cell of no width: two edges at the same place)
+			local cut = us[i + 1] - us[i] < 1e-3 or vs[j + 1] - vs[j] < 1e-3
+			for _, hole in holes do
+				if u > hole[1] and u < hole[2] and v > hole[3] and v < hole[4] then
+					cut = true
+				end
+			end
+			keep[i][j] = not cut
+		end
+	end
+	for _, rect in rectangles(keep, columns, rows) do
+		local u0, u1 = us[rect.i], us[rect.i + rect.w]
+		local v0, v1 = vs[rect.j], vs[rect.j + rect.h]
+		local size = fromAxes(axis, length, u1 - u0, v1 - v0)
+		local center = fromAxes(axis, 0, (u0 + u1) / 2, (v0 + v1) / 2)
+		newTile(part, size, CFrame.new(center), parent).Name = "Core"
+	end
+end
+
 -- A torso (or a limb) rebuilt like Roblox draws it: a box with bevelled
 -- edges. The bevelled frame comes from the kit, with the shirt / pants
 -- painted on it; the inside of each face is flat tiles (with the hole of a
@@ -934,10 +1262,12 @@ local function buildBoxSkin(
 		end
 	end
 	-- A skin-coloured core deep inside: a hairline gap between two tiles
-	-- shows skin, never the sky through the body.
-	local core = part.Size - Vector3.new(0.32, 0.32, 0.32)
+	-- shows skin, never the sky through the body. A deep cut (the bore)
+	-- would end inside it: the core is left out around it (a tunnel through
+	-- it, in boxes; the cut's own insert is a closed cup).
+	local core = part.Size - Vector3.new(2 * CORE_INSET, 2 * CORE_INSET, 2 * CORE_INSET)
 	if core.X > 0.05 and core.Y > 0.05 and core.Z > 0.05 then
-		newTile(part, core, CFrame.identity, parent).Name = "Core"
+		buildCore(part, core, cuts, parent)
 	end
 end
 
@@ -948,11 +1278,22 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		return
 	end
 	local origin = Vector3.new(cut.shape.index * WoundShapes.spacing, WoundShapes.markerDrop, 0)
+	-- (a bore drawn with a burn's insert, in an older kit: burnt too)
+	local bored = cut.shape.kind == "Bore"
+	local burnt = cut.data.kind == "Burn" or cut.data.kind == "Bore"
+	local onHead = cut.face == nil
 	for _, item in pieces do
 		local layer = string.match(item.Name, "_(%a+)$") or ""
-		local look = LOOKS[layer]
+		local look = if bored
+			then BORE_LOOKS[layer]
+			elseif burnt then BURN_LOOKS[layer]
+			else LOOKS[layer]
 		if look == nil then
-			continue
+			continue -- (a burn: no blood in it)
+		end
+		if burnt and onHead and layer == "Flesh" then
+			-- (on the head the skin is thin: under it, the skull)
+			look = { color = SKULL, reflectance = 0.04, material = Enum.Material.SmoothPlastic }
 		end
 		local relative = found.frame:ToObjectSpace(item.CFrame)
 		local position = relative.Position / found.unit - origin
@@ -976,6 +1317,23 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		reachX, reachY = math.max(reachX, math.abs(point.X)), math.max(reachY, math.abs(point.Y))
 	end
 	local width = 2 * reachX + 0.06
+	if bored then
+		-- (the bore's cup is closed and goes far deeper than the usual
+		-- plate, which would cut through it: the plate goes behind its
+		-- bottom, in case a crack shows past its rim)
+		local depth = (cut.shape.depth or BACKING_DEPTH) + 0.04
+		local thickness = math.abs(cut.frame.ZVector:Dot(part.Size))
+		local backing = Instance.new("Part")
+		backing.Name = "Backing"
+		backing.Size = Vector3.new(width, 2 * reachY + 0.06, 0.02)
+		backing.Color = BORE_BACKING
+		backing.Material = Enum.Material.SmoothPlastic
+		backing.CFrame = part.CFrame
+			* cut.frame
+			* CFrame.new(0, 0, -math.min(depth, thickness - 0.12))
+		setUp(backing, part, parent)
+		return
+	end
 	-- On a block: one flat plate. On the head: a few plates following its
 	-- curve (a flat one would cross the ends of a long cut).
 	local plates = if cut.face == nil then 5 else 1
@@ -983,7 +1341,9 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		local backing = Instance.new("Part")
 		backing.Name = "Backing"
 		backing.Size = Vector3.new(width / plates + 0.01, 2 * reachY + 0.06, 0.02)
-		backing.Color = BACKING_COLOR
+		backing.Color = if burnt
+			then (if onHead then SKULL:Lerp(RAW_WALL, 0.15) else BURN_BACKING)
+			else BACKING_COLOR
 		backing.Material = Enum.Material.SmoothPlastic
 		if cut.face == nil then
 			local radius = WoundShapes.headRadius
@@ -1009,6 +1369,7 @@ type Opened = {
 	face: Decal?, -- the face picture we hid, and its own transparency
 	faceTransparency: number,
 	connection: RBXScriptConnection?,
+	tint: { RBXScriptConnection }, -- the skin follows the part's colour
 }
 local opened: { [BasePart]: Opened } = {}
 
@@ -1046,6 +1407,9 @@ local function close(part: BasePart)
 		return
 	end
 	opened[part] = nil
+	for _, link in state.tint do
+		link:Disconnect()
+	end
 	if state.connection then
 		state.connection:Disconnect()
 	end
@@ -1070,7 +1434,9 @@ local function refresh(model: Model, partName: string)
 		for index = 1, Gash.MAX_PER_PART do
 			local data = Gash.decode(model:GetAttribute(Gash.attribute(key, index)))
 			if data then
-				local placed = if isHead then placeOnHead(part, data) else placeOnBox(part, data)
+				local placed = if isHead
+					then placeOnHead(part, data, found)
+					else placeOnBox(part, data, found)
 				-- (no insert for it in this kit, or an old kit without the head
 				-- pieces: no hole either)
 				if
@@ -1106,13 +1472,22 @@ local function refresh(model: Model, partName: string)
 
 	local folder = Instance.new("Folder")
 	folder.Name = "Gashes"
-	if isHead then
-		buildHeadSkin(part, cuts, found, folder)
-	else
-		buildBoxSkin(model, part, key, cuts, found, folder)
-	end
-	for _, cut in cuts do
-		buildInsert(part, cut, found, folder)
+	-- (built out of the game, then the part hidden: if anything goes wrong
+	-- on the way, the part stays as it is, whole, never invisible)
+	local ok, problem = pcall(function()
+		if isHead then
+			buildHeadSkin(part, cuts, found, folder)
+		else
+			buildBoxSkin(model, part, key, cuts, found, folder)
+		end
+		for _, cut in cuts do
+			buildInsert(part, cut, found, folder)
+		end
+	end)
+	if not ok then
+		folder:Destroy()
+		warn(`[Gashes] could not draw the cuts of {part:GetFullName()}: {problem}`)
+		return
 	end
 	local state: Opened = {
 		folder = folder,
@@ -1121,7 +1496,24 @@ local function refresh(model: Model, partName: string)
 		face = face,
 		faceTransparency = faceTransparency,
 		connection = nil,
+		tint = {},
 	}
+	-- The skin repainted with the part (if something recolours the real part)
+	local function retint()
+		for _, item in folder:GetDescendants() do
+			if item:IsA("BasePart") and item.Name == "Skin" then
+				item.Color = part.Color
+				item.Material = skinMaterial(part)
+				item.Reflectance = part.Reflectance
+			end
+		end
+	end
+	for _, property in { "Color", "Material", "Reflectance" } do
+		table.insert(state.tint, part:GetPropertyChangedSignal(property):Connect(retint))
+	end
+	-- (known first: close() always gives the part back its own looks)
+	folder.Parent = part
+	opened[part] = state
 	part.Transparency = 1
 	if face then
 		face.Transparency = 1 -- (a decal still shows on an invisible part)
@@ -1145,8 +1537,6 @@ local function refresh(model: Model, partName: string)
 			:Connect(follow)
 		follow()
 	end
-	folder.Parent = part
-	opened[part] = state
 	hideMarks(part)
 end
 
@@ -1178,6 +1568,30 @@ local function waitForKit()
 	end)
 end
 
+-- The kit changed after it was found incomplete: everyone drawn again a
+-- moment later (once, however many pieces arrive meanwhile).
+local redrawing = false
+onKitChanged = function()
+	if redrawing then
+		return
+	end
+	redrawing = true
+	task.delay(0.5, function()
+		redrawing = false
+		for model in watched do
+			if model.Parent then
+				refreshAll(model)
+			end
+		end
+	end)
+end
+
+-- Does the wound kit (once found) have the bore inserts (BoreS / M / L)?
+-- An older kit has not: nothing is drawn for a bore then.
+function Gashes.hasBore(): boolean
+	return findKit() ~= nil and boreInKit
+end
+
 function Gashes.watch(model: Model)
 	watched[model] = true
 	waitForKit()
@@ -1198,6 +1612,8 @@ function Gashes.watch(model: Model)
 			ArmRip.apply(model, true)
 		elseif name == "BoneTaken" then
 			ArmRip.boneTaken(model)
+		elseif name == Bisect.ATTRIBUTE then
+			Bisect.apply(model, true)
 		end
 	end)
 	-- Gone (destroyed, or just taken out of the game): forget its parts.
@@ -1217,6 +1633,7 @@ function Gashes.watch(model: Model)
 		elseif not watched[model] then
 			watched[model] = true -- back in the game (streaming)
 			refreshAll(model)
+			Bisect.apply(model, false)
 		end
 	end)
 	-- A new bruise mark (Wounds) over a cut: hidden.
@@ -1236,6 +1653,7 @@ function Gashes.watch(model: Model)
 	refreshAll(model)
 	HeadBlast.apply(model, false) -- (a body whose head burst before we saw it)
 	ArmRip.apply(model, false) -- (or whose arm was torn off)
+	Bisect.apply(model, false) -- (or that was torn in two)
 end
 
 return table.freeze(Gashes)
