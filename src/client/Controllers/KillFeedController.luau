@@ -1,10 +1,12 @@
 --!strict
 -- KillFeedController: the eliminations, top right. Plain lines, no boxes:
 --
---      8 gifffer  finished  Dummy    0:04  |
---   31 Vex  fled — kill to  17 Rook_77   0:11
---       17 Rook_77  eliminated  12 Mara  0:26
+--   8 gifffer  finished  Dummy  — HOME RUN    0:04  |
+--         31 Vex  fled — kill to  17 Rook_77    0:11
+--             17 Rook_77  eliminated  12 Mara    0:26
 --
+-- • A finisher kill names the finisher after the victim ("— LIVER RIP",
+--   a short red dash, small caps), sent by the server with the line.
 -- • Names in condensed type, verbs lighter and lower-case, the age of the
 --   line in small monospaced numbers.
 -- • Each player's name has their level just before it, small and grey
@@ -17,7 +19,11 @@
 -- • Older lines (third and beyond) are dimmer; each line fades out after
 --   FEED_TIME seconds; never more than FEED_LINES lines.
 --
--- One line per Remotes.KillFeed message from the server.
+-- One line per Remotes.KillFeed message from the server. "You" is told by
+-- UserId when the server sends it (two players can share a display name).
+--
+-- KillFeedController.readDetails(value) checks the line's details table
+-- (the death screen reads the same message).
 --
 -- KillFeedController.setHidden(true / false) hides the whole feed for a
 -- moment (the scoreboard does it while Tab is held: the board sits in the
@@ -44,12 +50,14 @@ local OLD_ROW_TRANSPARENCY = 0.28
 -- outside it).
 -- (Wide enough on the left for the longest line: two long names + verb.)
 local LAYER_MARGIN = 40
-local LAYER_EXTRA_LEFT = 260
+local LAYER_EXTRA_LEFT = 380 -- (+ the finisher's name)
 
 -- What a line is made of, in order: names (with their level) and verbs.
+type PartKind = "name" | "you" | "verb" | "finisher"
+
 type Part = {
 	text: string,
-	kind: "name" | "you" | "verb",
+	kind: PartKind,
 	level: number?, -- names only: shown just before the name
 }
 
@@ -72,7 +80,22 @@ local rows: { Row } = {} -- newest first
 local order = 0
 
 -- One word / name of the line.
-local function piece(text: string, kind: "name" | "you" | "verb", layout: number): TextLabel
+local function piece(text: string, kind: PartKind, layout: number): TextLabel
+	if kind == "finisher" then
+		return Theme.text({
+			LayoutOrder = layout,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, ROW_HEIGHT),
+			FontFace = Theme.Fonts.LabelBold,
+			TextSize = 11,
+			TextColor3 = C.Ink2,
+			TextTransparency = 1,
+			Text = Theme.track(text, "three"),
+		}, {
+			-- 1 px lower: small caps on the names' baseline.
+			Theme.make("UIPadding", { PaddingTop = UDim.new(0, 1) }),
+		})
+	end
 	return Theme.text({
 		LayoutOrder = layout,
 		AutomaticSize = Enum.AutomaticSize.X,
@@ -132,34 +155,69 @@ local function nameGroup(part: Part, layout: number): (Frame, { TextLabel })
 	return group, labels
 end
 
--- The parts of a line, in reading order.
+-- The parts of a line, in reading order. `victimIsYou` / `killerIsYou`:
+-- that name is drawn as ours.
 local function phrase(
 	kind: Types.KillFeedKind,
 	victim: string,
 	killer: string?,
 	victimLevel: number?,
-	killerLevel: number?
+	killerLevel: number?,
+	victimIsYou: boolean,
+	killerIsYou: boolean
 ): { Part }
-	local function name(text: string, level: number?): Part
+	local function name(text: string, level: number?, you: boolean): Part
 		return {
 			text = text,
-			kind = if text == player.DisplayName then "you" else "name",
+			kind = if you then "you" else "name",
 			level = level,
 		}
 	end
 	local function verb(text: string): Part
 		return { text = text, kind = "verb" }
 	end
+	local victimPart = name(victim, victimLevel, victimIsYou)
 	if kind == "Finished" and killer then
-		return { name(killer, killerLevel), verb("finished"), name(victim, victimLevel) }
+		return { name(killer, killerLevel, killerIsYou), verb("finished"), victimPart }
 	elseif kind == "Fled" and killer then
-		return { name(victim, victimLevel), verb("fled — kill to"), name(killer, killerLevel) }
+		return { victimPart, verb("fled — kill to"), name(killer, killerLevel, killerIsYou) }
 	elseif kind == "Fled" then
-		return { name(victim, victimLevel), verb("fled") }
+		return { victimPart, verb("fled") }
 	elseif killer then
-		return { name(killer, killerLevel), verb("eliminated"), name(victim, victimLevel) }
+		return { name(killer, killerLevel, killerIsYou), verb("eliminated"), victimPart }
 	end
-	return { name(victim, victimLevel), verb("died") }
+	return { victimPart, verb("died") }
+end
+
+-- A short text from the remote (a name, a kit id), or nil.
+local function readString(value: unknown): string?
+	if typeof(value) == "string" and #value > 0 and #value <= 40 then
+		return value
+	end
+	return nil
+end
+
+-- A UserId from the remote, or nil.
+local function readId(value: unknown): number?
+	if typeof(value) == "number" and value == value and math.abs(value) ~= math.huge then
+		return value
+	end
+	return nil
+end
+
+-- The 6th argument of Remotes.KillFeed, checked field by field (a missing
+-- or broken table gives empty details: the line still shows).
+function KillFeedController.readDetails(value: unknown): Types.KillFeedDetails
+	if typeof(value) ~= "table" then
+		return {}
+	end
+	local raw = value :: { [string]: unknown }
+	return {
+		finisher = readString(raw.finisher),
+		killerKit = readString(raw.killerKit),
+		victimId = readId(raw.victimId),
+		killerId = readId(raw.killerId),
+	}
 end
 
 -- A level from the remote: a whole number, or nil (dummy / bad data).
@@ -201,20 +259,36 @@ local function addLine(
 	victim: unknown,
 	killer: unknown,
 	victimLevel: unknown,
-	killerLevel: unknown
+	killerLevel: unknown,
+	rawDetails: unknown
 )
 	if typeof(kind) ~= "string" or typeof(victim) ~= "string" then
 		return
 	end
 	local killerName = if typeof(killer) == "string" then killer else nil
+	local details = KillFeedController.readDetails(rawDetails)
+	-- Ours: by UserId when the server sent one, else by display name.
+	local victimIsYou = if details.victimId
+		then details.victimId == player.UserId
+		else victim == player.DisplayName
+	local killerIsYou = if details.killerId
+		then details.killerId == player.UserId
+		else killerName ~= nil and killerName == player.DisplayName
 	local parts = phrase(
 		kind :: Types.KillFeedKind,
 		victim,
 		killerName,
 		readLevel(victimLevel),
-		if killerName then readLevel(killerLevel) else nil
+		if killerName then readLevel(killerLevel) else nil,
+		victimIsYou,
+		killerIsYou
 	)
-	local mine = victim == player.DisplayName or killerName == player.DisplayName
+	local finisher = details.finisher
+	if kind == "Finished" and finisher then
+		table.insert(parts, { text = "—", kind = "verb" })
+		table.insert(parts, { text = finisher, kind = "finisher" })
+	end
+	local mine = victimIsYou or killerIsYou
 
 	order -= 1
 	local frame = Theme.make("Frame", {
@@ -252,8 +326,13 @@ local function addLine(
 
 	local texts: { TextLabel } = {}
 	for index, part in parts do
-		if part.kind == "verb" then
+		if part.kind == "verb" or part.kind == "finisher" then
 			local label = piece(part.text, part.kind, index)
+			-- (the dash before a finisher's name: blood red, like the
+			-- Kits menu's fury versions)
+			if part.kind == "verb" and parts[index + 1] and parts[index + 1].kind == "finisher" then
+				label.TextColor3 = C.BloodHi
+			end
 			label.Parent = content
 			table.insert(texts, label)
 		else
@@ -384,6 +463,8 @@ function KillFeedController.start()
 		Parent = gui,
 	}) :: CanvasGroup
 	layer = group
+	-- Smaller on a phone, a little bigger on a large screen (from its corner).
+	Theme.autoScale(group, 0.7)
 	feed = Theme.make("Frame", {
 		Name = "Feed",
 		AnchorPoint = Vector2.new(1, 0),

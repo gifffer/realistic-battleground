@@ -21,6 +21,8 @@
 --   and the left edge of the screen darkens a little at each tick.
 -- • Soft dark gradients at the screen edges keep text readable on bright
 --   scenes. Everything hides while you're knocked out or a menu is open.
+-- • Screen size: the block shrinks on a phone / small window and grows a
+--   little on a large screen, from its corner (Theme.autoScale).
 --
 -- • XP: when you earn XP the line grows and the bit you just earned shows
 --   bright for a moment; on a level up it fills to the end, the level
@@ -186,6 +188,8 @@ local function build()
 		BackgroundTransparency = 1,
 		Parent = gui,
 	})
+	-- Follows the screen size from its corner (smaller on a phone).
+	Theme.autoScale(vitals, 0.75)
 	hpNum = label({
 		Name = "HpNum",
 		-- 66 × 34: "100" in this font (bold, ×1.12) is ≈ 63 × 34 px.
@@ -206,7 +210,8 @@ local function build()
 	})
 	-- HEALTH follows the numeral: never closer than 6 px to its last digit.
 	local function placeHpLabel()
-		hpLabel.Position = UDim2.fromOffset(math.max(56, hpNum.TextBounds.X + 6), 18)
+		local width = Theme.unscaled(hpNum, hpNum.TextBounds.X)
+		hpLabel.Position = UDim2.fromOffset(math.max(56, width + 6), 18)
 	end
 	hpNum:GetPropertyChangedSignal("TextBounds"):Connect(placeHpLabel)
 	placeHpLabel()

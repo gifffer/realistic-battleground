@@ -463,3 +463,22 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Interface : menu Kits, HUD, kill feed, écran de mort, écrans mobiles (`feature/ui-overhaul`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| U1 | Menu → **KITS**, choisir chaque kit | Sous MOVES et AWAKENING, une nouvelle section **FINISHER · ON A KO** : touche **[M1]**, le nom (**HOME RUN**, **LIVER RIP**, **ARM RIP**, **INCINERATE**) et une phrase. Le panneau est un peu plus haut, **— CLOSE** reste en dessous, rien n'est coupé. |
+| U2 | Kit verrouillé (niveau trop bas / pas assez de pièces) | Tout est visible mais plus terne (touches et noms), y compris le finisher ; l'action en haut à droite (LEVEL / BUY / NEED…) fonctionne comme avant (achat en deux clics, vérifié par le serveur). |
+| U3 | Finisher sur le **Dummy** avec chaque kit | Kill feed en haut à droite : `TonNom finished Dummy — LIVER RIP` (tiret **rouge**, nom du finisher en petites capitales). |
+| U4 | Tuer sans finisher (2 joueurs, l'autre tombe de la carte après un coup) | Ligne `X eliminated Y`, **sans** nom de finisher. |
+| U5 | 2 joueurs : se faire **finir** | La cinématique joue d'abord **en entier**, puis en bas au centre : **FINISHED BY**, le nom du tueur, `LV 12  BOXER — LIVER RIP`, une ligne qui se vide et **RESPAWN 2.3** qui descend ; le monde perd ses couleurs. Au respawn tout disparaît en fondu. |
+| U6 | Se faire tuer normalement | **ELIMINATED BY** + nom + niveau + kit, pas de tiret rouge. |
+| U7 | Mourir seul (tomber de la carte, personne ne t'a frappé) | **ELIMINATED / YOU DIED**, pas de nom ni de kit. |
+| U8 | En **duel** | Aucun écran de mort (l'écran de fin de duel reste le seul). |
+| U9 | Deux joueurs avec le **même nom d'affichage** | Ta ligne du kill feed est la tienne (nom en gras blanc + petit trait) uniquement quand c'est vraiment toi (comparé par UserId). |
+| U10 | *Test → Device* : **iPhone** (paysage), puis une petite fenêtre | HUD (vie à gauche, kit à droite), kill feed et tableau des joueurs plus petits mais lisibles, toujours dans leur coin. Le bloc du kit est **au-dessus du bouton de saut**. |
+| U11 | Sur iPhone : **toucher** un move de la barre du kit | Le move part (comme la touche 1-4). Jauge pleine : toucher **[G] AWAKEN** lance l'Awakening. |
+| U12 | Sur iPhone / petite fenêtre : ouvrir le **MENU** (chaque section) | Le menu entier tient à l'écran (il remonte et rétrécit juste ce qu'il faut) ; la marque de la section choisie est bien en face ; changer de section ou redimensionner la fenêtre le recale. |
+| U13 | Écran 1080p normal | Tout est **exactement comme avant** (mêmes tailles, mêmes places). En 1440p / 4K : un peu plus grand. |
+| U14 | Shop / Profile après un achat | Pièces, niveau/XP, cosmétiques et stats se mettent à jour comme avant ; les soulignés (EQUIPPED, réglages ON/OFF) ont la bonne largeur, même sur iPhone. |

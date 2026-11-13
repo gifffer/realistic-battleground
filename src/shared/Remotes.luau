@@ -195,8 +195,10 @@ return table.freeze({
 	WallBroken = event("WallBroken"),
 
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?,
-	--                        victimLevel: number?, killerLevel: number?)
-	-- A fighter was eliminated: one line in the kill feed (top right).
+	--                        victimLevel: number?, killerLevel: number?,
+	--                        details: Types.KillFeedDetails)
+	-- A fighter was eliminated: one line in the kill feed (top right), and
+	-- the victim's death screen (DeathScreenController).
 	KillFeed = event("KillFeed"),
 
 	-- client → server  (aim: Vector3)

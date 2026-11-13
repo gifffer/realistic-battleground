@@ -431,6 +431,8 @@ local function build()
 		ZIndex = 3,
 		Parent = gui,
 	})
+	-- Follows the screen size from its corner (smaller on a phone).
+	Theme.autoScale(board, 0.7)
 
 	-- Title, player count, subtitle.
 	local title = Theme.text({

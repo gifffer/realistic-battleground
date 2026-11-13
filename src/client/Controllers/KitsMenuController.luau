@@ -9,10 +9,15 @@
 --                       ...
 --                       AWAKENING                          LASTS
 --                     | [G] STREET FURY                     10 s
+--                       FINISHER                         ON A KO
+--                       [M1] HOME RUN
+--                            A baseball bat from behind his back...
 --
 -- Left: every kit (Shared/Kits). Right: the selected kit's moves, read
 -- from its data (so the numbers are always the real ones), each with its
--- Street Fury version under the cooldown (the red dash = "fury version").
+-- Street Fury version under the cooldown (the red dash = "fury version"),
+-- then its Awakening and its finisher (M1 on a knocked-out fighter; the
+-- kill feed and the death screen name it too).
 -- EQUIP asks the server (Remotes.EquipKit); the saved profile says which
 -- one is equipped (PlayerDataController).
 --
@@ -47,6 +52,7 @@ local C = Theme.Colors
 local DETAIL_INSET = Vector2.new(16, 8)
 local DETAIL_X = 200 - DETAIL_INSET.X
 local DETAIL_Y = -DETAIL_INSET.Y
+local DETAIL_HEIGHT = 448 -- moves, awakening, finisher
 
 -- Second press on BUY must come within this many seconds of the first.
 local CONFIRM_SECONDS = 3
@@ -333,8 +339,12 @@ local function moveRow(
 		-- "— RISING UPPERCUT" line by ~18 px), so that sentence alone is
 		-- set a size smaller until it ends 8 px before the line.
 		local function fitSentence()
-			local room = furyLine.AbsolutePosition.X - 8 - sentence.AbsolutePosition.X
-			local width = sentence.TextBounds.X
+			-- (screen pixels, back to layout pixels: the menu can be scaled)
+			local room = Theme.unscaled(
+				sentence,
+				furyLine.AbsolutePosition.X - sentence.AbsolutePosition.X
+			) - 8
+			local width = Theme.unscaled(sentence, sentence.TextBounds.X)
 			if room > 0 and width > room and sentence.TextSize > 10 then
 				sentence.TextSize = math.max(10, math.floor(sentence.TextSize * room / width))
 			end
@@ -548,7 +558,12 @@ local function equippedMark(parent: Instance)
 		Theme.tween(
 			underline,
 			0.18,
-			{ Size = UDim2.fromOffset(math.max(mark.TextBounds.X - 3, 10), 2) },
+			{
+				Size = UDim2.fromOffset(
+					math.max(Theme.unscaled(mark, mark.TextBounds.X) - 3, 10),
+					2
+				),
+			},
 			Enum.EasingStyle.Quart
 		)
 	end)
@@ -743,7 +758,7 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		Theme.text({
 			Name = "Sentence",
 			Position = UDim2.fromOffset(34, 22),
-			Size = UDim2.new(1, -34, 0, 40), -- two lines at most (the canvas ends at 380)
+			Size = UDim2.new(1, -34, 0, 40), -- two lines at most (the finisher follows)
 			FontFace = Theme.Fonts.Body,
 			TextSize = 12,
 			TextColor3 = C.Ink2,
@@ -756,6 +771,41 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		})
 		seconds(row, awakening.duration)
 	end
+
+	-- The finisher: M1 on a knocked-out fighter (the kit's own, or the
+	-- default one). Under the Awakening (or where it would be).
+	local finisher = Kits.finisher(kit.id)
+	sectionHead(body, 377, "FINISHER", { "ON A KO" })
+	local finisherRow = Theme.make("Frame", {
+		Name = "FinisherRow",
+		Position = UDim2.fromOffset(0, 395),
+		Size = UDim2.new(1, 0, 0, 52),
+		BackgroundTransparency = 1,
+		Parent = body,
+	})
+	keyCap(finisherRow, "M1", false, dim)
+	Theme.text({
+		Name = "Name",
+		Position = UDim2.fromOffset(34, 6),
+		Size = UDim2.fromOffset(200, 13),
+		TextColor3 = if dim then C.Ink2 else C.Ink,
+		TextStrokeTransparency = 1,
+		Text = Theme.track(finisher.name, "four"),
+		Parent = finisherRow,
+	})
+	Theme.text({
+		Name = "Sentence",
+		Position = UDim2.fromOffset(34, 22),
+		Size = UDim2.new(1, -34, 0, 30),
+		FontFace = Theme.Fonts.Body,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
+		TextStrokeTransparency = 1,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Text = finisher.description,
+		Parent = finisherRow,
+	})
 end
 
 -- Shows the selected kit. `animate`: the old content slides out, the new in.
@@ -958,7 +1008,7 @@ local function build(content: Frame)
 	Theme.make("Frame", {
 		Name = "Divider2",
 		Position = UDim2.fromOffset(170, 0),
-		Size = UDim2.fromOffset(1, 360),
+		Size = UDim2.fromOffset(1, DETAIL_HEIGHT - 8),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.88,
 		Parent = content,
@@ -966,14 +1016,14 @@ local function build(content: Frame)
 	detail = Theme.make("CanvasGroup", {
 		Name = "Detail",
 		Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y),
-		Size = UDim2.fromOffset(360 + DETAIL_INSET.X + 2, 380 + DETAIL_INSET.Y),
+		Size = UDim2.fromOffset(360 + DETAIL_INSET.X + 2, DETAIL_HEIGHT + DETAIL_INSET.Y),
 		BackgroundTransparency = 1,
 		Parent = content,
 	})
 	body = Theme.make("Frame", {
 		Name = "Body",
 		Position = UDim2.fromOffset(DETAIL_INSET.X, DETAIL_INSET.Y),
-		Size = UDim2.fromOffset(360, 380),
+		Size = UDim2.fromOffset(360, DETAIL_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = detail,
 	})
@@ -1014,7 +1064,7 @@ function KitsMenuController.start()
 		label = "KITS",
 		subtitle = subtitle(),
 		order = 10, -- first in the list, above PROFILE and SETTINGS
-		size = Vector2.new(560, 480),
+		size = Vector2.new(560, 548), -- (taller: the finisher row)
 		scrimWidth = 1100,
 		build = build,
 	})
