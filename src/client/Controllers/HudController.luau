@@ -22,7 +22,8 @@
 -- • Soft dark gradients at the screen edges keep text readable on bright
 --   scenes. Everything hides while you're knocked out or a menu is open.
 -- • Screen size: the block shrinks on a phone / small window and grows a
---   little on a large screen, from its corner (Theme.autoScale).
+--   little on a large screen, from its corner (Theme.autoScale). On a
+--   touch screen it sits top left, clear of the thumbstick.
 --
 -- • XP: when you earn XP the line grows and the bit you just earned shows
 --   bright for a moment; on a level up it fills to the end, the level
@@ -190,6 +191,17 @@ local function build()
 	})
 	-- Follows the screen size from its corner (smaller on a phone).
 	Theme.autoScale(vitals, 0.75)
+	-- On a touch screen the bottom left is Roblox's thumbstick (and the
+	-- thumb on it): the block goes to the top left, under the top bar.
+	Theme.onViewportChanged(function(viewport)
+		if Theme.isTouch() then
+			vitals.AnchorPoint = Vector2.zero
+			vitals.Position = UDim2.fromOffset(24, Theme.topInset("left", viewport) + 12)
+		else
+			vitals.AnchorPoint = Vector2.new(0, 1)
+			vitals.Position = UDim2.new(0, 48, 1, -44)
+		end
+	end)
 	hpNum = label({
 		Name = "HpNum",
 		-- 66 × 34: "100" in this font (bold, ×1.12) is ≈ 63 × 34 px.

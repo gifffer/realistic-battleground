@@ -555,17 +555,9 @@ local function equippedMark(parent: Instance)
 		Parent = mark,
 	})
 	task.defer(function()
-		Theme.tween(
-			underline,
-			0.18,
-			{
-				Size = UDim2.fromOffset(
-					math.max(Theme.unscaled(mark, mark.TextBounds.X) - 3, 10),
-					2
-				),
-			},
-			Enum.EasingStyle.Quart
-		)
+		Theme.tween(underline, 0.18, {
+			Size = UDim2.fromOffset(math.max(Theme.unscaled(mark, mark.TextBounds.X) - 3, 10), 2),
+		}, Enum.EasingStyle.Quart)
 	end)
 end
 

@@ -42,6 +42,7 @@ local MIN_SHOWN = 0.6
 local DeathScreenController = {}
 
 local gui: ScreenGui
+local scrim: Frame -- the dark band (fades in and out with the text)
 local group: CanvasGroup
 local eyebrow: TextLabel
 local title: TextLabel
@@ -71,16 +72,16 @@ local function build()
 		Enabled = false,
 		Parent = player:WaitForChild("PlayerGui"),
 	})
-	-- A dark band low on the screen, no visible edge.
-	Theme.make("Frame", {
+	-- A dark band low on the screen, no visible edge (fades with the text).
+	scrim = Theme.make("Frame", {
 		Name = "Scrim",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.fromScale(0, 1),
 		Size = UDim2.fromScale(1, 0.5),
 		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = 0,
+		BackgroundTransparency = 1,
 		Parent = gui,
-	}, { Theme.gradient(-90, { { 0, 0.35 }, { 0.5, 0.7 }, { 1, 1 } }) })
+	}, { Theme.gradient(-90, { { 0, 0.35 }, { 0.5, 0.7 }, { 1, 1 } }) }) :: Frame
 
 	group = Theme.make("CanvasGroup", {
 		Name = "Content",
@@ -222,6 +223,7 @@ local function hide()
 	end
 	local current = token
 	Theme.tween(group, 0.2, { GroupTransparency = 1 })
+	Theme.tween(scrim, 0.4, { BackgroundTransparency = 1 })
 	Theme.tween(grade, 0.4, { Saturation = 0, Brightness = 0 })
 	task.delay(0.4, function()
 		if token == current then
@@ -242,6 +244,8 @@ local function show(current: number)
 	stepConnection = RunService.RenderStepped:Connect(step)
 	group.GroupTransparency = 1
 	group.Position = UDim2.new(0.5, 0, 1, -60)
+	scrim.BackgroundTransparency = 1
+	Theme.tween(scrim, 0.35, { BackgroundTransparency = 0 })
 	Theme.tween(group, 0.35, {
 		GroupTransparency = 0,
 		Position = UDim2.new(0.5, 0, 1, -72),

@@ -51,6 +51,7 @@ local OLD_ROW_TRANSPARENCY = 0.28
 -- (Wide enough on the left for the longest line: two long names + verb.)
 local LAYER_MARGIN = 40
 local LAYER_EXTRA_LEFT = 380 -- (+ the finisher's name)
+local FEED_TOP = 36 -- y of the first line inside the layer
 
 -- What a line is made of, in order: names (with their level) and verbs.
 type PartKind = "name" | "you" | "verb" | "finisher"
@@ -284,7 +285,8 @@ local function addLine(
 		killerIsYou
 	)
 	local finisher = details.finisher
-	if kind == "Finished" and finisher then
+	-- (only with a killer: "Dummy died — HOME RUN" reads wrong)
+	if kind == "Finished" and killerName and finisher then
 		table.insert(parts, { text = "—", kind = "verb" })
 		table.insert(parts, { text = finisher, kind = "finisher" })
 	end
@@ -456,7 +458,7 @@ function KillFeedController.start()
 		Position = UDim2.fromScale(1, 0),
 		Size = UDim2.fromOffset(
 			360 + 40 + LAYER_MARGIN + LAYER_EXTRA_LEFT,
-			36 + K.FEED_LINES * ROW_HEIGHT + LAYER_MARGIN
+			FEED_TOP + K.FEED_LINES * ROW_HEIGHT + LAYER_MARGIN
 		),
 		BackgroundTransparency = 1,
 		GroupTransparency = if hidden then 1 else 0,
@@ -465,10 +467,16 @@ function KillFeedController.start()
 	layer = group
 	-- Smaller on a phone, a little bigger on a large screen (from its corner).
 	Theme.autoScale(group, 0.7)
+	-- The first line (36 px down, scaled) stays under Roblox's top-bar buttons.
+	Theme.onViewportChanged(function(viewport)
+		local inset = Theme.topInset("right", viewport)
+		local drop = math.max(0, inset + 4 - FEED_TOP * Theme.scaleFor(viewport, 0.7))
+		group.Position = UDim2.new(1, 0, 0, drop)
+	end)
 	feed = Theme.make("Frame", {
 		Name = "Feed",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -40, 0, 36),
+		Position = UDim2.new(1, -40, 0, FEED_TOP),
 		Size = UDim2.fromOffset(360, K.FEED_LINES * ROW_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = group,

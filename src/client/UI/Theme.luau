@@ -27,7 +27,9 @@
 --   Theme.autoScale(frame, minScale?)        adds a UIScale that follows the screen
 --   Theme.onViewportChanged(callback)        callback(viewport) now and on every resize
 --   Theme.isTouch()                          a touch screen with no mouse (phone, tablet)
+--   Theme.topInset(side, viewport)           height of Roblox's top bar on that side (0 if free)
 
+local GuiService = game:GetService("GuiService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -303,6 +305,8 @@ function Theme.onViewportChanged(callback: (Vector2) -> ()): () -> ()
 	if not cameraWatched then
 		cameraWatched = true
 		workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchCamera)
+		-- Roblox's top bar changed (shown, hidden, new buttons): refit too.
+		GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(notifyViewport)
 		watchCamera()
 	end
 	table.insert(viewportListeners, callback)
@@ -348,6 +352,23 @@ end
 -- buttons, blocks move away from the on-screen jump button).
 function Theme.isTouch(): boolean
 	return UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+end
+
+-- Screen pixels taken by Roblox's top bar (menu, chat, backpack... about
+-- 36-58 px high) at the top of the `side` edge, 0 when that side is free.
+-- For ScreenGuis with IgnoreGuiInset = true: a block anchored to the top
+-- keeps its top under this, or the buttons take its taps / hide it.
+-- (TopbarInset is the FREE part of the bar: the buttons are left of
+-- Min.X and right of Max.X.)
+function Theme.topInset(side: "left" | "right", viewport: Vector2): number
+	local free = GuiService.TopbarInset
+	if free.Height <= 0 then
+		-- Not reported (bar hidden or an old client): the classic inset.
+		local topLeft = GuiService:GetGuiInset()
+		return topLeft.Y
+	end
+	local covered = if side == "left" then free.Min.X > 1 else free.Max.X < viewport.X - 1
+	return if covered then free.Max.Y else 0
 end
 
 return table.freeze(Theme)
