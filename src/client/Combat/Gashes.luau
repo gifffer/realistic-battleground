@@ -29,6 +29,7 @@ local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
 local ArmRip = require(script.Parent.ArmRip)
 local BloodGush = require(script.Parent.BloodGush)
+local BloodAge = require(script.Parent.BloodAge)
 local HeadBlast = require(script.Parent.HeadBlast)
 
 local Gashes = {}
@@ -963,6 +964,10 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		piece.Reflectance = look.reflectance
 		piece.Material = look.material
 		setUp(piece, part, parent)
+		if layer == "Blood" then
+			-- (fresh it glistens; it darkens and crusts as it dries)
+			BloodAge.track(piece, "wound", BloodAge.PALETTE.ARTERIAL, 0.45)
+		end
 	end
 	-- Dark flesh deep behind the cut: wherever the steps of the hole in the
 	-- skin reach past the insert, you see deep red instead of through the body.

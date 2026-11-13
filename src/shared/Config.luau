@@ -328,6 +328,155 @@ return table.freeze({
 		HURT_SOUND_HEALTH = 70,
 	}),
 
+	-- Blood (client-side visuals only: nothing here changes a fight). Used by
+	-- the client's Combat/Blood*.luau modules and the gore modules.
+	-- Realistic gore: on Roblox, fill in the experience's maturity
+	-- questionnaire accordingly, or set ENABLED = false.
+	Blood = table.freeze({
+		-- Master switch: false = no blood at all (hit sprays, drips, pools,
+		-- footprints...). The finishers' gore is also gated by Injuries.SKIN_TEAR.
+		ENABLED = true,
+		-- How much blood a client keeps at once: "Auto" follows the player's
+		-- Roblox graphics quality (Esc > Settings), or force "Low" / "Medium" /
+		-- "High". Low keeps 40 % of the caps below, Medium 70 %.
+		QUALITY = "Auto",
+		-- The colours of blood, from fresh to old (one palette for every
+		-- module). Real blood is DARK: deep crimson, never pink or bright red.
+		PALETTE = table.freeze({
+			ARTERIAL = Color3.fromRGB(138, 9, 6), -- fresh from an artery (spurts, fresh spatter)
+			ARTERIAL_LIGHT = Color3.fromRGB(161, 20, 14), -- a thin film / mist (thin = lighter)
+			VENOUS = Color3.fromRGB(94, 11, 11), -- drips, pools, runs
+			CLOTTED = Color3.fromRGB(72, 10, 10), -- 20-60 s: thickening, its edge darkens
+			DRYING = Color3.fromRGB(62, 13, 11), -- 60-120 s
+			DRY = Color3.fromRGB(48, 14, 11), -- matte, turning reddish-brown (dried blood is never pure red)
+			OLD = Color3.fromRGB(42, 21, 16), -- brown-black crust (end of its life)
+			GLOSS = Color3.fromRGB(30, 2, 2), -- the wet film on a pool (dark: the sky reflects)
+			FABRIC_SOAK = Color3.fromRGB(70, 12, 12), -- soaked into a shirt / pants...
+			FABRIC_SOAK_DRY = Color3.fromRGB(46, 17, 13), -- ...once dry
+		}),
+		-- The most blood a client draws at once (at "High"; the oldest goes).
+		CAPS = table.freeze({
+			STAINS = 700, -- marks on floors / walls
+			GLOSS = 40, -- wet shiny films on fresh pools
+			POOLS = 20, -- pools growing under bleeders / torn arteries
+			BODY = 200, -- marks on bodies (skin, soaked clothes, fists)
+			BODY_PER_CHARACTER = 24,
+			FOOTPRINTS = 120,
+			RUNS = 40, -- blood running down a wall / the skin, at once
+			DROPS = 140, -- drops flying at once
+			PENDING_LANDINGS = 60, -- drops whose landing is computed in advance
+			NEW_PER_FRAME = 40, -- new marks per frame (more wait for the next frames)
+			PARTICLES_PER_BURST = 120,
+			AGE_PER_FRAME = 150, -- marks updated (drying) per frame
+		}),
+		-- How each kind of mark ages, in seconds (real minutes squeezed):
+		-- red → dark red at `fresh`, clotted (dark edge) at `clot`, dry at `dry`,
+		-- gone at `life` (fading the last 15 %). `gloss`: how shiny it starts
+		-- (Reflectance), lost by `glossEnd`.
+		PROFILES = table.freeze({
+			spatter = table.freeze({
+				fresh = 12, -- (stays visibly red through the rest of the fight)
+				clot = 30,
+				dry = 60,
+				life = 120,
+				gloss = 0,
+				glossEnd = 1,
+			}),
+			pool = table.freeze({
+				fresh = 20,
+				clot = 60,
+				dry = 150,
+				life = 180,
+				gloss = 0.25,
+				glossEnd = 60,
+			}),
+			run = table.freeze({
+				fresh = 10,
+				clot = 30,
+				dry = 90,
+				life = 120,
+				gloss = 0.12,
+				glossEnd = 30,
+			}),
+			body = table.freeze({
+				fresh = 10,
+				clot = 30,
+				dry = 90,
+				life = 120,
+				gloss = 0.08,
+				glossEnd = 25,
+			}),
+			smear = table.freeze({
+				fresh = 5,
+				clot = 5,
+				dry = 40,
+				life = 90,
+				gloss = 0,
+				glossEnd = 1,
+			}),
+			soak = table.freeze({
+				fresh = 3,
+				clot = 20,
+				dry = 60,
+				life = 600,
+				gloss = 0,
+				glossEnd = 1,
+			}),
+			foot = table.freeze({
+				fresh = 10,
+				clot = 10,
+				dry = 50,
+				life = 60,
+				gloss = 0,
+				glossEnd = 1,
+			}),
+			wound = table.freeze({
+				fresh = 15,
+				clot = 45,
+				dry = 120,
+				life = math.huge,
+				gloss = 0.3,
+				glossEnd = 90,
+			}),
+		}),
+		-- How fast a bleeder's pool grows: area (studs²) per second for each
+		-- point of BleedPerSecond.
+		FEED_SCALE = 0.35,
+		-- Blood pictures: assets/blood/*.png uploaded to Roblox, their image ids
+		-- here (guide: docs/BLOOD_FR.md). 0 = not uploaded yet: the game draws
+		-- that kind of mark with plain shapes instead. Fill them in any order.
+		-- Each list is the numbered files of that kind, in order: spatterRound
+		-- = { spatter_round_1, _2, _3 }. footL / footR: 1 heavy, 2 partial,
+		-- 3 trace; pool / poolRim go in pairs (pool_2 with pool_rim_2).
+		IMAGES = table.freeze({
+			spatterRound = table.freeze({ 0, 0, 0 }), -- spatter_round_1..3
+			spatterOval = table.freeze({ 0, 0, 0 }), -- spatter_oval_1..3
+			spatterTail = table.freeze({ 0, 0, 0 }), -- spatter_tail_1..3
+			spatterStreak = table.freeze({ 0, 0 }), -- spatter_streak_1..2
+			satellites = table.freeze({ 0, 0, 0 }), -- satellites_1..3
+			drip = table.freeze({ 0, 0 }), -- drip_1..2
+			dripPool = table.freeze({ 0, 0 }), -- drip_pool_1..2
+			pool = table.freeze({ 0, 0, 0 }), -- pool_1..3
+			poolRim = table.freeze({ 0, 0, 0 }), -- pool_rim_1..3
+			poolLobe = table.freeze({ 0, 0, 0 }), -- pool_lobe_1..3
+			run = table.freeze({ 0, 0 }), -- run_1..2
+			smear = table.freeze({ 0, 0 }), -- smear_1..2
+			handL = table.freeze({ 0 }), -- handprint_L_1
+			handR = table.freeze({ 0 }), -- handprint_R_1
+			footL = table.freeze({ 0, 0, 0 }), -- foot_L_1..3
+			footR = table.freeze({ 0, 0, 0 }), -- foot_R_1..3
+			soak = table.freeze({ 0, 0, 0 }), -- soak_1..3
+			skinSmear = table.freeze({ 0, 0 }), -- skin_smear_1..2
+			knuckles = table.freeze({ 0, 0 }), -- knuckles_1..2
+			arterialArc = table.freeze({ 0, 0 }), -- arterial_arc_1..2
+			pDrop = table.freeze({ 0 }), -- p_drop
+			pDrops4x4 = table.freeze({ 0 }), -- p_drops_4x4
+			pGobs4x4 = table.freeze({ 0 }), -- p_gobs_4x4
+			pMist8x8 = table.freeze({ 0 }), -- p_mist_8x8
+			beamStream = table.freeze({ 0 }), -- beam_stream
+		}),
+	}),
+
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish
 	-- you (M1 on you while you're down); otherwise you get back up.
 	Knockout = table.freeze({

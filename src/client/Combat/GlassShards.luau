@@ -13,12 +13,14 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
+local BloodAge = require(script.Parent.BloodAge)
 
 local GlassShards = {}
 
 local GLASS_COLOR = Color3.fromRGB(116, 140, 92) -- the green-brown bottle, thin
-local BLOOD_COLOR = Color3.fromRGB(78, 4, 4)
+local BLOOD_COLOR = Config.Blood.PALETTE.VENOUS
 local HEAD_RADIUS = 0.6 -- the classic head (see Gashes)
 local LIFT = 0.012 -- blood just over the skin (and over the bruise marks)
 
@@ -99,15 +101,19 @@ local function drawShard(part: BasePart, shard: Gash.Shard, parent: Instance)
 	-- Blood where the glass went in.
 	local dot = Instance.new("Part")
 	dot.Name = "ShardBlood"
-	dot.Shape = Enum.PartType.Cylinder
 	local size = random:NextNumber(0.05, 0.09)
-	dot.Size = Vector3.new(0.01, size, size) -- (a cylinder's round face: Y = Z)
+	-- (a small uneven bead: a flattened sphere, a little oval)
+	dot.Size = Vector3.new(0.01, size, size * random:NextNumber(1, 1.35))
+	local bead = Instance.new("SpecialMesh")
+	bead.MeshType = Enum.MeshType.Sphere
+	bead.Parent = dot
 	dot.Material = Enum.Material.SmoothPlastic
 	dot.Color = BLOOD_COLOR
 	dot.Reflectance = 0.25
-	-- (a cylinder's axis is its X: turned to point out of the skin)
+	-- (its thin X axis points out of the skin)
 	dot.CFrame = part.CFrame * CFrame.fromMatrix(at + normal * LIFT, normal, up)
 	setUp(dot, part, parent)
+	BloodAge.track(dot, "wound", Config.Blood.PALETTE.ARTERIAL) -- (it darkens, dulls)
 
 	-- Sometimes a thin trickle running down the skin.
 	if random:NextNumber() < 0.6 then
@@ -118,9 +124,14 @@ local function drawShard(part: BasePart, shard: Gash.Shard, parent: Instance)
 		trickle.Material = Enum.Material.SmoothPlastic
 		trickle.Color = BLOOD_COLOR
 		trickle.Reflectance = 0.25
+		-- (a thin run, tapered at both ends: a stretched sphere)
+		local spindle = Instance.new("SpecialMesh")
+		spindle.MeshType = Enum.MeshType.Sphere
+		spindle.Parent = trickle
 		local start = at + normal * LIFT + Vector3.new(0, -length / 2, 0)
 		trickle.CFrame = part.CFrame * CFrame.fromMatrix(start, side, up)
 		setUp(trickle, part, parent)
+		BloodAge.track(trickle, "wound", Config.Blood.PALETTE.VENOUS)
 	end
 end
 

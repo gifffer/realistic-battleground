@@ -222,6 +222,12 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "OrganDrop",
 	},
 
+	-- Blood (Combat/Blood*: silent until they have ids) ----------------------
+	BloodDrip = { ids = {}, volume = 0.25, pitch = 1, pitchVariation = 0.15 }, -- a drop patting the floor
+	BloodSplat = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.1 }, -- a wet slap of blood landing
+	ArterialSpurt = { ids = {}, volume = 0.55, pitch = 1, pitchVariation = 0.08 }, -- an artery's jet, each beat
+	BloodGurgle = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.05 }, -- blood in an open throat
+
 	-- Injuries (step 5) -----------------------------------------------------
 	-- Loops heard only by you while your health is low.
 	Heartbeat = { ids = { 7237020278 }, volume = 0.6, pitch = 1, pitchVariation = 0 },

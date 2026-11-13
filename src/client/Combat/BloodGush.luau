@@ -7,10 +7,15 @@
 --   • it SPURTS with the heartbeat: a jet on each beat (strong, arcing out
 --     a metre or two), a weak flow between beats; the heart races, then
 --     slows and weakens as the blood runs out (a few seconds);
---   • each jet comes down where its arc meets the floor: elongated drops
---     in a line along the way it flew, a splash where the bulk lands;
---   • it runs down the body from the wound, in streaks that lengthen;
---   • a pool spreads under it, faster at first;
+--   • each jet is a rope of liquid that breaks into drops (real drops fly
+--     with it, with the jet's gravity: they stretch, fall apart, splash);
+--     with the beam_stream picture the rope itself is drawn on each beat;
+--   • it comes down where its arc meets the floor / a wall: on strong beats
+--     a wave of big drops (the artery sweeping by), elongated drops in a
+--     line along the way it flew, and the blood gathers into a pool there;
+--   • it runs down the body from the wound, in runs that lengthen, and
+--     soaks into the clothes;
+--   • a pool spreads under it, faster at first, flowing downhill;
 --   • whoever is right there gets it on them (dark spots on his front, his
 --     arms).
 --
@@ -25,14 +30,20 @@
 --                                     streaks running down
 
 local Debris = game:GetService("Debris")
-local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local HeadBlast = require(script.Parent.HeadBlast)
+local Config = require(ReplicatedStorage.Shared.Config)
+local Blood = require(script.Parent.Blood)
+local BloodBody = require(script.Parent.BloodBody)
+local BloodPool = require(script.Parent.BloodPool)
+local BloodStain = require(script.Parent.BloodStain)
+local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local BloodGush = {}
 
-local BLOOD = Color3.fromRGB(78, 6, 6) -- dark, once out
-local BLOOD_WET = Color3.fromRGB(110, 8, 8) -- fresh, arterial (brighter)
+local PALETTE = Config.Blood.PALETTE
+local BLOOD = PALETTE.VENOUS -- dark, once out
+local BLOOD_WET = PALETTE.ARTERIAL -- fresh, arterial (brighter)
 local GRAVITY = 60 -- studs/s², what the particles use too (they look heavier)
 
 export type Options = {
@@ -71,6 +82,12 @@ local function jetEmitter(parent: Attachment, size: number): ParticleEmitter
 	jet.Drag = 0.25
 	jet.EmissionDirection = Enum.NormalId.Front
 	jet.Rate = 0
+	if Blood.droplets(jet, "gobs") then
+		-- (the picture: blobs and ligaments, a stream breaking into drops;
+		-- the jet's own gravity kept, the same as its drops)
+		jet.Acceleration = Vector3.new(0, -GRAVITY, 0)
+		jet.Size = NumberSequence.new(size * 1.2, size * 0.7)
+	end
 	jet.Parent = parent
 	return jet
 end
@@ -79,7 +96,7 @@ local function mistEmitter(parent: Attachment): ParticleEmitter
 	local mist = Instance.new("ParticleEmitter")
 	mist.Name = "Mist"
 	mist.Texture = "rbxasset://textures/particles/smoke_main.dds"
-	mist.Color = ColorSequence.new(BLOOD_WET)
+	mist.Color = ColorSequence.new(PALETTE.ARTERIAL_LIGHT)
 	mist.LightEmission = 0
 	mist.LightInfluence = 1
 	mist.Transparency = NumberSequence.new({
@@ -97,66 +114,200 @@ local function mistEmitter(parent: Attachment): ParticleEmitter
 	mist.Drag = 2
 	mist.EmissionDirection = Enum.NormalId.Front
 	mist.Rate = 0
+	Blood.droplets(mist, "mist")
 	mist.Parent = parent
 	return mist
 end
 
--- Where a jet leaving `from` at `velocity` meets the floor (and the line of
--- drops it leaves on the way down): ballistic, the floor found by rays.
-local function landing(from: Vector3, velocity: Vector3, ignore: { Instance }): (Vector3?, Vector3)
+-- Where a jet leaving `from` at `velocity` meets something (floor, wall):
+-- ballistic, found by rays. Returns the hit, the speed it arrives with and
+-- the time it flies.
+local function landing(
+	from: Vector3,
+	velocity: Vector3,
+	ignore: { Instance }
+): (RaycastResult?, Vector3, number)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = ignore
+	local skip: { Instance } = table.clone(ignore)
+	table.insert(skip, BloodStain.folder)
+	params.FilterDescendantsInstances = skip
 	local position, moving = from, velocity
+	local time = 0
 	for _ = 1, 40 do
 		local dt = 0.03
 		local step = moving * dt
 		local hit = workspace:Raycast(position, step, params)
 		if hit then
-			return hit.Position, moving
+			return hit,
+				moving,
+				time + dt * (hit.Position - position).Magnitude / math.max(step.Magnitude, 1e-3)
 		end
 		position += step
 		moving += Vector3.new(0, -GRAVITY * dt, 0)
+		time += dt
 	end
-	return nil, moving
+	return nil, moving, time
 end
 
--- One jet's blood coming down: a splash where the bulk lands, drops strung
--- out along the way it flew, short of it and past it.
+-- One jet's blood coming down: where the bulk lands, a big stain (on the
+-- first strong beats the wave of an artery sweeping by), elongated drops
+-- strung out along the way it flew; it pools there.
 local function rain(
 	from: Vector3,
 	velocity: Vector3,
 	strength: number,
 	ignore: { Instance },
-	random: Random
-)
-	local at, moving = landing(from, velocity, ignore)
-	if at == nil then
-		return
+	random: Random,
+	key: any
+): (RaycastResult?, Vector3, number)
+	local hit, moving, time = landing(from, velocity, ignore)
+	if hit == nil then
+		return nil, moving, time
 	end
-	local flat = Vector3.new(moving.X, 0, moving.Z)
-	local along = if flat.Magnitude > 0.1 then flat.Unit else Vector3.new(1, 0, 0)
-	local delay = math.clamp((from - at).Magnitude / math.max(velocity.Magnitude, 1), 0.08, 0.6)
+	local at, normal = hit.Position, hit.Normal
+	local tangent = moving - normal * moving:Dot(normal)
+	local along = if tangent.Magnitude > 0.1
+		then tangent.Unit
+		else normal:Cross(Vector3.new(1, 0, 0))
+	local delay = math.clamp(time, 0.08, 0.8)
+	local seed = random:NextInteger(1, 2 ^ 30)
 	local big = random:NextNumber() < 0.5 + 0.3 * strength -- (not every beat: the marks are counted)
+	local streaks = 1 + math.floor(1.5 * strength)
+	local onto = hit.Instance
 	task.delay(delay, function()
-		if big then
-			HeadBlast.splash(at, 0.35 + 0.5 * strength, random:NextInteger(1, 2 ^ 20))
+		if onto.Parent == nil then
+			return
 		end
-		for index = 1, 1 + math.floor(1.5 * strength) do
-			local offset = along * random:NextNumber(-0.6, 1.2) * index * 0.35
-				+ along:Cross(Vector3.new(0, 1, 0)) * random:NextNumber(-0.12, 0.12)
-			HeadBlast.streak(
+		local rand = Random.new(seed)
+		if big then
+			if strength > 0.55 then
+				-- a strong beat: a wave of big drops along the way it swept
+				BloodStain.stain(
+					"arterialArc",
+					at,
+					normal,
+					along,
+					0.35 + 0.35 * strength,
+					1 + 1.6 * strength,
+					{
+						random = rand,
+						onto = onto :: BasePart,
+						start = BLOOD_WET,
+						pinned = true,
+						priority = 3,
+					}
+				)
+			else
+				Blood.splat(at, normal, 0.3 + 0.4 * strength, moving, onto :: BasePart, rand)
+			end
+		end
+		for index = 1, streaks do
+			local offset = along * rand:NextNumber(-0.6, 1.2) * index * 0.35
+				+ along:Cross(normal) * rand:NextNumber(-0.12, 0.12)
+			Blood.splat(
 				at + offset,
-				random:NextNumber(0.18, 0.4) * (0.6 + strength),
-				along,
-				random:NextInteger(1, 2 ^ 20)
+				normal,
+				rand:NextNumber(0.1, 0.22) * (0.6 + strength),
+				moving,
+				onto :: BasePart,
+				rand
 			)
 		end
+		-- (on the ground it gathers: the pools of each landing merge)
+		if normal.Y > 0.7 then
+			BloodPool.feed(key, at, 0.5 + 0.8 * strength, 0.6, 1.4)
+		end
 	end)
+	return hit, moving, time
+end
+
+-- The liquid rope of a spurt (only with its picture, beam_stream): from the
+-- wound to where it lands, curved like the jet's arc.
+local function streamBeam(parent: Instance, size: number): (Beam?, Attachment?, Attachment?)
+	local id = BloodStain.image("beamStream", nil, 1)
+	if id == 0 then
+		return nil, nil, nil
+	end
+	local a0 = Instance.new("Attachment")
+	a0.Name = "StreamFrom"
+	a0.Parent = workspace.Terrain
+	local a1 = Instance.new("Attachment")
+	a1.Name = "StreamTo"
+	a1.Parent = workspace.Terrain
+	local beam = Instance.new("Beam")
+	beam.Name = "Stream"
+	beam.Texture = "rbxassetid://" .. id
+	beam.TextureMode = Enum.TextureMode.Wrap
+	beam.TextureLength = 1
+	beam.TextureSpeed = 3
+	beam.Color = ColorSequence.new(BLOOD_WET, BLOOD)
+	beam.LightInfluence = 0.8
+	beam.FaceCamera = true
+	beam.Segments = 16
+	beam.Width0 = size * 0.9
+	beam.Width1 = size * 0.35
+	beam.Transparency = NumberSequence.new(1)
+	beam.Attachment0 = a0
+	beam.Attachment1 = a1
+	beam.Parent = parent
+	return beam, a0, a1
+end
+
+-- The rope bent along the arc (a ballistic curve as a Bézier: its control
+-- points a third of the way along the speeds at both ends).
+local function bendBeam(
+	beam: Beam,
+	a0: Attachment,
+	a1: Attachment,
+	from: Vector3,
+	velocity: Vector3,
+	to: Vector3,
+	arrival: Vector3,
+	time: number
+)
+	local up = Vector3.new(0, 1, 0)
+	local function frame(position: Vector3, direction: Vector3): CFrame
+		local d = if direction.Magnitude > 1e-3 then direction.Unit else up
+		local other = if math.abs(d.Y) > 0.99 then Vector3.new(1, 0, 0) else up
+		-- (an Attachment's Axis is its X: along the speed there)
+		return CFrame.fromMatrix(position, d, other:Cross(d).Unit:Cross(d))
+	end
+	a0.WorldCFrame = frame(from, velocity)
+	a1.WorldCFrame = frame(to, arrival)
+	beam.CurveSize0 = velocity.Magnitude * time / 3
+	beam.CurveSize1 = arrival.Magnitude * time / 3
+end
+
+-- Drops of the jet itself: real drops (they fly with the jet's gravity,
+-- stretch, break apart and splash where they land).
+local function jetDrops(
+	hole: Attachment,
+	speed: number,
+	size: number,
+	count: number,
+	random: Random
+)
+	local frame = hole.WorldCFrame
+	for _ = 1, count do
+		local spread =
+			Vector3.new(random:NextNumber(-0.08, 0.08), random:NextNumber(-0.08, 0.08), 0)
+		local direction = frame:VectorToWorldSpace((Vector3.new(0, 0, -1) + spread).Unit)
+		Blood.drop(
+			frame.Position + direction * random:NextNumber(0, 0.25),
+			direction * speed * random:NextNumber(0.8, 1.1) + Vector3.new(0, 1.5, 0),
+			size * random:NextNumber(0.35, 0.7),
+			random,
+			GRAVITY / workspace.Gravity
+		)
+	end
 end
 
 -- An artery torn open at `local` (in `part`'s space; out along its LookVector).
 function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
+	if not Config.Blood.ENABLED then
+		return
+	end
 	local random = Random.new(options.seed)
 	local hole = Instance.new("Attachment")
 	hole.Name = "Artery"
@@ -164,11 +315,14 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 	hole.Parent = part
 	local jet = jetEmitter(hole, options.size)
 	local mist = mistEmitter(hole)
-	local ignore = options.ignore or { part }
+	local ignore: { Instance } = options.ignore or { part }
+	local key = { artery = options.seed } -- (its own pool; landings merge into it)
+	local beam, from, to = streamBeam(hole, options.size)
+	local owner = part:FindFirstAncestorOfClass("Model")
 	if options.pool > 0 then
 		task.delay(0.3, function()
 			if part.Parent then
-				HeadBlast.pool(
+				BloodPool.spread(
 					hole.WorldPosition,
 					options.pool,
 					options.seconds + 3,
@@ -184,13 +338,9 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 		mist:Emit(30)
 		jet.Speed = NumberRange.new(options.speed * 0.9, options.speed * 1.1)
 		jet:Emit(math.floor(60 * options.size / 0.12))
-		rain(
-			hole.WorldPosition,
-			hole.WorldCFrame.LookVector * options.speed + Vector3.new(0, 2, 0),
-			1,
-			ignore,
-			random
-		)
+		local first = hole.WorldCFrame.LookVector * options.speed + Vector3.new(0, 2, 0)
+		rain(hole.WorldPosition, first, 1, ignore, random, key)
+		jetDrops(hole, options.speed, options.size, 8, random)
 		while hole.Parent and part.Parent and os.clock() - start < options.seconds do
 			local left = 1 - (os.clock() - start) / options.seconds -- (it runs out)
 			local strength = left * left * 0.8 + left * 0.2
@@ -202,19 +352,34 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 			jet.Speed = NumberRange.new(speed * 0.85, speed * 1.1)
 			jet.Rate = 260 * (0.3 + 0.7 * strength)
 			mist.Rate = 40 * strength
-			rain(
-				hole.WorldPosition,
-				hole.WorldCFrame.LookVector * speed + Vector3.new(0, 1.5, 0),
-				strength,
-				ignore,
-				random
-			)
+			local velocity = hole.WorldCFrame.LookVector * speed + Vector3.new(0, 1.5, 0)
+			local hit, arrival, time =
+				rain(hole.WorldPosition, velocity, strength, ignore, random, key)
+			jetDrops(hole, speed, options.size, 3 + math.floor(4 * strength), random)
+			if owner and strength > 0.25 then
+				SoundController.play("ArterialSpurt", owner)
+			end
+			if beam and from and to and hit then
+				-- the rope of blood from the wound to where it lands...
+				bendBeam(beam, from, to, hole.WorldPosition, velocity, hit.Position, arrival, time)
+				beam.Width0 = options.size * (0.5 + 0.4 * strength)
+				beam.Transparency = NumberSequence.new(0.05, 0.25)
+			end
 			task.wait(0.11 + 0.05 * (1 - strength))
+			if beam then
+				-- ...that breaks into drops when the beat ends
+				beam.Transparency = NumberSequence.new(0.6, 1)
+				jet:Emit(math.floor(10 * strength) + 2)
+			end
 			-- between beats: it wells out and runs
 			jet.Rate = 18 * strength
 			jet.Speed = NumberRange.new(1, 2.5)
 			mist.Rate = 0
-			task.wait(math.max(0.05, beat - 0.13))
+			task.wait(0.06)
+			if beam then
+				beam.Transparency = NumberSequence.new(1)
+			end
+			task.wait(math.max(0.05, beat - 0.19))
 			beat = math.min(beat * 1.06, 1.1) -- (the heart slows)
 		end
 		jet.Rate = 0
@@ -224,92 +389,59 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 		jet.Rate = 6
 		task.wait(3)
 		jet.Rate = 0
+		if from and to then
+			from:Destroy()
+			to:Destroy()
+		end
 		Debris:AddItem(hole, 1.5)
 	end)
 end
 
--- Blood running down the body from `local` (in `part`'s space): thin dark
--- streaks on its surface, welded to it, lengthening downwards.
+-- Blood running down the body from `local` (in `part`'s space): runs on its
+-- skin that lengthen downwards, a bead at their tips (Blood.run).
 function BloodGush.runDown(part: BasePart, localPoint: Vector3, count: number, seed: number)
+	if not Config.Blood.ENABLED then
+		return
+	end
 	local random = Random.new(seed)
+	local model = part:FindFirstAncestorOfClass("Model")
 	for index = 1, count do
-		task.delay(random:NextNumber(0, 0.8) + index * 0.1, function()
+		local delay = random:NextNumber(0, 0.8) + index * 0.1
+		local offset = Vector3.new(
+			random:NextNumber(-0.18, 0.18),
+			random:NextNumber(-0.1, 0.05),
+			random:NextNumber(-0.18, 0.18)
+		)
+		local width = random:NextNumber(0.05, 0.11)
+		local length = random:NextNumber(0.6, 1.6)
+		local runSeed = random:NextInteger(1, 2 ^ 30)
+		task.delay(delay, function()
 			if part.Parent == nil then
 				return
 			end
-			-- on the face of the part nearest the wound, going down it
-			local half = part.Size / 2
-			local start = localPoint
-				+ Vector3.new(
-					random:NextNumber(-0.18, 0.18),
-					random:NextNumber(-0.1, 0.05),
-					random:NextNumber(-0.18, 0.18)
-				)
-			local face = Vector3.new(
-				math.clamp(start.X, -half.X, half.X),
-				math.clamp(start.Y, -half.Y, half.Y),
-				math.clamp(start.Z, -half.Z, half.Z)
-			)
-			-- (snap to the closest face, a hair out of it)
-			local dx, dz = half.X - math.abs(face.X), half.Z - math.abs(face.Z)
-			local normal = if dx < dz
-				then Vector3.new(math.sign(face.X), 0, 0)
-				else Vector3.new(0, 0, math.sign(face.Z))
-			face = if dx < dz
-				then Vector3.new(math.sign(face.X) * (half.X + 0.012), face.Y, face.Z)
-				else Vector3.new(face.X, face.Y, math.sign(face.Z) * (half.Z + 0.012))
-			local width = random:NextNumber(0.05, 0.11)
-			local length = math.min(random:NextNumber(0.6, 1.6), face.Y + half.Y)
-			local streak = Instance.new("Part")
-			streak.Name = "BloodRun"
-			streak.Anchored = false
-			streak.CanCollide = false
-			streak.CanQuery = false
-			streak.CanTouch = false
-			streak.Massless = true
-			streak.CastShadow = false
-			streak.Material = Enum.Material.SmoothPlastic
-			streak.Color = if random:NextNumber() < 0.5 then BLOOD else BLOOD_WET
-			streak.Reflectance = 0.12
-			-- thin along the face's normal, starting short at the wound
-			local size = if normal.X ~= 0
-				then Vector3.new(0.01, 0.05, width)
-				else Vector3.new(width, 0.05, 0.01)
-			streak.Size = size
-			local top = CFrame.new(face)
-			streak.CFrame = part.CFrame * top * CFrame.new(0, -size.Y / 2, 0)
-			local weld = Instance.new("Weld")
-			weld.Part0 = part
-			weld.Part1 = streak
-			weld.C0 = top * CFrame.new(0, -size.Y / 2, 0)
-			weld.Parent = streak
-			streak.Parent = part
-			local grow = random:NextNumber(1.2, 2.6)
-			local full = if normal.X ~= 0
-				then Vector3.new(0.01, length, width)
-				else Vector3.new(width, length, 0.01)
-			TweenService:Create(
-				streak,
-				TweenInfo.new(grow, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{ Size = full }
-			):Play()
-			TweenService
-				:Create(
-					weld,
-					TweenInfo.new(grow, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{
-						C0 = top * CFrame.new(0, -length / 2, 0),
-					}
-				)
-				:Play()
-			Debris:AddItem(streak, 40)
+			local point = part.CFrame * (localPoint + offset)
+			local _, _, out = BloodStain.onSkin(part, point)
+			Blood.run(point, out, width, {
+				onto = part,
+				random = Random.new(runSeed),
+				length = length,
+				owner = model,
+				start = if index % 2 == 0 then BLOOD_WET else BLOOD,
+			})
+			if model then
+				BloodBody.soak(model, part, point, 0.5)
+			end
 		end)
 	end
 end
 
 -- Spots of blood on `target` (someone right there), on its side facing
--- `toward` (the wound): his front, his arms.
+-- `toward` (the wound): his front, his arms - each one stretched away from
+-- the wound (the way it flew), sticking to the skin (the round head too).
 function BloodGush.splatter(target: Model, toward: Vector3, count: number, seed: number)
+	if not Config.Blood.ENABLED then
+		return
+	end
 	local random = Random.new(seed)
 	local parts: { BasePart } = {}
 	for _, name in { "Torso", "Right Arm", "Left Arm", "Head" } do
@@ -328,48 +460,52 @@ function BloodGush.splatter(target: Model, toward: Vector3, count: number, seed:
 		-- on the face that looks at the wound (the biggest component)
 		local ax, ay, az = math.abs(side.X), math.abs(side.Y), math.abs(side.Z)
 		local point: Vector3
-		local size: Vector3
-		local s = random:NextNumber(0.06, 0.16)
 		if ax >= ay and ax >= az then
 			point = Vector3.new(
-				math.sign(side.X) * (half.X + 0.01),
+				math.sign(side.X) * half.X,
 				random:NextNumber(-half.Y, half.Y) * 0.9,
 				random:NextNumber(-half.Z, half.Z) * 0.9
 			)
-			size = Vector3.new(0.01, s * random:NextNumber(1, 2.2), s)
 		elseif az >= ay then
 			point = Vector3.new(
 				random:NextNumber(-half.X, half.X) * 0.9,
 				random:NextNumber(-half.Y, half.Y) * 0.9,
-				math.sign(side.Z) * (half.Z + 0.01)
+				math.sign(side.Z) * half.Z
 			)
-			size = Vector3.new(s, s * random:NextNumber(1, 2.2), 0.01)
 		else
 			point = Vector3.new(
 				random:NextNumber(-half.X, half.X) * 0.9,
-				math.sign(side.Y) * (half.Y + 0.01),
+				math.sign(side.Y) * half.Y,
 				random:NextNumber(-half.Z, half.Z) * 0.9
 			)
-			size = Vector3.new(s, 0.01, s)
 		end
-		local spot = Instance.new("Part")
-		spot.Name = "BloodSpot"
-		spot.CanCollide = false
-		spot.CanQuery = false
-		spot.CanTouch = false
-		spot.Massless = true
-		spot.CastShadow = false
-		spot.Material = Enum.Material.SmoothPlastic
-		spot.Color = BLOOD_WET
-		spot.Reflectance = 0.1
-		spot.Size = size
-		spot.CFrame = part.CFrame * CFrame.new(point)
-		local weld = Instance.new("WeldConstraint")
-		weld.Part0 = part
-		weld.Part1 = spot
-		weld.Parent = spot
-		spot.Parent = part
-		Debris:AddItem(spot, 25)
+		local world = part.CFrame * point
+		local away = world - toward
+		local s = random:NextNumber(0.06, 0.16)
+		local stretch = random:NextNumber(1, 2.2)
+		BloodStain.stain(
+			if stretch > 1.6 then "spatterTail" else "spatterOval",
+			world,
+			away,
+			away,
+			s,
+			s * stretch,
+			{
+				onto = part,
+				random = random,
+				profile = "body",
+				start = BLOOD_WET,
+				owner = target,
+				priority = 2,
+			}
+		)
+	end
+	-- (his fists are bloody now: his next swings flick it off)
+	for _, name in { "Right Arm", "Left Arm" } do
+		local arm = target:FindFirstChild(name)
+		if arm and arm:IsA("BasePart") then
+			BloodBody.bloodyLimb(target, arm, 0.5)
+		end
 	end
 end
 
@@ -380,6 +516,7 @@ function BloodGush.neck(model: Model, seed: number)
 	if torso == nil or not torso:IsA("BasePart") then
 		return
 	end
+	SoundController.play("BloodGurgle", model)
 	-- (out of the top of the stump, above its cut flesh)
 	local top = torso.Size.Y / 2 + 0.3
 	for index, x in { -0.17, 0.17 } do
@@ -391,7 +528,7 @@ function BloodGush.neck(model: Model, seed: number)
 			size = 0.13,
 			pool = if index == 1 then 4 else 0,
 			seed = seed + index,
-			ignore = { model },
+			ignore = { model :: Instance },
 		})
 	end
 	local back = Vector3.new(0, top + 0.05, 0.15)
@@ -402,7 +539,7 @@ function BloodGush.neck(model: Model, seed: number)
 		size = 0.16,
 		pool = 0,
 		seed = seed + 7,
-		ignore = { model },
+		ignore = { model :: Instance },
 	})
 	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, -0.5), 7, seed + 11)
 	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, 0.5), 5, seed + 13)
@@ -431,7 +568,7 @@ function BloodGush.torso(
 			size = 0.15,
 			pool = 3.8,
 			seed = seed,
-			ignore = { model },
+			ignore = { model :: Instance },
 		}
 	)
 	BloodGush.runDown(torso, localPoint, 9, seed + 5)

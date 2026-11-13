@@ -16,7 +16,9 @@
 -- the kill (Gashes draws it, through the clothes).
 
 local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local GoreKit = require(script.Parent.GoreKit)
 local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
@@ -28,8 +30,8 @@ local LiverRip = {}
 
 local LIVER = Color3.fromRGB(96, 28, 24) -- dark red-brown, glossy
 local GALLBLADDER = Color3.fromRGB(74, 100, 42)
-local BLOOD = Color3.fromRGB(78, 6, 6)
-local BLOOD_WET = Color3.fromRGB(104, 8, 8)
+local BLOOD = Config.Blood.PALETTE.VENOUS
+local BLOOD_WET = Config.Blood.PALETTE.ARTERIAL
 local BONE = Color3.fromRGB(224, 212, 188)
 local LIFETIME = 240 -- seconds at most the liver stays (it goes with the body before)
 
@@ -73,20 +75,33 @@ local function emitter(parent: Attachment, rate: number): ParticleEmitter
 	blood.Drag = 0.5
 	blood.EmissionDirection = Enum.NormalId.Front
 	blood.Rate = rate
+	Blood.droplets(blood, "drops") -- (real drops when the picture is uploaded)
 	blood.Parent = parent
 	return blood
 end
 
 -- A burst of blood (and bits) out of the point `at`, toward `out`.
 local function burst(at: CFrame, count: number, speed: number)
+	if not Config.Blood.ENABLED then
+		return
+	end
 	local point = Instance.new("Attachment")
 	point.WorldCFrame = at
 	point.Parent = workspace.Terrain
 	local spray = emitter(point, 0)
 	spray.Speed = NumberRange.new(speed * 0.4, speed)
 	spray.SpreadAngle = Vector2.new(60, 60)
-	spray:Emit(count)
+	spray:Emit(math.min(count, Config.Blood.CAPS.PARTICLES_PER_BURST))
 	Debris:AddItem(point, 1.5)
+	-- what flies also lands: a few of those drops leave their marks
+	Blood.landings(
+		at.Position,
+		at.LookVector,
+		60,
+		NumberRange.new(speed * 0.4, speed),
+		count / 12,
+		NumberRange.new(0.03, 0.08)
+	)
 end
 
 local function chip(at: Vector3, color: Color3, size: Vector3, velocity: Vector3)

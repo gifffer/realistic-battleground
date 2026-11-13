@@ -414,3 +414,28 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Sang réaliste (`feature/realistic-blood`)
+
+Sans les images (`Config.Blood.IMAGES` à 0), le sang est dessiné avec des formes simples ; avec les
+images importées (docs/BLOOD_FR.md), les mêmes tests doivent donner des taches plus détaillées.
+Réglage d'éclairage conseillé pour le mouillé : `Lighting.Technology = Future`.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Coup qui saigne (bouteille) sur un Dummy, regarder le sol | Taches **rouge foncé** (jamais rose), bord irrégulier, jamais un disque parfait. Une goutte arrivée en biais est **ovale ou en « ! »**, la queue dans le sens où elle allait. |
+| R2 | Attendre 1-2 min près des taches | Elles **foncent** (rouge → bordeaux), un **bord sombre** apparaît (le sang coagule), puis brun-noir mat, et elles disparaissent en fondu. |
+| R3 | Coup qui saigne tout près d'un **mur** | Des taches sur le mur, étirées vers le bas, et du sang qui **coule** lentement avec une perle au bout. |
+| R4 | Deux clients (Test > 2 joueurs), même coup | Les gouttes tombent **aux mêmes endroits** sur les deux écrans (à peu près). |
+| R5 | Un joueur qui saigne (Bleeding) reste **immobile** ~10 s | Le sang **coule de la plaie** sur la peau, les gouttes tombent **du bout de la coulure** ; une **flaque** grandit sous lui (vite puis plus lentement), brillante au début, avec des lobes. Sur une pente, elle s'étale vers le bas. |
+| R6 | Flaque près d'un trottoir / d'une marche | Elle s'arrête au bord ; si le sol tombe, du sang **coule le long du bord**. |
+| R7 | Marcher dans une flaque fraîche puis s'éloigner | **Empreintes** gauche/droite : pleines, puis partielles, puis des traces ; plus rien après ~9 pas. Pas d'empreinte dans du sang sec. |
+| R8 | Coup qui saigne au **visage** plusieurs fois | Souvent le **nez saigne** (coulure jusqu'à la lèvre, gouttes du menton quelques secondes), parfois la **lèvre** ; sur un coup lourd, un crachat de sang. Pas plus de ~6 coulures sur le visage. |
+| R9 | Coup qui saigne au **torse** d'un joueur avec un t-shirt | Une tache **s'étend dans le tissu** pendant ~30 s, plus sombre et mate que sur la peau. Sans t-shirt : un film plus clair sur la peau. |
+| R10 | Frapper un visage qui saigne, puis donner des coups dans le vide | Les **jointures** sont rouges ; chaque coup projette une **ligne de petites gouttes** (de plus en plus petites) au sol ; ça s'estompe en ~1 min. |
+| R11 | Finisher **batte** / **bras** / **foie** | Les jets sont de **vraies gouttes** qui retombent avec la gravité et se cassent en gouttelettes ; là où les jets tombent fort : une **vague de grosses taches** ; la flaque grandit et suit la pente. L'attaquant a des taches allongées sur lui, même sur la tête ronde (pas de carrés). |
+| R12 | Taper un KO qui saigne puis le laisser au sol | Une flaque se forme sous lui. S'il glisse / est poussé : une **traînée** de sang. En se relevant : une **empreinte de main**. |
+| R13 | Coupure au verre | Plus de **cubes en plastique** qui rebondissent : des gouttes qui volent et tachent le sol. Le sang dans la coupure brille au début puis fonce. |
+| R14 | Mourir / réapparaître | Tout le sang **sur le corps** disparaît ; le sang au sol reste et vieillit normalement. |
+| R15 | 16 joueurs / 2 finishers en même temps (ou Graphismes au minimum dans Échap) | Pas de chute d'images ; au minimum, moins de taches restent (les plus vieilles s'effacent en premier, les flaques en dernier). |
+| R16 | `Config.Blood.ENABLED = false` | Plus aucun sang (jets, gouttes, flaques, empreintes), le reste du combat marche. |
