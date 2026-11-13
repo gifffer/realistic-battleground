@@ -19,7 +19,7 @@
 --     touching anything.
 --
 --   ParkAtmosphereController.blend()        0 (city look) → 1 (full park look)
---   ParkAtmosphereController.inPark()       true while your camera is in the park
+--   ParkAtmosphereController.inPark()       true while your camera or your character is in it
 --   ParkAtmosphereController.serverClockTime()  the server's Lighting.ClockTime (not ours)
 --
 -- "Am I in the park?": your CAMERA or your CHARACTER is inside a ParkZone box (either one:
@@ -249,11 +249,11 @@ function ParkAtmosphereController.blend(): number
 	return blendValue * blendValue * (3 - 2 * blendValue)
 end
 
+-- (true while your camera or your character is in the park)
 function ParkAtmosphereController.inPark(): boolean
 	return cameraInPark
 end
 
--- (true while your camera or your character is in the park)
 -- The server's ClockTime, even while the park override has changed ours.
 function ParkAtmosphereController.serverClockTime(): number
 	local mem = memory[Lighting]

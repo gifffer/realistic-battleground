@@ -718,10 +718,11 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 				model,
 				torso,
 				if side < 0 then "ApronStrapL" else "ApronStrapR",
-				Vector3.new(side * 0.47, 0.86, -0.54),
-				Vector3.new(side * 0.32, 1.0, -0.54),
+				-- (0.09 deep: its front 0.01 prouder than the bib's where it starts on it)
+				Vector3.new(side * 0.47, 0.86, -0.545),
+				Vector3.new(side * 0.32, 1.0, -0.545),
 				0.1,
-				0.08,
+				0.09,
 				strap,
 				Enum.Material.Fabric
 			)

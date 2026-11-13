@@ -7665,8 +7665,10 @@ clips.HitBodyRight = mirror(clips.HitBodyLeft)
 -- to bring the fist in front of the mouth: the can then stands up with its top at the lips
 -- (~35 degrees), and as the arm goes on rising and the head tilts back it tips over
 -- (~60-75 degrees) into the mouth. Two small nods of the head = two gulps. Then the head
--- comes down and the arm lowers. (The angles were solved offline so that the top of the can
--- ends 0.1-0.25 stud in front of the mouth without the arm going through the head.)
+-- comes down and the arm lowers. (The angles were solved offline so that the rim of the can
+-- touches the lips. The arm has no elbow, so at the top its inner edge brushes the jaw a
+-- little: lifting it clear would leave the can 0.2+ stud away from the mouth, which looks
+-- worse from every camera angle than an arm that hides the chin.)
 -- Upper body only (the legs keep walking: you can drink while walking, slowly).
 -- Named "Emote_..." so it is played like an emote: no fists up after it, no swing sound.
 -- Its length must match Config.Cola.DRINK_TIME.
