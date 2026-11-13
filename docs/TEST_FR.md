@@ -463,3 +463,24 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Hitbox et lag : compensation de latence (`feature/hitbox-lag`)
+
+Le serveur teste maintenant chaque coup (M1, coups de kit, charge, prise) **aussi** là où
+l'attaquant **voyait** sa cible : il « remonte le temps » de son ping + 0,1 s (jamais plus de
+0,35 s, ± 0,06 s). Pour simuler du lag : *Studio → File → Studio Settings → Network →
+Incoming Replication Lag* = `0.15`, puis *Test → Clients and Servers → 2 Players*.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L1 | Dans Studio, frapper le Dummy (M1) | Comme avant : boîte **rouge** (la hitbox) ; en plus une petite boîte **bleue** sur le torse du Dummy (là où le serveur l'a « vu »). Aucune ligne rouge dans l'Output. |
+| L2 | 2 joueurs avec lag 0,15 : B **sprinte de gauche à droite** devant A, A clique quand son poing touche B **sur son écran** | Le coup **compte** (dégâts, réaction) dans la grande majorité des cas. Avant : presque toujours raté. |
+| L3 | Même chose, B court **en s'éloignant** de A | Si le poing touche sur l'écran de A, ça compte ; la boîte bleue est derrière B (là où A le voyait). |
+| L4 | A frappe B, la réaction prédite (instantanée) chez A | Elle n'est presque plus jamais **annulée** juste après (le serveur et l'écran de A sont d'accord). |
+| L5 | B est à 10 studs ou plus de A, A frappe dans le vide | **Rien** : la compensation ne rallonge pas la portée (0,35 s max). |
+| L6 | Visée tête pendant que B court (A vise la tête sur son écran) | Le coup est compté **à la tête** (zone calculée sur le corps « remonté »). |
+| L7 | B **bloque** (F) quand le coup arrive | Toujours **bloqué** : seule la **position** est remontée, pas l'état (garde, parade, dash). |
+| L8 | Dash (Q) de B au bon moment | Toujours **esquivé** (les frames d'esquive comptent comme avant). |
+| L9 | Coups de kit (1–4), charge (tackle du Street Brawler) et prises du Bouncer sur une cible qui bouge | Ils touchent là où l'attaquant voit la cible (boîtes bleues), comme le M1. |
+| L10 | B meurt / réapparaît / est téléporté dans l'arène de duel, A frappe là où B était | **Rien** : l'historique est effacé lors d'une téléportation. |
+| L11 | Mettre `DEBUG_HITBOXES = false` dans `Shared/Config` | Plus aucune boîte (rouge ni bleue). |

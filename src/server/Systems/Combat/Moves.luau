@@ -40,6 +40,7 @@ local Knockout = require(script.Parent.Parent.Knockout)
 local Stamina = require(script.Parent.Parent.Stamina)
 local Grab = require(script.Parent.Grab)
 local Hitbox = require(script.Parent.Hitbox)
+local Rewind = require(script.Parent.Rewind)
 local State = require(script.Parent.State)
 
 type CombatState = State.CombatState
@@ -60,7 +61,13 @@ export type Context = {
 	isAwakened: (state: CombatState) -> boolean,
 	setAttribute: (model: Model, name: string, value: any) -> (),
 	resolveHit: (attacker: CombatState, victim: CombatState, spec: HitSpec) -> boolean,
-	aimZone: (attacker: CombatState, victim: Model, direction: Vector3) -> Types.HitZone?,
+	-- (`rootAt`: the victim's rewound root, see Hitbox.query)
+	aimZone: (
+		attacker: CombatState,
+		victim: Model,
+		direction: Vector3,
+		rootAt: CFrame?
+	) -> Types.HitZone?,
 	landingZone: (
 		requested: Types.HitZone,
 		partsInBox: { [string]: boolean },
@@ -123,7 +130,8 @@ local function zoneFor(
 	hit: Kits.HitDef,
 	victimModel: Model,
 	parts: { [string]: boolean },
-	aim: Vector3?
+	aim: Vector3?,
+	rootAt: CFrame?
 ): Types.HitZone
 	local fixed = hit.zone
 	if fixed then
@@ -132,7 +140,7 @@ local function zoneFor(
 	end
 	local c = context()
 	local aimed: Types.HitZone = if aim
-		then c.aimZone(state, victimModel, aim) or "Torso"
+		then c.aimZone(state, victimModel, aim, rootAt) or "Torso"
 		else "Torso"
 	return c.landingZone(aimed, parts, AIMABLE_ZONES)
 end
@@ -140,16 +148,18 @@ end
 -- Checks the hitbox of `hit` in front of the attacker and resolves it on
 -- everyone inside. Returns the fighters it really LANDED on (not the ones
 -- who dodged, parried, blocked, were protected or already knocked out).
+-- `rewind`: lag compensation (seconds, Combat/Rewind.amount).
 local function strike(
 	state: CombatState,
 	hit: Kits.HitDef,
 	moveId: string,
 	aim: Vector3?,
-	cframe: CFrame?
+	rewind: number
 ): { CombatState }
 	local c = context()
-	local boxCFrame = cframe or state.root.CFrame * CFrame.new(0, 0, -hit.forward)
-	local victims, partsByModel = Hitbox.query(boxCFrame, hit.hitbox, state.model)
+	local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -hit.forward)
+	local victims, partsByModel, rootByModel =
+		Hitbox.query(boxCFrame, hit.hitbox, state.model, rewind)
 	if hit.breaks then
 		-- a heavy blow: the walls around go too
 		local push = state.root.CFrame.LookVector * 35 + Vector3.new(0, 18, 0)
@@ -160,8 +170,14 @@ local function strike(
 		local victim = c.getState(victimModel)
 		-- (A knocked-out body on the floor is not a target: walk over it.)
 		if victim and c.isAlive(victim) and not Knockout.isKnockedOut(victimModel) then
-			local zone: Types.HitZone =
-				zoneFor(state, hit, victimModel, partsByModel[victimModel], aim)
+			local zone: Types.HitZone = zoneFor(
+				state,
+				hit,
+				victimModel,
+				partsByModel[victimModel],
+				aim,
+				rootByModel[victimModel]
+			)
 			if c.resolveHit(state, victim, specFor(hit, zone, moveId)) then
 				table.insert(reached, victim)
 			end
@@ -254,7 +270,8 @@ local function runCharge(state: CombatState, move: Kits.MoveDef, token: number)
 				state.model
 			)
 		end
-		local reached = strike(state, charge.hit, move.id, nil)
+		-- (the attacker's view of the others, like a punch: see Rewind)
+		local reached = strike(state, charge.hit, move.id, nil, Rewind.amount(state.player, 0))
 		if #reached > 0 then
 			if connection then
 				connection:Disconnect()
@@ -410,13 +427,16 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	-- one reached (if still close and standing), they can't miss halfway.
 	local chained: { CombatState }? = nil
 	for index, hit in move.hits do
+		local dueAt = time + hit.at
 		task.delay(hit.at, function()
 			-- Cancelled (stunned meanwhile), dead or removed?
 			if state.attackToken ~= token or not c.isAlive(state) then
 				return
 			end
 			if not move.chain or index == 1 then
-				local reached = strike(state, hit, move.id, aim)
+				-- (how late we are: the attacker saw it land at `at`)
+				local reached =
+					strike(state, hit, move.id, aim, Rewind.amount(state.player, c.now() - dueAt))
 				if move.chain then
 					chained = reached
 				end

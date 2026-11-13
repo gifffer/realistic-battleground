@@ -135,6 +135,19 @@ return table.freeze({
 		HITBOX_SIZE = Vector3.new(5, 5, 5.5),
 		HITBOX_FORWARD = 3, -- studs in front of the attacker's center
 
+		-- Lag compensation (Server/Systems/Combat/Rewind): every hitbox also
+		-- tests the victims where the ATTACKER saw them. That is his round
+		-- trip (measured by Roblox) + REWIND_INTERPOLATION ago: Roblox shows
+		-- other characters a little late, to move them smoothly.
+		REWIND_INTERPOLATION = 0.1,
+		-- Never further back than this (seconds): a very laggy (or lag
+		-- switching) player gains no reach beyond it.
+		REWIND_MAX = 0.35,
+		-- Also tested this much before and after (the ping jitters).
+		REWIND_TOLERANCE = 0.06,
+		-- Positions remembered per fighter (seconds; > REWIND_MAX + TOLERANCE).
+		REWIND_HISTORY = 0.6,
+
 		-- Being hit.
 		HIT_STUN = 0.5, -- longer than M1_INTERVAL: a started combo can't be escaped
 		FINISHER_STUN = 0.8,

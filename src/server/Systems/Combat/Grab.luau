@@ -30,6 +30,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Ragdoll = require(script.Parent.Parent.Ragdoll)
 local Hitbox = require(script.Parent.Hitbox)
+local Rewind = require(script.Parent.Rewind)
 local State = require(script.Parent.State)
 
 type CombatState = State.CombatState
@@ -247,16 +248,19 @@ function Grab.run(
 	grab: Kits.GrabDef,
 	token: number
 )
+	local dueAt = tools.now() + grab.at
 	task.delay(grab.at, function()
 		if state.attackToken ~= token or not tools.isAlive(state) then
 			return -- stunned during the reach (a punch beats a grab)
 		end
 		-- The nearest fighter in reach who can be caught.
 		local box = state.root.CFrame * CFrame.new(0, 0, -grab.forward)
-		local victims = Hitbox.query(box, grab.hitbox, state.model)
+		-- (also where he saw them: lag compensation, see Rewind)
+		local time = tools.now()
+		local rewind = Rewind.amount(state.player, time - dueAt)
+		local victims = Hitbox.query(box, grab.hitbox, state.model, rewind)
 		local target: CombatState? = nil
 		local best = math.huge
-		local time = tools.now()
 		for _, model in victims do
 			local candidate = tools.getState(model)
 			if
