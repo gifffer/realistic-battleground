@@ -233,6 +233,11 @@ local function ground(): RaycastParams
 	if now - paramsAt > 1 then
 		paramsAt = now
 		local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+		-- (the frozen bodies the finishers leave are bodies too: the floor
+		-- is under them, a pool never lands on one)
+		for _, corpse in CollectionService:GetTagged(Config.Combat.CORPSE_TAG) do
+			table.insert(ignore, corpse)
+		end
 		table.insert(ignore, folder)
 		groundParams.FilterDescendantsInstances = ignore
 	end

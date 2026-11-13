@@ -35,6 +35,7 @@ local BLOOD = Config.Blood.PALETTE.VENOUS
 local BLOOD_WET = Config.Blood.PALETTE.ARTERIAL
 local BONE = Color3.fromRGB(224, 212, 188)
 local LIFETIME = 240 -- seconds at most the liver stays (it goes with the body before)
+local POOLS = Config.Blood.FINISHER_POOLS
 
 -- Where the liver was: the victim's right, under the ribs, in front (torso
 -- space; the server's "Tear" cut is there too).
@@ -194,6 +195,20 @@ function LiverRip.rip(victim: Model, attacker: Model)
 			7
 		)
 		BloodGush.splatter(attacker, at.Position, 16, math.floor(at.Z * 11 + at.X * 3))
+		-- the big pool out of the open flank: under him while he is held up,
+		-- then under the body where it lies (the same on every client: the
+		-- seed comes from both names - the same attacker's next finisher
+		-- on someone else gets its own pool)
+		local torso = victim:FindFirstChild("Torso")
+		if torso and torso:IsA("BasePart") then
+			BloodGush.stump(
+				torso,
+				WOUND + Vector3.new(0, -0.1, -0.1),
+				POOLS.LIVER_HOLE,
+				Blood.seed(victim.Name, attacker.Name, "LiverHole"),
+				{ ignore = { victim :: Instance, attacker } }
+			)
+		end
 	end
 	if arm == nil or not arm:IsA("BasePart") then
 		warn("[LiverRip] no Left Arm to hold the liver")
@@ -207,6 +222,7 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	-- (its CFrame, not PivotTo: an imported piece's pivot is elsewhere)
 	liver.CFrame = arm.CFrame * CFrame.new(0, -1.25, -0.15) * CFrame.Angles(0, 0, math.rad(80))
 	liver:SetAttribute("LiverOf", attacker.Name)
+	liver:SetAttribute("LiverFrom", victim.Name) -- (its pool's seed, LiverRip.drop)
 	local weld = Instance.new("WeldConstraint")
 	weld.Name = "Held"
 	weld.Part0 = arm
@@ -314,6 +330,15 @@ function LiverRip.drop(attacker: Model)
 				liver.Position,
 				1.4,
 				math.floor(liver.Position.X * 11 + liver.Position.Z * 5)
+			)
+			-- it lies there, still oozing: a small pool of its own (the
+			-- floor ray goes through the liver itself)
+			BloodGush.stump(
+				liver,
+				Vector3.zero,
+				POOLS.LIVER,
+				Blood.seed(attacker.Name, liver:GetAttribute("LiverFrom"), "Liver"),
+				{ ignore = { liver :: Instance, attacker } }
 			)
 		end
 	end)

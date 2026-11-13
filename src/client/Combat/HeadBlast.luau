@@ -31,6 +31,7 @@ local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local Blood = require(script.Parent.Blood)
 local BloodAge = require(script.Parent.BloodAge)
+local BloodGush = require(script.Parent.BloodGush)
 local BloodPool = require(script.Parent.BloodPool)
 local BloodStain = require(script.Parent.BloodStain)
 local Squish = require(script.Parent.Squish)
@@ -1037,6 +1038,10 @@ function HeadBlast.apply(model: Model, live: boolean)
 	local random = Random.new(seed)
 	if live then
 		burst(model, head, torso, random)
+	else
+		-- (a body we only see now, or its frozen copy: the neck's big pool is
+		-- already there - the same one BloodGush.neck pours live, seed + 101)
+		BloodGush.lay(torso, BloodGush.NECK_POINT, Config.Blood.FINISHER_POOLS.NECK, seed + 101)
 	end
 	hideAll(model, head)
 	buildStump(torso, head.Color, random)

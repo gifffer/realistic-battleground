@@ -24,6 +24,14 @@
 --       `area` studs² a second, for `seconds` (call again to keep it going)
 --   BloodPool.spread(position, size, seconds, seed)   a pool growing to
 --       `size` studs across in `seconds` (the finishers' arteries)
+--   BloodPool.pour(key, hit, area, maxRadius, seed)   `area` studs² of blood
+--       poured at once on the ground `hit` (a finisher's stump bleeding,
+--       BloodGush.stump): a BIG pool, kept before the small ones when there
+--       are too many, the same shape on every client (`seed`)
+--   BloodPool.claim(seed)   true the first time a finisher pool's `seed` is
+--       asked for (a body seen again, its frozen copy: no second pool)
+--   BloodPool.lay(position, size, seed)   a finisher's pool already there
+--       (a body we only see after the finisher): `size` studs across
 --   BloodPool.wetAt(position)  0 (dry ground) → 1 (fresh wet blood): feet
 --       stepping in it get bloody (BloodTracks)
 --   BloodPool.addWet(record, position, radius)  a big splat counts as wet
@@ -48,6 +56,11 @@ local MAX_LOBES = 5
 local STEP_HEIGHT = 0.1 -- a bump higher than this stops it (curb, step, body)
 local LOBE_DRYING = 1.4 -- the thin lobes dry this much faster than the middle
 local LOW_SIDE = 0.6 -- studs: a lying body's pool starts this far downhill
+local FINISHER_POOLS = Config.Blood.FINISHER_POOLS
+local BIG_LOBES = 7 -- (a finisher's big pool: more lobes, it covers more ground)
+-- seconds a finisher pool's seed stays claimed: as long as the body (or its
+-- frozen copy) can still be seen, a little more
+local CLAIM_TIME = Config.Knockout.FINISHER_BODY_TIME + 5
 
 type Lobe = {
 	record: BloodAge.Record,
@@ -74,6 +87,10 @@ type Pool = {
 	lastAbsorb: number,
 	drips: number, -- drops fallen into it
 	extras: { BloodAge.Record }, -- (starbursts: they go with the pool)
+	-- 1 a bleeder's pool, 2 a finisher's (kept first when there are too many)
+	priority: number,
+	life: number?, -- (a finisher's: its own lifetime, s)
+	maxLobes: number,
 }
 
 local pools: { Pool } = {}
@@ -126,12 +143,39 @@ local function probe(pool: Pool, direction: Vector3, distance: number): (string,
 	return "flat", hit.Position
 end
 
-local function makePool(key: any, hit: RaycastResult, maxRadius: number, random: Random): Pool?
-	-- too many pools: the oldest one stops growing (it stays, it ages)
+local function makePool(
+	key: any,
+	hit: RaycastResult,
+	maxRadius: number,
+	random: Random,
+	priority: number?
+): Pool?
+	local rank = priority or 1
+	local life = if rank >= 2 then FINISHER_POOLS.LIFE else nil
+	-- too many pools: the oldest one stops growing (it stays, it ages). A
+	-- bleeder's small pool goes before a finisher's big one; a small new
+	-- pool never stops a finisher's from growing (it just isn't made).
 	local cap = BloodAge.cap("POOLS")
 	while #pools >= cap do
+		local oldest: number? = nil
+		local now = os.clock()
+		for index, pool in pools do
+			-- (a finisher's pool still pouring is never stopped: else the
+			-- next pour would make a new one on top of it, again and again)
+			local pouring = pool.priority >= 2 and now < pool.feedUntil
+			if
+				pool.priority <= rank
+				and not pouring
+				and (oldest == nil or pool.priority < pools[oldest].priority)
+			then
+				oldest = index
+			end
+		end
+		if oldest == nil then
+			return nil
+		end
 		-- (its starbursts stay with its record until it ages out)
-		table.remove(pools, 1)
+		table.remove(pools, oldest)
 	end
 	local along = Vector3.new(random:NextNumber(-1, 1), 0, random:NextNumber(-1, 1))
 	local aspect = random:NextNumber(0.7, 1)
@@ -151,6 +195,7 @@ local function makePool(key: any, hit: RaycastResult, maxRadius: number, random:
 			noEdge = true,
 			material = hit.Material,
 			priority = 3,
+			life = life,
 		}
 	)
 	if record == nil then
@@ -176,9 +221,42 @@ local function makePool(key: any, hit: RaycastResult, maxRadius: number, random:
 		lastAbsorb = 0,
 		drips = 0,
 		extras = {},
+		priority = rank,
+		life = life,
+		maxLobes = if rank >= 2 then BIG_LOBES else MAX_LOBES,
 	}
 	table.insert(pools, pool)
 	return pool
+end
+
+-- The pool that takes blood landing at `hit`: one already close by (its own,
+-- `key`, first: two pools that meet become one), else a new one.
+local function poolAt(
+	key: any,
+	hit: RaycastResult,
+	maxRadius: number,
+	seed: number?,
+	priority: number?
+): Pool?
+	local target: Pool? = nil
+	for _, pool in pools do
+		local record = pool.record
+		if record and not record.dead then
+			local gap = hit.Position - pool.center
+			if math.abs(gap:Dot(pool.normal)) < 0.6 then
+				local reach = pool.radius * 0.7 + 0.3
+				if gap.Magnitude < reach and (target == nil or pool.key == key) then
+					target = pool
+				end
+			end
+		end
+	end
+	if target == nil then
+		-- (its shape: from `seed`, the same on every client; else from where it is)
+		local shapeSeed = seed or math.floor(hit.Position.X * 7 + hit.Position.Z * 13)
+		target = makePool(key, hit, maxRadius, Random.new(shapeSeed), priority)
+	end
+	return target
 end
 
 -- Feeds the pool of `key` at `position`: `area` studs² a second, for
@@ -209,23 +287,7 @@ function BloodPool.feed(
 			end
 		end
 	end
-	local target: Pool? = nil
-	for _, pool in pools do
-		local record = pool.record
-		if record and not record.dead then
-			local gap = hit.Position - pool.center
-			if math.abs(gap:Dot(pool.normal)) < 0.6 then
-				local reach = pool.radius * 0.7 + 0.3
-				if gap.Magnitude < reach and (target == nil or pool.key == key) then
-					target = pool
-				end
-			end
-		end
-	end
-	if target == nil then
-		local seed = math.floor(hit.Position.X * 7 + hit.Position.Z * 13)
-		target = makePool(key, hit, maxRadius or 1.8, Random.new(seed))
-	end
+	local target = poolAt(key, hit, maxRadius or 1.8)
 	if target then
 		target.rate = math.max(target.rate, area)
 		target.feedUntil = math.max(target.feedUntil, os.clock() + seconds)
@@ -242,6 +304,84 @@ function BloodPool.spread(position: Vector3, size: number, seconds: number, seed
 	local radius = size / 2
 	local area = math.pi * radius * radius
 	BloodPool.feed({ seed = seed }, position, area / math.max(seconds, 0.2) * 1.4, seconds, radius)
+end
+
+-- Finisher pools already made, by seed (when): a body seen again, or its
+-- frozen copy (Server/Systems/Corpses, same attributes), makes no second one.
+local claimed: { [number]: number } = {}
+
+-- true the first time `seed` is asked for (then false for CLAIM_TIME s).
+function BloodPool.claim(seed: number): boolean
+	local now = os.clock()
+	for old, at in claimed do
+		if now - at > CLAIM_TIME then
+			claimed[old] = nil
+		end
+	end
+	if claimed[seed] then
+		return false
+	end
+	claimed[seed] = now
+	return true
+end
+
+-- `area` studs² of blood poured now on the ground `hit` (a finisher's stump,
+-- BloodGush.stump, calls it a few times a second: pulsing, then oozing,
+-- then slowing). A big pool, up to `maxRadius` studs (its round part), the
+-- same shape on every client (`seed`); kept before the bleeders' pools.
+function BloodPool.pour(
+	key: any,
+	hit: RaycastResult,
+	area: number,
+	maxRadius: number,
+	seed: number,
+	seconds: number?
+)
+	if not Config.Blood.ENABLED or area <= 0 or hit.Material == Enum.Material.Water then
+		return
+	end
+	local target = poolAt(key, hit, maxRadius, seed, 2)
+	if target == nil then
+		return
+	end
+	target.area += area
+	-- (grow() runs while it is fed: a little longer than the next pour, or
+	-- `seconds`)
+	target.feedUntil = math.max(target.feedUntil, os.clock() + (seconds or 0.6))
+	target.maxRadius = math.max(target.maxRadius, maxRadius)
+	if not target.capped then
+		target.capRadius = target.maxRadius
+	end
+	if target.priority < 2 then
+		-- (a small pool the big one ran into: it is the big one now)
+		target.priority = 2
+		target.maxLobes = BIG_LOBES
+	end
+end
+
+-- A finisher's pool already there (a body we only see after it happened):
+-- `size` studs across, spread in a moment. Once per `seed` (BloodPool.claim).
+function BloodPool.lay(position: Vector3, size: number, seed: number)
+	if not Config.Blood.ENABLED or not FINISHER_POOLS.ENABLED or not BloodPool.claim(seed) then
+		return
+	end
+	local hit = groundUnder(position)
+	if hit == nil then
+		return
+	end
+	local radius = size / 2
+	-- (the area that grows to about `size`: see grow(), BloodGush.stump)
+	local R = radius * 1.1
+	local plain = -R * math.log(1 - 0.85 * radius / R)
+	-- (kept growing a few seconds: its lobes come out like the live one's)
+	BloodPool.pour(
+		{ seed = seed },
+		hit,
+		math.pi * plain * plain,
+		R,
+		seed,
+		BIG_LOBES * LOBE_EVERY * 1.3
+	)
 end
 
 -- A lobe of blood pushing out of the pool's edge `direction` (downhill).
@@ -262,6 +402,7 @@ local function addLobe(pool: Pool, direction: Vector3, at: Vector3)
 			pinned = true,
 			noEdge = true,
 			priority = 3,
+			life = pool.life,
 		}
 	)
 	if record then
@@ -343,7 +484,7 @@ local function grow(pool: Pool, dt: number, now: number)
 		end
 	end
 	-- the overflow: a new lobe out of its edge, downhill
-	if now >= pool.nextLobe and #pool.lobes < MAX_LOBES and pool.radius > 0.3 then
+	if now >= pool.nextLobe and #pool.lobes < pool.maxLobes and pool.radius > 0.3 then
 		pool.nextLobe = now + LOBE_EVERY * pool.random:NextNumber(0.8, 1.5)
 		local direction, slot = flowDirection(pool)
 		if direction then

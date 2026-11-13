@@ -621,6 +621,37 @@ return table.freeze({
 			FOOT_DECAY = 0.7, -- each footprint keeps this much of the previous one's blood (real: 0.6-0.75, about 7 prints)
 			STARBURSTS_PER_POOL = 4, -- rings of tiny drops around a pool someone drips into
 		}),
+		-- The big pools the finishers leave (BloodGush.stump): a torn-off limb, a
+		-- head burst, a body cut in two loses a LOT of blood in a few seconds.
+		-- Each wound pours its blood on the floor under it: spurts with the
+		-- heartbeat first (PULSE seconds), then a steady ooze, then slower and
+		-- slower until SECONDS. The pool follows the body part as it falls or
+		-- slides (a smear while it slides), flows downhill, stops at curbs and
+		-- walls, merges with pools close by, then ages like any pool (wet,
+		-- clotting, the pale serum ring, dry).
+		-- LITRES: how much blood comes out. On a hard floor 1 litre spreads to
+		-- about SIZE_PER_LITRE studs across (bigger volume = wider, as the
+		-- square root: 4 litres would only be twice as wide).
+		FINISHER_POOLS = table.freeze({
+			ENABLED = true, -- false: no big finisher pools (the spurts still land)
+			SIZE_PER_LITRE = 2.9, -- studs across for 1 litre (about 0.8 m)
+			LIFE = 240, -- seconds a finisher pool stays (the serum ring shows from 90 s)
+			MOVING = 2.5, -- studs/s: a wound moving faster smears instead of pooling
+			MAX_HEIGHT = 4.5, -- studs: a wound higher than this (in the air) pools nothing yet
+			DRAGS = 12, -- smear marks at most per wound while its body slides
+			-- One line per wound. LITRES (blood out), SECONDS (how long it keeps
+			-- coming), PULSE (seconds of spurts with the heartbeat; 0 = it only
+			-- oozes: a limb lying on the floor), BEAT (seconds between beats).
+			NECK = table.freeze({ LITRES = 1.4, SECONDS = 14, PULSE = 6, BEAT = 0.38 }), -- the bat: the head burst
+			SHOULDER = table.freeze({ LITRES = 1.1, SECONDS = 12, PULSE = 5.5, BEAT = 0.4 }), -- the arm torn off: the socket
+			TORN_ARM = table.freeze({ LITRES = 0.15, SECONDS = 9, PULSE = 0, BEAT = 0.4 }), -- the arm itself, lying on the floor
+			LIVER_HOLE = table.freeze({ LITRES = 1, SECONDS = 13, PULSE = 5.5, BEAT = 0.4 }), -- the liver torn out: the flank
+			LIVER = table.freeze({ LITRES = 0.08, SECONDS = 6, PULSE = 0, BEAT = 0.4 }), -- the liver dropped on the floor
+			WAIST_TORSO = table.freeze({ LITRES = 1.5, SECONDS = 15, PULSE = 5, BEAT = 0.38 }), -- the portal cut: the upper body
+			WAIST_LEGS = table.freeze({ LITRES = 0.8, SECONDS = 11, PULSE = 4, BEAT = 0.35 }), -- the portal cut: the legs
+			BISECT_TORSO = table.freeze({ LITRES = 1.5, SECONDS = 15, PULSE = 5, BEAT = 0.36 }), -- the Bull: the top half
+			BISECT_LEGS = table.freeze({ LITRES = 0.9, SECONDS = 12, PULSE = 4, BEAT = 0.36 }), -- the Bull: the legs
+		}),
 	}),
 
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish
