@@ -13,8 +13,7 @@
 --     head itself, so its cuts never come back over it);
 --   • leaves what a real blow like that leaves: the lower jaw and a few
 --     teeth, the open neck (torn skin, flesh, windpipe, the top of the
---     spine), the heart still pumping blood out of it in spurts, a pool
---     spreading under it;
+--     spine) - its arteries spurting is BloodGush.neck;
 --   • when it happens in front of us (not a body we only see later): the
 --     burst itself — thin pieces of skull (scalp outside, bone inside), brain,
 --     an eye, teeth, a spray and a mist of blood, the hair / hat sent flying,
@@ -29,6 +28,8 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
+local Blood = require(script.Parent.Blood)
+local Squish = require(script.Parent.Squish)
 
 local HeadBlast = {}
 
@@ -45,11 +46,11 @@ local SCLERA = Color3.fromRGB(236, 230, 220)
 local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
-local PIECE_LIFETIME = 30 -- seconds the pieces stay on the floor
+local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
-local MAX_MARKS = 140 -- blood marks on the floor at once (several finishers...)
-local PUMP_TIME = 4.5 -- seconds the neck keeps pumping blood
-local BEAT = 0.55 -- seconds between two spurts (a racing heart)
+local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
+-- Pools never pushed out by newer drops (they fade on their own).
+local pinned: { [BasePart]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
 local done: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -65,8 +66,11 @@ end
 -- Out of sight for good (Transparency, not LocalTransparencyModifier: the
 -- bruise marks of Wounds reset that one).
 local function hide(item: Instance)
-	if item:IsA("BasePart") or item:IsA("Decal") then
-		(item :: any).Transparency = 1
+	if item:IsA("BasePart") then
+		item.Transparency = 1
+		item.CanQuery = false -- (blood falls through it, not on it)
+	elseif item:IsA("Decal") then
+		item.Transparency = 1
 	elseif item:IsA("SurfaceGui") then
 		item.Enabled = false
 	end
@@ -132,6 +136,17 @@ end
 
 -- A flat mark of blood on the floor: round (`length` = nil) or a streak
 -- `length` long pointing along `along` (where the drop was going).
+-- Too many marks: the oldest that isn't a pool goes.
+local function evictOldest()
+	for index, piece in marks do
+		if not pinned[piece] then
+			table.remove(marks, index)
+			piece:Destroy()
+			return
+		end
+	end
+end
+
 local function mark(
 	position: Vector3,
 	width: number,
@@ -157,7 +172,7 @@ local function mark(
 	piece.Transparency = 0.05
 	-- (each new one a hair higher: no flicker where they overlap)
 	markCount += 1
-	local lift = 0.012 + (markCount % 12) * 0.002
+	local lift = 0.066 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
 	local up = hit.Normal
 	if length and along and along.Magnitude > 1e-3 then
 		local forward = (along - up * along:Dot(up)).Unit
@@ -173,10 +188,7 @@ local function mark(
 	piece.Parent = workspace
 	table.insert(marks, piece)
 	if #marks > MAX_MARKS then
-		local oldest = table.remove(marks, 1)
-		if oldest then
-			oldest:Destroy()
-		end
+		evictOldest()
 	end
 	local life = lifetime or MARK_LIFETIME
 	task.delay(life * 0.7, function()
@@ -192,10 +204,7 @@ end
 local function keepMark(piece: BasePart, lifetime: number?)
 	table.insert(marks, piece)
 	if #marks > MAX_MARKS then
-		local oldest = table.remove(marks, 1)
-		if oldest then
-			oldest:Destroy()
-		end
+		evictOldest()
 	end
 	local life = lifetime or MARK_LIFETIME
 	task.delay(life * 0.7, function()
@@ -249,7 +258,7 @@ local function blot(
 	if forward.Magnitude < 1e-3 then
 		forward = Vector3.new(1, 0, 0)
 	end
-	local lift = 0.006 + (markCount % 12) * 0.002
+	local lift = 0.064 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
 	-- (the kit's X along `forward`, its Y along the floor's normal)
 	local right = forward.Unit
 	part.CFrame = CFrame.fromMatrix(hit.Position + up * lift, right, up) * layer.offset.Rotation
@@ -328,6 +337,14 @@ local function welded(part: BasePart, to: BasePart, cframe: CFrame, parent: Inst
 	weld.Part1 = part
 	weld.Parent = part
 	part.Parent = parent
+end
+
+-- Shown round (a sphere mesh filling the part): unlike a Ball part, it
+-- can be squashed (Squish).
+local function roundMesh(part: BasePart)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Parent = part
 end
 
 local function newPart(name: string, size: Vector3, color: Color3, wet: boolean): Part
@@ -564,65 +581,105 @@ local function bloodEmitter(parent: Attachment): ParticleEmitter
 	return emitter
 end
 
--- The neck pumps blood in spurts (the heart still beats a few times, weaker
--- each time); a pool spreads under it.
-local function pump(model: Model, mouth: Attachment, random: Random)
-	local emitter = bloodEmitter(mouth)
-	local below = mouth.WorldPosition
-	local pool: { BasePart } = {}
-	local real = blot(GoreShapes.pool, below, 0.4, nil, random, 40)
-	if real then
-		local k = random:NextNumber(3.2, 4.2) / 0.4
-		local grown = real.Size * Vector3.new(k, 1, k) -- (across, not thicker)
-		TweenService:Create(
-			real,
-			TweenInfo.new(PUMP_TIME + 2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = grown }
-		):Play()
-	end
-	for index = 1, if real then 0 else 3 do
-		local offset =
-			Vector3.new(random:NextNumber(-0.35, 0.35), 0, random:NextNumber(-0.35, 0.35))
-		local piece =
-			mark(below + offset, 0.3, nil, nil, if index == 1 then BLOOD else BLOOD_WET, 40)
-		if piece then
-			table.insert(pool, piece)
-		end
-	end
-	for index, piece in pool do
-		local grown = Vector3.new(0.01, 1, 1) * (3.4 - index * 0.6) * random:NextNumber(0.85, 1.1)
-		TweenService:Create(
-			piece,
-			TweenInfo.new(PUMP_TIME + 2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = grown }
-		):Play()
-	end
-	task.spawn(function()
-		local start = os.clock()
-		while mouth.Parent and os.clock() - start < PUMP_TIME do
-			local fade = 1 - (os.clock() - start) / PUMP_TIME
-			emitter.Speed = NumberRange.new(3 + 6 * fade, 6 + 9 * fade)
-			emitter.Rate = 160 * fade -- a spurt
-			task.wait(0.14)
-			emitter.Rate = 10 * fade -- between two
-			task.wait(BEAT - 0.14)
-		end
-		emitter.Rate = 0
-		Debris:AddItem(emitter, 1)
-	end)
-	-- (this body's pieces go with it)
-	model.AncestryChanged:Connect(function()
-		if model.Parent == nil then
-			emitter.Rate = 0
-		end
-	end)
-end
-
 ------------------------------------------------------------------------------
 -- The burst
 ------------------------------------------------------------------------------
 
 -- A flying piece (collides with the floor, never with fighters' clicks).
+-- The body whose head is bursting (its pieces go when it goes).
+local bursting: Model? = nil
+
+-- A piece of the head stays on the floor until the body is removed (a
+-- respawn, a reset): then it goes too. Once it lies still it is fixed
+-- there (it can't sink or slip through the floor, nothing nudges it).
+local function keepPiece(piece: BasePart)
+	local body = bursting
+	Debris:AddItem(piece, PIECE_LIFETIME)
+	if body then
+		local gone = false
+		local function remove()
+			if gone or piece.Parent == nil then
+				return
+			end
+			gone = true
+			-- (every layer: a soft piece shows through its welded copy)
+			local fade = TweenInfo.new(0.6)
+			for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+				if item:IsA("BasePart") and item.Transparency < 1 then
+					TweenService:Create(item, fade, { Transparency = 1 }):Play()
+				end
+			end
+			Debris:AddItem(piece, 0.65)
+		end
+		body.Destroying:Once(remove)
+		local watch: RBXScriptConnection? = nil
+		watch = body.AncestryChanged:Connect(function()
+			if body.Parent == nil then
+				remove()
+				if watch then
+					watch:Disconnect()
+				end
+			end
+		end)
+		piece.Destroying:Once(function()
+			if watch then
+				watch:Disconnect()
+			end
+		end)
+	end
+	-- Fixed once it lies still on the floor (not on someone: they move);
+	-- put back if it ever tunnels through a surface.
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	task.spawn(function()
+		local still = 0
+		local last = piece.Position
+		while piece.Parent and not piece.Anchored do
+			task.wait(0.2)
+			if not piece:IsDescendantOf(workspace) then
+				break
+			end
+			local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+			table.insert(ignore, piece)
+			params.FilterDescendantsInstances = ignore
+			local position = piece.Position
+			-- (did it pass through a floor / wall since the last check?)
+			local crossed = workspace:Raycast(last, position - last, params)
+			if
+				crossed
+				and (position - last).Magnitude > 0.5
+				and (position - crossed.Position):Dot(crossed.Normal) < -0.3
+			then
+				piece.AssemblyLinearVelocity = Vector3.zero
+				piece.CFrame = CFrame.new(crossed.Position + crossed.Normal * 0.15)
+					* piece.CFrame.Rotation
+				piece.Anchored = true
+				break
+			end
+			last = position
+			if
+				piece.AssemblyLinearVelocity.Magnitude < 0.3
+				and piece.AssemblyAngularVelocity.Magnitude < 0.5
+			then
+				still += 0.2
+				if still >= 0.8 then
+					local below = workspace:Raycast(
+						position,
+						Vector3.new(0, -(piece.Size.Magnitude * 0.6 + 0.3), 0),
+						params
+					)
+					if below and not onCharacter(below.Instance) then
+						piece.Anchored = true
+					end
+				end
+			else
+				still = 0
+			end
+		end
+	end)
+end
+
 local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
 	piece.CanCollide = true
 	piece.CanQuery = false
@@ -636,7 +693,7 @@ local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Rand
 	piece.AssemblyLinearVelocity = velocity
 	piece.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 28)
 	piece.Parent = workspace
-	Debris:AddItem(piece, PIECE_LIFETIME)
+	keepPiece(piece)
 end
 
 -- Two parts stuck together into one piece (the other one rides along).
@@ -706,23 +763,25 @@ local function simplePieces(head: BasePart, at: Vector3, away: Vector3, random: 
 			if random:NextNumber() < 0.65 then BRAIN else BRAIN_BLOODY,
 			true
 		)
-		lump.Shape = Enum.PartType.Ball
+		roundMesh(lump) -- (a Ball part can't be squashed: a sphere mesh can)
 		if random:NextNumber() < 0.5 then
 			local more = newPart("Brain", Vector3.new(size, size, size) * 0.7, BRAIN, true)
-			more.Shape = Enum.PartType.Ball
+			roundMesh(more) -- (a Ball part can't be squashed: a sphere mesh can)
 			stuck(lump, more, CFrame.new(size * 0.4, 0, size * 0.2))
 		end
 		fly(lump, at, outward(random, away, 1.1, 15), random)
+		Squish.soft(lump, { softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 })
 	end
 	-- An eye.
 	local eye = newPart("Eye", Vector3.new(0.2, 0.2, 0.2), Color3.fromRGB(238, 234, 226), true)
-	eye.Shape = Enum.PartType.Ball
+	roundMesh(eye) -- (a Ball part can't be squashed: a sphere mesh can)
 	local iris = newPart("Iris", Vector3.new(0.09, 0.09, 0.09), Color3.fromRGB(40, 32, 28), true)
-	iris.Shape = Enum.PartType.Ball
+	roundMesh(iris) -- (a Ball part can't be squashed: a sphere mesh can)
 	stuck(eye, iris, CFrame.new(0, 0, -0.07))
 	local nerve = newPart("Nerve", Vector3.new(0.04, 0.04, 0.22), FLESH, true)
 	stuck(eye, nerve, CFrame.new(0, 0, 0.18))
 	fly(eye, at, outward(random, away, 1.4, 14), random)
+	Squish.soft(eye, { softness = 0.25, sag = 0.1, stiffness = 380, lifetime = 10 })
 	-- Teeth.
 	for _ = 1, 4 do
 		fly(
@@ -743,7 +802,8 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 		return false
 	end
 	local paint = painter(head.Color)
-	local function throw(names: { string }, speed: number, up: number)
+	-- `soft`: brain, eyes: soft, wet pieces (Squish), not hard plastic
+	local function throw(names: { string }, speed: number, up: number, soft: string?)
 		for _, name in names do
 			local piece = pieces[name]
 			if piece then
@@ -767,18 +827,32 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 				part.AssemblyLinearVelocity = direction * speed * random:NextNumber(0.55, 1)
 				part.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(6, 22)
 				part.Parent = workspace
-				Debris:AddItem(part, PIECE_LIFETIME)
+				keepPiece(part)
+				if soft == "Brain" then
+					-- (its surface detail first: then it squashes with it)
+					Squish.detail(part, "Brain")
+					Squish.soft(
+						part,
+						{ softness = 0.5, sag = 0.24, stiffness = 170, lifetime = 14 }
+					)
+				elseif soft == "Eye" then
+					Squish.soft(
+						part,
+						{ softness = 0.25, sag = 0.1, stiffness = 380, lifetime = 10 }
+					)
+				end
 			end
 		end
 	end
 	throw(GoreShapes.skull, 24, 1.1)
-	throw(GoreShapes.brain, 13, 0.8)
-	throw(GoreShapes.eye, 15, 1.2)
+	throw(GoreShapes.brain, 13, 0.8, "Brain")
+	throw(GoreShapes.eye, 15, 1.2, "Eye")
 	throw(GoreShapes.tooth, 20, 1.4)
 	return true
 end
 
 local function burst(model: Model, head: BasePart, torso: BasePart, random: Random)
+	bursting = model
 	local at = head.Position
 	-- Away from the attacker: he stands past the head, so toward the body.
 	local flat = Vector3.new(torso.Position.X - at.X, 0, torso.Position.Z - at.Z)
@@ -823,7 +897,14 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 		end
 	end
 
-	-- In the air: a spray of drops, and a red mist.
+	-- Real drops and thick strings of blood thrown out all around (they land
+	-- and splash on the floor, the walls, the attacker), more away from him.
+	-- (kept under the shared cap of drops in flight; the haze is the
+	-- burst's own mist below)
+	Blood.spray(at, Vector3.new(0, 1, 0) + away, 4, model, true)
+	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 2.5, model, true)
+	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 1.5, model, true)
+	-- In the air: a spray of fine drops, and a red mist.
 	local point = Instance.new("Attachment")
 	point.WorldPosition = at
 	point.Parent = workspace.Terrain
@@ -874,12 +955,28 @@ function HeadBlast.splash(position: Vector3, size: number, seed: number)
 	splash(position, size, Random.new(seed))
 end
 
+-- A stretched drop on the floor at `position` (`size` studs long), its tail
+-- along `along` (the way it was flying). For BloodGush.
+function HeadBlast.streak(position: Vector3, size: number, along: Vector3, seed: number)
+	local random = Random.new(seed)
+	if blot(GoreShapes.streak, position, size, along, random) == nil then
+		mark(
+			position,
+			size * 0.25,
+			size,
+			along,
+			if random:NextNumber() < 0.5 then BLOOD else BLOOD_WET
+		)
+	end
+end
+
 -- A pool spreading under `position` to `size` studs over `seconds`.
 function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: number)
 	local random = Random.new(seed)
 	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 40)
 		or mark(position, 0.3, nil, nil, BLOOD, 40)
 	if piece then
+		pinned[piece] = true
 		local k = size / 0.3
 		-- (grows across, not thicker: a round mark's thin axis is X)
 		local flat = piece:IsA("Part") and piece.Shape == Enum.PartType.Cylinder
@@ -889,6 +986,11 @@ function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: 
 			{ Size = piece.Size * (if flat then Vector3.new(1, k, k) else Vector3.new(k, 1, k)) }
 		):Play()
 	end
+end
+
+-- Has the burst head of `model` been drawn already?
+function HeadBlast.isApplied(model: Model): boolean
+	return done[model] == true
 end
 
 -- The head of `model` is gone. `live`: it's happening now (the burst), not
@@ -909,10 +1011,8 @@ function HeadBlast.apply(model: Model, live: boolean)
 		burst(model, head, torso, random)
 	end
 	hideAll(model, head)
-	local mouth = buildStump(torso, head.Color, random)
-	if live then
-		pump(model, mouth, random)
-	end
+	buildStump(torso, head.Color, random)
+	-- (the neck bleeding itself: BloodGush.neck, Gashes calls it when live)
 end
 
 return table.freeze(HeadBlast)

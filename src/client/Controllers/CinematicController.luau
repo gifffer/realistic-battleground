@@ -23,6 +23,8 @@ local TweenService = game:GetService("TweenService")
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
+local ArmRip = require(script.Parent.Parent.Combat.ArmRip)
+local BloodGush = require(script.Parent.Parent.Combat.BloodGush)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
 local CameraController = require(script.Parent.CameraController)
@@ -47,6 +49,12 @@ local SHAKES: { [string]: Shake } = {
 	Gut = { at = 0, strength = 4, punch = 8 }, -- the hand into the side
 	Dig = { at = 0, strength = 1.2, punch = 1 },
 	Rip = { at = 0, strength = 2.5, punch = 4 },
+	-- (the Bouncer's arm)
+	Grab = { at = 0, strength = 0.8, punch = 1 },
+	Stomp = { at = 0, strength = 2, punch = 3 },
+	Strain = { at = 0, strength = 1.2, punch = 1.5 },
+	Pop = { at = 0, strength = 3, punch = 5 },
+	Tear = { at = 0, strength = 4.5, punch = 9 },
 }
 
 local bars: { top: Frame, bottom: Frame }? = nil
@@ -220,7 +228,8 @@ local function playEvent(
 	cinematic: Finishers.Cinematic,
 	event: Finishers.Event,
 	attacker: Model,
-	victim: Model
+	victim: Model,
+	anchor: CFrame
 )
 	local kind = event.kind
 	if kind == "Prop" then
@@ -236,14 +245,16 @@ local function playEvent(
 		SoundController.play("VictimPlea", victim)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
-	elseif kind == "Body" or kind == "Dig" then
+	elseif kind == "Body" or kind == "Dig" or kind == "Stomp" then
 		SoundController.play("BodyShot", victim)
 	elseif kind == "Face" then
 		SoundController.play("HeavyHit", victim)
-		KitEffects.bloodSpray(victim, attacker, "Head")
+		KitEffects.bloodSpray(victim, attacker, "Head", 3)
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)
+		-- it goes all over him (and his bat)
+		BloodGush.splatter(attacker, victim:GetPivot().Position, 14, math.floor(event.time * 1000))
 	elseif kind == "Gut" then
 		SoundController.play("KnockoutPunch", victim)
 		LiverRip.gut(victim, attacker)
@@ -251,6 +262,23 @@ local function playEvent(
 		LiverRip.rip(victim, attacker)
 	elseif kind == "Drop" then
 		LiverRip.drop(attacker)
+	elseif kind == "Grab" then
+		SoundController.play("Grab", victim)
+	elseif kind == "Strain" then
+		SoundController.play("Strain", attacker)
+	elseif kind == "Pop" then
+		ArmRip.pop(victim)
+	elseif kind == "Tear" then
+		-- (the arm off itself: ArmRip, from the server's "ArmTorn"): the first
+		-- jet hits him full on
+		local torso = victim:FindFirstChild("Torso")
+		local from = if torso and torso:IsA("BasePart")
+			then torso.Position
+			else victim:GetPivot().Position
+		BloodGush.splatter(attacker, from, 22, math.floor(event.time * 1000))
+	elseif kind == "Throw" then
+		-- (the arm off itself: ArmRip, from the server's "ArmTorn")
+		ArmRip.thrown(attacker, anchor)
 	end
 end
 
@@ -296,10 +324,12 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 
 	for _, event in cinematic.events do
 		task.delay(event.time, function()
-			-- (throwing the liver down needs only him there)
-			local victimThere = victim.Parent ~= nil or event.kind == "Drop"
+			-- (throwing the liver / the arm down needs only him there)
+			local victimThere = victim.Parent ~= nil
+				or event.kind == "Drop"
+				or event.kind == "Throw"
 			if not run.cancelled and attacker.Parent and victimThere then
-				playEvent(cinematic, event, attacker, victim)
+				playEvent(cinematic, event, attacker, victim, anchor)
 			end
 		end)
 	end
@@ -326,10 +356,12 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	run.cancelled = true
 	KitEffects.stopAction(attacker) -- the bat
 	LiverRip.cancel(attacker)
-	for _, clip in { "Brawler_FinisherBat", "Boxer_FinisherCombo" } do
+	for _, clip in { "Brawler_FinisherBat", "Boxer_FinisherCombo", "Bouncer_FinisherArmRip" } do
 		CharacterAnimationController.stopAction(attacker, clip)
 	end
-	CharacterAnimationController.stopAction(run.victim, "Boxer_FinisherVictim")
+	for _, clip in { "Boxer_FinisherVictim", "Bouncer_FinisherArmRipVictim" } do
+		CharacterAnimationController.stopAction(run.victim, clip)
+	end
 	if run.stopCamera then
 		run.stopCamera()
 	end

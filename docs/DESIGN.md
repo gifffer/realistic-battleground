@@ -177,6 +177,24 @@ Rapide, mobile, esquives, combos.
 | 4 | **Liver Shot** — coup au corps, réduit l'endurance adverse |
 | G | **Awakening « Knockout Mode »** — 4 attaques améliorées, dont le **Knockout Combo** (combo cinématique, ragdoll) |
 
+### Bouncer / Videur (niveau 5, 500 coins)
+Videur de boîte de nuit : énorme et lent. Il ne fait pas d'échange de coups, il **saisit**.
+Prend **15 % de dégâts en moins** et se déplace **10 % moins vite**. Ses saisies passent à travers
+la garde et ne se parent pas ; un coup qui l'étourdit avant (frappe > saisie) ou une esquive les bat.
+| Touche | Attaque |
+|---|---|
+| 1 | **Shove** — pousse à deux mains, repousse loin |
+| 2 | **Chokehold** — étranglement par derrière (serre 3 fois, vide l'endurance) |
+| 3 | **Body Slam** — un bras entre les jambes, le soulève en travers de sa poitrine et l'écrase sur le dos |
+| 4 | **Hammer Fist** — les deux poings sur le haut du crâne |
+| G | **Awakening « Last Call »** — 10 s, dégâts +20 % : **Throw Out** (le jette à travers la pièce), **Sleeper Hold** (étranglement plus long, il s'évanouit), **Powerbomb** (sur les épaules, puis écrasé, à genoux), **Double Hammer** |
+
+Finisher cinématique : pied sur la poitrine, il **arrache le bras droit** à l'épaule, le regarde, le jette.
+On peut ensuite **ramasser l'os** du bras (le vrai humérus de Z-Anatomy) et le **lancer** (clic gauche,
+usage unique, `src/shared/Weapons.luau`) : il vole en arc et se casse en deux sur ce qu'il touche
+(quelqu'un, un mur, le sol).
+Les chiffres sont dans `src/shared/Kits/Bouncer.luau`, la saisie dans `src/server/Systems/Combat/Grab.luau`.
+
 ## 8. Progression & économie
 
 ### 8.1 Gains

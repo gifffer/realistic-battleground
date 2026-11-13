@@ -198,4 +198,18 @@ return table.freeze({
 	-- the server (the limbs fly at about `velocity`). Every client plays the crash, the
 	-- scream and the same blood (random numbers from `seed`): TrainController / TrainGore.
 	TrainHit = event("TrainHit"),
+
+	-- client → server  (aim: Vector3)
+	-- Throw what we hold (Shared/Weapons) where we aim. Checked and rate-limited.
+	ThrowWeapon = event("ThrowWeapon"),
+
+	-- server → all clients  (thrower: Model, weaponId: string, throwId: number,
+	--                        origin: Vector3, velocity: Vector3)
+	-- It left the hand: every client shows it flying (the same arc).
+	WeaponThrown = event("WeaponThrown"),
+
+	-- server → all clients  (weaponId: string, throwId: number?, position: Vector3,
+	--                        velocity: Vector3)
+	-- It broke there (hit someone / a wall / the floor, or dropped): two halves.
+	WeaponBroke = event("WeaponBroke"),
 })

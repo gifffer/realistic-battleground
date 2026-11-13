@@ -33,6 +33,31 @@ export type HitDef = {
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 }
 
+-- A grab (Bouncer): the hands close `at` seconds into the move on the first
+-- fighter in the box. It goes through a guard (and can't be parried: there
+-- is no blow to parry), but a hit that stuns the grabber first cancels it,
+-- and a dash dodges it. Caught: both fighters are held in place for
+-- `duration` seconds, the victim `distance` studs in front of him (facing him,
+-- or turned away: a choke from behind), each playing its clip, while
+-- `hits` land on the held fighter (their `at` counted from the catch).
+-- A hit with knockback / knockdown lets go of them first. An Awakened
+-- fighter can't be held (the catch only hurts).
+export type GrabDef = {
+	at: number,
+	hitbox: Vector3,
+	forward: number,
+	damage: number, -- of the catch itself
+	duration: number,
+	distance: number,
+	facing: "toward" | "away",
+	animation: string, -- his clip while holding (Client/Animation/CombatClips)
+	victimAnimation: string, -- theirs
+	hits: { HitDef },
+	-- A slam: released lying on their back, their root put here (relative
+	-- to his root): where their clip ends on the floor.
+	laidAt: CFrame?,
+}
+
 export type MoveDef = {
 	id: string,
 	name: string, -- shown in the move bar and the Kits menu (English)
@@ -56,6 +81,9 @@ export type MoveDef = {
 	-- fighters the first one reached, if they are still close (cinematic
 	-- combos that can't "miss" halfway).
 	chain: boolean?,
+	-- A grab instead of strikes (see GrabDef). `duration` = a grab that
+	-- catches nobody; a catch keeps him busy until the hold ends.
+	grab: GrabDef?,
 }
 
 -- The kit's own way to finish a knocked-out opponent (M1 on them). Kits
@@ -91,6 +119,10 @@ export type KitDef = {
 	moves: { MoveDef },
 	awakening: AwakeningDef?,
 	finisher: FinisherDef?,
+	-- A heavy build (Bouncer): every hit taken deals this much of its
+	-- damage (0.85 = 15 % less), and he walks / runs this much slower.
+	damageTaken: number?,
+	speed: number?,
 }
 
 return nil

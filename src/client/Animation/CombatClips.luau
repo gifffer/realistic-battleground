@@ -7777,4 +7777,9 @@ clips.Emote_Drink = {
 	},
 }
 
+-- The Bouncer's clips are in their own file.
+for name, clip in require(script.Parent.BouncerClips) do
+	clips[name] = clip
+end
+
 return table.freeze(clips)
