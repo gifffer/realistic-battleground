@@ -25,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
+local Config = require(ReplicatedStorage.Shared.Config)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local Gashes = require(script.Parent.Gashes)
 local GlassShards = require(script.Parent.GlassShards)
@@ -126,6 +127,95 @@ local function ageing(piece: BasePart, age: number, dark: number)
 	elseif age < TO_BLUE then
 		TweenService:Create(piece, TweenInfo.new(TO_BLUE - age), { Color = shade(BLUE) }):Play()
 	end
+end
+
+-- The bruise pictures (Config.Injuries.BRUISE_IMAGES), if uploaded.
+local IMAGES = Config.Injuries.BRUISE_IMAGES
+local function hasImages(): boolean
+	return IMAGES.blobs[1] ~= 0
+end
+
+-- The same colour change as `ageing`, on a picture's tint.
+local function ageingImage(image: ImageLabel, age: number, dark: number)
+	local function shade(c: Color3): Color3
+		return Color3.new(c.R * dark, c.G * dark, c.B * dark)
+	end
+	image.ImageColor3 = shade(colourAt(age))
+	if age < TO_PURPLE then
+		local toPurple = TweenService:Create(
+			image,
+			TweenInfo.new(TO_PURPLE - age),
+			{ ImageColor3 = shade(PURPLE) }
+		)
+		toPurple:Play()
+		toPurple.Completed:Once(function()
+			if image.Parent then
+				TweenService
+					:Create(
+						image,
+						TweenInfo.new(TO_BLUE - TO_PURPLE),
+						{ ImageColor3 = shade(BLUE) }
+					)
+					:Play()
+			end
+		end)
+	elseif age < TO_BLUE then
+		TweenService:Create(image, TweenInfo.new(TO_BLUE - age), { ImageColor3 = shade(BLUE) })
+			:Play()
+	end
+end
+
+-- A soft picture of bruise lying on the skin at `at` (part space), facing
+-- `out`, `size` studs across, turned `rotation` degrees: a see-through
+-- plate with the picture on its outer face (lit like the skin). `fixed`: a
+-- colour that doesn't age.
+local function picture(
+	part: BasePart,
+	folder: Instance,
+	at: Vector3,
+	out: Vector3,
+	upAxis: Vector3,
+	size: number,
+	imageId: number,
+	transparency: number,
+	dark: number,
+	age: number,
+	rotation: number,
+	layer: number,
+	fixed: Color3?
+)
+	local plate = newPart("Bruise", Enum.PartType.Block, Vector3.new(0.004, size, size), FRESH)
+	plate.Transparency = 1
+	attach(plate, part, CFrame.fromMatrix(at, out, upAxis), folder)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Right -- (the plate's X: out of the skin)
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 600
+	gui.LightInfluence = 1
+	gui.ZOffset = layer
+	gui.Parent = plate
+	local image = Instance.new("ImageLabel")
+	image.Size = UDim2.fromScale(1, 1)
+	image.BackgroundTransparency = 1
+	image.Image = `rbxassetid://{imageId}`
+	image.ImageTransparency = transparency
+	image.Rotation = rotation
+	if fixed then
+		image.ImageColor3 = fixed
+	else
+		ageingImage(image, age, dark)
+	end
+	image.Parent = gui
+	-- (a picture ignores LocalTransparencyModifier: hidden with your own
+	-- limb in first person)
+	local function follow()
+		gui.Enabled = part.LocalTransparencyModifier < 0.99
+	end
+	local link = part:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(follow)
+	plate.Destroying:Once(function()
+		link:Disconnect()
+	end)
+	follow()
 end
 
 -- A small flat oval of bruise lying on the skin at `at` (part space),
@@ -257,110 +347,207 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 		attach(lump, part, CFrame.fromMatrix(center, out, upAxis), folder)
 	end
 
-	-- Its outline isn't a circle: the radius wobbles around it (a few
-	-- waves), so every bruise has its own blotchy shape.
-	local waves: { { amplitude: number, phase: number, k: number } } = {}
-	for k = 2, 5 do
-		table.insert(waves, {
-			amplitude = random:NextNumber(0.05, 0.22) / (k * 0.5),
-			phase = random:NextNumber(0, math.pi * 2),
-			k = k,
-		})
-	end
-	local stretch = random:NextNumber(0.75, 1.1) -- (a little taller or wider)
-	local function edgeAt(theta: number): number
-		local r = 1
-		for _, wave in waves do
-			r += wave.amplitude * math.cos(wave.k * theta + wave.phase)
+	-- Without the pictures: many small soft ovals overlapping.
+	local function drawOvals()
+		-- Its outline isn't a circle: the radius wobbles around it (a few
+		-- waves), so every bruise has its own blotchy shape.
+		local waves: { { amplitude: number, phase: number, k: number } } = {}
+		for k = 2, 5 do
+			table.insert(waves, {
+				amplitude = random:NextNumber(0.05, 0.22) / (k * 0.5),
+				phase = random:NextNumber(0, math.pi * 2),
+				k = k,
+			})
 		end
-		return size * 0.5 * math.max(0.55, r)
+		local stretch = random:NextNumber(0.75, 1.1) -- (a little taller or wider)
+		local function edgeAt(theta: number): number
+			local r = 1
+			for _, wave in waves do
+				r += wave.amplitude * math.cos(wave.k * theta + wave.phase)
+			end
+			return size * 0.5 * math.max(0.55, r)
+		end
+
+		-- Blood under the skin: many small soft ovals overlapping, see-through,
+		-- so it's mottled and darker where they pile up (the middle), paler and
+		-- broken up toward its uneven edge.
+		local count = 16 + 5 * level
+		for index = 1, count do
+			local theta = random:NextNumber(0, math.pi * 2)
+			local limit = edgeAt(theta)
+			local r = limit * random:NextNumber() ^ 0.9 * 0.85
+			local du, dv = r * math.cos(theta), r * math.sin(theta) * stretch
+			local edge = r / limit
+			local pos, o = place(du, dv, 0.006 + index * 0.00025)
+			spot(
+				part,
+				folder,
+				pos,
+				o,
+				size * random:NextNumber(0.38, 0.6) * (1.05 - 0.25 * edge),
+				random:NextNumber(0.6, 0.95),
+				math.clamp(
+					0.72 + 0.24 * edge - strength + random:NextNumber(-0.04, 0.04),
+					0.55,
+					0.95
+				),
+				0.75 + 0.4 * edge + random:NextNumber(-0.08, 0.08),
+				age,
+				random:NextNumber(0, math.pi),
+				nil
+			)
+		end
+		-- Where the blood pooled deeper: a few darker patches near the middle.
+		for index = 1, 1 + level do
+			local theta = random:NextNumber(0, math.pi * 2)
+			local r = edgeAt(theta) * random:NextNumber(0, 0.45)
+			local pos, o =
+				place(r * math.cos(theta), r * math.sin(theta) * stretch, 0.0165 + index * 0.0003)
+			spot(
+				part,
+				folder,
+				pos,
+				o,
+				size * random:NextNumber(0.18, 0.3),
+				random:NextNumber(0.6, 0.9),
+				math.clamp(0.42 - strength, 0.2, 0.6),
+				0.62,
+				age,
+				random:NextNumber(0, math.pi),
+				nil
+			)
+		end
+		-- Pinpoint bleeding (petechiae): tiny dark-red dots scattered in it.
+		for index = 1, 4 + 2 * level do
+			local theta = random:NextNumber(0, math.pi * 2)
+			local r = edgeAt(theta) * random:NextNumber(0.15, 0.95)
+			local pos, o =
+				place(r * math.cos(theta), r * math.sin(theta) * stretch, 0.019 + index * 0.0002)
+			local d = random:NextNumber(0.012, 0.028)
+			spot(
+				part,
+				folder,
+				pos,
+				o,
+				d,
+				random:NextNumber(0.7, 1),
+				random:NextNumber(0.15, 0.4),
+				1,
+				age,
+				0,
+				PETECHIA
+			)
+		end
+		-- A faint tint at the rim: blue-purple where the blood is spreading.
+		for index = 1, 3 do
+			local theta = random:NextNumber(0, math.pi * 2)
+			local r = edgeAt(theta) * random:NextNumber(0.8, 1.02)
+			local pos, o =
+				place(r * math.cos(theta), r * math.sin(theta) * stretch, 0.004 + index * 0.0002)
+			spot(
+				part,
+				folder,
+				pos,
+				o,
+				size * random:NextNumber(0.25, 0.4),
+				random:NextNumber(0.5, 0.8),
+				0.86,
+				1,
+				age,
+				random:NextNumber(0, math.pi),
+				RIM
+			)
+		end
 	end
 
-	-- Blood under the skin: many small soft ovals overlapping, see-through,
-	-- so it's mottled and darker where they pile up (the middle), paler and
-	-- broken up toward its uneven edge.
-	local count = 16 + 5 * level
-	for index = 1, count do
-		local theta = random:NextNumber(0, math.pi * 2)
-		local limit = edgeAt(theta)
-		local r = limit * random:NextNumber() ^ 0.9 * 0.85
-		local du, dv = r * math.cos(theta), r * math.sin(theta) * stretch
-		local edge = r / limit
-		local pos, o = place(du, dv, 0.006 + index * 0.00025)
-		spot(
+	-- With the pictures: a few soft, mottled pictures layered on the skin
+	-- (a faint wider halo, the bruise, a darker clump, pinpoint bleeding).
+	if hasImages() then
+		local blobs = IMAGES.blobs
+		local function blobId(): number
+			local id = blobs[random:NextInteger(1, #blobs)]
+			return if id ~= 0 then id else blobs[1]
+		end
+		local raise = 0.006 -- (place() already lifts over the swelling)
+		local function at2(du: number, dv: number, lift: number): (Vector3, Vector3)
+			return place(du, dv, raise + lift)
+		end
+		-- (a flat picture on the round head: kept small enough to follow it)
+		local most = if head then 0.42 else 10
+		if IMAGES.rim ~= 0 then
+			local p, o = at2(0, 0, 0.001)
+			picture(
+				part,
+				folder,
+				p,
+				o,
+				upAxis,
+				math.min(size * 1.7, most * 1.15),
+				IMAGES.rim,
+				0.55 + 0.1 * random:NextNumber(),
+				1.25,
+				age,
+				random:NextNumber(0, 360),
+				1,
+				nil
+			)
+		end
+		local p, o = at2(0, 0, 0.002)
+		picture(
 			part,
 			folder,
-			pos,
+			p,
 			o,
-			size * random:NextNumber(0.38, 0.6) * (1.05 - 0.25 * edge),
-			random:NextNumber(0.6, 0.95),
-			math.clamp(0.72 + 0.24 * edge - strength + random:NextNumber(-0.04, 0.04), 0.55, 0.95),
-			0.75 + 0.4 * edge + random:NextNumber(-0.08, 0.08),
-			age,
-			random:NextNumber(0, math.pi),
-			nil
-		)
-	end
-	-- Where the blood pooled deeper: a few darker patches near the middle.
-	for index = 1, 1 + level do
-		local theta = random:NextNumber(0, math.pi * 2)
-		local r = edgeAt(theta) * random:NextNumber(0, 0.45)
-		local pos, o =
-			place(r * math.cos(theta), r * math.sin(theta) * stretch, 0.0165 + index * 0.0003)
-		spot(
-			part,
-			folder,
-			pos,
-			o,
-			size * random:NextNumber(0.18, 0.3),
-			random:NextNumber(0.6, 0.9),
-			math.clamp(0.42 - strength, 0.2, 0.6),
-			0.62,
-			age,
-			random:NextNumber(0, math.pi),
-			nil
-		)
-	end
-	-- Pinpoint bleeding (petechiae): tiny dark-red dots scattered in it.
-	for index = 1, 4 + 2 * level do
-		local theta = random:NextNumber(0, math.pi * 2)
-		local r = edgeAt(theta) * random:NextNumber(0.15, 0.95)
-		local pos, o =
-			place(r * math.cos(theta), r * math.sin(theta) * stretch, 0.019 + index * 0.0002)
-		local d = random:NextNumber(0.012, 0.028)
-		spot(
-			part,
-			folder,
-			pos,
-			o,
-			d,
-			random:NextNumber(0.7, 1),
-			random:NextNumber(0.15, 0.4),
+			upAxis,
+			math.min(size * 1.25, most),
+			blobId(),
+			math.clamp(0.12 - strength, 0, 0.3),
 			1,
 			age,
-			0,
-			PETECHIA
+			random:NextNumber(0, 360),
+			2,
+			nil
 		)
-	end
-	-- A faint tint at the rim: blue-purple where the blood is spreading.
-	for index = 1, 3 do
-		local theta = random:NextNumber(0, math.pi * 2)
-		local r = edgeAt(theta) * random:NextNumber(0.8, 1.02)
-		local pos, o =
-			place(r * math.cos(theta), r * math.sin(theta) * stretch, 0.004 + index * 0.0002)
-		spot(
-			part,
-			folder,
-			pos,
-			o,
-			size * random:NextNumber(0.25, 0.4),
-			random:NextNumber(0.5, 0.8),
-			0.86,
-			1,
-			age,
-			random:NextNumber(0, math.pi),
-			RIM
-		)
+		for index = 1, math.max(1, level - 1) do
+			local du = random:NextNumber(-0.18, 0.18) * size
+			local dv = random:NextNumber(-0.18, 0.18) * size
+			local q, n = at2(du, dv, 0.003 + index * 0.0005)
+			picture(
+				part,
+				folder,
+				q,
+				n,
+				upAxis,
+				math.min(size * random:NextNumber(0.55, 0.75), most * 0.7),
+				blobId(),
+				0.35,
+				0.65,
+				age,
+				random:NextNumber(0, 360),
+				2 + index,
+				nil
+			)
+		end
+		if IMAGES.petechiae ~= 0 then
+			local q, n = at2(0, 0, 0.006)
+			picture(
+				part,
+				folder,
+				q,
+				n,
+				upAxis,
+				math.min(size * 1.0, most * 0.9),
+				IMAGES.petechiae,
+				0.15,
+				1,
+				age,
+				random:NextNumber(0, 360),
+				8,
+				PETECHIA
+			)
+		end
+	else
+		drawOvals()
 	end
 
 	-- A hard blow on the face splits the skin: a short cut across it, a run
@@ -405,6 +592,12 @@ local function fadeOut(folder: Instance, index: number)
 		if piece:IsA("BasePart") and piece:GetAttribute("BruiseIndex") == index then
 			piece:SetAttribute("BruiseIndex", nil)
 			TweenService:Create(piece, TweenInfo.new(FADE_OUT), { Transparency = 1 }):Play()
+			for _, image in piece:GetDescendants() do
+				if image:IsA("ImageLabel") then
+					TweenService:Create(image, TweenInfo.new(FADE_OUT), { ImageTransparency = 1 })
+						:Play()
+				end
+			end
 			task.delay(FADE_OUT, function()
 				piece:Destroy()
 			end)
