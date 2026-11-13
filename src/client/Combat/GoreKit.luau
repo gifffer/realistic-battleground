@@ -33,12 +33,22 @@ local warned = false
 -- A kit already looked through and found without the pieces (an old one):
 -- not looked through again until something is added to it.
 local lacking: Instance? = nil
+-- A kit found with the head's pieces but not yet all the later ones (an old
+-- kit, or one still replicating): used as it is until something is added to
+-- it, then looked through again.
+local partial: { [string]: Piece }? = nil
+local partialFrom: Instance? = nil
 
--- The pieces, once the kit is there with all of them (nil until then: it is
--- looked for again next time, the kit may replicate late).
+-- The pieces, once the kit is there with the head's (nil until then: it is
+-- looked for again next time, the kit may replicate late). Without some of
+-- the later pieces they are not kept for good: looked for again once the
+-- kit changes.
 function GoreKit.get(): { [string]: Piece }?
 	if pieces then
 		return pieces
+	end
+	if partial and partialFrom and partialFrom:IsDescendantOf(ReplicatedStorage) then
+		return partial
 	end
 	local assets = ReplicatedStorage:FindFirstChild("Assets")
 	local model = if assets then assets:FindFirstChild("WoundKit", true) else nil
@@ -118,6 +128,19 @@ function GoreKit.get(): { [string]: Piece }?
 			return a.size.Magnitude > b.size.Magnitude
 		end)
 		piece.center = piece.layers[1].offset.Position
+	end
+	for name in optional do
+		if found[name] == nil then
+			-- (some later piece missing: not kept for good, it may arrive)
+			partial = found
+			partialFrom = model
+			model.DescendantAdded:Once(function()
+				if partial == found then
+					partial = nil
+				end
+			end)
+			return found
+		end
 	end
 	pieces = found
 	return found
