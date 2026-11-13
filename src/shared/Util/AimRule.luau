@@ -19,7 +19,10 @@ function AimRule.validate(aim: unknown, facing: Vector3): Vector3?
 		return nil
 	end
 	-- NaN is the only value not equal to itself.
-	local finite = aim.X == aim.X and aim.Y == aim.Y and aim.Z == aim.Z and aim.Magnitude < math.huge
+	local finite = aim.X == aim.X
+		and aim.Y == aim.Y
+		and aim.Z == aim.Z
+		and aim.Magnitude < math.huge
 	if not finite or aim.Magnitude <= 0.1 then
 		return nil
 	end

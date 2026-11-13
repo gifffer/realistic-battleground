@@ -164,7 +164,7 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 	hole.Parent = part
 	local jet = jetEmitter(hole, options.size)
 	local mist = mistEmitter(hole)
-	local ignore = options.ignore or { part }
+	local ignore: { Instance } = options.ignore or { part :: Instance }
 	if options.pool > 0 then
 		task.delay(0.3, function()
 			if part.Parent then
@@ -391,7 +391,7 @@ function BloodGush.neck(model: Model, seed: number)
 			size = 0.13,
 			pool = if index == 1 then 4 else 0,
 			seed = seed + index,
-			ignore = { model },
+			ignore = { model :: Instance },
 		})
 	end
 	local back = Vector3.new(0, top + 0.05, 0.15)
@@ -402,7 +402,7 @@ function BloodGush.neck(model: Model, seed: number)
 		size = 0.16,
 		pool = 0,
 		seed = seed + 7,
-		ignore = { model },
+		ignore = { model :: Instance },
 	})
 	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, -0.5), 7, seed + 11)
 	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, 0.5), 5, seed + 13)
@@ -431,7 +431,7 @@ function BloodGush.torso(
 			size = 0.15,
 			pool = 3.8,
 			seed = seed,
-			ignore = { model },
+			ignore = { model :: Instance },
 		}
 	)
 	BloodGush.runDown(torso, localPoint, 9, seed + 5)

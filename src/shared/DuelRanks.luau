@@ -48,7 +48,9 @@ function DuelRanks.progress(elo: number): Progress
 		minElo = current.minElo,
 		nextRank = if nextOne then nextOne.name else nil,
 		nextMinElo = if nextOne then nextOne.minElo else nil,
-		fraction = if nextOne then math.clamp((elo - current.minElo) / (nextOne.minElo - current.minElo), 0, 1) else 1,
+		fraction = if nextOne
+			then math.clamp((elo - current.minElo) / (nextOne.minElo - current.minElo), 0, 1)
+			else 1,
 	}
 end
 

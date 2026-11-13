@@ -76,10 +76,34 @@ Finishers.SIDE_VICTIM = CFrame.new(0.3, -2.5, -2.7, 0, -1, 0, 0, 0, -1, 1, 0, 0)
 -- ArmRip: the torn arm in his right fist (his Right Arm's space), and where
 -- it is (anchor space) when he throws it. Measured on the two clips
 -- (Client/Animation/BouncerClips): change them together.
-Finishers.ARM_GRIP =
-	CFrame.new(0.7757, -1.1319, 0.1752, -0.1069, 0.9447, 0.3101, 0.3554, -0.255, 0.8992, 0.9286, 0.2064, -0.3085)
-Finishers.ARM_THROW_FROM =
-	CFrame.new(2.4602, -0.2834, -1.8162, -0.104, 0.9834, 0.1484, -0.7243, -0.1772, 0.6663, 0.6816, -0.0382, 0.7308)
+Finishers.ARM_GRIP = CFrame.new(
+	0.7757,
+	-1.1319,
+	0.1752,
+	-0.1069,
+	0.9447,
+	0.3101,
+	0.3554,
+	-0.255,
+	0.8992,
+	0.9286,
+	0.2064,
+	-0.3085
+)
+Finishers.ARM_THROW_FROM = CFrame.new(
+	2.4602,
+	-0.2834,
+	-1.8162,
+	-0.104,
+	0.9834,
+	0.1484,
+	-0.7243,
+	-0.1772,
+	0.6663,
+	0.6816,
+	-0.0382,
+	0.7308
+)
 Finishers.ARM_THROW_VELOCITY = Vector3.new(3, -2, -1) -- anchor space, studs/s
 -- PortalCut: the victim stands this far in front of him (root to root), and
 -- the portal lies flat around their waist (anchor space, its centre at the

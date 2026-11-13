@@ -68,7 +68,14 @@ export type MoveAction = "Slide" | "Climb" | "Vault" | "Cancel"
 --   Finisher   4th hit, knockback  GuardBreak  block broken (no stamina)
 --   Parried    perfect block       Dodged      hit during dash frames
 --   Protected  the victim has spawn protection (nothing happens)
-export type CombatEventKind = "Hit" | "Finisher" | "Blocked" | "GuardBreak" | "Parried" | "Dodged" | "Protected"
+export type CombatEventKind =
+	"Hit"
+	| "Finisher"
+	| "Blocked"
+	| "GuardBreak"
+	| "Parried"
+	| "Dodged"
+	| "Protected"
 
 -- Where a hit lands (Config.Combat.ZONE_DAMAGE).
 export type HitZone = "Head" | "Torso" | "Legs"
@@ -99,7 +106,15 @@ export type RewardKind =
 --   Round        a round is about to start   { round, score: {mine, theirs}, fightAt }
 --   RoundEnd     a round is over             { round, won: boolean, score, last }
 --   End          the match is over           { won, ranked, score, xp, coins, eloBefore?, eloAfter?, forfeit, returnAt }
-export type DuelEventKind = "Challenged" | "Declined" | "Queue" | "Waiting" | "Start" | "Round" | "RoundEnd" | "End"
+export type DuelEventKind =
+	"Challenged"
+	| "Declined"
+	| "Queue"
+	| "Waiting"
+	| "Start"
+	| "Round"
+	| "RoundEnd"
+	| "End"
 
 -- A line of the kill feed (Remotes.KillFeed).
 --   Finished  killer finished a KO'd victim

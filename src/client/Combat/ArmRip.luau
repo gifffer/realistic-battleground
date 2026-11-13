@@ -229,7 +229,7 @@ function ArmRip.apply(model: Model, live: boolean)
 			size = 0.1,
 			pool = 0,
 			seed = seed + 3,
-			ignore = { model },
+			ignore = { model :: Instance },
 		})
 		drip(arm)
 	end
