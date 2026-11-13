@@ -15,6 +15,8 @@
 --   pitch           playback speed: 1 = normal, 0.8 = lower and heavier
 --   pitchVariation  each play is randomly a bit higher / lower (0.08 = ±8 %)
 --   fallback        name of another sound to use while `ids` is empty
+--   length          seconds: only the start of it is played (a long file
+--                   cut short with a quick fade), nil = all of it
 --
 -- Every sound is played IN 3D on the character who makes it (you hear it
 -- louder when close, from the right direction).
@@ -25,6 +27,7 @@ export type SoundInfo = {
 	pitch: number,
 	pitchVariation: number,
 	fallback: string?,
+	length: number?,
 }
 
 local sounds: { [string]: SoundInfo } = {
@@ -238,20 +241,20 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "BottleBreak",
 	},
 	AcidSizzle = { -- acid eating into skin / the floor: a hissing fizz
-		ids = {},
+		ids = { 9066038215 },
 		volume = 0.7,
 		pitch = 1,
 		pitchVariation = 0.1,
 	},
 	Explosion = { -- the explosive flask: a dull, close blast
-		ids = {},
+		ids = { 98182121433648 },
 		volume = 1,
 		pitch = 0.9,
 		pitchVariation = 0.05,
 		fallback = "HeavyHit",
 	},
 	RayGun = { -- the ray gun firing: a short electric crackle
-		ids = {},
+		ids = { 108089086472724 },
 		volume = 0.8,
 		pitch = 1,
 		pitchVariation = 0.06,
@@ -271,11 +274,18 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "AcidSizzle",
 	},
 	GloveBlast = { -- the gravity glove: a deep thump of air
-		ids = {},
+		ids = { 1842641928 },
 		volume = 0.9,
 		pitch = 0.85,
 		pitchVariation = 0.05,
 		fallback = "Tackle",
+		length = 1.3,
+	},
+	RiftImpact = { -- a heavy impact of the Awakening (the arms flung out, the gravity slam)
+		ids = { 71947288327190 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.04,
 	},
 	PortalShot = { -- the portal gun's shot
 		ids = {},
@@ -284,7 +294,7 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.06,
 	},
 	PortalOpen = { -- a portal tearing open: a wet, rushing whoosh
-		ids = {},
+		ids = { 1013378689 },
 		volume = 0.8,
 		pitch = 1,
 		pitchVariation = 0.06,
@@ -303,7 +313,7 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.08,
 	},
 	BodyCut = { -- cut in two by the portal closing: a wet, heavy slice
-		ids = {},
+		ids = { 80160249812182 },
 		volume = 1,
 		pitch = 0.9,
 		pitchVariation = 0.04,

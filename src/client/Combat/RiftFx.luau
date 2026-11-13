@@ -571,7 +571,7 @@ local function wave(data: { [string]: any })
 	Debris:AddItem(point, 2)
 	flash(ground + Vector3.new(0, 0.5, 0), 1.6)
 	shakeNear(ground, 5, 0.45)
-	SoundController.playAt("GloveBlast", ground)
+	SoundController.playAt("RiftImpact", ground)
 end
 
 ------------------------------------------------------------------------------
@@ -789,6 +789,12 @@ function RiftFx.onAwaken(model: Model)
 		door(root.CFrame * CFrame.new(0, 0, 2.2), 0.8)
 		flash(root.Position, 1.2)
 		SoundController.play("PortalOpen", model)
+		-- (the arms flung out, 0.75 s into Rift_Awaken: the impact)
+		task.delay(0.72, function()
+			if model.Parent then
+				SoundController.play("RiftImpact", model)
+			end
+		end)
 	end
 end
 
