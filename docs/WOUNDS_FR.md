@@ -22,6 +22,18 @@ Une bouteille ne casse pas un crâne et n'ouvre pas une cage thoracique. Le jeu 
 ![Rendu de contrôle : à gauche la tête refaite par le jeu avec deux plaies, à droite la vraie tête Roblox. La forme est identique.](wounds_head.png)
 ![Rendu de contrôle : le torse refait (cadre biseauté et faces, avec un t-shirt de test) à côté du vrai torse Roblox.](wounds_torso.png)
 
+## Coupe en deux (Dr. Rift)
+
+Le finisher **PortalCut** du Dr. Rift referme un portail autour de la taille de la victime et la **coupe en deux** juste sous le torse. Le serveur (`cutInHalf` dans `src/server/Systems/Combat/init.luau`) retire les hanches, laisse les jambes debout un instant (soudées à la racine ancrée), fait tomber le haut du corps en arrière, puis les jambes s'effondrent. Toutes les pièces restent dans le personnage (les vêtements restent dessinés). Il pose l'attribut `CutInHalf` (une graine) sur le corps ; chaque client dessine alors la coupe avec `src/client/Combat/WaistCut.luau` :
+
+- `Gore_Waist_*` sous le torse : la **vraie coupe du bassin** à hauteur des hanches (Z-Anatomy) — os iliaques et sacrum en section, **têtes des fémurs** dans leur cavité, fessiers, iliopsoas, muscles de la cuisse coupés (deux rouges alternés), vessie et côlon, artères coupées, graisse jaune sous la peau, peau déchirée qui pend, **anses d'intestin grêle** qui pendent ;
+- `Gore_HipR_*` / `Gore_HipL_*` sur le haut de chaque jambe : l'autre face de la coupe (tête du fémur, muscles, artère et veine fémorales, graisse, peau retroussée) ;
+- `Gore_Gut1_*` à `Gore_Gut3_*` : des morceaux du **vrai intestin grêle** qui tombent du torse, mous et mouillés (`Squish`), et restent ~25 s au sol.
+
+Quand ça arrive devant nous : giclée de sang des deux côtés, un **geyser** vers le haut sur chaque jambe (artères fémorales), les deux artères iliaques qui pompent hors du haut du corps, du sang qui coule sur les jambes, une flaque, le torse qui goutte. Un corps vu plus tard n'a que les plaies.
+
+L'anatomie vient de `tools/wounds/extract_waist.py` → `tools/wounds/anatomy/waist.npz` (Z-Anatomy, CC BY-SA 4.0), les pièces de `tools/wounds/gore.py` (`waist_cut`, `gut_lengths`). Sans ces pièces (ancien `WoundKit`), `WaistCut` dessine des formes simples. **Après avoir refait le kit, ré-importe `assets/wounds/WoundKit.fbx` dans Studio** (voir ci-dessous).
+
 ## Importer les plaies dans Studio (une seule fois)
 
 1. Télécharge **`assets/wounds/WoundKit.fbx`** : sur GitHub, ouvre le fichier puis clique **Download raw file**.

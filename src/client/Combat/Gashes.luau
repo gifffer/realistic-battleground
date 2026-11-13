@@ -30,6 +30,7 @@ local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
 local ArmRip = require(script.Parent.ArmRip)
 local BloodGush = require(script.Parent.BloodGush)
 local HeadBlast = require(script.Parent.HeadBlast)
+local WaistCut = require(script.Parent.WaistCut)
 
 local Gashes = {}
 
@@ -1191,6 +1192,8 @@ function Gashes.watch(model: Model)
 			end
 		elseif name == ArmRip.ATTRIBUTE then
 			ArmRip.apply(model, true)
+		elseif name == WaistCut.ATTRIBUTE then
+			WaistCut.apply(model, true)
 		elseif name == "BoneTaken" then
 			ArmRip.boneTaken(model)
 		end
@@ -1231,6 +1234,7 @@ function Gashes.watch(model: Model)
 	refreshAll(model)
 	HeadBlast.apply(model, false) -- (a body whose head burst before we saw it)
 	ArmRip.apply(model, false) -- (or whose arm was torn off)
+	WaistCut.apply(model, false) -- (or who was cut in two)
 end
 
 return table.freeze(Gashes)

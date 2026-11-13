@@ -50,6 +50,12 @@ local GoreShapes = {
 		Humerus = Vector3.new(120, 3, -14),
 		HumerusA = Vector3.new(123, 3, -14),
 		HumerusB = Vector3.new(126, 3, -14),
+		Waist = Vector3.new(129, 3, -14),
+		HipR = Vector3.new(132, 3, -14),
+		HipL = Vector3.new(135, 3, -14),
+		Gut1 = Vector3.new(138, 3, -14),
+		Gut2 = Vector3.new(141, 3, -14),
+		Gut3 = Vector3.new(144, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -110,6 +116,14 @@ local GoreShapes = {
 		"Humerus",
 		"HumerusA",
 		"HumerusB",
+	},
+	cut = {
+		"Waist",
+		"HipR",
+		"HipL",
+		"Gut1",
+		"Gut2",
+		"Gut3",
 	},
 }
 
