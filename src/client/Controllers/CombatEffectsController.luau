@@ -46,6 +46,8 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local BloodFace = require(script.Parent.Parent.Combat.BloodFace)
+local BloodTracks = require(script.Parent.Parent.Combat.BloodTracks)
 local KitLooks = require(script.Parent.Parent.Combat.KitLooks)
 local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
@@ -681,10 +683,22 @@ local function onCombatEvent(
 			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		end
 		-- Blood and torn skin: decided by the server (same on every screen).
+		if kind == "Hit" and moveId == nil then
+			-- (bare-fist M1s only - not a kick, a bottle, a bat: split knuckles)
+			KitEffects.punchLanded(victim, attacker)
+		end
 		if bloodArg == true then
 			-- (more for the heavy blows and the kits' moves)
 			local amount = if strong then 3.8 elseif moveId then 2.5 else 1.6
-			KitEffects.bloodSpray(victim, attacker, zone, amount)
+			KitEffects.bloodSpray(
+				victim,
+				attacker,
+				zone,
+				amount,
+				KitEffects.bloodSeed(attackIdArg, victim, zone),
+				-- (which face wound it opens: nose, lip, brow cut...)
+				{ strong = strong, moveId = moveId, side = side :: string }
+			)
 		end
 		if typeof(skinTearSeedArg) == "number" then
 			KitEffects.skinTear(victim, attacker, skinTearSeedArg, zone)
@@ -802,6 +816,10 @@ local function onCombatAction(model: Model, action: string)
 	end
 	CharacterAnimationController.playAction(model, action)
 	BouncerFx.onAction(model, action)
+	if action == "GetUp" then
+		BloodTracks.onGetUp(model) -- (a bloody hand pushing on the ground)
+		BloodFace.onGetUp(model) -- (wipes his bloody face; a graze from the floor)
+	end
 	if
 		action == "GetUp"
 		or string.sub(action, 1, 6) == "Emote_"
@@ -815,10 +833,12 @@ local function onCombatAction(model: Model, action: string)
 		KitEffects.onAction(model, action, alreadyHeard)
 	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model) -- the heavy blows
+		KitEffects.onSwing(model) -- (a bloody fist flicks blood off)
 	elseif string.sub(action, 1, 4) == "Dash" then
 		SoundController.play("Dash", model)
 	else
 		SoundController.play("Swing", model)
+		KitEffects.onSwing(model)
 	end
 end
 
@@ -900,6 +920,10 @@ function CombatEffectsController.start()
 	Remotes.AttackResolved.OnClientEvent:Connect(onAttackResolved)
 	-- Our M1: show the hit the instant the fist lands (HIT_DELAY later).
 	CombatController.onAttackStarted(function(info)
+		local character = player.Character
+		if character then
+			KitEffects.onSwing(character) -- (our bloody fist flicks blood off)
+		end
 		task.delay(Config.Combat.HIT_DELAY, function()
 			predictHit(info)
 		end)

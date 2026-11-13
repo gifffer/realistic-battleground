@@ -289,11 +289,12 @@ local function update(dt: number)
 				surfaceParams(root)
 			)
 			if floor then
-				Blood.splat(
+				-- (a wet swipe along the way it slides, not a chain of drops)
+				Blood.smear(
 					floor.Position,
 					floor.Normal,
-					math.clamp(s.Magnitude * 0.25, 0.12, 0.6),
 					velocity,
+					math.clamp(s.Magnitude * 0.22, 0.1, 0.5),
 					floor.Instance :: BasePart
 				)
 			end
