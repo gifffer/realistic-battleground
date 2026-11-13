@@ -574,3 +574,19 @@ Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à *
 | R19 | Regarder les deux coupes | Haut du corps : coupe à la taille avec le **vrai bassin** (os), les muscles, la graisse sous la peau, les intestins qui pendent. Jambes : coupe avec le **fémur**, les muscles de la cuisse, les artères. |
 | R20 | Un joueur qui arrive après | Il voit le corps en deux morceaux avec les coupes, sans le sang qui gicle. |
 | R21 | Le Dr. Rift quitte le jeu (ou meurt) **avant** la coupe | Tout s'arrête (portail, pistolet), la victime retombe KO, entière. |
+
+## Membres qui partent à l'autre bout de la map (`fix/limbs-fly-away`)
+
+Le bug : parfois les bras et les jambes d'un corps au sol partaient très loin, puis revenaient petit à petit sur le perso.
+La cause : quand un corps tombe (ragdoll), chaque bras, jambe et la tête deviennent des morceaux séparés, tenus par une articulation molle. Le serveur ne prenait en charge que le tronc ; Roblox donnait les membres **à l'ordinateur d'un joueur** (la victime, ou le joueur le plus proche). Cet ordinateur avait encore le membre là où **son animation** le dessinait (une animation de finisher peut déplacer tout le corps de plusieurs mètres) et envoyait cette position à tout le monde : le membre « s'envolait », puis l'articulation le ramenait lentement.
+Maintenant le **serveur** simule **tous** les morceaux du corps au sol (même chute pour tout le monde, un tricheur ne peut plus bouger ses membres KO), et chaque client remet tout de suite sur le corps un membre trop loin de son articulation.
+
+Tester à **2 joueurs** (le bug venait d'un autre ordinateur), avec un peu de lag si possible (Studio : File → Studio Settings → Network → Incoming Replication Lag = 0,2).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L1 | Mettre l'autre joueur KO, plusieurs fois, sous plusieurs angles | Il tombe mou, **les bras et les jambes restent attachés** au corps, sur les deux écrans. |
+| L2 | Tackle / Uppercut / Gravity Glove sur l'autre joueur (il tombe vivant), puis il se relève | Chute et relevé propres ; une fois debout il **contrôle de nouveau son perso** normalement (marcher, sauter, frapper). |
+| L3 | Faire chaque finisher (Batte, KnockoutCombo, Arm Rip, Incinerate, Gore, Portal Cut) sur le **Dummy** et sur un **joueur** | À la fin, le corps tombe **là où il est** : aucun membre ne part au loin puis revient. Le bras arraché (Arm Rip) reste dans la main puis est lancé normalement ; les jambes (Gore, Portal Cut) se séparent normalement. |
+| L4 | Gros combo sur le Dummy jusqu'au KO, puis attendre qu'il se relève | Pareil : membres en place, relevé propre. |
+| L5 | Duel : perdre une manche | Le perdant tombe, membres en place ; la manche suivante il est debout et contrôle son perso. |

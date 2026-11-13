@@ -549,6 +549,45 @@ local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
 	entry.sprintWeight += math.clamp(target - entry.sprintWeight, -step, step)
 end
 
+-- Farther than this (studs) from its loose joint (Server/Ragdoll), a limb
+-- of a limp body is out of place: no ball socket stretches that far.
+local LOOSE_LIMB_GAP = 3
+
+-- A limp body's limbs, put back on their loose joints if they are far off.
+-- (The joints let go while our clip still drew the limb somewhere else: a
+-- finisher can carry the whole body metres away. The server moves the
+-- limb and every client follows it soon, but meanwhile it would hang far
+-- off the body.) Torn-off limbs have no socket left: never touched.
+local function snapLooseLimbs(model: Model)
+	local torso = model:FindFirstChild("Torso")
+	if torso == nil or not torso:IsA("BasePart") then
+		return
+	end
+	for _, socket in torso:GetChildren() do
+		if not socket:IsA("BallSocketConstraint") or not socket.Enabled then
+			continue
+		end
+		local a0, a1 = socket.Attachment0, socket.Attachment1
+		local limb = if a1 then a1.Parent else nil
+		if
+			a0 == nil
+			or a1 == nil
+			or a0.Parent ~= torso
+			or limb == nil
+			or not limb:IsA("BasePart")
+			or limb.Anchored
+			or not limb:IsDescendantOf(model)
+		then
+			continue
+		end
+		if (a0.WorldPosition - a1.WorldPosition).Magnitude > LOOSE_LIMB_GAP then
+			limb.CFrame = a0.WorldCFrame * a1.CFrame:Inverse()
+			limb.AssemblyLinearVelocity = torso.AssemblyLinearVelocity
+			limb.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+end
+
 local function onPreSimulation(dt: number)
 	local camera = workspace.CurrentCamera
 	local cameraPosition = if camera then camera.CFrame.Position else Vector3.zero
@@ -579,6 +618,7 @@ local function onPreSimulation(dt: number)
 			if rootJoint and rootJoint:IsA("Motor6D") then
 				rootJoint.Transform = CFrame.identity
 			end
+			snapLooseLimbs(model)
 			entry.flinch = Vector3.zero
 			entry.flinchSpeed = Vector3.zero
 			entry.sprintWeight = 0

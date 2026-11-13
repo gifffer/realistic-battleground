@@ -13,7 +13,13 @@
 --     neck joint is switched off (a KO would become an instant death).
 --   • The SERVER simulates the body while it's limp (SetNetworkOwner(nil)):
 --     every player sees the same fall, and a cheater can't move their own
---     knocked-out body.
+--     knocked-out body. EVERY piece of it: with its joints off, each limb is
+--     a body of its own (an "assembly"), and Roblox would hand those to a
+--     player's computer by itself (its own player, or whoever stands
+--     closest). That computer still has the limb where ITS animation last
+--     drew it (a finisher clip can carry the whole body metres away), so
+--     it sent that spot to everyone: the arms and legs flew off across the
+--     map, then the loose joint dragged them back little by little.
 --
 --   Ragdoll.enable(model)
 --   Ragdoll.disable(model, owner?)   -- `owner` = the player to give the body back to
@@ -36,6 +42,26 @@ local JOINTS: { [string]: Limit } = {
 local LIMBS = { "Head", "Right Arm", "Left Arm", "Right Leg", "Left Leg" }
 -- Name prefix of everything we create (to remove it cleanly).
 local TAG = "Ragdoll_"
+
+-- The server simulates every loose piece of `model` (see the header).
+-- Pieces held by something outside it (an arm in a killer's fist) and
+-- anchored ones are left alone.
+local function serverOwnsAll(model: Model)
+	local done: { [BasePart]: boolean } = {}
+	for _, item in model:GetDescendants() do
+		if not item:IsA("BasePart") then
+			continue
+		end
+		local base: BasePart? = item.AssemblyRootPart -- (nil out of the world)
+		if base == nil or done[base] or not base:IsDescendantOf(model) then
+			continue
+		end
+		done[base] = true
+		if item:CanSetNetworkOwnership() then
+			item:SetNetworkOwner(nil)
+		end
+	end
+end
 
 -- An attachment on `part` at the joint position given by `cframe` (C0 / C1).
 local function attach(part: BasePart, name: string, cframe: CFrame): Attachment
@@ -99,12 +125,11 @@ function Ragdoll.enable(model: Model)
 
 	humanoid.PlatformStand = true
 	humanoid.AutoRotate = false
+	-- The server simulates the fall, limbs included (same for everyone,
+	-- can't be cheated).
+	serverOwnsAll(model)
 	if root and root:IsA("BasePart") then
 		root.CanCollide = false
-		-- The server simulates the fall (same for everyone, can't be cheated).
-		if root:CanSetNetworkOwnership() then
-			root:SetNetworkOwner(nil)
-		end
 		-- Now that the server owns the body, its state change takes effect:
 		-- Physics = limbs keep their collisions, nothing stands it up.
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
@@ -170,6 +195,8 @@ function Ragdoll.disable(model: Model, owner: Player?)
 	humanoid.AutoRotate = true
 	humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
 	humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	-- (the joints are back on: one body again, its root's owner is the
+	-- owner of all of it; a piece still apart stays the server's)
 	if owner and root and root:IsA("BasePart") and root:CanSetNetworkOwnership() then
 		root:SetNetworkOwner(owner)
 	end
