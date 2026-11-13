@@ -532,7 +532,8 @@ local function update(deltaTime: number)
 	local lean = (if currentStorm then STORM_LEAN else RAIN_LEAN) + GUST_LEAN * gustLevel
 	local fall = (Vector3.new(0, -1, 0) + windFlat * lean).Unit
 	local up = -fall
-	local right = Vector3.zAxis:Cross(up).Unit
+	local zAxis = Vector3.new(0, 0, 1)
+	local right = zAxis:Cross(up).Unit
 	local ahead = cameraVelocity * W.RAIN_LEAD
 	local origin = cameraPosition + ahead + up * W.RAIN_HEIGHT
 	rainBox.CFrame = CFrame.fromMatrix(origin, right, up)
