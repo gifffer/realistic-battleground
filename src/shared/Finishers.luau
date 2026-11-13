@@ -19,7 +19,8 @@
 --                    to the body, hook, hook, cross; he coils, and a left
 --                    hook goes into their right side under the ribs: the
 --                    hand goes in, digs, wrenches and tears the liver out;
---                    he holds it up, squeezes it, lets it drop.
+--                    he holds it up, squeezes it, lets it drop. No
+--                    cutscene camera: both keep their own (ownCamera).
 --   "ArmRip"         Bouncer: the opponent laid on their back across in
 --                    front of him; he takes their right wrist in both hands,
 --                    puts his foot on their chest and pulls, three times:
@@ -56,10 +57,8 @@ export type Shot = {
 	time: number,
 	from: Vector3,
 	to: Vector3,
-	-- ("heart": the Sentinel's bore on the victim's chest, Shared/Util/Gash;
-	-- "wound": where the Boxer's hand goes in, LIVER_WOUND; "fist": the
-	-- liver in his left fist, LIVER_GRIP)
-	look: Vector3 | "victim" | "heart" | "wound" | "fist",
+	-- ("heart": the Sentinel's bore on the victim's chest, Shared/Util/Gash)
+	look: Vector3 | "victim" | "heart",
 	fov: number,
 	fovTo: number?,
 }
@@ -78,6 +77,9 @@ export type Cinematic = {
 	victimAnimation: string?, -- played on the victim (held up / laid out)
 	events: { Event },
 	shots: { Shot },
+	-- No cutscene camera: the two fighters keep their own (third or first
+	-- person, as they had it), only shaken on the blows; no shots, no bars.
+	ownCamera: boolean?,
 }
 
 Finishers.HEAD_DISTANCE = 3.8 -- studs, attacker root → victim head (flat): under the barrel
@@ -304,91 +306,9 @@ local cinematics: { [string]: Cinematic } = {
 			{ time = 3.08, kind = "Squeeze" }, -- he squeezes it: it bleeds out
 			{ time = 3.55, kind = "Drop" }, -- he lets go: it drops to the floor
 		},
-		-- (the victim stands at (0, 0, -2.2), facing him: its right side,
-		-- the liver, is on his left, -X. The shots were checked against the
-		-- clips' poses: nothing in front of what they show.)
-		shots = {
-			-- Over his shoulder: he hauls them up.
-			{
-				time = 0,
-				from = Vector3.new(2.2, 0.9, 3.4),
-				to = Vector3.new(1.9, 0.8, 2.8),
-				look = Vector3.new(0, 0.4, -2.6),
-				fov = 60,
-				fovTo = 54,
-			},
-			-- Side view: the body shots.
-			{
-				time = 0.55,
-				from = Vector3.new(5.6, 0.3, -1.1),
-				to = Vector3.new(5.0, 0.2, -1.3),
-				look = Vector3.new(0, 0.1, -1.3),
-				fov = 55,
-				fovTo = 48,
-			},
-			-- Behind the victim, past their shoulder: the hooks to the face.
-			{
-				time = 1.1,
-				from = Vector3.new(-2.4, 1.0, -5.4),
-				to = Vector3.new(-2.0, 0.9, -5.0),
-				look = Vector3.new(0, 0.6, -1.0),
-				fov = 56,
-				fovTo = 50,
-			},
-			-- Behind his left side, low: he coils; past him, the fist going
-			-- into their right side under the ribs, closing in.
-			{
-				time = 1.98,
-				from = Vector3.new(-2.9, -0.3, 0.35),
-				to = Vector3.new(-2.65, -0.42, 0.1),
-				look = Vector3.new(-0.52, -0.95, -2.0),
-				fov = 50,
-				fovTo = 44,
-			},
-			-- Cut in, low under the fold: the arm in to the wrist, the blood
-			-- pushed out round it as it digs and turns.
-			{
-				time = 2.31,
-				from = Vector3.new(-2.3, -1.3, -1.15),
-				to = Vector3.new(-2.1, -1.2, -1.35),
-				look = "wound",
-				fov = 42,
-				fovTo = 38,
-			},
-			-- From his left, low: the arm pulls out, the liver in the fist.
-			{
-				time = 2.55,
-				from = Vector3.new(-4.1, -1.15, -0.6),
-				to = Vector3.new(-3.8, -1.0, -0.85),
-				look = "fist",
-				fov = 55,
-			},
-			-- In front of it: he holds it up and looks at it, squeezes it.
-			{
-				time = 2.85,
-				from = Vector3.new(-1.5, 1.15, -3.7),
-				to = Vector3.new(-1.45, 1.05, -3.4),
-				look = "fist",
-				fov = 45,
-				fovTo = 36,
-			},
-			-- Low, from his left: the liver drops from his hand to the floor.
-			{
-				time = 3.45,
-				from = Vector3.new(-3.7, -1.2, -3.3),
-				to = Vector3.new(-3.5, -1.35, -3.0),
-				look = Vector3.new(-1.4, -1.15, -1.2),
-				fov = 58,
-			},
-			-- Wide: the body on the floor, the liver by it.
-			{
-				time = 3.9,
-				from = Vector3.new(4.6, 1.0, -4.6),
-				to = Vector3.new(5.2, 1.4, -2.2),
-				look = Vector3.new(-0.3, -1.3, -1.9),
-				fov = 60,
-			},
-		},
+		-- (no shots: each fighter watches it from their own camera)
+		ownCamera = true,
+		shots = {},
 	},
 	ArmRip = {
 		id = "ArmRip",

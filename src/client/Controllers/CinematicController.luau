@@ -13,6 +13,10 @@
 --     moving target: the victim's head, the Boxer's fist). The player can't
 --     move during it (the server holds both characters); the normal camera
 --     comes back at the end.
+--   • a cinematic with `ownCamera` (the Boxer's) takes no camera: the two
+--     fighters keep their own, third or first person as they had it, only
+--     shaken (lighter) on the blows and held still through each hit-stop;
+--     in first person the attacker sees his own arms.
 --
 -- The server can cut it short before the killing blow (the attacker dies,
 -- someone leaves: Remotes.FinisherEnded with killed = false): everything
@@ -93,8 +97,9 @@ local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 		Land = { at = 0, strength = 4, punch = 6 },
 		Huff = { at = 0, strength = 0.6, punch = 0.5 },
 	},
-	-- (the Boxer's: every blow freezes the camera a beat - both clips hold the
-	-- same beat; the coil before the last one pulls the view out. The wrench
+	-- (the Boxer's, on the fighters' own cameras, lighter - OWN_SHAKE: every
+	-- blow freezes the jolt a beat - both clips hold the same beat; the coil
+	-- before the last one pulls the view out a little. The wrench
 	-- and the rip don't freeze: the hand keeps turning, and the victim goes
 	-- limp on the rip - the server ragdolls it there)
 	KnockoutCombo = {
@@ -114,6 +119,12 @@ local FLASH_BRIGHTNESS = 0.12
 local FLASH_CONTRAST = 0.4
 local FLASH_SATURATION = -0.25
 local FLASH_TINT = Color3.fromRGB(255, 150, 140)
+-- On the fighters' own cameras (Finishers ownCamera): how much of the shake
+-- and of the push-in (a normal camera is shaken lighter than a cutscene).
+local OWN_SHAKE = 0.45
+local OWN_PUNCH = 0.4
+-- (in first person: shown during it)
+local ARMS = { "Left Arm", "Right Arm" }
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
@@ -141,9 +152,9 @@ local VICTIM_CLIPS = {
 	"Bull_FinisherVictim",
 }
 local runs: { [Model]: Run } = {}
--- Which camera is ours now (a new cinematic takes the camera over; the old
--- one's end then does nothing).
-local cameraGeneration = 0
+-- What stops the camera of the cinematic we're in now (a new one ends it
+-- first, then takes the camera over).
+local currentStop: (() -> ())? = nil
 
 local function makeBars()
 	local gui = Instance.new("ScreenGui")
@@ -197,12 +208,68 @@ local function showOwnBody(character: Model)
 	end
 end
 
+-- The blows `t` seconds in: the camera's kick (degrees), its push-in (field
+-- of view), the screen's flash (0 to 1), and whether a hit-stop holds now.
+-- Each dies out fast, held full through its hit-stop.
+local function shakeAt(shakes: { Shake }, t: number): (number, number, number, boolean)
+	local kick, punch, flash, holding = 0, 0, 0, false
+	for _, shake in shakes do
+		local age = t - shake.at
+		local hold = shake.stop or 0
+		if age >= 0 and age < hold then
+			holding = true
+		end
+		if age >= 0 and age < hold + 0.6 then
+			local fade = if age < hold then 1 else math.exp(-(age - hold) * 7)
+			kick += shake.strength * fade
+			punch += shake.punch * fade
+			flash += (shake.flash or 0) * fade
+		end
+	end
+	return kick, punch, math.min(flash, 1), holding
+end
+
+-- A random jolt of the camera, up to `kick` degrees.
+local function jolt(random: Random, kick: number): CFrame
+	return CFrame.Angles(
+		math.rad(random:NextNumber(-kick, kick)),
+		math.rad(random:NextNumber(-kick, kick)),
+		math.rad(random:NextNumber(-kick, kick) * 0.5)
+	)
+end
+
+-- The screen's flinch on the hardest blows (only if this one has any).
+local function makeGrade(shakes: { Shake }): ColorCorrectionEffect?
+	for _, shake in shakes do
+		if shake.flash then
+			local effect = Instance.new("ColorCorrectionEffect")
+			effect.Name = "FinisherFlash"
+			effect.Parent = Lighting
+			return effect
+		end
+	end
+	return nil
+end
+
+-- The flinch at `flash` (0 to 1) after `last`; returns the new last
+-- (it is only written while it changes).
+local function showFlash(grade: ColorCorrectionEffect?, flash: number, last: number): number
+	if grade == nil or (flash <= 0.002 and last <= 0) then
+		return last
+	end
+	local amount = if flash > 0.002 then flash else 0
+	grade.Brightness = FLASH_BRIGHTNESS * amount
+	grade.Contrast = FLASH_CONTRAST * amount
+	grade.Saturation = FLASH_SATURATION * amount
+	grade.TintColor = WHITE:Lerp(FLASH_TINT, amount)
+	return amount
+end
+
 -- The camera of the cutscene, for the two fighters. Returns what stops it
 -- (and gives the normal camera back).
 local function playCamera(
 	cinematic: Finishers.Cinematic,
 	anchor: CFrame,
-	attacker: Model,
 	victim: Model,
 	shakes: { Shake }
 ): (() -> ())?
@@ -210,8 +277,9 @@ local function playCamera(
 	if camera == nil then
 		return nil
 	end
-	cameraGeneration += 1
-	local generation = cameraGeneration
+	if currentStop then
+		currentStop() -- (an older one)
+	end
 	camera.CameraType = Enum.CameraType.Scriptable
 	CameraController.holdRotation("cinematic", true)
 	showBars(true)
@@ -221,19 +289,9 @@ local function playCamera(
 	local lastIndex = 0
 	local wobble = CFrame.identity
 	local wasHolding = false
-	-- The screen's flinch on the hardest blows (only if this one has any).
-	local grade: ColorCorrectionEffect? = nil
-	for _, shake in shakes do
-		if shake.flash and grade == nil then
-			local effect = Instance.new("ColorCorrectionEffect")
-			effect.Name = "FinisherFlash"
-			effect.Parent = Lighting
-			grade = effect
-		end
-	end
+	local grade = makeGrade(shakes)
 	local lastFlash = 0
 
-	RunService:UnbindFromRenderStep("FinisherCamera") -- (an older one)
 	RunService:BindToRenderStep(
 		"FinisherCamera",
 		Enum.RenderPriority.Camera.Value + 10,
@@ -260,9 +318,10 @@ local function playCamera(
 				lastLook = nil -- (a cut: the new shot frames its target at once)
 			end
 			local ends = if shots[index + 1] then shots[index + 1].time else cinematic.duration
+			local kick, punch, flash, holding = shakeAt(shakes, t)
 			-- Hit-stops: the shot's motion holds still while one runs (and
 			-- still ends where it should: the held time is taken off its length).
-			local frozen, held, holding = 0, 0, false
+			local frozen, held = 0, 0
 			for _, shake in shakes do
 				local length = shake.stop
 				if length then
@@ -275,34 +334,18 @@ local function playCamera(
 					if upTo > from then
 						held += upTo - from
 					end
-					if t >= shake.at and t < shake.at + length then
-						holding = true
-					end
 				end
 			end
 			local alpha = smooth((t - shot.time - frozen) / math.max(ends - shot.time - held, 1e-3))
 			local position = anchor * shot.from:Lerp(shot.to, alpha)
 			local look: Vector3
-			if
-				shot.look == "victim"
-				or shot.look == "heart"
-				or shot.look == "wound"
-				or shot.look == "fist"
-			then
+			if shot.look == "victim" or shot.look == "heart" then
 				local target = anchor.Position
-				if shot.look == "heart" or shot.look == "wound" then
-					-- (the Sentinel's bore, on the front of the chest; where
-					-- the Boxer's hand goes in)
+				if shot.look == "heart" then
+					-- (the Sentinel's bore, on the front of the chest)
 					local torso = victim:FindFirstChild("Torso")
 					if torso and torso:IsA("BasePart") then
-						target = torso.CFrame
-							* (if shot.look == "heart" then Gash.HEART else Finishers.LIVER_WOUND)
-					end
-				elseif shot.look == "fist" then
-					-- (the liver in the Boxer's left fist)
-					local arm = attacker:FindFirstChild("Left Arm")
-					if arm and arm:IsA("BasePart") then
-						target = (arm.CFrame * Finishers.LIVER_GRIP).Position
+						target = torso.CFrame * Gash.HEART
 					end
 				else
 					local head = victim:FindFirstChild("Head")
@@ -321,41 +364,16 @@ local function playCamera(
 				look = anchor * (shot.look :: Vector3)
 				lastLook = nil
 			end
-			-- Shakes and push-ins from the blows, dying out (held full
-			-- through a hit-stop).
-			local kick, punch, flash = 0, 0, 0
-			for _, shake in shakes do
-				local age = t - shake.at
-				local hold = shake.stop or 0
-				if age >= 0 and age < hold + 0.6 then
-					local fade = if age < hold then 1 else math.exp(-(age - hold) * 7)
-					kick += shake.strength * fade
-					punch += shake.punch * fade
-					flash += (shake.flash or 0) * fade
-				end
-			end
+			-- Shakes and push-ins from the blows (frozen on a hit-stop: its
+			-- full jolt, taken once and held).
 			if not holding or not wasHolding then
-				-- (frozen on the blow: its full jolt, taken once and held)
-				wobble = CFrame.Angles(
-					math.rad(random:NextNumber(-kick, kick)),
-					math.rad(random:NextNumber(-kick, kick)),
-					math.rad(random:NextNumber(-kick, kick) * 0.5)
-				)
+				wobble = jolt(random, kick)
 			end
 			wasHolding = holding
 			camera.CFrame = CFrame.lookAt(position, look) * wobble
 			local fov = shot.fov + ((shot.fovTo or shot.fov) - shot.fov) * alpha
 			camera.FieldOfView = math.clamp(fov - punch, 20, 100)
-			if grade then
-				flash = math.min(flash, 1)
-				if flash > 0.002 or lastFlash > 0 then
-					lastFlash = if flash > 0.002 then flash else 0
-					grade.Brightness = FLASH_BRIGHTNESS * lastFlash
-					grade.Contrast = FLASH_CONTRAST * lastFlash
-					grade.Saturation = FLASH_SATURATION * lastFlash
-					grade.TintColor = WHITE:Lerp(FLASH_TINT, lastFlash)
-				end
-			end
+			lastFlash = showFlash(grade, flash, lastFlash)
 		end
 	)
 
@@ -365,11 +383,11 @@ local function playCamera(
 			return
 		end
 		stopped = true
+		if currentStop == stop then
+			currentStop = nil
+		end
 		if grade then
 			grade:Destroy()
-		end
-		if cameraGeneration ~= generation then
-			return -- (a newer cutscene has the camera)
 		end
 		RunService:UnbindFromRenderStep("FinisherCamera")
 		showBars(false)
@@ -377,6 +395,139 @@ local function playCamera(
 		camera.CameraType = Enum.CameraType.Custom
 		CameraController.holdRotation("cinematic", false)
 	end
+	currentStop = stop
+	task.delay(cinematic.duration, stop)
+	return stop
+end
+
+-- In first person (his whole body hidden), his arms shown: the punches, the
+-- liver in his fist. Not an arm the camera is in (it would fill the
+-- screen). Leaves them as they are in third person.
+local function showArms(character: Model, cameraAt: Vector3): boolean
+	local head = character:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") or head.LocalTransparencyModifier < 0.99 then
+		return false
+	end
+	for _, name in ARMS do
+		local arm = character:FindFirstChild(name)
+		if arm and arm:IsA("BasePart") then
+			local at = arm.CFrame:PointToObjectSpace(cameraAt)
+			local half = arm.Size / 2 + Vector3.new(0.35, 0.35, 0.35)
+			local inside = math.abs(at.X) < half.X
+				and math.abs(at.Y) < half.Y
+				and math.abs(at.Z) < half.Z
+			arm.LocalTransparencyModifier = if inside then 1 else 0
+		end
+	end
+	return true
+end
+
+-- Hidden again like the rest of the body (Roblox only sets it again when
+-- the zoom changes).
+local function hideArms(character: Model)
+	local head = character:FindFirstChild("Head")
+	if head == nil or not head:IsA("BasePart") then
+		return
+	end
+	for _, name in ARMS do
+		local arm = character:FindFirstChild(name)
+		if arm and arm:IsA("BasePart") then
+			arm.LocalTransparencyModifier = head.LocalTransparencyModifier
+		end
+	end
+end
+
+-- A cinematic that leaves the fighters their own camera (Finishers
+-- ownCamera): no shots, no bars, the normal camera (third or first person,
+-- turning with the mouse) only shaken on the blows, lighter, the jolt held
+-- through each hit-stop, a light push-in and the screen's flinch. The jolt
+-- is put on after Roblox's camera and taken off before it runs again (it
+-- starts from where the camera looks: it would drift). Returns what stops it.
+local function playOwnCamera(
+	cinematic: Finishers.Cinematic,
+	attacker: Model,
+	shakes: { Shake }
+): (() -> ())?
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return nil
+	end
+	if currentStop then
+		currentStop() -- (an older one)
+	end
+	local character = player.Character
+	local body = if character == attacker then character else nil
+	CameraController.holdRotation("cinematic", true) -- (held still by the server)
+	local start = os.clock()
+	local random = Random.new()
+	local wobble = CFrame.identity
+	local applied = CFrame.identity -- (the jolt on the camera now)
+	local wasHolding = false
+	local pushed = false -- (our push-in on the field of view)
+	local armsShown = false
+	local grade = makeGrade(shakes)
+	local lastFlash = 0
+
+	local function takeOff()
+		if applied ~= CFrame.identity then
+			if camera.CameraType ~= Enum.CameraType.Scriptable then
+				camera.CFrame *= applied:Inverse()
+			end
+			applied = CFrame.identity
+		end
+	end
+	RunService:BindToRenderStep("FinisherShakeOff", Enum.RenderPriority.Camera.Value - 1, takeOff)
+	RunService:BindToRenderStep("FinisherShake", Enum.RenderPriority.Camera.Value + 10, function()
+		local t = os.clock() - start
+		if t >= cinematic.duration then
+			return
+		end
+		local kick, punch, flash, holding = shakeAt(shakes, t)
+		if not holding or not wasHolding then
+			wobble = jolt(random, kick * OWN_SHAKE)
+		end
+		wasHolding = holding
+		if camera.CameraType ~= Enum.CameraType.Scriptable then
+			camera.CFrame *= wobble
+			applied = wobble
+		end
+		if math.abs(punch) > 0.02 then
+			camera.FieldOfView = normalFov() - punch * OWN_PUNCH
+			pushed = true
+		elseif pushed then
+			camera.FieldOfView = normalFov()
+			pushed = false
+		end
+		lastFlash = showFlash(grade, flash, lastFlash)
+		if body and body.Parent then
+			armsShown = showArms(body, camera.CFrame.Position) or armsShown
+		end
+	end)
+
+	local stopped = false
+	local function stop()
+		if stopped then
+			return
+		end
+		stopped = true
+		if currentStop == stop then
+			currentStop = nil
+		end
+		RunService:UnbindFromRenderStep("FinisherShake")
+		RunService:UnbindFromRenderStep("FinisherShakeOff")
+		takeOff()
+		if pushed then
+			camera.FieldOfView = normalFov()
+		end
+		if grade then
+			grade:Destroy()
+		end
+		if body and armsShown then
+			hideArms(body)
+		end
+		CameraController.holdRotation("cinematic", false)
+	end
+	currentStop = stop
 	task.delay(cinematic.duration, stop)
 	return stop
 end
@@ -570,7 +721,9 @@ local function onStarted(
 	end
 	local character = player.Character
 	if character ~= nil and (character == attacker or character == victim) then
-		run.stopCamera = playCamera(cinematic, anchor, attacker, victim, shakes)
+		run.stopCamera = if cinematic.ownCamera
+			then playOwnCamera(cinematic, attacker, shakes)
+			else playCamera(cinematic, anchor, victim, shakes)
 		if character == attacker then
 			CombatController.holdAttacks(cinematic.duration)
 		end
