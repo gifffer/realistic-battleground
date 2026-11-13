@@ -872,7 +872,7 @@ function Ambience.setWeather(kind: string, seconds: number)
 	applyWet(seconds)
 end
 
--- POWER CUT, step 1: every powered light toggles 3 to 6 times at random for `seconds`,
+-- POWER CUT, step 1: every powered light toggles at random (3 to 6 times per 2 s) for `seconds`,
 -- then the power goes (step 2). Yields.
 function Ambience.powerFlicker(seconds: number)
 	local parts: { { part: BasePart, tag: string } } = {}
@@ -886,7 +886,9 @@ function Ambience.powerFlicker(seconds: number)
 	for _, entry in parts do
 		task.spawn(function()
 			local deadline = os.clock() + seconds
-			for count = 1, random:NextInteger(3, 6) * 2 do
+			-- (about 3 to 6 stutters every 2 s: a longer warning flickers more)
+			local stutters = math.max(3, math.round(random:NextInteger(3, 6) * seconds / 2))
+			for count = 1, stutters * 2 do
 				if os.clock() > deadline then
 					break
 				end

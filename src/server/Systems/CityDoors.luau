@@ -44,13 +44,25 @@
 --   • the parts are moved at most 30 times a second (each move replicates to every player)
 --     and not at all once the doors are at rest (closed, or held open).
 --
--- No sound: Shared/Sounds has no door sound yet (add one and play it in setOpen / on a flap).
+-- SOUNDS (Shared/Sounds: DoorGlassOpen / DoorGlassClose / DoorSaloonOpen / DoorSaloonClose):
+--   one sound per DOORWAY (not one per leaf), in 3D at the doorway's centre:
+--   • glass doors: when they start to open, and when they start to close;
+--   • saloon doors: "open" when someone pushes them from (almost) closed, "close" the first
+--     time they swing back through the middle (the slap of the leaves meeting).
+--   At most one of each per doorway every SOUND_GAP seconds (no machine-gun doors when a
+--   player dances in the doorway). The Sound is made HERE, on the server, in an invisible
+--   Attachment at the doorway: a sound the server plays replicates to every player, who hears
+--   it from the right place (louder when close).
 -- Done on the server: anchored parts moved by the server replicate to every player.
 
 local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+
+local Sounds = require(ReplicatedStorage.Shared.Sounds)
 
 local CityDoors = {}
 
@@ -72,6 +84,11 @@ local SALOON_PUSH = 260 -- degrees per second given at once when pushed open (a 
 local SALOON_SEND_EVERY = 1 / 30 -- seconds between two moves of the parts
 local SALOON_REST_ANGLE = 0.4 -- degrees: below this (and slow), the doors are at rest
 local SALOON_REST_SPEED = 3 -- degrees per second
+
+-- Door sounds.
+local SOUND_GAP = 0.6 -- seconds: at most one "open" (or one "close") per doorway in this time
+local SOUND_MIN_DISTANCE = 8 -- studs: full volume this close
+local SOUND_MAX_DISTANCE = 70 -- studs: not heard at all beyond
 
 type Leaf = {
 	part: BasePart,
@@ -98,6 +115,10 @@ type Door = {
 	target: number,
 	awake: boolean, -- moving: updated every frame
 	sinceSend: number, -- seconds since the parts were last moved
+	closeSoundPending: boolean, -- saloon: play "close" when the leaves next pass the middle
+	-- sounds
+	soundAnchor: Attachment?, -- the invisible point the sounds play from (made on first use)
+	lastSound: { [string]: number }, -- slot name → os.clock() of its last play
 }
 
 local doors: { [string]: Door } = {}
@@ -150,6 +171,9 @@ local function addPart(instance: Instance)
 			target = 0,
 			awake = false,
 			sinceSend = 0,
+			closeSoundPending = false,
+			soundAnchor = nil,
+			lastSound = {},
 		}
 		doors[group] = door
 	end
@@ -221,6 +245,51 @@ local function isSomeoneNear(door: Door, positions: { Vector3 }): boolean
 end
 
 ------------------------------------------------------------------------------
+-- Sounds
+------------------------------------------------------------------------------
+
+local soundRandom = Random.new()
+
+-- Plays the sound `slot` (a name in Shared/Sounds) at the doorway, unless it already played
+-- there less than SOUND_GAP seconds ago, or it has no id.
+local function playDoorSound(door: Door, slot: string)
+	local info = Sounds[slot]
+	if info == nil or #info.ids == 0 then
+		return
+	end
+	local now = os.clock()
+	local last = door.lastSound[slot]
+	if last and now - last < SOUND_GAP then
+		return
+	end
+	door.lastSound[slot] = now
+	-- One invisible attachment per doorway, in the Terrain (it never moves with the leaves).
+	local anchor = door.soundAnchor
+	if anchor == nil or anchor.Parent == nil then
+		local newAnchor = Instance.new("Attachment")
+		newAnchor.Name = "DoorSound"
+		-- (the Terrain sits at the world's origin: its Position IS the world position)
+		newAnchor.Position = door.centre
+		newAnchor.Parent = workspace.Terrain
+		door.soundAnchor = newAnchor
+		anchor = newAnchor
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = slot
+	sound.SoundId = `rbxassetid://{info.ids[soundRandom:NextInteger(1, #info.ids)]}`
+	sound.Volume = info.volume
+	sound.PlaybackSpeed = info.pitch
+		* (1 + soundRandom:NextNumber(-info.pitchVariation, info.pitchVariation))
+	sound.RollOffMode = Enum.RollOffMode.InverseTapered
+	sound.RollOffMinDistance = SOUND_MIN_DISTANCE
+	sound.RollOffMaxDistance = SOUND_MAX_DISTANCE
+	sound.Parent = anchor
+	sound:Play()
+	-- (a door sound is short: removed after 4 s whatever happens)
+	Debris:AddItem(sound, 4)
+end
+
+------------------------------------------------------------------------------
 -- Glass doors
 ------------------------------------------------------------------------------
 
@@ -229,6 +298,7 @@ local function setOpen(door: Door, open: boolean)
 	door.isOpen = open
 	door.passable = false
 	door.version += 1
+	playDoorSound(door, if open then "DoorGlassOpen" else "DoorGlassClose")
 	local version = door.version
 	for _, leaf in door.leaves do
 		if open then
@@ -344,12 +414,15 @@ local function checkSaloons()
 						door.speed = -door.speed
 					end
 					door.speed = math.max(door.speed, SALOON_PUSH)
+					playDoorSound(door, "DoorSaloonOpen")
 				end
+				door.closeSoundPending = false
 				door.target = SALOON_OPEN
 				wake(door)
 			end
 		elseif door.target ~= 0 then
 			door.target = 0 -- nobody: let them swing back
+			door.closeSoundPending = true -- the slap when they pass the middle
 			wake(door)
 		end
 	end
@@ -361,6 +434,7 @@ local function stepSaloons(dt: number)
 	local steps = math.clamp(math.ceil(dt / (1 / 120)), 1, 8)
 	local h = dt / steps
 	for door in awakeSaloons do
+		local before = door.angle
 		for _ = 1, steps do
 			local accel = -SALOON_STIFFNESS * (door.angle - door.target)
 				- SALOON_DAMPING * door.speed
@@ -375,11 +449,21 @@ local function stepSaloons(dt: number)
 				door.speed = math.abs(door.speed) * 0.3
 			end
 		end
+		-- swinging back: the first time the leaves pass the middle, they slap ("close")
+		if door.closeSoundPending and door.target == 0 and (before > 0) ~= (door.angle > 0) then
+			door.closeSoundPending = false
+			playDoorSound(door, "DoorSaloonClose")
+		end
 		-- at rest (closed, or held open by someone standing in the doorway): stop updating
 		-- until the target changes (checkSaloons wakes it up)
 		local resting = math.abs(door.angle - door.target) < SALOON_REST_ANGLE
 			and math.abs(door.speed) < SALOON_REST_SPEED
 		if resting then
+			if door.closeSoundPending and door.target == 0 then
+				-- (settled without passing the middle: still the "close")
+				door.closeSoundPending = false
+				playDoorSound(door, "DoorSaloonClose")
+			end
 			door.angle = door.target
 			door.speed = 0
 			door.awake = false

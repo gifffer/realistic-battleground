@@ -455,6 +455,23 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | P1 | Entrer dans le parc | Petit texte discret en haut « SAFE ZONE — No fighting in the park » qui disparaît après ~3 s. |
 | P2 | Frapper / move / dash-attaque / finisher dans le parc, ou frapper quelqu'un dans le parc depuis l'extérieur | Rien : pas d'animation de coup (côté client), le serveur refuse tout, personne n'est touché ni achevé dans le parc. Le dash et le blocage marchent toujours. |
 | A1 | Regarder les PNJ de près | Cheveux en couches (frange, chignon, cheveux longs, rasé…), casquettes avec visière et bouton, bonnets avec revers, casquettes plates, casques audio, lunettes avec monture et verres (parfois solaires), boucles d'oreilles, montre, collier. Barman : tablier avec bretelles, poche (stylo, décapsuleur) et serviette sur l'épaule. Vendeurs : badge sur cordon à la couleur de la boutique. Rien ne flotte quand ils bougent. |
+#### v7 : sons, train, météo plus immersive
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| D1 | Mourir (train, chute, finisher, `Health = 0`) | **Plus de « oof »** de Roblox. Sous le train : on entend toujours le **fracas** et le **cri**. |
+| D2 | Attendre deux trains de suite (hors Studio) | Entre la fin d'un passage et l'alerte du suivant : **95 à 155 s** (avant 70 à 130). En Studio ça reste court (35 s). |
+| D3 | S'approcher d'une porte vitrée de boutique, puis s'éloigner | Un son d'**ouverture** (en 3D, depuis la porte) quand elle s'ouvre, un son de **fermeture** quand elle se referme. Un seul son par porte double (pas deux). Faire des allers-retours rapides : pas de son en rafale. |
+| D4 | Passer les portes de saloon de DUFFY'S | Son d'ouverture quand on les pousse ; quand on s'éloigne, son de fermeture au moment où les battants **se recroisent au milieu** (une seule fois, pas à chaque battement). |
+| R1 | Pluie, dehors à découvert (`WeatherForce = "Rain"`) | **Rarement** (toutes les ~6–12 s), 1–2 petites **gouttes sur l'écran** sur les côtés ou en haut (jamais au centre), elles glissent un peu vers le bas et sèchent en 1–3 s. Un peu plus souvent en orage. **Aucune** sous un auvent, sous le viaduc, dans le bar / une boutique, dans le parc, en duel. |
+| R2 | Pluie, regarder une flaque proche | Petits **cercles** qui s'ouvrent et disparaissent à la surface. |
+| R3 | Pluie, rester dehors en 3ᵉ personne | Petites éclaboussures sur la **tête et les épaules** de ton perso. En 1ʳᵉ personne : pas d'éclaboussures devant l'objectif. |
+| R4 | Pluie / orage, regarder la pluie quelques secondes | Les gouttes tombent **penchées** (un peu sous la pluie, beaucoup en orage) et de temps en temps une **rafale** les penche plus fort 1–3 s. |
+| R5 | Orage : regarder les éclairs | L'éclair tombe dans une direction au hasard (souvent devant toi), le flash est **bleuté** et éclaire tout l'écran. Environ 1 sur 5 tombe **près** : flash plus fort, la rue s'éclaire un instant, la caméra **tremble** un peu, et le tonnerre (quand il aura un son) claque presque tout de suite. |
+| F1 | Brouillard (`WeatherForce = "Fog"`) | Une **nappe basse** qui dérive lentement au ras du sol autour de toi (pas dans le bar / les boutiques ni dans le parc), un **halo** doux autour des lampadaires allumés, la musique et la pluie de la ville un peu **étouffées**. Tout revient à la normale à la fin. |
+| F2 | Coupure de courant (de nuit : `WeatherForce = "PowerCut"`) | Les lumières **grésillent / clignotent ~3,5 s**, puis le transformateur de la **sous-station** (nord du Lot 9) **saute** : gerbe d'**étincelles**, fumée, flash bleu-blanc (son `TransformerBlow` vide pour l'instant). Pendant le noir, les lumières rouges de secours **pulsent** doucement. Le retour en vague marche comme avant. |
+| F3 | Être dans le parc pendant pluie / brouillard / coupure | Rien de tout ça : toujours ensoleillé, pas de gouttes, pas de brume, pas d'étincelles. |
+
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
 
 ## Kit Bouncer / Videur (`claude/bouncer-kit`)

@@ -399,7 +399,9 @@ return table.freeze({
 
 		-- POWER CUT (night only): the lights flicker, go dark, then come back as a wave
 		-- from the substation, the sodium lamps warming up from red to orange.
-		POWER_FLICKER = 2,
+		-- (3.5 s of stuttering lamps before the dark: the grid struggling, then the
+		-- transformer at the substation blows in a burst of sparks, see WeatherFxController)
+		POWER_FLICKER = 3.5,
 		POWER_DARK = 40,
 		POWER_WARMUP = 6,
 		-- Not if the night ends in less than this (the dawn would come in the dark).
@@ -431,8 +433,9 @@ return table.freeze({
 	Train = table.freeze({
 		-- The first train comes this long after the city is built.
 		FIRST_PASS = NumberRange.new(40, 70),
-		-- Time between the end of a pass and the start of the next one.
-		INTERVAL = NumberRange.new(70, 130),
+		-- Time between the end of a pass and the start of the next one (+25 s since v7: the
+		-- train came a bit too often).
+		INTERVAL = NumberRange.new(95, 155),
 		SPEED = 70, -- studs per second (crossing the ~250-stud viaduct takes about 4 s)
 		-- Total length of the train: locomotive + 2 cars (must match the model the client
 		-- builds in TrainController; it is published to the clients as TrainLength).

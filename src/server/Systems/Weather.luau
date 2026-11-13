@@ -7,7 +7,7 @@
 --              a louder rain sound, and lightning every 9 to 24 s (a bolt in the sky, the screen
 --              flashes, the thunder rolls).
 --   FOG        2 to 3 min of dense haze: about 90 studs of visibility, lamps turn to orbs.
---   POWER CUT  night only, at most once a night: every lamp, neon and window flickers for 2 s,
+--   POWER CUT  night only, at most once a night: every lamp, neon and window flickers for 3.5 s,
 --              then the district goes dark for 40 s (only the red exit lights and the things
 --              on their own power stay on), then the power comes back as a wave from the
 --              substation, the street lamps warming up from red to orange.

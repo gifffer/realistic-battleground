@@ -6,7 +6,7 @@
 --
 -- The schedule:
 --   • the first pass comes Config.Train.FIRST_PASS seconds after the city is built, then
---     one every INTERVAL seconds (random, 70 to 130 s), alternating directions;
+--     one every INTERVAL seconds (random, 95 to 155 s), alternating directions;
 --   • WARN_TIME (5 s) before the locomotive comes out of its tunnel, the signals blink red,
 --     the horn sounds and the ground rumbles (clients);
 --   • the train crosses at SPEED studs per second and disappears into the other tunnel.

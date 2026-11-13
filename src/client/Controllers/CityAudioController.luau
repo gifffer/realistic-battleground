@@ -27,6 +27,9 @@
 --        • Far from a place (out of earshot) its speakers are stopped: nothing plays for
 --          nothing.
 --
+-- FOG: while it lasts, the outdoor bed and the rain are slightly MUFFLED (an equalizer cuts
+-- some highs, like sound swallowed by the damp air), following WeatherController.fogIntensity().
+--
 -- The MUSIC setting (Settings window, SOUND) turns the music (layers 1 and 3) off; the rain,
 -- the train and the fights are not music and are never cut.
 --
@@ -81,6 +84,10 @@ local INDOOR_BED = 0.3
 local INDOOR_RAIN = 0.3
 -- Rain under a roof outside (an awning, the viaduct).
 local COVERED_RAIN = 0.6
+
+-- Fog: equalizer gains (dB) at full fog on the outdoor bed and the rain.
+local FOG_HIGH = -12
+local FOG_MID = -3
 
 -- How fast the volumes follow (seconds to go all the way).
 local FADE_TIME = 1.2
@@ -162,8 +169,24 @@ local function bed(slotName: string): Sound?
 	sound.Looped = true
 	sound.Volume = 0
 	sound.PlaybackSpeed = info.pitch
+	-- (an equalizer, flat by default: the fog muffles it)
+	local eq = Instance.new("EqualizerSoundEffect")
+	eq.Name = "Fog"
+	eq.HighGain = 0
+	eq.MidGain = 0
+	eq.LowGain = 0
+	eq.Parent = sound
 	sound.Parent = SoundService
 	return sound
+end
+
+-- The fog's muffling on one 2D bed (0 = clear → 1 = full fog).
+local function setFogMuffle(sound: Sound?, fog: number)
+	local eq = if sound then sound:FindFirstChild("Fog") else nil
+	if eq and eq:IsA("EqualizerSoundEffect") then
+		eq.HighGain = FOG_HIGH * fog
+		eq.MidGain = FOG_MID * fog
+	end
 end
 
 -- Plays `sound` at `volume`, and stops it when it is silent (saves a voice).
@@ -444,6 +467,12 @@ local function update(deltaTime: number)
 			rainSlot.volume * intensity * shelter * (1 - park) * (if inDuel then 0 else 1)
 		)
 	end
+
+	-- the fog muffles the outdoor bed and the rain (not in the park: always sunny there)
+	local fog = WeatherController.fogIntensity() * (1 - park)
+	setFogMuffle(dayBed, fog)
+	setFogMuffle(nightBed, fog)
+	setFogMuffle(rainLoop, fog)
 
 	-- 3. the places
 	if now >= nextSync then

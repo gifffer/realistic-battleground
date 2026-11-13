@@ -114,8 +114,8 @@ local City = {}
 
 -- How many parts we create before letting the server breathe.
 local PARTS_PER_CHUNK = 300
--- Above this number of parts we warn (v6: the target is about 6100, the hard cap 6200).
-local PARTS_WARNING = 6200
+-- Above this number of parts we warn (v8: the generator's hard cap is 7000 parts).
+local PARTS_WARNING = 7000
 
 -- v6: the SpezCola vending machines (see SPEZCOLA MACHINES at the top of this file).
 local SPEZCOLA_PREFIX = "SpezColaMachine_"

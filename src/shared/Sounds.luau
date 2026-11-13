@@ -338,6 +338,20 @@ local sounds: { [string]: SoundInfo } = {
 	-- The victim screaming in pain, on their body, right after the hit (before they respawn).
 	TrainScream = { ids = { 91948204995130 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
 
+	-- Doors (Server/Systems/CityDoors) ----------------------------------------------------
+	-- In 3D at the doorway, once per doorway (not per leaf). Empty = silent doors.
+	-- The shops' automatic glass doors sliding / swinging open, and closing again.
+	DoorGlassOpen = { ids = { 70931033029641 }, volume = 0.6, pitch = 1, pitchVariation = 0.04 },
+	DoorGlassClose = { ids = { 87017895257466 }, volume = 0.6, pitch = 1, pitchVariation = 0.04 },
+	-- Duffy's swinging saloon doors: pushed open, and flapping back shut.
+	DoorSaloonOpen = { ids = { 114086045710843 }, volume = 0.7, pitch = 1, pitchVariation = 0.06 },
+	DoorSaloonClose = { ids = { 102044262944412 }, volume = 0.6, pitch = 1, pitchVariation = 0.06 },
+
+	-- Power cut (Client/Controllers/WeatherFxController) ----------------------------------
+	-- In 3D at the substation when the power goes: a transformer blowing (a sharp bang + an
+	-- electric crackle). Empty = only the sparks and the flash.
+	TransformerBlow = { ids = {}, volume = 1, pitch = 1, pitchVariation = 0.05 },
+
 	-- SpezCola machines (the free cola machines of the city) -------------------------------
 	-- The machine humming (LOOP, in 3D at the machine).
 	SpezColaHum = {
