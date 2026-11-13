@@ -51,6 +51,24 @@ local function listen()
 	for _, instance in CollectionService:GetTagged(CityZones.PARK_TAG) do
 		addBox(instance)
 	end
+	-- The copies in ReplicatedStorage (see CityZones: a client may not have the workspace
+	-- boxes when the workspace is streamed). They arrive when the city is built.
+	task.spawn(function()
+		local mirror = ReplicatedStorage:WaitForChild(CityZones.MIRROR_NAME, math.huge)
+		if mirror == nil then
+			return
+		end
+		local function addCopy(child: Instance)
+			if child:GetAttribute("ZoneTag") == CityZones.PARK_TAG then
+				addBox(child)
+			end
+		end
+		mirror.ChildAdded:Connect(addCopy)
+		mirror.ChildRemoved:Connect(removeBox)
+		for _, child in mirror:GetChildren() do
+			addCopy(child)
+		end
+	end)
 end
 
 function SafeZone.contains(position: Vector3): boolean

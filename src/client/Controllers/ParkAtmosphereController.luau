@@ -21,8 +21,25 @@
 --   ParkAtmosphereController.blend()        0 (city look) → 1 (full park look)
 --   ParkAtmosphereController.inPark()       true while your camera is in the park
 --   ParkAtmosphereController.serverClockTime()  the server's Lighting.ClockTime (not ours)
+--
+-- "Am I in the park?": your CAMERA or your CHARACTER is inside a ParkZone box (either one:
+-- near the park's edge the camera can swing out of the box behind you). The boxes are read
+-- with Shared/Util/CityZones, which also reads the copies the city puts in ReplicatedStorage
+-- (a streamed workspace may not have the boxes on your computer).
+--
+-- Debug (Studio > Players > you > Attributes): InPark (true / false), ParkBlend (0 .. 1) and
+-- ParkBoxes (how many park boxes your computer knows; 0 = the park can't be found).
+--
+-- v6 fixes (the park was at night in a playtest):
+--   • the memory of the server's values is a NORMAL table now. It was a weak-keyed table:
+--     Roblox may drop an Instance key from such a table while the object still exists (its
+--     Lua handle is collected and remade), then the next frame took OUR park value as "the
+--     server's value", and leaving the park "restored" the park look;
+--   • the boxes are also read from ReplicatedStorage (StreamingEnabled, see above);
+--   • the character's position counts too, not only the camera's.
 
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -53,7 +70,7 @@ local LAYERS: { Layer } = {
 		end,
 		props = {
 			ClockTime = 14,
-			Brightness = 2.6,
+			Brightness = 2.5,
 			Ambient = rgb(108, 104, 98),
 			OutdoorAmbient = rgb(150, 146, 138),
 			ExposureCompensation = 0.05,
@@ -108,8 +125,10 @@ local LAYERS: { Layer } = {
 }
 
 -- For each object: the server's value of each property, and what we wrote last.
+-- (A normal table, NOT weak-keyed: see the v6 fixes in the header. It is emptied by restore()
+-- and holds at most the 6 objects of LAYERS.)
 type Memory = { server: { [string]: any }, written: { [string]: any } }
-local memory: { [Instance]: Memory } = setmetatable({}, { __mode = "k" }) :: any
+local memory: { [Instance]: Memory } = {}
 
 local blendValue = 0
 local cameraInPark = false
@@ -164,12 +183,44 @@ local function restore()
 	table.clear(memory)
 end
 
+local player = Players.LocalPlayer
+local warnedNoBoxes = false
+
+-- Is your camera or your character in the park? (also updates the debug attributes)
+local function checkInPark(): boolean
+	local boxes = CityZones.boxes(CityZones.PARK_TAG)
+	local inside = false
+	local camera = workspace.CurrentCamera
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	for _, box in boxes do
+		if
+			(camera ~= nil and CityZones.insideBox(box, camera.CFrame.Position))
+			or (root ~= nil and root:IsA("BasePart") and CityZones.insideBox(box, root.Position))
+		then
+			inside = true
+			break
+		end
+	end
+	player:SetAttribute("InPark", inside)
+	player:SetAttribute("ParkBoxes", #boxes)
+	-- A built city without any park box: say it once (the park would never be sunny).
+	if #boxes == 0 and not warnedNoBoxes then
+		local city = workspace:FindFirstChild("City")
+		if city and city:GetAttribute("Built") == true then
+			warnedNoBoxes = true
+			warn("[ParkAtmosphere] the city is built but no ParkZone box was found")
+		end
+	end
+	return inside
+end
+
 local function update(deltaTime: number)
 	local now = os.clock()
 	if now >= nextCheck then
 		nextCheck = now + CHECK_EVERY
-		local camera = workspace.CurrentCamera
-		cameraInPark = camera ~= nil and CityZones.inPark(camera.CFrame.Position)
+		cameraInPark = checkInPark()
+		player:SetAttribute("ParkBlend", math.round(blendValue * 100) / 100)
 	end
 	local target = if cameraInPark then 1 else 0
 	if blendValue ~= target then
@@ -202,6 +253,7 @@ function ParkAtmosphereController.inPark(): boolean
 	return cameraInPark
 end
 
+-- (true while your camera or your character is in the park)
 -- The server's ClockTime, even while the park override has changed ours.
 function ParkAtmosphereController.serverClockTime(): number
 	local mem = memory[Lighting]

@@ -211,6 +211,34 @@ local function addBlock(
 	return part
 end
 
+-- A flat strip lying on the FRONT of a body part (a strap, a chain), going from point `a`
+-- to point `b` (both in the body part's space, same Z): its length runs along a -> b,
+-- `width` across, `depth` front-to-back. (Angles on Z turn the strip's Y axis onto a -> b:
+-- turning by φ sends Y to (-sin φ, cos φ), so φ = atan2(-dx, dy).)
+local function addStrip(
+	model: Model,
+	body: BasePart,
+	name: string,
+	a: Vector3,
+	b: Vector3,
+	width: number,
+	depth: number,
+	color: Color3,
+	material: Enum.Material?
+): BasePart
+	local delta = b - a
+	local length = Vector3.new(delta.X, delta.Y, 0).Magnitude
+	return addBlock(
+		model,
+		body,
+		name,
+		Vector3.new(width, length, depth),
+		CFrame.new((a + b) / 2) * CFrame.Angles(0, 0, math.atan2(-delta.X, delta.Y)),
+		color,
+		material
+	)
+end
+
 -- Block hair in layers. The R6 head looks about 1.25 studs wide, tall and deep: its top is
 -- 0.62 above its centre, its face 0.62 in front (-Z), its sides 0.62 left / right.
 -- `covered` = a hat is on (only what shows under it: the back and the sides).
@@ -271,7 +299,8 @@ local function addHair(model: Model, head: BasePart, look: Look, covered: boolea
 				head,
 				"FringeTip",
 				Vector3.new(0.46, 0.14, 0.12),
-				CFrame.new(-0.32, 0.29, -0.63),
+				-- (its front 0.005 prouder than the fringe; it ends above the glasses' top bar)
+				CFrame.new(-0.32, 0.345, -0.635),
 				color,
 				fabric
 			)
@@ -300,8 +329,9 @@ local function addHair(model: Model, head: BasePart, look: Look, covered: boolea
 				model,
 				head,
 				"BunTie",
-				Vector3.new(0.46, 0.08, 0.4),
-				CFrame.new(0, 0.5, 0.55),
+				-- (a hair bigger than the bun all round: no two faces in the same plane)
+				Vector3.new(0.46, 0.08, 0.42),
+				CFrame.new(0, 0.5, 0.56),
 				INK
 			)
 		end
@@ -316,7 +346,7 @@ local function addHair(model: Model, head: BasePart, look: Look, covered: boolea
 		model,
 		head,
 		"HairBack",
-		Vector3.new(1.3, backHeight, 0.18),
+		Vector3.new(1.3, backHeight, 0.2), -- (0.01 behind HairTop's back face: no flicker)
 		CFrame.new(0, 0.58 - backHeight / 2, 0.6),
 		shade,
 		fabric
@@ -380,7 +410,7 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 			head,
 			"CapStrap",
 			Vector3.new(0.5, 0.12, 0.05),
-			CFrame.new(0, 0.46, 0.68),
+			CFrame.new(0, 0.47, 0.68), -- (its bottom 0.01 above the crown's: no flicker)
 			darker(color, 0.3)
 		)
 		-- the shop's logo patch (clerks) or a small white one
@@ -389,7 +419,7 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 			head,
 			"CapLogo",
 			Vector3.new(0.42, 0.18, 0.04),
-			CFrame.new(0, 0.6, -0.68),
+			CFrame.new(0, 0.6, -0.665), -- (its back sunk 0.005 in the crown's front at -0.65)
 			shopColor or Color3.fromRGB(226, 222, 212)
 		)
 	elseif kind == "Beanie" then
@@ -454,19 +484,33 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 			head,
 			"FlatSeam",
 			Vector3.new(0.06, 0.04, 1.2),
-			CFrame.new(0, 0.75, -0.04),
+			-- tilted like the crown and half sunk in its top (level, it floated at the front)
+			CFrame.new(0, 0.62, -0.04)
+				* CFrame.Angles(math.rad(-5), 0, 0)
+				* CFrame.new(0, 0.12, 0),
 			darker(color, 0.25)
 		)
 	elseif kind == "Headphones" then
-		-- big headphones: the band over the head, two padded cups on the ears
+		-- big headphones: the band over the head, two padded cups on the ears.
+		-- The band RESTS on whatever is on top of the head (it floated 0.07 above a bald
+		-- head, and its top was in the same plane as the hair's crown: flicker):
+		-- the bare head's top is 0.625 above its centre, buzz hair 0.68, other cuts 0.79.
+		local onTop = if look.hair == nil
+			then 0.625
+			elseif look.hairStyle == "Buzz" then 0.68
+			else 0.79
+		local bandY = onTop + 0.04 -- (band 0.1 thick: sunk 0.01 into what it rests on)
 		addBlock(
 			model,
 			head,
 			"PhonesBand",
 			Vector3.new(1.46, 0.1, 0.22),
-			CFrame.new(0, 0.74, 0.02),
+			CFrame.new(0, bandY, 0.02),
 			color
 		)
+		-- the metal arms, from inside the band's ends down into the cups (top 0.33)
+		local armTop = bandY + 0.03
+		local armBottom = 0.29
 		for _, side in { -1, 1 } do
 			addBlock(
 				model,
@@ -488,8 +532,8 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 				model,
 				head,
 				if side < 0 then "PhonesArmL" else "PhonesArmR",
-				Vector3.new(0.08, 0.42, 0.12),
-				CFrame.new(side * 0.7, 0.5, 0.02),
+				Vector3.new(0.08, armTop - armBottom, 0.12),
+				CFrame.new(side * 0.7, (armTop + armBottom) / 2, 0.02),
 				STEEL,
 				Enum.Material.Metal
 			)
@@ -497,48 +541,106 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 	end
 end
 
+-- Glasses. The R6 head is ROUND seen from above (a cylinder about 1.25 across: radius
+-- 0.625), not a box: away from the middle, its face curves back (at 0.27 to the side, where
+-- the eyes are, it is already 0.06 behind the nose; at 0.5, 0.25 behind). So, like real
+-- glasses, the front is a flat frame resting on the nose and WIDER than the face: its two
+-- end pieces reach the sides of the head (0.645 out), and the temples start right there,
+-- touching the end pieces, and run straight back along the sides of the head to the ears
+-- (just behind its middle), sloping a little down. (Before, the frame stopped 0.48 out and
+-- the temples began 0.64 out: a 0.16 gap, they looked stuck in the air.)
+-- Each lens is held by 4 thin bars (no dark block behind it: clear lenses stay clear).
+local EYE_Y = 0.12 -- height of the eyes above the head's centre
+local GLASSES_Z = -0.65 -- the frame's middle plane (its back touches the nose at -0.625+)
+local TEMPLE_X = 0.645 -- the temples, just outside the head's side (0.625)
+
 local function addGlasses(model: Model, head: BasePart, kind: "Clear" | "Dark")
 	local frame = INK
 	local lensColor = if kind == "Dark"
 		then Color3.fromRGB(16, 18, 22)
 		else Color3.fromRGB(190, 214, 224)
 	for _, side in { -1, 1 } do
-		-- the frame around each lens (a dark block), the lens just in front of it
+		local function name(base: string): string
+			return base .. (if side < 0 then "L" else "R")
+		end
+		-- one lens: 0.44 wide, 0.3 tall outside, centred 0.27 to the side
+		local x = side * 0.27
 		addBlock(
 			model,
 			head,
-			if side < 0 then "FrameL" else "FrameR",
-			Vector3.new(0.44, 0.3, 0.04),
-			CFrame.new(side * 0.26, 0.12, -0.645),
+			name("RimTop"),
+			Vector3.new(0.44, 0.05, 0.04),
+			CFrame.new(x, EYE_Y + 0.125, GLASSES_Z),
 			frame
 		)
+		addBlock(
+			model,
+			head,
+			name("RimBottom"),
+			Vector3.new(0.44, 0.04, 0.04),
+			CFrame.new(x, EYE_Y - 0.13, GLASSES_Z),
+			frame
+		)
+		for _, edge in { -1, 1 } do
+			-- the inner (nose) and outer bars, between the top and bottom bars
+			addBlock(
+				model,
+				head,
+				name(if edge * side < 0 then "RimInner" else "RimOuter"),
+				Vector3.new(0.04, 0.21, 0.04),
+				CFrame.new(x + edge * 0.2, EYE_Y - 0.005, GLASSES_Z),
+				frame
+			)
+		end
 		local lens = addBlock(
 			model,
 			head,
-			if side < 0 then "LensL" else "LensR",
-			Vector3.new(0.34, 0.2, 0.03),
-			CFrame.new(side * 0.26, 0.12, -0.67),
+			name("Lens"),
+			Vector3.new(0.36, 0.21, 0.02),
+			CFrame.new(x, EYE_Y - 0.005, GLASSES_Z),
 			lensColor,
 			Enum.Material.Glass
 		)
 		lens.Transparency = if kind == "Dark" then 0.05 else 0.55
 		lens.Reflectance = 0.15
-		-- the arm going back to the ear
+		-- the end piece: from the outer bar (0.47 .. 0.49 out) to the temple's outer side
 		addBlock(
 			model,
 			head,
-			if side < 0 then "TempleL" else "TempleR",
-			Vector3.new(0.04, 0.05, 0.64),
-			CFrame.new(side * 0.64, 0.18, -0.33),
+			name("EndPiece"),
+			Vector3.new(TEMPLE_X + 0.02 - 0.47, 0.05, 0.036), -- (thinner: its faces are not in the rims' planes)
+			CFrame.new(side * (0.47 + TEMPLE_X + 0.02) / 2, EYE_Y + 0.11, GLASSES_Z),
+			frame
+		)
+		-- the temple: starts inside the end piece, ends at the ear, sloping down a little.
+		-- CFrame.lookAt(middle, back end): the block's length (its Z) runs along it.
+		local front = Vector3.new(side * TEMPLE_X, EYE_Y + 0.11, GLASSES_Z)
+		local back = Vector3.new(side * TEMPLE_X, EYE_Y + 0.02, 0.06)
+		addBlock(
+			model,
+			head,
+			name("Temple"),
+			Vector3.new(0.04, 0.05, (back - front).Magnitude),
+			CFrame.lookAt((front + back) / 2, back),
+			frame
+		)
+		-- its tip, bent down behind the ear
+		addBlock(
+			model,
+			head,
+			name("TempleTip"),
+			Vector3.new(0.04, 0.14, 0.05),
+			CFrame.new(side * TEMPLE_X, EYE_Y - 0.03, 0.07),
 			frame
 		)
 	end
+	-- the bridge over the nose, between the two inner bars (0.05 .. 0.09 out)
 	addBlock(
 		model,
 		head,
 		"Bridge",
 		Vector3.new(0.12, 0.05, 0.04),
-		CFrame.new(0, 0.17, -0.65),
+		CFrame.new(0, EYE_Y + 0.06, GLASSES_Z),
 		frame
 	)
 end
@@ -570,11 +672,18 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 		end
 	end
 
-	-- Torso: the torso is 2 wide, 2 tall, 1 deep: its front is 0.5 in front (-Z).
+	-- Torso: the torso is 2 wide, 2 tall, 1 deep: its front is 0.5 in front (-Z), its top 1.0
+	-- above its centre. Rule for everything worn on it: flat things lie WITH THEIR BACK ON THE
+	-- CLOTH (back face exactly at -0.5 / +0.5 / y 1.0), never a hair in front of it (it would
+	-- look stuck in the air), and two parts never have a visible face in the same plane
+	-- (flicker): a part laid over another is 0.005-0.01 prouder or wider.
+	-- (The head sits ON the torso: its round mesh goes down to 0.875 above the torso's centre,
+	-- so anything going "around the neck" disappears under it a little behind the front.)
 	if look.apron then
 		local apron = look.apron
 		local strap = darker(apron, 0.3)
-		-- the bib (chest), the skirt (waist to knees), a band around the waist
+		-- the bib (chest), the skirt (waist to knees, over the top of the legs), a band around
+		-- the waist (just wider than the torso: the ties; at the front it is under the apron)
 		addBlock(
 			model,
 			torso,
@@ -588,8 +697,8 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"ApronSkirt",
-			Vector3.new(1.86, 1.35, 0.08),
-			CFrame.new(0, -0.62, -0.55),
+			Vector3.new(1.86, 1.35, 0.09), -- (0.01 prouder than the bib where they overlap)
+			CFrame.new(0, -0.62, -0.545),
 			apron,
 			Enum.Material.Fabric
 		)
@@ -597,24 +706,37 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"ApronWaist",
-			Vector3.new(2.04, 0.14, 1.04),
+			Vector3.new(2.02, 0.14, 1.02),
 			CFrame.new(0, -0.08, 0),
 			strap,
 			Enum.Material.Fabric
 		)
-		-- the neck straps, from the bib's corners over the shoulders
+		-- the neck strap: from the bib's top corners up to the sides of the neck, then over
+		-- the top of the torso, going back round the neck (under the head)
 		for _, side in { -1, 1 } do
-			addBlock(
+			addStrip(
 				model,
 				torso,
 				if side < 0 then "ApronStrapL" else "ApronStrapR",
-				Vector3.new(0.1, 0.1, 1.04),
-				CFrame.new(side * 0.42, 1.02, 0),
+				Vector3.new(side * 0.47, 0.86, -0.54),
+				Vector3.new(side * 0.32, 1.0, -0.54),
+				0.1,
+				0.08,
+				strap,
+				Enum.Material.Fabric
+			)
+			addBlock(
+				model,
+				torso,
+				if side < 0 then "ApronNeckL" else "ApronNeckR",
+				Vector3.new(0.1, 0.06, 0.595),
+				CFrame.new(side * 0.32, 1.03, -0.2775),
 				strap,
 				Enum.Material.Fabric
 			)
 		end
-		-- the front pocket, a pen and a bottle opener sticking out of it
+		-- the front pocket (its back sunk 0.005 in the skirt), a pen and a bottle opener in it:
+		-- their fronts are behind the pocket's front, only their tops stick out
 		addBlock(
 			model,
 			torso,
@@ -628,7 +750,7 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"Pen",
-			Vector3.new(0.05, 0.22, 0.05),
+			Vector3.new(0.04, 0.22, 0.04),
 			CFrame.new(0.24, -0.3, -0.6),
 			Color3.fromRGB(230, 228, 220)
 		)
@@ -643,14 +765,16 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 		)
 	end
 	if look.towel then
-		-- a bar towel folded over the left shoulder, hanging front and back
+		-- a bar towel folded over the left shoulder, hanging front and back, lying on the
+		-- shirt next to the apron's bib (the bib ends 0.55 out, the towel starts 0.56 out)
 		local towel = Color3.fromRGB(222, 216, 198)
+		local towelX = -0.77
 		addBlock(
 			model,
 			torso,
 			"TowelTop",
-			Vector3.new(0.5, 0.08, 1.14),
-			CFrame.new(-0.6, 1.04, 0),
+			Vector3.new(0.42, 0.08, 1.12),
+			CFrame.new(towelX, 1.04, 0),
 			towel,
 			Enum.Material.Fabric
 		)
@@ -658,8 +782,8 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"TowelFront",
-			Vector3.new(0.5, 0.52, 0.06),
-			CFrame.new(-0.6, 0.76, -0.58),
+			Vector3.new(0.42, 0.52, 0.06),
+			CFrame.new(towelX, 0.74, -0.53),
 			towel,
 			Enum.Material.Fabric
 		)
@@ -667,8 +791,8 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"TowelBack",
-			Vector3.new(0.5, 0.74, 0.06),
-			CFrame.new(-0.6, 0.66, 0.58),
+			Vector3.new(0.42, 0.74, 0.06),
+			CFrame.new(towelX, 0.63, 0.53),
 			towel,
 			Enum.Material.Fabric
 		)
@@ -676,14 +800,17 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"TowelStripe",
-			Vector3.new(0.52, 0.06, 0.07),
-			CFrame.new(-0.6, 0.6, -0.58),
+			Vector3.new(0.44, 0.06, 0.07),
+			CFrame.new(towelX, 0.6, -0.535),
 			Color3.fromRGB(150, 46, 40),
 			Enum.Material.Fabric
 		)
 	end
+	-- the top of what the lanyard goes over: the polo's collar (clerks of a shop) or the torso
+	local neckTop = 1.0
 	if role == "Clerk" and shopColor then
-		-- the polo: the shop's colour on the collar, and its button placket
+		-- the polo: the shop's colour on the collar (a band around the top of the torso),
+		-- and its button placket (it stops at the collar, 0.005 prouder than it)
 		addBlock(
 			model,
 			torso,
@@ -692,25 +819,41 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			CFrame.new(0, 0.92, 0),
 			shopColor
 		)
+		neckTop = 1.02
 		addBlock(
 			model,
 			torso,
 			"Placket",
-			Vector3.new(0.16, 0.42, 0.03),
-			CFrame.new(0, 0.66, -0.515),
+			Vector3.new(0.16, 0.39, 0.035),
+			CFrame.new(0, 0.645, -0.5175),
 			darker(shopColor, 0.2)
 		)
 	end
 	if look.lanyard then
-		-- a badge on a lanyard: two straps making a V from the collar, the card, a clip
+		-- A badge on a lanyard. The strap goes round the neck (two short bits on top of the
+		-- collar, going back under the head), comes down the chest in a V (wide at the neck,
+		-- meeting at the clip), and the clip holds the card, which lies flat on the chest.
+		-- (Before, the V was upside down, its ends did not reach the clip, and the card hung
+		-- 0.015 in front of the shirt: it looked like it floated.)
 		local strapColor = shopColor or INK
+		local clipY = 0.36
 		for _, side in { -1, 1 } do
-			addBlock(
+			addStrip(
 				model,
 				torso,
 				if side < 0 then "LanyardL" else "LanyardR",
-				Vector3.new(0.06, 0.62, 0.03),
-				CFrame.new(side * 0.16, 0.5, -0.52) * CFrame.Angles(0, 0, math.rad(side * 14)),
+				Vector3.new(side * 0.3, neckTop, -0.52),
+				Vector3.new(side * 0.035, clipY + 0.02, -0.52),
+				0.06,
+				0.04,
+				strapColor
+			)
+			addBlock(
+				model,
+				torso,
+				if side < 0 then "LanyardNeckL" else "LanyardNeckR",
+				Vector3.new(0.06, 0.04, 0.29),
+				CFrame.new(side * 0.3, neckTop + 0.015, -0.395),
 				strapColor
 			)
 		end
@@ -718,25 +861,28 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			model,
 			torso,
 			"BadgeClip",
-			Vector3.new(0.1, 0.1, 0.04),
-			CFrame.new(0, 0.18, -0.53),
+			Vector3.new(0.12, 0.1, 0.05),
+			CFrame.new(0, clipY, -0.525),
 			STEEL,
 			Enum.Material.Metal
 		)
+		-- the card: its top tucked 0.01 into the clip, its back on the shirt
+		local cardTop = clipY - 0.04
 		addBlock(
 			model,
 			torso,
 			"Badge",
 			Vector3.new(0.38, 0.5, 0.03),
-			CFrame.new(0, -0.1, -0.53),
+			CFrame.new(0, cardTop - 0.25, -0.515),
 			Color3.fromRGB(240, 238, 230)
 		)
+		-- printed on it: the shop's stripe, a photo, two lines of name (0.005 proud)
 		addBlock(
 			model,
 			torso,
 			"BadgeStripe",
-			Vector3.new(0.38, 0.12, 0.035),
-			CFrame.new(0, 0.08, -0.535),
+			Vector3.new(0.39, 0.1, 0.035),
+			CFrame.new(0, cardTop - 0.08, -0.5175),
 			strapColor
 		)
 		addBlock(
@@ -744,18 +890,42 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			torso,
 			"BadgePhoto",
 			Vector3.new(0.14, 0.16, 0.035),
-			CFrame.new(-0.09, -0.12, -0.535),
+			CFrame.new(-0.09, cardTop - 0.29, -0.5175),
 			Color3.fromRGB(120, 124, 132)
 		)
+		for line = 0, 1 do
+			addBlock(
+				model,
+				torso,
+				"BadgeName",
+				Vector3.new(0.13 - line * 0.03, 0.03, 0.035),
+				CFrame.new(0.08 - line * 0.015, cardTop - 0.25 - line * 0.07, -0.5175),
+				Color3.fromRGB(70, 70, 76)
+			)
+		end
 	end
 	if look.necklace then
-		-- a thin gold chain and a pendant
+		-- a thin gold chain (two strands from the sides of the neck, meeting low on the
+		-- chest, lying on the shirt) and a pendant hanging from a small ring
+		for _, side in { -1, 1 } do
+			addStrip(
+				model,
+				torso,
+				if side < 0 then "ChainL" else "ChainR",
+				Vector3.new(side * 0.26, 1.0, -0.5125),
+				Vector3.new(side * 0.012, 0.64, -0.5125),
+				0.035,
+				0.025,
+				GOLD,
+				Enum.Material.Metal
+			)
+		end
 		addBlock(
 			model,
 			torso,
-			"Chain",
-			Vector3.new(0.7, 0.04, 0.03),
-			CFrame.new(0, 0.84, -0.515),
+			"PendantRing",
+			Vector3.new(0.05, 0.05, 0.03),
+			CFrame.new(0, 0.63, -0.515),
 			GOLD,
 			Enum.Material.Metal
 		)
@@ -764,7 +934,7 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			torso,
 			"Pendant",
 			Vector3.new(0.12, 0.14, 0.04),
-			CFrame.new(0, 0.74, -0.52),
+			CFrame.new(0, 0.54, -0.52),
 			GOLD,
 			Enum.Material.Metal
 		)

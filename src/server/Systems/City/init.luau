@@ -106,6 +106,9 @@
 
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local CityZones = require(ReplicatedStorage.Shared.Util.CityZones)
 
 local City = {}
 
@@ -465,6 +468,35 @@ local function cleanUpTemplate()
 	end
 end
 
+-- Copies the zone boxes (ParkZone / MusicZone) into ReplicatedStorage > CityZoneBoxes.
+-- Why: with Workspace.StreamingEnabled (on by default in new places), a client only has the
+-- parts of the workspace that are near it, so a zone box could be missing on a client and
+-- "am I in the park?" would wrongly answer no. ReplicatedStorage is never streamed: every
+-- client always has the copies. The copies carry no tag (the server's tag lists stay as they
+-- are) but the attribute ZoneTag = the tag they stand for; Shared/Util/CityZones reads both.
+local function mirrorZones(city: Instance)
+	local old = ReplicatedStorage:FindFirstChild(CityZones.MIRROR_NAME)
+	if old then
+		old:Destroy()
+	end
+	local mirror = Instance.new("Folder")
+	mirror.Name = CityZones.MIRROR_NAME
+	for _, tag in { CityZones.PARK_TAG, CityZones.MUSIC_TAG } do
+		for _, instance in CollectionService:GetTagged(tag) do
+			if instance:IsA("BasePart") and instance:IsDescendantOf(city) then
+				local copy = instance:Clone()
+				copy:ClearAllChildren()
+				for _, copiedTag in copy:GetTags() do
+					CollectionService:RemoveTag(copy, copiedTag)
+				end
+				copy:SetAttribute("ZoneTag", tag)
+				copy.Parent = mirror
+			end
+		end
+	end
+	mirror.Parent = ReplicatedStorage
+end
+
 -- Creates every part, a chunk at a time.
 -- The "Ground" parts come first in the data: they are all created in one go (no wait), and only
 -- then is the template's Baseplate removed. So there is always a floor under the spawns.
@@ -529,6 +561,7 @@ local function build(city: Folder, data: CityData)
 			CollectionService:AddTag(descendant, SPEZCOLA_TAG)
 		end
 	end
+	mirrorZones(city)
 	city:SetAttribute("Built", true)
 	city:SetAttribute("PartCount", count)
 end

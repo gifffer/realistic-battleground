@@ -52,9 +52,22 @@ local DRINK_ANIMATION = "Emote_Drink"
 local SPEED_KEY = "Drinking"
 -- A cylinder part's round axis is its X axis: this turn makes it point UP (Y).
 local UPRIGHT = CFrame.Angles(0, 0, math.pi / 2)
--- Where the can sits in the right hand, in the Right Arm's space: at the bottom of the arm
--- (the hand), on its front, upright while the arm hangs.
-local GRIP = CFrame.new(0, -0.78, -0.37)
+-- Where the can sits in the right fist, in the Right Arm's space (the R6 arm is 1 x 2 x 1, its
+-- bottom face at Y = -1 is the knuckles, -Z is its front). Like a Roblox tool: the can's
+-- axis goes THROUGH the fist, so the fingers wrap around its middle:
+--   * centred 0.05 below the bottom face (about a quarter of the can is inside the fist,
+--     the rest shows) and 0.15 towards the front (the top pokes out of the fist's front);
+--   * its top points along the arm's FRONT (-Z), turned 35 degrees inwards (towards the
+--     face): when the drinking clip brings the fist up in front of the mouth, the can
+--     stands up with its top at the lips, then tips over as the arm goes on rising.
+-- (The old grip had the can's axis along the arm itself: with the arm raised, the can lay
+-- flat on the back of the hand, its top pointing back at the shoulder, a stud away from the
+-- mouth. The clip's shoulder angles were changed with it: see Emote_Drink.)
+-- Read right to left: Angles(-90 deg on X) turns the can's "up" (Y) to the arm's front (-Z),
+-- then 35 deg on Y turns that front inwards, then the move puts it in the fist.
+local GRIP = CFrame.new(0, -1.05, -0.15)
+	* CFrame.Angles(0, math.rad(35), 0)
+	* CFrame.Angles(-math.pi / 2, 0, 0)
 
 type Machine = {
 	model: Model,
@@ -449,7 +462,8 @@ local function startDrink(player: Player, can: Can)
 	body.AssemblyLinearVelocity = Vector3.zero
 	body.AssemblyAngularVelocity = Vector3.zero
 	-- A Weld (not a WeldConstraint) to the Right Arm: it follows the arm that each client
-	-- poses for the drinking clip. C0 = where the can sits in the hand (upright).
+	-- poses for the drinking clip. C0 = where the can sits in the fist (GRIP), then UPRIGHT
+	-- turns the body cylinder (round axis = its X) so its axis is the can's "up".
 	local weld = Instance.new("Weld")
 	weld.Name = "Grip"
 	weld.Part0 = arm
@@ -531,10 +545,17 @@ local function dispense(machine: Machine)
 	local out = dispenser.CFrame.LookVector
 	local flatOut = Vector3.new(out.X, 0, out.Z)
 	flatOut = if flatOut.Magnitude > 1e-3 then flatOut.Unit else Vector3.new(0, 0, -1)
-	-- The can comes out lying on its side (across the tray), a hair in front of the opening.
+	-- The can comes out lying on its side, its top towards the player, a hair in front of the
+	-- opening. Lying ALONG the push (not across it) it slides and stops a stud in front of the
+	-- machine; lying across, it rolled away like a wheel and ended under the furniture.
+	-- (Read right to left: Angles(0, 180 deg, 0) turns the label to the can's back, then
+	-- Angles(-90 deg on X) lays the can down: its "up" (Y) goes to the look direction (-Z) =
+	-- out, and its back to the top: the "Spez" label faces the sky.)
 	local position = dispenser.Position + flatOut * 0.25
-	local across = CFrame.lookAt(position, position + flatOut) * CFrame.Angles(0, 0, math.pi / 2)
-	local model, body = buildCan(across)
+	local lying = CFrame.lookAt(position, position + flatOut)
+		* CFrame.Angles(-math.pi / 2, 0, 0)
+		* CFrame.Angles(0, math.pi, 0)
+	local model, body = buildCan(lying)
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "DrinkPrompt"
@@ -561,9 +582,21 @@ local function dispense(machine: Machine)
 	pcall(function()
 		body:SetNetworkOwner(nil) -- the server moves it (no client can throw it around)
 	end)
-	-- out of the tray, a little push towards the player, a bit of spin
-	body.AssemblyLinearVelocity = flatOut * 5.5 + Vector3.new(0, 1.5, 0)
+	-- out of the tray, a little push towards the player, a bit of spin (around the vertical,
+	-- so it never starts rolling)
+	body.AssemblyLinearVelocity = flatOut * 6 + Vector3.new(0, 1.5, 0)
 	body.AssemblyAngularVelocity = Vector3.new(0, math.random() * 2 - 1, 0)
+	-- Once it lies still, it stays put: no slow creeping roll on a sloped floor.
+	task.delay(1.5, function()
+		if
+			can.state == "Loose"
+			and model.Parent ~= nil
+			and body.AssemblyLinearVelocity.Magnitude < 1
+		then
+			body.AssemblyLinearVelocity = Vector3.zero
+			body.AssemblyAngularVelocity = Vector3.zero
+		end
+	end)
 
 	table.insert(machine.cans, can)
 	table.insert(allCans, can)
