@@ -33,7 +33,9 @@ local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local Blood = require(script.Parent.Blood)
 local BloodBody = require(script.Parent.BloodBody)
+local BloodFace = require(script.Parent.BloodFace)
 local BloodPool = require(script.Parent.BloodPool)
+local BloodRivulet = require(script.Parent.BloodRivulet)
 local BloodStain = require(script.Parent.BloodStain)
 
 local KitEffects = {}
@@ -468,22 +470,42 @@ local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
 	if part == nil or not part:IsA("BasePart") then
 		return nil, nil
 	end
-	local depth = if part.Name == "Head" then 0.8 else part.Size.Z / 2 + 0.06
-	local y = if part.Name == "Head" then -0.2 else random:NextNumber(-0.5, 0.5)
-	return (part.CFrame * CFrame.new(random:NextNumber(-0.3, 0.3), y, -depth)).Position, part
+	-- (the SAME spot for the whole bleed: one wound, one run from it - the
+	-- seed changes with each new bleed the server starts)
+	local bleedUntil = model:GetAttribute("BleedUntil")
+	local spot = Random.new(
+		Blood.seed(model.Name, part.Name, if typeof(bleedUntil) == "number" then bleedUntil else 0)
+	)
+	local depth = if part.Name == "Head" then 0.6 else part.Size.Z / 2 + 0.06
+	local y = if part.Name == "Head" then -0.2 else spot:NextNumber(-0.5, 0.5)
+	return (part.CFrame * CFrame.new(spot:NextNumber(-0.3, 0.3), y, -depth)).Position, part
 end
 
--- One drop of the wound: it runs down the skin first (a run from the cut),
--- then falls from the end of that run.
+-- The wound keeps bleeding: its run (BloodRivulet) is fed again. The blood
+-- runs down the skin first; once the run reaches a drip point (the bottom
+-- of the torso, the chin...) a drop hangs there, swells and falls by itself
+-- (or a thin stream pours, for a heavy bleed). Returns where it drips from.
 local function drip(model: Model): Vector3?
 	local random = Random.new()
 	local start, part = dripStart(model, random)
 	if start == nil or part == nil then
 		return nil
 	end
-	local from = BloodBody.dripFrom(model, part, start, random)
-	-- (a real drop: it falls, stretches, splashes where it lands)
-	Blood.drop(from, part.AssemblyLinearVelocity * 0.5, random:NextNumber(0.05, 0.1))
+	local run = BloodBody.woundRun(model, part, start, random)
+	local from = (if run then BloodRivulet.dripPoint(run) or BloodRivulet.tip(run) else nil)
+		or start
+	if run and not BloodRivulet.stopped(run) then
+		return from -- (still running down, or dripping by itself)
+	end
+	-- no run (too many at once) or it stopped: a plain drop off its end.
+	-- (a dripping drop falls slower than a thrown one: passive gravity)
+	Blood.drop(
+		from,
+		part.AssemblyLinearVelocity * 0.5,
+		random:NextNumber(0.05, 0.08),
+		random,
+		BloodRivulet.passiveScale()
+	)
 	return from
 end
 
@@ -594,7 +616,10 @@ function KitEffects.watch(model: Model)
 					Random.new(Blood.seed(model.Name, "KO", math.floor(torso.Position.X)))
 				task.delay(random:NextNumber(0.6, 1.2), function()
 					if torso.Parent then
-						BloodPool.feed(model, torso.Position, 0.35, random:NextNumber(6, 10), 1.6)
+						-- (fed at the NECK end of the body: a pool shows from the
+						-- head's side, it isn't hidden under the torso)
+						local neck = (torso.CFrame * CFrame.new(0, 1, 0)).Position
+						BloodPool.feed(model, neck, 0.35, random:NextNumber(6, 10), 1.6)
 					end
 				end)
 			end
@@ -603,6 +628,7 @@ function KitEffects.watch(model: Model)
 	model:GetAttributeChangedSignal("Awakened"):Connect(function()
 		setFury(entry, model:GetAttribute("Awakened") == true)
 	end)
+	BloodFace.watch(model) -- (knocked out: sideways face runs, a pool under the head)
 	setFury(entry, model:GetAttribute("Awakened") == true)
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
@@ -669,6 +695,7 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local token = (swingToken[model] or 0) + 1
 	swingToken[model] = token
 	BloodBody.onSwing(model) -- (a bloody fist flicks blood off)
+	BloodFace.noteAction(model) -- (not standing idle: no spit / wipe now)
 	local sound = START_SOUNDS[animation]
 	if sound and not silent then
 		SoundController.play(sound, model)
@@ -702,6 +729,31 @@ end
 -- A swing (an M1, a kit move): a bloody fist flicks blood off in a line.
 function KitEffects.onSwing(model: Model)
 	BloodBody.onSwing(model)
+	BloodFace.noteAction(model)
+end
+
+-- A punch landed on `victim` (every Hit, bloody or not): the fist that did
+-- it counts it (after many, its knuckles split).
+function KitEffects.punchLanded(victim: Model, attacker: Model)
+	local root = victim:FindFirstChild("HumanoidRootPart") or victim:FindFirstChild("Torso")
+	if root == nil or not root:IsA("BasePart") then
+		return
+	end
+	local best: BasePart? = nil
+	local bestDistance = 3.5
+	for _, name in { "Right Arm", "Left Arm" } do
+		local arm = attacker:FindFirstChild(name)
+		if arm and arm:IsA("BasePart") then
+			local tip = (arm.CFrame * CFrame.new(0, -arm.Size.Y / 2, 0)).Position
+			local distance = (tip - root.Position).Magnitude
+			if distance < bestDistance then
+				best, bestDistance = arm, distance
+			end
+		end
+	end
+	if best then
+		BloodBody.countPunch(attacker, best)
+	end
 end
 
 -- The finisher's bat in `model`'s hand for `duration` seconds.
@@ -780,13 +832,15 @@ end
 -- wound itself bloody, the attacker's fist bloody, the drops splashing
 -- where they land (floor, walls, bodies). `amount`: 1 a punch, more for
 -- heavy blows (2-3). `seed` (from the attack: Blood.seed) makes it the same
--- on every client; without it, it's random.
+-- on every client; without it, it's random. `info` = { strong, moveId,
+-- side } of the hit: what face wound it opens (BloodFace).
 function KitEffects.bloodSpray(
 	victim: Model,
 	attacker: Model,
 	zone: string,
 	amount: number?,
-	seed: number?
+	seed: number?,
+	info: BloodFace.HitInfo?
 )
 	if not Config.Blood.ENABLED then
 		return
@@ -801,6 +855,11 @@ function KitEffects.bloodSpray(
 	end
 	local _, toward = impactPoint(part, attacker)
 	local much = (amount or 1) * (if zone == "Head" then 1.25 else 1)
+	local heavy = much >= 2
+	if zone == "Head" then
+		-- (a blow on an already open wound sprays more: up to ×1.9)
+		much *= math.min(1 + 0.3 * BloodFace.openWounds(victim), 1.9)
+	end
 	-- The wound, on the real skin facing the blow (the classic head is
 	-- round, 0.6 across; its part is a wider box).
 	local point: Vector3
@@ -860,7 +919,7 @@ function KitEffects.bloodSpray(
 	Blood.splat(point, normal, 0.22 + 0.06 * much, Vector3.new(0, -3, 0), part, random)
 	if part.Name == "Head" then
 		-- a face that bleeds: the nose, a split lip (runs, drops off the chin)
-		BloodBody.face(victim, attacker, much >= 2, random)
+		BloodBody.face(victim, attacker, heavy, random, info)
 	else
 		BloodBody.soak(victim, part, point, math.min(much * 0.5, 1.2))
 	end

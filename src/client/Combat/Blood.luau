@@ -19,14 +19,24 @@
 --   • It is WET at first (glossy, red) and DRIES (darker, a dark clotting
 --     edge, then matte brown-black) - BloodAge, one system for all of it.
 --   • A fine red MIST hangs a moment in the air on hard blows.
+--   • (v2) A drop that DRIPS (falls from a wound, not thrown) falls slowly
+--     (Config.Blood.PASSIVE_GRAVITY: real drops are light) and lands as a
+--     round crenellated "drip"; the higher it fell, the more tiny satellite
+--     drops ring it (a "starburst" past ~1 m). A big drop falling far on a
+--     hard or wet floor splashes a CROWN (fingers rising, breaking into
+--     droplets). A drop falling into a wet pool makes a RIPPLE ring and
+--     throws tiny drops around the pool, where they pile up.
 --
 --   Blood.spray(point, direction, amount, source, noMist?, random?)  a wound
 --       opening: drops (and strands if amount >= 1) out of `point` along
 --       `direction`; `amount` 1 = a punch that cuts, 2-3 = a heavy blow, 5+ =
 --       gore. `random`: a seeded Random, the same spray on every client.
---   Blood.splat(position, normal, size, velocity?, onto?, random?)  a splash
---       on a surface (`onto`: the part hit; a body part keeps it).
---   Blood.drop(position, velocity, size)  one drop (a wound dripping).
+--   Blood.splat(position, normal, size, velocity?, onto?, random?, info?)  a
+--       splash on a surface (`onto`: the part hit; a body part keeps it).
+--       `info` (SplatInfo below): how far it fell, a drip or thrown, its colour...
+--   Blood.drop(position, velocity, size, random?, gravity?, info?)  one drop.
+--       A wound dripping: gravity = Blood.passiveScale(), info = {passive = true}.
+--   Blood.passiveScale()  the `gravity` multiplier of a drop that drips
 --   Blood.ballistic(origin, velocity, size, options?)  a drop whose landing
 --       is computed once (no part flying): for particle bursts, so what flies
 --       also lands. Returns where it lands.
@@ -44,6 +54,7 @@
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local BloodAge = require(script.Parent.BloodAge)
@@ -58,6 +69,7 @@ Blood.FRESH = PALETTE.ARTERIAL -- bright, just out (oxygenated)
 Blood.DARK = PALETTE.VENOUS -- a few seconds later
 Blood.DRY = PALETTE.DRY -- dried
 
+local WORLD = Config.Blood.WORLD
 local MAX_STRANDS = 24
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local UP = Vector3.new(0, 1, 0)
@@ -78,6 +90,38 @@ Blood.onSkin = BloodStain.onSkin
 
 function Blood.enabled(): boolean
 	return Config.Blood.ENABLED
+end
+
+-- How a splash came to be (all optional). Filled in by the drops themselves
+-- when they land; a caller can force its colour / kind / ageing.
+export type SplatInfo = {
+	height: number?, -- how far it fell (studs): satellites / crown grow with it
+	passive: boolean?, -- a drip (not thrown): a round "drip" stain when it lands straight
+	start: Color3?, -- its colour fresh (spit: PALETTE.SALIVA)
+	kind: string?, -- force the stain's kind ("spit")
+	profile: string?, -- force its ageing ("saliva")
+	dropSize: number?, -- (the drop's own size, studs: big ones splash a crown)
+	material: Enum.Material?, -- (the ground it hit)
+	micro: boolean?, -- (a tiny drop thrown by a splash: no crown, no ripple)
+}
+
+-- The `gravity` multiplier (× workspace.Gravity) of a drop that only DRIPS:
+-- Config.Blood.PASSIVE_GRAVITY studs/s². Read each time: a place can change
+-- its gravity.
+function Blood.passiveScale(): number
+	return Config.Blood.PASSIVE_GRAVITY / math.max(workspace.Gravity, 1)
+end
+
+-- Is this camera close enough to `point` for the small details (crowns,
+-- ripples)? And is it looking steeply down (a crown sprite would read as a
+-- flat card from above)?
+local function closeDetail(point: Vector3): (boolean, boolean)
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return false, false
+	end
+	local close = (camera.CFrame.Position - point).Magnitude <= WORLD.CROWN_RANGE
+	return close, camera.CFrame.LookVector.Y < -0.87 -- (steeper than 60°)
 end
 
 -- A whole number from the event's values (an attack id, a name...): the
@@ -273,6 +317,247 @@ BloodStain.setRunHook(function(at: Vector3, normal: Vector3, width: number)
 end)
 
 ------------------------------------------------------------------------------
+-- Splash details (v2): crowns, ripples, tiny drops. Only near the camera.
+------------------------------------------------------------------------------
+
+-- Soft ground swallows a drop: no crown (grass, sand, mud, cloth...).
+local SOFT: { [Enum.Material]: boolean } = {
+	[Enum.Material.Grass] = true,
+	[Enum.Material.LeafyGrass] = true,
+	[Enum.Material.Sand] = true,
+	[Enum.Material.Mud] = true,
+	[Enum.Material.Ground] = true,
+	[Enum.Material.Fabric] = true,
+	[Enum.Material.Carpet] = true,
+	[Enum.Material.Snow] = true,
+}
+
+-- A few "splashers" made once and reused (never one per drop): an
+-- Attachment on the Terrain with two emitters - the crown picture (a drop
+-- flattening, its fingers rising and breaking into droplets, side view) and
+-- a couple of specks jumping up.
+type Splasher = {
+	attachment: Attachment,
+	crown: ParticleEmitter?,
+	specks: ParticleEmitter?,
+	busyUntil: number,
+}
+local splashers: { Splasher } = {}
+
+local function newSplasher(): Splasher
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "BloodSplash"
+	attachment.Parent = workspace.Terrain
+	local crownId = BloodStain.image("crown4x4", nil, 1)
+	local crownEmitter: ParticleEmitter? = nil
+	if crownId ~= 0 then
+		local e = Instance.new("ParticleEmitter")
+		e.Name = "Crown"
+		e.Texture = "rbxassetid://" .. crownId
+		e.FlipbookLayout = Enum.ParticleFlipbookLayout.Grid4x4
+		e.FlipbookMode = Enum.ParticleFlipbookMode.OneShot -- (16 frames once, over its life)
+		e.Orientation = Enum.ParticleOrientation.FacingCameraWorldUp -- (stays upright)
+		e.Lifetime = NumberRange.new(0.22)
+		e.Speed = NumberRange.new(0)
+		e.Rotation = NumberRange.new(0)
+		e.RotSpeed = NumberRange.new(0)
+		e.Acceleration = Vector3.zero
+		e.Drag = 0
+		e.LightInfluence = 0.8
+		e.Transparency = NumberSequence.new(0)
+		e.Rate = 0
+		e.Parent = attachment
+		crownEmitter = e
+	end
+	local speckId = BloodStain.image("pDrop", nil, 1)
+	local specksEmitter: ParticleEmitter? = nil
+	if speckId ~= 0 then
+		local e = Instance.new("ParticleEmitter")
+		e.Name = "Specks"
+		e.Texture = "rbxassetid://" .. speckId
+		e.Orientation = Enum.ParticleOrientation.VelocityParallel
+		e.EmissionDirection = Enum.NormalId.Top
+		e.SpreadAngle = Vector2.new(25, 25)
+		e.Speed = NumberRange.new(2, 4)
+		e.Lifetime = NumberRange.new(0.15, 0.22)
+		e.Acceleration = Vector3.new(0, -60, 0)
+		e.Size = NumberSequence.new(0.035, 0.02)
+		e.LightInfluence = 0.8
+		e.Color = ColorSequence.new(PALETTE.ARTERIAL)
+		e.Rate = 0
+		e.Parent = attachment
+		specksEmitter = e
+	end
+	return { attachment = attachment, crown = crownEmitter, specks = specksEmitter, busyUntil = 0 }
+end
+
+-- A splasher free now (at most CAPS.CROWNS at once), or nil.
+local function freeSplasher(now: number): Splasher?
+	for _, splasher in splashers do
+		if now >= splasher.busyUntil and splasher.attachment.Parent then
+			return splasher
+		end
+	end
+	if #splashers < BloodAge.cap("CROWNS") then
+		local made = newSplasher()
+		table.insert(splashers, made)
+		return made
+	end
+	return nil
+end
+
+-- A big drop hitting a hard (or wet) floor after a long fall: a crown of
+-- fingers rising and breaking into droplets (0.22 s), plus 2-5 real tiny
+-- drops thrown out of its rim, on the side it was going (a slanted drop
+-- throws them ahead). `width`: its stain's width.
+local function crown(
+	position: Vector3,
+	normal: Vector3,
+	width: number,
+	color: Color3,
+	velocity: Vector3,
+	material: Enum.Material?,
+	rand: Random
+)
+	local close, steep = closeDetail(position)
+	if not close then
+		return
+	end
+	local wet = BloodPool.wetAt(position) > 0.3
+	if material and SOFT[material] and not wet then
+		return -- (soaked up by soft ground)
+	end
+	local now = os.clock()
+	local splasher = freeSplasher(now)
+	local sprite = if splasher then splasher.crown else nil
+	if splasher and sprite and not steep then
+		splasher.busyUntil = now + 0.25
+		local size = math.clamp(width * 2.2, 0.15, 1.2)
+		-- (the bottom of each picture is the ground: its middle half a size up)
+		splasher.attachment.WorldPosition = position + normal * (size * 0.45)
+		sprite.Size = NumberSequence.new(size)
+		sprite.Color = ColorSequence.new(color)
+		sprite:Emit(1)
+	end
+	-- the droplets the crown throws out (real drops: they land too)
+	local tangent = velocity - normal * velocity:Dot(normal)
+	local ahead = if tangent.Magnitude > 1 then tangent.Unit else nil
+	for _ = 1, rand:NextInteger(2, 5) do
+		local a = rand:NextNumber(0, math.pi * 2)
+		local out = Vector3.new(math.cos(a), 0, math.sin(a))
+		if ahead then
+			out = (out + ahead * 1.5).Unit -- (mostly ahead: a slanted drop's wave)
+		end
+		Blood.drop(
+			position + normal * 0.04,
+			out * rand:NextNumber(2, 4) + normal * rand:NextNumber(3, 6),
+			rand:NextNumber(0.015, 0.025),
+			rand,
+			nil,
+			{ micro = true }
+		)
+	end
+end
+
+-- (Blood.ballistic, made further down with the drops in flight)
+local ballisticLater: (Vector3, Vector3, number, BallisticOptions?) -> Vector3?
+
+-- Ripple rings on pools: a few carriers reused (CAPS.RIPPLES at once).
+type Ripple = { part: Part, decal: Decal, busyUntil: number }
+local ripples: { Ripple } = {}
+local RIPPLE_GROW = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local function freeRipple(now: number): Ripple?
+	for _, ripple in ripples do
+		if now >= ripple.busyUntil and ripple.part.Parent then
+			return ripple
+		end
+	end
+	if #ripples >= BloodAge.cap("RIPPLES") then
+		return nil
+	end
+	local id = BloodStain.image("rippleRing", nil, 1)
+	if id == 0 then
+		return nil -- (not uploaded yet: no ripple)
+	end
+	local part = Instance.new("Part")
+	part.Name = "BloodRipple"
+	part.Transparency = 1
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Archivable = false
+	local decal = Instance.new("Decal")
+	decal.Face = Enum.NormalId.Top
+	decal.Texture = "rbxassetid://" .. id
+	decal.Color3 = PALETTE.ARTERIAL_LIGHT -- (a thin bright crest)
+	decal.Transparency = 1
+	decal.Parent = part
+	part.Parent = folder
+	local made: Ripple = { part = part, decal = decal, busyUntil = 0 }
+	table.insert(ripples, made)
+	return made
+end
+
+local function ripple(position: Vector3, normal: Vector3)
+	local now = os.clock()
+	local ring = freeRipple(now)
+	if ring == nil then
+		return
+	end
+	ring.busyUntil = now + 0.37
+	local side = normal:Cross(X_AXIS)
+	if side.Magnitude < 1e-3 then
+		side = normal:Cross(Vector3.new(0, 0, 1))
+	end
+	-- (its Top face along `normal`, just over the pool's wet film)
+	ring.part.CFrame = CFrame.fromMatrix(position + normal * 0.07, side.Unit, normal)
+	ring.part.Size = Vector3.new(0.08, 0.01, 0.08)
+	ring.decal.Transparency = 0.25
+	TweenService:Create(ring.part, RIPPLE_GROW, { Size = Vector3.new(0.45, 0.01, 0.45) }):Play()
+	TweenService:Create(ring.decal, RIPPLE_GROW, { Transparency = 1 }):Play()
+end
+
+-- A drop falling into a wet pool: a ring spreads on it, two specks jump up,
+-- and a few tiny drops are thrown out radially; they land around the pool
+-- (the faster from higher), where they pile up (with BloodPool's
+-- "starburst": the classic pattern under someone bleeding standing still).
+local function intoPool(
+	position: Vector3,
+	normal: Vector3,
+	size: number,
+	height: number,
+	rand: Random
+)
+	local close = closeDetail(position)
+	if not close then
+		return
+	end
+	ripple(position, normal)
+	local splasher = freeSplasher(os.clock())
+	local specks = if splasher then splasher.specks else nil
+	if splasher and specks then
+		splasher.attachment.WorldPosition = position + normal * 0.03
+		specks:Emit(2)
+	end
+	local speed = math.clamp(4 + 2.2 * math.sqrt(math.max(height, 0)), 4, 10)
+	for _ = 1, rand:NextInteger(2, if size > 0.15 then 5 else 3) do
+		local a = rand:NextNumber(0, math.pi * 2)
+		local out = Vector3.new(math.cos(a), 0, math.sin(a))
+		ballisticLater(
+			position + normal * 0.05,
+			(out * rand:NextNumber(0.7, 1.1) + normal * rand:NextNumber(0.8, 1.3)).Unit
+				* speed
+				* rand:NextNumber(0.7, 1.1),
+			rand:NextNumber(0.012, 0.02),
+			{ random = rand, info = { micro = true, start = PALETTE.ARTERIAL_LIGHT } }
+		)
+	end
+end
+
+------------------------------------------------------------------------------
 -- Splats
 ------------------------------------------------------------------------------
 
@@ -296,12 +581,14 @@ function Blood.splat(
 	size: number,
 	velocity: Vector3?,
 	onto: BasePart?,
-	rng: Random?
+	rng: Random?,
+	info: SplatInfo?
 )
 	if not Config.Blood.ENABLED then
 		return
 	end
 	local rand = rng or random
+	local inf: SplatInfo = info or {}
 	local body = if onto then isBody(onto) else nil
 	local v = velocity or Vector3.zero
 	local speed = v.Magnitude
@@ -317,16 +604,26 @@ function Blood.splat(
 		local w = size * rand:NextNumber(0.6, 0.85)
 		local slant = if speed > 1 then math.abs(v.Unit:Dot(out)) else 1
 		BloodStain.stain(
-			if slant > 0.9 then "spatterRound" else "spatterOval",
+			inf.kind or (if slant > 0.9 then "spatterRound" else "spatterOval"),
 			point,
 			out,
 			along,
 			w,
 			w / math.max(slant, 0.5),
-			{ random = rand, onto = skin, profile = "body", alpha = 0.12, priority = 2 }
+			{
+				random = rand,
+				onto = skin,
+				profile = inf.profile or "body",
+				alpha = 0.12,
+				priority = 2,
+				start = inf.start,
+			}
 		)
 		return
 	end
+	local floor = normal.Y > 0.7
+	local passive = inf.passive == true
+	local height = inf.height or 0
 	-- the impact angle (90 = straight in), from the speed against the surface
 	local sinAngle = if speed > 1 then math.clamp(math.abs(v:Dot(normal)) / speed, 0, 1) else 1
 	local angle = math.deg(math.asin(sinAngle))
@@ -352,9 +649,14 @@ function Blood.splat(
 		end
 	end
 	-- a drop falling into a fresh pool splashes into it (no new stain)
-	if normal.Y > 0.7 and size < 0.35 then
-		local inPool, splash = BloodPool.absorb(position)
+	if floor and size < 0.35 then
+		local inPool, splash = BloodPool.absorb(position, if inf.micro then nil else rand, height)
 		if inPool then
+			if inf.micro then
+				return -- (a tiny splash drop falling back in: lost in the pool)
+			end
+			-- a ring on the pool, tiny drops thrown around it
+			intoPool(position, normal, size, height, rand)
 			if splash then
 				BloodStain.stain("dripPool", position, normal, along, size * 1.4, size * 1.4, {
 					random = rand,
@@ -366,20 +668,64 @@ function Blood.splat(
 			return
 		end
 	end
+	-- a drip falling only a little way: smaller, no satellites (research:
+	-- the stain of a drop grows with the height it fell from)
+	local drip = passive and floor and angle >= 70
+	if drip and height < 1 then
+		size *= 0.9
+	end
 	local width = size * rand:NextNumber(0.72, 0.92)
 	local length = math.min(width / math.max(sinAngle, 0.22), width * 4.5)
-	local kind = spatterKind(angle)
-	local start = PALETTE.ARTERIAL:Lerp(PALETTE.VENOUS, rand:NextNumber(0, 0.35))
+	local kind = inf.kind or (if drip then "drip" else spatterKind(angle))
+	local start = inf.start
+		or if passive
+			then PALETTE.VENOUS:Lerp(PALETTE.ARTERIAL, rand:NextNumber(0, 0.4))
+			else PALETTE.ARTERIAL:Lerp(PALETTE.VENOUS, rand:NextNumber(0, 0.35))
 	-- (the parent drop sits 35 % along the picture: its tail ahead)
-	local centre = if kind == "spatterRound" then position else position + along * length * 0.15
+	local round = kind == "spatterRound" or kind == "drip"
+	local centre = if round then position else position + along * length * 0.15
 	BloodStain.stain(kind, centre, normal, along, width, length, {
 		random = rand,
 		onto = onto,
 		start = start,
+		profile = inf.profile,
 		priority = if size > 0.2 then 3 else 2,
 	})
+	if drip and height > 3.5 then
+		-- fallen more than ~1 m: a ring of tiny satellite drops around it
+		-- (on rough ground only the satellites grow with height, research)
+		local radius = math.min(size * (1 + 0.25 * height), size * 3)
+		local drawn = BloodStain.resolve("starburst")
+		if drawn ~= "starburst" then
+			radius = math.min(radius, size * 1.25) -- (the stand-in: a smaller fan)
+		end
+		local a = rand:NextNumber(0, math.pi * 2)
+		BloodStain.stain(
+			"starburst",
+			position,
+			normal,
+			Vector3.new(math.cos(a), 0, math.sin(a)),
+			radius * 2,
+			radius * 2,
+			{
+				random = rand,
+				onto = onto,
+				start = PALETTE.ARTERIAL_LIGHT,
+				alpha = 0.25,
+				priority = 1,
+				noEdge = true,
+			}
+		)
+	end
+	-- a big drop falling far onto a hard / wet floor: a splash crown
+	if floor and not inf.micro and height >= WORLD.CROWN_MIN_HEIGHT then
+		local dropSize = inf.dropSize or size / 2.6
+		if dropSize >= WORLD.CROWN_MIN_SIZE then
+			crown(position, normal, width, start, v, inf.material, rand)
+		end
+	end
 	-- fast and big: a fan of tiny satellite drops thrown ahead of it
-	if speed > 14 and size > 0.15 then
+	if not passive and speed > 14 and size > 0.15 then
 		BloodStain.stain(
 			"satellites",
 			position + along * size * 0.9,
@@ -397,7 +743,7 @@ function Blood.splat(
 		)
 	end
 	-- a big one on the floor: thick and wet in the middle (a small pool)
-	if not wall and size > 0.22 and normal.Y > 0.7 then
+	if not wall and size > (if passive then 0.3 else 0.22) and floor and inf.kind == nil then
 		local core = size * rand:NextNumber(0.5, 0.65)
 		local record = BloodStain.place(
 			"pool",
@@ -479,6 +825,8 @@ type Drop = {
 	seed: number,
 	gravity: number, -- (× workspace.Gravity)
 	drag: number?, -- (nil: by its size)
+	y0: number, -- the height it left from (how far it fell, when it lands)
+	info: SplatInfo?,
 }
 type Strand = {
 	head: Drop,
@@ -500,7 +848,8 @@ local function newDrop(
 	size: number,
 	source: Model?,
 	rng: Random?,
-	gravity: number?
+	gravity: number?,
+	info: SplatInfo?
 ): Drop?
 	if not Config.Blood.ENABLED or #drops >= BloodAge.cap("DROPS") then
 		return nil
@@ -527,21 +876,25 @@ local function newDrop(
 		seed = rand:NextInteger(1, 2 ^ 30),
 		gravity = gravity or 1,
 		drag = if gravity then 0.25 else nil,
+		y0 = position.Y,
+		info = info,
 	}
 	table.insert(drops, drop)
 	return drop
 end
 
 -- `gravity`: × workspace.Gravity (an artery's jet uses a lighter one, like
--- its particles; it then also keeps a heavy liquid's low drag).
+-- its particles; it then also keeps a heavy liquid's low drag). A drop that
+-- drips: Blood.passiveScale(). `info`: given to its splash when it lands.
 function Blood.drop(
 	position: Vector3,
 	velocity: Vector3,
 	size: number,
 	rng: Random?,
-	gravity: number?
+	gravity: number?,
+	info: SplatInfo?
 )
-	newDrop(position, velocity, size, nil, rng, gravity)
+	newDrop(position, velocity, size, nil, rng, gravity, info)
 end
 
 function Blood.strand(
@@ -573,22 +926,62 @@ function Blood.strand(
 	})
 end
 
+-- How wide a drop of `size` splashes: a bigger, faster drop splashes wider;
+-- a drip on rough ground soaks in at once (its stain no wider for a higher
+-- fall, research: AAFS 2005).
+local function splashSize(
+	size: number,
+	speed: number,
+	passive: boolean,
+	material: Enum.Material?
+): number
+	if passive and BloodStain.porous(material) then
+		return size * 2.6
+	end
+	return size * (2.2 + math.min(speed, 40) * 0.05)
+end
+
+-- What a landing drop tells its splash (a copy: never the caller's table).
+local function landingInfo(
+	given: SplatInfo?,
+	height: number,
+	passive: boolean,
+	size: number,
+	material: Enum.Material
+): SplatInfo
+	local g: SplatInfo = given or {}
+	return {
+		height = math.max(height, 0),
+		passive = passive or g.passive == true,
+		start = g.start,
+		kind = g.kind,
+		profile = g.profile,
+		dropSize = size,
+		material = material,
+		micro = g.micro,
+	}
+end
+
 local function land(drop: Drop, hit: RaycastResult)
 	local speed = drop.velocity.Magnitude
-	-- (a bigger, faster drop splashes wider)
-	local size = drop.size * (2.2 + math.min(speed, 40) * 0.05)
+	-- (a drop made with the drips' slow gravity is a drip, even if its maker
+	-- didn't say so)
+	local passive = (drop.info ~= nil and drop.info.passive == true)
+		or math.abs(drop.gravity - Blood.passiveScale()) < 1e-3
 	Blood.splat(
 		hit.Position,
 		hit.Normal,
-		size,
+		splashSize(drop.size, speed, passive, hit.Material),
 		drop.velocity,
 		hit.Instance :: BasePart,
-		Random.new(drop.seed)
+		Random.new(drop.seed),
+		landingInfo(drop.info, drop.y0 - hit.Position.Y, passive, drop.size, hit.Material)
 	)
 end
 
 -- Moves every drop, lands the ones that hit something.
 local function step(dt: number)
+	debug.profilebegin("BloodDrops")
 	local gravity = Vector3.new(0, -workspace.Gravity, 0)
 	local now = os.clock()
 	stepRuns(now)
@@ -691,6 +1084,7 @@ local function step(dt: number)
 	if #moved > 0 then
 		workspace:BulkMoveTo(moved, frames, Enum.BulkMoveMode.FireCFrameChanged)
 	end
+	debug.profileend()
 end
 RunService.Heartbeat:Connect(step)
 
@@ -704,6 +1098,8 @@ export type BallisticOptions = {
 	ignore: { Instance }?, -- (bodies its path goes through: the wound's own)
 	random: Random?,
 	delay: number?, -- (seconds before it leaves)
+	gravity: number?, -- studs/s² (default workspace.Gravity; a drip: Config.Blood.PASSIVE_GRAVITY)
+	info: SplatInfo?, -- given to its splash (its colour, kind...)
 }
 
 -- A drop leaving `origin` at `velocity`: where it lands is found now (a few
@@ -726,7 +1122,9 @@ function Blood.ballistic(
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.FilterDescendantsInstances = ignore
-	local gravity = Vector3.new(0, -workspace.Gravity, 0)
+	local fall = opts.gravity or workspace.Gravity
+	local gravity = Vector3.new(0, -fall, 0)
+	local passive = math.abs(fall - Config.Blood.PASSIVE_GRAVITY) < 1e-3
 	local drag = if size > 0.12 then 0.35 else 1.1
 	local position, moving = origin, velocity
 	local flight = 0
@@ -751,14 +1149,15 @@ function Blood.ballistic(
 				if instance.Parent == nil then
 					return
 				end
-				local splash = size * (2.2 + math.min(arrival.Magnitude, 40) * 0.05)
+				local splash = splashSize(size, arrival.Magnitude, passive, hit.Material)
 				Blood.splat(
 					hit.Position,
 					hit.Normal,
 					splash,
 					arrival,
 					instance :: BasePart,
-					Random.new(seed)
+					Random.new(seed),
+					landingInfo(opts.info, origin.Y - hit.Position.Y, passive, size, hit.Material)
 				)
 			end)
 			return hit.Position
@@ -768,6 +1167,8 @@ function Blood.ballistic(
 	end
 	return nil
 end
+
+ballisticLater = Blood.ballistic
 
 -- A burst of particles: `count` of its drops really land (the marks it leaves
 -- match what flew), from the same speeds and spread.

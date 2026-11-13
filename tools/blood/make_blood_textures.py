@@ -218,7 +218,7 @@ def fade_border(rgba, px=6):
 
 def save(name, rgba):
     if name != "beam_stream":  # the beam tiles along X: no fade
-        rgba = fade_border(rgba, 12 if name.startswith(("smear", "skin_smear")) else 3)
+        rgba = fade_border(rgba, 12 if name.startswith(("smear", "skin_smear", "drag", "wipe_smear")) else 3)
     path = os.path.join(OUT, name + ".png")
     Image.fromarray(rgba, "RGBA").save(path, optimize=True, compress_level=9)
     SIZES[name] = (os.path.getsize(path), rgba.shape[1], rgba.shape[0])
@@ -1048,6 +1048,992 @@ def arterial_arc(seed, W=1024, H=256):
     return to_rgba(lum(t), edge_alpha(A, t))
 
 
+# ======================================================= SET D (v2) =====
+# Blood v2 "details": NEW pictures only (docs/BLOOD_FR.md, "Nouvelles images
+# (v2)"). Same rules as above: grey = thickness, straight alpha, travel +X,
+# upright pictures drawn top -> bottom. A few of them are masks for raw skin
+# (abrasion, split knuckle): there the grey is "how raw / how bloody", tinted
+# by the code with Config.Blood.PALETTE.RAW.
+# Nothing here changes a v1 picture: the v1 functions are only called.
+def v2_rng(seed):
+    return np.random.default_rng(seed)
+
+
+def rows_cols(h, w):
+    Y, X = np.mgrid[0:h, 0:w].astype(F32) + 0.5
+    return Y, X
+
+
+def rivulet_profile(rng, W, H, top=0.27, bottom=0.17):
+    """A skin rivulet seen face-on, one value per row: centre x, half-width
+    (px) and the 'pause marks' (0..1) where the front stopped and swelled.
+    Real runs are 2-6 mm wide, wider where they left the wound (top)."""
+    y = np.arange(H, dtype=F32) + 0.5
+    f = y / H
+    cx = W * 0.5 + W * 0.04 * noise(rng, (H,), 70) + W * 0.012 * noise(rng, (H,), 14)
+    half = W * (top + (bottom - top) * f**0.7) * (1 + 0.07 * noise(rng, (H,), 30) + 0.03 * noise(rng, (H,), 8))
+    pause = np.zeros(H, F32)
+    for p in rng.uniform(0.2, 0.85, int(rng.integers(2, 4))) * H:
+        g = np.exp(-(((y - p) / (W * rng.uniform(0.1, 0.16))) ** 2))
+        half = half * (1 + 0.15 * g)
+        pause = np.maximum(pause, g)
+    return cx, half, pause
+
+
+def rivulet_field(rng, W, H, cx, half, wobble=0.9):
+    """Signed distance (px, <0 inside) and normalised cross position q
+    (0 = centre line, 1 = edge) of a rivulet from its profile."""
+    Y, X = rows_cols(H, W)
+    # the contact line is never perfectly straight: each side wobbles on its own
+    left = wobble * (noise(rng, (H,), 7) + 0.4 * noise(rng, (H,), 2))
+    right = wobble * (noise(rng, (H,), 7) + 0.4 * noise(rng, (H,), 2))
+    edge = np.where(X < cx[:, None], left[:, None], right[:, None])
+    dx = np.abs(X - cx[:, None])
+    D = dx - half[:, None] - edge
+    q = np.clip(dx / (half[:, None] + edge + 1e-3), 0, 1.5)
+    return D, q, Y, X
+
+
+def rivulet_strip(seed, W=128, H=512):
+    """A run on skin WITHOUT its front bead (the bead is a separate 3D drop or
+    rivulet_bead): round cross-section (dark centre line, thin light edges),
+    2-3 swollen darker 'pause marks', a faint wet film left beside it where
+    it drained, and the bottom 6 % fading into the bead."""
+    rng = v2_rng(seed)
+    cx, half, pause = rivulet_profile(rng, W, H)
+    D, q, Y, X = rivulet_field(rng, W, H, cx, half)
+    A = np.clip(0.5 - D, 0, 1)
+    cap = np.sqrt(np.clip(1 - q * q, 0, 1))  # a rivulet is a circular cap in section
+    flow = noise(rng, (H, W), (24, 1.2))  # faint streaks along the flow
+    t = 0.12 + 0.72 * cap**1.3 + 0.12 * pause[:, None] * cap + 0.04 * flow * cap
+    # wet film beside the run (it was wider while it flowed, then drained)
+    film_w = half * (1.35 + 0.2 * noise(rng, (H,), 40))
+    film = (1 - smooth(-1, 1, np.abs(X - cx[:, None]) - film_w[:, None])) * smooth(-0.5, 0.8, noise(rng, (H,), 50))[:, None]
+    A = np.maximum(A, 0.2 * film)
+    t = np.where(D < 0, t, 0.05)
+    A = A * (1 - smooth(H * 0.94, H * 1.0, Y))
+    return to_rgba(lum(np.clip(t, 0, 1)), A)
+
+
+def rivulet_bead(seed, N=128):
+    """The front bead of a run, face-on: a thick dark dome 1.0 x 1.3, a thin
+    light meniscus, a short neck at the top (where the run joins it) and the
+    light that passes through the drop glowing at its bottom (as in photos)."""
+    rng = v2_rng(seed)
+    S = Shape(N, N, rng, warps=((12, 1.2), (4, 0.4)))
+    c = N * 0.5
+    a = N * rng.uniform(0.25, 0.28)
+    S.add(ellipse(c, c + N * 0.06, a * 1.3, a, np.pi / 2, random_harm(rng, [(3, 5, 0.03)])))
+    S.add(ucap(c + rng.normal(0, 2), 0, a * 0.55, c, c, a * 0.75), 8)  # the neck
+    A = S.alpha()
+    d = depth_of(A)
+    t = meniscus(d, 2.5) * (0.82 + 0.18 * smooth(0, a * 0.8, d))
+    glow = np.exp(-(((S.X - c) / (a * 0.55)) ** 2 + ((S.Y - (c + N * 0.06 + a * 0.75)) / (a * 0.28)) ** 2))
+    t = np.clip(t - 0.3 * glow * smooth(2, 6, d), 0, 1)
+    return to_rgba(lum(t), A)
+
+
+def rivulet_fork(seed, W=256, H=512):
+    """A run that splits into 2-3 fingers below 40 % of its height (a Y / psi
+    shape): blood met an obstacle (a skin crease, a hair). One finger is the
+    main channel and goes further; the ends are round, without a bulb."""
+    rng = v2_rng(seed)
+    S = Shape(W, H, rng, warps=((18, 1.2), (5, 0.4)))
+    c = W * 0.5 + rng.normal(0, 4)
+    r0 = W * 0.1
+    ys = np.arange(0, H * rng.uniform(0.4, 0.5), 10.0)
+    trunk = [(c + 3 * np.sin(y / 37), y, r0 * (1 - 0.1 * y / H)) for y in ys]
+    S.chain(trunk, k=4)
+    sx, sy, sr = trunk[-1]
+    n = int(rng.integers(2, 4))
+    main = int(rng.integers(n))
+    for i in range(n):
+        ang = np.pi / 2 + (i - (n - 1) / 2) * rng.uniform(0.3, 0.45) + rng.normal(0, 0.05)
+        length = (H * 0.92 - sy) * (1.0 if i == main else rng.uniform(0.35, 0.7))
+        r = sr * (0.85 if i == main else rng.uniform(0.5, 0.65))
+        pts = []
+        for f in np.linspace(0, 1, 9):
+            bend = ang + 0.35 * f * (np.pi / 2 - ang)  # gravity pulls each finger back toward straight down
+            x = sx + np.cos(bend) * length * f + 2 * np.sin(f * 7 + i)
+            y = sy + np.sin(bend) * length * f
+            pts.append((x, y, r * (1 - 0.25 * f)))
+        S.chain(pts, k=6)
+        S.add(circle(pts[-1][0], pts[-1][1], pts[-1][2] * 1.05), 3)
+    A = S.alpha()
+    d = depth_of(A)
+    t = np.clip(meniscus(d, sr * 0.45) * 0.86 + 0.04 * noise(rng, A.shape, (20, 2)), 0, 1)
+    return to_rgba(lum(t), edge_alpha(A, t))
+
+
+def cut_shape(rng, W, H, length, gape, bow, tilt, rim_w):
+    """Shared by brow / cheek cuts: a ragged split along a curved line.
+    Returns maps: slit (the open wound), rim (swollen lips), centre line v."""
+    Y, X = rows_cols(H, W)
+    c = W * 0.5
+    u = (X - c) / (length / 2)  # -1..1 along the cut
+    yc = H * 0.5 + bow * (1 - u * u) * H + tilt * u * H + 1.5 * noise(rng, (W,), 10)[None, :]
+    v = Y - yc
+    open_ = np.clip(1 - u * u, 0, 1) ** 0.6
+    rag = 1 + 0.35 * noise(rng, (H, W), (2, 3)) + 0.25 * noise(rng, (W,), 4)[None, :]
+    gap = gape * open_ * rag
+    slit = (1 - smooth(-0.7, 0.7, np.abs(v) - gap)) * smooth(0.4, 1.2, gap)
+    lip = gap + rim_w * (0.7 + 0.5 * noise(rng, (W,), 6)[None, :]) * np.clip(1 - np.abs(u) ** 3, 0, 1)
+    rim = (1 - smooth(-1.5, 1.5, np.abs(v) - lip - 1.2 * noise(rng, (H, W), 2))) * (np.abs(u) < 1.15)
+    return slit, rim, u, v, Y, X
+
+
+def bridges(rng, slit, u, v, count, gape):
+    """Tissue bridges: thin strands that cross the gap of a blunt laceration
+    (nerves, small vessels). A cut by glass has none; a split by a fist has."""
+    out = np.zeros_like(slit)
+    for _ in range(count):
+        u0 = rng.uniform(-0.5, 0.5)
+        sl = rng.normal(0, 0.4)
+        w = rng.uniform(0.012, 0.022)
+        out = np.maximum(out, np.exp(-(((u - u0 - sl * v / (gape * 20)) / w) ** 2)) * slit)
+    return out
+
+
+def bruise_halo(rng, shape, X, Y, cx, cy, rx, ry, mott=0.6):
+    """Faint mottled halo (fresh bruise / swelling) around a wound."""
+    r = ((X - cx) / rx) ** 2 + ((Y - cy) / ry) ** 2
+    m = fbm(rng, shape, [(6, 1.0), (2, 0.5)])
+    return np.exp(-r * 1.4) * np.clip(1 - mott * 0.5 + mott * 0.35 * m, 0, 1)
+
+
+def browcut(seed, W=256, H=128):
+    """The boxing cut along the eyebrow (+X = along the brow): a dark wet slit
+    with ragged gaping lips, 2-3 tissue bridges, a lighter swollen rim of
+    split skin, blood welling over the LOWER end (where it will run from),
+    and a faint mottled bruise. Tinted with blood colours: the rim (light
+    grey) reads as raw red skin, the slit as near-black wet blood."""
+    rng = v2_rng(seed)
+    length = W * rng.uniform(0.62, 0.72)
+    slit, rim, u, v, Y, X = cut_shape(rng, W, H, length, gape=H * 0.075, bow=-0.08, tilt=0.07, rim_w=H * 0.075)
+    br = bridges(rng, slit, u, v, int(rng.integers(2, 4)), H * 0.075)
+    # blood welling at the low end (+X) and spilling a little below it
+    S = Shape(W, H, rng, warps=((8, 1.5), (3, 0.5)))
+    ex = W * 0.5 + length * 0.42
+    ey = H * 0.5 + 0.07 * H + 2
+    S.add(ellipse(ex, ey + 3, 11, 7.5, 0.4, random_harm(rng, [(3, 5, 0.08)])))
+    S.add(ucap(ex, ey + 3, 6.5, ex + rng.normal(2, 2), ey + H * rng.uniform(0.25, 0.34), 5), 4)
+    for _ in range(int(rng.integers(2, 5))):  # little pearls of blood along the lips
+        x = W * 0.5 + rng.uniform(-0.4, 0.4) * length
+        k = (x - W * 0.5) / (length / 2)
+        S.add(circle(x, H * 0.5 + (-0.08 * (1 - k * k) + 0.07 * k) * H + rng.uniform(3, 6), rng.uniform(1.8, 3.2)))
+    welled = S.alpha()
+    halo = bruise_halo(rng, (H, W), X, Y, W * 0.5, H * 0.5, length * 0.62, H * 0.38)
+    L = np.full((H, W), 0.7, F32)
+    A = 0.16 * halo
+    L = np.where(rim > 0.02, 0.9 - 0.12 * noise(rng, (H, W), 2) * 0.5, L)
+    A = np.maximum(A, rim * 0.8)
+    wet_d = depth_of(np.maximum(slit, welled))
+    L = np.where(np.maximum(slit, welled) > 0.02, 0.3 + 0.18 * (1 - meniscus(wet_d, 1.6)), L)
+    A = np.maximum(A, np.maximum(slit, welled))
+    L = np.where(br > 0.3, 0.75, L)  # the bridges are lighter strands across the gap
+    return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
+
+
+def cheekcut(seed, W=256, H=128):
+    """Cheekbone split: a shorter crescent (bowed toward +Y), more bruised and
+    swollen than the brow cut."""
+    rng = v2_rng(seed)
+    length = W * rng.uniform(0.46, 0.52)
+    slit, rim, u, v, Y, X = cut_shape(rng, W, H, length, gape=H * 0.065, bow=0.12, tilt=0.02, rim_w=H * 0.085)
+    br = bridges(rng, slit, u, v, 2, H * 0.065)
+    halo = bruise_halo(rng, (H, W), X, Y, W * 0.5, H * 0.56, length * 0.85, H * 0.42, mott=0.9)
+    S = Shape(W, H, rng, warps=((8, 1.5),))
+    lx = W * 0.5 + rng.choice([-1, 1]) * length * 0.1
+    S.add(ellipse(lx, H * 0.5 + 0.12 * H + 4, 7, 5, 0.0))
+    S.add(ucap(lx, H * 0.62 + 4, 4.5, lx + rng.normal(0, 2), H * 0.86, 3.5), 4)
+    welled = S.alpha()
+    L = np.full((H, W), 0.62, F32)
+    A = 0.32 * halo
+    L = np.where(rim > 0.02, 0.88, L)
+    A = np.maximum(A, rim * 0.8)
+    wet = np.maximum(slit, welled)
+    L = np.where(wet > 0.02, 0.3 + 0.18 * (1 - meniscus(depth_of(wet), 1.6)), L)
+    A = np.maximum(A, wet)
+    L = np.where(br > 0.3, 0.75, L)
+    return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
+
+
+def lipfilm(seed, W=256, H=64):
+    """A thin film of blood along the lower lip (+X = across the mouth),
+    lighter (thin, mixed with saliva), with 2-3 short beads hanging from its
+    bottom edge, darker (thicker) because blood collects there."""
+    rng = v2_rng(seed)
+    S = Shape(W, H, rng, warps=((10, 1.5), (3, 0.5)))
+    pts = []
+    lump = noise(rng, (16,), 1.5)
+    for j, x in enumerate(np.linspace(W * 0.08, W * 0.92, 16)):
+        f = (x - W * 0.5) / (W * 0.42)
+        pts.append((x, H * 0.36 + 2 * f * f + rng.normal(0, 0.6), (H * 0.11 + 2.5 * lump[j]) * np.sqrt(max(0.05, 1 - f**4)) + 1.5))
+    S.chain(pts, k=5)
+    for _ in range(int(rng.integers(2, 4))):  # the film breaks where the lip was dry
+        S.add(circle(rng.uniform(W * 0.15, W * 0.85), H * 0.3 + rng.normal(0, 2), rng.uniform(2.5, 5)), 2, sub=True)
+    beads = []
+    for _ in range(int(rng.integers(2, 4))):
+        x = rng.uniform(W * 0.2, W * 0.8)
+        L = rng.uniform(H * 0.18, H * 0.4)
+        r = rng.uniform(4, 6.5)
+        y0 = H * 0.42
+        S.add(ucap(x, y0, r * 0.55, x + rng.normal(0, 1), y0 + L, r * 0.75), 4)
+        S.add(ellipse(x, y0 + L + r * 0.4, r * 1.15, r, np.pi / 2), 3)
+        beads.append((x, y0 + L + r * 0.4, r))
+    A = S.alpha()
+    d = depth_of(A)
+    t = 0.08 + 0.16 * meniscus(d, 2.0) + 0.05 * noise(rng, A.shape, (2, 8))
+    for x, y, r in beads:
+        g = np.exp(-(((S.X - x) / (r * 1.1)) ** 2 + ((S.Y - y) / (r * 1.3)) ** 2))
+        t = np.maximum(t, 0.78 * g * meniscus(d, 1.5))
+    return to_rgba(lum(np.clip(t, 0, 1)), A)
+
+
+def crack_plates(rng, h, w, cell, warp=1.5):
+    """Dried crust breaks into plates (like dried mud). Voronoi cells about
+    `cell` px wide. Returns the distance (px) to the nearest crack and the
+    plate id of each pixel."""
+    from scipy.spatial import cKDTree
+
+    Y, X = rows_cols(h, w)
+    Yw = Y + warp * noise(rng, (h, w), 3)
+    Xw = X + warp * noise(rng, (h, w), 3)
+    n = max(4, int(h * w / (cell * cell)))
+    pts = np.stack([rng.uniform(0, h, n), rng.uniform(0, w, n)], 1)
+    tree = cKDTree(pts)
+    q = np.stack([Yw.ravel(), Xw.ravel()], 1)
+    dist, idx = tree.query(q, k=2)
+    p1, p2 = pts[idx[:, 0]], pts[idx[:, 1]]
+    sep = np.linalg.norm(p2 - p1, axis=1) + 1e-6
+    edge = (dist[:, 1] ** 2 - dist[:, 0] ** 2) / (2 * sep)
+    return edge.reshape(h, w).astype(F32), idx[:, 0].reshape(h, w)
+
+
+def crust_from(rng, A, cell, gap_p=0.12, lam=3.0):
+    """Turn a wet stain (alpha A) into dried crust: cracked plates, each its
+    own thickness, lighter flaking edges where plates lift, a darker dried
+    rim along the outline (coffee ring), and some plates fallen off near the
+    edge. Matte: high contrast inside."""
+    h, w = A.shape
+    edge, pid = crack_plates(rng, h, w, cell)
+    d = depth_of(A)
+    plate_t = np.random.default_rng(int(rng.integers(1 << 30))).uniform(0.3, 0.62, pid.max() + 1)[pid]
+    lost = np.random.default_rng(int(rng.integers(1 << 30))).random(pid.max() + 1)[pid]
+    # only part of the plate borders are open cracks (a real crust is not a mosaic)
+    opened = smooth(0.0, 0.8, noise(rng, (h, w), cell * 0.6))
+    crack = (1 - smooth(0.35, 1.0, edge)) * opened
+    near_edge = 1 - smooth(4, 14, d)
+    gone = (lost < gap_p * (0.3 + 1.7 * near_edge)).astype(F32)
+    lift = (1 - smooth(0.8, 3.0, edge)) * opened  # open plate borders curl up: thinner, lighter
+    ring = np.exp(-(((d - 2.5) / 2.5) ** 2))
+    t = plate_t * (1 - 0.35 * lift) + 0.3 * ring + 0.07 * noise(rng, (h, w), 1.0)
+    t = np.clip(t * meniscus(d, lam) * 1.15, 0, 1)
+    cov = A * (1 - crack * 0.85) * (1 - gone)
+    return t, cov
+
+
+def crust_strip(seed, W=128, H=512):
+    """A dried run (same outline family as rivulet_strip, another seed):
+    cracked plates, flaking lighter edges, a darker dried rim along both
+    sides, small gaps. Placed over an old run when it dries."""
+    rng = v2_rng(seed)
+    cx, half, pause = rivulet_profile(rng, W, H, top=0.22, bottom=0.17)
+    D, q, Y, X = rivulet_field(rng, W, H, cx, half, wobble=1.4)
+    A = np.clip(0.5 - D, 0, 1)
+    t, cov = crust_from(rng, A, cell=rng.uniform(16, 22), gap_p=0.08)
+    t = np.clip(t + 0.1 * pause[:, None], 0, 1)
+    cov = cov * (1 - smooth(H * 0.93, H, Y))
+    return to_rgba(lum(t), cov)
+
+
+def crust_patch(seed, N=256):
+    """A dried smear / dried lip: an irregular patch of cracked, flaky, matte
+    crust with holes."""
+    rng = v2_rng(seed)
+    S = Shape(N, N, rng, warps=((20, 5.0), (6, 1.5)))
+    c = N * 0.5
+    for _ in range(int(rng.integers(4, 7))):
+        S.add(circle(c + rng.normal(0, N * 0.1), c + rng.normal(0, N * 0.07), N * rng.uniform(0.1, 0.18), random_harm(rng, [(3, 6, 0.08)])), N * 0.06)
+    for _ in range(int(rng.integers(3, 7))):  # holes where it never covered
+        S.add(circle(c + rng.normal(0, N * 0.12), c + rng.normal(0, N * 0.1), rng.uniform(4, 10)), 3, sub=True)
+    for _ in range(int(rng.integers(5, 12))):
+        satellite(S, rng, c + rng.normal(0, N * 0.3), c + rng.normal(0, N * 0.25), rng.uniform(1.5, 4), rng.uniform(0, 6.28))
+    A = S.alpha()
+    t, cov = crust_from(rng, A, cell=rng.uniform(18, 26), gap_p=0.12)
+    return to_rgba(lum(t), cov)
+
+
+def bubble_rings(rng, S, t, A, count, rmin, rmax, inside):
+    """Froth: small air bubbles in thin blood. Lighter inside (a thin film
+    stretched over the bubble), a thin dark ring at its foot."""
+    ys, xs = np.nonzero(inside)
+    if len(ys) == 0:
+        return t, A
+    for _ in range(count):
+        j = int(rng.integers(len(ys)))
+        r = rng.uniform(rmin, rmax)
+        rr = np.hypot(S.X - xs[j], S.Y - ys[j])
+        ring = np.exp(-(((rr - r) / max(0.9, r * 0.12)) ** 2))
+        inner = 1 - smooth(r - 1.2, r, rr)
+        t = np.where(inner > 0.5, 0.06, t)
+        t = np.maximum(t, 0.85 * ring)
+        A = np.where(inner > 0.5, A * 0.55, A)
+        A = np.maximum(A, ring * 0.95)
+    return t, A
+
+
+def spit(seed, N=256):
+    """Expirated blood (spat / coughed): an irregular light blob full of
+    bubble rings, smaller blobs around, and one thin string of saliva toward
+    +X. Mostly thin (light): tinted Config.Blood.PALETTE.SALIVA."""
+    rng = v2_rng(seed)
+    S = Shape(N, N, rng, warps=((16, 3.0), (5, 1.0)))
+    c = N * 0.42
+    for _ in range(int(rng.integers(3, 6))):
+        S.add(circle(c + rng.normal(0, 14), N * 0.5 + rng.normal(0, 12), rng.uniform(18, 32), random_harm(rng, [(3, 6, 0.08), (8, 14, 0.04)])), 12)
+    for _ in range(int(rng.integers(3, 8))):
+        a = rng.uniform(-1.6, 1.6)
+        d = rng.uniform(60, 100)
+        S.add(circle(c + np.cos(a) * d, N * 0.5 + np.sin(a) * d * 0.8, rng.uniform(3, 9), random_harm(rng, [(3, 5, 0.1)])), 2)
+    # the string: a thin wavy thread with a tiny blob or two on it
+    y = N * 0.5 + rng.normal(0, 6)
+    pts = [(c + 25 + i * 16, y + 6 * np.sin(i * 0.9 + rng.uniform(0, 3)), 1.8 + 0.6 * rng.random()) for i in range(int(rng.integers(5, 8)))]
+    S.chain(pts, k=2)
+    for p in pts[2::3]:
+        S.add(ellipse(p[0], p[1], 4, 2.6, 0), 2)
+    A = S.alpha()
+    d = depth_of(A)
+    t = 0.22 + 0.28 * meniscus(d, 3) + 0.08 * noise(rng, A.shape, 6)
+    t, A = bubble_rings(rng, S, t, A, int(rng.integers(5, 11)), 2.5, 8, d > 9)
+    t, A = bubble_rings(rng, S, t, A, int(rng.integers(8, 16)), 1.2, 2.6, d > 4)
+    return to_rgba(lum(np.clip(t, 0, 1)), np.clip(A, 0, 1))
+
+
+def crown_cell(f, seed, N=256):
+    """One frame (f = 0..15) of a drop splashing on the ground, seen from the
+    side and a little above (camera-facing particle). Ground = near the
+    bottom of the cell. 0-2 the drop flattens, 3-7 a thin crown rises with
+    fingers, 8-11 the fingers throw droplets out, 12-15 it collapses into a
+    flat wet lens. The crown wall is a thin sheet: light and see-through,
+    thicker (darker) at its foot and in its beaded rim."""
+    rng = np.random.default_rng(seed)
+    S = Shape(N, N, rng, warps=((14, 0.8),))
+    c, g = N * 0.5, N * 0.86
+    R0 = N * 0.1
+    sheet = np.zeros((N, N), F32)
+    sheet_l = np.full((N, N), 0.8, F32)
+    n_f = 9
+    phis = np.linspace(0, 2 * np.pi, n_f, endpoint=False) + rng.uniform(0, 0.7)
+    flen = 0.7 + 0.5 * rng.random(n_f)
+    lens_a = R0 * (1.0 + 1.9 * (1 - np.exp(-f / 4)))
+    lens_b = max(2.5, R0 * (0.9 * np.exp(-f / 1.2) + 0.1))
+    if f == 0:
+        S.add(circle(c, g - R0, R0))
+    elif f <= 2:
+        S.add(ellipse(c, g - lens_b, lens_a, lens_b, 0))
+    else:
+        S.add(ellipse(c, g - 2.5, lens_a, 4.0, 0))
+    tilt = 0.3  # seen a little from above: circles become ellipses
+    if f >= 2:
+        k = np.clip((f - 2) / 6, 0, 1)
+        col = np.clip((f - 11) / 4, 0, 1)  # collapse
+        Hc = R0 * (0.3 + 2.0 * k) * (1 - col)
+        Rb = R0 * (1.5 + 0.8 * k + 0.3 * col)  # wall foot radius
+        Rt = Rb * (1.2 + 0.3 * k)  # the crown flares outward (a tulip, not a bucket)
+        yt = g - 3 - Hc
+        if Hc > 1.5:
+            Y, X = rows_cols(N, N)
+            yrel = np.clip((g - 3 - Y) / max(Hc, 1), 0, 1)
+            rad = Rb + (Rt - Rb) * yrel
+            ex = np.clip(1 - ((X - c) / rad) ** 2, 0, 1)
+            inside = (np.abs(X - c) < rad) & (Y < g - 3 + tilt * Rb * np.sqrt(ex)) & (Y > yt - tilt * Rt * np.sqrt(ex))
+            side = np.abs(X - c) / np.maximum(rad, 1)  # the sheet looks denser where seen edge-on
+            sheet = inside.astype(F32) * (0.12 + 0.3 * (1 - yrel) ** 2 + 0.3 * side**8)
+            sheet_l = 0.92 - 0.3 * (1 - yrel) ** 2 - 0.15 * side**8
+            for i in range(32):  # the beaded rim
+                a0, a1 = 2 * np.pi * i / 32, 2 * np.pi * (i + 1) / 32
+                rb = 1.6 + 0.9 * ((i * 5) % 3) / 2  # beads of uneven size along the rim
+                S.add(ucap(c + Rt * np.cos(a0), yt + tilt * Rt * np.sin(a0), rb, c + Rt * np.cos(a1), yt + tilt * Rt * np.sin(a1), 1.6), 1)
+        for i, p in enumerate(phis):
+            bx, by = c + Rt * np.cos(p), yt + tilt * Rt * np.sin(p)
+            out = np.cos(p)
+            L0 = R0 * 1.3 * flen[i]
+            fl = L0 * np.clip((f - 3) / 4, 0, 1) * (1 - col)
+            if fl > 1 and f <= 9:  # a finger with a bead at its tip
+                tx, ty = bx + out * fl * 0.5, by - fl
+                S.add(ucap(bx, by, 4.6, tx, ty, 2.4), 3)
+                if f >= 5:
+                    S.add(circle(tx + out, ty - 2, 3.6 + 0.5 * (f - 5)), 2)
+            if f >= 9:
+                tf = (f - 8) / 7  # ballistic flight of the released droplet
+                dx = bx + out * (L0 * 0.5 + R0 * 3.0 * tf)
+                dy = by - L0 - R0 * 3.2 * tf + R0 * 5.0 * tf * tf
+                if dy < g - 3:
+                    S.add(ellipse(dx, dy, 4.4, 4.0, 0))
+                    if f <= 10:
+                        S.add(ucap(bx + out * L0 * 0.3, by - L0 * 0.6, 1.0, dx, dy, 1.4), 1)
+                else:
+                    S.add(ellipse(dx, g - 2, 6, 2.0, 0))  # landed: a tiny lens
+    A = S.alpha()
+    A[int(g + 3) :, :] = 0
+    Ls = shade_liquid(A, dome(A))
+    L = np.where(A > 0.02, Ls, sheet_l)
+    A_all = np.maximum(A, sheet * (1 - A))
+    return to_rgba(np.clip(L, 0, 1), np.clip(A_all, 0, 1))
+
+
+def crown_4x4():
+    return grid([crown_cell(f, 2000) for f in range(16)], 4)
+
+
+def ripple_ring(N=256):
+    """A ripple on a wet pool after a drop: a bright thin crest (reflecting
+    the sky), a darker trough just inside it, a faint second ring, and a
+    highlight on one side. Scaled up and faded by the code."""
+    rng = v2_rng(2100)
+    Y, X = rows_cols(N, N)
+    c = N * 0.5
+    r = np.hypot(X - c, Y - c) * (1 + 0.006 * noise(rng, (N, N), 20))
+    th = np.arctan2(Y - c, X - c)
+    side = 0.55 + 0.45 * np.cos(th + 2.3)  # light from the top left
+    R1, R2 = N * 0.44, N * 0.3
+    crest = np.exp(-(((r - R1) / 1.3) ** 2))
+    trough = np.exp(-(((r - (R1 - 4.5)) / 2.0) ** 2))
+    inner = np.exp(-(((r - R2) / 1.2) ** 2)) * 0.4
+    A = np.clip(np.maximum.reduce([crest * (0.45 + 0.55 * side), trough * 0.35, inner * (0.5 + 0.5 * side)]), 0, 1)
+    L = np.where(trough * 0.35 > np.maximum(crest, inner), 0.38, 1.0)
+    return to_rgba(L, A)
+
+
+def starburst(seed, N=512):
+    """Drip-into-pool satellites: every drop falling into a wet pool throws
+    tiny droplets out, radially. After a dozen drops the pool sits in a
+    'starburst' of dots. Centre 25 % empty (the pool covers it)."""
+    rng = v2_rng(seed)
+    S = Shape(N, N, rng, warps=((20, 0.8),))
+    c = N * 0.5
+    R = N * 0.48
+    for _ in range(int(rng.integers(70, 120))):
+        a = rng.uniform(0, 2 * np.pi)
+        d = R * (0.3 + 0.7 * rng.random() ** 1.7)
+        far = (d / R - 0.3) / 0.7
+        r = np.clip(rng.lognormal(np.log(3.2 - 1.8 * far), 0.4), 1.0, 6.0)
+        x, y = c + np.cos(a) * d, c + np.sin(a) * d
+        satellite(S, rng, x, y, r, a, tail_p=0.35 + 0.4 * far)
+    A = S.alpha()
+    t = np.clip(meniscus(depth_of(A), 1.6) * 1.1, 0, 1)
+    return to_rgba(lum(t), edge_alpha(A, t))
+
+
+def fibre_feather(rng, shape, length=8):
+    """Noise stretched along random fibre directions (0, 45, 90, 135 deg
+    mixed): what the edge of a wicking stain follows on cloth."""
+    h, w = shape
+    a = noise(rng, shape, (0.8, length))
+    b = noise(rng, shape, (length, 0.8))
+    cdiag = ndi.rotate(noise(rng, (h * 2, w * 2), (0.8, length)), 45, reshape=False, order=1)[h // 2 : h // 2 + h, w // 2 : w // 2 + w]
+    cdiag = cdiag / (cdiag.std() + 1e-6)
+    sel = noise(rng, shape, 24)
+    return np.where(sel > 0.3, np.maximum(a, b), np.maximum(cdiag, 0.6 * a))
+
+
+def wick_halo(seed, N=512):
+    """The wicking edge of a blood stain on cotton: a fuzzy ring, feathered
+    outward along the fibres, fading in toward an empty middle (the soak
+    picture covers it: place it at the soak's size, the pale fringe 1.25x). Tinted FABRIC_WET it is the dark wet
+    patch that shows on ANY shirt colour; tinted pale, the plasma fringe."""
+    rng = v2_rng(seed)
+    S = Shape(N, N, rng, warps=((50, 14.0), (14, 4.0)))
+    c = N * 0.5
+    R = N * 0.31  # placed at the SAME size as the soak, it starts just inside its edge
+    S.add(circle(c, c, R, random_harm(rng, [(3, 5, 0.06), (6, 9, 0.03)])))
+    D = S.D
+    band = R * rng.uniform(0.42, 0.5)
+    # (same lesson as soak: long fibre streaks read as fur. Capillary lobes a
+    # few threads deep, with only a faint fibre bias.)
+    feather = fibre_feather(rng, (N, N), length=4)
+    lobes = fbm(rng, (N, N), [(9, 1.0), (3.5, 0.6)])
+    outer = smooth(-0.5, 0.5, -D / 9 + 0.12 * feather + 0.45 * lobes)
+    # wettest (darkest) next to the stain, fading out toward the fibre edge;
+    # the inside melts away under the soak picture
+    inner = smooth(-band * 1.3, -band * 0.55, D + 6 * noise(rng, (N, N), 10))
+    A = outer * inner * (0.5 + 0.5 * smooth(0, -band * 0.7, D))
+    t = 0.65 - 0.3 * smooth(-band * 0.7, 0, D) + 0.06 * noise(rng, (N, N), 6)
+    return to_rgba(lum(np.clip(t, 0, 1)), np.clip(A * 0.95, 0, 1))
+
+
+def wick_weave(seed=2301, N=512):
+    """Wicking on a synthetic woven fabric: blood follows the threads (warp
+    and weft), so the halo is squarish (a rounded rectangle), feathered along
+    H and V only. Empty centre, like wick_halo (same size as the soak)."""
+    rng = v2_rng(seed)
+    Y, X = rows_cols(N, N)
+    c = N * 0.5
+    dx = np.abs(X - c + 8 * noise(rng, (N, N), 30)) / (N * 0.32)
+    dy = np.abs(Y - c + 8 * noise(rng, (N, N), 30)) / (N * 0.28)
+    r = (dx**3.2 + dy**3.2) ** (1 / 3.2)  # a superellipse: between a circle and a square
+    D = (r - 1) * N * 0.3  # about a distance in px, < 0 inside
+    feather = np.maximum(noise(rng, (N, N), (0.7, 6)), noise(rng, (N, N), (6, 0.7)))
+    lobes = fbm(rng, (N, N), [(8, 1.0), (3, 0.6)])
+    outer = smooth(-0.5, 0.5, -D / 8 + 0.3 * feather + 0.35 * lobes)
+    band = N * 0.13
+    inner = smooth(-band * 1.3, -band * 0.55, D + 5 * noise(rng, (N, N), 8))
+    A = outer * inner * (0.5 + 0.5 * smooth(0, -band * 0.7, D))
+    t = 0.65 - 0.3 * smooth(-band * 0.7, 0, D) + 0.05 * noise(rng, (N, N), 5)
+    return to_rgba(lum(np.clip(t, 0, 1)), np.clip(A * 0.95, 0, 1))
+
+
+def serum_halo(n, N=512):
+    """Paired with pool_<n> (same outline, same frame): the pale ring of
+    serum that seeps OUT of an old pool as the clot shrinks (plasma leaves
+    the red cells behind). Transparent inside the pool. Tinted SERUM."""
+    _, S = pool_shape(700 + n, 1024)
+    big = S.alpha()
+    A0 = big.reshape(N, 2, N, 2).mean(axis=(1, 3))  # 1024 -> 512, same frame
+    # small drops beside the pool dry too fast to weep serum: keep the big body
+    lab, k = ndi.label(A0 >= 0.5)
+    areas = ndi.sum(np.ones_like(A0), lab, range(1, k + 1))
+    keep = np.isin(lab, 1 + np.nonzero(areas >= 0.05 * areas.max())[0])
+    A0 = np.where(keep, A0, 0.0)
+    rng = v2_rng(2400 + n)
+    out_d = ndi.distance_transform_edt(A0 < 0.5).astype(F32)
+    width = N * (0.02 + 0.04 * smooth(-1, 1, noise(rng, (N, N), 30)))
+    band = (1 - smooth(width * 0.6, width, out_d)) * (A0 < 0.5)
+    tide = np.exp(-(((out_d - width * 0.85) / 1.6) ** 2)) * band
+    A = np.clip(band * (0.55 - 0.3 * out_d / (width + 1)) + 0.3 * tide, 0, 1) * (1 - A0)
+    L = np.clip(1.0 - 0.45 * tide + 0.04 * noise(rng, (N, N), 3), 0, 1)
+    return to_rgba(L, A)
+
+
+def drag(seed, W=1024, H=256):
+    """A body dragged / sliding toward +X: the blood that was lying there is
+    pushed into a heavy smeared start (left), then a film wiped by the cloth
+    with 8-14 irregular parallel striations, broken where the ground's high
+    points interrupt it, thinning and fading to nothing on the right."""
+    rng = v2_rng(seed)
+    Y, X = rows_cols(H, W)
+    curve = 10 * noise(rng, (W,), 200)[None, :]
+    Yc = Y - H * 0.5 - curve
+    prog = np.clip((X - W * 0.1) / (W * 0.85), 0, 1)
+    half = H * 0.34 * (1 - 0.45 * prog) + 5 * noise(rng, (W,), 30)[None, :]
+    band = 1 - smooth(-3, 3, np.abs(Yc) - half - 7 * noise(rng, (H, W), (3, 20)) - 3 * noise(rng, (H, W), 2))
+    # striations: lanes at uneven spacing, each its own width, strength and end
+    n = int(rng.integers(8, 15))
+    ys = np.sort(rng.uniform(-1, 1, n)) * H * 0.3
+    lanes = np.zeros((H, W), F32)
+    for y0 in ys:
+        w = rng.uniform(1.5, 7)
+        end = W * rng.uniform(0.4, 0.97)
+        wig = 2.0 * noise(rng, (W,), 70)[None, :]
+        broken = smooth(-1.2, -0.2, noise(rng, (W,), rng.uniform(8, 30)))[None, :]  # gaps along a lane
+        g = np.exp(-(((Yc - y0 * (1 - 0.4 * prog) - wig) / w) ** 2)) * broken
+        lanes = np.maximum(lanes, g * (1 - smooth(end - W * 0.2, end, X)) * rng.uniform(0.5, 1.0))
+    grit = noise(rng, (H, W), 1.3) + 0.6 * noise(rng, (H, W), 5) + 0.5 * noise(rng, (H, W), (2, 30))
+    thr = -2.0 + 3.6 * prog**1.1  # the further, the more the ground breaks the film
+    film = smooth(thr - 0.35, thr + 0.35, grit) * (1 - smooth(0.05, 0.6, prog))
+    cov = np.maximum(smooth(thr - 0.35, thr + 0.35, grit + 1.2) * lanes, film * 0.9) * band
+    # the start: pooled blood pushed forward (its front smeared into the film)
+    S = Shape(W, H, rng, warps=((30, 8.0), (9, 2.0)))
+    hx = W * 0.1
+    for _ in range(5):
+        S.add(ellipse(hx + rng.normal(0, 14), H * 0.5 + curve[0, int(hx)] + rng.normal(0, 14), rng.uniform(34, 50), rng.uniform(26, 40), rng.normal(0, 0.2), random_harm(rng, [(3, 6, 0.06)])), 22)
+    head = S.alpha()
+    head = np.maximum(head, ndi.uniform_filter1d(head, 60, axis=1, origin=-29) * 0.9 * band)  # pushed toward +X
+    cov = np.maximum(cov * smooth(hx - 40, hx + 10, X), head)
+    t = 0.18 + 0.4 * (1 - prog) ** 1.3 + 0.25 * lanes * (1 - 0.6 * prog) + 0.05 * noise(rng, (H, W), 6)
+    hd = depth_of(head)
+    t = np.where(head > 0.5, np.maximum(t, (0.4 + 0.5 * meniscus(hd, 8)) * (1 - 0.45 * smooth(hx, hx + 90, X))), t)
+    A = cov * (0.55 + 0.45 * smooth(0.05, 0.45, t)) * (1 - smooth(W * 0.9, W, X))
+    return to_rgba(lum(np.clip(t, 0, 1)), np.clip(A, 0, 1))
+
+
+def shoe_run(seed, mirror=False, N=256):
+    """A running print: only the forefoot lands (tread lugs, grooves partly
+    filled), the shoe slips forward a little on the wet blood (streaks
+    toward the toes = toward the top of the image, the way the runner
+    goes), and no heel."""
+    rng = v2_rng(seed)
+    side = -1 if mirror else 1
+    S = Shape(N, N, rng, warps=((24, 1.2),))
+    cy = N * 0.6
+    S.add(ellipse(128 + 6 * side, cy, 44, 48, 0.12 * side))
+    S.add(ucap(128 + 8 * side, cy + 30, 37, 128 + 4 * side, cy + 58, 30), 18)
+    D = S.D.copy()
+    inside = np.clip(0.5 - D, 0, 1)
+    Y, X = rows_cols(N, N)
+    jx, jy = 1.6 * noise(rng, (N, N), 5), 1.6 * noise(rng, (N, N), 5)
+    cw, ch = 15.0, 11.0
+    row = np.floor((Y + jy) / ch)
+    u = ((X + jx + (row % 2) * cw * 0.5) / cw) % 1.0
+    w = ((Y + jy) / ch) % 1.0
+    cell_id = np.floor((X + jx + (row % 2) * cw * 0.5) / cw) * 37 + row * 11
+    size = 0.4 + 0.06 * np.sin(cell_id * 12.9898)
+    box = np.maximum(np.abs(u - 0.5) - size + 0.12, 0) ** 2 + np.maximum(np.abs(w - 0.5) - size * 0.85 + 0.12, 0) ** 2
+    lugs = (1 - smooth(0.0035, 0.012, box)) * smooth(-2.0, -1.3, noise(rng, (N, N), 4))
+    rim = np.clip(0.5 - np.abs(D + 4.5) + 3.0, 0, 1)
+    press = fbm(rng, (N, N), [(18, 1.0), (5, 0.6)])
+    fill = smooth(-0.5, 0.3, press + 0.6 * smooth(cy + 10, cy - 40, Y))  # blood in the grooves, more at the toes
+    heel_fade = 1 - smooth(cy + 15, cy + 70, Y + 10 * noise(rng, (N, N), 8))  # the back barely touched
+    tread = np.maximum(np.maximum(lugs, rim), fill * 0.9) * inside * heel_fade * smooth(-2.4, -1.8, press)
+    # the forward slip: the front of the print dragged toward the toes
+    src = tread * smooth(cy + 5, cy - 25, Y)
+    slip = np.zeros_like(src)
+    reach = rng.uniform(40, 60)
+    for k in range(1, int(reach)):
+        slip = np.maximum(slip, np.roll(src, -k, axis=0) * (1 - k / reach) ** 1.3)
+    streak = smooth(-0.5, 0.7, noise(rng, (N, N), (16, 1.6)) + 0.4 * noise(rng, (N, N), (40, 4)))
+    slip = slip * streak * (1 - inside * 0.6)
+    cov = np.maximum(tread, slip * 0.9)
+    t = np.clip(0.55 + 0.18 * press - 0.3 * (slip > tread) * (1 - slip), 0.1, 1)
+    A = np.clip(cov, 0, 1) * (0.6 + 0.4 * smooth(0.1, 0.5, t))
+    return to_rgba(lum(t), A)
+
+
+def froth_cell(i, N=256):
+    """A frothy gob of blood + saliva / mucus (spat, blown from the nose):
+    a lumpy blob riddled with bubbles (holes with a bright rim), lighter
+    than pure blood."""
+    rng = np.random.default_rng(2500 + i)
+    S = Shape(N, N, rng, warps=((18, 3.0), (6, 1.0)))
+    c = N * 0.5
+    for _ in range(int(rng.integers(3, 7))):
+        S.add(circle(c + rng.normal(0, 22), c + rng.normal(0, 22), rng.uniform(22, 44)), 18)
+    if i % 3 == 0:  # a strand trailing off
+        a = rng.uniform(0, 6.28)
+        S.chain([(c + np.cos(a) * d, c + np.sin(a) * d + 6 * np.sin(d / 15), 7 - d / 25) for d in np.linspace(20, 115, 7)], k=6)
+    holes = []
+    for _ in range(int(rng.integers(10, 26))):
+        x, y = c + rng.normal(0, 28), c + rng.normal(0, 28)
+        r = np.clip(rng.lognormal(np.log(6), 0.45), 2.5, 16)
+        holes.append((x, y, r))
+    A = S.alpha()
+    h = dome(A)
+    for x, y, r in holes:
+        rr = np.hypot(S.X - x, S.Y - y)
+        h = h + 0.6 * r * np.sqrt(np.clip(1 - (rr / r) ** 2, 0, 1))  # bubbles bulge out
+    L = shade_liquid(A, h, soft=1.0) + 0.14
+    for x, y, r in holes:
+        rr = np.hypot(S.X - x, S.Y - y)
+        if rng.random() < 0.45:  # a popped bubble: a hole with a light rim
+            A = np.where(rr < r * 0.7, A * smooth(r * 0.45, r * 0.7, rr), A)
+            L = np.where(np.abs(rr - r * 0.8) < 1.6, np.maximum(L, 0.85), L)
+    return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
+
+
+def froth_4x4():
+    return grid([froth_cell(i) for i in range(16)], 4)
+
+
+def pendant_cell(f, N=256):
+    """A drop hanging under a wet edge (stump, chin, fingertip): 0 round,
+    1 pear, 2 necked, 3 released (falling drop + tiny satellite + the small
+    bead left behind). The edge it hangs from is the TOP of the cell."""
+    rng = np.random.default_rng(2600)
+    S = Shape(N, N, rng, warps=((20, 0.8),))
+    c = N * 0.5
+    S.add(ellipse(c, -6, 46, 11, 0))  # the wet edge it hangs from
+    if f == 0:
+        S.add(circle(c, 52, 44), 22)
+    elif f == 1:
+        S.add(ucap(c, 14, 26, c, 112, 49), 16)
+    elif f == 2:
+        S.add(ucap(c, 8, 20, c, 96, 6), 14)
+        S.add(ucap(c, 96, 6, c, 162, 48), 10)
+    else:
+        S.add(circle(c, 12, 20), 14)
+        S.add(circle(c, 116, 7))
+        S.add(ellipse(c, 198, 44, 47, 0))
+    A = S.alpha()
+    return to_rgba(shade_liquid(A, dome(A)), A)
+
+
+def pendant_2x2():
+    return grid([pendant_cell(f) for f in range(4)], 2)
+
+
+def wipe_smear(seed, W=512, H=256):
+    """The back of a hand / a forearm wiped across a bleeding face (+X): a
+    heavier start, 4-6 parallel knuckle lanes, a thin film that breaks up and
+    feathers out, and a fairly abrupt end where the hand left the skin."""
+    rng = v2_rng(seed)
+    Y, X = rows_cols(H, W)
+    bend = rng.uniform(-0.0006, 0.0006)
+    Yc = Y - H * 0.5 - bend * (X - W * 0.5) ** 2 - 5 * noise(rng, (W,), 60)[None, :]
+    prog = np.clip((X - W * 0.08) / (W * 0.8), 0, 1)
+    nf = int(rng.integers(4, 7))
+    sp = H * 0.6 / nf
+    lanes = np.zeros((H, W), F32)
+    for i in range(nf):
+        y0 = (i - (nf - 1) / 2) * sp * (1 - 0.2 * prog) + rng.normal(0, 2) + 2 * noise(rng, (W,), 50)[None, :]
+        lanes = np.maximum(lanes, np.exp(-(((Yc - y0) / (sp * rng.uniform(0.2, 0.32))) ** 2)) * rng.uniform(0.6, 1.0))
+    width = (nf * sp / 2 + 6) * (1 - 0.25 * prog)
+    edge = np.abs(Yc) + 9 * noise(rng, (H, W), (5, 24)) + 4 * noise(rng, (H, W), 3)
+    film = 1 - smooth(width - 5, width + 5, edge)
+    endx = W * rng.uniform(0.84, 0.9) + 8 * noise(rng, (H,), 10)[:, None]
+    end = 1 - smooth(endx - 2, endx + 1, X)
+    start = smooth(W * 0.03, W * 0.1, X + 14 * noise(rng, (H, W), 8))
+    stri = fbm(rng, (H, W), [((2.0, 30), 1.0), ((4, 70), 0.6), ((10, 12), 0.5)])
+    thr = -1.6 + 2.4 * prog**1.2
+    cov = film * start * end * smooth(thr - 0.45, thr + 0.45, stri + 1.1 * lanes - 0.4)
+    t = 0.08 + 0.26 * (1 - prog) ** 1.6 + 0.1 * lanes * (1 - 0.5 * prog) + 0.04 * np.clip(stri, -1, 2)
+    t = t + 0.12 * np.exp(-(((X - endx) / 3.0) ** 2)) * film  # blood piles up a little where the hand lifted
+    A = cov * (0.4 + 0.6 * smooth(0.04, 0.35, t))
+    return to_rgba(lum(np.clip(t, 0, 0.6)), np.clip(A, 0, 1))
+
+
+def abrasion(seed, N=512):
+    """Road rash (skin scraped on asphalt / concrete), +X = the way it slid:
+    an irregular raw patch, fine parallel scratches along +X that run past
+    its ends, pinpoint bleeding dots, a little blood film where it is
+    deepest, a few grit specks and small lifted skin tags heaped at the +X
+    end. A mask tinted Config.Blood.PALETTE.RAW: light = pink raw skin,
+    darker = blood (redder after the tint), darkest = grit."""
+    rng = v2_rng(seed)
+    S = Shape(N, N, rng, warps=((40, 10.0), (12, 3.0), (4, 1.0)))
+    c = N * 0.5
+    for _ in range(int(rng.integers(4, 7))):
+        S.add(ellipse(c + rng.normal(0, N * 0.07), c + rng.normal(0, N * 0.04), N * rng.uniform(0.12, 0.19), N * rng.uniform(0.05, 0.09), rng.normal(0, 0.1)), N * 0.05)
+    D = S.D
+    Y, X = rows_cols(N, N)
+    scratch = noise(rng, (N, N), (0.6, 22)) + 0.7 * noise(rng, (N, N), (1.4, 50))
+    core = smooth(-0.8, 0.8, -D / 8 + 0.35 * noise(rng, (N, N), (1.0, 14)))
+    # scratches continue past the patch along the slide (+X and -X ends)
+    tails = smooth(1.2, 2.2, scratch) * (1 - smooth(0, 70, D)) * (1 - core)
+    depth = smooth(0, 45, -D)
+    mott = fbm(rng, (N, N), [(7, 1.0), (2, 0.5)])
+    L = 0.8 - 0.2 * depth + 0.05 * mott - 0.06 * np.clip(scratch, -2, 2) / 2
+    patchy = 0.75 + 0.2 * smooth(-1, 1, noise(rng, (N, N), 12))
+    A = np.maximum(core * patchy * (0.8 + 0.2 * depth), 0.55 * tails)
+    # a thin blood film where it is deepest
+    film = smooth(0.4, 1.2, noise(rng, (N, N), 9) + 1.2 * depth - 0.6) * core
+    L = L * (1 - 0.6 * film) + 0.42 * 0.6 * film
+    ys, xs = np.nonzero(D < -6)
+    for _ in range(int(rng.integers(45, 80))):  # pinpoint bleeding, aligned with the scratches
+        j = int(rng.integers(len(ys)))
+        r = rng.uniform(0.9, 2.2)
+        g = np.clip(r + 0.5 - np.hypot((X - xs[j]) / rng.uniform(1.0, 2.2), Y - ys[j]), 0, 1)
+        L = L * (1 - g) + 0.42 * g
+        A = np.maximum(A, g)
+    for _ in range(int(rng.integers(6, 14))):  # grit
+        j = int(rng.integers(len(ys)))
+        g = np.clip(rng.uniform(0.6, 1.2) + 0.5 - np.hypot(X - xs[j], Y - ys[j]), 0, 1)
+        L = L * (1 - g) + 0.1 * g
+        A = np.maximum(A, g)
+    # skin tags heaped at the end of the slide: little light curls
+    xe = float(np.max(np.nonzero((D < 0).any(axis=0))[0]))
+    for _ in range(int(rng.integers(5, 10))):
+        col_ = D[:, int(np.clip(xe - 12, 0, N - 1))]
+        cand = np.nonzero(col_ < 0)[0]
+        if len(cand) == 0:
+            continue
+        y = float(rng.choice(cand))
+        x = xe - rng.uniform(2, 22)
+        tag = np.clip(1 - np.hypot((X - x) / rng.uniform(3, 6), (Y - y) / rng.uniform(1.5, 3)), 0, 1)
+        L = np.where(tag > 0.05, 1.0, L)
+        A = np.maximum(A, smooth(0.0, 0.3, tag))
+    return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
+
+
+def split_knuckle(seed=2800, N=256):
+    """Knuckles split by punching: 3 short dark splits in a row along +X,
+    each on a small raw pink scraped peak, a bead of blood oozing out of
+    each split. Tinted RAW (light = raw skin, dark = blood)."""
+    rng = v2_rng(seed)
+    Y, X = rows_cols(N, N)
+    L = np.full((N, N), 0.92, F32)
+    A = np.zeros((N, N), F32)
+    for i in range(3):
+        x = N * (0.24 + 0.26 * i) + rng.normal(0, 4)
+        y = N * 0.5 + 6 * (i - 1) ** 2 + rng.normal(0, 3)
+        P = Shape(N, N, rng, warps=((6, 3.0), (2, 1.0)))
+        P.add(ellipse(x, y, rng.uniform(22, 28), rng.uniform(14, 19), rng.normal(0, 0.2), random_harm(rng, [(3, 6, 0.1)])))
+        raw = smooth(-0.6, 0.6, -P.D / 4 + 0.6 * noise(rng, (N, N), (1, 6)))  # scraped: ragged, scratched along X
+        L = np.where(raw > 0.05, 0.92 - 0.12 * smooth(-1, 1, noise(rng, (N, N), (0.8, 7))), L)
+        A = np.maximum(A, 0.75 * raw)
+        S = Shape(N, N, rng, warps=((4, 0.8), (1.5, 0.3)))
+        ang = rng.normal(0, 0.15)
+        ln = rng.uniform(12, 18)
+        S.add(ucap(x - np.cos(ang) * ln, y - np.sin(ang) * ln, 1.0, x, y, rng.uniform(2.4, 3.2)))
+        S.add(ucap(x, y, 2.8, x + np.cos(ang) * ln, y + np.sin(ang) * ln, 1.0), 2)
+        if rng.random() < 0.85:
+            S.add(circle(x + rng.normal(0, 4), y + rng.uniform(4, 7), rng.uniform(3, 4.5)), 3)
+        sl = S.alpha()
+        L = np.where(sl > 0.02, L * (1 - sl) + 0.3 * sl, L)
+        A = np.maximum(A, sl)
+    return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
+
+
+def scalp_split(seed=2900, N=256):
+    """Blunt laceration of the scalp / forehead (bat, kerb, head slammed on
+    the ground): a Y / star-shaped split where the skin burst over the bone,
+    ragged gaping lips, tissue bridges, a swollen raw rim and blood welling
+    over its lowest arm. Same greys as browcut (tinted with blood colours)."""
+    rng = v2_rng(seed)
+    Y, X = rows_cols(N, N)
+    c = N * 0.5
+    S = Shape(N, N, rng, warps=((10, 2.5), (3, 1.0)))
+    R = Shape(N, N, rng, warps=((10, 2.5), (3, 1.0)))
+    arms = int(rng.integers(3, 5))
+    base = rng.uniform(0, 2 * np.pi)
+    low = (0.0, -1.0)
+    for i in range(arms):
+        a = base + 2 * np.pi * i / arms + rng.normal(0, 0.35)
+        ln = N * rng.uniform(0.22, 0.34)
+        mx, my = c + np.cos(a) * ln * 0.5 + rng.normal(0, 4), c + np.sin(a) * ln * 0.5 + rng.normal(0, 4)
+        ex, ey = c + np.cos(a) * ln, c + np.sin(a) * ln
+        S.add(ucap(c, c, 6.0, mx, my, 3.8), 4)  # the open gap, widest in the middle
+        S.add(ucap(mx, my, 3.8, ex, ey, 0.8), 3)
+        R.add(ucap(c, c, 13, mx, my, 10), 8)  # swollen split skin around it
+        R.add(ucap(mx, my, 10, ex, ey, 4.5), 6)
+        if ey > low[1]:
+            low = (ex, ey)
+    slit = S.alpha()
+    rim = R.alpha() * (1 - slit)
+    # ragged lips: the edge of the gap is torn, not cut
+    rag = smooth(-0.3, 0.3, noise(rng, (N, N), 1.5) + 1.2 * (slit - 0.5))
+    slit = np.maximum(slit * rag, smooth(0.6, 1.0, slit))
+    br = np.zeros_like(slit)
+    for _ in range(int(rng.integers(3, 6))):  # tissue bridges across the gap
+        bx, by = c + rng.normal(0, N * 0.06), c + rng.normal(0, N * 0.06)
+        a = rng.uniform(0, np.pi)
+        along = (X - bx) * np.cos(a) + (Y - by) * np.sin(a)
+        across = -(X - bx) * np.sin(a) + (Y - by) * np.cos(a)
+        br = np.maximum(br, np.exp(-((along / 1.4) ** 2)) * (np.abs(across) < 9) * slit)
+    W_ = Shape(N, N, rng, warps=((8, 1.5),))
+    lx, ly = low
+    W_.add(ellipse(lx, ly + 4, 10, 7, np.pi / 2))
+    W_.add(ucap(lx, ly + 4, 6, lx + rng.normal(0, 3), min(N - 12, ly + N * 0.22), 4.5), 4)
+    welled = W_.alpha()
+    halo = bruise_halo(rng, (N, N), X, Y, c, c, N * 0.42, N * 0.42, mott=0.9)
+    L = np.full((N, N), 0.68, F32)
+    A = 0.2 * halo
+    L = np.where(rim > 0.02, 0.88 - 0.08 * smooth(-1, 1, noise(rng, (N, N), 3)), L)
+    A = np.maximum(A, rim * 0.8)
+    wet = np.maximum(slit, welled)
+    L = np.where(wet > 0.02, 0.28 + 0.2 * (1 - meniscus(depth_of(wet), 1.6)), L)
+    A = np.maximum(A, wet)
+    L = np.where(br > 0.3, 0.72, L)
+    return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
+
+
+def flesh_tear(seed, N=512):
+    """EXTREME (finishers): a torn-open wound seen from the front, what a rip
+    or a burst leaves. THE ONLY PICTURE IN COLOUR (tint it white, Color3
+    1,1,1): the layers of real tissue cannot come from one tint. From the
+    outside in: bruised skin, the torn edge of the skin (pale pink dermis,
+    ragged with flaps), the yellow lumpy fat just under it (the strongest
+    'real' cue of a deep wound), red muscle with its fibres torn in one
+    direction and a few white strands of fascia, a deep wet cavity with dark
+    clots, and blood welling over the lowest lip."""
+    rng = v2_rng(seed)
+    Y, X = rows_cols(N, N)
+    c = N * 0.5
+    S = Shape(N, N, rng, warps=((40, 10.0), (12, 4.0), (4, 1.0)))
+    S.add(ellipse(c, c, N * rng.uniform(0.25, 0.29), N * rng.uniform(0.17, 0.21), rng.normal(0, 0.3), random_harm(rng, [(3, 6, 0.1), (7, 11, 0.05)])))
+    for _ in range(int(rng.integers(3, 6))):  # flaps of torn skin hanging into the hole
+        a = rng.uniform(0, 2 * np.pi)
+        r0 = N * 0.24
+        S.add(ucap(c + np.cos(a) * r0 * 1.1, c + np.sin(a) * r0 * 0.8, 14, c + np.cos(a) * r0 * 0.6, c + np.sin(a) * r0 * 0.45, 3), 6, sub=True)
+    hole = S.D + 2.5 * noise(rng, (N, N), 2)
+    d_in = -hole
+    th = np.arctan2(Y - c, X - c)
+    # colours (sRGB 0..1)
+    skin_edge = np.array([0.86, 0.62, 0.56])
+    fat_c = np.array([0.84, 0.7, 0.46])
+    musc = np.array([0.46, 0.07, 0.07])
+    blood = np.array([0.2, 0.01, 0.01])
+    rgb = np.zeros((N, N, 3), F32)
+    A = np.zeros((N, N), F32)
+
+    def over(rgb, A, top, a):  # paint a layer (straight colour, alpha a) on top
+        out = a + A * (1 - a)
+        mixed = (top * a[..., None] + rgb * (A * (1 - a))[..., None]) / np.maximum(out, 1e-4)[..., None]
+        return mixed, out
+
+    # bruised skin around it (a soft dark red-purple halo, low alpha)
+    halo = bruise_halo(rng, (N, N), X, Y, c, c, N * 0.4, N * 0.34)
+    rgb, A = over(rgb, A, np.array([0.42, 0.12, 0.16]), 0.4 * halo)
+    # torn skin edge (outside the hole): a narrow raw band, wider where flaps lifted
+    edge_w = 6 + 4 * smooth(-0.5, 1.5, noise(rng, (N, N), 8)) + 3 * np.cos(th * 5 + rng.uniform(0, 6)) ** 2
+    rim = smooth(-1, 1, edge_w - hole) * smooth(-1, 1, hole)
+    rgb, A = over(rgb, A, skin_edge * (0.9 + 0.1 * noise(rng, (N, N), 2))[..., None], rim)
+    inside = smooth(-1, 1, d_in)
+    # fat: lumpy yellow band just inside the edge
+    lob = noise(rng, (N, N), 3.5)
+    fat = (1 - smooth(5, 14, d_in + 5 * lob)) * inside
+    stain = smooth(-0.3, 0.8, noise(rng, (N, N), 5))[..., None]  # fat smeared with blood in places
+    fat_rgb = fat_c * (0.88 + 0.12 * smooth(-1, 1, lob))[..., None] - 0.2 * np.exp(-((lob / 0.25) ** 2))[..., None] * np.array([0.3, 0.3, 0.2])
+    fat_rgb = fat_rgb * (1 - 0.6 * stain) + np.array([0.5, 0.08, 0.07]) * 0.6 * stain
+    # muscle: fibres torn along one direction, darker with depth
+    a = rng.uniform(0, np.pi)
+    fibres = noise(rng, (N * 2, N * 2), (1.2, 10)) + 0.7 * noise(rng, (N * 2, N * 2), 4)
+    fibres = ndi.rotate(fibres, np.degrees(a), reshape=False, order=1)[N // 2 : N // 2 + N, N // 2 : N // 2 + N]
+    fibres = fibres / (fibres.std() + 1e-6)
+    depth = smooth(15, N * 0.17, d_in)
+    m_rgb = musc * (1 + 0.16 * fibres - 0.45 * depth)[..., None]
+    fascia = smooth(1.9, 2.4, fibres + 0.8 * noise(rng, (N, N), 10)) * (1 - depth) * smooth(14, 22, d_in)
+    m_rgb = m_rgb * (1 - fascia[..., None]) + fascia[..., None] * np.array([0.85, 0.8, 0.74])
+    # a deep wet cavity with clots, and blood pooling in the lower part
+    cav = smooth(0.45, 0.85, depth + 0.25 * noise(rng, (N, N), 12))
+    low = smooth(-N * 0.05, N * 0.12, Y - c) * smooth(12, 30, d_in)
+    wet = np.clip(np.maximum(cav, 0.8 * low * smooth(-0.5, 0.5, noise(rng, (N, N), 14) + 0.5)), 0, 1)
+    clots = smooth(1.5, 2.0, noise(rng, (N, N), 6) + 1.2 * cav)
+    b_rgb = blood * (1 - 0.5 * clots)[..., None] + 0.04 * noise(rng, (N, N), 3)[..., None] * blood
+    tissue = m_rgb * (1 - wet[..., None]) + b_rgb * wet[..., None]
+    tissue = tissue * (1 - fat[..., None]) + fat_rgb * fat[..., None]
+    rgb, A = over(rgb, A, tissue, inside)
+    # blood welling over the lowest lip and starting to run
+    ys, xs = np.nonzero(inside > 0.5)
+    j = int(np.argmax(ys))
+    W_ = Shape(N, N, rng, warps=((10, 2.0),))
+    W_.add(ellipse(xs[j], ys[j] - 14, 46, 18, 0, random_harm(rng, [(3, 6, 0.12), (7, 10, 0.05)])))
+    rx = xs[j] + rng.uniform(-18, 18)
+    W_.add(ucap(rx, ys[j] - 4, 9, rx + rng.normal(0, 5), min(N - 24, ys[j] + N * 0.15), 6), 12)
+    wa = W_.alpha()
+    film = 0.55 + 0.45 * meniscus(depth_of(wa), 3)
+    rgb, A = over(rgb, A, np.array([0.5, 0.04, 0.04]) * (1 - 0.5 * film)[..., None], wa * (0.75 + 0.25 * film))
+    # straight alpha, colour bled under the transparent pixels (no mip fringe)
+    A8 = np.round(np.clip(A, 0, 1) * 255).astype(np.uint8)
+    rgb = np.clip(rgb, 0, 1)
+    out = (rgb * 255).round().astype(np.uint8)
+    idx = ndi.distance_transform_edt(A8 == 0, return_distances=False, return_indices=True)
+    out = out[idx[0], idx[1]]
+    return np.dstack([out, A8])
+
+
+JOBS_V2 = [
+    # Tier 1
+    *[(f"rivulet_strip_{i}", lambda i=i: rivulet_strip(1800 + i)) for i in (1, 2, 3)],
+    *[(f"rivulet_bead_{i}", lambda i=i: rivulet_bead(1810 + i)) for i in (1, 2)],
+    *[(f"rivulet_fork_{i}", lambda i=i: rivulet_fork(1820 + i)) for i in (1, 2)],
+    *[(f"browcut_{i}", lambda i=i: browcut(1830 + i)) for i in (1, 2)],
+    ("lipfilm_1", lambda: lipfilm(1841)),
+    *[(f"crust_strip_{i}", lambda i=i: crust_strip(1850 + i)) for i in (1, 2)],
+    *[(f"spit_{i}", lambda i=i: spit(1860 + i)) for i in (1, 2)],
+    ("crown_4x4", crown_4x4),
+    ("ripple_ring_1", ripple_ring),
+    *[(f"starburst_{i}", lambda i=i: starburst(1870 + i)) for i in (1, 2)],
+    *[(f"wick_halo_{i}", lambda i=i: wick_halo(1880 + i)) for i in (1, 2)],
+    # Tier 2
+    ("cheekcut_1", lambda: cheekcut(1891)),
+    *[(f"wipe_smear_{i}", lambda i=i: wipe_smear(1900 + i)) for i in (1, 2)],
+    *[(f"crust_patch_{i}", lambda i=i: crust_patch(1910 + i)) for i in (1, 2)],
+    *[(f"abrasion_{i}", lambda i=i: abrasion(1920 + i)) for i in (1, 2)],
+    ("split_knuckle_1", split_knuckle),
+    ("wick_weave_1", wick_weave),
+    *[(f"serum_halo_{i}", lambda i=i: serum_halo(i)) for i in (1, 2, 3)],
+    *[(f"drag_{i}", lambda i=i: drag(1930 + i)) for i in (1, 2)],
+    ("shoe_run_L_1", lambda: shoe_run(1941)),
+    ("shoe_run_R_1", lambda: shoe_run(1942, mirror=True)),
+    ("froth_4x4", froth_4x4),
+    ("pendant_2x2", pendant_2x2),
+    # Extreme wounds (bonus: no code uses them yet; see docs/BLOOD_FR.md)
+    ("scalp_split_1", scalp_split),
+    *[(f"flesh_tear_{i}", lambda i=i: flesh_tear(1950 + i)) for i in (1, 2)],
+]
+
+
 # ================================================================= main ====
 JOBS = [
     # Set A
@@ -1081,16 +2067,25 @@ JOBS = [
 ]
 
 
+# v2 names must never collide with a v1 name (a v1 file is uploaded: changing
+# it would mean re-uploading it) nor start like one (the name filter below).
+V1_PREFIXES = ("spatter", "satellites", "drip", "pool", "run", "smear", "hand", "foot", "soak", "skin", "knuckles", "p_", "beam", "arterial")
+assert not any(n.startswith(V1_PREFIXES) for n, _ in JOBS_V2), "a v2 name starts like a v1 name"
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    # Filters after the folder: name prefixes ("drip"), or "v1" / "v2" for a
+    # whole set. Nothing = everything (the v1 files come out byte-identical).
     only = set(sys.argv[2:])
-    for name, job in JOBS:
-        if only and not any(name.startswith(o) for o in only):
+    jobs = [(n, j, "v1") for n, j in JOBS] + [(n, j, "v2") for n, j in JOBS_V2]
+    for name, job, set_ in jobs:
+        if only and set_ not in only and not any(name.startswith(o) for o in only):
             continue
         save(name, job())
         sz, w, h = SIZES[name]
         print(f"{name:18s} {w:4d}x{h:<4d} {sz / 1024:7.1f} KB")
-    total = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT) if f.endswith(".png") and f != "preview.png")
+    total = sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT) if f.endswith(".png") and not f.startswith("preview"))
     print(f"total (without preview.png): {total / 1024 / 1024:.2f} MB")
 
 

@@ -31,6 +31,9 @@
 --   BloodStain.place(...) same, now, returns its BloodAge record (or nil)
 --   BloodStain.rescale(record, kAlong, kAcross)  grows a mark (pools, soaks)
 --   BloodStain.image(kind, random, index?)  an uploaded picture id, or 0
+--   BloodStain.resolve(kind)   the kind actually drawn (a picture not uploaded
+--       yet borrows a close kind's, Config.Blood.IMAGE_FALLBACK) and its id
+--   BloodStain.porous(material)  rough ground (blood soaks in)?
 --   BloodStain.onSkin(part, point)   where blood sticks on a body (the skin)
 
 local CollectionService = game:GetService("CollectionService")
@@ -45,6 +48,7 @@ local BloodStain = {}
 local PALETTE = Config.Blood.PALETTE
 local PROFILES = Config.Blood.PROFILES
 local IMAGES = Config.Blood.IMAGES
+local IMAGE_FALLBACK: { [string]: string } = (Config.Blood :: any).IMAGE_FALLBACK or {}
 
 -- Turn of the pictures on their carrier (radians), in case a picture shows
 -- turned in Studio (a tail not pointing where the drop went): adjust here.
@@ -191,8 +195,29 @@ function BloodStain.image(kind: string, random: Random?, index: number?): number
 	return uploaded[pick]
 end
 
+-- Does this exact kind have its own uploaded picture? (no stand-in)
 function BloodStain.hasImage(kind: string): boolean
 	return BloodStain.image(kind, nil) ~= 0
+end
+
+-- The kind that is really drawn for `kind`, and one of its picture ids:
+-- `kind` itself if it has an uploaded picture; else its stand-in from
+-- Config.Blood.IMAGE_FALLBACK (a skin rivulet not uploaded yet looks like a
+-- wall run), up to 3 steps; else the last stand-in and 0 (its plain shapes).
+function BloodStain.resolve(kind: string): (string, number)
+	local current = kind
+	for _ = 1, 4 do
+		local id = BloodStain.image(current, nil)
+		if id ~= 0 then
+			return current, id
+		end
+		local nextKind = IMAGE_FALLBACK[current]
+		if nextKind == nil then
+			break
+		end
+		current = nextKind
+	end
+	return current, 0
 end
 
 ------------------------------------------------------------------------------
@@ -232,6 +257,11 @@ local POROUS: { [Enum.Material]: boolean } = {
 	[Enum.Material.Cobblestone] = true,
 	[Enum.Material.Carpet] = true,
 }
+-- Rough ground (concrete, asphalt, wood...)? Blood soaks into it.
+function BloodStain.porous(material: Enum.Material?): boolean
+	return material ~= nil and POROUS[material] == true
+end
+
 -- Smooth ground: it stays wet and shiny longer.
 local SMOOTH: { [Enum.Material]: boolean } = {
 	[Enum.Material.Metal] = true,
@@ -747,6 +777,9 @@ function BloodStain.place(
 	end
 	local opts: Options = options or {}
 	local random = opts.random or Random.new()
+	local asked = kind
+	-- (a new kind not uploaded yet: drawn as its stand-in, picture or shapes)
+	kind = BloodStain.resolve(kind)
 	local stuck: BasePart? = nil
 	local onto = opts.onto
 	local model: Model? = if onto then isBody(onto) else nil
@@ -836,6 +869,10 @@ function BloodStain.place(
 	local start = opts.start or PALETTE.ARTERIAL
 	local alpha = opts.alpha or 0
 	local image = BloodStain.image(kind, random, opts.index)
+	if image == 0 and kind ~= asked then
+		-- (a stand-in may have fewer numbered pictures than asked for)
+		image = BloodStain.image(kind, random)
+	end
 	local anchor: BasePart
 	local release: ((BloodAge.Record) -> ())? = nil
 	if image ~= 0 then
@@ -857,7 +894,11 @@ function BloodStain.place(
 		}
 		table.insert(shape.pieces, piece)
 		attach(shape, piece)
-		table.insert(layers, BloodAge.layer(decal, 0, alpha))
+		local main = BloodAge.layer(decal, 0, alpha)
+		if kind == "pool" then
+			main.gel = 0.1 -- (clotting: the thick middle gels, a shade darker)
+		end
+		table.insert(layers, main)
 		if kind == "pool" then
 			-- its clotting ring: the same outline (same number), it shows as it dries
 			local rimId = BloodStain.image("poolRim", nil, table.find((IMAGES :: any).pool, image))
@@ -870,6 +911,23 @@ function BloodStain.place(
 				rim.Parent = carrier
 				table.insert(layers, BloodAge.layer(rim, 0.3, 0, true))
 			end
+			-- the pale serum ring that seeps out of an old pool (same outline,
+			-- same frame: pool_2 with serum_halo_2); invisible until 90 s
+			local serumId =
+				BloodStain.image("serumHalo", nil, table.find((IMAGES :: any).pool, image))
+			if serumId ~= 0 then
+				local serum = Instance.new("Decal")
+				serum.Name = "Serum"
+				serum.Face = Enum.NormalId.Top
+				serum.Texture = "rbxassetid://" .. serumId
+				serum.ZIndex = 0 -- (under the pool: it only shows outside its edge)
+				serum.Parent = carrier
+				local layer = BloodAge.layer(serum, 0, 0.45)
+				layer.color = PALETTE.SERUM
+				layer.showFrom = 90
+				layer.showFull = 180
+				table.insert(layers, layer)
+			end
 		end
 		anchor = carrier
 		if stuck == nil then
@@ -879,9 +937,11 @@ function BloodStain.place(
 					gloss:Destroy()
 					glossCount -= 1
 				end
-				local rim = carrier:FindFirstChild("Rim")
-				if rim then
-					rim:Destroy()
+				for _, name in { "Rim", "Serum" } do
+					local extra = carrier:FindFirstChild(name)
+					if extra then
+						extra:Destroy()
+					end
 				end
 				if carrier.Parent == nil then
 					return -- (already destroyed: never reuse it)
@@ -935,6 +995,7 @@ function BloodStain.place(
 	madeThisFrame += #shape.pieces
 	-- a wet shiny film over a fresh pool (dark: the sky reflects in it)
 	local gloss: BasePart? = nil
+	local glossPiece: Piece? = nil
 	local glossScale = opts.gloss
 	if
 		glossScale
@@ -962,6 +1023,7 @@ function BloodStain.place(
 		attach(shape, piece)
 		gloss = film
 		glossCount += 1
+		glossPiece = piece
 		if release == nil then
 			release = function(record: BloodAge.Record)
 				glossCount -= 1
@@ -994,6 +1056,23 @@ function BloodStain.place(
 		-- (plain shapes: about 3 of them count as one picture)
 		weight = if image ~= 0 then 1 else math.ceil(#shape.pieces / 3),
 	}
+	local wetFilm = glossPiece
+	if wetFilm then
+		-- (drying, the wet film retreats toward the thick middle: from its
+		-- size fresh down to 0.43 of it when the gloss ends, 0.7 → 0.3 × the pool)
+		local baseW, baseL = wetFilm.w, wetFilm.l
+		local lastK = 1
+		record.reshape = function(rec: BloodAge.Record, t: number)
+			local p = rec.profile
+			local u = math.clamp((t - p.fresh) / math.max(p.glossEnd - p.fresh, 1), 0, 1)
+			local k = 1 - 0.57 * u * u * (3 - 2 * u)
+			if math.abs(k - lastK) > 0.03 and wetFilm.inst.Parent then
+				lastK = k
+				wetFilm.w, wetFilm.l = baseW * k, baseL * k
+				setPiece(shape, wetFilm)
+			end
+		end
+	end
 	shapes[record] = shape
 	BloodAge.add(record)
 	BloodAge.paint(record)

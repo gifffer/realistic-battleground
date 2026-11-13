@@ -11,7 +11,13 @@
 --   • it STOPS at a curb, a wall, a step up (a ray finds the obstacle) and
 --     RUNS OVER a drop (blood running down the side of the curb);
 --   • two pools that meet become one (a new feed close to a pool feeds it);
---   • it is WET (shiny) for a while, then dulls, darkens, crusts.
+--   • it is WET (shiny) for a while, then dulls, darkens, crusts; its wet
+--     film shrinks toward the thick middle, the thin edges (lobes) dry first,
+--     and an old one weeps a pale ring of serum around it (BloodStain).
+--   • someone dripping into it from above: each drop throws tiny drops
+--     around it, and after a dozen drops a "starburst" of dots rings it.
+--   • under a body lying on a slope it starts on the LOW side (blood runs
+--     out of the body downhill before it pools).
 --
 --   BloodPool.feed(key, position, area, seconds, maxRadius?)
 --       feeds the pool of `key` (a character, an artery...) at `position`:
@@ -21,8 +27,10 @@
 --   BloodPool.wetAt(position)  0 (dry ground) → 1 (fresh wet blood): feet
 --       stepping in it get bloody (BloodTracks)
 --   BloodPool.addWet(record, position, radius)  a big splat counts as wet
---   BloodPool.absorb(position)  is this point in a fresh pool? (a drop
---       falling into it splashes into it instead of making a new stain)
+--   BloodPool.absorb(position, random?, height?)  is this point in a fresh
+--       pool? (a drop falling into it splashes into it instead of making a
+--       new stain; with `random`, a drop that fell `height` studs may ring
+--       the pool with a starburst of tiny drops)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -38,6 +46,8 @@ local START_RADIUS = 0.22 -- studs: a new pool's first size
 local LOBE_EVERY = 0.4 -- seconds between new lobes while it is fed
 local MAX_LOBES = 5
 local STEP_HEIGHT = 0.1 -- a bump higher than this stops it (curb, step, body)
+local LOBE_DRYING = 1.4 -- the thin lobes dry this much faster than the middle
+local LOW_SIDE = 0.6 -- studs: a lying body's pool starts this far downhill
 
 type Lobe = {
 	record: BloodAge.Record,
@@ -62,6 +72,8 @@ type Pool = {
 	nextEdgeCheck: number,
 	random: Random,
 	lastAbsorb: number,
+	drips: number, -- drops fallen into it
+	extras: { BloodAge.Record }, -- (starbursts: they go with the pool)
 }
 
 local pools: { Pool } = {}
@@ -118,6 +130,7 @@ local function makePool(key: any, hit: RaycastResult, maxRadius: number, random:
 	-- too many pools: the oldest one stops growing (it stays, it ages)
 	local cap = BloodAge.cap("POOLS")
 	while #pools >= cap do
+		-- (its starbursts stay with its record until it ages out)
 		table.remove(pools, 1)
 	end
 	local along = Vector3.new(random:NextNumber(-1, 1), 0, random:NextNumber(-1, 1))
@@ -161,6 +174,8 @@ local function makePool(key: any, hit: RaycastResult, maxRadius: number, random:
 		nextEdgeCheck = 0,
 		random = random,
 		lastAbsorb = 0,
+		drips = 0,
+		extras = {},
 	}
 	table.insert(pools, pool)
 	return pool
@@ -181,6 +196,18 @@ function BloodPool.feed(
 	local hit = groundUnder(position)
 	if hit == nil or hit.Material == Enum.Material.Water then
 		return
+	end
+	if typeof(key) == "Instance" and key:IsA("Model") then
+		-- a body lying on a slope: the blood leaves it on its low side
+		local down = key:GetAttribute("KnockedOut") == true or key:GetAttribute("Ragdolled") == true
+		local g = Vector3.new(0, -1, 0)
+		local downhill = g - hit.Normal * g:Dot(hit.Normal)
+		if down and downhill.Magnitude > 0.05 then
+			local low = groundUnder(hit.Position + downhill.Unit * LOW_SIDE)
+			if low and low.Material ~= Enum.Material.Water then
+				hit = low
+			end
+		end
 	end
 	local target: Pool? = nil
 	for _, pool in pools do
@@ -238,6 +265,8 @@ local function addLobe(pool: Pool, direction: Vector3, at: Vector3)
 		}
 	)
 	if record then
+		-- (a lobe is the thin edge of a pool: it dries first)
+		record.speed *= LOBE_DRYING
 		table.insert(pool.lobes, { record = record, madeAt = r })
 	end
 end
@@ -363,10 +392,51 @@ function BloodPool.addWet(record: BloodAge.Record, position: Vector3, radius: nu
 	end
 end
 
+-- Drop after drop into the same pool: the tiny drops each one throws pile up
+-- around it into a ring of dots (a "starburst"), one picture every 3 drops
+-- or so, at most WORLD.STARBURSTS_PER_POOL. They go with the pool.
+local function starburst(pool: Pool, position: Vector3, height: number, random: Random)
+	pool.drips += 1
+	if
+		#pool.extras >= Config.Blood.WORLD.STARBURSTS_PER_POOL
+		or pool.drips < 3
+		or pool.random:NextNumber() > 0.34
+	then
+		return
+	end
+	-- (higher falls throw them further; never wider than a few studs)
+	local across = math.min(pool.radius * 2 * random:NextNumber(1.5, 2.5) * math.clamp(0.6 + height * 0.1, 0.6, 1.2), 3.5)
+	if BloodStain.resolve("starburst") ~= "starburst" then
+		across = math.min(across, 1.2) -- (its stand-in, a fan of dots: smaller)
+	end
+	local a = random:NextNumber(0, math.pi * 2)
+	local record = BloodStain.place(
+		"starburst",
+		position,
+		pool.normal,
+		Vector3.new(math.cos(a), 0, math.sin(a)),
+		across,
+		across,
+		{
+			random = random,
+			profile = "pool",
+			start = PALETTE.ARTERIAL_LIGHT,
+			alpha = 0.2,
+			pinned = true,
+			noEdge = true,
+			priority = 1,
+		}
+	)
+	if record then
+		table.insert(pool.extras, record)
+	end
+end
+
 -- A drop falling at `position`: into a fresh pool? Then it splashes into it
 -- (true: the caller draws a small drip-into-drip splash at most every 0.5 s,
--- `splash` true) and feeds it a little.
-function BloodPool.absorb(position: Vector3): (boolean, boolean)
+-- `splash` true) and feeds it a little. With `random` (a real drop, not a
+-- splash's tiny one): it counts toward the pool's starburst.
+function BloodPool.absorb(position: Vector3, random: Random?, height: number?): (boolean, boolean)
 	local now = os.clock()
 	for _, pool in pools do
 		local record = pool.record
@@ -379,6 +449,9 @@ function BloodPool.absorb(position: Vector3): (boolean, boolean)
 				end
 				pool.area += 0.01
 				BloodAge.touch(record)
+				if random then
+					starburst(pool, position, height or 1, random)
+				end
 				local splash = now - pool.lastAbsorb > 0.5
 				if splash then
 					pool.lastAbsorb = now
@@ -390,12 +463,23 @@ function BloodPool.absorb(position: Vector3): (boolean, boolean)
 	return false, false
 end
 
+-- A pool gone (aged out, evicted): its starbursts go with it.
+local function dropExtras(pool: Pool)
+	for _, extra in pool.extras do
+		if not extra.dead then
+			BloodAge.remove(extra)
+		end
+	end
+	table.clear(pool.extras)
+end
+
 local accumulated = 0
 RunService.Heartbeat:Connect(function(dt: number)
 	accumulated += dt
 	if accumulated < 0.1 then
 		return -- (10 times a second is plenty for a pool)
 	end
+	debug.profilebegin("BloodPool")
 	local step = accumulated
 	accumulated = 0
 	local now = os.clock()
@@ -404,6 +488,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		local pool = pools[index]
 		local record = pool.record
 		if record == nil or record.dead then
+			dropExtras(pool)
 			table.remove(pools, index)
 			continue
 		end
@@ -412,6 +497,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		end
 		index += 1
 	end
+	debug.profileend()
 end)
 
 return table.freeze(BloodPool)

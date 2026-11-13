@@ -46,6 +46,7 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local BloodFace = require(script.Parent.Parent.Combat.BloodFace)
 local BloodTracks = require(script.Parent.Parent.Combat.BloodTracks)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
@@ -668,6 +669,7 @@ local function onCombatEvent(
 			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		end
 		-- Blood and torn skin: decided by the server (same on every screen).
+		KitEffects.punchLanded(victim, attacker) -- (many punches: split knuckles)
 		if bloodArg == true then
 			-- (more for the heavy blows and the kits' moves)
 			local amount = if strong then 2.6 elseif moveId then 1.7 else 1
@@ -676,7 +678,9 @@ local function onCombatEvent(
 				attacker,
 				zone,
 				amount,
-				KitEffects.bloodSeed(attackIdArg, victim, zone)
+				KitEffects.bloodSeed(attackIdArg, victim, zone),
+				-- (which face wound it opens: nose, lip, brow cut...)
+				{ strong = strong, moveId = moveId, side = side :: string }
 			)
 		end
 		if typeof(skinTearSeedArg) == "number" then
@@ -793,6 +797,7 @@ local function onCombatAction(model: Model, action: string)
 	BouncerFx.onAction(model, action)
 	if action == "GetUp" then
 		BloodTracks.onGetUp(model) -- (a bloody hand pushing on the ground)
+		BloodFace.onGetUp(model) -- (wipes his bloody face; a graze from the floor)
 	end
 	if
 		action == "GetUp"

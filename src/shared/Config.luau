@@ -353,14 +353,21 @@ return table.freeze({
 			GLOSS = Color3.fromRGB(30, 2, 2), -- the wet film on a pool (dark: the sky reflects)
 			FABRIC_SOAK = Color3.fromRGB(70, 12, 12), -- soaked into a shirt / pants...
 			FABRIC_SOAK_DRY = Color3.fromRGB(46, 17, 13), -- ...once dry
+			SALIVA = Color3.fromRGB(168, 38, 36), -- blood mixed with saliva / mucus (spit, mouth)
+			SERUM = Color3.fromRGB(214, 176, 96), -- the clear-yellow fluid around an old pool / a graze
+			RAW = Color3.fromRGB(190, 80, 72), -- scraped skin (graze, split knuckle)
+			FABRIC_WET = Color3.fromRGB(22, 8, 8), -- a wet dark patch on cloth (darkens any colour)
 		}),
+		-- Passive blood (drips, a run's drop, a stump pouring) falls with this
+		-- gravity (studs/s²) instead of workspace.Gravity: real drops fall slower.
+		PASSIVE_GRAVITY = 45,
 		-- The most blood a client draws at once (at "High"; the oldest goes).
 		CAPS = table.freeze({
 			STAINS = 700, -- marks on floors / walls
 			GLOSS = 40, -- wet shiny films on fresh pools
 			POOLS = 20, -- pools growing under bleeders / torn arteries
-			BODY = 200, -- marks on bodies (skin, soaked clothes, fists)
-			BODY_PER_CHARACTER = 24,
+			BODY = 240, -- marks on bodies (skin, soaked clothes, fists)
+			BODY_PER_CHARACTER = 30,
 			FOOTPRINTS = 120,
 			RUNS = 40, -- blood running down a wall / the skin, at once
 			DROPS = 140, -- drops flying at once
@@ -368,6 +375,10 @@ return table.freeze({
 			NEW_PER_FRAME = 40, -- new marks per frame (more wait for the next frames)
 			PARTICLES_PER_BURST = 120,
 			AGE_PER_FRAME = 150, -- marks updated (drying) per frame
+			RIVULETS = 40, -- runs on skin moving at once (all characters)
+			PENDANTS = 24, -- drops hanging (chin, fingertips...) at once
+			CROWNS = 8, -- splash crowns (a big drop hitting the ground) at once
+			RIPPLES = 6, -- rings on pools (a drop falling into one) at once
 		}),
 		-- How each kind of mark ages, in seconds (real minutes squeezed):
 		-- red → dark red at `fresh`, clotted (dark edge) at `clot`, dry at `dry`,
@@ -386,7 +397,7 @@ return table.freeze({
 				fresh = 20,
 				clot = 60,
 				dry = 150,
-				life = 180,
+				life = 240, -- (long enough for the pale serum ring to show, 90-180 s)
 				gloss = 0.25,
 				glossEnd = 60,
 			}),
@@ -438,6 +449,47 @@ return table.freeze({
 				gloss = 0.3,
 				glossEnd = 90,
 			}),
+			-- (v2: blood ON the face, BloodRivulet / BloodFace: stays until respawn)
+			rivulet = table.freeze({ -- a run's trail on the skin: dark first, dry at 60 s
+				fresh = 8,
+				clot = 20,
+				dry = 60,
+				life = math.huge,
+				gloss = 0,
+				glossEnd = 1,
+			}),
+			bead = table.freeze({ -- the drop at a run's front: wet and shiny the longest
+				fresh = 15,
+				clot = 60,
+				dry = 120,
+				life = math.huge,
+				gloss = 0.22,
+				glossEnd = 90,
+			}),
+			crust = table.freeze({ -- dried crust (old runs, a graze, split knuckles)
+				fresh = 0,
+				clot = 0,
+				dry = 1,
+				life = math.huge,
+				gloss = 0,
+				glossEnd = 1,
+			}),
+			cut = table.freeze({ -- the split skin of a brow / cheek cut
+				fresh = 15,
+				clot = 40,
+				dry = 120,
+				life = math.huge,
+				gloss = 0.25,
+				glossEnd = 60,
+			}),
+			saliva = table.freeze({ -- spit blood (mixed with saliva)
+				fresh = 4,
+				clot = 10,
+				dry = 40,
+				life = 90,
+				gloss = 0,
+				glossEnd = 1,
+			}),
 		}),
 		-- How fast a bleeder's pool grows: area (studs²) per second for each
 		-- point of BleedPerSecond.
@@ -474,6 +526,82 @@ return table.freeze({
 			pGobs4x4 = table.freeze({ 100815666699043 }), -- p_gobs_4x4
 			pMist8x8 = table.freeze({ 132573984669153 }), -- p_mist_8x8
 			beamStream = table.freeze({ 135594613079576 }), -- beam_stream
+			-- v2 details on the fighters (0 = not uploaded yet: an uploaded
+			-- picture of a close kind is drawn instead, see docs/BLOOD_FR.md)
+			rivuletStrip = table.freeze({ 0, 0, 0 }), -- rivulet_strip_1..3 (else "run")
+			rivuletBead = table.freeze({ 0, 0 }), -- rivulet_bead_1..2
+			rivuletFork = table.freeze({ 0, 0 }), -- rivulet_fork_1..2
+			browCut = table.freeze({ 0, 0 }), -- browcut_1..2 (else "skinSmear")
+			cheekCut = table.freeze({ 0 }), -- cheekcut_1 (else "skinSmear")
+			lipFilm = table.freeze({ 0 }), -- lipfilm_1 (else "skinSmear")
+			wipeSmear = table.freeze({ 0, 0 }), -- wipe_smear_1..2 (else "skinSmear")
+			crustStrip = table.freeze({ 0, 0 }), -- crust_strip_1..2 (else: no crust picture)
+			crustPatch = table.freeze({ 0, 0 }), -- crust_patch_1..2
+			spit = table.freeze({ 0, 0 }), -- spit_1..2
+			abrasion = table.freeze({ 0, 0 }), -- abrasion_1..2 (else "skinSmear")
+			splitKnuckle = table.freeze({ 0 }), -- split_knuckle_1 (else "knuckles")
+			wickHalo = table.freeze({ 0, 0 }), -- wick_halo_1..2 (else "soak")
+			wickWeave = table.freeze({ 0 }), -- wick_weave_1
+			froth4x4 = table.freeze({ 0 }), -- froth_4x4 (else p_mist_8x8)
+			pendant2x2 = table.freeze({ 0 }), -- pendant_2x2
+			-- v2 details in the world (floors, pools, tracks)
+			crown4x4 = table.freeze({ 0 }), -- crown_4x4 (else: no crown, only its tiny drops)
+			rippleRing = table.freeze({ 0 }), -- ripple_ring_1 (else: no ripple)
+			starburst = table.freeze({ 0, 0 }), -- starburst_1..2 (else "satellites")
+			serumHalo = table.freeze({ 0, 0, 0 }), -- serum_halo_1..3, in pairs with pool_1..3
+			drag = table.freeze({ 0, 0 }), -- drag_1..2 (else "smear")
+			shoeRunL = table.freeze({ 0 }), -- shoe_run_L_1 (else "footL")
+			shoeRunR = table.freeze({ 0 }), -- shoe_run_R_1 (else "footR")
+			-- v2 extreme wounds (finishers). No code draws them yet: ready for
+			-- when a finisher wants a torn wound decal.
+			scalpSplit = table.freeze({ 0 }), -- scalp_split_1: Y / star split of the scalp (else "browCut")
+			-- flesh_tear_1..2: a torn-open wound (skin edge, yellow fat, muscle,
+			-- deep wet cavity). The ONLY picture in colour: draw it with
+			-- Decal.Color3 = white (1, 1, 1), never a blood tint.
+			fleshTear = table.freeze({ 0, 0 }),
+		}),
+		-- A picture not uploaded yet borrows the picture of a close kind that is
+		-- (and, with none at all, that kind's plain shapes): a skin rivulet
+		-- looks like a wall run until rivulet_strip is uploaded.
+		-- (crown4x4, froth4x4, pendant2x2, rippleRing, serumHalo: no stand-in,
+		-- the code skips them or uses another particle picture.)
+		IMAGE_FALLBACK = table.freeze({
+			rivuletStrip = "run",
+			rivuletBead = "drip",
+			rivuletFork = "run",
+			browCut = "skinSmear",
+			cheekCut = "skinSmear",
+			lipFilm = "skinSmear",
+			wipeSmear = "skinSmear",
+			crustStrip = "run",
+			crustPatch = "skinSmear",
+			spit = "drip",
+			abrasion = "skinSmear",
+			splitKnuckle = "knuckles",
+			wickHalo = "soak",
+			wickWeave = "soak",
+			starburst = "satellites",
+			drag = "smear",
+			shoeRunL = "footL",
+			shoeRunR = "footR",
+			scalpSplit = "browCut",
+		}),
+		-- Face wounds (BloodFace / BloodRivulet). Times in seconds.
+		FACE = table.freeze({
+			CUTS = true, -- eyebrow / cheekbone cuts, grazes (false: only runs and drops)
+			MAX_MARKS = 14, -- face marks per character (runs, cuts, crust...); oldest dry go first
+			MAX_ACTIVE_RUNS = 4, -- runs moving at once per character
+			TICK = 1 / 15, -- run / hanging-drop updates (seconds)
+			RANGE = 60, -- studs from the camera: farther, runs jump to their end, no hanging drops
+			SWEAT_AFTER = 6, -- bloody hits on this fighter before blood runs thinner and further
+		}),
+		-- World details (drops landing, pools, footprints, drags). Studs / seconds.
+		WORLD = table.freeze({
+			CROWN_RANGE = 40, -- studs from the camera: farther, no splash crown / ripple
+			CROWN_MIN_SIZE = 0.07, -- a drop at least this big (studs)...
+			CROWN_MIN_HEIGHT = 1.5, -- ...falling at least this far (studs) splashes a crown
+			FOOT_DECAY = 0.65, -- each footprint keeps this much of the previous one's blood
+			STARBURSTS_PER_POOL = 4, -- rings of tiny drops around a pool someone drips into
 		}),
 	}),
 

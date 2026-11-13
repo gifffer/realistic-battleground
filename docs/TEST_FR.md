@@ -430,7 +430,7 @@ Réglage d'éclairage conseillé pour le mouillé : `Lighting.Technology = Futur
 | R5 | Un joueur qui saigne (Bleeding) reste **immobile** ~10 s | Le sang **coule de la plaie** sur la peau, les gouttes tombent **du bout de la coulure** ; une **flaque** grandit sous lui (vite puis plus lentement), brillante au début, avec des lobes. Sur une pente, elle s'étale vers le bas. |
 | R6 | Flaque près d'un trottoir / d'une marche | Elle s'arrête au bord ; si le sol tombe, du sang **coule le long du bord**. |
 | R7 | Marcher dans une flaque fraîche puis s'éloigner | **Empreintes** gauche/droite : pleines, puis partielles, puis des traces ; plus rien après ~9 pas. Pas d'empreinte dans du sang sec. |
-| R8 | Coup qui saigne au **visage** plusieurs fois | Souvent le **nez saigne** (coulure jusqu'à la lèvre, gouttes du menton quelques secondes), parfois la **lèvre** ; sur un coup lourd, un crachat de sang. Pas plus de ~6 coulures sur le visage. |
+| R8 | Coup qui saigne au **visage** plusieurs fois | Souvent le **nez saigne** (coulure jusqu'à la lèvre, gouttes du menton), parfois la **lèvre** ; sur un coup lourd, un crachat de sang. Pas plus de ~14 marques sur le visage (détails : tests F ci-dessous). |
 | R9 | Coup qui saigne au **torse** d'un joueur avec un t-shirt | Une tache **s'étend dans le tissu** pendant ~30 s, plus sombre et mate que sur la peau. Sans t-shirt : un film plus clair sur la peau. |
 | R10 | Frapper un visage qui saigne, puis donner des coups dans le vide | Les **jointures** sont rouges ; chaque coup projette une **ligne de petites gouttes** (de plus en plus petites) au sol ; ça s'estompe en ~1 min. |
 | R11 | Finisher **batte** / **bras** / **foie** | Les jets sont de **vraies gouttes** qui retombent avec la gravité et se cassent en gouttelettes ; là où les jets tombent fort : une **vague de grosses taches** ; la flaque grandit et suit la pente. L'attaquant a des taches allongées sur lui, même sur la tête ronde (pas de carrés). |
@@ -439,3 +439,33 @@ Réglage d'éclairage conseillé pour le mouillé : `Lighting.Technology = Futur
 | R14 | Mourir / réapparaître | Tout le sang **sur le corps** disparaît ; le sang au sol reste et vieillit normalement. |
 | R15 | 16 joueurs / 2 finishers en même temps (ou Graphismes au minimum dans Échap) | Pas de chute d'images ; au minimum, moins de taches restent (les plus vieilles s'effacent en premier, les flaques en dernier). |
 | R16 | `Config.Blood.ENABLED = false` | Plus aucun sang (jets, gouttes, flaques, empreintes), le reste du combat marche. |
+
+### Sang sur les combattants, v2 (coulures, visage, gouttes qui pendent)
+
+À tester **à 8-12 studs** (la caméra normale) sur un Dummy, puis à 2 joueurs. Les nouvelles images
+(`rivuletStrip`, `browCut`, `wipeSmear`... dans `Config.Blood.IMAGES`) sont à 0 tant qu'elles ne
+sont pas importées : le jeu prend une image proche déjà importée (coulure de mur, film sur la peau),
+donc tout se teste tout de suite. Les points du visage (narine, lèvre, sourcil...) sont des
+estimations en haut de `Client/Combat/BloodFace.luau` : si une coulure part à côté de la narine,
+c'est là qu'on règle.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | 10 coups qui saignent au visage, **de face** | Le nez saigne : la coulure **avance par à-coups** (elle s'arrête, la perle au bout gonfle, puis elle saute un peu plus bas), fait une **pause sur la lèvre**, contourne la bouche (parfois des deux côtés) et arrive au **menton**. Jamais une bande droite qui glisse d'un coup. |
+| F2 | Regarder le menton pendant que le nez saigne | Une **goutte pend** au menton : elle grossit, s'étire (un « cou »), tombe, une plus petite reste et regrossit. Au début une goutte par seconde environ, puis de plus en plus lent (3-4 s) jusqu'à l'arrêt (15-40 s). Les gouttes tombent **moins vite** qu'avant (elles ne « claquent » plus). |
+| F3 | Pendant que la goutte pend, la victime frappe ou se fait frapper | La goutte **part tout de suite**, projetée dans le sens du mouvement. |
+| F4 | Coups de **côté** (gauche puis droite) | Plus souvent la **lèvre** : un film de sang sur la lèvre inférieure, une courte coulure du coin de la bouche vers la mâchoire. |
+| F5 | Uppercut / coup de tête / bouteille sur un visage déjà **bien marqué** (bleus niveau 2+) | Parfois une **coupure au sourcil** : la peau fendue (trait sombre), le sang **passe sur la paupière** (petite pause + film dans l'œil), descend la joue et **goutte de la mâchoire**. Max une coupure par sourcil. |
+| F6 | Re-frapper la tête quand une coupure est ouverte | La coupure **se rouvre** (brille de nouveau) et une nouvelle coulure **suit l'ancienne trace mouillée, plus vite**, puis continue plus loin. Le jet de sang du coup est plus fort (jusqu'à ×1.9 avec plusieurs plaies ouvertes). |
+| F7 | Coup lourd avec le nez qui saigne déjà | Parfois **nez cassé** : les deux narines coulent, plus large, plus longtemps. |
+| F8 | Victime blessée au visage, **immobile ~3 s** (ne frappe pas, n'est pas frappée) | De temps en temps (toutes les 6-15 s) : elle **crache** (un filet de sang qui s'étire et casse, une petite mousse rosée), **se mouche** (gouttelettes vers l'avant-bas, la coulure du nez raccourcit puis **recoule**), ou **s'essuie** (traînée horizontale sur la lèvre ou le sourcil, coulures raccourcies, le sang **revient** 1-3 s après, le dos de la main devient rouge). |
+| F9 | Mettre KO un combattant qui saigne du visage | Les coulures encore mouillées **tournent** : sur le côté elles traversent la joue en travers, sur le dos le sang **s'accumule** (la perle grossit) ; ~1 s après, une **flaque sous la tête** (si la tête est au sol). |
+| F10 | Se relever (GetUp) avec le visage en sang | Souvent il **s'essuie** le visage. Sur béton / asphalte / pavés, parfois une **éraflure** rosée sur la pommette (max 2), qui reste jusqu'à la mort. |
+| F11 | Attendre ~1 min après la fin d'un saignement | Les coulures foncent (la traînée d'abord, la perle reste brillante le plus longtemps), puis sèchent et **restent** jusqu'à la réapparition (croûte craquelée quand `crustStrip` est importée). De nouvelles coulures passent par-dessus. |
+| F12 | Plus de 6 coups qui saignent sur le même combattant | **Sueur** : les nouvelles coulures sont plus claires, plus larges et vont plus loin. |
+| F13 | `Bleeding` sur le **torse** (coupure au verre), rester debout | Le sang coule de la plaie **jusqu'au bas du t-shirt** (par à-coups, et il passe sur le côté s'il atteint le bord), puis goutte de là ; saignement fort (3+/s) : un **petit filet** qui coule en continu. La tache dans le tissu **descend** en grandissant, avec un **halo mouillé plus sombre** autour (visible aussi sur un t-shirt noir) et un bord pâle. La flaque se forme sous le point qui goutte. |
+| F14 | Mettre KO un combattant qui saigne (torse) | La flaque part du côté de la **tête/du cou**, pas cachée sous le ventre. |
+| F15 | 12 coups de poing touchés avec le même bras (un Dummy) | Les **jointures se fendent** (petites marques rosées/rouges) et restent jusqu'à la mort. Les gouttes projetées en frappant avec un poing ensanglanté partent surtout **à la fin du geste**, les deux premières plus grosses ; 3-4 coups vident le poing. |
+| F16 | Caméra à plus de 60 studs d'un combattant qui saigne | Pas d'animation (les coulures sont posées d'un coup, pas de goutte qui pend : des gouttes simples). Revenir près : tout s'anime de nouveau. |
+| F17 | 16 Dummies qui saignent du visage en même temps (MicroProfiler, étiquette `BloodRivulet`) | Moins de 0,4 ms par image ; pas plus de 4 coulures qui bougent par combattant, 3 gouttes qui pendent. |
+| F18 | `Config.Blood.FACE.CUTS = false` | Plus de coupures ni d'éraflures ; nez et lèvre saignent toujours. |

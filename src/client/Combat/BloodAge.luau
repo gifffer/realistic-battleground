@@ -23,7 +23,10 @@
 --   BloodAge.scale()              0.4 / 0.7 / 1: the quality (caps × this)
 --   BloodAge.mix(a, b, t)         blends two colours the way light does
 --   BloodAge.ageColor(start, profile, t)   the colour of blood `t` s old
+--   BloodAge.night()              0 (day) → 1 (night): at night blood shows by
+--                                 its sheen (darker colour, stronger gloss)
 
+local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -62,6 +65,11 @@ export type Layer = {
 	-- (true: its Transparency belongs to its own module - a wound part that
 	-- fades out with its bruise - ageing only changes its colour and sheen)
 	keepAlpha: boolean?,
+	-- (v2, all optional)
+	color: Color3?, -- a fixed tint (it doesn't age: the pale serum ring)
+	showFrom: number?, -- invisible until this age (s), then fades in...
+	showFull: number?, -- ...fully shown (its `alpha`) at this age
+	gel: number?, -- darker by this much once clotted (a pool's thick middle)
 }
 
 export type Record = {
@@ -86,6 +94,9 @@ export type Record = {
 	-- (filled in by BloodAge itself)
 	counted: boolean?, -- still counts in its kind's cap (not fading out)
 	nextPaint: number?, -- (an old, dry mark is repainted less often)
+	-- (v2) called at each paint with its age `t` (s): a pool's wet film
+	-- shrinking toward its middle as it dries
+	reshape: ((Record, number) -> ())?,
 }
 
 ------------------------------------------------------------------------------
@@ -145,6 +156,18 @@ end
 
 local qualityScale = 1
 local nextQualityCheck = 0
+local nightAmount = 0 -- 0 day → 1 night (read every 5 s)
+
+-- Night: before 6:30 or after 18:30 (half an hour to fade between the two).
+local function readNight(): number
+	local clock = Lighting.ClockTime
+	local past = math.max(6.5 - clock, clock - 18.5) -- (> 0: night, < 0: day)
+	return math.clamp(past / 0.5 + 1, 0, 1)
+end
+
+function BloodAge.night(): number
+	return nightAmount
+end
 
 local function readQuality(): number
 	local wanted = Config.Blood.QUALITY
@@ -448,15 +471,34 @@ local function paint(record: Record, now: number)
 		else BloodAge.ageColor(record.start, profile, t)
 	local wet = 1 - smooth(t / math.max(profile.glossEnd, 1e-3))
 	local shine = profile.gloss * wet
+	local night = nightAmount
+	if night > 0 then
+		-- (at night fresh blood looks nearly black and shows by its sheen)
+		color =
+			mix(color, PALETTE.GLOSS, 0.15 * night * (1 - smooth(t / math.max(profile.clot, 1))))
+		shine = math.min(shine * (1 + 0.4 * night), 0.35)
+	end
 	local rimIn = smooth((t - profile.clot * 0.4) / math.max(profile.clot * 0.6, 1e-3))
+	local clotted = smooth((t - profile.clot) / math.max(profile.dry - profile.clot, 1e-3))
+	local reshape = record.reshape
+	if reshape then
+		reshape(record, t)
+	end
 	for _, layer in record.layers do
 		local inst = layer.inst
 		local alpha = layer.alpha + record.soakIn
 		if layer.rim then
 			alpha = 1 - (1 - alpha) * rimIn
 		end
+		local showFrom = layer.showFrom
+		if showFrom then
+			-- (appears late: invisible before `showFrom`, its alpha at `showFull`)
+			local full = layer.showFull or (showFrom + 1)
+			alpha = 1 - (1 - alpha) * smooth((t - showFrom) / math.max(full - showFrom, 1e-3))
+		end
 		alpha = alpha + (1 - alpha) * fade
-		local c = shaded(color, layer.shade)
+		local shade = layer.shade + (layer.gel or 0) * clotted
+		local c = layer.color or shaded(color, shade)
 		if layer.isDecal then
 			local decal = inst :: Decal
 			decal.Color3 = c
@@ -476,6 +518,7 @@ local function paint(record: Record, now: number)
 	local gloss = record.gloss
 	if gloss then
 		local glossAlpha = record.glossAlpha + (1 - record.glossAlpha) * (1 - wet)
+		glossAlpha = math.max(0, glossAlpha - 0.1 * night * wet) -- (stronger at night)
 		gloss.Transparency = glossAlpha + (1 - glossAlpha) * fade
 		gloss.Reflectance = shine
 	end
@@ -511,7 +554,9 @@ RunService.Heartbeat:Connect(function()
 	if now >= nextQualityCheck then
 		nextQualityCheck = now + 5
 		qualityScale = readQuality()
+		nightAmount = readNight()
 	end
+	debug.profilebegin("BloodAge")
 	-- (looks at up to 4 × AGE_PER_FRAME marks, paints at most AGE_PER_FRAME)
 	local visits = math.min(#all, CAPS.AGE_PER_FRAME * 4)
 	local paints = CAPS.AGE_PER_FRAME
@@ -540,6 +585,7 @@ RunService.Heartbeat:Connect(function()
 		end
 		visits -= 1
 	end
+	debug.profileend()
 end)
 
 return table.freeze(BloodAge)
