@@ -46,7 +46,6 @@ local Bisect = {}
 
 Bisect.ATTRIBUTE = "Bisected"
 
-local BLOOD = Color3.fromRGB(78, 6, 6)
 local BLOOD_WET = Color3.fromRGB(104, 8, 8)
 local FLESH = Color3.fromRGB(122, 28, 30)
 local FLESH_DARK = Color3.fromRGB(80, 14, 16)
