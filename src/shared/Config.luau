@@ -426,16 +426,16 @@ return table.freeze({
 		-- While `drops` has no id, NOTHING is drawn on the screen (the rest of the rain stays).
 		SCREEN_RAIN_IMAGES = table.freeze({
 			-- single drops: drop_round.png, drop_egg.png, drop_irregular.png
-			drops = table.freeze({ 0, 0, 0 }),
+			drops = table.freeze({ 111660229759033, 71940132609064, 128041657038467 }),
 			-- two / three drops that ran together: drop_merged_2.png, drop_merged_3.png
-			merged = table.freeze({ 0, 0 }),
+			merged = table.freeze({ 120208136091045, 123722258422810 }),
 			-- a running drop and its wet trail: streak_1.png, streak_2.png, streak_3.png
 			-- (keep them 128 x 512: the game shows only the bottom part of the trail)
-			streaks = table.freeze({ 0, 0, 0 }),
+			streaks = table.freeze({ 87263627117702, 136885468981190, 84830595394974 }),
 			-- the fine spray at the screen edges in heavy rain: mist_1.png, mist_2.png
-			mist = table.freeze({ 0, 0 }),
+			mist = table.freeze({ 121407696421406, 82113857552482 }),
 			-- a very faint wet smear at the edges: wet_glass.png
-			wet = 0,
+			wet = 72393032484221,
 		}),
 
 		-- Studio only: the first event comes after 20 s and the gaps are 45 s, to test.
