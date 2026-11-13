@@ -329,8 +329,10 @@ end
 -- Playback speed of a clip.
 local function playbackRate(entry: Tracked, name: string): number
 	if name == "LimpWalk" or name == "LimpWalkLeft" then
-		-- The steps follow the real speed (slowed further by a leg hit...).
-		return math.clamp(horizontalSpeed(entry.root) / LIMP_WALK_SPEED, 0.6, 1.5)
+		-- The steps follow the real speed, down to a crawl (limping while
+		-- blocking or stunned is 2-4 studs/s): a high floor would make the
+		-- feet slide.
+		return math.clamp(horizontalSpeed(entry.root) / LIMP_WALK_SPEED, 0.3, 1.5)
 	elseif name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)

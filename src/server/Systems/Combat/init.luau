@@ -295,13 +295,16 @@ local function injure(
 		if part == "Left Leg" then
 			victim.leftLegDamage += damage
 		end
-		if not victim.limping and victim.legDamage >= INJ.LIMP_LEG_DAMAGE then
-			victim.limping = true
+		if victim.legDamage >= INJ.LIMP_LEG_DAMAGE then
 			-- The limp favours the leg that took the most ("LimpLeg": which
-			-- one hurts, for the walk every client draws).
+			-- one hurts, for the walk every client draws). Checked on every leg
+			-- hit, so it moves to the other leg if that one overtakes.
 			local left = victim.leftLegDamage * 2 > victim.legDamage
 			setAttribute(victim.model, "LimpLeg", if left then "Left" else "Right")
-			setAttribute(victim.model, "Limping", true)
+			if not victim.limping then
+				victim.limping = true
+				setAttribute(victim.model, "Limping", true)
+			end
 		end
 	end
 	if mark then
