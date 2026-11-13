@@ -398,7 +398,21 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 
 ### Finishers (adversaire KO + M1)
 - [ ] **Sentinel — Incinerate** : il attrape l'adversaire par la gorge et le soulève du sol, gros plan sur ses yeux qui chargent (son de charge), puis lasers à bout portant dans le visage (le visage se carbonise, étincelles, fumée), la tête finit calcinée (noire, braises, cheveux brûlés, fumée), il lâche le corps.
-- [ ] **Bull — Gore** : il souffle, gratte le sol, plante ses cornes dans le ventre (deux trous, beaucoup de sang), le soulève sur ses cornes, le secoue (le sang gicle à chaque secousse), l'écrase au sol (gros impact, fissures), puis frappe du pied.
+- [ ] **Bull — Gore** (**ré-importer `WoundKit` avant**, ~4,4 s) :
+  - **Placement** : l'adversaire KO est remis **debout, sonné**, à ~11 studs devant le Bull, face à lui. Contre un mur ou au bord d'un vide, le Bull se tourne vers un côté libre ; s'il n'y a de place nulle part, la course est plus courte (~7 studs). Jamais de course à travers un mur dans un endroit dégagé.
+  - **0 → 0,6 s** : plan bas derrière le Bull, puis plan près de la victime : il souffle (vapeur), baisse la tête, **gratte le sol du sabot** deux fois (poussière, petites fissures).
+  - **0,6 → 1,1 s** : il **charge** (~10 studs en une demi-seconde, rugissement, nuage de poussière derrière, fissures à chaque foulée, lignes de vitesse) ; la caméra le suit de côté, au ras du sol.
+  - **1,1 s** : les **cornes dans la cage thoracique** (craquement de côtes, gerbe de sang des deux côtés des cornes, éclats d'os, sang sur le Bull) ; la victime se plie par-dessus sa tête ; un **trou** déchiré dans la poitrine (à travers le t-shirt). Il l'emporte sur quelques studs.
+  - **1,45 s** : il **saute** (impact au décollage), la victime sur les cornes ; elle bascule en arrière au-dessus de sa tête.
+  - **1,85 s** (le coup final) : en l'air, il donne un coup de tête : le corps se **déchire en deux à la taille**. Le **haut** (torse, bras, tête) part en avant et vers le haut en tournant et retombe ~6-8 studs plus loin ; les **jambes** tombent en arrière. Gerbe de sang dans les deux sens, pluie de sang.
+  - **Les intestins** sortent du torse pendant que les deux moitiés s'éloignent : une chaîne de boucles roses qui **se déroule** le long du trajet du haut du corps, retombe et reste **au sol, en boucles, des jambes jusqu'au torse** ; un **tas d'intestins** tombe près des jambes (mou, il s'écrase). Si les moitiés partent trop loin, l'intestin se déchire côté torse.
+  - **Bouts arrachés** : sous le torse, les vrais muscles déchirés, la colonne (vertèbres + disque) qui dépasse, des nerfs qui pendent, l'intestin qui bombe, graisse jaune et peau retroussée ; au-dessus des jambes, le bassin (os iliaques, sacrum), l'autre moitié du disque, muscles, peau.
+  - **Sang** : l'aorte et la veine cave **giclent par saccades** sous le torse, les deux artères iliaques au-dessus des jambes ; bruit sourd et éclaboussure quand chaque moitié touche le sol ; **traînée** de sang au sol là où le haut du corps glisse ; une **flaque** s'étend sous chaque moitié.
+  - **2,25 s** : le Bull **atterrit** entre les deux moitiés (gros impact, fissures, poussière). Plan au ras du sol depuis les jambes : les intestins qui partent vers le haut du corps, le Bull au milieu ; il **souffle** au-dessus (vapeur), regarde les jambes derrière lui ; plan large d'en haut.
+  - Sans le nouveau `WoundKit` (ancien kit) : des formes simples (chair sombre, os, boucles roses en cylindres) au lieu des vraies pièces, rien ne casse.
+- [ ] **Bull — Gore, corps vu plus tard** : un joueur qui arrive après (ou le **corps figé** de `Workspace > Corpses` après la réapparition, F10) voit les deux moitiés là où elles sont tombées, les bouts arrachés, les intestins **posés au sol** d'une moitié à l'autre (immobiles), le tas d'intestins et les flaques ; pas de jets ni d'animation.
+- [ ] **Bull — Gore coupé avant 1,85 s** (le Bull meurt, un joueur part) : tout s'arrête, le Bull reste **là où on le voyait** (pas de téléportation au bout de la course), la victime retombe KO, entière (le trou dans la poitrine disparaît).
+- [ ] **Bull — Gore** sur un **mannequin** : même chose ; les deux moitiés disparaissent avec lui (25 s).
 - [ ] Coupés en cours (l'attaquant meurt...) : tout s'arrête proprement, la caméra revient.
 
 ## Kit Bouncer / Videur (`claude/bouncer-kit`)

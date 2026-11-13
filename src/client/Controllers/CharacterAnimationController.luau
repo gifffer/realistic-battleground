@@ -160,6 +160,9 @@ local tracked: { [Model]: Tracked } = {}
 local predictedBlock = false
 -- Reused every frame (no table created per frame).
 local sprintPose: { [string]: CFrame } = {}
+-- Bodies held at a place of their own (pinRoot): where the torso's centre
+-- is this frame (world), or nil once it's over.
+local pins: { [Model]: () -> Vector3? } = setmetatable({}, { __mode = "k" }) :: any
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -499,6 +502,22 @@ local function compose(entry: Tracked)
 			result = result * R6Pose.toTransform(motor, flinchRotation(entry.flinch, share))
 			any = true
 		end
+		-- Pinned (pinRoot): the torso's centre put where it must be, whatever
+		-- the root part does; the clip's own turn kept.
+		-- (torso = root · C0 · Transform · C1⁻¹, solved for Transform's position)
+		local pin = if joint == "Root" then pins[entry.model] else nil
+		if pin then
+			local at = pin()
+			if at then
+				local joint0 = entry.root.CFrame * motor.C0
+				local turn = result.Rotation
+				local tail = (turn * motor.C1:Inverse()).Position
+				result = CFrame.new(joint0:PointToObjectSpace(at) - tail) * turn
+				any = true
+			else
+				pins[entry.model] = nil
+			end
+		end
 
 		if any then
 			motor.Transform = result
@@ -583,7 +602,7 @@ local function onPreSimulation(dt: number)
 		updateFlinch(entry, dt)
 
 		local busy = #entry.movement > 0 or #entry.stance > 0 or #entry.action > 0
-		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero
+		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero or pins[model] ~= nil
 		if busy or extras or next(entry.lastWritten) ~= nil then
 			compose(entry)
 		end
@@ -647,6 +666,18 @@ function CharacterAnimationController.stopAction(model: Model, name: string)
 			layer.target = 0
 			layer.fadeOut = ACTION_FADE_OUT
 		end
+	end
+end
+
+-- Holds the body of `model` at a place of its own while its clips play:
+-- `at()` gives where its torso's centre is this frame (world), nil once
+-- over (then the body is back on its root part). nil `at`: let go now.
+-- (The Bull's finisher: his root waits where he ends, his body runs there.)
+function CharacterAnimationController.pinRoot(model: Model, at: (() -> Vector3?)?)
+	if at then
+		pins[model] = at
+	else
+		pins[model] = nil
 	end
 end
 

@@ -35,6 +35,9 @@ local TweenService = game:GetService("TweenService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local Finishers = require(ReplicatedStorage.Shared.Finishers)
+local Blood = require(script.Parent.Blood)
+local BloodGush = require(script.Parent.BloodGush)
 local KitLooks = require(script.Parent.KitLooks)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
@@ -2761,9 +2764,329 @@ local function incinerate(model: Model, live: boolean)
 	end)
 end
 
--- One moment of a Sentinel / Bull finisher (CinematicController; the
--- blood of the gore is its, through KitEffects).
-function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model)
+-- The Bull's finisher ("Gore", Shared/Finishers): his body runs along
+-- Finishers.CHARGE while his root waits where he ends, so everything here
+-- is placed from his torso (where he is seen), never from his root.
+local BONE_CHIP = Color3.fromRGB(226, 214, 190)
+
+-- Runs `fn` `delay` seconds later if this finisher wasn't cut short.
+local function onCue(attacker: Model, token: number, delay: number, fn: () -> ())
+	task.delay(delay, function()
+		if finisherTokens[attacker] == token and attacker.Parent then
+			fn()
+		end
+	end)
+end
+
+-- Under his body (his hooves), or nil.
+local function underBull(attacker: Model): Floor?
+	local torso = part(attacker, "Torso")
+	return if torso then floorAt(torso.Position) else nil
+end
+
+-- A hoof on the floor: dust thrown back, a dent, chips.
+local function hoof(attacker: Model, leg: string, back: Vector3, strength: number)
+	local limb = part(attacker, leg)
+	if limb == nil then
+		return
+	end
+	local floor = floorAt((limb.CFrame * CFrame.new(0, -1, 0)).Position)
+	if floor == nil then
+		return
+	end
+	local dust = dustColor(floor)
+	smokePuff(
+		floor.position + Vector3.new(0, 0.3, 0),
+		math.floor(5 * strength),
+		0.6 * strength,
+		dust,
+		back + Vector3.yAxis * 0.6,
+		9 * strength
+	)
+	groundRing(
+		floor.position,
+		0.3,
+		2.4 * strength,
+		0.3,
+		dust,
+		{ width = 0.35, height = 0.3, segments = 16 }
+	)
+	cracks(floor.position, 2, 1.1 * strength, 5)
+	rocks(floor.position, math.max(1, math.floor(2 * strength)), 0.4 * strength)
+end
+
+-- Splinters of rib thrown out of the chest with the horns.
+local function boneChips(point: Vector3, out: Vector3, count: number)
+	for _ = 1, count do
+		local chip = newPart(
+			Vector3.new(
+				random:NextNumber(0.05, 0.1),
+				random:NextNumber(0.12, 0.3),
+				random:NextNumber(0.05, 0.08)
+			),
+			BONE_CHIP:Lerp(Color3.fromRGB(150, 40, 36), random:NextNumber(0, 0.35))
+		)
+		chip.Anchored = false
+		chip.CanCollide = true
+		chip.CastShadow = true
+		chip.CollisionGroup = DEBRIS_GROUP
+		chip.CustomPhysicalProperties = PhysicalProperties.new(0.5, 0.6, 0.15)
+		chip.CFrame = CFrame.new(point)
+			* CFrame.Angles(random:NextNumber(0, 6.3), random:NextNumber(0, 6.3), 0)
+		chip.AssemblyLinearVelocity = (out + random:NextUnitVector() * 0.6).Unit
+				* random:NextNumber(8, 18)
+			+ Vector3.new(0, random:NextNumber(3, 9), 0)
+		chip.AssemblyAngularVelocity = random:NextUnitVector() * 20
+		chip.Parent = fx
+		Debris:AddItem(chip, 6)
+		task.delay(5.2, function()
+			if chip.Parent then
+				tween(chip, 0.7, { Transparency = 1 })
+			end
+		end)
+	end
+end
+
+local function bullFinisherEvent(
+	kind: string,
+	attacker: Model,
+	victim: Model,
+	anchor: CFrame?,
+	token: number
+)
+	local forward = if anchor then flat(anchor.LookVector) else forwardOf(attacker)
+	if kind == "Snort" then
+		token += 1
+		finisherTokens[attacker] = token
+		snort(attacker, 2)
+		local head = part(attacker, "Head")
+		if head then
+			local eyes = rageEyes(head, 4.3)
+			animate(4.3, function()
+				if finisherTokens[attacker] ~= token then
+					for _, eye in eyes do
+						eye.Transparency = 1
+					end
+				end
+			end)
+		end
+		local floor = underBull(attacker)
+		if floor then
+			smokePuff(
+				floor.position + Vector3.new(0, 0.3, 0),
+				8,
+				0.8,
+				dustColor(floor),
+				-forward + Vector3.yAxis,
+				10
+			)
+		end
+	elseif kind == "Scrape" then
+		-- (the right hoof scraping back)
+		local sound = SoundController.play("Stomp", attacker)
+		if sound then
+			sound.Volume *= 0.45
+			sound.PlaybackSpeed *= 1.25
+		end
+		hoof(attacker, "Right Leg", -forward, 1)
+		snort(attacker, 0.9)
+	elseif kind == "Rush" then
+		-- The roar, until the horns go in.
+		local roar = SoundController.play("BullCharge", attacker)
+		local run = Finishers.CHARGE.impact - Finishers.CHARGE.run
+		if roar then
+			local sound = roar
+			local volume = sound.Volume
+			animate(run + 0.35, function(alpha)
+				local left = (1 - alpha) * (run + 0.35)
+				if finisherTokens[attacker] ~= token then
+					sound.Volume = 0
+				elseif left < 0.25 then
+					sound.Volume = volume * left / 0.25
+				end
+			end, function()
+				sound:Stop()
+				sound:Destroy()
+			end)
+		end
+		local torso = part(attacker, "Torso")
+		local floor = underBull(attacker)
+		if torso then
+			-- dust rolling off him, gravel kicked up behind
+			local back = Instance.new("Attachment")
+			back.CFrame = CFrame.new(0, -2.4, 0.8) * CFrame.Angles(math.rad(160), 0, 0)
+			back.Parent = torso
+			stream(back, {
+				texture = TEX.smoke,
+				color = dustColor(floor),
+				size = { 1, 3, 4.5 },
+				transparency = { 0.3, 0.6, 1 },
+				speed = NumberRange.new(3, 8),
+				lifetime = NumberRange.new(0.7, 1.3),
+				spread = 35,
+				acceleration = Vector3.new(0, 2, 0),
+				drag = 2.5,
+				count = 0,
+			}, 80)
+			stream(back, {
+				texture = TEX.sparkle,
+				color = Color3.fromRGB(120, 100, 80),
+				size = { 0.2, 0.15 },
+				transparency = { 0, 1 },
+				speed = NumberRange.new(8, 16),
+				lifetime = NumberRange.new(0.3, 0.6),
+				spread = 30,
+				acceleration = Vector3.new(0, -60, 0),
+				count = 0,
+			}, 45)
+			Debris:AddItem(back, run + 0.05)
+			hornTrails(attacker, run + 0.1)
+			trail(part(attacker, "Head") or torso, Color3.fromRGB(255, 220, 200), run, 1.6, 0.3)
+		end
+		-- every stride: a hoof cracks the floor; the air pushed ahead
+		local strides = math.floor(run / 0.11)
+		for step = 0, strides do
+			onCue(attacker, token, step * 0.11, function()
+				hoof(attacker, if step % 2 == 0 then "Right Leg" else "Left Leg", -forward, 1.2)
+				if step % 3 == 0 then
+					local head = part(attacker, "Head")
+					if head then
+						ring(
+							axisFrame(head.Position + forward * 1.5, forward),
+							1,
+							3.5,
+							0.3,
+							WHITE,
+							{
+								neon = true,
+								width = 0.1,
+								height = 0.06,
+								transparency = 0.5,
+							}
+						)
+						streaks(head.Position + forward * 2, -forward, 4, 1.5, 3, 20, WHITE, 0.3)
+						shake(head.Position, 0.8, 30, 0.15)
+					end
+				end
+			end)
+		end
+	elseif kind == "Impact" then
+		-- The horns into the ribcage: the ribs crunch, blood bursts out of the
+		-- chest round the horns and over him (the wound itself: the server's
+		-- "Tear" on the torso, Gashes).
+		SoundController.play("RibCrack", victim)
+		SoundController.play("HeavyHit", victim)
+		SoundController.play("FleshTear", victim)
+		local torso = part(victim, "Torso")
+		if torso then
+			local chest = (torso.CFrame * CFrame.new(0, 0.3, -0.55)).Position
+			local out = torso.CFrame.LookVector
+			local side = torso.CFrame.RightVector
+			flash(chest, Color3.fromRGB(255, 200, 190), 2.2, 0.2)
+			ring(
+				axisFrame(chest, -forward),
+				0.6,
+				4.5,
+				0.35,
+				WHITE,
+				{ neon = true, width = 0.14, height = 0.08 }
+			)
+			Blood.spray(chest, out + side * 0.8 + Vector3.new(0, 0.7, 0), 3.5, victim)
+			Blood.spray(chest, out - side * 0.8 + Vector3.new(0, 0.7, 0), 3.5, victim)
+			Blood.spray(chest, -forward * 0.4 + Vector3.new(0, -0.6, 0), 2, victim, true)
+			Blood.mist(chest, out + Vector3.new(0, 0.5, 0), 3)
+			Blood.splat(chest, out, 0.4, Vector3.new(0, -3, 0), torso)
+			boneChips(chest, out + Vector3.new(0, 0.4, 0), 7)
+			BloodGush.splatter(attacker, chest, 20, math.floor(chest.X * 7 + chest.Z * 13))
+		end
+		hornTrails(attacker, 0.25)
+		shake((torso or part(attacker, "Torso") or attacker:GetPivot()).Position, 2.6, 40, 0.4)
+		punch(
+			if torso then torso.Position else attacker:GetPivot().Position,
+			25,
+			Color3.fromRGB(255, 90, 80),
+			0.6
+		)
+	elseif kind == "Jump" then
+		local floor = underBull(attacker)
+		local sound = SoundController.play("Stomp", attacker)
+		if sound then
+			sound.PlaybackSpeed *= 0.85
+		end
+		if floor then
+			local dust = dustColor(floor)
+			groundRing(floor.position, 0.6, 7, 0.45, dust, { width = 0.8, height = 0.6 })
+			dustRing(floor.position, 2, 0.7, dust)
+			cracks(floor.position, 5, 2.4, 7)
+			rocks(floor.position, 5, 0.8)
+			shake(floor.position, 1.5, 35, 0.25)
+		end
+		-- (a little more blood drips off as they go up)
+		local torso = part(victim, "Torso")
+		if torso then
+			Blood.spray(
+				(torso.CFrame * CFrame.new(0, 0, -0.5)).Position,
+				Vector3.new(0, -1, 0),
+				1.5,
+				victim,
+				true
+			)
+		end
+	elseif kind == "Rip" then
+		-- Tossed: torn in two at the waist (the halves, the guts, the stumps
+		-- pumping: Bisect, from the server's "Bisected"): the tearing, a
+		-- burst of blood out of the waist both ways, rain coming down.
+		SoundController.play("BullToss", attacker)
+		SoundController.play("ArmTear", victim)
+		SoundController.play("FleshTear", victim)
+		snort(attacker, 1.5)
+		local torso = part(victim, "Torso")
+		if torso then
+			local waist = (torso.CFrame * CFrame.new(0, -1, 0)).Position
+			flash(waist, Color3.fromRGB(255, 120, 110), 3, 0.25)
+			shockSphere(waist, 0.5, 4, 0.3, Color3.fromRGB(150, 20, 20))
+			Blood.spray(waist, forward + Vector3.new(0, 1.2, 0), 6, victim)
+			Blood.spray(waist, -forward + Vector3.new(0, -0.4, 0), 5, victim)
+			Blood.spray(waist, Vector3.yAxis, 4, victim, true)
+			Blood.mist(waist, Vector3.yAxis, 4)
+			BloodGush.splatter(attacker, waist, 26, math.floor(waist.X * 11 + waist.Z * 5))
+			shake(waist, 3, 50, 0.5)
+			punch(waist, 30, Color3.fromRGB(255, 70, 60), 0.9)
+		end
+	elseif kind == "Land" then
+		SoundController.play("Stomp", attacker)
+		SoundController.play("Slam", attacker)
+		local torso = part(attacker, "Torso")
+		local floor = underBull(attacker)
+		local spot = if floor
+			then floor.position
+			elseif torso then torso.Position
+			else attacker:GetPivot().Position
+		groundImpact(spot, { size = 1.1, flashColor = Color3.fromRGB(255, 200, 150) })
+		snort(attacker, 1.4)
+	elseif kind == "Huff" then
+		-- Snorting over what's left: steam rolling down onto it.
+		snort(attacker, 2.2)
+		onCue(attacker, token, 0.35, function()
+			snort(attacker, 1.2)
+		end)
+		local floor = underBull(attacker)
+		if floor then
+			smokePuff(
+				floor.position + Vector3.new(0, 0.3, 0),
+				5,
+				0.6,
+				dustColor(floor),
+				forward + Vector3.yAxis,
+				6
+			)
+		end
+	end
+end
+
+-- One moment of a Sentinel / Bull finisher (CinematicController).
+-- `anchor`: the finisher's (Shared/Finishers).
+function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model, anchor: CFrame?)
 	local token = finisherTokens[attacker] or 0
 	if kind == "Grab" then
 		token += 1
@@ -2807,72 +3130,8 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model)
 			flash(face.Position, EMBER, 2.5, 0.3)
 			shockSphere(face.Position, 0.4, 2.5, 0.3, EMBER)
 		end
-	elseif kind == "Snort" then
-		token += 1
-		finisherTokens[attacker] = token
-		snort(attacker, 2)
-		local head = part(attacker, "Head")
-		if head then
-			local eyes = rageEyes(head, 3.6)
-			animate(3.6, function()
-				if finisherTokens[attacker] ~= token then
-					for _, eye in eyes do
-						eye.Transparency = 1
-					end
-				end
-			end)
-		end
-		local spot = feet(attacker)
-		if spot then
-			smokePuff(
-				spot + Vector3.new(0, 0.3, 0),
-				8,
-				0.8,
-				dustColor(floorAt(spot)),
-				-forwardOf(attacker) + Vector3.yAxis,
-				10
-			)
-		end
-	elseif kind == "Gore" then
-		SoundController.play("FleshTear", victim)
-		SoundController.play("HeavyHit", victim)
-		hornTrails(attacker, 0.2)
-		local torso = part(victim, "Torso")
-		if torso then
-			local toward = forwardOf(attacker)
-			flash(torso.Position, Color3.fromRGB(255, 220, 200), 2, 0.2)
-			ring(
-				axisFrame(torso.Position, toward),
-				0.6,
-				4.5,
-				0.35,
-				WHITE,
-				{ neon = true, width = 0.14, height = 0.08 }
-			)
-		end
-		shake(attacker:GetPivot().Position, 2.2, 35, 0.35)
-	elseif kind == "Shake" then
-		local torso = part(victim, "Torso")
-		if torso then
-			streaks(torso.Position, Vector3.yAxis, 6, 1, 2.5, 25, WHITE, 0.3)
-		end
-		snort(attacker, 0.8)
-		shake(attacker:GetPivot().Position, 1, 25, 0.2)
-	elseif kind == "Slam" then
-		SoundController.play("Slam", attacker)
-		local torso = part(victim, "Torso")
-		local spot = if torso
-			then torso.Position
-			else (feet(attacker) or attacker:GetPivot().Position)
-		groundImpact(spot, { size = 1.5, flashColor = Color3.fromRGB(255, 200, 150) })
-	elseif kind == "Stomp" then
-		SoundController.play("Stomp", attacker)
-		local spot = feet(attacker)
-		if spot then
-			groundRing(spot, 0.5, 6, 0.45, dustColor(floorAt(spot)), { width = 0.7, height = 0.5 })
-			cracks(spot, 4, 2, 6)
-		end
-		snort(attacker, 1.6)
+	else
+		bullFinisherEvent(kind, attacker, victim, anchor, token)
 	end
 end
 

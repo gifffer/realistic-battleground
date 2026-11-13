@@ -7,7 +7,12 @@
 --                    opponent lying on the ground, from his right to his
 --                    left: the head bursts.
 --   "Incinerate"     Sentinel: lifted by the throat, heat vision point blank.
---   "Gore"           Bull: gored, lifted on the horns, shaken, slammed down.
+--   "Gore"           Bull: paws the floor, charges the opponent (stood up
+--                    groggy a dozen studs away), rams his horns into their
+--                    ribcage, carries them and leaps; in the air he tosses
+--                    his head and the body tears in two at the waist: the
+--                    top half flies on and lands further, the legs drop,
+--                    the guts trail on the floor from one to the other.
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
 --                    to the body, hook, hook, cross, then a left hook into
 --                    their right side under the ribs: the hand goes in and
@@ -54,8 +59,10 @@ export type Cinematic = {
 	-- Where the attacker stands: "head" = past the lying victim's head
 	-- (the body beyond it), facing it, HEAD_DISTANCE away; "front" = where he is, the victim
 	-- pulled up in front of him at HOLD_DISTANCE, facing him; "side" = by
-	-- the victim laid on its back across in front of him (SIDE_VICTIM).
-	placement: "head" | "front" | "side",
+	-- the victim laid on its back across in front of him (SIDE_VICTIM);
+	-- "charge" = the victim stood up CHARGE.victim studs in front of him,
+	-- facing him, a clear run between them (Finishers.CHARGE).
+	placement: "head" | "front" | "side" | "charge",
 	victimAnimation: string?, -- played on the victim (held up / laid out)
 	events: { Event },
 	shots: { Shot },
@@ -98,6 +105,95 @@ Finishers.ARM_THROW_FROM = CFrame.new(
 	0.7308
 )
 Finishers.ARM_THROW_VELOCITY = Vector3.new(3, -2, -1) -- anchor space, studs/s
+
+-- "charge" (the Bull's "Gore"): his run, his leap and his landing.
+--   victim   studs from the anchor to where the victim stands (facing him)
+--   short    no room for the whole run: he starts this much closer (the
+--            anchor stays where a full run would start, so the shots and
+--            everything after the impact are the same)
+--   ends     where his root is at the end (anchor space): the server puts
+--            his (anchored) root there at the start; every client shows
+--            his body along `path` meanwhile (CharacterAnimationController
+--            .pinRoot), so where the root is never shows
+--   path     where his body (his torso's centre) is, anchor space, over
+--            time; `flat` = it stops there. The clip Bull_Finisher has a
+--            keyframe at each of these times.
+--   rip      the victim's root at the kill, in its own placed root's space
+--            (the last keyframe of Bull_FinisherVictim): the server drops
+--            the body from there, already torn
+export type PathPoint = { time: number, at: Vector3, flat: boolean? }
+Finishers.CHARGE = table.freeze({
+	victim = 11,
+	short = 4,
+	ends = Vector3.new(0, 0, -15.5),
+	path = table.freeze({
+		{ time = 0, at = Vector3.new(0, 0, 0), flat = true },
+		{ time = 0.25, at = Vector3.new(0, -0.2, 0.1) },
+		{ time = 0.45, at = Vector3.new(0, -0.2, 0.1) },
+		{ time = 0.6, at = Vector3.new(0, -0.45, 0.35), flat = true }, -- (weight back: off)
+		{ time = 0.85, at = Vector3.new(0, -0.35, -4.3) },
+		{ time = 1.1, at = Vector3.new(0, -0.45, -9.0) }, -- the horns go in
+		{ time = 1.3, at = Vector3.new(0, -0.35, -10.6) },
+		{ time = 1.45, at = Vector3.new(0, -0.75, -11.4) }, -- (crouched: the leap)
+		{ time = 1.65, at = Vector3.new(0, 1.9, -12.7) },
+		{ time = 1.85, at = Vector3.new(0, 2.8, -13.8) }, -- the toss
+		{ time = 2.05, at = Vector3.new(0, 1.8, -14.9) },
+		{ time = 2.25, at = Vector3.new(0, -0.8, -15.5), flat = true }, -- landed
+		{ time = 2.55, at = Vector3.new(0, -0.15, -15.5) },
+		{ time = 3.0, at = Vector3.new(0, -0.05, -15.5) },
+		{ time = 4.4, at = Vector3.new(0, 0, -15.5), flat = true },
+	} :: { PathPoint }),
+	-- (on his horns over his head, thrown back, high in the air)
+	rip = CFrame.new(0, 5.1, 4.4) * CFrame.Angles(math.rad(62), 0, 0),
+	run = 0.6, -- (when he sets off, and when the horns go in: the short
+	impact = 1.1, -- run is slower between the two)
+})
+
+-- Where the Bull's body is (anchor space) `time` seconds into "Gore", with
+-- `short` studs less of a run (0 or CHARGE.short): a smooth spline through
+-- CHARGE.path (like the clips': it passes through the points without
+-- stopping, except at the flat ones).
+function Finishers.chargeRoot(time: number, short: number): Vector3
+	local path = Finishers.CHARGE.path
+	local count = #path
+	local t = math.clamp(time, 0, path[count].time)
+	local from = 1
+	for index = 1, count - 1 do
+		if path[index + 1].time >= t then
+			from = index
+			break
+		end
+	end
+	local to = math.min(from + 1, count)
+	local function tangent(index: number): Vector3
+		local point = path[index]
+		if point.flat or index == 1 or index == count then
+			return Vector3.zero
+		end
+		local before, after = path[index - 1], path[index + 1]
+		return (after.at - before.at) / (after.time - before.time)
+	end
+	local a, b = path[from], path[to]
+	local span = b.time - a.time
+	local at: Vector3
+	if span <= 0 then
+		at = a.at
+	else
+		local u = (t - a.time) / span
+		local u2, u3 = u * u, u * u * u
+		at = a.at * (2 * u3 - 3 * u2 + 1)
+			+ tangent(from) * ((u3 - 2 * u2 + u) * span)
+			+ b.at * (-2 * u3 + 3 * u2)
+			+ tangent(to) * ((u3 - u2) * span)
+	end
+	if short > 0 then
+		-- (he starts closer: the run itself is shorter, the rest the same)
+		local C = Finishers.CHARGE
+		local share = math.clamp((C.impact - t) / (C.impact - C.run), 0, 1)
+		at += Vector3.new(0, 0, -short * share)
+	end
+	return at
+end
 
 local cinematics: { [string]: Cinematic } = {
 	Bat = {
@@ -330,8 +426,8 @@ local cinematics: { [string]: Cinematic } = {
 
 -- Sentinel: "Incinerate" - he grabs them by the throat, lifts them off
 -- their feet, his eyes charge, and he burns their head point blank; drops
--- what's left. Bull: "Gore" - horns into the belly, lifted up on them,
--- shaken like a rag, slammed down into the floor.
+-- what's left. Bull: "Gore" - a charge, the horns into the ribcage, a leap,
+-- torn in two in the air (see the top of the file).
 cinematics.Incinerate = {
 	id = "Incinerate",
 	duration = 4.2,
@@ -398,66 +494,91 @@ cinematics.Incinerate = {
 cinematics.Gore = {
 	id = "Gore",
 	duration = 4.4,
-	kill = 3.4,
-	placement = "front",
+	kill = 1.85,
+	placement = "charge",
 	victimAnimation = "Bull_FinisherVictim",
 	events = {
-		{ time = 0.1, kind = "Snort" },
-		{ time = 0.7, kind = "Gore" }, -- the horns go in
-		{ time = 1.65, kind = "Shake" },
-		{ time = 1.9, kind = "Shake" },
-		{ time = 2.15, kind = "Shake" },
-		{ time = 2.4, kind = "Shake" },
-		{ time = 3.4, kind = "Slam" }, -- slammed into the floor
-		{ time = 3.9, kind = "Stomp" },
+		{ time = 0.05, kind = "Snort" },
+		{ time = 0.25, kind = "Scrape" }, -- a hoof scrapes the floor
+		{ time = 0.45, kind = "Scrape" },
+		{ time = 0.6, kind = "Rush" }, -- he charges at them
+		{ time = 1.1, kind = "Impact" }, -- the horns into the ribcage
+		{ time = 1.45, kind = "Jump" }, -- he leaps, them on his horns
+		{ time = 1.85, kind = "Rip" }, -- tossed: torn in two at the waist (the kill)
+		{ time = 2.25, kind = "Land" },
+		{ time = 3.3, kind = "Huff" }, -- snorts over what's left
+		{ time = 3.95, kind = "Scrape" },
 	},
+	-- (his run: Finishers.CHARGE; they stand at (0, 0, -11), the top half
+	-- lands around (0, -2.5, -21), the legs around (0, -2.5, -13), he lands
+	-- between them at (0, 0, -15.5))
 	shots = {
-		-- Low, three-quarter: he paws the floor, head down.
+		-- Low behind him, past his shoulder, down the way he'll run: he
+		-- snorts, paws the floor; them, groggy, at the end of it.
 		{
 			time = 0,
-			from = Vector3.new(4.2, -0.8, -3.6),
-			to = Vector3.new(3.9, -0.9, -3.0),
-			look = Vector3.new(0, -0.3, -1),
+			from = Vector3.new(2.0, -1.6, 4.4),
+			to = Vector3.new(1.7, -1.8, 3.8),
+			look = Vector3.new(0, -0.6, -9),
+			fov = 50,
+		},
+		-- Low, by them, looking back at him: head down, a hoof scraping.
+		{
+			time = 0.4,
+			from = Vector3.new(-2.6, -2.3, -8.2),
+			to = Vector3.new(-2.4, -2.4, -7.8),
+			look = Vector3.new(0, -1.2, -1.2),
+			fov = 46,
+		},
+		-- Low alongside the charge, toward them.
+		{
+			time = 0.62,
+			from = Vector3.new(5.0, -1.9, -2.0),
+			to = Vector3.new(4.2, -2.0, -7.2),
+			look = Vector3.new(0, -0.6, -9.5),
 			fov = 58,
 		},
-		-- From the side: the horns go in.
+		-- Close from the side: the horns into the ribcage, folded over his
+		-- head, carried.
 		{
-			time = 0.6,
-			from = Vector3.new(5.2, 0.2, -1.2),
-			to = Vector3.new(4.8, 0, -1.2),
-			look = Vector3.new(0, 0, -1.3),
+			time = 1.08,
+			from = Vector3.new(3.0, -0.9, -9.6),
+			to = Vector3.new(2.7, -0.6, -10.6),
+			look = Vector3.new(0, 0.2, -10.8),
+			fov = 44,
+		},
+		-- Wide, in profile: the leap, the toss, the body torn in two in the
+		-- air, the top flying on, the legs dropping, him landing.
+		{
+			time = 1.42,
+			from = Vector3.new(8.5, -1.2, -12.0),
+			to = Vector3.new(8.2, -1.0, -13.0),
+			look = Vector3.new(0, 1.6, -14.8),
+			fov = 60,
+		},
+		-- On the floor by the legs: the guts trailing away from them, under
+		-- him, to the top half further on.
+		{
+			time = 2.35,
+			from = Vector3.new(-1.8, -2.6, -10.8),
+			to = Vector3.new(-1.6, -2.55, -11.6),
+			look = Vector3.new(0.2, -2.3, -19),
 			fov = 52,
 		},
-		-- From the floor, looking up: lifted up on the horns.
+		-- Behind his right shoulder: snorting over it.
 		{
-			time = 1.15,
-			from = Vector3.new(3.4, -2.0, 1.6),
-			to = Vector3.new(3.0, -2.2, 1.3),
-			look = Vector3.new(0, 2, -1.4),
-			fov = 60,
+			time = 3.2,
+			from = Vector3.new(4.5, 1.5, -11.8),
+			to = Vector3.new(4.9, 2.2, -11.0),
+			look = Vector3.new(0, -1.8, -17.5),
+			fov = 58,
 		},
-		-- In front: shaken like a rag, blood flying.
+		-- Wide from above: all of it.
 		{
-			time = 1.6,
-			from = Vector3.new(0.5, 1.2, -6.5),
-			to = Vector3.new(0.3, 1.0, -6.0),
-			look = Vector3.new(0, 1.5, -1.5),
-			fov = 62,
-		},
-		-- Wide from the side: slammed down.
-		{
-			time = 2.75,
-			from = Vector3.new(6.5, 1.0, -1.5),
-			to = Vector3.new(6, 0.4, -1.6),
-			look = Vector3.new(0, -1.2, -2),
-			fov = 60,
-		},
-		-- From above: the body in the cracked floor, him over it.
-		{
-			time = 3.5,
-			from = Vector3.new(3.5, 4.5, -5.5),
-			to = Vector3.new(3.8, 5, -4.5),
-			look = Vector3.new(0, -2.5, -2.2),
+			time = 3.8,
+			from = Vector3.new(6.5, 5.5, -22),
+			to = Vector3.new(7.5, 7, -20),
+			look = Vector3.new(0, -2.6, -16.5),
 			fov = 60,
 		},
 	},

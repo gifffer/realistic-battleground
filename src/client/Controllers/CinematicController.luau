@@ -56,22 +56,26 @@ local SHAKES: { [string]: Shake } = {
 	Strain = { at = 0, strength = 1.2, punch = 1.5 },
 	Pop = { at = 0, strength = 3, punch = 5 },
 	Tear = { at = 0, strength = 4.5, punch = 9 },
-	-- (the Sentinel's and the Bull's)
+	-- (the Sentinel's)
 	Beam = { at = 0, strength = 1.5, punch = 3 },
 	Burnt = { at = 0, strength = 3, punch = 6 },
-	Gore = { at = 0, strength = 4.5, punch = 9 }, -- the horns go in
-	Shake = { at = 0, strength = 2, punch = 2 },
-	Slam = { at = 0, strength = 5, punch = 10 },
 }
 -- The Sentinel's and the Bull's finishers: all their effects are KitVFX's
 -- (by cinematic: other finishers have events with the same names).
 local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
--- (and how much blood each of the Bull's blows draws)
-local GORE_BLOOD: { [string]: number } = { Gore = 3, Shake = 1, Slam = 2 }
--- (an event name both kits use, shaken differently in these finishers)
+-- (event names other finishers use too, shaken differently in these;
+-- a negative push-in widens the view: the Bull's charge)
 local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 	Incinerate = { Grab = { at = 0, strength = 1, punch = 1 } },
-	Gore = { Stomp = { at = 0, strength = 1.5, punch = 2 } },
+	Gore = {
+		Scrape = { at = 0, strength = 0.5, punch = 0.5 },
+		Rush = { at = 0, strength = 1.2, punch = -5 },
+		Impact = { at = 0, strength = 5, punch = 10 }, -- the horns into the ribcage
+		Jump = { at = 0, strength = 1.5, punch = 2 },
+		Rip = { at = 0, strength = 6, punch = 12 }, -- torn in two
+		Land = { at = 0, strength = 4, punch = 6 },
+		Huff = { at = 0, strength = 0.6, punch = 0.5 },
+	},
 }
 
 local bars: { top: Frame, bottom: Frame }? = nil
@@ -81,7 +85,23 @@ type Run = {
 	cinematic: Finishers.Cinematic,
 	victim: Model,
 	cancelled: boolean,
+	started: number, -- os.clock()
 	stopCamera: (() -> ())?, -- ours (we're one of the two fighters)
+}
+
+-- Every finisher clip (cut short: stopped).
+local ATTACKER_CLIPS = {
+	"Brawler_FinisherBat",
+	"Boxer_FinisherCombo",
+	"Bouncer_FinisherArmRip",
+	"Sentinel_Finisher",
+	"Bull_Finisher",
+}
+local VICTIM_CLIPS = {
+	"Boxer_FinisherVictim",
+	"Bouncer_FinisherArmRipVictim",
+	"Sentinel_FinisherVictim",
+	"Bull_FinisherVictim",
 }
 local runs: { [Model]: Run } = {}
 -- Which camera is ours now (a new cinematic takes the camera over; the old
@@ -250,11 +270,7 @@ local function playEvent(
 )
 	local kind = event.kind
 	if KIT_CINEMATICS[cinematic.id] then
-		KitVFX.finisherEvent(kind, attacker, victim)
-		local amount = GORE_BLOOD[kind]
-		if amount then
-			KitEffects.bloodSpray(victim, attacker, "Torso", amount)
-		end
+		KitVFX.finisherEvent(kind, attacker, victim, anchor)
 		return
 	end
 	if kind == "Prop" then
@@ -307,7 +323,13 @@ local function playEvent(
 	end
 end
 
-local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor: unknown)
+local function onStarted(
+	attacker: unknown,
+	victim: unknown,
+	id: unknown,
+	anchor: unknown,
+	short: unknown
+)
 	if typeof(attacker) ~= "Instance" or not attacker:IsA("Model") then
 		return
 	end
@@ -338,8 +360,29 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 	if old then
 		old.cancelled = true
 	end
-	local run: Run = { cinematic = cinematic, victim = victim, cancelled = false }
+	local run: Run = {
+		cinematic = cinematic,
+		victim = victim,
+		cancelled = false,
+		started = os.clock(),
+	}
 	runs[attacker] = run
+	if cinematic.placement == "charge" then
+		-- His body runs along the path, his root already where he ends
+		-- (Shared/Finishers CHARGE).
+		local studs = if typeof(short) == "number"
+			then math.clamp(short, 0, Finishers.CHARGE.short)
+			else 0
+		local duration = cinematic.duration
+		local frame: CFrame = anchor
+		CharacterAnimationController.pinRoot(attacker, function(): Vector3?
+			local t = os.clock() - run.started
+			if run.cancelled or t >= duration then
+				return nil
+			end
+			return frame * Finishers.chargeRoot(t, studs)
+		end)
+	end
 	local character = player.Character
 	if character ~= nil and (character == attacker or character == victim) then
 		run.stopCamera = playCamera(cinematic, anchor, victim, shakes)
@@ -367,6 +410,8 @@ local function onStarted(attacker: unknown, victim: unknown, id: unknown, anchor
 end
 
 -- The server ended a cinematic. Cut short (not killed): stop it all now.
+-- (Ended early although killed - the victim left: the Bull's run stops
+-- there too, his root is put where his body is.)
 local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	if typeof(attacker) ~= "Instance" or not attacker:IsA("Model") then
 		return
@@ -376,32 +421,25 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 		return
 	end
 	runs[attacker] = nil
+	local charge = run.cinematic.placement == "charge"
+	local early = os.clock() - run.started < run.cinematic.duration - 0.25
+	if charge then
+		CharacterAnimationController.pinRoot(attacker, nil)
+	end
 	if killed == true then
+		if charge and early then
+			CharacterAnimationController.stopAction(attacker, "Bull_Finisher")
+		end
 		return -- (played to the end: everything stops on its own)
 	end
 	run.cancelled = true
 	KitEffects.stopAction(attacker) -- the bat
 	LiverRip.cancel(attacker)
 	KitVFX.cancelFinisher(attacker)
-	for _, clip in
-		{
-			"Brawler_FinisherBat",
-			"Boxer_FinisherCombo",
-			"Bouncer_FinisherArmRip",
-			"Sentinel_Finisher",
-			"Bull_Finisher",
-		}
-	do
+	for _, clip in ATTACKER_CLIPS do
 		CharacterAnimationController.stopAction(attacker, clip)
 	end
-	for _, clip in
-		{
-			"Boxer_FinisherVictim",
-			"Bouncer_FinisherArmRipVictim",
-			"Sentinel_FinisherVictim",
-			"Bull_FinisherVictim",
-		}
-	do
+	for _, clip in VICTIM_CLIPS do
 		CharacterAnimationController.stopAction(run.victim, clip)
 	end
 	if run.stopCamera then
