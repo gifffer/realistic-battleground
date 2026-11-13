@@ -212,4 +212,12 @@ return table.freeze({
 	--                        velocity: Vector3)
 	-- It broke there (hit someone / a wall / the floor, or dropped): two halves.
 	WeaponBroke = event("WeaponBroke"),
+
+	-- server → all clients  (kind: string, data: { [string]: any })
+	-- Dr. Rift's gadgets, for the look only (Client/Combat/RiftFx): a flask
+	-- flying / bursting, an acid puddle, a ray, portals opening, a portal
+	-- shot fizzling, a clone stepping in / out. Every client shows the same
+	-- thing; the server already decided what it did. Kinds and data: see
+	-- Server/Systems/Combat/Gadgets.luau (top).
+	RiftFx = event("RiftFx"),
 })

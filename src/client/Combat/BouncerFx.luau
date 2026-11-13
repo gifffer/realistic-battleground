@@ -319,9 +319,9 @@ local function squeeze(victim: Model, attacker: Model, sleeper: boolean)
 	if head == nil or not head:IsA("BasePart") then
 		return
 	end
-	local skin = trueSkin[head]
-	if skin == nil then
-		skin = head.Color
+	local known: Color3? = trueSkin[head]
+	local skin: Color3 = known or head.Color
+	if known == nil then
 		trueSkin[head] = skin
 	end
 	local entry = choked[victim]
