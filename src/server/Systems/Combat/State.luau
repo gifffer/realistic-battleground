@@ -30,6 +30,7 @@ export type CombatState = {
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
 	cinematicUntil: number, -- in a cinematic finisher: nobody can hit them
+	channelUntil: number, -- channelling a beam: rooted until then
 	cinematicToken: number, -- changes with each cinematic (stale timers do nothing)
 	nextDashAt: number,
 	knockbackUntil: number, -- a knockback push is running until then
@@ -101,6 +102,7 @@ export type HitSpec = {
 	-- Chance of visible blood per zone (nil: the M1 rules in Config.Injuries).
 	bloodChance: { [string]: number }?,
 	cuts: ("Lac" | "Slash")?, -- glass: cuts the skin where it lands (Gash)
+	burns: boolean?, -- heat vision: burnt, not bruised (the burn is set by the beam)
 	launch: number?, -- with knockdown: thrown up at this speed (uppercuts)
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 	attackId: number?, -- M1 number from the client (prediction), nil for moves

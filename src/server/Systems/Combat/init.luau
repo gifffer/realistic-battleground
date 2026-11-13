@@ -60,9 +60,11 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Weapons = require(ReplicatedStorage.Shared.Weapons)
+local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
+local Corpses = require(script.Parent.Corpses)
 local Knockout = require(script.Parent.Knockout)
 local Movement = require(script.Parent.Movement)
 local PlayerData = require(script.Parent.PlayerData)
@@ -507,6 +509,93 @@ local function addGash(
 	end
 end
 
+-- Heat vision burning through the skin of `partName` where it touches
+-- (`world`): a "Burn" (Gashes draws the hole: charred edge, the skull or
+-- cooked muscle under it). The beam staying on the same spot makes that
+-- burn grow (S, M, L); a part full of wounds: the nearest burn grows.
+local BURN_MERGE = 0.35 -- studs
+local function addBurn(victim: Model, partName: string, world: Vector3): (string?, any)
+	if not INJ.SKIN_TEAR then
+		return nil, nil
+	end
+	local part = victim:FindFirstChild(partName)
+	local key = Gash.KEY_OF[partName]
+	if part == nil or not part:IsA("BasePart") or key == nil then
+		return nil, nil
+	end
+	-- On the skin: the round head's surface, or the side face it's on.
+	local p = part.CFrame:PointToObjectSpace(world)
+	local point: Vector3
+	if partName == "Head" then
+		-- (the head part is a 2-wide box, the head you see 1.2 across: a
+		-- point beside it never touched the skin)
+		if math.abs(p.X) > 0.62 then
+			return nil, nil
+		end
+		local flat = Vector3.new(p.X, 0, p.Z)
+		flat = if flat.Magnitude > 1e-3 then flat.Unit else Vector3.new(0, 0, -1)
+		point = flat * 0.6 + Vector3.new(0, math.clamp(p.Y, -0.25, 0.25), 0)
+	else
+		local half = part.Size / 2
+		if math.abs(p.X) / half.X > math.abs(p.Z) / half.Z then
+			point = Vector3.new(math.sign(p.X) * half.X, math.clamp(p.Y, -half.Y, half.Y), p.Z)
+		else
+			point = Vector3.new(p.X, math.clamp(p.Y, -half.Y, half.Y), math.sign(p.Z) * half.Z)
+		end
+	end
+	-- the nearest burn there grows; else a free slot; else (full) the
+	-- nearest wound of any kind turns into a burn
+	local free: number? = nil
+	local burnAt: number? = nil
+	local burnDistance = math.huge
+	local anyAt: number? = nil
+	local anyDistance = math.huge
+	for index = 1, Gash.MAX_PER_PART do
+		local old = Gash.decode(victim:GetAttribute(Gash.attribute(key, index)))
+		if old == nil then
+			free = free or index
+		else
+			local distance = (old.point - point).Magnitude
+			if old.kind == "Burn" and distance < burnDistance then
+				burnAt, burnDistance = index, distance
+			end
+			if distance < anyDistance then
+				anyAt, anyDistance = index, distance
+			end
+		end
+	end
+	local attribute: string
+	local data: Gash.Data
+	local target = if burnAt and burnDistance < BURN_MERGE
+		then burnAt
+		elseif free then nil
+		else anyAt
+	if target then
+		attribute = Gash.attribute(key, target)
+		local old = Gash.decode(victim:GetAttribute(attribute))
+		if old == nil or (old.kind == "Burn" and old.size == "L") then
+			return nil, nil -- (as deep as it gets)
+		end
+		data = old
+		data.size = if old.kind == "Burn" then Gash.bigger(old.size) else old.size
+		data.kind = "Burn"
+	elseif free then
+		attribute = Gash.attribute(key, free)
+		data = {
+			kind = "Burn",
+			size = "S",
+			point = point,
+			angle = random:NextNumber(-90, 90),
+			seed = random:NextInteger(1, 2 ^ 30),
+		}
+	else
+		return nil, nil
+	end
+	local previous = victim:GetAttribute(attribute)
+	setAttribute(victim, attribute, Gash.encode(data))
+	return attribute, previous
+end
+
 -- Bits of glass stuck in the skin ("Shard_<Part>_<n>", Shared/Util/Gash):
 -- a bottle bursting on someone leaves a few, often without a real cut.
 local function addShards(victim: CombatState, attacker: CombatState, zone: string, count: number)
@@ -801,7 +890,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local bloodChance: number = 0
 	local chances = spec.bloodChance
 	if chances ~= nil then
-		bloodChance = chances[zone] or 0
+		bloodChance = math.min(1, (chances[zone] or 0) * INJ.BLOOD_CHANCE_SCALE)
 	elseif spec.moveId ~= nil then
 		bloodChance = 0 -- a kit move that doesn't say it cuts: no blood
 	elseif spec.kind == "Finisher" and zone == "Head" then
@@ -873,7 +962,14 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		startBurning(victim, credit, burn.kind, burn.perSecond, burn.duration)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
-	injure(victim, attacker, zone :: Types.HitZone, damage, side, spec.cuts == nil)
+	injure(
+		victim,
+		attacker,
+		zone :: Types.HitZone,
+		damage,
+		side,
+		spec.cuts == nil and not spec.burns
+	)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
 	if isAwakened(victim) then
@@ -953,6 +1049,7 @@ function Combat.register(model: Model, player: Player?)
 		finishingUntil = 0,
 		invulnerableUntil = 0,
 		cinematicUntil = 0,
+		channelUntil = 0,
 		cinematicToken = 0,
 		nextDashAt = 0,
 		knockbackUntil = 0,
@@ -1036,6 +1133,141 @@ local function tearLiverOut(victim: Model)
 	)
 end
 
+-- The Bull's finisher: his horns go into the ribcage. One big "Tear" (two
+-- side by side don't fit on the torso's front: they'd overlap); a free
+-- slot, else over the first cut (like the liver). The cut's old value (or
+-- false) is written in `before` once, to be put back if the finisher is cut
+-- short before the kill.
+local function goreWounds(victim: Model, before: { [string]: any })
+	local index = 1
+	for candidate = 1, Gash.MAX_PER_PART do
+		if victim:GetAttribute(Gash.attribute("Torso", candidate)) == nil then
+			index = candidate
+			break
+		end
+	end
+	local name = Gash.attribute("Torso", index)
+	if before[name] == nil then
+		local old = victim:GetAttribute(name)
+		before[name] = if old == nil then false else old
+	end
+	setAttribute(
+		victim,
+		name,
+		Gash.encode({
+			kind = "Tear",
+			size = "L",
+			point = Vector3.new(0, 0.3, -0.5), -- the ribcage, in front
+			angle = random:NextNumber(-20, 20), -- (degrees)
+			seed = random:NextInteger(1, 2 ^ 30),
+		})
+	)
+end
+
+-- The Sentinel's finisher: the beam burning into the heart. One "Bore" on
+-- the torso at Gash.HEART (the wound kit's bore inserts are made for that
+-- spot, angle 0), deeper each time (S, M, L). Nothing bleeds: no blood, no
+-- injury, cauterized. The cuts already over that spot go (the bore takes
+-- their place); a full torso gives up the cut nearest the heart. Every
+-- attribute changed is written in `before` (its old value, or false) once,
+-- to be put back if the finisher is cut short. Returns the bore's attribute.
+local function boreFootprint(data: Gash.Data): Vector2
+	local shape = WoundShapes.shapes[data.kind .. data.size]
+	local extent = if shape then shape.extent else Vector2.new(0.3, 0.3)
+	local c, s = math.abs(math.cos(math.rad(data.angle))), math.abs(math.sin(math.rad(data.angle)))
+	return Vector2.new(c * extent.X + s * extent.Y, s * extent.X + c * extent.Y)
+end
+
+local function boreHeart(
+	victim: Model,
+	size: Gash.Size,
+	attribute: string?,
+	before: { [string]: any }
+): string?
+	local torso = victim:FindFirstChild("Torso")
+	if torso == nil or not torso:IsA("BasePart") then
+		return nil
+	end
+	local function remember(name: string)
+		if before[name] == nil then
+			local old = victim:GetAttribute(name)
+			before[name] = if old == nil then false else old
+		end
+	end
+	if attribute == nil then
+		local half = torso.Size / 2
+		local bore = boreFootprint({
+			kind = "Bore",
+			size = "L",
+			point = Gash.HEART,
+			angle = 0,
+			seed = 0,
+		})
+		local free: number? = nil
+		local nearest: number? = nil
+		local nearestDistance = math.huge
+		for index = 1, Gash.MAX_PER_PART do
+			local name = Gash.attribute("Torso", index)
+			local old = Gash.decode(victim:GetAttribute(name))
+			if old == nil then
+				free = free or index
+				continue
+			end
+			local p = old.point
+			local delta = p - Gash.HEART
+			-- On the front face too (the side faces' cuts never reach it),
+			-- and their outlines would cross: it goes.
+			local front = -p.Z / half.Z >= math.abs(p.X) / half.X
+			local footprint = boreFootprint(old)
+			if
+				front
+				and math.abs(delta.X) < bore.X + footprint.X
+				and math.abs(delta.Y) < bore.Y + footprint.Y
+			then
+				remember(name)
+				setAttribute(victim, name, nil)
+				free = free or index
+			elseif delta.Magnitude < nearestDistance then
+				nearest, nearestDistance = index, delta.Magnitude
+			end
+		end
+		local index = free or nearest
+		if index == nil then
+			return nil
+		end
+		attribute = Gash.attribute("Torso", index)
+	end
+	local name = attribute :: string
+	local old = Gash.decode(victim:GetAttribute(name))
+	remember(name)
+	setAttribute(
+		victim,
+		name,
+		Gash.encode({
+			kind = "Bore",
+			size = size,
+			point = Gash.HEART,
+			angle = 0,
+			seed = if old and old.kind == "Bore" then old.seed else random:NextInteger(1, 2 ^ 30),
+		})
+	)
+	return name
+end
+
+-- When the bore goes deeper, after the beam starts (seconds).
+local BORE_STEPS: { { after: number, size: Gash.Size } } = {
+	{ after = 0.3, size = "S" },
+	{ after = 0.7, size = "M" },
+	{ after = 1.1, size = "L" },
+}
+
+-- Where the victim's body is in the last frame of its clip (anchor space of
+-- the victim's root): the ragdoll starts from there, not from standing.
+local KILL_POSE: { [string]: CFrame } = {
+	Incinerate = CFrame.new(-0.5, -2.46, 1.8) * CFrame.Angles(math.rad(88), 0, 0), -- thrown down on its back
+	Gore = Finishers.CHARGE.rip, -- thrown back high over his head
+}
+
 -- Thrown things (Shared/Weapons): one in the right hand ("Weapon"
 -- attribute: the clients show it). A left click throws it (throwWeapon); it
 -- breaks in two on what it hits first (Remotes.WeaponBroke: every client
@@ -1096,6 +1328,30 @@ local function offerBone(victim: Model, arm: BasePart)
 		point:Destroy()
 		giveWeapon(state, "Bone")
 	end)
+end
+
+-- A body's frozen copy (Corpses, at the respawn) still shows its torn arm
+-- on the floor with the bone in it: the bone can still be taken, from the
+-- copy (its own "BoneTaken"). Only an arm that was lying there, offered
+-- (its "BonePrompt" kept by the copy, the prompt itself removed).
+local function offerCopiedBone(copy: Model)
+	if
+		copy.Parent == nil
+		or copy:GetAttribute("ArmTorn") == nil
+		or copy:GetAttribute("BoneTaken") == true
+	then
+		return
+	end
+	local arm = copy:FindFirstChild("Right Arm")
+	if not (arm and arm:IsA("BasePart")) then
+		return
+	end
+	local old = arm:FindFirstChild("BonePrompt")
+	if not (old and old:IsA("Attachment")) then
+		return
+	end
+	old:Destroy()
+	offerBone(copy, arm)
 end
 
 -- The Bouncer's finisher: the right arm torn off at the shoulder. Every
@@ -1166,6 +1422,178 @@ local function tearArmOff(victim: Model, attacker: Model, anchor: CFrame, throwI
 			end
 		end)
 	end)
+end
+
+-- The Bull's finisher: the body torn in two at the waist, in the air (just
+-- after the kill, the ragdoll on). The legs come off the torso: their
+-- joints and the loose ones of the ragdoll go (the ragdoll's NoCollide
+-- ones stay: the two halves never knock into each other as they part);
+-- they are welded to each other, straight side by side (one piece: "the
+-- legs"; the clients draw the hips on them so). The top half is thrown on
+-- and up, turning over; the legs drop back. Every client draws the rest
+-- from "Bisected" (= a seed): Client/Combat/Bisect (the torn ends, the
+-- guts trailing from one half to the other, the blood).
+local function bisect(victim: Model, anchor: CFrame)
+	local torso = victim:FindFirstChild("Torso")
+	local root = victim:FindFirstChild("HumanoidRootPart")
+	local right = victim:FindFirstChild("Right Leg")
+	local left = victim:FindFirstChild("Left Leg")
+	if
+		not (
+			torso
+			and torso:IsA("BasePart")
+			and root
+			and root:IsA("BasePart")
+			and right
+			and right:IsA("BasePart")
+			and left
+			and left:IsA("BasePart")
+		)
+	then
+		return
+	end
+	local function isHipJoint(name: string): boolean
+		for _, side in { "Right Hip", "Left Hip" } do
+			if
+				name == side
+				or name == "Ragdoll_" .. side
+				or name == "Ragdoll_" .. side .. "0"
+				or name == "Ragdoll_" .. side .. "1"
+			then
+				return true
+			end
+		end
+		return false
+	end
+	for _, part in { torso, right, left } do
+		for _, item in part:GetChildren() do
+			if isHipJoint(item.Name) then
+				item:Destroy()
+			end
+		end
+	end
+	left.CFrame = right.CFrame * CFrame.new(-1, 0, 0)
+	local legs = Instance.new("WeldConstraint")
+	legs.Name = "BisectLegs"
+	legs.Part0 = right
+	legs.Part1 = left
+	legs.Parent = right
+	-- (two bodies now: the server moves both, same for everyone)
+	for _, part in { root, right } do
+		if part:CanSetNetworkOwnership() then
+			part:SetNetworkOwner(nil)
+		end
+	end
+	local sway = random:NextNumber(-1.5, 1.5)
+	root.AssemblyLinearVelocity = anchor:VectorToWorldSpace(Vector3.new(sway, 15, -14))
+	root.AssemblyAngularVelocity =
+		anchor:VectorToWorldSpace(Vector3.new(-6, sway * 0.8, random:NextNumber(-1.5, 1.5)))
+	-- The head and the arms hang on the torso by the ragdoll's loose joints
+	-- only (each its own body): thrown with it, the same way, or the torso
+	-- alone went (they stayed behind, at rest, owned by whoever), and they
+	-- never knock into the legs (the halves part freely).
+	local linear, angular = root.AssemblyLinearVelocity, root.AssemblyAngularVelocity
+	local center = root.AssemblyCenterOfMass
+	for _, name in { "Head", "Right Arm", "Left Arm" } do
+		local limb = victim:FindFirstChild(name)
+		local base = if limb and limb:IsA("BasePart") then limb.AssemblyRootPart else nil
+		if limb == nil or not limb:IsA("BasePart") or base == nil or base == root then
+			continue -- (gone, or still rigid on the torso)
+		elseif not base:IsDescendantOf(victim) then
+			continue -- (held by someone: not ours to throw)
+		end
+		if limb:CanSetNetworkOwnership() then
+			limb:SetNetworkOwner(nil)
+		end
+		limb.AssemblyLinearVelocity = linear + angular:Cross(limb.Position - center)
+		limb.AssemblyAngularVelocity = angular
+		for _, leg in { right, left } do
+			local apart = Instance.new("NoCollisionConstraint")
+			apart.Name = "BisectApart"
+			apart.Part0 = limb
+			apart.Part1 = leg
+			apart.Parent = limb
+		end
+	end
+	right.AssemblyLinearVelocity = anchor:VectorToWorldSpace(Vector3.new(-sway * 0.4, -6, 7))
+	right.AssemblyAngularVelocity = anchor:VectorToWorldSpace(Vector3.new(4, 0, sway))
+	setAttribute(victim, "Bisected", random:NextInteger(1, 2 ^ 30))
+end
+
+-- "charge" (the Bull's "Gore", Finishers.CHARGE): where he starts from (the
+-- anchor) and how much shorter his run is. The victim will stand
+-- CHARGE.victim studs in front, then the leap, the top half flying on, so
+-- a clear lane with a floor all along: the way he faces the victim first,
+-- else turned, then the same with a shorter run. Nowhere: nil (no charge,
+-- never through a wall or off a ledge).
+local CHARGE_TURNS = { 0, 45, -45, 90, -90, 135, -135, 180 } -- degrees
+local LANE_END = -24 -- anchor Z where the top half may land, at most
+
+local function chargePlacement(attacker: Model, victim: Model, root: BasePart): (CFrame?, number)
+	local RUN = Finishers.CHARGE
+	local victimRoot = victim:FindFirstChild("HumanoidRootPart")
+	local at = if victimRoot and victimRoot:IsA("BasePart")
+		then victimRoot.Position
+		else root.Position + root.CFrame.LookVector
+	local toward = Vector3.new(at.X - root.Position.X, 0, at.Z - root.Position.Z)
+	toward = if toward.Magnitude > 0.1
+		then toward.Unit
+		else Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { attacker, victim }
+	params.RespectCanCollide = true
+	local overlap = OverlapParams.new()
+	overlap.FilterType = Enum.RaycastFilterType.Exclude
+	overlap.FilterDescendantsInstances = { attacker, victim }
+	overlap.RespectCanCollide = true
+	-- (someone standing in the way doesn't count: only the map)
+	local function onBody(part: BasePart): boolean
+		local model = part:FindFirstAncestorOfClass("Model")
+		return model ~= nil and model:FindFirstChildOfClass("Humanoid") ~= nil
+	end
+	local function clear(anchor: CFrame, short: number): boolean
+		local feet = anchor.Position.Y - 3
+		for _, z in { -short, -5.5, -RUN.victim, -13.5, RUN.ends.Z, -19, LANE_END + 1.5 } do
+			local from = (anchor * CFrame.new(0, 1, z)).Position
+			local hit = workspace:Raycast(from, Vector3.new(0, -8, 0), params)
+			if hit == nil or math.abs(hit.Position.Y - feet) > 1.25 then
+				return false
+			end
+		end
+		local near = -short + 1.2
+		local length = near - LANE_END
+		for _, part in
+			workspace:GetPartBoundsInBox(
+				anchor * CFrame.new(0, 2.4, near - length / 2),
+				Vector3.new(3.4, 9.6, length),
+				overlap
+			)
+		do
+			if not onBody(part) then
+				return false
+			end
+		end
+		return true
+	end
+	-- (standing height over the floor under him: in the air, a jump, the
+	-- lane is still checked from the ground)
+	local start = root.Position
+	local floor = workspace:Raycast(start, Vector3.new(0, -12, 0), params)
+	if floor then
+		start = Vector3.new(start.X, floor.Position.Y + 3, start.Z)
+	end
+	for _, short in { 0, RUN.short } do
+		for _, turn in CHARGE_TURNS do
+			local direction = CFrame.Angles(0, math.rad(turn), 0):VectorToWorldSpace(toward)
+			-- (the anchor: where a full run would start, behind him if shorter)
+			local anchor = CFrame.lookAt(start, start + direction) * CFrame.new(0, 0, short)
+			if clear(anchor, short) then
+				return anchor, short
+			end
+		end
+	end
+	return nil, 0
 end
 
 -- A cinematic finisher (Shared/Finishers): both fighters are placed and held
@@ -1249,7 +1677,9 @@ local function startCinematic(
 	state: CombatState,
 	target: Model,
 	finisher: Kits.FinisherDef,
-	cinematic: Finishers.Cinematic
+	cinematic: Finishers.Cinematic,
+	charge: CFrame?, -- ("charge": chargePlacement's anchor and short run)
+	short: number
 )
 	local root = state.root
 	local victimRoot = target:FindFirstChild("HumanoidRootPart")
@@ -1271,6 +1701,7 @@ local function startCinematic(
 	-- Where everyone stands.
 	local anchor: CFrame
 	local victimPlace: CFrame? = nil
+	local chargeShort = 0 -- ("charge": studs less of a run)
 	if cinematic.placement == "head" then
 		-- Past the head of the body lying there (the body beyond it, the
 		-- camera shots count on it), looking down at it.
@@ -1454,6 +1885,17 @@ local function startCinematic(
 		-- (nowhere clear: where he is, facing it, as close as it gets)
 		anchor = found or CFrame.lookAt(root.Position, root.Position + toward)
 		victimPlace = anchor * laid
+	elseif cinematic.placement == "charge" then
+		-- The victim stood up groggy far in front of him, facing him.
+		-- (startFinisher found the lane; none, no charge at all)
+		if charge == nil then
+			Knockout.release(target)
+			return
+		end
+		anchor, chargeShort = charge, short
+		victimPlace = anchor
+			* CFrame.new(0, 0, -Finishers.CHARGE.victim)
+			* CFrame.Angles(0, math.pi, 0)
 	else
 		-- Where he is, facing the body; the victim hauled up in front of him.
 		local toward = Vector3.new(
@@ -1467,8 +1909,20 @@ local function startCinematic(
 			* CFrame.new(0, 0, -(cinematic.distance or Finishers.HOLD_DISTANCE))
 			* CFrame.Angles(0, math.pi, 0)
 	end
+	-- ("charge": his root waits where he will end; every client shows his
+	-- body along the run meanwhile, Finishers.CHARGE)
+	local charging = cinematic.placement == "charge"
 	root.Anchored = true
-	root.CFrame = anchor
+	root.CFrame = if charging then anchor * CFrame.new(Finishers.CHARGE.ends) else anchor
+	-- Where his body is now (his root goes there if the cutscene is cut short).
+	local function attackerPlace(): CFrame
+		if not charging then
+			return anchor
+		end
+		local at = Finishers.chargeRoot(now() - time, chargeShort)
+		-- (crouched: his root at standing height, not into the floor)
+		return anchor * CFrame.new(at.X, math.max(at.Y, 0), at.Z)
+	end
 	state.cinematicUntil = time + cinematic.duration
 	state.cinematicToken += 1
 	local cinematicToken = state.cinematicToken
@@ -1483,11 +1937,14 @@ local function startCinematic(
 	if cinematic.victimAnimation then
 		Remotes.CombatAction:FireAllClients(target, cinematic.victimAnimation)
 	end
-	Remotes.FinisherStarted:FireAllClients(state.model, target, cinematic.id, anchor)
+	Remotes.FinisherStarted:FireAllClients(state.model, target, cinematic.id, anchor, chargeShort)
 
 	local connections: { RBXScriptConnection } = {}
 	local over = false
 	local killed = false
+	-- (the Bull's horns, the Sentinel's bore: every cut they changed, with
+	-- its old value, put back if cut short)
+	local woundsBefore: { [string]: any } = {}
 	-- Everything this cinematic holds, let go (once). Before the killing
 	-- blow, the victim drops back down, still KO'd (someone can finish them).
 	local function finish()
@@ -1499,6 +1956,11 @@ local function startCinematic(
 			connection:Disconnect()
 		end
 		if not killed then
+			if target.Parent then
+				for attribute, previous in woundsBefore do
+					setAttribute(target, attribute, if previous == false then nil else previous)
+				end
+			end
 			if victimPlace and victimRoot.Parent then
 				victimRoot.Anchored = false
 				Ragdoll.enable(target)
@@ -1508,6 +1970,10 @@ local function startCinematic(
 		-- (only if no newer cinematic took this fighter over)
 		if state.cinematicToken == cinematicToken then
 			if root.Parent then
+				-- ("charge" cut short: where his body is, not where he'd end)
+				if charging and now() < state.cinematicUntil then
+					root.CFrame = attackerPlace()
+				end
 				root.Anchored = false
 			end
 			state.cinematicUntil = 0
@@ -1534,6 +2000,38 @@ local function startCinematic(
 		)
 	end
 
+	if cinematic.id == "Incinerate" then
+		-- the beam point blank into the heart (Shared/Finishers "Incinerate":
+		-- from "Beam"): the hole goes deeper as it burns, S -> M -> L
+		local beamAt = 0
+		for _, event in cinematic.events do
+			if event.kind == "Beam" then
+				beamAt = event.time
+			end
+		end
+		local boreAttribute: string? = nil
+		for _, step in BORE_STEPS do
+			task.delay(beamAt + step.after, function()
+				if not over and target.Parent and state.attackToken == token and isAlive(state) then
+					boreAttribute = boreHeart(target, step.size, boreAttribute, woundsBefore)
+				end
+			end)
+		end
+	end
+	if cinematic.id == "Gore" then
+		-- the horns going into the ribcage (Shared/Finishers "Gore": "Impact")
+		local impact = Finishers.CHARGE.impact
+		for _, event in cinematic.events do
+			if event.kind == "Impact" then
+				impact = event.time
+			end
+		end
+		task.delay(impact, function()
+			if not over and target.Parent and state.attackToken == token and isAlive(state) then
+				goreWounds(target, woundsBefore)
+			end
+		end)
+	end
 	task.delay(cinematic.kill, function()
 		if over then
 			return
@@ -1545,7 +2043,12 @@ local function startCinematic(
 		killed = true
 		local cut = cinematic.id == "PortalCut" and victimPlace ~= nil
 		if victimPlace and not cut then
-			-- Limp: it folds and drops where it stands.
+			-- Limp: it folds and drops where it stands (where its clip left
+			-- it: held up, slammed down...).
+			local pose = KILL_POSE[cinematic.id]
+			if pose then
+				victimRoot.CFrame = victimPlace * pose
+			end
 			victimRoot.Anchored = false
 			Ragdoll.enable(target)
 		end
@@ -1556,6 +2059,20 @@ local function startCinematic(
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
+			elseif cinematic.id == "Incinerate" then
+				-- (every client lets the hole smoke and cool down, from when
+				-- the beam stopped: KitVFX, bodies seen later too)
+				local burntAt = cinematic.kill
+				for _, event in cinematic.events do
+					if event.kind == "Burnt" then
+						burntAt = event.time
+					end
+				end
+				setAttribute(
+					target,
+					Finishers.BORED_ATTRIBUTE,
+					workspace:GetServerTimeNow() - (cinematic.kill - burntAt)
+				)
 			elseif cinematic.id == "ArmRip" then
 				local throwIn: number? = nil
 				for _, event in cinematic.events do
@@ -1572,6 +2089,9 @@ local function startCinematic(
 					end
 				end
 				cutInHalf(target, anchor, foldIn or 0.8)
+			elseif cinematic.id == "Gore" then
+				-- (dead first: never a living body torn in two)
+				bisect(target, anchor)
 			end
 		elseif cut and victimRoot.Parent then
 			-- (not dead after all: no cut, it just drops)
@@ -1599,6 +2119,18 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	local time = now()
 	local K = Config.Knockout
 	local finisher = Kits.finisher(state.kitId)
+	local cinematic = Finishers.get(finisher.cinematic)
+	-- "charge" (the Bull's run): no clear lane with a floor here (walls, a
+	-- ledge), the plain finisher instead; nobody is moved.
+	local charge: CFrame? = nil
+	local short = 0
+	if cinematic and cinematic.placement == "charge" then
+		charge, short = chargePlacement(state.model, target, state.root)
+		if charge == nil then
+			finisher = Kits.finisher(nil)
+			cinematic = nil
+		end
+	end
 	state.nextAttackAt = time + finisher.duration
 	state.finishingUntil = time + finisher.duration
 	state.attackingUntil = time + finisher.duration
@@ -1606,9 +2138,8 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	state.attackToken += 1
 	local token = state.attackToken
 
-	local cinematic = Finishers.get(finisher.cinematic)
 	if cinematic then
-		startCinematic(state, target, finisher, cinematic)
+		startCinematic(state, target, finisher, cinematic, charge, short)
 		return true
 	end
 
@@ -1814,6 +2345,7 @@ local function tryDash(model: Model, player: Player): boolean
 		or isStunned(state)
 		or state.blocking
 		or isBusy(state)
+		or now() < state.channelUntil -- (rooted by the beam)
 	then
 		return false
 	end
@@ -1861,6 +2393,7 @@ function Combat.resetForRound(model: Model)
 		setAttribute(model, "InCinematic", nil)
 	end
 	state.stunnedUntil = 0
+	state.channelUntil = 0
 	state.attackToken += 1
 	state.knockdownToken += 1
 	state.knockedDownUntil = 0
@@ -2034,9 +2567,19 @@ local function update(dt: number)
 				"MoveSlow",
 				if time < state.slowUntil then state.slowMultiplier else nil
 			)
-			-- A heavy build (Bouncer) moves slower.
+			-- Channelling a beam (heat vision): rooted.
+			Movement.setSpeedModifier(
+				player,
+				"Channel",
+				if time < state.channelUntil then 0.08 else nil
+			)
+			-- The kit's own pace (a heavy build slower, the Bull faster) and
+			-- whether it can sprint.
 			local kit = Kits.get(state.kitId)
 			Movement.setSpeedModifier(player, "Kit", if kit then kit.speed else nil)
+			Movement.setSprintLock(player, "Kit", kit ~= nil and kit.noSprint == true)
+			-- (clients don't predict a dash the server would refuse)
+			setAttribute(state.model, "Channeling", time < state.channelUntil)
 			-- Kneeling for a finisher: stay in place.
 			Movement.setSpeedModifier(
 				player,
@@ -2309,6 +2852,7 @@ function Combat.start()
 		aimZone = aimZone,
 		landingZone = landingZone,
 		addFury = addFury,
+		addBurn = addBurn,
 	})
 	Gadgets.bind({
 		getState = function(model: Model): CombatState?
@@ -2356,6 +2900,7 @@ function Combat.start()
 		specFor = Moves.specFor,
 	})
 	Knockout.onGetUp(onGetUp)
+	Corpses.onCopy(offerCopiedBone)
 	Knockout.onKill(function(killer)
 		local state = states[killer]
 		if state then

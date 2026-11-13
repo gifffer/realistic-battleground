@@ -352,6 +352,7 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
 | F8 | Pendant la cinématique | Impossible de dasher, bloquer ou attaquer ; on ne peut pas lancer un duel avec l'attaquant. |
 | F9 | Un joueur qui arrive après (ou qui était loin) | Il voit le corps sans tête, le cou ouvert, sans l'explosion. |
+| F10 | Achever un **2ᵉ joueur** (n'importe quel finisher), puis regarder son corps | Il réapparaît après 5 s, mais son **corps reste** là où il est tombé jusqu'à **10 s** après le coup final (`Config.Knockout.FINISHER_BODY_TIME`), puis disparaît. Les blessures restent dessinées (tête explosée, trou, bras arraché, tête calcinée, coupures, bleus) et les morceaux au sol (crâne, foie) restent aussi longtemps. Le corps est figé : on passe à travers, on ne peut ni le frapper ni le cibler, il n'a ni nom ni barre de vie, il ne bloque ni les coups ni les lasers. Un Bull mort garde ses cornes mais ne souffle plus. Dans l'Explorer : un modèle dans `Workspace > Corpses` (tag `Corpse`, pas `Combatant`). Les mannequins, eux, restent 25 s comme avant. |
 
 ### Bleus
 
@@ -366,6 +367,54 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | B7 | Kill / réapparition | Les bleus disparaissent. Un Dummy tué reste au sol **25 s** avant de réapparaître (le sang et les morceaux restent ~30 s). |
 
 Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
+
+## Kits Sentinel et Bull (`feature/kits-sentinel-bull`)
+
+Équipe le kit dans le menu Kits (gratuits), puis teste sur un mannequin.
+
+### Sentinel
+- [ ] **Look** : cape rouge en tissu simulé (elle pend, se balance, vole en arrière quand tu bouges, réagit au vent de la map et aux ondes de choc), fermoirs dorés + chaîne, emblème. Plus de points rouges sur la tête (les yeux ne s'allument que pendant le laser).
+- [ ] **Vitesse** : il marche un peu plus lentement que les autres et ne peut pas sprinter.
+- [ ] **1 — Heat Vision** : 1 s de charge (les yeux s'allument, énergie aspirée, petits éclairs, son de charge), puis deux lasers tout droit là où il regardait au départ (ils ne suivent PAS la souris). Immobile pendant la charge et le tir, pas de dash. Il ne fait mal qu'à la TÊTE : il faut viser la tête et y rester ~0,5 s avant les dégâts. Le corps bloque le laser : s'il touche d'abord un bras, une épaule, le torse ou une jambe, il s'arrête dessus (quelques étincelles qui ricochent), sans dégâts, sans brûlure ni lueur ; un joueur caché derrière un autre est protégé. Un tir qui passe juste à côté du visage continue tout droit. Un chapeau / des cheveux sur la tête comptent comme la tête. Pas de son quand ça touche : là où le laser touche la tête, la peau brûle et disparaît (vrai trou dans la peau, bord carbonisé, peau cuite autour) et on voit le crâne dessous. Pas de sang (cautérisé). Rester au même endroit agrandit la brûlure (3 tailles). Tout le monde voit la même chose et elle reste. Le laser s'arrête sur les murs (traînée en fusion puis carbonisée). Bloquer (garde) contre un laser sur la tête coûte de l'endurance comme avant ; si les bras levés sont devant le visage, ils arrêtent le laser.
+- [ ] **2 — Thunder Clap** : éclairs dans les mains, puis clap : flash, sphère d'énergie, anneaux en cône, lignes d'air, éclairs, poussière poussée devant.
+- [ ] **3 — Skyfall** : impact au DÉCOLLAGE (cratère, fissures lumineuses, dalles soulevées, cailloux) + son, traînée en vol, poing qui se charge en descente, gros impact à l'ATTERRISSAGE + son, écran qui tremble.
+- [ ] **4 — Haymaker** : le poing se charge (énergie aspirée, éclairs), impact : flash, anneaux, lignes d'air, étincelles + son.
+
+### Bull
+- [ ] **Look** : cornes courbées avec anneaux à la base, anneau doré dans le nez, vapeur qui sort du nez de temps en temps.
+- [ ] **Vitesse** : il marche plus vite que les autres.
+- [ ] **Course (Shift)** : course de taureau (penché, tête baissée cornes devant, grosses foulées), poussière + petites fissures à chaque pas, vapeur du nez.
+- [ ] **1 — Gore Charge** : son de charge (coupé à la fin de l'attaque, ~1,2 s), yeux rouges, il gratte le sol, puis charge : nuage de poussière, fissures à chaque pas, traînées sur les cornes. La cible saigne.
+- [ ] **2 — Horn Hook** : coup de cornes vers le haut : anneau d'air, colonne de poussière, la cible décolle.
+- [ ] **3 — Stampede** : il se cabre (cailloux qui flottent), puis frappe le sol : gros impact (dalles, fissures, poussière) + son ; ralentit les cibles autour. Imblocable.
+- [ ] **4 — Bull Toss** : son à l'attrapé ET au lancer, anneau d'air vers le haut au lancer.
+
+### Murs cassables
+- [ ] La **Gore Charge** traverse les murs : le mur se troue (seulement la partie touchée), débris de la couleur / matière du mur, poussière.
+- [ ] Les gros impacts cassent aussi les murs proches : Thunder Clap, Skyfall (atterrissage), Haymaker, Horn Hook, Stampede.
+- [ ] Le sol, les sols surélevés / toits, les murs des arènes de duel et les murs invisibles ne cassent jamais.
+- [ ] Les murs se reconstruisent ~25 s après le dernier coup (pas si quelqu'un est dedans).
+- [ ] Pour protéger une partie de la map : tag CollectionService `Unbreakable` ou attribut `Unbreakable = true` (sur la part ou un de ses parents).
+
+### Finishers (adversaire KO + M1)
+- [ ] **Sentinel — Incinerate** (**ré-importer `assets/wounds/WoundKit.fbx` avant**, il contient le trou « Bore » ; ~5,6 s) : il attrape l'adversaire par la gorge (bruit d'étouffement) et le soulève, les pieds ne touchent plus le sol et battent faiblement ; on entend son cœur battre. Gros plan sur ses yeux qui chargent (son de charge, éclairs), sa tête **se penche vers la poitrine**. Les deux lasers convergent **à bout portant dans le cœur** (côté **gauche** de la victime, en haut de la poitrine) : plan de profil avec les deux rayons, gros plan sur la poitrine, puis vue au-dessus de son épaule droite qui plonge dans le trou. Le trou **se creuse** pendant le tir (petit → moyen avec un craquement de côtes → grand : le cœur est traversé, le battement s'arrête). **Aucune goutte de sang** (cautérisé) ; la lumière du laser éclaire **l'intérieur** du trou, étincelles, grosse fumée qui sort du trou ; la victime convulse puis devient molle. Le rayon s'arrête : le bord du trou est **rouge-orange incandescent** et refroidit vers le **noir** en quelques secondes, fumée et braises qui montent. Dans le trou on voit les organes : peau carbonisée au bord, graisse cuite, muscle, **côtes coupées** (os blanc cassé, cartilage blanc-bleuté), bord du **poumon** (rose-gris), **cœur** traversé (rouge sombre, cavité presque noire) ; le trou ne traverse pas le dos. Il **jette le corps** sur le dos (bruit de chute, poussière), puis la caméra **descend lentement** sur le trou qui fume encore. Le t-shirt est troué autour du trou. Un joueur qui arrive après voit encore un peu de fumée sur le corps. La tête n'est plus brûlée.
+- [ ] **Sentinel — Incinerate, cas limites** : la victime avait déjà des coupures sur le torse (bouteille) : celle qui est sur le cœur disparaît, le trou la remplace ; finisher coupé avant la mort (l'attaquant quitte) : le trou disparaît, les coupures d'avant reviennent, plus de fumée / lueur. Avec un vieux `WoundKit` (pas ré-importé) : une grande brûlure à la place du trou, pas d'erreur.
+- [ ] **Bull — Gore** (**ré-importer `WoundKit` avant**, ~4,4 s) :
+  - **Placement** : l'adversaire KO est remis **debout, sonné**, à ~11 studs devant le Bull, face à lui. Contre un mur ou au bord d'un vide, le Bull se tourne vers un côté libre ; s'il n'y a de place nulle part, la course est plus courte (~7 studs). Jamais de course à travers un mur dans un endroit dégagé.
+  - **0 → 0,6 s** : plan bas derrière le Bull, puis plan près de la victime : il souffle (vapeur), baisse la tête, **gratte le sol du sabot** deux fois (poussière, petites fissures).
+  - **0,6 → 1,1 s** : il **charge** (~10 studs en une demi-seconde, rugissement, nuage de poussière derrière, fissures à chaque foulée, lignes de vitesse) ; la caméra le suit de côté, au ras du sol.
+  - **1,1 s** : les **cornes dans la cage thoracique** (craquement de côtes, gerbe de sang des deux côtés des cornes, éclats d'os, sang sur le Bull) ; la victime se plie par-dessus sa tête ; un **trou** déchiré dans la poitrine (à travers le t-shirt). Il l'emporte sur quelques studs.
+  - **1,45 s** : il **saute** (impact au décollage), la victime sur les cornes ; elle bascule en arrière au-dessus de sa tête.
+  - **1,85 s** (le coup final) : en l'air, il donne un coup de tête : le corps se **déchire en deux à la taille**. Le **haut** (torse, bras, tête) part en avant et vers le haut en tournant et retombe ~6-8 studs plus loin ; les **jambes** tombent en arrière. Gerbe de sang dans les deux sens, pluie de sang.
+  - **Les intestins** sortent du torse pendant que les deux moitiés s'éloignent : une chaîne de boucles roses qui **se déroule** le long du trajet du haut du corps, retombe et reste **au sol, en boucles, des jambes jusqu'au torse** ; un **tas d'intestins** tombe près des jambes (mou, il s'écrase). Si les moitiés partent trop loin, l'intestin se déchire côté torse.
+  - **Bouts arrachés** : sous le torse, les vrais muscles déchirés, la colonne (vertèbres + disque) qui dépasse, des nerfs qui pendent, l'intestin qui bombe, graisse jaune et peau retroussée ; au-dessus des jambes, le bassin (os iliaques, sacrum), l'autre moitié du disque, muscles, peau.
+  - **Sang** : l'aorte et la veine cave **giclent par saccades** sous le torse, les deux artères iliaques au-dessus des jambes ; bruit sourd et éclaboussure quand chaque moitié touche le sol ; **traînée** de sang au sol là où le haut du corps glisse ; une **flaque** s'étend sous chaque moitié.
+  - **2,25 s** : le Bull **atterrit** entre les deux moitiés (gros impact, fissures, poussière). Plan au ras du sol depuis les jambes : les intestins qui partent vers le haut du corps, le Bull au milieu ; il **souffle** au-dessus (vapeur), regarde les jambes derrière lui ; plan large d'en haut.
+  - Sans le nouveau `WoundKit` (ancien kit) : des formes simples (chair sombre, os, boucles roses en cylindres) au lieu des vraies pièces, rien ne casse.
+- [ ] **Bull — Gore, corps vu plus tard** : un joueur qui arrive après (ou le **corps figé** de `Workspace > Corpses` après la réapparition, F10) voit les deux moitiés là où elles sont tombées, les bouts arrachés, les intestins **posés au sol** d'une moitié à l'autre (immobiles), le tas d'intestins et les flaques ; pas de jets ni d'animation.
+- [ ] **Bull — Gore coupé avant 1,85 s** (le Bull meurt, un joueur part) : tout s'arrête, le Bull reste **là où on le voyait** (pas de téléportation au bout de la course), la victime retombe KO, entière (le trou dans la poitrine disparaît).
+- [ ] **Bull — Gore** sur un **mannequin** : même chose ; les deux moitiés disparaissent avec lui (25 s).
+- [ ] Coupés en cours (l'attaquant meurt...) : tout s'arrête proprement, la caméra revient.
 
 ## Kit Bouncer / Videur (`claude/bouncer-kit`)
 
@@ -414,6 +463,87 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Sang réaliste (`feature/realistic-blood`)
+
+Sans les images (`Config.Blood.IMAGES` à 0), le sang est dessiné avec des formes simples ; avec les
+images importées (docs/BLOOD_FR.md), les mêmes tests doivent donner des taches plus détaillées.
+Réglage d'éclairage conseillé pour le mouillé : `Lighting.Technology = Future`.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Coup qui saigne (bouteille) sur un Dummy, regarder le sol | Taches **rouge foncé** (jamais rose), bord irrégulier, jamais un disque parfait. Une goutte arrivée en biais est **ovale ou en « ! »**, la queue dans le sens où elle allait. |
+| R2 | Attendre 1-2 min près des taches | Elles **foncent** (rouge → bordeaux), un **bord sombre** apparaît (le sang coagule), puis brun-noir mat, et elles disparaissent en fondu. |
+| R3 | Coup qui saigne tout près d'un **mur** | Des taches sur le mur, étirées vers le bas, et du sang qui **coule** lentement avec une perle au bout. |
+| R4 | Deux clients (Test > 2 joueurs), même coup | Les gouttes tombent **aux mêmes endroits** sur les deux écrans (à peu près). |
+| R5 | Un joueur qui saigne (Bleeding) reste **immobile** ~10 s | Le sang **coule de la plaie** sur la peau, les gouttes tombent **du bout de la coulure** ; une **flaque** grandit sous lui (vite puis plus lentement), brillante au début, avec des lobes. Sur une pente, elle s'étale vers le bas. |
+| R6 | Flaque près d'un trottoir / d'une marche | Elle s'arrête au bord ; si le sol tombe, du sang **coule le long du bord**. |
+| R7 | Marcher dans une flaque fraîche puis s'éloigner | **Empreintes** gauche/droite : pleines, puis partielles, puis des traces, chacune plus pâle que la précédente ; plus rien après ~6-7 pas. Pas d'empreinte dans du sang sec. |
+| R8 | Coup qui saigne au **visage** plusieurs fois | Souvent le **nez saigne** (coulure jusqu'à la lèvre, gouttes du menton), parfois la **lèvre** ; sur un coup lourd, un crachat de sang. Pas plus de ~14 marques sur le visage (détails : tests F ci-dessous). |
+| R9 | Coup qui saigne au **torse** d'un joueur avec un t-shirt | Une tache **s'étend dans le tissu** pendant ~30 s, plus sombre et mate que sur la peau. Sans t-shirt : un film plus clair sur la peau. |
+| R10 | Frapper un visage qui saigne, puis donner des coups dans le vide | Les **jointures** sont rouges ; chaque coup projette une **ligne de petites gouttes** (de plus en plus petites) au sol ; ça s'estompe en ~1 min. |
+| R11 | Finisher **batte** / **bras** / **foie** | Les jets sont de **vraies gouttes** qui retombent avec la gravité et se cassent en gouttelettes ; là où les jets tombent fort : une **vague de grosses taches** ; la flaque grandit et suit la pente. L'attaquant a des taches allongées sur lui, même sur la tête ronde (pas de carrés). |
+| R12 | Taper un KO qui saigne puis le laisser au sol | Une flaque se forme sous lui. S'il glisse / est poussé : une **traînée** de sang continue (détails : W8). En se relevant : une **empreinte de main**. |
+| R13 | Coupure au verre | Plus de **cubes en plastique** qui rebondissent : des gouttes qui volent et tachent le sol. Le sang dans la coupure brille au début puis fonce. |
+| R14 | Mourir / réapparaître | Tout le sang **sur le corps** disparaît ; le sang au sol reste et vieillit normalement. |
+| R15 | 16 joueurs / 2 finishers en même temps (ou Graphismes au minimum dans Échap) | Pas de chute d'images ; au minimum, moins de taches restent (les plus vieilles s'effacent en premier, les flaques en dernier). |
+| R16 | `Config.Blood.ENABLED = false` | Plus aucun sang (jets, gouttes, flaques, empreintes), le reste du combat marche. |
+
+### Sang sur les combattants, v2 (coulures, visage, gouttes qui pendent)
+
+À tester **à 8-12 studs** (la caméra normale) sur un Dummy, puis à 2 joueurs. Les nouvelles images
+(`rivuletStrip`, `browCut`, `wipeSmear`... dans `Config.Blood.IMAGES`) sont à 0 tant qu'elles ne
+sont pas importées : le jeu prend une image proche déjà importée (coulure de mur, film sur la peau),
+donc tout se teste tout de suite. Les points du visage (narine, lèvre, sourcil...) sont des
+estimations en haut de `Client/Combat/BloodFace.luau` : si une coulure part à côté de la narine,
+c'est là qu'on règle.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | 10 coups qui saignent au visage, **de face** | Le nez saigne : la coulure **avance par à-coups** (elle s'arrête, la perle au bout gonfle, puis elle saute un peu plus bas), fait une **pause sur la lèvre**, contourne la bouche (parfois des deux côtés) et arrive au **menton**. Jamais une bande droite qui glisse d'un coup. |
+| F2 | Regarder le menton pendant que le nez saigne | Une **goutte pend** au menton : elle grossit, s'étire (un « cou »), tombe, une plus petite reste et regrossit. Au début une goutte par seconde environ, puis de plus en plus lent (3-4 s) jusqu'à l'arrêt (15-40 s). Les gouttes tombent **moins vite** qu'avant (elles ne « claquent » plus). |
+| F3 | Pendant que la goutte pend, la victime frappe ou se fait frapper | La goutte **part tout de suite**, projetée dans le sens du mouvement. |
+| F4 | Coups de **côté** (gauche puis droite) | Plus souvent la **lèvre** : un film de sang sur la lèvre inférieure, une courte coulure du coin de la bouche vers la mâchoire. |
+| F5 | Uppercut / coup de tête / bouteille sur un visage déjà **bien marqué** (bleus niveau 2+) | Parfois une **coupure au sourcil** : la peau fendue (trait sombre), le sang **passe sur la paupière** (petite pause + film dans l'œil), descend la joue et **goutte de la mâchoire**. Max une coupure par sourcil. |
+| F6 | Re-frapper la tête quand une coupure est ouverte | La coupure **se rouvre** (brille de nouveau) et une nouvelle coulure **suit l'ancienne trace mouillée, plus vite**, puis continue plus loin. Le jet de sang du coup est plus fort (jusqu'à ×1.9 avec plusieurs plaies ouvertes). |
+| F7 | Coup lourd avec le nez qui saigne déjà | Parfois **nez cassé** : les deux narines coulent, plus large, plus longtemps. |
+| F8 | Victime blessée au visage, **immobile ~3 s** (ne frappe pas, n'est pas frappée) | De temps en temps (toutes les 6-15 s) : elle **crache** (un filet de sang qui s'étire et casse, une petite mousse rosée), **se mouche** (gouttelettes vers l'avant-bas, la coulure du nez raccourcit puis **recoule**), ou **s'essuie** (traînée horizontale sur la lèvre ou le sourcil, coulures raccourcies, le sang **revient** 1-3 s après, le dos de la main devient rouge). |
+| F9 | Mettre KO un combattant qui saigne du visage | Les coulures encore mouillées **tournent** : sur le côté elles traversent la joue en travers, sur le dos le sang **s'accumule** (la perle grossit) ; ~1 s après, une **flaque sous la tête** (si la tête est au sol). |
+| F10 | Se relever (GetUp) avec le visage en sang | Souvent il **s'essuie** le visage. Sur béton / asphalte / pavés, parfois une **éraflure** rosée sur la pommette (max 2), qui reste jusqu'à la mort. |
+| F11 | Attendre ~1 min après la fin d'un saignement | Les coulures foncent (la traînée d'abord, la perle reste brillante le plus longtemps), puis sèchent et **restent** jusqu'à la réapparition (croûte craquelée quand `crustStrip` est importée). De nouvelles coulures passent par-dessus. |
+| F12 | Plus de 6 coups qui saignent sur le même combattant | **Sueur** : les nouvelles coulures sont plus claires, plus larges et vont plus loin. |
+| F13 | `Bleeding` sur le **torse** (coupure au verre), rester debout | Le sang coule de la plaie **jusqu'au bas du t-shirt** (par à-coups, et il passe sur le côté s'il atteint le bord), puis goutte de là ; saignement fort (3+/s) : un **petit filet** qui coule en continu. La tache dans le tissu **descend** en grandissant, avec un **halo mouillé plus sombre** autour (visible aussi sur un t-shirt noir) et un bord pâle. La flaque se forme sous le point qui goutte. |
+| F14 | Mettre KO un combattant qui saigne (torse) | La flaque part du côté de la **tête/du cou**, pas cachée sous le ventre. |
+| F15 | 12 coups de poing touchés avec le même bras (un Dummy) | Les **jointures se fendent** (petites marques rosées/rouges) et restent jusqu'à la mort. Les gouttes projetées en frappant avec un poing ensanglanté partent surtout **à la fin du geste**, les deux premières plus grosses ; 3-4 coups vident le poing. |
+| F16 | Caméra à plus de 60 studs d'un combattant qui saigne | Pas d'animation (les coulures sont posées d'un coup, pas de goutte qui pend : des gouttes simples). Revenir près : tout s'anime de nouveau. |
+| F17 | 16 Dummies qui saignent du visage en même temps (MicroProfiler, étiquette `BloodRivulet`) | Moins de 0,4 ms par image ; pas plus de 4 coulures qui bougent par combattant, 3 gouttes qui pendent. |
+| F18 | `Config.Blood.FACE.CUTS = false` | Plus de coupures ni d'éraflures ; nez et lèvre saignent toujours. |
+
+### Sang dans le monde, v2 (gouttes au sol, flaques, traces)
+
+Même principe : `crown4x4`, `rippleRing`, `starburst`, `serumHalo`, `drag`, `shoeRunL/R`,
+`pendant2x2` sont à 0 tant qu'elles ne sont pas importées. Sans elles : pas de couronne (seulement
+ses gouttelettes), pas d'anneau sur la flaque, pas d'auréole jaune ; les étoiles de gouttelettes, les
+traînées et les empreintes de course prennent une image proche (gouttelettes, traînée, empreinte
+normale). Couronnes, anneaux et petites éclaboussures : seulement à moins de 40 studs de la caméra.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| W1 | Un Dummy qui saigne (Bleeding), **immobile** 30 s, regarder ses pieds | Les gouttes tombent **moins vite** qu'un jet et laissent des taches **rondes au bord crénelé** (pas des ovales). Les premières tombent dans la flaque qui se forme. |
+| W2 | Pendant W1, une goutte tombe dans la flaque | Un **anneau** s'élargit sur la flaque (~0,35 s), deux petites éclaboussures sautent, et 2-5 **gouttelettes** sont projetées **autour** de la flaque, où elles s'accumulent. |
+| W3 | W1 continue ~1 min | Autour de la flaque, des **étoiles de gouttelettes** (max 4 par flaque) : le dessin typique « quelqu'un a saigné debout ici ». Elles disparaissent avec la flaque. |
+| W4 | Un combattant qui saigne **marche** | Une traînée de gouttes ; leurs petites queues pointent **vers l'avant** (le sens de la marche). |
+| W5 | Gouttes qui tombent de **haut** (tête d'un joueur qui saute, bras arraché levé) sur béton | Plus la chute est haute, plus il y a de **gouttelettes satellites** autour (la tache elle-même reste de la même taille sur le béton). Grosse goutte de haut sur sol dur ou mouillé, de près : une **couronne** (doigts de sang qui montent et se cassent, 0,2 s) et 2-5 gouttelettes projetées du côté où elle allait. Sur herbe / sable : pas de couronne. Caméra qui regarde droit vers le bas : pas d'image de couronne. |
+| W6 | **Courir** (> 14 studs/s) à travers une flaque fraîche | Parfois (~1 fois sur 3) une **glissade** : une longue traînée qui sort de la flaque dans le sens de la course. Ensuite des empreintes de **course** (l'avant du pied, étiré vers l'avant), plus espacées qu'en marchant, de plus en plus pâles (~6-7). |
+| W7 | Regarder une flaque **4 min** (Échap > horloge, ou attendre) | Le reflet mouillé **rétrécit vers le centre** (le bord sèche d'abord ; les lobes fins foncent avant le milieu), un **bord sombre** apparaît vers 30-60 s, le centre fonce un peu (il gélifie), puis vers 90-180 s un **anneau jaune pâle** (sérum) apparaît autour. La flaque disparaît vers 4 min. |
+| W8 | **ThrowOut** / **BodySlam** / **Powerbomb** sur un Dummy qui saigne | À l'impact : une **éclaboussure sous la tête** et 4-6 gouttelettes projetées autour. S'il glisse : **une seule traînée continue**, striée, qui s'allonge tant qu'il glisse dans la même direction (une nouvelle au-delà de 2,5 studs ou s'il tourne de plus de 20°), de plus en plus pâle. S'il saigne encore, elle ne disparaît jamais tout à fait. |
+| W9 | Un KO qui **ne saigne pas** glisse à travers une flaque | La traînée part de la flaque, pâlit vite et s'arrête après ~5-6 studs. |
+| W10 | Un KO avec seulement une **coupure à la tête** (verre) qui glisse | Une traînée **étroite** sous la tête (pas de la largeur du torse). |
+| W11 | KO qui saigne allongé sur une **pente** | La flaque commence un peu **plus bas** que le corps, du côté de la pente. |
+| W12 | **Nuit** (`Lighting.ClockTime = 0`) | Le sang frais paraît **presque noir** et se voit surtout par son **reflet mouillé** (plus fort qu'en plein jour). Il faut `Lighting.Technology = Future` et `EnvironmentSpecularScale` ≥ 0,5. Retour au jour (12) : en ~5 s, couleurs normales. |
+| W13 | Finisher **bras** / **foie**, regarder le moignon / l'organe | Les gouttes tombent **lentement** et se détachent comme des gouttes qui pendent (image `pendant2x2` si importée) ; au sol, taches rondes. **Artère** (batte) : entre deux battements le jet ne s'arrête pas, il raccourcit, et du sang **goutte** du trou ; après la fin, ~3 s de gouttes lentes. |
+| W14 | 16 combattants qui saignent dans une flaque (MicroProfiler : `BloodDrops`, `BloodPool`, `BloodAge`, `BloodTracks`) | Moins de ~1 ms par image au total pour le sang au sol ; jamais plus de 8 couronnes et 6 anneaux en même temps. |
+| W15 | **Pluie** | Rien de spécial : il n'y a pas de météo (attribut `Weather`) sur cette branche ; la dilution par la pluie viendra avec elle. |
 
 ## Kit Dr. Rift / savant cyborg (`claude/compassionate-goodall-wdn4q1`)
 

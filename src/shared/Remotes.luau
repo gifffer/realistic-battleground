@@ -188,6 +188,12 @@ return table.freeze({
 	-- A finisher with a kill effect equipped: every client plays it there.
 	KillEffect = event("KillEffect"),
 
+	-- server → all clients  (pieces: { { cframe: CFrame, size: Vector3, color: Color3,
+	--                        material: Enum.Material } }, point: Vector3, push: Vector3)
+	-- Parts of the map smashed by a heavy move (Destruction): every client
+	-- throws their debris from `point`, along `push` (studs/s).
+	WallBroken = event("WallBroken"),
+
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?,
 	--                        victimLevel: number?, killerLevel: number?)
 	-- A fighter was eliminated: one line in the kill feed (top right).

@@ -26,17 +26,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Corpse = require(ReplicatedStorage.Shared.Util.Corpse)
 local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local Blood = require(script.Parent.Blood)
+local BloodAge = require(script.Parent.BloodAge)
+local BloodPool = require(script.Parent.BloodPool)
+local BloodStain = require(script.Parent.BloodStain)
 local Squish = require(script.Parent.Squish)
 
 local HeadBlast = {}
 
 HeadBlast.ATTRIBUTE = "HeadBlown"
 
-local BLOOD = Color3.fromRGB(78, 6, 6) -- dark, as it is once out
-local BLOOD_WET = Color3.fromRGB(104, 8, 8) -- fresh
+local BLOOD = Config.Blood.PALETTE.VENOUS -- dark, as it is once out
+local BLOOD_WET = Config.Blood.PALETTE.ARTERIAL -- fresh
 local FLESH = Color3.fromRGB(122, 28, 30)
 local FLESH_DARK = Color3.fromRGB(84, 16, 18)
 local BONE = Color3.fromRGB(224, 212, 188)
@@ -47,10 +51,8 @@ local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
 local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
-local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
-local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
--- Pools never pushed out by newer drops (they fade on their own).
-local pinned: { [BasePart]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+-- (the blood on the floor ages, dries and goes with the rest: BloodAge,
+-- Config.Blood.PROFILES / CAPS)
 
 local done: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -99,7 +101,6 @@ end
 -- Blood on the floor
 ------------------------------------------------------------------------------
 
-local marks: { BasePart } = {}
 local markCount = 0 -- (never goes down: each new mark a hair higher)
 
 -- Is this part on a character (a body part, or anything in it: ragdoll
@@ -134,85 +135,65 @@ local function floorUnder(position: Vector3): RaycastResult?
 	return nil
 end
 
--- A flat mark of blood on the floor: round (`length` = nil) or a streak
--- `length` long pointing along `along` (where the drop was going).
--- Too many marks: the oldest that isn't a pool goes.
-local function evictOldest()
-	for index, piece in marks do
-		if not pinned[piece] then
-			table.remove(marks, index)
-			piece:Destroy()
-			return
-		end
-	end
-end
-
+-- A mark of blood on the floor under `position`: round (`length` = nil) or
+-- a stretched drop `length` long, its tail along `along` (where it was
+-- going). Drawn by BloodStain (a picture, or an irregular shape - never a
+-- plain disc), ageing like all blood.
 local function mark(
 	position: Vector3,
 	width: number,
 	length: number?,
 	along: Vector3?,
 	color: Color3,
-	lifetime: number?
-): BasePart?
+	random: Random?
+): BloodAge.Record?
 	local hit = floorUnder(position)
 	if hit == nil then
 		return nil
 	end
-	local piece = Instance.new("Part")
-	piece.Name = "Blood"
-	piece.Anchored = true
-	piece.CanCollide = false
-	piece.CanQuery = false
-	piece.CanTouch = false
-	piece.CastShadow = false
-	piece.Material = Enum.Material.SmoothPlastic
-	piece.Color = color
-	piece.Reflectance = 0
-	piece.Transparency = 0.05
-	-- (each new one a hair higher: no flicker where they overlap)
-	markCount += 1
-	local lift = 0.066 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
-	local up = hit.Normal
-	if length and along and along.Magnitude > 1e-3 then
-		local forward = (along - up * along:Dot(up)).Unit
-		piece.Size = Vector3.new(width, 0.01, length)
-		piece.CFrame =
-			CFrame.lookAt(hit.Position + up * lift, hit.Position + up * lift + forward, up)
-	else
-		piece.Shape = Enum.PartType.Cylinder
-		piece.Size = Vector3.new(0.01, width, width)
-		piece.CFrame = CFrame.lookAt(hit.Position + up * lift, hit.Position + up * 2)
-			* CFrame.Angles(0, math.rad(90), 0)
+	local stretched = length ~= nil and along ~= nil and along.Magnitude > 1e-3
+	local direction = if stretched and along then along else Vector3.new(1, 0, 0.3)
+	local long = if length then length else width
+	local kind = if not stretched
+		then "spatterRound"
+		elseif long > width * 3.2 then "spatterStreak"
+		else "spatterTail"
+	local at = hit.Position + direction * (if stretched then long * 0.15 else 0)
+	local options = { random = random, start = color, material = hit.Material, priority = 2 }
+	if BloodStain.room() then
+		return BloodStain.place(kind, at, hit.Normal, direction, width, long, options)
 	end
-	piece.Parent = workspace
-	table.insert(marks, piece)
-	if #marks > MAX_MARKS then
-		evictOldest()
-	end
-	local life = lifetime or MARK_LIFETIME
-	task.delay(life * 0.7, function()
-		if piece.Parent then
-			TweenService:Create(piece, TweenInfo.new(life * 0.3), { Transparency = 1 }):Play()
-		end
-	end)
-	Debris:AddItem(piece, life)
-	return piece
+	-- (this frame is full: it comes in the next frames)
+	BloodStain.stain(kind, at, hit.Normal, direction, width, long, options)
+	return nil
 end
 
--- Keeps a floor mark in the list (oldest gone past the cap), fading it out.
-local function keepMark(piece: BasePart, lifetime: number?)
-	table.insert(marks, piece)
-	if #marks > MAX_MARKS then
-		evictOldest()
-	end
-	local life = lifetime or MARK_LIFETIME
-	task.delay(life * 0.7, function()
-		if piece.Parent then
-			TweenService:Create(piece, TweenInfo.new(life * 0.3), { Transparency = 1 }):Play()
-		end
-	end)
-	Debris:AddItem(piece, life)
+-- A kit blot (a mesh) on the floor ages like the rest of the blood.
+local function keepMark(piece: BasePart, lifetime: number?, isPool: boolean): BloodAge.Record
+	local profile = if isPool then Config.Blood.PROFILES.pool else Config.Blood.PROFILES.spatter
+	local layer = BloodAge.layer(piece, 0, piece.Transparency)
+	layer.shiny = true
+	local record: BloodAge.Record = {
+		layers = { layer },
+		anchor = piece,
+		gloss = nil,
+		glossAlpha = 1,
+		start = piece.Color,
+		dryColor = nil,
+		born = os.clock(),
+		profile = profile,
+		speed = 1,
+		soakIn = 0,
+		life = lifetime or profile.life,
+		category = "stain",
+		owner = nil,
+		pinned = isPool,
+		fadeStart = nil,
+		dead = false,
+		release = nil,
+	}
+	BloodAge.add(record)
+	return record
 end
 
 -- A blot of blood from the kit (Splat / Streak / Pool) on the floor under
@@ -225,7 +206,7 @@ local function blot(
 	along: Vector3?,
 	random: Random,
 	lifetime: number?
-): BasePart?
+): BloodAge.Record?
 	local pieces = GoreKit.get()
 	if pieces == nil or #kind == 0 then
 		return nil
@@ -258,42 +239,76 @@ local function blot(
 	if forward.Magnitude < 1e-3 then
 		forward = Vector3.new(1, 0, 0)
 	end
-	local lift = 0.064 + (markCount % 12) * 0.002 -- (above Blood's splats: no flicker)
+	-- (its own thickness above the floor, each new one a hair higher)
+	-- (at least 0.02 off the floor: closer, the floor and the blot flicker)
+	local lift = part.Size.Y / 2 + 0.02 + (markCount % 12) * 0.0012
 	-- (the kit's X along `forward`, its Y along the floor's normal)
 	local right = forward.Unit
 	part.CFrame = CFrame.fromMatrix(hit.Position + up * lift, right, up) * layer.offset.Rotation
-	part.Parent = workspace
-	keepMark(part, lifetime)
-	return part
+	part.Parent = BloodStain.folder
+	return keepMark(part, lifetime, kind == GoreShapes.pool)
 end
 
--- An irregular splash: a blot made of a few overlapping round ones, and
--- small drops around it.
+-- An irregular splash: a big impact stain (a picture, else a kit blot, else
+-- an irregular shape), a small wet pool in it, small drops around it.
 local function splash(position: Vector3, size: number, random: Random)
-	if blot(GoreShapes.splat, position, size * 1.3, nil, random) then
-		return
+	local main: BloodAge.Record? = nil
+	if not BloodStain.hasImage("spatterRound") then
+		main = blot(GoreShapes.splat, position, size * 1.3, nil, random)
 	end
-	mark(position, size, nil, nil, BLOOD)
-	for _ = 1, random:NextInteger(3, 5) do
-		local angle = random:NextNumber(0, math.pi * 2)
-		local distance = size * random:NextNumber(0.25, 0.5)
-		mark(
-			position + Vector3.new(math.cos(angle), 0, math.sin(angle)) * distance,
-			size * random:NextNumber(0.35, 0.65),
-			nil,
-			nil,
-			if random:NextNumber() < 0.5 then BLOOD else BLOOD_WET
-		)
+	if main == nil then
+		main = mark(position, size, nil, nil, BLOOD, random)
+		local hit = floorUnder(position)
+		if hit then
+			-- (thick in the middle: a wet pool, shiny while fresh)
+			BloodStain.place(
+				"pool",
+				hit.Position,
+				hit.Normal,
+				Vector3.new(1, 0, 0),
+				size * 0.55,
+				size * 0.5,
+				{
+					random = random,
+					profile = "pool",
+					start = BLOOD,
+					gloss = 0.7,
+					pinned = true,
+					noEdge = true,
+					material = hit.Material,
+				}
+			)
+			BloodStain.stain(
+				"satellites",
+				hit.Position,
+				hit.Normal,
+				Vector3.new(random:NextNumber(-1, 1), 0, random:NextNumber(-1, 1)),
+				size * 1.8,
+				size * 2.2,
+				{
+					random = random,
+					start = BLOOD_WET,
+					alpha = 0.1,
+					priority = 1,
+				}
+			)
+		end
 	end
-	for _ = 1, random:NextInteger(4, 8) do
+	if main then
+		BloodPool.addWet(main, position, size * 0.45)
+	end
+	for _ = 1, random:NextInteger(3, 6) do
 		local angle = random:NextNumber(0, math.pi * 2)
 		local distance = size * random:NextNumber(0.6, 1.1)
+		local direction = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		local s = random:NextNumber(0.06, 0.14)
 		mark(
-			position + Vector3.new(math.cos(angle), 0, math.sin(angle)) * distance,
-			random:NextNumber(0.06, 0.16),
-			nil,
-			nil,
-			BLOOD
+			position + direction * distance,
+			s,
+			s * random:NextNumber(1.2, 2.2),
+			direction,
+			BLOOD_WET,
+			random
 		)
 	end
 end
@@ -314,7 +329,7 @@ local function castOff(from: Vector3, direction: Vector3, reach: number, random:
 				index > count * 0.6
 				or blot(GoreShapes.streak, at, stretched * 1.6, direction, random) == nil
 			then
-				mark(at, size, stretched, direction, BLOOD)
+				mark(at, size, stretched, direction, BLOOD, random)
 			end
 		end)
 	end
@@ -602,14 +617,21 @@ local function keepPiece(piece: BasePart)
 				return
 			end
 			gone = true
-			-- (every layer: a soft piece shows through its welded copy)
-			local fade = TweenInfo.new(0.6)
-			for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
-				if item:IsA("BasePart") and item.Transparency < 1 then
-					TweenService:Create(item, fade, { Transparency = 1 }):Play()
+			-- (a body left by a finisher stays a while longer, as a copy:
+			-- Server/Systems/Corpses; its pieces stay as long)
+			task.delay(Corpse.timeLeft(body), function()
+				if not piece.Parent then
+					return
 				end
-			end
-			Debris:AddItem(piece, 0.65)
+				-- (every layer: a soft piece shows through its welded copy)
+				local fade = TweenInfo.new(0.6)
+				for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+					if item:IsA("BasePart") and item.Transparency < 1 then
+						TweenService:Create(item, fade, { Transparency = 1 }):Play()
+					end
+				end
+				Debris:AddItem(piece, 0.65)
+			end)
 		end
 		body.Destroying:Once(remove)
 		local watch: RBXScriptConnection? = nil
@@ -901,9 +923,9 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 	-- and splash on the floor, the walls, the attacker), more away from him.
 	-- (kept under the shared cap of drops in flight; the haze is the
 	-- burst's own mist below)
-	Blood.spray(at, Vector3.new(0, 1, 0) + away, 4, model, true)
-	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 2.5, model, true)
-	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 1.5, model, true)
+	Blood.spray(at, Vector3.new(0, 1, 0) + away, 4, model, true, random)
+	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 2.5, model, true, random)
+	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 1.5, model, true, random)
 	-- In the air: a spray of fine drops, and a red mist.
 	local point = Instance.new("Attachment")
 	point.WorldPosition = at
@@ -917,7 +939,23 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 		NumberSequenceKeypoint.new(1, 0.06),
 	})
 	spray.Acceleration = Vector3.new(0, -70, 0)
-	spray:Emit(160)
+	if Blood.droplets(spray, "drops") then
+		-- (real drops: small, stretched along their flight; fewer needed)
+		spray.Size = NumberSequence.new(0.09, 0.05)
+		spray.Acceleration = Vector3.new(0, -70, 0)
+	end
+	spray:Emit(math.min(160, Config.Blood.CAPS.PARTICLES_PER_BURST))
+	-- what flies also lands: a few of those drops leave their marks
+	Blood.landings(
+		at,
+		Vector3.new(0, 1, 0) + away,
+		80,
+		NumberRange.new(8, 22),
+		14,
+		NumberRange.new(0.03, 0.08),
+		random,
+		{ model :: Instance }
+	)
 	local mist = bloodEmitter(point)
 	mist.SpreadAngle = Vector2.new(180, 180)
 	mist.Speed = NumberRange.new(3, 9)
@@ -934,6 +972,7 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 	mist.LightInfluence = 0.6
 	mist.Acceleration = Vector3.new(0, -8, 0)
 	mist.Drag = 5
+	Blood.droplets(mist, "mist")
 	mist:Emit(20)
 	Debris:AddItem(point, 1.6)
 
@@ -965,27 +1004,16 @@ function HeadBlast.streak(position: Vector3, size: number, along: Vector3, seed:
 			size * 0.25,
 			size,
 			along,
-			if random:NextNumber() < 0.5 then BLOOD else BLOOD_WET
+			if random:NextNumber() < 0.5 then BLOOD else BLOOD_WET,
+			random
 		)
 	end
 end
 
--- A pool spreading under `position` to `size` studs over `seconds`.
+-- A pool spreading under `position` to `size` studs over `seconds`: it
+-- flows downhill, stops at curbs, merges (BloodPool).
 function HeadBlast.pool(position: Vector3, size: number, seconds: number, seed: number)
-	local random = Random.new(seed)
-	local piece = blot(GoreShapes.pool, position, 0.3, nil, random, 40)
-		or mark(position, 0.3, nil, nil, BLOOD, 40)
-	if piece then
-		pinned[piece] = true
-		local k = size / 0.3
-		-- (grows across, not thicker: a round mark's thin axis is X)
-		local flat = piece:IsA("Part") and piece.Shape == Enum.PartType.Cylinder
-		TweenService:Create(
-			piece,
-			TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{ Size = piece.Size * (if flat then Vector3.new(1, k, k) else Vector3.new(k, 1, k)) }
-		):Play()
-	end
+	BloodPool.spread(position, size, seconds, seed)
 end
 
 -- Has the burst head of `model` been drawn already?

@@ -36,8 +36,8 @@
 --     (salmon pink, smeared with blood, on their see-through mesentery) and
 --     a length of colon falling out
 --     on the floor, the torso dripping.
--- Pieces from WoundKit (GoreKit "Waist" / "HipR" / "HipL" / "Gut<i>" /
--- "Colon"); simpler ones drawn here without them (an older kit).
+-- Pieces from WoundKit (GoreKit "RiftWaist" / "RiftHipR" / "RiftHipL" /
+-- "RiftGut<i>" / "RiftColon"); simpler ones drawn here without them (an older kit).
 --
 --   WaistCut.apply(model, live)   draws the wounds (once per body)
 --   WaistCut.isApplied(model)     whether it has been drawn on this body
@@ -106,7 +106,7 @@ local FEMORAL: { [string]: Vector3 } = {
 local ILIAC = { Vector3.new(0.47, -1.14, -0.19), Vector3.new(-0.47, -1.12, -0.19) }
 local CUT = CFrame.new(0, -1, 0) -- the torso's cut face (torso space)
 -- What falls out of the upper body (GoreKit pieces), in order.
-local SPILL = { "Gut1", "Gut2", "Gut3", "Colon" }
+local SPILL = { "RiftGut1", "RiftGut2", "RiftGut3", "RiftColon" }
 
 -- A face of the cut: its part, where it is in the part's space (`at`: its
 -- centre, Y out of the cut), its half size (X, Z), the gore drawn on it.
@@ -281,7 +281,7 @@ local function dress(part: BasePart, name: string, skin: Color3, random: Random)
 	local piece = if pieces then pieces[name] else nil
 	if piece then
 		weldTo(part, GoreKit.spawn(piece, part.CFrame, painter(skin)), folder)
-	elseif name == "Waist" then
+	elseif name == "RiftWaist" then
 		-- The raw face under the torso, the two femoral heads and the
 		-- sacrum in it, the skin torn round it, gut hanging.
 		local face = part.CFrame * CUT
@@ -336,7 +336,7 @@ local function dress(part: BasePart, name: string, skin: Color3, random: Random)
 		end
 		local sx, sz = part.Size.X, part.Size.Z
 		local top = part.CFrame * CFrame.new(0, part.Size.Y / 2, 0)
-		local sign = if name == "HipR" then 1 else -1 -- (+X = outside for the right leg)
+		local sign = if name == "RiftHipR" then 1 else -1 -- (+X = outside for the right leg)
 		local upright = CFrame.Angles(0, 0, math.pi / 2) -- a cylinder's axis (X) up
 		local function slab(label: string, size: Vector3, color: Color3, lift: number, at: Vector3?)
 			local bit = simplePart(label, Enum.PartType.Block, size, color)
@@ -439,7 +439,7 @@ local function bodyFirst(piece: GoreKit.Piece): GoreKit.Piece
 	return piece
 end
 
--- A loose length of gut (`name`: GoreKit's "Gut<i>" / "Colon"), falling
+-- A loose length of gut (`name`: GoreKit's "RiftGut<i>" / "RiftColon"), falling
 -- out of the torso's cut at `at` (world).
 local function newGut(name: string, at: CFrame, random: Random): BasePart
 	local pieces = GoreKit.get()
@@ -464,10 +464,10 @@ local function newGut(name: string, at: CFrame, random: Random): BasePart
 		local mesh = Instance.new("SpecialMesh")
 		mesh.MeshType = Enum.MeshType.Sphere
 		mesh.Parent = loop
-		local thick = if name == "Colon" then 0.3 else 0.2
+		local thick = if name == "RiftColon" then 0.3 else 0.2
 		loop.Size = Vector3.new(random:NextNumber(0.9, 1.4), thick, thick + 0.02)
 		loop.Material = Enum.Material.SmoothPlastic
-		loop.Color = if name == "Colon" then COLON else GUT
+		loop.Color = if name == "RiftColon" then COLON else GUT
 		loop.Reflectance = 0.2
 		loop.CFrame = at
 		gut = loop
@@ -978,12 +978,12 @@ function WaistCut.apply(model: Model, live: boolean)
 			part = torso,
 			at = CFrame.new(0, -torso.Size.Y / 2 - 0.07, 0) * CFrame.Angles(math.pi, 0, 0),
 			half = Vector2.new(torso.Size.X / 2, torso.Size.Z / 2),
-			gore = dress(torso, "Waist", torso.Color, random),
+			gore = dress(torso, "RiftWaist", torso.Color, random),
 		},
 	}
 	clearFace(torso, Enum.NormalId.Bottom)
 	local legs: { BasePart } = {}
-	for _, pair in { { "Right Leg", "HipR" }, { "Left Leg", "HipL" } } do
+	for _, pair in { { "Right Leg", "RiftHipR" }, { "Left Leg", "RiftHipL" } } do
 		local leg = model:FindFirstChild(pair[1])
 		if leg and leg:IsA("BasePart") then
 			-- (each leg's own skin colour: the cut shows it at the rim)

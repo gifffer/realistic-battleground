@@ -46,6 +46,10 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local BloodFace = require(script.Parent.Parent.Combat.BloodFace)
+local BloodTracks = require(script.Parent.Parent.Combat.BloodTracks)
+local KitLooks = require(script.Parent.Parent.Combat.KitLooks)
+local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local RiftFx = require(script.Parent.Parent.Combat.RiftFx)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
@@ -230,6 +234,18 @@ local function onCombatantAdded(instance: Instance)
 			playing = value
 		end)
 	end
+end
+
+-- A body left by a finisher (Server/Systems/Corpses): a frozen copy of a
+-- dead fighter, not a fighter. Only its wounds are drawn again (bruises,
+-- cuts, a burst head, a torn arm...), as for any body seen late.
+local corpses: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local function onCorpseAdded(instance: Instance)
+	if not instance:IsA("Model") or corpses[instance] then
+		return
+	end
+	corpses[instance] = true
+	Wounds.watch(instance)
 end
 
 local function onCombatantRemoved(instance: Instance)
@@ -670,10 +686,22 @@ local function onCombatEvent(
 			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		end
 		-- Blood and torn skin: decided by the server (same on every screen).
+		if kind == "Hit" and moveId == nil then
+			-- (bare-fist M1s only - not a kick, a bottle, a bat: split knuckles)
+			KitEffects.punchLanded(victim, attacker)
+		end
 		if bloodArg == true then
 			-- (more for the heavy blows and the kits' moves)
-			local amount = if strong then 2.6 elseif moveId then 1.7 else 1
-			KitEffects.bloodSpray(victim, attacker, zone, amount)
+			local amount = if strong then 3.8 elseif moveId then 2.5 else 1.6
+			KitEffects.bloodSpray(
+				victim,
+				attacker,
+				zone,
+				amount,
+				KitEffects.bloodSeed(attackIdArg, victim, zone),
+				-- (which face wound it opens: nose, lip, brow cut...)
+				{ strong = strong, moveId = moveId, side = side :: string }
+			)
 		end
 		if typeof(skinTearSeedArg) == "number" then
 			KitEffects.skinTear(victim, attacker, skinTearSeedArg, zone)
@@ -738,6 +766,10 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	-- Cinematic finishers: not predicted, played only when the server starts them.
 	Brawler_FinisherBat = true,
 	Boxer_FinisherCombo = true,
+	Sentinel_Finisher = true,
+	Sentinel_FinisherVictim = true, -- lifted by the throat
+	Bull_Finisher = true,
+	Bull_FinisherVictim = true, -- on his horns
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,
@@ -792,6 +824,10 @@ local function onCombatAction(model: Model, action: string)
 	end
 	CharacterAnimationController.playAction(model, action)
 	BouncerFx.onAction(model, action)
+	if action == "GetUp" then
+		BloodTracks.onGetUp(model) -- (a bloody hand pushing on the ground)
+		BloodFace.onGetUp(model) -- (wipes his bloody face; a graze from the floor)
+	end
 	if
 		action == "GetUp"
 		or string.sub(action, 1, 6) == "Emote_"
@@ -805,10 +841,12 @@ local function onCombatAction(model: Model, action: string)
 		KitEffects.onAction(model, action, alreadyHeard)
 	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
 		SoundController.play("HeavySwing", model) -- the heavy blows
+		KitEffects.onSwing(model) -- (a bloody fist flicks blood off)
 	elseif string.sub(action, 1, 4) == "Dash" then
 		SoundController.play("Dash", model)
 	else
 		SoundController.play("Swing", model)
+		KitEffects.onSwing(model)
 	end
 end
 
@@ -833,6 +871,8 @@ local function onKillEffect(effect: unknown, position: unknown)
 end
 
 function CombatEffectsController.start()
+	KitLooks.start() -- bull horns, sentinel cape
+	KitVFX.start() -- smashed walls, the Bull's strides
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
 	-- Something thrown (Shared/Weapons): flying, then broken where it hit.
 	Remotes.WeaponThrown.OnClientEvent:Connect(
@@ -882,12 +922,21 @@ function CombatEffectsController.start()
 	for _, instance in CollectionService:GetTagged(tag) do
 		onCombatantAdded(instance)
 	end
+	local corpseTag = Config.Combat.CORPSE_TAG
+	CollectionService:GetInstanceAddedSignal(corpseTag):Connect(onCorpseAdded)
+	for _, instance in CollectionService:GetTagged(corpseTag) do
+		onCorpseAdded(instance)
+	end
 
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)
 	Remotes.CombatAction.OnClientEvent:Connect(onCombatAction)
 	Remotes.AttackResolved.OnClientEvent:Connect(onAttackResolved)
 	-- Our M1: show the hit the instant the fist lands (HIT_DELAY later).
 	CombatController.onAttackStarted(function(info)
+		local character = player.Character
+		if character then
+			KitEffects.onSwing(character) -- (our bloody fist flicks blood off)
+		end
 		task.delay(Config.Combat.HIT_DELAY, function()
 			predictHit(info)
 		end)

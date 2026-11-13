@@ -33,12 +33,22 @@ local warned = false
 -- A kit already looked through and found without the pieces (an old one):
 -- not looked through again until something is added to it.
 local lacking: Instance? = nil
+-- A kit found with the head's pieces but not yet all the later ones (an old
+-- kit, or one still replicating): used as it is until something is added to
+-- it, then looked through again.
+local partial: { [string]: Piece }? = nil
+local partialFrom: Instance? = nil
 
--- The pieces, once the kit is there with all of them (nil until then: it is
--- looked for again next time, the kit may replicate late).
+-- The pieces, once the kit is there with the head's (nil until then: it is
+-- looked for again next time, the kit may replicate late). Without some of
+-- the later pieces they are not kept for good: looked for again once the
+-- kit changes.
 function GoreKit.get(): { [string]: Piece }?
 	if pieces then
 		return pieces
+	end
+	if partial and partialFrom and partialFrom:IsDescendantOf(ReplicatedStorage) then
+		return partial
 	end
 	local assets = ReplicatedStorage:FindFirstChild("Assets")
 	local model = if assets then assets:FindFirstChild("WoundKit", true) else nil
@@ -85,11 +95,14 @@ function GoreKit.get(): { [string]: Piece }?
 			table.insert(piece.layers, layer)
 		end
 	end
-	-- (the torn arm's pieces came later: a kit without them still has the
-	-- head's; ArmRip draws simpler ones itself then)
+	-- (the torn arm's pieces came later, then the Bull's (the body torn in
+	-- two, the guts): a kit without them still has the head's; the
+	-- finishers check for their own pieces and draw simpler ones then)
 	local optional: { [string]: boolean } = {}
-	for _, name in GoreShapes.limb do
-		optional[name] = true
+	for _, list in { GoreShapes.limb, GoreShapes.bisect, GoreShapes.gut } do
+		for _, name in list do
+			optional[name] = true
+		end
 	end
 	-- (nor Dr. Rift's body cut in two: WaistCut draws simpler ones then)
 	for _, name in GoreShapes.cut do
@@ -120,6 +133,19 @@ function GoreKit.get(): { [string]: Piece }?
 		end)
 		piece.center = piece.layers[1].offset.Position
 	end
+	for name in optional do
+		if found[name] == nil then
+			-- (some later piece missing: not kept for good, it may arrive)
+			partial = found
+			partialFrom = model
+			model.DescendantAdded:Once(function()
+				if partial == found then
+					partial = nil
+				end
+			end)
+			return found
+		end
+	end
 	pieces = found
 	return found
 end
@@ -130,11 +156,15 @@ end
 function GoreKit.spawn(
 	piece: Piece,
 	at: CFrame,
-	paint: (layer: string) -> (Color3, number)
+	paint: (layer: string) -> (Color3, number),
+	skip: { [string]: boolean }? -- layers left out
 ): BasePart
 	local main: BasePart? = nil
 	local mainOffset = CFrame.identity
 	for _, layer in piece.layers do
+		if skip and skip[layer.name] then
+			continue
+		end
 		local part = layer.source:Clone()
 		part:ClearAllChildren()
 		-- (the importer gives each piece a pivot at the kit's origin: far
