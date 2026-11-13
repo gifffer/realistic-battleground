@@ -75,50 +75,45 @@ local LOOKS: { [string]: Look } = {
 	},
 }
 
--- A burn ("Burn": the Sentinel's heat vision) is the same hole in the
--- skin, burnt: the skin's edge charred black, the burnt skin under it a
--- leathery tan, the fat cooked, and at the bottom what was under the skin -
--- the skull on the head, cooked muscle on the body. No blood (cauterized).
-local CHARRED = Color3.fromRGB(26, 19, 16)
+-- A burn ("Burn": the Sentinel's heat vision): the skin burnt clean away,
+-- like a deep friction / thermal wound - a thin raw red rim where the skin
+-- stops, and in the hole the pale, moist tissue under it: cream fascia with
+-- the whitish-yellow tendons showing, a little yellow fat, the skull on the
+-- head. Barely any blood (cauterized), no black crust.
+local CHARRED = Color3.fromRGB(26, 19, 16) -- (the bore's crust still uses it)
+local RAW_RIM = Color3.fromRGB(150, 36, 34)
+local RAW_WALL = Color3.fromRGB(186, 82, 74)
 local BURN_LOOKS: { [string]: Look } = {
 	-- (the burn inserts: BurnS / M / L, made for it)
-	Char = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
-	Eschar = {
-		color = Color3.fromRGB(176, 140, 104),
-		reflectance = 0.03,
-		material = Enum.Material.SmoothPlastic,
-	},
-	-- (an older kit without them: the laceration's insert, burnt)
-	Lip = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
-	Dermis = {
-		color = Color3.fromRGB(176, 140, 104),
-		reflectance = 0.03,
-		material = Enum.Material.SmoothPlastic,
-	},
+	Char = { color = RAW_RIM, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	Eschar = { color = RAW_WALL, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	-- (an older kit without them: the laceration's insert)
+	Lip = { color = RAW_RIM, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
+	Dermis = { color = RAW_WALL, reflectance = 0.1, material = Enum.Material.SmoothPlastic },
 	Fat = {
-		color = Color3.fromRGB(176, 128, 58),
+		color = Color3.fromRGB(226, 200, 140),
+		reflectance = 0.14,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Flesh = { -- the fascia: pale cream, a pink tinge
+		color = Color3.fromRGB(226, 204, 182),
 		reflectance = 0.12,
 		material = Enum.Material.SmoothPlastic,
 	},
-	Flesh = {
-		color = Color3.fromRGB(116, 42, 30),
-		reflectance = 0.08,
-		material = Enum.Material.SmoothPlastic,
-	},
-	Muscle = {
-		color = Color3.fromRGB(96, 30, 22),
-		reflectance = 0.08,
+	Muscle = { -- the floor with its ridges: whitish-yellow tendons
+		color = Color3.fromRGB(236, 222, 186),
+		reflectance = 0.16,
 		material = Enum.Material.SmoothPlastic,
 	},
 	Bone = {
-		color = Color3.fromRGB(214, 198, 168),
-		reflectance = 0.04,
+		color = Color3.fromRGB(226, 214, 186),
+		reflectance = 0.06,
 		material = Enum.Material.SmoothPlastic,
 	},
 }
--- (the bottom of a burn on the head: the skull, a little scorched)
-local SKULL = Color3.fromRGB(206, 190, 160)
-local BURN_BACKING = Color3.fromRGB(58, 22, 14)
+-- (the bottom of a burn on the head: the skull)
+local SKULL = Color3.fromRGB(214, 200, 172)
+local BURN_BACKING = Color3.fromRGB(196, 150, 128)
 
 -- The Sentinel's bore ("Bore": BoreS / M / L): the beam went into the chest
 -- over the heart, so hot that nothing bled. Everything it touched is seared:
@@ -1342,7 +1337,7 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		backing.Name = "Backing"
 		backing.Size = Vector3.new(width / plates + 0.01, 2 * reachY + 0.06, 0.02)
 		backing.Color = if burnt
-			then (if onHead then SKULL:Lerp(CHARRED, 0.25) else BURN_BACKING)
+			then (if onHead then SKULL:Lerp(RAW_WALL, 0.15) else BURN_BACKING)
 			else BACKING_COLOR
 		backing.Material = Enum.Material.SmoothPlastic
 		if cut.face == nil then
