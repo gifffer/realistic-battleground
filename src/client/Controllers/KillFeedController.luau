@@ -156,6 +156,15 @@ local function phrase(
 		return { name(victim, victimLevel), verb("fled — kill to"), name(killer, killerLevel) }
 	elseif kind == "Fled" then
 		return { name(victim, victimLevel), verb("fled") }
+	elseif kind == "Train" and killer then
+		return {
+			name(killer, killerLevel),
+			verb("threw"),
+			name(victim, victimLevel),
+			verb("under a train"),
+		}
+	elseif kind == "Train" then
+		return { name(victim, victimLevel), verb("was hit by a train") }
 	elseif killer then
 		return { name(killer, killerLevel), verb("eliminated"), name(victim, victimLevel) }
 	end

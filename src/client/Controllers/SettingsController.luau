@@ -4,6 +4,8 @@
 --   CAMERA   first-person / third-person camera
 --   DUELS    block duel requests (nobody can challenge you; ranked search
 --            still works)
+--   SOUND    music on / off (the city's music and the places' speakers:
+--            CityAudioController; the rain, the train and the fights stay)
 -- Settings are saved on the server (Server/Systems/Settings), so they
 -- follow the player everywhere. For "block duel requests" the server also
 -- sets the "BlocksDuels" attribute on your Player: the Duel menu shows it
@@ -21,6 +23,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
 local CameraController = require(script.Parent.CameraController)
+local CityAudioController = require(script.Parent.CityAudioController)
 local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -38,10 +41,12 @@ local SettingsController = {}
 
 local firstPerson = false
 local blockDuels = false
+local musicOn = true
 -- os.clock() of our last change, per setting name ("firstPerson"...).
 local lastLocalChange: { [string]: number } = {}
 local firstPersonToggle: Toggle? = nil
 local blockDuelsToggle: Toggle? = nil
+local musicToggle: Toggle? = nil
 
 local C = Theme.Colors
 
@@ -143,6 +148,21 @@ local function toggleBlockDuels()
 	Remotes.UpdateSetting:FireServer("blockDuels", blockDuels)
 end
 
+local function setMusic(value: boolean)
+	musicOn = value
+	CityAudioController.setMusicEnabled(value)
+	if musicToggle then
+		musicToggle.set(value)
+	end
+end
+
+-- Music on / off, saved.
+local function toggleMusic()
+	lastLocalChange.music = os.clock()
+	setMusic(not musicOn)
+	Remotes.UpdateSetting:FireServer("music", musicOn)
+end
+
 -- A section title ("CAMERA", "DUELS"): small caps, faint.
 local function sectionTitle(content: Frame, text: string, y: number)
 	Theme.text({
@@ -227,10 +247,21 @@ local function buildWindow(content: Frame)
 	)
 	setBlockDuels(blockDuels)
 
+	sectionTitle(content, "SOUND", 172)
+	musicToggle = settingRow(
+		content,
+		"MusicRow",
+		184,
+		"Music",
+		"The city's music and the songs in the bar, the shops and the park.",
+		toggleMusic
+	)
+	setMusic(musicOn)
+
 	-- Hint: the key that frees the mouse cursor.
 	Theme.make("Frame", {
 		Name = "Hint",
-		Position = UDim2.fromOffset(0, 172),
+		Position = UDim2.fromOffset(0, 258),
 		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
 		Parent = content,
@@ -256,7 +287,7 @@ local function buildWindow(content: Frame)
 	-- Hint: the key that switches the camera (W on AZERTY, Z on QWERTY).
 	Theme.make("Frame", {
 		Name = "CameraHint",
-		Position = UDim2.fromOffset(0, 202),
+		Position = UDim2.fromOffset(0, 288),
 		Size = UDim2.new(1, 0, 0, 20),
 		BackgroundTransparency = 1,
 		Parent = content,
@@ -298,15 +329,20 @@ local function onProfileChanged(snapshot: Types.ProfileSnapshot)
 	if not changedRecently("blockDuels") and blocks ~= blockDuels then
 		setBlockDuels(blocks)
 	end
+	-- (an old save without it: music on)
+	local music = settings.music ~= false
+	if not changedRecently("music") and music ~= musicOn then
+		setMusic(music)
+	end
 end
 
 function SettingsController.start()
 	MenuController.register({
 		id = "Settings",
 		label = "SETTINGS",
-		subtitle = "CAMERA · DUELS · CONTROLS",
+		subtitle = "CAMERA · DUELS · SOUND · CONTROLS",
 		order = 100, -- last button; Kits/Duel/Quests/Shop will come before it
-		size = Vector2.new(440, 420), -- taller than the default for the DUELS row
+		size = Vector2.new(440, 500), -- taller than the default for the DUELS and SOUND rows
 		build = buildWindow,
 	})
 	PlayerDataController.onChanged(onProfileChanged)

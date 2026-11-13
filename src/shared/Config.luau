@@ -58,6 +58,9 @@ return table.freeze({
 		CAMERA_TOGGLE = Enum.KeyCode.Z,
 		-- Play the equipped emote (Shop). Not while fighting.
 		EMOTE = Enum.KeyCode.B,
+		-- Use what's in your pocket (the 1-slot inventory, bottom-right): drink your
+		-- SpezCola. (G is taken by AWAKEN, 1-4 by the kit moves, E by the prompts.)
+		USE_ITEM = Enum.KeyCode.R,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,
@@ -361,5 +364,161 @@ return table.freeze({
 		-- How far the camera goes down (studs), matching the body's animation.
 		CROUCH_DROP = 1.1,
 		SLIDE_DROP = 2.3,
+	}),
+
+	-- Weather events in the city (Server/Systems/Weather decides, everyone sees the same;
+	-- Client/Controllers/WeatherController draws the rain, the flashes and the notice).
+	-- Times are in seconds. NumberRange.new(a, b) = a random value between a and b.
+	Weather = table.freeze({
+		-- The first event comes this long after the server starts.
+		FIRST_EVENT = NumberRange.new(180, 300),
+		-- Calm gap after an event ends, before the next one may start.
+		GAP = NumberRange.new(240, 420),
+		-- When the dice say "nothing", try again this long after.
+		RETRY = 45,
+		-- Chances of each event (they don't need to add up to 100). Rain is likelier at
+		-- night; a power cut only happens at night (and at most once per night).
+		WEIGHTS_DAY = table.freeze({ Rain = 40, Fog = 30, Nothing = 30 }),
+		WEIGHTS_NIGHT = table.freeze({ Rain = 55, Fog = 20, PowerCut = 25, Nothing = 15 }),
+
+		-- RAIN: lasts 2 to 4 min. The rain grows for RAMP_IN, fades over RAMP_OUT.
+		RAIN_DURATION = NumberRange.new(120, 240),
+		RAIN_RAMP_IN = 25,
+		RAIN_RAMP_OUT = 30,
+		-- Part of the rains that are storms (with thunder).
+		STORM_CHANCE = 0.5,
+		-- Time between two thunder flashes in a THUNDERSTORM (frequent lightning).
+		THUNDER_GAP = NumberRange.new(9, 24),
+		-- Client: a thunderstorm's rain is this many times denser than a plain rain, and blown
+		-- sideways by this wind (studs/s² added to the falling drops).
+		STORM_RAIN_MULT = 1.8,
+		STORM_WIND = Vector3.new(28, 0, 10),
+		-- The rumble is heard this long after the flash (light is faster than sound).
+		THUNDER_SOUND_DELAY = NumberRange.new(1.2, 4),
+
+		-- FOG: dense haze (about 90 studs of visibility) for 2 to 3 min.
+		FOG_DURATION = NumberRange.new(120, 180),
+		FOG_RAMP = 25,
+
+		-- POWER CUT (night only): the lights flicker, go dark, then come back as a wave
+		-- from the substation, the sodium lamps warming up from red to orange.
+		-- (3.5 s of stuttering lamps before the dark: the grid struggling, then the
+		-- transformer at the substation blows in a burst of sparks, see WeatherFxController)
+		POWER_FLICKER = 3.5,
+		POWER_DARK = 40,
+		POWER_WARMUP = 6,
+		-- Not if the night ends in less than this (the dawn would come in the dark).
+		POWER_MIN_NIGHT_LEFT = 75,
+		-- In the compact city: the lot office, north edge of Lot 9 (the road is at Y 1.2).
+		SUBSTATION = Vector3.new(60, 1.2, -116),
+		-- Speed of the restore wave, in studs per second.
+		POWER_WAVE_SPEED = 66,
+
+		-- Client: the rain around the camera.
+		RAIN_RATE = 900, -- drops per second (halved on low graphics quality)
+		RAIN_AREA = 90, -- side of the square area it falls on, in studs
+		RAIN_HEIGHT = 45, -- the drops start this high above the camera
+		RAIN_LEAD = 0.4, -- the area moves ahead of a moving camera (× its speed)
+		SPLASH_RATE = 220, -- little splashes on the ground around you
+		-- The one-line notice top-left ("RAIN", "POWER CUT").
+		NOTICE_TIME = 3,
+
+		-- Client: water on the camera "lens" when you stand in the rain (Client/UI/LensRain).
+		-- Pictures made by tools/raindrops/make_raindrop_textures.py, in assets/raindrops/.
+		-- Upload them (guide: docs/RAIN_FR.md) and paste the IMAGE ids here. 0 = not uploaded.
+		-- While `drops` has no id, NOTHING is drawn on the screen (the rest of the rain stays).
+		SCREEN_RAIN_IMAGES = table.freeze({
+			-- single drops: drop_round.png, drop_egg.png, drop_irregular.png
+			drops = table.freeze({ 111660229759033, 71940132609064, 128041657038467 }),
+			-- two / three drops that ran together: drop_merged_2.png, drop_merged_3.png
+			merged = table.freeze({ 120208136091045, 123722258422810 }),
+			-- a running drop and its wet trail: streak_1.png, streak_2.png, streak_3.png
+			-- (keep them 128 x 512: the game shows only the bottom part of the trail)
+			streaks = table.freeze({ 87263627117702, 136885468981190, 84830595394974 }),
+			-- the fine spray at the screen edges in heavy rain: mist_1.png, mist_2.png
+			mist = table.freeze({ 121407696421406, 82113857552482 }),
+			-- a very faint wet smear at the edges: wet_glass.png
+			wet = 72393032484221,
+		}),
+
+		-- Studio only: the first event comes after 20 s and the gaps are 45 s, to test.
+		-- You can also force one: in the Studio command bar (server), type
+		-- workspace:SetAttribute("WeatherForce", "Rain")   ("Rain", "Storm", "Fog", "PowerCut").
+		STUDIO_FAST = true,
+	}),
+
+	-- The freight train that crosses the railway viaduct (Server/Systems/Train decides when,
+	-- every client draws its own copy: Client/Controllers/TrainController). It comes out of a
+	-- tunnel portal at one end of the viaduct and goes into the other one.
+	-- Times in seconds, distances in studs.
+	Train = table.freeze({
+		-- The first train comes this long after the city is built.
+		FIRST_PASS = NumberRange.new(40, 70),
+		-- Time between the end of a pass and the start of the next one (+25 s since v7: the
+		-- train came a bit too often).
+		INTERVAL = NumberRange.new(95, 155),
+		SPEED = 70, -- studs per second (crossing the ~250-stud viaduct takes about 4 s)
+		-- Total length of the train: locomotive + 2 cars (must match the model the client
+		-- builds in TrainController; it is published to the clients as TrainLength).
+		LENGTH = 72,
+		-- The train's box, for hits: half its width and its height above the rail top.
+		HALF_WIDTH = 4.2,
+		HEIGHT = 10,
+		-- Signals blink, the horn sounds and the ground starts to rumble this long before
+		-- the locomotive comes out of the tunnel.
+		WARN_TIME = 5,
+
+		-- Getting hit (once per pass, per fighter).
+		DAMAGE = 60,
+		KNOCKDOWN_TIME = 2.6, -- seconds on the ground (limp) after the hit
+		-- The body is thrown: forward with the train (× the train's speed), sideways off the
+		-- track and up.
+		FLING_FORWARD = 0.7,
+		FLING_SIDE = 55,
+		FLING_UP = 38,
+		-- The train ALWAYS kills (no knockdown, even with spawn protection; never in a duel or
+		-- a finisher's cutscene) and tears the body apart: the head, arms and legs come off and
+		-- fly with the train (× its speed for forward, plus a random spread and a lift).
+		DISMEMBER_FORWARD = 0.9,
+		DISMEMBER_SPREAD = 28,
+		DISMEMBER_UP = 30,
+
+		-- Client: camera rumble for players this close to the track (it grows as the train
+		-- gets closer) and its strongest shake (1 = 0.1 stud).
+		SHAKE_RANGE = 60,
+		SHAKE_MAX = 2.2,
+
+		-- Studio only: the first train comes after 15 s and then every 35 s, to test.
+		-- You can also force one: in the Studio command bar (server), type
+		-- workspace:SetAttribute("TrainForce", true)
+		STUDIO_FAST = true,
+	}),
+
+	-- The hidden park (Shared/Util/SafeZone, Server/Systems/Combat): nobody fights there.
+	Park = table.freeze({
+		-- true = no punch, move, grab, throw or finisher starts in the park, and nobody
+		-- standing in it can be hit (the train never goes there).
+		SAFE_ZONE = true,
+		-- The small caption shown when you walk in (Client/Controllers/SafeZoneController).
+		CAPTION = "SAFE ZONE",
+		CAPTION_SUB = "No fighting in the park",
+	}),
+
+	-- SpezCola machines (Server/Systems/SpezCola, Client/Controllers/SpezColaController):
+	-- free, purely for fun. Take a can, it drops out of the tray, PICK IT UP (it goes in your
+	-- pocket: one can at most, the machine refuses while you have one or while yours still
+	-- lies on the floor) and drink it whenever you want with Controls.USE_ITEM (R).
+	-- You keep it when knocked out or in a duel (no drinking there); it falls out when you die.
+	Cola = table.freeze({
+		COOLDOWN = 4, -- seconds between two cans for one player
+		MAX_PER_MACHINE = 4, -- cans lying around one machine (the oldest goes first)
+		MAX_TOTAL = 30, -- cans in the whole server
+		CAN_LIFETIME = 90, -- seconds before a can nobody picked up disappears
+		EMPTY_LIFETIME = 10, -- seconds an empty (crushed) can stays on the ground
+		DISPENSE_DELAY = 0.55, -- seconds between the button and the can falling (the clunk)
+		DRINK_TIME = 2.3, -- length of the "Emote_Drink" clip (Client/Animation/CombatClips)
+		DRINK_SPEED = 0.7, -- walking speed × this while drinking
+		PROMPT_DISTANCE = 8, -- studs (the machine's button)
+		DRINK_DISTANCE = 6, -- studs (the "PICK UP" prompt of a can on the ground)
 	}),
 })

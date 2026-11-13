@@ -14,6 +14,7 @@ export type PlayerStats = {
 export type PlayerSettings = {
 	firstPerson: boolean, -- false = over-the-shoulder third person
 	blockDuels: boolean, -- true = nobody can challenge you to a duel
+	music: boolean, -- false = no music (the city's outdoor music and the places' speakers)
 }
 
 -- A player's save. Everything here must be JSON-friendly (DataStores store
@@ -120,6 +121,7 @@ export type DuelEventKind =
 --   Finished  killer finished a KO'd victim
 --   Fled      victim left the game in the middle of a fight (killer gets the kill)
 --   Died      no killer (fell off the map...)
-export type KillFeedKind = "Finished" | "Fled" | "Died"
+--   Train     hit by the city's train (Knockout.killByEnvironment)
+export type KillFeedKind = "Finished" | "Fled" | "Died" | "Train"
 
 return nil

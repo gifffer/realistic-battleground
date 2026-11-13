@@ -15,9 +15,16 @@
 --   pitch           playback speed: 1 = normal, 0.8 = lower and heavier
 --   pitchVariation  each play is randomly a bit higher / lower (0.08 = ±8 %)
 --   fallback        name of another sound to use while `ids` is empty
+--   looped          (optional) a seamless LOOP (ambience beds, the train, a humming machine)
+--   music           (optional) a MUSIC slot: a PLAYLIST. Its `ids` are played one after the
+--                   other, in order, then again from the first (not at random). Music is not
+--                   preloaded at startup (big files) and follows the MUSIC setting.
+--                   Played by Client/Controllers/CityAudioController.
+--   trackVolumes    (optional, music) a volume multiplier for ONE track of the playlist that
+--                   is louder / quieter than the others: { [id] = 0.6 }
 --
 -- Every sound is played IN 3D on the character who makes it (you hear it
--- louder when close, from the right direction).
+-- louder when close, from the right direction), unless its section says otherwise.
 
 export type SoundInfo = {
 	ids: { number },
@@ -25,6 +32,9 @@ export type SoundInfo = {
 	pitch: number,
 	pitchVariation: number,
 	fallback: string?,
+	looped: boolean?,
+	music: boolean?,
+	trackVolumes: { [number]: number }?,
 }
 
 local sounds: { [string]: SoundInfo } = {
@@ -239,6 +249,130 @@ local sounds: { [string]: SoundInfo } = {
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
 	Vault = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },
 	Mantle = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 }, -- grabbing a ledge
+
+	-- Weather (played by Client/Controllers/CityAudioController and WeatherController) --------
+	-- Not in 3D: heard by you wherever you are. Empty = silent, the game still works.
+	-- The rain LOOP, MIXED on top of the outdoor music (it never replaces it). Its volume follows
+	-- the rain (fades in / out), lower under a roof and inside the bar / shops, silent in the park.
+	Rain = { ids = { 88290426489497 }, volume = 0.45, pitch = 1, pitchVariation = 0, looped = true },
+	-- The THUNDERSTORM loop: the same recording, louder and a little lower (heavier rain).
+	Storm = {
+		ids = { 88290426489497 },
+		volume = 0.8,
+		pitch = 0.92,
+		pitchVariation = 0,
+		looped = true,
+	},
+	-- A thunder clap / rumble (one shot, 2D), heard 1 to 4 s after a far flash (at 60 to 100 %
+	-- of this volume, a little lower or higher each time) and 0.15 to 0.5 s after a close one
+	-- (louder). You can add 1 or 2 more ids: a random one plays each time.
+	Thunder = { ids = { 139319051979882 }, volume = 0.85, pitch = 1, pitchVariation = 0.08 },
+
+	-- Music and city ambience (Client/Controllers/CityAudioController) ---------------------
+	-- The OUTDOOR beds: 2D, heard everywhere outside, crossfaded with the day / night cycle,
+	-- quieter when you are inside the bar or a shop, silent in the park.
+	MusicOutsideDay = {
+		ids = { 9112758265 },
+		volume = 0.32,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+		music = true,
+	},
+	MusicOutsideNight = {
+		ids = { 9112759731 },
+		volume = 0.32,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+		music = true,
+	},
+	-- The places: played IN 3D from the speakers inside (parts tagged "Speaker" with the
+	-- attribute Zone). You start to hear them about 50 studs away, muffled through the walls,
+	-- and clear once inside. Every player hears the same song at the same moment.
+	MusicBar = { -- Duffy's
+		ids = { 1847867511, 116586402120871, 1840730332, 1840684529 },
+		volume = 0.55,
+		pitch = 1,
+		pitchVariation = 0,
+		music = true,
+	},
+	MusicThreads = { -- the clothes shop (THREADBARE)
+		ids = { 9043887091, 1845764031 },
+		volume = 0.45,
+		pitch = 1,
+		pitchVariation = 0,
+		music = true,
+		trackVolumes = { [1845764031] = 0.45 }, -- this one is mastered much louder
+	},
+	MusicRewind = { -- the emote shop (REWIND)
+		ids = { 1840684529, 1841647093 },
+		volume = 0.45,
+		pitch = 1,
+		pitchVariation = 0,
+		music = true,
+	},
+	MusicPark = { -- the hidden park (always sunny, no fights)
+		ids = { 9118752742, 1846088038 },
+		volume = 0.5,
+		pitch = 1,
+		pitchVariation = 0,
+		music = true,
+	},
+
+	-- Train (Server/Systems/Train, played by Client/Controllers/TrainController) -------------
+	-- In 3D, from the tunnel portal the train comes out of, then from the train itself.
+	-- Empty = silent, the train still runs (and still kills).
+	-- A loud diesel horn (one shot): heard when the signals start blinking, and again when the
+	-- locomotive comes out of the tunnel onto the deck.
+	TrainHorn = { ids = { 138837778626202 }, volume = 1, pitch = 1, pitchVariation = 0.03 },
+	-- The heavy rolling / clattering LOOP while the train is out, louder the closer you are.
+	TrainMoving = {
+		ids = { 18940522285 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	},
+	-- Someone is hit by the train (one shot, in 3D at the impact).
+	TrainCrash = { ids = { 7340406550 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
+	-- The victim screaming in pain, on their body, right after the hit (before they respawn).
+	TrainScream = { ids = { 91948204995130 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
+
+	-- Doors (Server/Systems/CityDoors) ----------------------------------------------------
+	-- In 3D at the doorway, once per doorway (not per leaf). Empty = silent doors.
+	-- The shops' automatic glass doors sliding / swinging open, and closing again.
+	DoorGlassOpen = { ids = { 70931033029641 }, volume = 0.6, pitch = 1, pitchVariation = 0.04 },
+	DoorGlassClose = { ids = { 87017895257466 }, volume = 0.6, pitch = 1, pitchVariation = 0.04 },
+	-- Duffy's swinging saloon doors: pushed open, and flapping back shut.
+	DoorSaloonOpen = { ids = { 114086045710843 }, volume = 0.7, pitch = 1, pitchVariation = 0.06 },
+	DoorSaloonClose = { ids = { 102044262944412 }, volume = 0.6, pitch = 1, pitchVariation = 0.06 },
+
+	-- Power cut (Client/Controllers/WeatherFxController) ----------------------------------
+	-- In 3D at the substation when the power goes: a transformer blowing (a sharp bang + an
+	-- electric crackle). Empty = only the sparks and the flash.
+	TransformerBlow = {
+		ids = { 140278004623742 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.05,
+	},
+	-- 2D, while the lights stutter just before the cut: an electric buzz / crackle of the
+	-- struggling grid (cut short when the transformer blows). Also, very quiet and short, in
+	-- 3D at a stuttering street lamp near you when it cuts out. Empty = only the flickering.
+	PowerBuzz = { ids = { 115768564143330 }, volume = 0.4, pitch = 1, pitchVariation = 0.05 },
+
+	-- SpezCola machines (the free cola machines of the city) -------------------------------
+	-- The machine humming (LOOP, in 3D at the machine).
+	SpezColaHum = {
+		ids = { 171186876 },
+		volume = 0.35,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	},
+	-- The can dropping into the tray (one shot, in 3D at the machine).
+	SpezColaDrop = { ids = { 124906885034839 }, volume = 0.8, pitch = 1, pitchVariation = 0.05 },
 }
 
 return table.freeze(sounds)

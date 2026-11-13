@@ -7659,6 +7659,124 @@ end
 -- Rib shot on the victim's RIGHT side = the left one, mirrored.
 clips.HitBodyRight = mirror(clips.HitBodyLeft)
 
+-- Drinking a SpezCola (Server/Systems/SpezCola): the can is welded in the right fist like a
+-- tool (its axis runs through the fist, pointing forward and a bit inwards while the arm
+-- hangs). R6 arms have no elbow, so the whole arm swings up and INWARDS (shoulder Z ~ -55)
+-- to bring the fist in front of the mouth: the can then stands up with its top at the lips
+-- (~35 degrees), and as the arm goes on rising and the head tilts back it tips over
+-- (~60-75 degrees) into the mouth. Two small nods of the head = two gulps. Then the head
+-- comes down and the arm lowers. (The angles were solved offline so that the rim of the can
+-- touches the lips. The arm has no elbow, so at the top its inner edge brushes the jaw a
+-- little: lifting it clear would leave the can 0.2+ stud away from the mouth, which looks
+-- worse from every camera angle than an arm that hides the chin.)
+-- Upper body only (the legs keep walking: you can drink while walking, slowly).
+-- Named "Emote_..." so it is played like an emote: no fists up after it, no swing sound.
+-- Its length must match Config.Cola.DRINK_TIME.
+clips.Emote_Drink = {
+	length = 2.3,
+	looped = false,
+	keyframes = {
+		{
+			time = 0,
+			pose = {
+				Root = { rot = Vector3.new(0, 0, 0) },
+				Neck = { rot = Vector3.new(0, 0, 0) },
+				RightShoulder = { rot = Vector3.new(0, 0, 0) },
+				LeftShoulder = { rot = Vector3.new(0, 0, 0) },
+			},
+		},
+		{
+			-- the arm swings up, the eyes on the can
+			time = 0.32,
+			pose = {
+				Root = { rot = Vector3.new(0, -2, 0) },
+				Neck = { rot = Vector3.new(-6, 2, 0) },
+				RightShoulder = { rot = Vector3.new(60, -8, -34) },
+				LeftShoulder = { rot = Vector3.new(-3, 0, -3) },
+			},
+		},
+		{
+			-- the can at the lips
+			time = 0.6,
+			tangent = "flat",
+			pose = {
+				Root = { rot = Vector3.new(2, -3, 0) },
+				Neck = { rot = Vector3.new(4, 3, 0) },
+				RightShoulder = { rot = Vector3.new(92, -16, -64) },
+				LeftShoulder = { rot = Vector3.new(-4, 0, -4) },
+			},
+		},
+		{
+			-- head back, the can tips over
+			time = 0.9,
+			pose = {
+				Root = { rot = Vector3.new(5, -3, 0), pos = Vector3.new(0, 0, 0.04) },
+				Neck = { rot = Vector3.new(22, 3, 0) },
+				RightShoulder = { rot = Vector3.new(118, -12, -56) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			-- gulp 1
+			time = 1.15,
+			pose = {
+				Root = { rot = Vector3.new(6, -3, 0), pos = Vector3.new(0, 0, 0.05) },
+				Neck = { rot = Vector3.new(26, 3, 0) },
+				RightShoulder = { rot = Vector3.new(122, -10, -56) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			time = 1.32,
+			pose = {
+				Root = { rot = Vector3.new(5.5, -3, 0), pos = Vector3.new(0, 0, 0.05) },
+				Neck = { rot = Vector3.new(23, 3, 0) },
+				RightShoulder = { rot = Vector3.new(122, -10, -54) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			-- gulp 2, the last drop
+			time = 1.55,
+			tangent = "flat",
+			pose = {
+				Root = { rot = Vector3.new(7, -3, 0), pos = Vector3.new(0, 0, 0.06) },
+				Neck = { rot = Vector3.new(29, 3, 0) },
+				RightShoulder = { rot = Vector3.new(128, -6, -54) },
+				LeftShoulder = { rot = Vector3.new(-5, 0, -6) },
+			},
+		},
+		{
+			-- head down again ("ahh")
+			time = 1.82,
+			pose = {
+				Root = { rot = Vector3.new(1, -2, 0) },
+				Neck = { rot = Vector3.new(2, 2, 0) },
+				RightShoulder = { rot = Vector3.new(96, -14, -52) },
+				LeftShoulder = { rot = Vector3.new(-3, 0, -3) },
+			},
+		},
+		{
+			time = 2.05,
+			pose = {
+				Root = { rot = Vector3.new(0, -1, 0) },
+				Neck = { rot = Vector3.new(-2, 1, 0) },
+				RightShoulder = { rot = Vector3.new(40, -4, -14) },
+				LeftShoulder = { rot = Vector3.new(-1, 0, -1) },
+			},
+		},
+		{
+			time = 2.3,
+			pose = {
+				Root = { rot = Vector3.new(0, 0, 0) },
+				Neck = { rot = Vector3.new(0, 0, 0) },
+				RightShoulder = { rot = Vector3.new(0, 0, 0) },
+				LeftShoulder = { rot = Vector3.new(0, 0, 0) },
+			},
+		},
+	},
+}
+
 -- The Bouncer's clips are in their own file.
 for name, clip in require(script.Parent.BouncerClips) do
 	clips[name] = clip

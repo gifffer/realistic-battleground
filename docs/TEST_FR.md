@@ -367,6 +367,135 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 
 Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
 
+## Étape 11 — Map : Marrow District (`feature/city-map`)
+
+**Avant de tester** : vérifie dans Studio que `Lighting` → `Technology` = **Future**. Rojo le règle maintenant (`default.project.json`) ; sinon mets-le à la main (un script ne peut pas le changer). Si ce n'est pas Future, l'Output affiche un avertissement `[Ambience] Lighting.Technology is ...` : sans Future, pas de flaques de lumière sous les lampadaires ni de halo des néons.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| C1 | Lancer le jeu | Le quartier se construit en quelques secondes autour de toi (le sol et les spawns d'abord). 4 rues, 2 ruelles, carrefour avec taxi accidenté et chantier, parking « Lot 9 », terrain de basket grillagé sous un pont ferroviaire, cour de chargement, chantier, casse. Tu apparais dans une des 10 zones (rue, ruelle, parking, terrain, cour, sous le pont), jamais sur le tablier du pont. La Baseplate grise de Studio a disparu, la route n'a pas de quadrillage qui clignote. |
+| C2 | Après-midi | Ciel couvert, lumière grise et terne, brume au loin. Façades en brique sale, fenêtres en retrait (certaines condamnées ou cassées), clims, gouttières, escaliers de secours, châteaux d'eau sur les toits. |
+| C3 | Nuit (attendre ~6 min ou changer `DAY_TIME` dans `Server/Systems/Ambience`) | Lampadaires orangés (quelques-uns grésillent, d'autres sont morts), environ un tiers des fenêtres allumées (chaud, bleu télé, néon froid), néons « DUFFY'S BAR », « DELI »… |
+| C4 | Grimper | Toit du garage, de l'entrepôt, du vieux hall, puis le tablier du pont : chaque marche est un vault ou un mantle. Le pont s'atteint aussi par l'escalier et par l'échafaudage du terrain. |
+| C5 | Météo (Studio : barre de commande `workspace:SetAttribute("WeatherForce", "Rain")`, ou `"Storm"`, `"Fog"`, `"PowerCut"` la nuit) | **Pluie** : ciel plus sombre, gouttes autour de toi, flaques qui brillent, gouttières qui coulent, petit texte « RAIN » en haut à gauche. **Orage** : éclairs (flash blanc) puis tonnerre. **Brouillard** : on voit à ~90 studs. **Coupure** (nuit) : tout clignote, 40 s de noir avec des lumières de secours rouges, puis le courant revient en vague. |
+| C6 | Sans rien forcer | Un premier événement arrive 3–5 min après le lancement, puis 4–7 min de calme entre deux. |
+| C7 | En duel | Pas de texte d'événement à l'écran. |
+| C8 | Parcours de test (Studio) | Toujours là, au sud du quartier. |
+| C9 | Les 2 mannequins d'entraînement | Ils sont au milieu du terrain de basket (la Cage), debout sur le sol, éclairés. Pas sous la map. |
+| C10 | Nuit, loin des lampadaires | Ton personnage (et les autres) reste lisible : une petite lumière chaude et douce l'éclaire (seulement la nuit et pendant une coupure de courant). |
+| C11 | Nuit : toits du garage et de l'entrepôt bas, cour de chargement, ruelle, parvis de la Cage | Chaque zone de combat a sa propre lumière (projecteur, ampoule sur un fil, tube sous le pont) : plus de grande zone bleu noir. |
+| C12 | Depuis le pont, sauter vers l'entrepôt au nord (S1) | Impossible de monter sur son toit (mur invisible) : on ne sort plus de la map par là. |
+
+### Boutiques en ville (vêtements et émotes)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| S1 | Entrer dans la boutique de vêtements, s'approcher du comptoir | Au-dessus du comptoir : le nom de la boutique en petit, puis **[E] ── BROWSE CLOTHES** (style du jeu, pas la bulle grise de Roblox). Lisible même la nuit. |
+| S2 | Appuyer sur **E** | Le menu s'ouvre (animation normale) sur **SHOP**, catégorie **OUTFITS** déjà sélectionnée. Le prompt disparaît tant que le menu est ouvert. |
+| S3 | Même chose au comptoir de la boutique d'émotes | **BROWSE EMOTES** → SHOP sur **EMOTES**. Si le menu est déjà sur SHOP, la liste glisse vers la bonne catégorie. |
+| S4 | Fermer le menu (CLOSE) près du comptoir | Le prompt revient. Le menu → **SHOP** marche toujours comme avant. |
+| S5 | En duel, mort ou KO près d'un comptoir | Aucun prompt, E ne fait rien. |
+| S6 | Mobile / émulateur tactile (Studio : Device) | Le prompt affiche **TAP** ; toucher le prompt ouvre la boutique. |
+| S7 | Mannequins de la boutique de vêtements | Chacun porte une tenue du SHOP (haut + pantalon aux couleurs de GREY SWEATS, OLIVE…). S'il n'y a pas de mannequin, rien ne casse. |
+| S8 | Le bar | On peut y entrer par l'angle (porte large de 8) ; comptoir, tabourets, billard, juke-box, lumière chaude ; pas de prompt de boutique dedans. |
+
+### v4 : map plus grande, portes, graphismes
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| V1 | Se promener | La map est plus grande (~262 × 270 au lieu de ~240 × 240) : avenue et rue Kerr plus larges (chaussée et trottoirs), terrain sous le pont plus long. Toujours 10 spawns, les mannequins d'entraînement toujours dans la Cage. |
+| V2 | Marcher vers une boutique (THREADBARE, REWIND, le bar — y compris la porte arrière du bar sur la cour) | Portes vitrées doubles (cadre métal, barres de poussée) qui s'ouvrent seules vers l'intérieur quand tu arrives à ~10 studs, et se referment quand plus personne n'est près. Elles ne se referment jamais sur toi. |
+| V3 | Combat devant une porte fermée | Un corps projeté contre la porte fermée est arrêté par elle (normal). Une porte ouverte ne bloque rien. |
+| V4 | Fenêtres | Toutes les fenêtres (étages, rez-de-chaussée, arrière des immeubles) ont le même cadre : montants, linteau, appui, traverse ; celles des immeubles lointains ont au moins un appui. |
+| V5 | Voitures | Toutes les berlines (garées, taxi, épave du parking, voiture sur cric) ont le même modèle détaillé (jantes, passages de roue, rétros, calandre, plaques, joints de portes). L'épave : rouille, capot soulevé, portière enfoncée, une roue manquante. Le van a le même niveau (cabine vitrée, pare-brise incliné, phares). |
+| V6 | Mannequins de la boutique de vêtements | Mieux faits (cou, épaules, bras et jambes articulés, mains, chaussures) et chacun dans une pose : main sur la hanche, bras levé, en marche, bras croisés. Ils prennent toujours les couleurs de la tenue. |
+| V7 | Bout est de la rue Kerr (à côté de CHECKS CASHED) | Plus de « ROAD CLOSED » ni de barrières : un kiosque à journaux éclairé (« NEWS LOTTO SMOKES ») contre le mur, un banc, une vieille pub de diner en hauteur. |
+| V8 | Parcours de test (Studio) | Toujours au sud, sans chevaucher la ville (déplacé un peu plus au sud). |
+
+### v5 : portes de saloon, PNJ, train
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| N1 | Entrer chez DUFFY'S par l'entrée d'angle | Deux battants de saloon (à mi-hauteur, à lattes). Ils ne bloquent jamais : tu passes à travers, ils s'ouvrent **dans le sens opposé à toi** (~80°), restent ouverts tant que tu es dans l'embrasure, puis reviennent en battant plusieurs fois de part et d'autre avant de s'arrêter. Pareil en sortant (ils s'ouvrent vers l'extérieur). Les autres portes (vitrées) marchent comme avant. |
+| N2 | Le bar | Un barman (Duffy, tablier sombre) derrière le comptoir essuie le comptoir avec un chiffon ; 2–3 clients (tabourets, box, billard) : assis, accoudés, bras croisés ou sur leur téléphone. Tous en R6 bloc, comme des joueurs. |
+| N3 | THREADBARE et REWIND | Un vendeur derrière chaque comptoir (col à la couleur de la boutique, badge). Le prompt **[E] BROWSE…** marche toujours normalement. |
+| N4 | S'approcher d'un PNJ (moins de ~12 studs) | Il tourne la tête vers toi (doucement, jamais à 180°). À ~8 studs, bulle de chat : vendeur « Fresh threads, cheap. » / « Got moves? Pick one. », barman « What'll it be? »… Une seule fois, puis plus avant ~40 s. |
+| N5 | Frapper / utiliser un move sur un PNJ, foncer dedans | Rien : pas de dégâts, pas de verrouillage, pas de nom ni de barre de vie au-dessus, il ne bouge pas d'un pouce. |
+| T1 | Forcer un train (Studio, barre de commande côté **serveur**) : `workspace:SetAttribute("TrainForce", true)` | 5 s d'alerte : les deux signaux au bout du pont passent du vert (au repos) au rouge clignotant, la caméra tremble un peu si tu es près des voies (à moins de 60 studs). Puis une locomotive rouge (phares allumés, numéro 4417) + un wagon couvert tagué + un wagon-citerne sortent du tunnel, traversent le pont à ~70 studs/s, roues qui tournent, et rentrent dans l'autre tunnel. Le tremblement grandit quand le train approche. |
+| T2 | Rester sur la voie (même avec toute ta vie, même juste après le spawn) | **Toujours mortel** : bruit de choc, le corps est **démembré** (tête, bras, jambes arrachés, projetés avec le train, moignons rouges avec l'os, sang qui gicle, flaque sous le torse), la victime **hurle**. Tous les joueurs voient la même chose. Ta caméra suit ton torse jusqu'au respawn. |
+| T3 | Se faire frapper par quelqu'un juste avant le train | Fil des kills : « <lui> threw <toi> under a train » (il a le kill). Sinon : « <toi> was hit by a train ». |
+| T4 | Sans rien forcer | En Studio : un train ~15 s après la construction de la ville puis toutes les ~35 s. En jeu publié : 40–70 s après le lancement, puis toutes les 95–155 s, en alternant le sens. |
+| T5 | En duel | Jamais touché par le train. |
+
+| T6 | Sons du train | Klaxon au début de l'alerte puis quand la loco sort du tunnel ; bruit de roulement (en 3D) qui suit le train, plus fort quand il est proche. |
+
+### v6 : musique, parc secret, orage
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| M1 | Se promener dehors | Une musique d'ambiance douce (jour), qui passe en fondu à celle de nuit au crépuscule. |
+| M2 | Marcher vers DUFFY'S | À ~50 studs on entend la musique du bar, **étouffée** (comme à travers les murs), de plus en plus fort. En entrant : claire, la musique de dehors baisse. 3 enceintes au mur. Pareil pour THREADBARE et REWIND (2 enceintes chacune). |
+| M3 | Deux joueurs dans le bar | Même chanson au même moment pour les deux. Quand une chanson finit, la suivante de la playlist démarre. |
+| M4 | Pluie | Le bruit de pluie s'**ajoute** à la musique (elle ne la remplace pas), monte et descend avec la pluie, plus faible sous un toit et dedans. |
+| M5 | Orage (`workspace:SetAttribute("WeatherForce", "Storm")`) | Texte « THUNDERSTORM », ciel noir, pluie bien plus dense et penchée par le vent, pluie plus forte au son, éclairs fréquents (un éclair dessiné dans le ciel + flash de l'écran) toutes les ~10–25 s. |
+| M6 | Le parc secret (passage discret) | Arbres, bancs, lampadaires, allées, massifs, aucun animal. Toujours **ensoleillé** (même la nuit ou sous l'orage : la lumière change en ~1,5 s en entrant, revient en sortant), pas de pluie ni d'éclair dedans. Sa musique sort des enceintes du parc ; la musique de la ville et la pluie se coupent. |
+| M7 | Menu → SETTINGS → SOUND → Music OFF | Plus de musique (dehors, bar, boutiques, parc). Pluie, train et coups restent. Sauvegardé. |
+| M8 | En duel | Pas de musique de ville ni de pluie. |
+
+#### v6 : SpezCola, zone sûre du parc, accessoires des PNJ
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| C1 | Trouver une machine SpezCola (chez DUFFY'S ou devant, près de la Cage, dans le parc) | Grande machine rouge éclairée, logo SpezCola. De près (~3–25 studs) on entend son **bourdonnement** en 3D. |
+| C2 | Prompt **[E] GET A SPEZCOLA** (maintenir 0,3 s) | Gratuit. Le bouton s'allume, petit temps (le « clunk »), puis une **canette** tombe du bac avec un bruit et roule un peu vers toi. Max 4 canettes par machine (la plus vieille disparaît), elles disparaissent seules après ~90 s si personne ne les ramasse. |
+| C3 | La canette | Rouge, bords argentés, opercule et languette, anneau blanc, « Spez » en blanc avec une vague. |
+| C4 | Prompt **[E] PICK UP** sur la canette au sol | La canette disparaît du sol et va dans ta **poche** : en bas à droite, juste au-dessus de la liste des moves du kit, un petit emplacement apparaît : « POCKET ─── », une petite canette dessinée, « SPEZCOLA » et à droite **[R] DRINK** (la touche s'allume une fois). Sans kit : l'emplacement est à la place de la liste des moves. Tu ne bois pas tout de suite, tu peux te balader avec. |
+| C5 | Appuyer sur **R** (ou cliquer sur l'emplacement avec le curseur libre) | La canette apparaît dans la main droite, animation de boisson visible par tous (canette à la bouche, tête en arrière, deux gorgées, ~2,3 s), tu marches un peu plus lentement. À la fin elle est un peu écrasée et jetée, disparaît 10 s après. L'emplacement de la poche disparaît dès le début. R sans canette en poche : rien. |
+| C6 | **Max 1** : avec une canette en poche, regarder la machine | Le prompt dit **YOU HAVE ONE**. Le maintenir quand même : rien ne tombe, une petite ligne « ALREADY CARRYING ONE » s'affiche ~2 s près de la poche. Une canette au sol dit **POCKET FULL** (la ramasser : refusé, même ligne). |
+| C7 | **Max 1** : prendre une canette à la machine **sans la ramasser**, puis re-essayer | Le prompt de la machine dit **TAKE YOUR CAN** ; le maintenir : rien ne tombe, ligne « YOUR CAN IS ON THE FLOOR ». Une fois ta canette ramassée (ou ramassée par quelqu'un d'autre / disparue), la machine redevient « GET A SPEZCOLA » (avec toujours 4 s minimum entre deux canettes). |
+| C8 | R en duel, juste après un combat, en tenant un os (arme) | Rien ne se passe, la canette **reste** en poche. Le mot à côté de [R] est grisé et dit **NOT IN A DUEL** / **IN COMBAT** / **HANDS FULL** (et la même ligne s'affiche si on appuie). KO : la poche est cachée avec le reste du HUD, la canette est gardée. En bloquant / en attaquant : rien (le serveur refuse, la canette reste). |
+| C9 | Se faire frapper (ou frapper / bloquer / glisser) en buvant | La canette tombe, l'animation est coupée. La canette est **perdue** (pas de retour en poche). |
+| C10 | Mourir avec une canette en poche | Elle **tombe** de ta poche là où tu es mort (un petit saut sur le côté) ; n'importe qui peut la ramasser ([E] PICK UP). Tu réapparais la poche vide. Quitter le jeu : la canette est perdue. |
+| C11 | Deux joueurs : A prend une canette, B la ramasse | B l'a en poche ; A peut de nouveau utiliser la machine (sa canette n'est plus au sol). |
+| P1 | Entrer dans le parc | Petit texte discret en haut « SAFE ZONE — No fighting in the park » qui disparaît après ~3 s. |
+| P2 | Frapper / move / dash-attaque / finisher dans le parc, ou frapper quelqu'un dans le parc depuis l'extérieur | Rien : pas d'animation de coup (côté client), le serveur refuse tout, personne n'est touché ni achevé dans le parc. Le dash et le blocage marchent toujours. |
+| A1 | Regarder les PNJ de près | Cheveux en couches (frange, chignon, cheveux longs, rasé…), casquettes avec visière et bouton, bonnets avec revers, casquettes plates, casques audio, lunettes avec monture et verres (parfois solaires), boucles d'oreilles, montre, collier. Barman : tablier avec bretelles, poche (stylo, décapsuleur) et serviette sur l'épaule. Vendeurs : badge sur cordon à la couleur de la boutique. Rien ne flotte quand ils bougent. |
+
+#### v7 : sons, train, météo plus immersive
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| D1 | Mourir (train, chute, finisher, `Health = 0`) | **Plus de « oof »** de Roblox. Sous le train : on entend toujours le **fracas** et le **cri**. |
+| D2 | Attendre deux trains de suite (hors Studio) | Entre la fin d'un passage et l'alerte du suivant : **95 à 155 s** (avant 70 à 130). En Studio ça reste court (35 s). |
+| D3 | S'approcher d'une porte vitrée de boutique, puis s'éloigner | Un son d'**ouverture** (en 3D, depuis la porte) quand elle s'ouvre, un son de **fermeture** quand elle se referme. Un seul son par porte double (pas deux). Faire des allers-retours rapides : pas de son en rafale. |
+| D4 | Passer les portes de saloon de DUFFY'S | Son d'ouverture quand on les pousse ; quand on s'éloigne, son de fermeture au moment où les battants **se recroisent au milieu** (une seule fois, pas à chaque battement). |
+| R1 | Pluie, dehors à découvert (`WeatherForce = "Rain"`) | **Rarement** (toutes les ~6–12 s), 1–2 petites **gouttes sur l'écran** sur les côtés ou en haut (jamais au centre), elles glissent un peu vers le bas et sèchent en 1–3 s. Un peu plus souvent en orage. **Aucune** sous un auvent, sous le viaduc, dans le bar / une boutique, dans le parc, en duel. |
+| R2 | Pluie, regarder une flaque proche | Petits **cercles** qui s'ouvrent et disparaissent à la surface. |
+| R3 | Pluie, rester dehors en 3ᵉ personne | Petites éclaboussures sur la **tête et les épaules** de ton perso. En 1ʳᵉ personne : pas d'éclaboussures devant l'objectif. |
+| R4 | Pluie / orage, regarder la pluie quelques secondes | Les gouttes tombent **penchées** (un peu sous la pluie, beaucoup en orage) et de temps en temps une **rafale** les penche plus fort 1–3 s. |
+| R5 | Orage : regarder les éclairs | L'éclair tombe dans une direction au hasard (souvent devant toi), le flash est **bleuté** et éclaire tout l'écran. Environ 1 sur 5 tombe **près** : flash plus fort, la rue s'éclaire un instant, la caméra **tremble** un peu, et le tonnerre claque presque tout de suite. |
+| F1 | Brouillard (`WeatherForce = "Fog"`) | Une **nappe basse** qui dérive lentement au ras du sol autour de toi (pas dans le bar / les boutiques ni dans le parc), un **halo** doux autour des lampadaires allumés, la musique et la pluie de la ville un peu **étouffées**. Tout revient à la normale à la fin. |
+| F2 | Coupure de courant (de nuit : `WeatherForce = "PowerCut"`) | Les lumières **grésillent / clignotent ~3,5 s** (son `PowerBuzz`), puis le transformateur de la **sous-station** (nord du Lot 9) **saute** : gerbe d'**étincelles**, fumée, flash bleu-blanc (son `TransformerBlow`). Pendant le noir, les lumières rouges de secours **pulsent** doucement. Le retour en vague marche comme avant. |
+| F3 | Être dans le parc pendant pluie / brouillard / coupure | Rien de tout ça : toujours ensoleillé, pas de gouttes, pas de brume, pas d'étincelles. |
+
+#### v8 : pluie réaliste sur l'écran, tonnerre, transformateur, grésillement
+
+(R1 ci-dessus est remplacé par ces tests. Avant : importer les images de `assets/raindrops/`, voir `docs/RAIN_FR.md`.)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L1 | Pluie **sans** les IDs d'images (tous à `0`) | **Aucune** goutte sur l'écran (plus les petites taches rondes). Le reste de la pluie marche. |
+| L2 | Pluie, dehors à découvert, IDs collés | De temps en temps (≈ 1 goutte toutes les 3 s) une **vraie goutte d'eau** se pose, surtout sur les côtés / en haut, presque jamais au centre : reflet en haut à gauche, bord sombre, bas plus clair, on voit le jeu à travers. Elle apparaît d'un coup (petite puis à sa taille). |
+| L3 | Rester 30 s à 1 min sous la pluie | Les gouttes restent en place et **grossissent** doucement ; deux gouttes qui se touchent **fusionnent** ; une grosse goutte finit par **couler** vers le bas (de plus en plus vite, en zigzaguant un peu) avec une courte **traînée** mouillée, et sort de l'écran. Jamais plus de 25 gouttes. |
+| L4 | Orage (`"Storm"`) | Plus de gouttes, et sur les **bords** de l'écran une **buée** de minuscules gouttelettes + un léger voile humide qui apparaissent en ~10–20 s. Le centre reste net. |
+| L5 | Passer sous un auvent / le viaduc, entrer dans le bar ou une boutique | Tout **sèche** en 2–4 s (les gouttes pâlissent et rétrécissent, la buée s'efface). Ressortir : ça recommence petit à petit. |
+| L6 | Entrer dans le parc, ou lancer un duel, avec des gouttes à l'écran | Tout **disparaît d'un coup**. |
+| L7 | Orage : attendre un éclair | Le **tonnerre** se fait entendre 1 à 4 s après un éclair lointain (plus ou moins fort), presque tout de suite et plus fort après un éclair proche. |
+| L8 | Coupure de courant (nuit, `"PowerCut"`) | Pendant les ~3,5 s de clignotement : un **grésillement électrique** ; il se coupe net quand le **transformateur saute** (bang + crépitement, en 3D depuis la sous-station, plus faible si tu es loin). |
+| L9 | Nuit, se tenir près d'un lampadaire qui grésille (il se coupe une fraction de seconde de temps en temps) | Un petit **crépitement** très discret à chaque coupure (pas plus d'un toutes les 2,5 s), rien si tu es à plus de ~25 studs. |
+
+Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
+
 ## Kit Bouncer / Videur (`claude/bouncer-kit`)
 
 **Ré-importer `assets/wounds/WoundKit.fbx` avant** (Import 3D dans `Assets > Wounds`, voir `WOUNDS_FR.md`) : il contient les pièces du bras arraché et l'os entier.

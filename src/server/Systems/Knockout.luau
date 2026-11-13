@@ -53,6 +53,9 @@ type FighterInfo = {
 	lastPlayerHitAt: number,
 	protectionToken: number,
 	dead: boolean,
+	-- What killed them when it was not a fighter (Knockout.killByEnvironment): the kill
+	-- feed says so ("was hit by a train"). nil = an ordinary death.
+	deathCause: Types.KillFeedKind?,
 }
 
 local Knockout = {}
@@ -284,7 +287,9 @@ local function onDied(info: FighterInfo)
 	if inDuel(info) then
 		return
 	end
-	local kind: Types.KillFeedKind = if info.finishedBy then "Finished" else "Died"
+	local kind: Types.KillFeedKind = if info.finishedBy
+		then "Finished"
+		else info.deathCause or "Died"
 	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
 	rewardKill(killer, killerPlayer, info, kind)
 end
@@ -316,6 +321,7 @@ function Knockout.register(model: Model, player: Player?)
 		lastPlayerHitAt = -math.huge,
 		protectionToken = 0,
 		dead = false,
+		deathCause = nil,
 	}
 	fighters[model] = info
 	setAttribute(model, "KnockedOut", false)
@@ -482,6 +488,23 @@ function Knockout.finish(victim: Model, attacker: Model)
 		return
 	end
 	info.humanoid.Health = 0 -- → Humanoid.Died → onDied (kill credit, feed)
+end
+
+-- Killed by the world, not by a fighter (the train: Server/Systems/Train via
+-- Combat.environmentHit). `cause` is the kill-feed kind ("Train"): the line reads
+-- "<victim> was hit by a train". Like any other death, the kill still goes to whoever
+-- hit them in the last COMBAT_TAG_TIME seconds (you can punch someone under the train),
+-- otherwise to nobody. Does nothing in a duel, or to someone already dead.
+-- Returns true if it killed them.
+function Knockout.killByEnvironment(victim: Model, cause: Types.KillFeedKind): boolean
+	local info = fighters[victim]
+	if info == nil or info.dead or inDuel(info) then
+		return false
+	end
+	info.deathCause = cause
+	info.koToken += 1 -- a pending get-up is cancelled
+	info.humanoid.Health = 0 -- → Humanoid.Died → onDied (feed, kill credit)
+	return true
 end
 
 -- `callback(model)` when a KO'd fighter gets back up.
