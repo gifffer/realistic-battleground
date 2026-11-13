@@ -15,7 +15,8 @@
 --     line along the way it flew, and the blood gathers into a pool there;
 --   • it runs down the body from the wound, in runs that lengthen, and
 --     soaks into the clothes;
---   • a pool spreads under it, faster at first, flowing downhill;
+--   • a pool spreads under it, faster at first, flowing downhill, and
+--     keeps creeping outward a while after it stops (BloodPool);
 --   • whoever is right there gets it on them (dark spots on his front, his
 --     arms).
 --
@@ -636,15 +637,14 @@ end
 -- The finishers' big pools
 ------------------------------------------------------------------------------
 
--- How big the pool of `wound` gets: studs across, and the round part's
--- radius limit / the area (studs²) to pour so it grows to about that size
--- (BloodPool's pools spread thinner and thinner: R · (1 - e^(-r/R))).
+-- How big the pool of `wound` gets once it has spread: studs across, the
+-- front's radius then, and the area (studs²) to pour for it (BloodPool
+-- spreads that area: its front gets there CREEP seconds after the wound
+-- stops, its fingers run on beyond it).
 local function poolSize(wound: Wound): (number, number, number)
 	local size = FINISHER_POOLS.SIZE_PER_LITRE * math.sqrt(math.max(wound.LITRES, 0))
 	local radius = size / 2
-	local R = radius * 1.1
-	local plain = -R * math.log(1 - 0.85 * radius / R)
-	return size, R, math.pi * plain * plain
+	return size, radius, math.pi * radius * radius
 end
 
 -- How much flows out at each tick (STUMP_TICK) of `wound`, adding up to
@@ -726,6 +726,8 @@ function BloodGush.stump(
 	local opts: StumpOptions = options or {}
 	local _, R, area = poolSize(wound)
 	local amounts = schedule(wound, area)
+	-- (its pool keeps spreading this long after the first blood reaches it)
+	local spreadTime = wound.SECONDS + FINISHER_POOLS.CREEP
 	local random = Random.new(seed)
 	local key = { stump = seed } -- (its own pool; it merges with those it meets)
 	task.spawn(function()
@@ -818,7 +820,7 @@ function BloodGush.stump(
 			if hit.Material == Enum.Material.Water then
 				continue -- (washed away)
 			end
-			BloodPool.pour(key, hit, amount + carried, R, seed)
+			BloodPool.pour(key, hit, amount + carried, R, seed, spreadTime)
 			carried = 0
 			-- oozing (after the spurts): drops falling off the wound into it
 			local t = now - start
