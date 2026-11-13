@@ -113,6 +113,9 @@ return table.freeze({
 		-- CollectionService tag on every model that can fight (players and
 		-- training dummies), so clients can find them for visual effects.
 		TAG = "Combatant",
+		-- Tag on the bodies left by a finisher after their player respawned
+		-- (Server/Systems/Corpses): clients draw their wounds, nothing else.
+		CORPSE_TAG = "Corpse",
 
 		-- M1 combo: damage of hits 1, 2, 3 and 4 (the 4th is the "finisher").
 		M1_DAMAGE = table.freeze({ 5, 5, 5, 8 }),
@@ -340,6 +343,10 @@ return table.freeze({
 		FINISH_DURATION = 1.1, -- the finisher animation; can't attack meanwhile
 		KILL_HEAL = 35, -- health given to the killer
 		RESPAWN_TIME = 5,
+		-- A player killed by a finisher: their body stays where it fell this
+		-- long after the killing blow (a frozen copy, Server/Systems/Corpses),
+		-- even though they respawn after RESPAWN_TIME.
+		FINISHER_BODY_TIME = 10,
 		SPAWN_PROTECTION = 3, -- invulnerable after spawning (ends if you attack)
 		-- Hit by someone less than this long ago = "in combat": leaving the
 		-- game counts as a death and gives them the kill.

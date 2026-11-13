@@ -352,6 +352,7 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
 | F8 | Pendant la cinématique | Impossible de dasher, bloquer ou attaquer ; on ne peut pas lancer un duel avec l'attaquant. |
 | F9 | Un joueur qui arrive après (ou qui était loin) | Il voit le corps sans tête, le cou ouvert, sans l'explosion. |
+| F10 | Achever un **2ᵉ joueur** (n'importe quel finisher), puis regarder son corps | Il réapparaît après 5 s, mais son **corps reste** là où il est tombé jusqu'à **10 s** après le coup final (`Config.Knockout.FINISHER_BODY_TIME`), puis disparaît. Les blessures restent dessinées (tête explosée, trou, bras arraché, tête calcinée, coupures, bleus) et les morceaux au sol (crâne, foie) restent aussi longtemps. Le corps est figé : on passe à travers, on ne peut ni le frapper ni le cibler, il n'a ni nom ni barre de vie, il ne bloque ni les coups ni les lasers. Un Bull mort garde ses cornes mais ne souffle plus. Dans l'Explorer : un modèle dans `Workspace > Corpses` (tag `Corpse`, pas `Combatant`). Les mannequins, eux, restent 25 s comme avant. |
 
 ### Bleus
 

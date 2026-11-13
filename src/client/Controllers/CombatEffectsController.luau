@@ -232,6 +232,18 @@ local function onCombatantAdded(instance: Instance)
 	end
 end
 
+-- A body left by a finisher (Server/Systems/Corpses): a frozen copy of a
+-- dead fighter, not a fighter. Only its wounds are drawn again (bruises,
+-- cuts, a burst head, a torn arm...), as for any body seen late.
+local corpses: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local function onCorpseAdded(instance: Instance)
+	if not instance:IsA("Model") or corpses[instance] then
+		return
+	end
+	corpses[instance] = true
+	Wounds.watch(instance)
+end
+
 local function onCombatantRemoved(instance: Instance)
 	if instance:IsA("Model") then
 		visuals[instance] = nil
@@ -876,6 +888,11 @@ function CombatEffectsController.start()
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)
 	for _, instance in CollectionService:GetTagged(tag) do
 		onCombatantAdded(instance)
+	end
+	local corpseTag = Config.Combat.CORPSE_TAG
+	CollectionService:GetInstanceAddedSignal(corpseTag):Connect(onCorpseAdded)
+	for _, instance in CollectionService:GetTagged(corpseTag) do
+		onCorpseAdded(instance)
 	end
 
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)

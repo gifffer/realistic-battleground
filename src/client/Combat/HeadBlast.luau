@@ -26,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Corpse = require(ReplicatedStorage.Shared.Util.Corpse)
 local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local Blood = require(script.Parent.Blood)
@@ -602,14 +603,21 @@ local function keepPiece(piece: BasePart)
 				return
 			end
 			gone = true
-			-- (every layer: a soft piece shows through its welded copy)
-			local fade = TweenInfo.new(0.6)
-			for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
-				if item:IsA("BasePart") and item.Transparency < 1 then
-					TweenService:Create(item, fade, { Transparency = 1 }):Play()
+			-- (a body left by a finisher stays a while longer, as a copy:
+			-- Server/Systems/Corpses; its pieces stay as long)
+			task.delay(Corpse.timeLeft(body), function()
+				if not piece.Parent then
+					return
 				end
-			end
-			Debris:AddItem(piece, 0.65)
+				-- (every layer: a soft piece shows through its welded copy)
+				local fade = TweenInfo.new(0.6)
+				for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+					if item:IsA("BasePart") and item.Transparency < 1 then
+						TweenService:Create(item, fade, { Transparency = 1 }):Play()
+					end
+				end
+				Debris:AddItem(piece, 0.65)
+			end)
 		end
 		body.Destroying:Once(remove)
 		local watch: RBXScriptConnection? = nil

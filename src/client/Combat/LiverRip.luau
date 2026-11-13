@@ -16,7 +16,9 @@
 -- the kill (Gashes draws it, through the clothes).
 
 local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Corpse = require(ReplicatedStorage.Shared.Util.Corpse)
 local GoreKit = require(script.Parent.GoreKit)
 local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
@@ -224,11 +226,19 @@ function LiverRip.rip(victim: Model, attacker: Model)
 		end
 	end)
 	Debris:AddItem(liver, LIFETIME + 6)
-	-- (it stays until the body it came from is removed)
+	-- (it stays until the body it came from is removed; a body left by a
+	-- finisher stays a while longer, as a copy: Server/Systems/Corpses)
+	local gone = false
 	local function remove()
-		if liver.Parent and not liver:FindFirstChild("Held") then
-			liver:Destroy()
+		if gone then
+			return
 		end
+		gone = true
+		task.delay(Corpse.timeLeft(victim), function()
+			if liver.Parent and not liver:FindFirstChild("Held") then
+				liver:Destroy()
+			end
+		end)
 	end
 	victim.Destroying:Once(remove)
 	victim.AncestryChanged:Connect(function()
