@@ -30,6 +30,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Ragdoll = require(script.Parent.Parent.Ragdoll)
 local Hitbox = require(script.Parent.Hitbox)
+local Rewind = require(script.Parent.Rewind)
 local State = require(script.Parent.State)
 
 type CombatState = State.CombatState
@@ -50,6 +51,10 @@ local Grab = {}
 
 -- A stun left on a victim let go early (the hold ended before its time).
 local LET_GO_STUN = 0.3
+-- A victim caught only where the grabber saw him (lag compensation) is
+-- still caught if he is now at most this far (studs) past the far end of
+-- the box: no long pull back across the gap he already ran.
+local GRAB_REWIND_SLACK = 2
 
 -- Flat (turned around Y only) CFrame of a root part.
 local function flat(root: BasePart): CFrame
@@ -247,20 +252,34 @@ function Grab.run(
 	grab: Kits.GrabDef,
 	token: number
 )
+	local dueAt = tools.now() + grab.at
 	task.delay(grab.at, function()
 		if state.attackToken ~= token or not tools.isAlive(state) then
 			return -- stunned during the reach (a punch beats a grab)
 		end
 		-- The nearest fighter in reach who can be caught.
 		local box = state.root.CFrame * CFrame.new(0, 0, -grab.forward)
-		local victims = Hitbox.query(box, grab.hitbox, state.model)
+		-- (also where he saw them: lag compensation, see Rewind)
+		local time = tools.now()
+		local rewind = Rewind.amount(state.player, time - dueAt)
+		local victims, _, _, ageByModel = Hitbox.query(box, grab.hitbox, state.model, rewind)
+		-- One caught only where he was (not in the box now) is pulled into
+		-- the hold from where he is: only if that is still within reach,
+		-- not yanked back across the gap he already ran on his screen.
+		local holdReach = grab.forward + grab.hitbox.Z / 2 + GRAB_REWIND_SLACK
 		local target: CombatState? = nil
 		local best = math.huge
-		local time = tools.now()
 		for _, model in victims do
 			local candidate = tools.getState(model)
+			local inReach = candidate ~= nil
+				and (
+					ageByModel[model] == nil
+					or (candidate.root.Position - state.root.Position).Magnitude <= holdReach
+				)
 			if
 				candidate
+				and inReach
+				and candidate.owner == nil -- (Dr. Rift's clones vanish when touched)
 				and tools.isAlive(candidate)
 				and not Knockout.isKnockedOut(model)
 				and candidate.holding == nil
@@ -292,6 +311,7 @@ function Grab.run(
 			bloodChance = {},
 			moveId = move.id,
 			grab = true,
+			rewound = ageByModel[target.model],
 		})
 		if
 			not caught

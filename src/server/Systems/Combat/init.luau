@@ -12,7 +12,9 @@
 --      Then the combo advances (hits 1 → 2 → 3 → 4 → 1...).
 --   3. After HIT_DELAY (the wind-up) the server puts a hitbox in front of
 --      the attacker. If the attacker got stunned meanwhile, the hit is
---      cancelled.
+--      cancelled. The victims are tested where they are AND where the
+--      attacker saw them (his ping ago, bounded: lag compensation, see
+--      Combat/Rewind.luau).
 --   4. For each model in the hitbox, resolveHit decides: dodged? parried?
 --      blocked? guard broken? or a normal hit (damage + stun, knockback on
 --      the 4th hit). Then Remotes.CombatEvent tells every client so they
@@ -70,8 +72,11 @@ local Movement = require(script.Parent.Movement)
 local PlayerData = require(script.Parent.PlayerData)
 local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
+local Clones = require(script.Clones)
+local Gadgets = require(script.Gadgets)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
+local Rewind = require(script.Rewind)
 local State = require(script.State)
 
 local C = Config.Combat
@@ -225,8 +230,13 @@ end
 -- Damage that would bring the victim to 0 HP knocks them out instead
 -- (Knockout), it never kills directly. `attacker` = nil for damage over
 -- time whose author is gone (bleeding).
-local function dealDamage(victim: CombatState, attacker: CombatState?, amount: number)
-	local attackerModel = if attacker then attacker.model else victim.bleedSource
+local function dealDamage(
+	victim: CombatState,
+	attacker: CombatState?,
+	amount: number,
+	source: Model?
+)
+	local attackerModel = if attacker then attacker.model else (source or victim.bleedSource)
 	if attackerModel then
 		Knockout.noteHit(victim.model, attackerModel)
 	end
@@ -272,6 +282,29 @@ local function startBleeding(
 	)
 end
 
+-- Starts (or strengthens) a burn (acid / fire): like bleeding, its own slot.
+local function startBurning(
+	victim: CombatState,
+	attacker: CombatState,
+	kind: string,
+	perSecond: number,
+	duration: number
+)
+	local time = now()
+	local burning = time < victim.burnUntil
+	victim.burnPerSecond = math.max(perSecond, if burning then victim.burnPerSecond else 0)
+	victim.burnUntil = math.max(victim.burnUntil, time + duration)
+	if not burning then
+		-- (an ongoing burn keeps its ticks: refreshing it, standing in a
+		-- puddle, must not push them back forever)
+		victim.nextBurnTick = time + KC.BLEED_TICK
+	end
+	victim.burnSource = attacker.model
+	victim.burnKind = kind
+	-- (clients: smoke, bubbling skin, the burn marks; Client/Combat/RiftFx)
+	setAttribute(victim.model, "Burning", kind)
+end
+
 -- Injuries left by a hit that landed (step 5):
 --   • a bruise where it landed (addBruise, "Bruise_<Part>_<n>"),
 --   • damage on the legs adds up: past LIMP_LEG_DAMAGE the fighter limps.
@@ -292,9 +325,19 @@ local function injure(
 		-- The leg on the side the kick came from (from the front: the right one).
 		part = if side == "Left" then "Left Leg" else "Right Leg"
 		victim.legDamage += damage
-		if not victim.limping and victim.legDamage >= INJ.LIMP_LEG_DAMAGE then
-			victim.limping = true
-			setAttribute(victim.model, "Limping", true)
+		if part == "Left Leg" then
+			victim.leftLegDamage += damage
+		end
+		if victim.legDamage >= INJ.LIMP_LEG_DAMAGE then
+			-- The limp favours the leg that took the most ("LimpLeg": which
+			-- one hurts, for the walk every client draws). Checked on every leg
+			-- hit, so it moves to the other leg if that one overtakes.
+			local left = victim.leftLegDamage * 2 > victim.legDamage
+			setAttribute(victim.model, "LimpLeg", if left then "Left" else "Right")
+			if not victim.limping then
+				victim.limping = true
+				setAttribute(victim.model, "Limping", true)
+			end
 		end
 	end
 	if mark then
@@ -604,8 +647,10 @@ end
 -- A kill (or nothing at all, see onKill): every injury is healed.
 local function healInjuries(state: CombatState)
 	state.legDamage = 0
+	state.leftLegDamage = 0
 	state.limping = false
 	setAttribute(state.model, "Limping", false)
+	setAttribute(state.model, "LimpLeg", nil)
 	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
 		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
@@ -742,11 +787,21 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	if isAwakened(attacker) and awakening and awakening.awakening then
 		damage *= awakening.awakening.damageMultiplier
 	end
+	-- A clone hits for a share of its owner.
+	damage *= Clones.damageScale(attacker)
 	-- A heavy build (Bouncer) takes less from every hit.
 	local victimKit = Kits.get(victim.kitId)
 	if victimKit and victimKit.damageTaken then
 		damage *= victimKit.damageTaken
 	end
+
+	-- 0a. Dr. Rift's clones (Combat/Clones): never against their own side.
+	-- Their hits are dealt in their owner's name (the KO, the Fury).
+	local side0 = attacker.owner or attacker
+	if (victim.owner or victim) == side0 then
+		return false
+	end
+	local credit = if attacker.owner and isAlive(attacker.owner) then attacker.owner else attacker
 
 	-- 0. Not in the same fight: a duel is only between its two fighters
 	-- ("DuelId" attribute, nil for everyone in the free arena).
@@ -767,8 +822,17 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
-	-- 1. Dash dodge frames: the hit misses.
-	if time < victim.invulnerableUntil then
+	-- 0c. One of Dr. Rift's clones: the first blow that reaches it sends it
+	-- back through a portal (no damage, no dodge, no guard).
+	if victim.owner then
+		event(spec.kind, true, true)
+		Clones.dispel(victim)
+		return true
+	end
+
+	-- 1. Dash dodge frames: the hit misses. (Caught where he was a moment
+	-- ago: dodge frames at any time since then count, see HitSpec.rewound.)
+	if time - (spec.rewound or 0) < victim.invulnerableUntil then
 		event("Dodged", false, false)
 		return false
 	end
@@ -818,7 +882,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 				event("GuardBreak", false, true)
 				return false
 			end
-			dealDamage(victim, attacker, damage * (1 - C.BLOCK_REDUCTION))
+			dealDamage(victim, credit, damage * (1 - C.BLOCK_REDUCTION))
 			-- The guard absorbs the hit but is still shoved back a little.
 			if time >= victim.knockbackUntil then
 				Push.apply(
@@ -833,7 +897,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 
 	-- 4. Normal hit.
-	dealDamage(victim, attacker, damage)
+	dealDamage(victim, credit, damage)
 
 	-- Blood: rolled here, so every client shows the same thing. Fists rarely
 	-- draw blood; the bottle's moves set their own (high) chance. The 4th M1
@@ -901,13 +965,17 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		bleed = INJ.CRIT_BLEED
 	end
 	if bleed then
-		startBleeding(victim, attacker, bleed.perSecond, bleed.duration)
+		startBleeding(victim, credit, bleed.perSecond, bleed.duration)
 		-- Where it bleeds from (the drops fall from there, see KitEffects).
 		setAttribute(
 			victim.model,
 			"BleedPart",
 			if zone == "Head" then "Head" elseif zone == "Legs" then "Right Leg" else "Torso"
 		)
+	end
+	local burn = spec.burn
+	if burn then
+		startBurning(victim, credit, burn.kind, burn.perSecond, burn.duration)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
 	injure(
@@ -926,6 +994,14 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 
 	local away = awayFromAttacker(attacker, victim)
+	local blast = spec.pushFrom
+	if blast then
+		local offset = victim.root.Position - blast
+		local flat = Vector3.new(offset.X, 0, offset.Z)
+		if flat.Magnitude > 1e-3 then
+			away = flat.Unit
+		end
+	end
 	local extraStun = if spec.headStun and zone == "Head" then C.HEAD_EXTRA_STUN else 0
 	local knockdown = spec.knockdown
 	local knockback = spec.knockback
@@ -1006,6 +1082,7 @@ function Combat.register(model: Model, player: Player?)
 		knockdownToken = 0,
 		knockedDownUntil = 0,
 		legDamage = 0,
+		leftLegDamage = 0,
 		limping = false,
 		lastDamagedAt = -math.huge,
 		regenCarry = 0,
@@ -1015,6 +1092,12 @@ function Combat.register(model: Model, player: Player?)
 		holding = nil,
 		heldBy = nil,
 		weapon = nil,
+		burnPerSecond = 0,
+		burnUntil = 0,
+		nextBurnTick = 0,
+		burnSource = nil,
+		burnKind = nil,
+		owner = nil,
 	}
 	model:SetAttribute("Blocking", false)
 	model:SetAttribute("Stunned", false)
@@ -1022,6 +1105,7 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Awakened", false)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
+	model:SetAttribute("LimpLeg", nil)
 	-- A player fights with the kit saved in their profile.
 	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
@@ -1030,10 +1114,13 @@ function Combat.register(model: Model, player: Player?)
 	Combat.setKit(model, if usable and data then data.equippedKit else Kits.DEFAULT)
 	CollectionService:AddTag(model, C.TAG)
 	Knockout.register(model, player)
+	-- Where it stands, frame by frame (lag compensation, Combat/Rewind).
+	Rewind.track(model, root)
 
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
 			states[model] = nil
+			Rewind.untrack(model)
 		end
 	end)
 end
@@ -1044,9 +1131,13 @@ local function blowHead(victim: Model)
 	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
 end
 
--- The Boxer's finisher: the liver torn out under the right ribs. A "Tear"
--- cut (Gashes draws the hole, broken ribs in it, through the clothes).
-local function tearLiverOut(victim: Model)
+-- The Boxer's finisher: the hand goes in under the right ribs ("Gut"), the
+-- liver is torn out. A "Tear" cut at Finishers.LIVER_WOUND (Gashes draws
+-- the hole, broken ribs in it, through the clothes): a free slot, else over
+-- the first cut. Its old value (or false) is written in `before` once, to be
+-- put back if the finisher is cut short before the kill. Returns the
+-- attribute it set.
+local function tearLiverOut(victim: Model, before: { [string]: any }): string
 	local index = 1
 	for candidate = 1, Gash.MAX_PER_PART do
 		if victim:GetAttribute(Gash.attribute("Torso", candidate)) == nil then
@@ -1054,17 +1145,23 @@ local function tearLiverOut(victim: Model)
 			break
 		end
 	end
+	local name = Gash.attribute("Torso", index)
+	if before[name] == nil then
+		local old = victim:GetAttribute(name)
+		before[name] = if old == nil then false else old
+	end
 	setAttribute(
 		victim,
-		Gash.attribute("Torso", index),
+		name,
 		Gash.encode({
 			kind = "Tear",
 			size = "L",
-			point = Vector3.new(0.5, -0.3, -0.5), -- its right, under the ribs, in front
+			point = Finishers.LIVER_WOUND,
 			angle = 0,
 			seed = random:NextInteger(1, 2 ^ 30),
 		})
 	)
+	return name
 end
 
 -- The Bull's finisher: his horns go into the ribcage. One big "Tear" (two
@@ -1534,6 +1631,79 @@ end
 -- still (anchored) for the cutscene, the attacker can't be touched, the
 -- victim dies at the killing blow. Every client plays the camera / effects
 -- from Remotes.FinisherStarted.
+-- PortalCut (Dr. Rift): the portal closed round their waist. The body is
+-- cut in two at the bottom of the torso: the upper body (torso, head,
+-- arms) falls back off the legs; the legs stay standing (welded to the
+-- anchored root) for `foldIn` seconds, then fold. Every part stays in the
+-- body's model (its clothes keep showing). "CutInHalf" = the seed of the
+-- gore every client draws (Client/Combat/WaistCut).
+local function cutInHalf(victim: Model, anchor: CFrame, foldIn: number)
+	local root = victim:FindFirstChild("HumanoidRootPart")
+	local torso = victim:FindFirstChild("Torso")
+	if not (root and root:IsA("BasePart") and torso and torso:IsA("BasePart")) then
+		return
+	end
+	-- The legs, held where they stand: welded to the (anchored) root.
+	local legs: { BasePart } = {}
+	for _, name in { "Right Leg", "Left Leg" } do
+		local leg = victim:FindFirstChild(name)
+		if leg and leg:IsA("BasePart") then
+			table.insert(legs, leg)
+			local weld = Instance.new("Weld")
+			weld.Name = "CutLegHold"
+			weld.Part0 = root
+			weld.Part1 = leg
+			weld.C0 = root.CFrame:ToObjectSpace(leg.CFrame)
+			weld.Parent = root
+		end
+	end
+	Ragdoll.enable(victim) -- (arms and head on their sockets: limp)
+	-- Off the torso: the hip joints and their ragdoll sockets...
+	for _, name in { "Right Hip", "Left Hip" } do
+		for _, childName in { name, "Ragdoll_" .. name, "Ragdoll_" .. name .. "0" } do
+			local child = torso:FindFirstChild(childName)
+			if child then
+				child:Destroy()
+			end
+		end
+	end
+	for _, leg in legs do
+		for _, child in leg:GetChildren() do
+			if string.match(child.Name, "^Ragdoll_.- Hip1$") then
+				child:Destroy()
+			end
+		end
+		leg.CanCollide = true
+		leg.Massless = false
+	end
+	-- ...and off the root: the upper body is free.
+	local rootJoint = root:FindFirstChild("RootJoint")
+	if rootJoint then
+		rootJoint:Destroy()
+	end
+	root.Anchored = true
+	victim:SetAttribute("CutInHalf", random:NextInteger(1, 2 ^ 30))
+	if torso:CanSetNetworkOwnership() then
+		torso:SetNetworkOwner(nil)
+	end
+	-- It falls back, away from him, turning over.
+	local away = (anchor.LookVector * Vector3.new(1, 0, 1)).Unit
+	torso.AssemblyLinearVelocity = away * 9 + Vector3.new(0, 7, 0)
+	torso.AssemblyAngularVelocity = anchor.RightVector * -5
+	-- Then the legs give way.
+	task.delay(foldIn, function()
+		if root.Parent == nil then
+			return
+		end
+		root.Anchored = false
+		if root:CanSetNetworkOwnership() then
+			root:SetNetworkOwner(nil)
+		end
+		root.AssemblyLinearVelocity = away * 2
+		root.AssemblyAngularVelocity = anchor.RightVector * -2.5
+	end)
+end
+
 local function startCinematic(
 	state: CombatState,
 	target: Model,
@@ -1767,7 +1937,7 @@ local function startCinematic(
 		toward = if toward.Magnitude > 0.1 then toward.Unit else root.CFrame.LookVector
 		anchor = CFrame.lookAt(root.Position, root.Position + toward)
 		victimPlace = anchor
-			* CFrame.new(0, 0, -Finishers.HOLD_DISTANCE)
+			* CFrame.new(0, 0, -(cinematic.distance or Finishers.HOLD_DISTANCE))
 			* CFrame.Angles(0, math.pi, 0)
 	end
 	-- ("charge": his root waits where he will end; every client shows his
@@ -1893,6 +2063,28 @@ local function startCinematic(
 			end
 		end)
 	end
+	-- (the Boxer's: the hole opens as the hand goes in, "Gut"; cut short
+	-- before the kill, it closes again)
+	local liverAttribute: string? = nil
+	if cinematic.id == "KnockoutCombo" then
+		local gutAt = cinematic.kill
+		for _, event in cinematic.events do
+			if event.kind == "Gut" then
+				gutAt = event.time
+			end
+		end
+		task.delay(math.min(gutAt, cinematic.kill), function()
+			if
+				not over
+				and liverAttribute == nil
+				and target.Parent
+				and state.attackToken == token
+				and isAlive(state)
+			then
+				liverAttribute = tearLiverOut(target, woundsBefore)
+			end
+		end)
+	end
 	task.delay(cinematic.kill, function()
 		if over then
 			return
@@ -1902,7 +2094,8 @@ local function startCinematic(
 			return
 		end
 		killed = true
-		if victimPlace then
+		local cut = cinematic.id == "PortalCut" and victimPlace ~= nil
+		if victimPlace and not cut then
 			-- Limp: it folds and drops where it stands (where its clip left
 			-- it: held up, slammed down...).
 			local pose = KILL_POSE[cinematic.id]
@@ -1918,7 +2111,9 @@ local function startCinematic(
 			if cinematic.id == "Bat" then
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
-				tearLiverOut(target)
+				if liverAttribute == nil then
+					liverAttribute = tearLiverOut(target, woundsBefore)
+				end
 			elseif cinematic.id == "Incinerate" then
 				-- (every client lets the hole smoke and cool down, from when
 				-- the beam stopped: KitVFX, bodies seen later too)
@@ -1941,10 +2136,27 @@ local function startCinematic(
 					end
 				end
 				tearArmOff(target, state.model, anchor, throwIn)
+			elseif cut then
+				local foldIn: number? = nil
+				for _, event in cinematic.events do
+					if event.kind == "Fold" then
+						foldIn = event.time - cinematic.kill
+					end
+				end
+				cutInHalf(target, anchor, foldIn or 0.8)
 			elseif cinematic.id == "Gore" then
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
 			end
+		elseif cinematic.id == "KnockoutCombo" then
+			-- (it didn't die after all: no hole left in a living body)
+			for attribute, previous in woundsBefore do
+				setAttribute(target, attribute, if previous == false then nil else previous)
+			end
+		elseif cut and victimRoot.Parent then
+			-- (not dead after all: no cut, it just drops)
+			victimRoot.Anchored = false
+			Ragdoll.enable(target)
 		end
 		-- (the attacker stays held until the end of the cutscene)
 	end)
@@ -2025,17 +2237,30 @@ function Combat.devFinish(attacker: Model, target: Model, kitId: string): boolea
 end
 
 -- The zone the attacker's aim ray meets on `victim`, or nil if it misses.
-local function aimZone(attacker: CombatState, victim: Model, direction: Vector3): Types.HitZone?
+-- `rootAt`: the victim was found in the hitbox there (rewound to where
+-- the attacker saw it, Combat/Rewind): the ray is cast at that body.
+local function aimZone(
+	attacker: CombatState,
+	victim: Model,
+	direction: Vector3,
+	rootAt: CFrame?
+): Types.HitZone?
 	local head = attacker.model:FindFirstChild("Head")
 	local origin = if head and head:IsA("BasePart") then head.Position else attacker.root.Position
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = { victim }
-	local hit = workspace:Raycast(origin, direction * C.AIM_RAY_LENGTH, params)
-	if hit == nil then
+	local ray = direction * C.AIM_RAY_LENGTH
+	local part: BasePart? = nil
+	if rootAt then
+		part = Hitbox.rayAt(victim, origin, ray, rootAt)
+	else
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { victim }
+		local hit = workspace:Raycast(origin, ray, params)
+		part = if hit then hit.Instance :: BasePart else nil
+	end
+	if part == nil then
 		return nil
 	end
-	local part = hit.Instance
 	-- Accessories (hats, hair...) are worn on the head.
 	if part.Parent and part.Parent:IsA("Accessory") then
 		return "Head"
@@ -2138,21 +2363,29 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	-- Everyone plays the punch (animation + swing sound).
 	Remotes.CombatAction:FireAllClients(model, `Brawler_M1_{combo}`)
 
+	-- When the fist lands (the attacker's screen showed it HIT_DELAY after
+	-- his click, which reached us one trip later).
+	local dueAt = now() + C.HIT_DELAY
 	task.delay(C.HIT_DELAY, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
 		if state.attackToken ~= token or not isAlive(state) then
 			resolved()
 			return
 		end
+		-- The victims are also tested where the attacker saw them (lag
+		-- compensation, Combat/Rewind). The attacker's own body is where
+		-- his client had it then already: we receive it one trip late too.
+		local rewind = Rewind.amount(state.player, now() - dueAt)
 		local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -C.HITBOX_FORWARD)
-		local victims, partsByModel = Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model)
+		local victims, partsByModel, rootByModel, ageByModel =
+			Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model, rewind)
 		for _, victimModel in victims do
 			local victim = states[victimModel]
 			if victim and isAlive(victim) then
 				-- Players: where their aim ray lands (no valid aim = torso).
 				-- Dummies: random.
 				local aimed: Types.HitZone = if aim
-					then aimZone(state, victimModel, aim) or "Torso"
+					then aimZone(state, victimModel, aim, rootByModel[victimModel]) or "Torso"
 					elseif state.player then "Torso"
 					else dummyZone
 				local landed: Types.HitZone =
@@ -2169,6 +2402,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 						else C.BLOCK_STAMINA_COST,
 					knockback = if isFinisher then C.KNOCKBACK_SPEED else nil,
 					attackId = attackId,
+					rewound = ageByModel[victimModel],
 				})
 			end
 		end
@@ -2243,6 +2477,7 @@ function Combat.resetForRound(model: Model)
 		Ragdoll.disable(model, state.player)
 	end
 	dropWeapon(state, false) -- (no weapons in a duel)
+	Clones.dismissAll(model) -- (Dr. Rift's clones go with the Awakening)
 	state.humanoid.Health = state.humanoid.MaxHealth
 	local player = state.player
 	if player then
@@ -2268,6 +2503,10 @@ function Combat.resetForRound(model: Model)
 	state.bleedPerSecond = 0
 	state.bleedUntil = 0
 	setAttribute(model, "Bleeding", false)
+	state.burnPerSecond = 0
+	state.burnUntil = 0
+	state.burnKind = nil
+	setAttribute(model, "Burning", nil)
 	healInjuries(state)
 	state.fury = 0
 	setAttribute(model, "Fury", 0)
@@ -2368,6 +2607,25 @@ local function update(dt: number)
 				local source = state.bleedSource
 				local attacker = if source then states[source] else nil
 				dealDamage(state, attacker, state.bleedPerSecond * KC.BLEED_TICK)
+			end
+		end
+
+		-- Burning (acid / fire): the same small ticks, its own slot.
+		if state.burnPerSecond > 0 then
+			if time >= state.burnUntil or not isAlive(state) then
+				state.burnPerSecond = 0
+				state.burnSource = nil
+				state.burnKind = nil
+				setAttribute(model, "Burning", nil)
+			elseif
+				time >= state.nextBurnTick
+				and time >= state.cinematicUntil
+				and not Knockout.isKnockedOut(model)
+			then
+				state.nextBurnTick = time + KC.BLEED_TICK
+				local source = state.burnSource
+				local attacker = if source then states[source] else nil
+				dealDamage(state, attacker, state.burnPerSecond * KC.BLEED_TICK, source)
 			end
 		end
 
@@ -2679,6 +2937,7 @@ end
 
 function Combat.start()
 	-- Kit moves get the tools they need from here (see Combat/Moves.luau).
+	Rewind.start()
 	Moves.bind({
 		getState = function(model: Model): CombatState?
 			return states[model]
@@ -2694,6 +2953,51 @@ function Combat.start()
 		landingZone = landingZone,
 		addFury = addFury,
 		addBurn = addBurn,
+	})
+	Gadgets.bind({
+		getState = function(model: Model): CombatState?
+			return states[model]
+		end,
+		allStates = function(): { [Model]: CombatState }
+			return states
+		end,
+		now = now,
+		isAlive = isAlive,
+		resolveHit = resolveHit,
+		burn = function(attacker: CombatState, victim: CombatState, burn: Kits.BurnDef)
+			if
+				(victim.owner or victim) == (attacker.owner or attacker)
+				or victim.model:GetAttribute("DuelId") ~= attacker.model:GetAttribute("DuelId")
+				or Knockout.isKnockedOut(victim.model)
+				or Knockout.isProtected(victim.model)
+				or now() < victim.cinematicUntil
+				or victim.owner ~= nil -- (a clone just goes)
+			then
+				return
+			end
+			startBurning(victim, attacker, burn.kind, burn.perSecond, burn.duration)
+		end,
+		specFor = Moves.specFor,
+	})
+	Clones.bind({
+		register = Combat.register,
+		setKit = Combat.setKit,
+		getState = function(model: Model): CombatState?
+			return states[model]
+		end,
+		allStates = function(): { [Model]: CombatState }
+			return states
+		end,
+		tryAttack = function(model: Model): boolean
+			return Combat.tryAttack(model)
+		end,
+		now = now,
+		isAlive = isAlive,
+		isAwakened = isAwakened,
+		isStunned = isStunned,
+		isBusy = isBusy,
+		resolveHit = resolveHit,
+		specFor = Moves.specFor,
 	})
 	Knockout.onGetUp(onGetUp)
 	Corpses.onCopy(offerCopiedBone)

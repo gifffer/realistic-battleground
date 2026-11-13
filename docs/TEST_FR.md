@@ -215,7 +215,7 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la jambe gauche. |
+| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la **bonne** jambe (voir B9–B13). |
 | B2 | Faire un kill en boitant | La boiterie **disparaît** (le kill soigne toutes les blessures). |
 | B3 | Frapper le Dummy plusieurs fois à la tête / au torse / aux jambes | Des **petites marques sombres** (bleus, coupure au sourcil) apparaissent là où il a été touché (3 max par partie). Elles partent à sa mort. |
 | B4 | 4ᵉ M1 visé à la **tête** | L'adversaire **saigne** un peu (3 s), même sans bouteille. |
@@ -223,6 +223,11 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 | B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
 | B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
 | B8 | Se faire frapper **à 70 PV ou moins** | Le perso pousse un **cri de douleur** (3 sons au hasard), entendu par tout le monde. |
+| B9 | Boiter (B1), marcher droit devant, regarder de profil depuis un 2ᵉ joueur | Boiterie **réaliste** (démarche antalgique) : le pied blessé **touche le sol à chaque pas**, posé à plat et prudemment, mais **très peu de temps** ; le corps retombe vite sur la bonne jambe (petite **chute de la tête** à ce moment), qui porte le poids longtemps. Rythme irrégulier « tac-TAAAC ». Jamais de jambe levée en l'air (« flamant rose »). |
+| B10 | Même chose, de face | Pendant l'appui sur la jambe blessée le buste **penche au-dessus d'elle** ; puis il repasse au-dessus de la bonne jambe. La jambe blessée avance **raide** avec la hanche qui monte et un petit arc vers l'extérieur. Bras qui balancent peu, celui du côté blessé un peu écarté. |
+| B11 | S'arrêter en boitant | Debout : bassin et poids **sur la bonne jambe**, le pied blessé **posé au sol** un peu en avant (genou souple), **main sur la cuisse blessée**. De temps en temps le perso **teste** sa jambe blessée, grimace (tête qui baisse) et repasse vite sur la bonne. Les pieds **ne glissent pas** pendant l'idle. |
+| B12 | Se faire boiter par des coups sur la jambe **gauche** (frappé de son côté gauche), puis sur la **droite** (autre vie) | La boiterie est du **bon côté** : c'est la jambe la plus touchée qui est ménagée (animation en miroir). Les autres joueurs voient le même côté. Si l'**autre** jambe prend ensuite plus de coups (même vie), la boiterie **change de côté** (fondu, pas de saut). |
+| B13 | Boiter puis ralentir / accélérer (marche normale, ralenti par un coup au tibia) | Les pas suivent la vitesse réelle (pas de patinage marqué), **même très lentement** : boiter en **bloquant** ou **étourdi** donne des petits pas lents, pas des jambes qui moulinent ; vitesse en boitant = **75 %** de la marche, pas de sprint. Accroupi en boitant : marche accroupie normale. |
 
 Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seulement toi).
 
@@ -344,9 +349,15 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | # | Test | Résultat attendu |
 |---|---|---|
 | F1 | **Street Brawler** sur un KO (couché **ou resté debout**) — **ré-importer `WoundKit` avant** | Bandes noires. La victime est allongée sur le dos devant lui, tête vers lui. Plan large de côté : le corps au sol, le perso sort une **grosse batte**. Gros plan sur la victime (vue de sa gauche) qui lève la tête et tend la main en suppliant (on l'entend) ; le bras ne bouche pas l'image. Plan du sol : comme au **golf**, à deux mains, il aligne la batte sur la tête, l'arme en arrière vers sa droite, puis **balaie** la tête au ras du sol de sa droite vers sa gauche et finit la batte au-dessus de l'épaule gauche. Plan de côté tenu : la **tête explose** en vraies pièces — morceaux de crâne (peau dehors, os dedans), cerveau, yeux, dents ; gerbe de sang, fine brume ; au sol, une éclaboussure et des traînées **sur le sol, jamais sur le corps**. Il reste la vraie mâchoire du bas avec ses dents, la peau du menton déchirée, les vertèbres ; le cou gicle par saccades, une flaque s'étend. Caméra normale ensuite (~3,3 s). |
-| F2 | **Boxer** sur un KO — **ré-importer `WoundKit` avant** | Il **relève** l'adversaire, deux coups au corps, crochet droit, crochet gauche, direct (la tête part d'un côté puis de l'autre, un peu de sang). Puis un **crochet du gauche dans son flanc droit, sous les côtes** : le poing rentre (craquement, ton son du coup final, gerbe de sang, éclats de côte), fouille, et **arrache le vrai foie** (avec la vésicule verte). Il le tient **à bout de bras** sur le côté, il dégouline, il le regarde (plan de face, bien visible) ; la victime s'effondre, un **trou** dans le flanc droit avec des **côtes cassées** dedans, à travers le t-shirt, qui gicle par saccades, flaque dessous. Il **ouvre la main : le foie tombe** au sol (plan bas), bruit mouillé et éclaboussure quand il touche le sol. ~4,1 s. |
+| F2 | **Boxer** sur un KO — **ré-importer `WoundKit` avant** | Il **relève** l'adversaire, deux coups au corps, crochet droit, crochet gauche, direct (la tête part d'un côté puis de l'autre, un peu de sang). Il **s'enroule** (bas, poing gauche loin derrière, un temps d'arrêt) puis un **crochet du gauche dans son flanc droit, sous les côtes** : le poing rentre (craquement, ton son du coup final, gerbe de sang, éclats de côte), fouille, **tourne**, et **arrache le vrai foie** (avec la vésicule verte). Il le tient **à bout de bras** sur le côté, il dégouline, il le regarde, le **serre** ; la victime s'effondre, un **trou** dans le flanc droit avec des **côtes cassées** dedans, à travers le t-shirt, qui gicle par saccades, flaque dessous. Il **ouvre la main : le foie tombe** au sol, bruit mouillé et éclaboussure quand il touche le sol. ~4,1 s. |
+| F2-cam | Boxer : **pas de caméra de cinématique** — à tester en **3ᵉ personne** puis en **1ʳᵉ personne** (Paramètres), côté tueur **et** côté victime | **Aucune bande noire, aucun plan** : chacun garde **sa propre caméra**, comme avant le finisher (3ᵉ personne sur l'épaule ou 1ʳᵉ personne), et peut toujours la **tourner à la souris** ; le perso, lui, **ne tourne pas** avec la caméra (il reste face à la victime). Seule chose en plus : **petites secousses** sur les coups. En **1ʳᵉ personne**, le Boxer **voit ses deux bras** (les coups, le foie dans son poing ; un bras qui passerait dans la caméra est caché), mais **pas** le reste de son corps (pas de tête/torse devant l'écran). **Après** le finisher : même caméra qu'avant, même champ de vision (pas de zoom resté), en 1ʳᵉ personne **les bras redeviennent invisibles**, le perso tourne de nouveau avec la caméra, on peut attaquer. |
+| F2a | Boxer : les coups (vus depuis sa propre caméra, tueur ou victime) | Chaque coup **fige l'image une fraction de seconde** (hit-stop : les **deux corps** s'arrêtent ensemble — la victime ne bouge plus non plus, la petite secousse de l'image reste figée sur l'impact — puis repartent), léger zoom sec et secousse **légère** (rien qui donne mal au cœur). Coups au visage : la **tête part** dans le sens du coup **à la fin de l'arrêt** et rebondit ; coups au corps : la tête **plonge en avant**. Petit anneau d'air et gouttes de sueur à l'impact (visibles par tout le monde). Avant le coup final, la vue **s'élargit très légèrement** pendant qu'il s'enroule, avec un **grognement d'effort** grave du Boxer. |
+| F2b | Boxer : la main qui rentre | Plus gros arrêt sur image, secousse et petit zoom plus forts, **l'écran flashe** (plus clair, contraste, teinte rouge) puis revient. Sur le flanc : le **trou est déjà ouvert** pendant que la main fouille (avant, il n'apparaissait qu'à la mort) ; le sang est poussé autour du poignet, des **filets épais** pendent et coulent le long du flanc ; quand la main **tourne** : craquement, la victime gémit, nouveau petit flash. |
+| F2c | Boxer : l'arrachage | Des **filaments rouge sombre** (vaisseaux) restent tendus entre le trou et le foie, puis **cassent** l'un après l'autre (le plus épais en dernier), avec un filet de sang qui fouette à chaque bout. Le foie **tremble** (mou) dans le poing, en travers du poing (il ne se tasse pas à la verticale). La main qui tourne et l'arrachage ne figent pas l'image. |
+| F2d | Boxer : il serre le foie (~3,1 s) | Le foie **s'écrase** dans le poing et reprend sa forme en tremblant, bruit mouillé, le sang **coule entre les doigts** en filets et le long de son avant-bras. |
+| F2e | Boxer : coupé **entre la main qui rentre et l'arrachage** (le joueur Boxer **se réinitialise** par le menu Roblox, ou **quitte la partie**, vers 2,3–2,6 s ; on ne peut pas le tuer pendant la cinématique, cf. F3) | Tout s'arrête, le **trou du flanc se referme** (les coupures d'avant reviennent s'il y en avait), la victime retombe KO (on peut l'achever à nouveau), pas de foie, pas de flash qui reste à l'écran, pas de secousse ni de zoom qui reste, la caméra tourne de nouveau le perso (et en 1ʳᵉ personne ses bras redeviennent invisibles). Si c'est la **victime** qui quitte la partie, la cinématique s'arrête aussi (le Boxer est libéré, pas d'erreur dans la sortie). |
 | F3 | Pendant un finisher, un 3ᵉ joueur frappe l'attaquant | Rien ne se passe : l'attaquant est intouchable pendant la scène. |
-| F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. |
+| F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. **Sauf Boxer** : elle garde sa propre caméra (cf. F2-cam). |
 | F5 | Un 3ᵉ joueur qui regarde | Pas de cinématique pour lui (sa caméra reste normale), mais il voit l'animation, la batte, le sang et entend les coups. |
 | F6 | Après le finisher | Le joueur peut de nouveau bouger et attaquer normalement, la caméra est revenue comme avant. |
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
@@ -461,9 +472,161 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | # | Test | Résultat attendu |
 |---|---|---|
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
-| S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
+| S2 | Finisher **foie** (Boxer) | Dès que la main rentre : gerbe, fine brume rouge, filets épais, taches sur le Boxer. À l'arrachage : le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras, avant-bras gauche quand il serre le foie). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
 
+## Hitbox et lag : compensation de latence (`feature/hitbox-lag`)
+
+Le serveur teste maintenant chaque coup (M1, coups de kit, charge, prise) **aussi** là où
+l'attaquant **voyait** sa cible : il « remonte le temps » de son ping + 0,1 s (jamais plus de
+0,35 s, ± 0,06 s). Pour simuler du lag : *Studio → File → Studio Settings → Network →
+Incoming Replication Lag* = `0.15`, puis *Test → Clients and Servers → 2 Players*.
+**Vérifier d'abord (L0)** que ce lag simulé est bien pris en compte, sinon les tests L2, L3,
+L6 et L12 ne veulent rien dire.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L0 | Lag 0,15, 2 joueurs : A frappe B (M1), regarder l'Output du **serveur** | Une ligne `[Rewind] … round trip … -> rewind …` par coup. Avec 0,15 de lag, **rewind ≈ 0,25 s** (round trip ≈ 0,15). Si le round trip reste ≈ 0 (rewind ≈ 0,1) : Studio ne compte pas ce lag dans le ping, mettre `REWIND_STUDIO_EXTRA_PING = 0.15` dans `Shared/Config` (Studio seulement) et refaire : rewind ≈ 0,25. Remettre `0` après les tests. |
+| L1 | Dans Studio, frapper le Dummy (M1) | Comme avant : boîte **rouge** (la hitbox) ; en plus une petite boîte **bleue** sur le torse du Dummy (là où le serveur l'a « vu »). Aucune ligne rouge dans l'Output. |
+| L2 | 2 joueurs avec lag 0,15 : B **sprinte de gauche à droite** devant A, A clique quand son poing touche B **sur son écran** | Le coup **compte** (dégâts, réaction) dans la grande majorité des cas. Avant : presque toujours raté. |
+| L3 | Même chose, B court **en s'éloignant** de A | Si le poing touche sur l'écran de A, ça compte ; la boîte bleue est derrière B (là où A le voyait). |
+| L4 | A frappe B, la réaction prédite (instantanée) chez A | Elle n'est presque plus jamais **annulée** juste après (le serveur et l'écran de A sont d'accord). |
+| L5 | B est à 10 studs ou plus de A, A frappe dans le vide | **Rien** : la compensation ne rallonge pas la portée (0,35 s max). |
+| L6 | Visée tête pendant que B court (A vise la tête sur son écran) | Le coup est compté **à la tête** (zone calculée sur le corps « remonté »). |
+| L7 | B **bloque** (F) quand le coup arrive | Toujours **bloqué** : seule la **position** est remontée, pas l'état (garde, parade). |
+| L8 | Dash (Q) de B au bon moment | Toujours **esquivé** (les frames d'esquive comptent comme avant). |
+| L12 | Lag 0,15 : B **dashe un peu tôt** pour s'éloigner (Q, ~0,1–0,2 s avant que le poing de A arrive), A frappe | **Esquivé** (« Dodged »), même si la boîte bleue montre B encore dans la hitbox : touché seulement là où il **était**, ses frames d'esquive depuis ce moment-là comptent. Avant la correction, le coup passait. |
+| L13 | Lag 0,15 : Bouncer, prise (Chokehold / Body Slam) sur B qui **s'enfuit en sprint** | Si B est encore à portée de bras, il est attrapé (court déplacement devant le Bouncer). S'il est déjà **loin** (plus de ~6–7 studs du Bouncer), il n'est **pas** attrapé : jamais ramené en arrière sur plusieurs studs. |
+| L9 | Coups de kit (1–4), charge (tackle du Street Brawler) et prises du Bouncer sur une cible qui bouge | Ils touchent là où l'attaquant voit la cible (boîtes bleues), comme le M1. |
+| L10 | B meurt / réapparaît / est téléporté dans l'arène de duel, A frappe là où B était | **Rien** : l'historique est effacé lors d'une téléportation. |
+| L11 | Mettre `DEBUG_HITBOXES = false` dans `Shared/Config` | Plus aucune boîte (rouge ni bleue). |
+## Sang réaliste (`feature/realistic-blood`)
+
+Sans les images (`Config.Blood.IMAGES` à 0), le sang est dessiné avec des formes simples ; avec les
+images importées (docs/BLOOD_FR.md), les mêmes tests doivent donner des taches plus détaillées.
+Réglage d'éclairage conseillé pour le mouillé : `Lighting.Technology = Future`.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Coup qui saigne (bouteille) sur un Dummy, regarder le sol | Taches **rouge foncé** (jamais rose), bord irrégulier, jamais un disque parfait. Une goutte arrivée en biais est **ovale ou en « ! »**, la queue dans le sens où elle allait. |
+| R2 | Attendre 1-2 min près des taches | Elles **foncent** (rouge → bordeaux), un **bord sombre** apparaît (le sang coagule), puis brun-noir mat, et elles disparaissent en fondu. |
+| R3 | Coup qui saigne tout près d'un **mur** | Des taches sur le mur, étirées vers le bas, et du sang qui **coule** lentement avec une perle au bout. |
+| R4 | Deux clients (Test > 2 joueurs), même coup | Les gouttes tombent **aux mêmes endroits** sur les deux écrans (à peu près). |
+| R5 | Un joueur qui saigne (Bleeding) reste **immobile** ~10 s | Le sang **coule de la plaie** sur la peau, les gouttes tombent **du bout de la coulure** ; une **flaque** grandit sous lui (vite puis plus lentement), brillante au début, avec des lobes. Sur une pente, elle s'étale vers le bas. |
+| R6 | Flaque près d'un trottoir / d'une marche | Elle s'arrête au bord ; si le sol tombe, du sang **coule le long du bord**. |
+| R7 | Marcher dans une flaque fraîche puis s'éloigner | **Empreintes** gauche/droite : pleines, puis partielles, puis des traces, chacune plus pâle que la précédente ; plus rien après ~6-7 pas. Pas d'empreinte dans du sang sec. |
+| R8 | Coup qui saigne au **visage** plusieurs fois | Souvent le **nez saigne** (coulure jusqu'à la lèvre, gouttes du menton), parfois la **lèvre** ; sur un coup lourd, un crachat de sang. Pas plus de ~14 marques sur le visage (détails : tests F ci-dessous). |
+| R9 | Coup qui saigne au **torse** d'un joueur avec un t-shirt | Une tache **s'étend dans le tissu** pendant ~30 s, plus sombre et mate que sur la peau. Sans t-shirt : un film plus clair sur la peau. |
+| R10 | Frapper un visage qui saigne, puis donner des coups dans le vide | Les **jointures** sont rouges ; chaque coup projette une **ligne de petites gouttes** (de plus en plus petites) au sol ; ça s'estompe en ~1 min. |
+| R11 | Finisher **batte** / **bras** / **foie** | Les jets sont de **vraies gouttes** qui retombent avec la gravité et se cassent en gouttelettes ; là où les jets tombent fort : une **vague de grosses taches** ; la flaque grandit et suit la pente. L'attaquant a des taches allongées sur lui, même sur la tête ronde (pas de carrés). |
+| R12 | Taper un KO qui saigne puis le laisser au sol | Une flaque se forme sous lui. S'il glisse / est poussé : une **traînée** de sang continue (détails : W8). En se relevant : une **empreinte de main**. |
+| R13 | Coupure au verre | Plus de **cubes en plastique** qui rebondissent : des gouttes qui volent et tachent le sol. Le sang dans la coupure brille au début puis fonce. |
+| R14 | Mourir / réapparaître | Tout le sang **sur le corps** disparaît ; le sang au sol reste et vieillit normalement. |
+| R15 | 16 joueurs / 2 finishers en même temps (ou Graphismes au minimum dans Échap) | Pas de chute d'images ; au minimum, moins de taches restent (les plus vieilles s'effacent en premier, les flaques en dernier). |
+| R16 | `Config.Blood.ENABLED = false` | Plus aucun sang (jets, gouttes, flaques, empreintes), le reste du combat marche. |
+
+### Sang sur les combattants, v2 (coulures, visage, gouttes qui pendent)
+
+À tester **à 8-12 studs** (la caméra normale) sur un Dummy, puis à 2 joueurs. Les nouvelles images
+(`rivuletStrip`, `browCut`, `wipeSmear`... dans `Config.Blood.IMAGES`) sont à 0 tant qu'elles ne
+sont pas importées : le jeu prend une image proche déjà importée (coulure de mur, film sur la peau),
+donc tout se teste tout de suite. Les points du visage (narine, lèvre, sourcil...) sont des
+estimations en haut de `Client/Combat/BloodFace.luau` : si une coulure part à côté de la narine,
+c'est là qu'on règle.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | 10 coups qui saignent au visage, **de face** | Le nez saigne : la coulure **avance par à-coups** (elle s'arrête, la perle au bout gonfle, puis elle saute un peu plus bas), fait une **pause sur la lèvre**, contourne la bouche (parfois des deux côtés) et arrive au **menton**. Jamais une bande droite qui glisse d'un coup. |
+| F2 | Regarder le menton pendant que le nez saigne | Une **goutte pend** au menton : elle grossit, s'étire (un « cou »), tombe, une plus petite reste et regrossit. Au début une goutte par seconde environ, puis de plus en plus lent (3-4 s) jusqu'à l'arrêt (15-40 s). Les gouttes tombent **moins vite** qu'avant (elles ne « claquent » plus). |
+| F3 | Pendant que la goutte pend, la victime frappe ou se fait frapper | La goutte **part tout de suite**, projetée dans le sens du mouvement. |
+| F4 | Coups de **côté** (gauche puis droite) | Plus souvent la **lèvre** : un film de sang sur la lèvre inférieure, une courte coulure du coin de la bouche vers la mâchoire. |
+| F5 | Uppercut / coup de tête / bouteille sur un visage déjà **bien marqué** (bleus niveau 2+) | Parfois une **coupure au sourcil** : la peau fendue (trait sombre), le sang **passe sur la paupière** (petite pause + film dans l'œil), descend la joue et **goutte de la mâchoire**. Max une coupure par sourcil. |
+| F6 | Re-frapper la tête quand une coupure est ouverte | La coupure **se rouvre** (brille de nouveau) et une nouvelle coulure **suit l'ancienne trace mouillée, plus vite**, puis continue plus loin. Le jet de sang du coup est plus fort (jusqu'à ×1.9 avec plusieurs plaies ouvertes). |
+| F7 | Coup lourd avec le nez qui saigne déjà | Parfois **nez cassé** : les deux narines coulent, plus large, plus longtemps. |
+| F8 | Victime blessée au visage, **immobile ~3 s** (ne frappe pas, n'est pas frappée) | De temps en temps (toutes les 6-15 s) : elle **crache** (un filet de sang qui s'étire et casse, une petite mousse rosée), **se mouche** (gouttelettes vers l'avant-bas, la coulure du nez raccourcit puis **recoule**), ou **s'essuie** (traînée horizontale sur la lèvre ou le sourcil, coulures raccourcies, le sang **revient** 1-3 s après, le dos de la main devient rouge). |
+| F9 | Mettre KO un combattant qui saigne du visage | Les coulures encore mouillées **tournent** : sur le côté elles traversent la joue en travers, sur le dos le sang **s'accumule** (la perle grossit) ; ~1 s après, une **flaque sous la tête** (si la tête est au sol). |
+| F10 | Se relever (GetUp) avec le visage en sang | Souvent il **s'essuie** le visage. Sur béton / asphalte / pavés, parfois une **éraflure** rosée sur la pommette (max 2), qui reste jusqu'à la mort. |
+| F11 | Attendre ~1 min après la fin d'un saignement | Les coulures foncent (la traînée d'abord, la perle reste brillante le plus longtemps), puis sèchent et **restent** jusqu'à la réapparition (croûte craquelée quand `crustStrip` est importée). De nouvelles coulures passent par-dessus. |
+| F12 | Plus de 6 coups qui saignent sur le même combattant | **Sueur** : les nouvelles coulures sont plus claires, plus larges et vont plus loin. |
+| F13 | `Bleeding` sur le **torse** (coupure au verre), rester debout | Le sang coule de la plaie **jusqu'au bas du t-shirt** (par à-coups, et il passe sur le côté s'il atteint le bord), puis goutte de là ; saignement fort (3+/s) : un **petit filet** qui coule en continu. La tache dans le tissu **descend** en grandissant, avec un **halo mouillé plus sombre** autour (visible aussi sur un t-shirt noir) et un bord pâle. La flaque se forme sous le point qui goutte. |
+| F14 | Mettre KO un combattant qui saigne (torse) | La flaque part du côté de la **tête/du cou**, pas cachée sous le ventre. |
+| F15 | 12 coups de poing touchés avec le même bras (un Dummy) | Les **jointures se fendent** (petites marques rosées/rouges) et restent jusqu'à la mort. Les gouttes projetées en frappant avec un poing ensanglanté partent surtout **à la fin du geste**, les deux premières plus grosses ; 3-4 coups vident le poing. |
+| F16 | Caméra à plus de 60 studs d'un combattant qui saigne | Pas d'animation (les coulures sont posées d'un coup, pas de goutte qui pend : des gouttes simples). Revenir près : tout s'anime de nouveau. |
+| F17 | 16 Dummies qui saignent du visage en même temps (MicroProfiler, étiquette `BloodRivulet`) | Moins de 0,4 ms par image ; pas plus de 4 coulures qui bougent par combattant, 3 gouttes qui pendent. |
+| F18 | `Config.Blood.FACE.CUTS = false` | Plus de coupures ni d'éraflures ; nez et lèvre saignent toujours. |
+
+### Sang dans le monde, v2 (gouttes au sol, flaques, traces)
+
+Même principe : `crown4x4`, `rippleRing`, `starburst`, `serumHalo`, `drag`, `shoeRunL/R`,
+`pendant2x2` sont à 0 tant qu'elles ne sont pas importées. Sans elles : pas de couronne (seulement
+ses gouttelettes), pas d'anneau sur la flaque, pas d'auréole jaune ; les étoiles de gouttelettes, les
+traînées et les empreintes de course prennent une image proche (gouttelettes, traînée, empreinte
+normale). Couronnes, anneaux et petites éclaboussures : seulement à moins de 40 studs de la caméra.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| W1 | Un Dummy qui saigne (Bleeding), **immobile** 30 s, regarder ses pieds | Les gouttes tombent **moins vite** qu'un jet et laissent des taches **rondes au bord crénelé** (pas des ovales). Les premières tombent dans la flaque qui se forme. |
+| W2 | Pendant W1, une goutte tombe dans la flaque | Un **anneau** s'élargit sur la flaque (~0,35 s), deux petites éclaboussures sautent, et 2-5 **gouttelettes** sont projetées **autour** de la flaque, où elles s'accumulent. |
+| W3 | W1 continue ~1 min | Autour de la flaque, des **étoiles de gouttelettes** (max 4 par flaque) : le dessin typique « quelqu'un a saigné debout ici ». Elles disparaissent avec la flaque. |
+| W4 | Un combattant qui saigne **marche** | Une traînée de gouttes ; leurs petites queues pointent **vers l'avant** (le sens de la marche). |
+| W5 | Gouttes qui tombent de **haut** (tête d'un joueur qui saute, bras arraché levé) sur béton | Plus la chute est haute, plus il y a de **gouttelettes satellites** autour (la tache elle-même reste de la même taille sur le béton). Grosse goutte de haut sur sol dur ou mouillé, de près : une **couronne** (doigts de sang qui montent et se cassent, 0,2 s) et 2-5 gouttelettes projetées du côté où elle allait. Sur herbe / sable : pas de couronne. Caméra qui regarde droit vers le bas : pas d'image de couronne. |
+| W6 | **Courir** (> 14 studs/s) à travers une flaque fraîche | Parfois (~1 fois sur 3) une **glissade** : une longue traînée qui sort de la flaque dans le sens de la course. Ensuite des empreintes de **course** (l'avant du pied, étiré vers l'avant), plus espacées qu'en marchant, de plus en plus pâles (~6-7). |
+| W7 | Regarder une flaque **4 min** (Échap > horloge, ou attendre) | Le reflet mouillé **rétrécit vers le centre** (le bord sèche d'abord ; les lobes fins foncent avant le milieu), un **bord sombre** apparaît vers 30-60 s, le centre fonce un peu (il gélifie), puis vers 90-180 s un **anneau jaune pâle** (sérum) apparaît autour. La flaque disparaît vers 4 min. |
+| W8 | **ThrowOut** / **BodySlam** / **Powerbomb** sur un Dummy qui saigne | À l'impact : une **éclaboussure sous la tête** et 4-6 gouttelettes projetées autour. S'il glisse : **une seule traînée continue**, striée, qui s'allonge tant qu'il glisse dans la même direction (une nouvelle au-delà de 2,5 studs ou s'il tourne de plus de 20°), de plus en plus pâle. S'il saigne encore, elle ne disparaît jamais tout à fait. |
+| W9 | Un KO qui **ne saigne pas** glisse à travers une flaque | La traînée part de la flaque, pâlit vite et s'arrête après ~5-6 studs. |
+| W10 | Un KO avec seulement une **coupure à la tête** (verre) qui glisse | Une traînée **étroite** sous la tête (pas de la largeur du torse). |
+| W11 | KO qui saigne allongé sur une **pente** | La flaque commence un peu **plus bas** que le corps, du côté de la pente. |
+| W12 | **Nuit** (`Lighting.ClockTime = 0`) | Le sang frais paraît **presque noir** et se voit surtout par son **reflet mouillé** (plus fort qu'en plein jour). Il faut `Lighting.Technology = Future` et `EnvironmentSpecularScale` ≥ 0,5. Retour au jour (12) : en ~5 s, couleurs normales. |
+| W13 | Finisher **bras** / **foie**, regarder le moignon / l'organe | Les gouttes tombent **lentement** et se détachent comme des gouttes qui pendent (image `pendant2x2` si importée) ; au sol, taches rondes. **Artère** (batte) : entre deux battements le jet ne s'arrête pas, il raccourcit, et du sang **goutte** du trou ; après la fin, ~3 s de gouttes lentes. |
+| W14 | 16 combattants qui saignent dans une flaque (MicroProfiler : `BloodDrops`, `BloodPool`, `BloodAge`, `BloodTracks`) | Moins de ~1 ms par image au total pour le sang au sol ; jamais plus de 8 couronnes et 6 anneaux en même temps. |
+| W15 | **Pluie** | Rien de spécial : il n'y a pas de météo (attribut `Weather`) sur cette branche ; la dilution par la pluie viendra avec elle. |
+
+## Kit Dr. Rift / savant cyborg (`claude/compassionate-goodall-wdn4q1`)
+
+**Ré-importer `assets/wounds/WoundKit.fbx` avant** : il contient les pièces de la coupe en deux (bassin, haut des cuisses, intestins).
+Dans **Studio**, tous les kits sont débloqués ; dans le jeu publié, Dr. Rift demande le **niveau 8** et **800 coins**.
+Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**. Les sons n'ont pas encore d'ID (ceux qui ont un remplaçant jouent le remplaçant, les autres ne jouent rien).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Équiper le kit | Ton **bras gauche** devient mécanique : épaulière en tôle, rails, piston, coude à rotule, avant-bras blindé avec une **fenêtre verte qui brille**, câbles, **gant de métal** avec une paume verte. Une **lentille verte** remplace l'œil droit (sangle autour de la tête). Les autres joueurs le voient aussi. Changer de kit : tout disparaît. |
+| R2 | **1** (Acid Flask) | Il sort une **fiole** verte et la lance de côté. Elle vole en tournant, en arc. Au contact (quelqu'un, un mur, le sol) : verre qui éclate, **éclaboussure verte**, fumée. La personne touchée et celles autour (7 studs, sans mur entre) **grésillent** (étincelles vertes + fumée sur le corps), perdent de la vie quelques secondes et sont ralenties. Une **flaque d'acide** qui bouillonne reste 5 s : marcher dedans brûle. |
+| R3 | **2** (Ray Gun) | Il se met de profil, **pistolet à rayon** (cœur orange) au bout du bras, tir : **rayon orange** jusqu'au premier corps ou au premier mur, étincelles aux deux bouts, petit recul du bras. La cible **prend feu** (petites flammes + fumée, lumière orange) et perd de la vie 3 s. À travers un mur : rien. |
+| R4 | **3** (Gravity Glove) | Il ramène le gant à la hanche puis pousse la paume en avant avec un grand pas : tout ce qui est devant **s'envole** (ragdoll), même en bloquant. Éclair vert sur la cible. |
+| R5 | **4** (Portal Gun) en visant le **sol** au loin | Pistolet à portails (cœur vert). Un tir vert part vers l'endroit visé, **un portail rond** s'ouvre à plat sur le sol, un **portail debout** s'ouvre devant lui ; il entre et **ressort au portail du sol**. Les portails se referment. |
+| R6 | **4** en visant un **mur** | Le portail s'ouvre sur le mur, il ressort debout devant le mur. |
+| R7 | **4** en visant **trop haut** (le ciel), le vide, un plafond, ou plus loin que 80 studs | Le tir **grésille** (étincelles), pas de portail, il ne bouge pas. Le pistolet revient en **2,5 s** (au lieu de 10) et ça ne coûte pas d'endurance. |
+| R8 | **4** vers un endroit hors de la map, dans une salle de duel, ou sans place pour lui | Raté comme R7. En **duel** : impossible de sortir de la salle. |
+| R9 | Remplir la jauge, **G** (DIMENSION RIFT) | Il lève le gant (étincelles aspirées), puis écarte les bras : un portail s'ouvre derrière lui, et **2 copies de lui** sortent de portails à côté de lui. Elles marchent vers l'ennemi le plus proche et frappent. |
+| R10 | Frapper un clone | **Un seul coup** et il repart dans un portail. Les clones ne frappent jamais leur Dr. Rift ni entre eux. |
+| R11 | Un clone met quelqu'un KO | Le KO compte pour **toi** (pas pour le clone). |
+| R12 | **1** en Awakening (Explosive Flask) | Fiole orange : **boule de feu**, fumée noire, braises, onde au sol, trace brûlée qui reste, la caméra tremble. Tout le monde autour (10 studs) **s'envole** à l'opposé de l'explosion et brûle un peu. |
+| R13 | **2** en Awakening (Overcharged Ray) | Deux mains, jambes écartées, gros **rayon** plus épais qui **traverse tout le monde** sur la ligne (jusqu'au mur), grand recul. |
+| R14 | **3** en Awakening (Rift Swarm) en pointant quelqu'un | Les clones **disparaissent dans un portail et réapparaissent autour de lui**, frappent 3 fois, le 3ᵉ coup le met au sol. Les clones détruits **reviennent** pour ce coup. Personne visé : grésillement. |
+| R15 | **4** en Awakening (Gravity Slam) | Petit saut, il pose un genou et **écrase le gant au sol** : anneau vert + poussière qui part tout autour, tous ceux autour (13 studs) **décollent**. |
+| R16 | Fin de l'awakening / mort / reset de manche en duel | Les clones repartent dans des portails. |
+| R17 | Se faire frapper en Dr. Rift | Un peu **plus** de dégâts que les autres kits (vieux). |
+| R18 | **Finisher** sur un KO (Dummy) | Bandes noires. Il tend le **gant** : le corps est **soulevé** du sol et reste debout, mou, les pieds qui pendent (étincelles vertes sur lui). Il sort le **pistolet à portails** et tire sur sa taille : un **portail vert s'ouvre à plat autour de ses hanches**. Gros plan sur son visage (il supplie). Le portail **se referme d'un coup** : le corps est **coupé en deux**. Le haut (torse, tête, bras) **tombe en arrière**, les **jambes restent debout** un moment en giclant du sang vers le haut par saccades, puis **s'effondrent**. Des intestins tombent du haut du corps, flaques, sang sur le Dr. Rift. ~4,6 s. |
+| R19 | Regarder les deux coupes | Haut du corps : coupe à la taille avec le **vrai bassin** (os), les muscles, la graisse sous la peau, les intestins qui pendent. Jambes : coupe avec le **fémur**, les muscles de la cuisse, les artères. |
+| R20 | Un joueur qui arrive après | Il voit le corps en deux morceaux avec les coupes, sans le sang qui gicle. |
+| R21 | Le Dr. Rift quitte le jeu (ou meurt) **avant** la coupe | Tout s'arrête (portail, pistolet), la victime retombe KO, entière. |
+
+## Membres qui partent à l'autre bout de la map (`fix/limbs-fly-away`)
+
+Le bug : parfois les bras et les jambes d'un corps au sol partaient très loin, puis revenaient petit à petit sur le perso.
+La cause : quand un corps tombe (ragdoll), chaque bras, jambe et la tête deviennent des morceaux séparés, tenus par une articulation molle. Le serveur ne prenait en charge que le tronc ; Roblox donnait les membres **à l'ordinateur d'un joueur** (la victime, ou le joueur le plus proche). Cet ordinateur avait encore le membre là où **son animation** le dessinait (une animation de finisher peut déplacer tout le corps de plusieurs mètres) et envoyait cette position à tout le monde : le membre « s'envolait », puis l'articulation le ramenait lentement.
+Maintenant le **serveur** simule **tous** les morceaux du corps au sol (même chute pour tout le monde, un tricheur ne peut plus bouger ses membres KO), et chaque client remet tout de suite sur le corps un membre trop loin de son articulation.
+
+Tester à **2 joueurs** (le bug venait d'un autre ordinateur), avec un peu de lag si possible (Studio : File → Studio Settings → Network → Incoming Replication Lag = 0,2).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| M1 | Mettre l'autre joueur KO, plusieurs fois, sous plusieurs angles | Il tombe mou, **les bras et les jambes restent attachés** au corps, sur les deux écrans. |
+| M2 | Tackle / Uppercut / Gravity Glove sur l'autre joueur (il tombe vivant), puis il se relève | Chute et relevé propres ; une fois debout il **contrôle de nouveau son perso** normalement (marcher, sauter, frapper). |
+| M3 | Faire chaque finisher (Batte, KnockoutCombo, Arm Rip, Incinerate, Gore, Portal Cut) sur le **Dummy** et sur un **joueur** | À la fin, le corps tombe **là où il est** : aucun membre ne part au loin puis revient. Le bras arraché (Arm Rip) reste dans la main puis est lancé normalement ; les jambes (Gore, Portal Cut) se séparent normalement. |
+| M4 | Gros combo sur le Dummy jusqu'au KO, puis attendre qu'il se relève | Pareil : membres en place, relevé propre. |
+| M5 | Duel : perdre une manche | Le perdant tombe, membres en place ; la manche suivante il est debout et contrôle son perso. |
+| M6 | **Dr. Rift** : **4** (Portal Gun) pendant que l'autre joueur te frappe ; essayer d'être mis au sol (Tackle / Uppercut) **juste en sortant** du portail (fenêtre très courte, 0,1 s) | Si ça tombe dedans : corps mou, membres en place sur les deux écrans ; une fois relevé, tu contrôles de nouveau ton perso. Sinon, le passage au portail reste normal. |
 ## Outils de test Studio (`feature/test-tools`)
 
 Deux outils pour **regarder de l'extérieur** ce que tu ne peux pas voir seul (boiterie,

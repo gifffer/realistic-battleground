@@ -56,6 +56,13 @@ local GoreShapes = {
 		Gut2 = Vector3.new(138, 3, -14),
 		Gut3 = Vector3.new(141, 3, -14),
 		GutPile = Vector3.new(144, 3, -14),
+		RiftWaist = Vector3.new(147, 3, -14),
+		RiftHipR = Vector3.new(150, 3, -14),
+		RiftHipL = Vector3.new(153, 3, -14),
+		RiftGut1 = Vector3.new(156, 3, -14),
+		RiftGut2 = Vector3.new(159, 3, -14),
+		RiftGut3 = Vector3.new(162, 3, -14),
+		RiftColon = Vector3.new(165, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -126,6 +133,15 @@ local GoreShapes = {
 		"Gut2",
 		"Gut3",
 		"GutPile",
+	},
+	cut = {
+		"RiftWaist",
+		"RiftHipR",
+		"RiftHipL",
+		"RiftGut1",
+		"RiftGut2",
+		"RiftGut3",
+		"RiftColon",
 	},
 }
 
