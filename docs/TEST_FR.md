@@ -463,3 +463,34 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Outils de test Studio (`feature/test-tools`)
+
+Deux outils pour **regarder de l'extérieur** ce que tu ne peux pas voir seul (boiterie,
+finishers). Ils n'existent **que dans Studio** (jamais dans le jeu publié), construits par
+`Server/Systems/TestTools`. Pour les désactiver : `Config.Dev.TEST_TOOLS = false`.
+Rien n'est sauvegardé dans la place : arrête le Play et tout disparaît.
+
+Place-toi au spawn et regarde vers la **gauche** (le parcours de test est à droite) :
+
+- **Limping Dummy** (marron), devant à gauche : il fait des allers-retours en boitant
+  (~24 studs). Il s'arrête ~1 s à chaque bout (pose debout sur sa bonne jambe). À chaque
+  tour, la jambe qui boite change (`LimpLeg` = Left / Right : visible seulement avec la
+  boiterie de la branche `feature/limp-realistic` ; sur les autres branches il boite
+  toujours pareil). On peut le frapper ; il se soigne après 3 s, réapparaît 8 s après sa mort.
+- **FINISHER DEMO**, derrière à gauche : une zone sombre au sol, un mannequin gris
+  (« Finisher Victim ») et un bleu, et devant une rangée de **plots rouges**, un par kit
+  (nom du kit + nom du finisher écrits au-dessus).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| 1 | Regarder le **Limping Dummy** de côté | Il marche lentement en boitant, jamais de pied dans le sol, il ne glisse pas. Debout aux bouts : appuyé sur sa bonne jambe. |
+| 2 | Le suivre plusieurs tours | Il ne se bloque pas ; avec `feature/limp-realistic`, le côté de la boiterie alterne à chaque tour. |
+| 3 | Aller à un plot rouge, appuyer sur **E** (« Watch finisher ») | Une nouvelle paire apparaît : le bleu (au nom du kit) met le gris KO, ~2 s après il fait **le finisher du kit** sur lui. **Ta caméra ne bouge pas** : tu regardes de l'extérieur (seuls les deux mannequins ont la cinématique). |
+| 4 | Pendant la démo | Les plots sont désactivés (pas d'invite E) jusqu'à la fin. |
+| 5 | Après la démo | Le corps reste ~8 s pour regarder les blessures, puis une paire neuve réapparaît debout et les plots se réactivent. |
+| 6 | Tester chaque plot | STREET BRAWLER → **Bat** (la tête explose), BOXER → **KnockoutCombo** (foie arraché), SENTINEL → **Incinerate** (trou dans le cœur), BOUNCER → **ArmRip** (bras arraché, on peut prendre l'os). |
+| 7 | Regarder depuis plusieurs angles (tourne autour pendant la démo) | Animations, sang, accessoires (batte, bras) visibles comme pour un vrai joueur. |
+
+Si une démo ne démarre pas, l'Output affiche une ligne jaune `[TestTools] <kit> : ...` :
+copie-la moi. Un nouveau kit avec un finisher aura **automatiquement** son plot.

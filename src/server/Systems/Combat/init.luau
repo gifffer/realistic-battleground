@@ -2007,6 +2007,23 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	return true
 end
 
+-- Studio test tool (Server/Systems/TestTools): `attacker` (a dummy) finishes
+-- the KO'd `target` with the finisher of kit `kitId`, exactly as a player
+-- would. Never in a live game. Returns true if the finisher started.
+function Combat.devFinish(attacker: Model, target: Model, kitId: string): boolean
+	if not RunService:IsStudio() then
+		return false
+	end
+	local state = states[attacker]
+	if state == nil or Kits.get(kitId) == nil or not isAlive(state) or isBusy(state) then
+		return false
+	end
+	-- (any kit, even one not out yet: it's a test)
+	state.kitId = kitId
+	setAttribute(attacker, "Kit", kitId)
+	return startFinisher(state, target)
+end
+
 -- The zone the attacker's aim ray meets on `victim`, or nil if it misses.
 local function aimZone(attacker: CombatState, victim: Model, direction: Vector3): Types.HitZone?
 	local head = attacker.model:FindFirstChild("Head")

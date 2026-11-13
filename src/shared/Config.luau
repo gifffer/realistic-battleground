@@ -104,6 +104,10 @@ return table.freeze({
 		-- In Studio only: every kit can be equipped without buying it (to
 		-- test new kits without levelling up). Never in the published game.
 		UNLOCK_KITS_IN_STUDIO = true,
+		-- In Studio only: a limping dummy walking near the spawn, and a stage
+		-- where one dummy finishes another with any kit's finisher, to watch
+		-- them from outside (Server/Systems/TestTools).
+		TEST_TOOLS = true,
 	}),
 
 	-- Basic combat (M1 combo, block, parry, dash). Times are in seconds.
