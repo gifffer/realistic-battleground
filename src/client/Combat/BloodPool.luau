@@ -405,7 +405,10 @@ local function starburst(pool: Pool, position: Vector3, height: number, random: 
 		return
 	end
 	-- (higher falls throw them further; never wider than a few studs)
-	local across = math.min(pool.radius * 2 * random:NextNumber(1.5, 2.5) * math.clamp(0.6 + height * 0.1, 0.6, 1.2), 3.5)
+	local across = math.min(
+		pool.radius * 2 * random:NextNumber(1.5, 2.5) * math.clamp(0.6 + height * 0.1, 0.6, 1.2),
+		3.5
+	)
 	if BloodStain.resolve("starburst") ~= "starburst" then
 		across = math.min(across, 1.2) -- (its stand-in, a fan of dots: smaller)
 	end
