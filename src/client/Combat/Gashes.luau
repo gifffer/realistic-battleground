@@ -647,6 +647,10 @@ end
 
 ------------------------------------------------------------------------------
 -- Building.
+-- (a Weld with its offset written in, not a WeldConstraint: that one takes
+-- the offset the parts have when it comes on, and on a body posed by its
+-- clips (Motor6D.Transform) that can be another pose than the one the piece
+-- was placed for: the skin then sat beside the body, or far from it)
 local function setUp(piece: BasePart, part: BasePart, parent: Instance)
 	piece.Anchored = false
 	piece.CanCollide = false
@@ -654,9 +658,10 @@ local function setUp(piece: BasePart, part: BasePart, parent: Instance)
 	piece.CanTouch = false
 	piece.CastShadow = false
 	piece.Massless = true
-	local weld = Instance.new("WeldConstraint")
+	local weld = Instance.new("Weld")
 	weld.Part0 = part
 	weld.Part1 = piece
+	weld.C0 = part.CFrame:ToObjectSpace(piece.CFrame)
 	weld.Parent = piece
 	piece.Parent = parent
 end
@@ -1406,13 +1411,22 @@ local function refresh(model: Model, partName: string)
 
 	local folder = Instance.new("Folder")
 	folder.Name = "Gashes"
-	if isHead then
-		buildHeadSkin(part, cuts, found, folder)
-	else
-		buildBoxSkin(model, part, key, cuts, found, folder)
-	end
-	for _, cut in cuts do
-		buildInsert(part, cut, found, folder)
+	-- (built out of the game, then the part hidden: if anything goes wrong
+	-- on the way, the part stays as it is, whole, never invisible)
+	local ok, problem = pcall(function()
+		if isHead then
+			buildHeadSkin(part, cuts, found, folder)
+		else
+			buildBoxSkin(model, part, key, cuts, found, folder)
+		end
+		for _, cut in cuts do
+			buildInsert(part, cut, found, folder)
+		end
+	end)
+	if not ok then
+		folder:Destroy()
+		warn(`[Gashes] could not draw the cuts of {part:GetFullName()}: {problem}`)
+		return
 	end
 	local state: Opened = {
 		folder = folder,
@@ -1436,6 +1450,9 @@ local function refresh(model: Model, partName: string)
 	for _, property in { "Color", "Material", "Reflectance" } do
 		table.insert(state.tint, part:GetPropertyChangedSignal(property):Connect(retint))
 	end
+	-- (known first: close() always gives the part back its own looks)
+	folder.Parent = part
+	opened[part] = state
 	part.Transparency = 1
 	if face then
 		face.Transparency = 1 -- (a decal still shows on an invisible part)
@@ -1459,8 +1476,6 @@ local function refresh(model: Model, partName: string)
 			:Connect(follow)
 		follow()
 	end
-	folder.Parent = part
-	opened[part] = state
 	hideMarks(part)
 end
 

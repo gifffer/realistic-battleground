@@ -86,6 +86,10 @@ local HALF = 0.24 -- (its ends, a hair inside it: no gap at the joints)
 local MAX_SEGMENTS = 22 -- (11 studs of it at most)
 local PAYOUT_TIME = 4 -- seconds the guts keep coming out (live)
 local GAP_TEAR = 2.5 -- studs between the last loop and the torso: torn off there
+-- studs of slack in the strand to the torso: the guts hang and drop from
+-- it (a strand as long as the gap held the chain taut, a stiff rope up to
+-- the flying torso)
+local GUT_SLACK = 1.2
 local SETTLE_TIME = 8 -- then what lies still is fixed where it lies
 local DEBRIS_GROUP = "Debris" -- (collides with the map, not with fighters)
 local GUT_PHYSICS = PhysicalProperties.new(1, 1, 0, 100, 100) -- limp, wet, no bounce
@@ -146,15 +150,19 @@ local function along(position: Vector3, direction: Vector3): CFrame
 	return CFrame.fromMatrix(position, right, up, right:Cross(up))
 end
 
+-- (a Weld with its offset written in: a WeldConstraint takes the offset
+-- the parts have when it comes on, maybe another pose of the body's clips
+-- than the one the piece was placed for)
 local function weldTo(base: BasePart, piece: BasePart, parent: Instance)
 	piece.Anchored = false
 	piece.CanCollide = false
 	piece.CanQuery = false
 	piece.CanTouch = false
 	piece.Massless = true
-	local weld = Instance.new("WeldConstraint")
+	local weld = Instance.new("Weld")
 	weld.Part0 = base
 	weld.Part1 = piece
+	weld.C0 = base.CFrame:ToObjectSpace(piece.CFrame)
 	weld.Parent = piece
 	piece.Parent = parent
 end
@@ -583,7 +591,8 @@ local function payOut(body: Body, torso: BasePart, leg: BasePart, legFrame: CFra
 		place(segment, from, toward)
 		segment.part.Parent = folder
 		keep(body, segment.part)
-		segment.part.AssemblyLinearVelocity = torso.AssemblyLinearVelocity * 0.5
+		-- (a little of the torso's speed: out of it, they fall behind it)
+		segment.part.AssemblyLinearVelocity = torso.AssemblyLinearVelocity * 0.3
 			+ leg.AssemblyLinearVelocity * 0.3
 		if last then
 			local joint = Instance.new("BallSocketConstraint")
@@ -613,7 +622,7 @@ local function payOut(body: Body, torso: BasePart, leg: BasePart, legFrame: CFra
 	local strand = Instance.new("RopeConstraint")
 	strand.Attachment0 = first.finish
 	strand.Attachment1 = exit
-	strand.Length = 0.2
+	strand.Length = GUT_SLACK
 	strand.Visible = true
 	strand.Color = BrickColor.new(GUT_DARK)
 	strand.Thickness = 0.06
@@ -650,7 +659,7 @@ local function payOut(body: Body, torso: BasePart, leg: BasePart, legFrame: CFra
 			Blood.spray(target, Vector3.new(0, -1, 0), 1.2, body.model, true)
 			return
 		end
-		strand.Length = gap + 0.15
+		strand.Length = gap + GUT_SLACK
 	end)
 	if connection then
 		table.insert(body.connections, connection)

@@ -1422,6 +1422,33 @@ local function bisect(victim: Model, anchor: CFrame)
 	root.AssemblyLinearVelocity = anchor:VectorToWorldSpace(Vector3.new(sway, 15, -14))
 	root.AssemblyAngularVelocity =
 		anchor:VectorToWorldSpace(Vector3.new(-6, sway * 0.8, random:NextNumber(-1.5, 1.5)))
+	-- The head and the arms hang on the torso by the ragdoll's loose joints
+	-- only (each its own body): thrown with it, the same way, or the torso
+	-- alone went (they stayed behind, at rest, owned by whoever), and they
+	-- never knock into the legs (the halves part freely).
+	local linear, angular = root.AssemblyLinearVelocity, root.AssemblyAngularVelocity
+	local center = root.AssemblyCenterOfMass
+	for _, name in { "Head", "Right Arm", "Left Arm" } do
+		local limb = victim:FindFirstChild(name)
+		local base = if limb and limb:IsA("BasePart") then limb.AssemblyRootPart else nil
+		if limb == nil or not limb:IsA("BasePart") or base == nil or base == root then
+			continue -- (gone, or still rigid on the torso)
+		elseif not base:IsDescendantOf(victim) then
+			continue -- (held by someone: not ours to throw)
+		end
+		if limb:CanSetNetworkOwnership() then
+			limb:SetNetworkOwner(nil)
+		end
+		limb.AssemblyLinearVelocity = linear + angular:Cross(limb.Position - center)
+		limb.AssemblyAngularVelocity = angular
+		for _, leg in { right, left } do
+			local apart = Instance.new("NoCollisionConstraint")
+			apart.Name = "BisectApart"
+			apart.Part0 = limb
+			apart.Part1 = leg
+			apart.Parent = limb
+		end
+	end
 	right.AssemblyLinearVelocity = anchor:VectorToWorldSpace(Vector3.new(-sway * 0.4, -6, 7))
 	right.AssemblyAngularVelocity = anchor:VectorToWorldSpace(Vector3.new(4, 0, sway))
 	setAttribute(victim, "Bisected", random:NextInteger(1, 2 ^ 30))
