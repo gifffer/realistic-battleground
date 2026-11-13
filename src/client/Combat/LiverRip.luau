@@ -18,6 +18,7 @@
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Corpse = require(ReplicatedStorage.Shared.Util.Corpse)
 local GoreKit = require(script.Parent.GoreKit)
 local Blood = require(script.Parent.Blood)
@@ -30,8 +31,8 @@ local LiverRip = {}
 
 local LIVER = Color3.fromRGB(96, 28, 24) -- dark red-brown, glossy
 local GALLBLADDER = Color3.fromRGB(74, 100, 42)
-local BLOOD = Color3.fromRGB(78, 6, 6)
-local BLOOD_WET = Color3.fromRGB(104, 8, 8)
+local BLOOD = Config.Blood.PALETTE.VENOUS
+local BLOOD_WET = Config.Blood.PALETTE.ARTERIAL
 local BONE = Color3.fromRGB(224, 212, 188)
 local LIFETIME = 240 -- seconds at most the liver stays (it goes with the body before)
 
@@ -75,20 +76,33 @@ local function emitter(parent: Attachment, rate: number): ParticleEmitter
 	blood.Drag = 0.5
 	blood.EmissionDirection = Enum.NormalId.Front
 	blood.Rate = rate
+	Blood.droplets(blood, "drops") -- (real drops when the picture is uploaded)
 	blood.Parent = parent
 	return blood
 end
 
 -- A burst of blood (and bits) out of the point `at`, toward `out`.
 local function burst(at: CFrame, count: number, speed: number)
+	if not Config.Blood.ENABLED then
+		return
+	end
 	local point = Instance.new("Attachment")
 	point.WorldCFrame = at
 	point.Parent = workspace.Terrain
 	local spray = emitter(point, 0)
 	spray.Speed = NumberRange.new(speed * 0.4, speed)
 	spray.SpreadAngle = Vector2.new(60, 60)
-	spray:Emit(count)
+	spray:Emit(math.min(count, Config.Blood.CAPS.PARTICLES_PER_BURST))
 	Debris:AddItem(point, 1.5)
+	-- what flies also lands: a few of those drops leave their marks
+	Blood.landings(
+		at.Position,
+		at.LookVector,
+		60,
+		NumberRange.new(speed * 0.4, speed),
+		count / 12,
+		NumberRange.new(0.03, 0.08)
+	)
 end
 
 local function chip(at: Vector3, color: Color3, size: Vector3, velocity: Vector3)
@@ -204,7 +218,10 @@ function LiverRip.rip(victim: Model, attacker: Model)
 			Blood.drop(
 				liver.Position - Vector3.new(0, 0.3, 0),
 				liver.AssemblyLinearVelocity * 0.5,
-				Random.new():NextNumber(0.06, 0.11)
+				Random.new():NextNumber(0.06, 0.11),
+				nil,
+				Blood.passiveScale(), -- (a drip: it falls slowly, lands round)
+				{ passive = true }
 			)
 			task.wait(Random.new():NextNumber(0.08, 0.2))
 		end
@@ -214,6 +231,7 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	local drops = emitter(drip, 30)
 	drops.EmissionDirection = Enum.NormalId.Bottom
 	drops.Speed = NumberRange.new(0.5, 2)
+	Blood.dripEmitter(drops) -- (it only drips: real drops fall slowly)
 	liver.Parent = workspace
 	-- soft and wet: it jiggles in his hand, slaps and slumps on the floor
 	-- (its surface detail first, in the workspace: then it squashes too)

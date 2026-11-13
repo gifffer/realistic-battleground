@@ -38,6 +38,8 @@ local HeatBeam = require(ReplicatedStorage.Shared.Util.HeatBeam)
 local Destruction = require(script.Parent.Parent.Destruction)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Stamina = require(script.Parent.Parent.Stamina)
+local Clones = require(script.Parent.Clones)
+local Gadgets = require(script.Parent.Gadgets)
 local Grab = require(script.Parent.Grab)
 local Hitbox = require(script.Parent.Hitbox)
 local Rewind = require(script.Parent.Rewind)
@@ -118,10 +120,12 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		burns = hit.burns,
 		launch = hit.launch,
 		staminaDrain = hit.staminaDrain,
+		burn = hit.burn,
 		attackId = nil,
 		moveId = moveId,
 	}
 end
+Moves.specFor = specFor
 
 -- The zone `hit` lands on for `victimModel`: its own zone, or where the
 -- attacker aims (head or torso, like an M1).
@@ -398,20 +402,33 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	if time < state.nextAttackAt - grace or time < (state.cooldowns[move.id] or 0) - grace then
 		return false
 	end
+	-- The portal gun: where would it open? Decided now, before anything is
+	-- spent. Nowhere (aimed too high, at the void, out of the map...): the
+	-- shot fizzles, the gun is back soon, no stamina.
+	local gadget = move.gadget
+	local portal = if gadget then gadget.portal else nil
+	local portalExit: CFrame?, portalFace: CFrame? = nil, nil
+	local fizzle = false
+	if portal then
+		portalExit, portalFace = Gadgets.portalTarget(state, portal, aim)
+		fizzle = portalExit == nil
+	end
 	local player = state.player
-	if player and not Stamina.trySpend(player, move.stamina) then
+	if player and not fizzle and not Stamina.trySpend(player, move.stamina) then
 		return false
 	end
 	-- Using a move ends the spawn protection (like attacking).
 	Knockout.endProtection(state.model)
 	state.slipUntil = 0 -- a new move ends the previous slip
 
-	state.cooldowns[move.id] = time + move.cooldown
-	c.setAttribute(state.model, `CD_{move.id}`, serverTime(move.cooldown))
+	local cooldown = if fizzle and portal then portal.failCooldown else move.cooldown
+	local duration = if fizzle and portal then portal.at + 0.3 else move.duration
+	state.cooldowns[move.id] = time + cooldown
+	c.setAttribute(state.model, `CD_{move.id}`, serverTime(cooldown))
 	state.combo = 0 -- a move breaks the M1 combo
 	state.lastAttackAt = time
-	state.nextAttackAt = time + move.duration
-	state.attackingUntil = time + move.duration
+	state.nextAttackAt = time + duration
+	state.attackingUntil = time + duration
 	state.attackToken += 1
 	local token = state.attackToken
 	Remotes.CombatAction:FireAllClients(state.model, move.animation)
@@ -460,6 +477,9 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	end
 	runCharge(state, move, token)
 	runBeam(state, move, token)
+	if gadget then
+		Gadgets.run(state, move, gadget, aim, token, portalExit, portalFace)
+	end
 	local grab = move.grab
 	if grab then
 		Grab.run({
@@ -564,6 +584,11 @@ function Moves.awaken(state: CombatState): boolean
 	state.attackingUntil = time + activation
 	state.attackToken += 1
 	Remotes.CombatAction:FireAllClients(state.model, awakening.animation)
+	-- Dr. Rift: copies of him step out of portals.
+	local clones = awakening.clones
+	if clones then
+		Clones.summon(state, clones)
+	end
 	return true
 end
 

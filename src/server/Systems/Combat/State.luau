@@ -3,6 +3,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local KitTypes = require(ReplicatedStorage.Shared.Kits.KitTypes)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 -- Everything the server knows about one fighter (player or training dummy).
@@ -50,6 +51,7 @@ export type CombatState = {
 
 	-- Injuries (step 5), cleared by a kill or a new life.
 	legDamage: number, -- damage taken on the legs
+	leftLegDamage: number, -- the part of it taken on the left leg
 	limping: boolean, -- legDamage reached Config.Injuries.LIMP_LEG_DAMAGE
 	lastDamagedAt: number, -- for the out-of-combat regeneration
 	regenCarry: number, -- fraction of HP regenerated, not given yet
@@ -67,6 +69,19 @@ export type CombatState = {
 
 	-- A thing to throw in the right hand (Shared/Weapons id).
 	weapon: string?,
+
+	-- Burning (Dr. Rift's acid / ray): damage over time, its own slot
+	-- (a bleed and a burn add up). burnKind = "Acid" / "Fire".
+	burnPerSecond: number, -- 0 = not burning
+	burnUntil: number,
+	nextBurnTick: number,
+	burnSource: Model?,
+	burnKind: string?,
+
+	-- A clone (Dr. Rift's Awakening, Combat/Clones): whose. Its hits are
+	-- dealt in its owner's name (credit, Fury); it can't hit its owner or
+	-- the owner's other clones, and they can't hit it.
+	owner: CombatState?,
 }
 
 -- What one hit does. An M1 builds one, every kit move hit builds one
@@ -104,6 +119,11 @@ export type HitSpec = {
 	-- frames then count over that whole time: a dash started since then
 	-- still dodges it.
 	rewound: number?,
+	-- Acid / fire on the skin (Kits.BurnDef).
+	burn: KitTypes.BurnDef?,
+	-- A blast (an explosion, a shockwave): pushed away from this point,
+	-- not from the attacker.
+	pushFrom: Vector3?,
 }
 
 return nil

@@ -59,7 +59,9 @@ local FADE_IN: { [string]: number } = {
 	HurtGuard = 0.3,
 	HurtIdle = 0.4,
 	LimpWalk = 0.2,
+	LimpWalkLeft = 0.2,
 	LimpIdle = 0.3,
+	LimpIdleLeft = 0.3,
 	Walk = 0.15,
 	Run = 0.15,
 	BullRun = 0.15,
@@ -113,6 +115,18 @@ local RUN_START_SPEED = 14
 local RUN_STOP_SPEED = 12
 local CROUCH_WALK_START = 1.5
 local CROUCH_WALK_STOP = 0.5
+-- Limp clips, by the hurt leg (the "LimpLeg" attribute; written for the
+-- right one, mirrored for the left).
+local LIMP_WALK: { [string]: string } = table.freeze({ Right = "LimpWalk", Left = "LimpWalkLeft" })
+local LIMP_IDLE: { [string]: string } = table.freeze({ Right = "LimpIdle", Left = "LimpIdleLeft" })
+local LIMP_CLIPS: { [string]: boolean } = table.freeze({
+	LimpWalk = true,
+	LimpWalkLeft = true,
+	LimpIdle = true,
+	LimpIdleLeft = true,
+})
+-- The limp walk is authored for this speed (studs/s): walking, slowed by the limp.
+local LIMP_WALK_SPEED = Config.Character.WALK_SPEED * Config.Injuries.LIMP_SPEED
 -- Characters farther than this from the camera aren't animated by us
 -- (too far to see the difference, saves work with 16 players).
 local MAX_DISTANCE = 200
@@ -243,10 +257,12 @@ local function movementClip(entry: Tracked, state: string?): string?
 		and onGround
 		and entry.model:GetAttribute("Limping") == true
 	then
+		local side = if entry.model:GetAttribute("LimpLeg") == "Left" then "Left" else "Right"
+		local walkClip = LIMP_WALK[side]
 		local current = entry.movement[#entry.movement]
-		local walking = current ~= nil and current.target == 1 and current.name == "LimpWalk"
+		local walking = current ~= nil and current.target == 1 and current.name == walkClip
 		local threshold = if walking then CROUCH_WALK_STOP else CROUCH_WALK_START
-		return if horizontalSpeed(entry.root) > threshold then "LimpWalk" else "LimpIdle"
+		return if horizontalSpeed(entry.root) > threshold then walkClip else LIMP_IDLE[side]
 	end
 	if state == "Crouch" then
 		local current = entry.movement[#entry.movement]
@@ -312,9 +328,11 @@ end
 
 -- Playback speed of a clip.
 local function playbackRate(entry: Tracked, name: string): number
-	if name == "LimpWalk" then
-		-- Authored for 12 studs/s (walking speed × the limp's slowdown).
-		return math.clamp(horizontalSpeed(entry.root) / 12, 0.6, 1.6)
+	if name == "LimpWalk" or name == "LimpWalkLeft" then
+		-- The steps follow the real speed, down to a crawl (limping while
+		-- blocking or stunned is 2-4 studs/s): a high floor would make the
+		-- feet slide.
+		return math.clamp(horizontalSpeed(entry.root) / LIMP_WALK_SPEED, 0.3, 1.5)
 	elseif name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
@@ -426,9 +444,7 @@ end
 -- A limp clip is playing (or fading in) on the movement channel.
 isLimping = function(entry: Tracked): boolean
 	local current = entry.movement[#entry.movement]
-	return current ~= nil
-		and current.target == 1
-		and (current.name == "LimpWalk" or current.name == "LimpIdle")
+	return current ~= nil and current.target == 1 and LIMP_CLIPS[current.name] == true
 end
 
 -- Damped spring pulling the flinch back to zero (the head wobbles and settles).
@@ -549,6 +565,52 @@ local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
 	entry.sprintWeight += math.clamp(target - entry.sprintWeight, -step, step)
 end
 
+-- Farther than this (studs) from its loose joint (Server/Ragdoll), a limb
+-- of a limp body is out of place: no ball socket stretches that far.
+local LOOSE_LIMB_GAP = 3
+-- Name prefix of the loose joints the server adds (Server/Ragdoll).
+local RAGDOLL_TAG = "Ragdoll_"
+
+-- A limp body's limbs, put back on their loose joints if they are far off.
+-- (The joints let go while our clip still drew the limb somewhere else: a
+-- finisher can carry the whole body metres away. The server moves the
+-- limb and every client follows it soon, but meanwhile it would hang far
+-- off the body.) Torn-off limbs have no socket left: never touched.
+local function snapLooseLimbs(model: Model)
+	local torso = model:FindFirstChild("Torso")
+	if torso == nil or not torso:IsA("BasePart") then
+		return
+	end
+	for _, socket in torso:GetChildren() do
+		-- (only the ragdoll's own sockets, Server/Ragdoll)
+		if
+			not socket:IsA("BallSocketConstraint")
+			or not socket.Enabled
+			or string.sub(socket.Name, 1, #RAGDOLL_TAG) ~= RAGDOLL_TAG
+		then
+			continue
+		end
+		local a0, a1 = socket.Attachment0, socket.Attachment1
+		local limb = if a1 then a1.Parent else nil
+		if
+			a0 == nil
+			or a1 == nil
+			or a0.Parent ~= torso
+			or limb == nil
+			or not limb:IsA("BasePart")
+			or limb.Anchored
+			or not limb:IsDescendantOf(model)
+		then
+			continue
+		end
+		if (a0.WorldPosition - a1.WorldPosition).Magnitude > LOOSE_LIMB_GAP then
+			limb.CFrame = a0.WorldCFrame * a1.CFrame:Inverse()
+			limb.AssemblyLinearVelocity = torso.AssemblyLinearVelocity
+			limb.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+end
+
 local function onPreSimulation(dt: number)
 	local camera = workspace.CurrentCamera
 	local cameraPosition = if camera then camera.CFrame.Position else Vector3.zero
@@ -579,6 +641,7 @@ local function onPreSimulation(dt: number)
 			if rootJoint and rootJoint:IsA("Motor6D") then
 				rootJoint.Transform = CFrame.identity
 			end
+			snapLooseLimbs(model)
 			entry.flinch = Vector3.zero
 			entry.flinchSpeed = Vector3.zero
 			entry.sprintWeight = 0
