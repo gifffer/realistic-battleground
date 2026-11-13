@@ -7663,5 +7663,9 @@ clips.HitBodyRight = mirror(clips.HitBodyLeft)
 for name, clip in require(script.Parent.BouncerClips) do
 	clips[name] = clip
 end
+-- Dr. Rift's too.
+for name, clip in require(script.Parent.RiftClips) do
+	clips[name] = clip
+end
 
 return table.freeze(clips)
