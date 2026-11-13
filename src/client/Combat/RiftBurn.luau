@@ -491,7 +491,7 @@ end
 -- A frame on the skin at `position` (part space) facing out along `normal`
 -- (its Z), turned by `spin` around it.
 local function frameOn(position: Vector3, normal: Vector3, spin: number): CFrame
-	return CFrame.fromMatrix(position, Vector3.yAxis:Cross(normal), Vector3.yAxis)
+	return CFrame.fromMatrix(position, Vector3.new(0, 1, 0):Cross(normal), Vector3.yAxis)
 		* CFrame.Angles(0, 0, spin)
 end
 
