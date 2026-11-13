@@ -62,10 +62,15 @@ local DIAMOND_CEILING = 1900
 -- are refreshed while the section is open.
 local TICK_SECONDS = 0.25
 
--- The action row (FIND MATCH / CANCEL) and the players' rows fit a button.
+-- The action row (FIND MATCH / CANCEL) and the players' rows fit a button,
+-- with room for it to grow under the mouse (each is a canvas: it cuts).
 local ACTION_Y = 100
-local ACTION_HEIGHT = Button.height("small") + 4
+local ACTION_HEIGHT = Button.height("small") + 8
 local ROW_HEIGHT = Button.height("small") + 8
+-- Buttons sit this far from the right edge of their canvas (same reason).
+local BUTTON_INSET = 7
+-- ON THIS SERVER: at y 158, lower on touch (the taller action row).
+local PLAYERS_Y = math.max(158, ACTION_Y + ACTION_HEIGHT + 22)
 
 -- A refused challenge (DuelController.getState().declined), as shown in
 -- the row's reason slot for a few seconds. Keys = the server's reasons.
@@ -449,7 +454,7 @@ local function rightGroup(parent: Instance, padding: number): Frame
 	return Theme.make("Frame", {
 		Name = "Right",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -3, 0.5, 0),
+		Position = UDim2.new(1, -BUTTON_INSET, 0.5, 0),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, ACTION_HEIGHT),
 		BackgroundTransparency = 1,
@@ -501,7 +506,7 @@ local function buildActionRow(parent: Instance)
 	findButton = lineButton("FIND MATCH", {
 		Name = "FindMatch",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -3, 0.5, 0),
+		Position = UDim2.new(1, -BUTTON_INSET, 0.5, 0),
 		Parent = idle,
 	}, function()
 		DuelController.findMatch()
@@ -776,7 +781,7 @@ end
 ------------------------------------------------------------------------------
 
 local function buildPlayers(parent: Instance)
-	local head = sectionHead(parent, 158, "ON THIS SERVER")
+	local head = sectionHead(parent, PLAYERS_Y, "ON THIS SERVER")
 	micro("RANK", {
 		Name = "RankColumn",
 		Position = UDim2.fromOffset(300, 1),
@@ -793,7 +798,7 @@ local function buildPlayers(parent: Instance)
 	})
 	rowsFrame = Theme.make("ScrollingFrame", {
 		Name = "Rows",
-		Position = UDim2.fromOffset(0, 177),
+		Position = UDim2.fromOffset(0, PLAYERS_Y + 19),
 		Size = UDim2.new(1, 0, 0, 180),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -809,7 +814,7 @@ local function buildPlayers(parent: Instance)
 	}) :: ScrollingFrame
 	emptyText = Theme.text({
 		Name = "Empty",
-		Position = UDim2.fromOffset(0, 185),
+		Position = UDim2.fromOffset(0, PLAYERS_Y + 27),
 		Size = UDim2.fromOffset(400, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
@@ -871,7 +876,7 @@ local function createRow(target: Player): Row
 	local challenge = lineButton("CHALLENGE", {
 		Name = "Challenge",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -3, 0.5, 0),
+		Position = UDim2.new(1, -BUTTON_INSET, 0.5, 0),
 		Visible = false,
 		Parent = action,
 	}, function()
@@ -1247,7 +1252,7 @@ function DuelMenuController.start()
 		label = "DUEL",
 		subtitle = "ONE ON ONE · FIRST TO 2 ROUNDS",
 		order = 30, -- between KITS (10) and PROFILE (50)
-		size = Vector2.new(560, 480),
+		size = Vector2.new(560, 480 + PLAYERS_Y - 158),
 		scrimWidth = 1100,
 		build = build,
 	})

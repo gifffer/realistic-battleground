@@ -64,7 +64,10 @@ local C = Theme.Colors
 local DETAIL_INSET = Vector2.new(16, 8)
 local DETAIL_X = 200 - DETAIL_INSET.X
 local DETAIL_Y = -DETAIL_INSET.Y
-local ROW_HEIGHT = if Theme.isTouch() then 56 else 50 -- one item (its button fits)
+-- One item: 50 px, taller on touch so its button fits (the text moves down
+-- by half the difference to stay centred on it).
+local ROW_HEIGHT = math.max(50, Button.height("small") + 8)
+local ROW_TEXT_Y = (ROW_HEIGHT - 50) // 2
 local ROWS_TOP = 99 -- first row, under the CATALOG head
 local MAX_ROWS = 5 -- the biggest category
 local DETAIL_SIZE = Vector2.new(360, ROWS_TOP + MAX_ROWS * ROW_HEIGHT + 8)
@@ -333,9 +336,10 @@ end
 -- The actions (right side of a row)
 ------------------------------------------------------------------------------
 
--- Where an action button sits: right of the row, vertically centred.
+-- Where an action button sits: right of the row, vertically centred, far
+-- enough from the layer's edge that it can grow under the mouse uncut.
 local ACTION_ANCHOR = Vector2.new(1, 0.5)
-local ACTION_POSITION = UDim2.new(1, -3, 0.5, 0)
+local ACTION_POSITION = UDim2.new(1, -7, 0.5, 0)
 
 -- Locked / not enough coins: a greyed button that says why (not clickable).
 local function blockedButton(parent: Instance, icon: Button.IconName, text: string)
@@ -577,12 +581,15 @@ local function itemRow(parent: Instance, order: number, item: Cosmetics.Item): R
 	if item.category == "Outfit" then
 		-- Top above, trousers below: a tiny outfit.
 		indent = OUTFIT_INDENT
-		swatch(frame, "Top", item.top or C.Ink3, 10)
-		swatch(frame, "Trousers", item.trousers or C.Ink3, 24)
+		swatch(frame, "Top", item.top or C.Ink3, 10 + ROW_TEXT_Y)
+		swatch(frame, "Trousers", item.trousers or C.Ink3, 24 + ROW_TEXT_Y)
 	end
 	local name = Theme.text({
 		Name = "Name",
-		Position = UDim2.fromOffset(indent, if item.category == "Emote" then 3 else 8),
+		Position = UDim2.fromOffset(
+			indent,
+			ROW_TEXT_Y + (if item.category == "Emote" then 3 else 8)
+		),
 		Size = UDim2.fromOffset(200, 13),
 		TextStrokeTransparency = 1,
 		Text = Theme.track(item.name, "four"),
@@ -590,9 +597,12 @@ local function itemRow(parent: Instance, order: number, item: Cosmetics.Item): R
 	}) :: TextLabel
 	Theme.text({
 		Name = "Sentence",
-		Position = UDim2.fromOffset(indent, if item.category == "Emote" then 19 else 25),
+		Position = UDim2.fromOffset(
+			indent,
+			ROW_TEXT_Y + (if item.category == "Emote" then 19 else 25)
+		),
 		-- Stops before the action button; a long one ends with "…".
-		Size = UDim2.new(1, -indent - 150, 0, 14),
+		Size = UDim2.new(1, -indent - 154, 0, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
@@ -606,8 +616,8 @@ local function itemRow(parent: Instance, order: number, item: Cosmetics.Item): R
 		-- Under the sentence: how to play it.
 		hint = caption(EMOTE_HINT, {
 			Name = "Hint",
-			Position = UDim2.fromOffset(indent, 36),
-			Size = UDim2.new(1, -indent - 150, 0, 11),
+			Position = UDim2.fromOffset(indent, 36 + ROW_TEXT_Y),
+			Size = UDim2.new(1, -indent - 154, 0, 11),
 			TextSize = 9,
 			Parent = frame,
 		})

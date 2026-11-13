@@ -521,7 +521,8 @@ local function buildPrompt()
 	prompt = Theme.make("CanvasGroup", {
 		Name = "Prompt",
 		Position = UDim2.new(0, PROMPT_X, 0.5, PROMPT_Y),
-		Size = UDim2.fromOffset(480, 116),
+		-- (taller on touch: its buttons are; the timer stays inside)
+		Size = UDim2.fromOffset(480, math.max(116, 76 + Button.height("small"))),
 		BackgroundTransparency = 1,
 		GroupTransparency = 1,
 		Visible = false,
@@ -2376,29 +2377,15 @@ function DuelController.start()
 		end
 	end)
 
-	-- The status line: clicking MENU while it shows opens the DUEL section.
+	-- While the status line shows (searching / waiting, menu closed), MENU
+	-- and the M key open the DUEL section.
+	MenuController.setDefaultOverride(function(): string?
+		return if state == "Searching" or state == "Waiting" then "Duel" else nil
+	end)
 	local menuGui = player:WaitForChild("PlayerGui"):WaitForChild("Menu", 10)
 	local found = if menuGui then menuGui:FindFirstChild("MenuButton") else nil
 	if found and found:IsA("GuiButton") then
 		menuButton = found
-		-- Read at the press (InputBegan comes before Activated): MenuController's
-		-- own Activated handler may run first and open the menu, which hides
-		-- the status line before ours runs.
-		local statusAtPress = false
-		found.InputBegan:Connect(function(input)
-			if
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch
-			then
-				statusAtPress = statusShown
-			end
-		end)
-		found.Activated:Connect(function()
-			if statusAtPress or statusShown then
-				statusAtPress = false
-				task.defer(MenuController.open, "Duel")
-			end
-		end)
 	end
 
 	MenuController.onOpenChanged(function()

@@ -497,9 +497,9 @@ dessus). Sur téléphone les boutons sont plus hauts (doigt).
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| V1 | Arriver en jeu (PC) | À gauche au milieu : un bouton **MENU** bien visible (icône ☰, le mot MENU, la touche **M** dessinée dessus). Un **anneau ambre** en sort régulièrement tant que le menu n'a jamais été ouvert ; il s'arrête après la première ouverture. |
+| V1 | Arriver en jeu (PC) | À gauche au milieu : un bouton **MENU** bien visible (icône ☰, le mot MENU, la touche **M** dessinée dessus), **toujours entouré d'ambre avec l'icône ambre** (même après la première ouverture). Un **anneau ambre** en sort régulièrement tant que le menu n'a jamais été ouvert ; il s'arrête après la première ouverture. |
 | V2 | Survoler / cliquer **MENU** | Le bouton s'éclaire et grossit un peu au survol, s'enfonce au clic ; le menu s'ouvre. |
-| V3 | Touche **M** (hors chat) | Ouvre le menu sur la dernière section vue ; **M** à nouveau (ou **CLOSE**, qui affiche aussi « M ») le ferme. Taper « m » dans le chat ne fait **rien**. Pendant l'écran de fin de duel (bouton MENU caché) : rien. |
+| V3 | Touche **M** (hors chat) | Ouvre le menu sur la dernière section vue (pendant une recherche ranked / l'attente d'arène : sur **DUEL**, comme un clic sur MENU) ; **M** à nouveau (ou **CLOSE**, qui affiche aussi « M ») le ferme. Taper « m » dans le chat ne fait **rien**. Pendant l'écran de fin de duel (bouton MENU caché) : rien. |
 | V4 | Liste des sections (01 KITS, 02 DUEL…) | Chaque section est un **bouton-onglet** (plaque légère). Survol : plus clair. La section ouverte : **contour ambre + barre ambre à gauche**, numéro ambre. |
 | V5 | **KITS** → colonne ROSTER | Chaque kit est une **carte** (nom + ligne d'état). Le kit choisi a le contour ambre ; le kit équipé dit **EQUIPPED en ambre**. |
 | V6 | KITS → **BOXER** (possédé, pas équipé) | En haut à droite un gros bouton **ambre EQUIP**. Clic → il devient le badge **✓ EQUIPPED** (contour ambre, pas de fond plein : on voit que ce n'est plus un bouton) et la carte BOXER dit EQUIPPED. Le serveur vérifie toujours. |
@@ -512,4 +512,9 @@ dessus). Sur téléphone les boutons sont plus hauts (doigt).
 | V13 | *Test → Device* : **iPhone** (paysage) | Boutons plus hauts (faciles à toucher), pas de touche dessinée (M / Y / N cachées). Pas d'effet de survol bloqué après un toucher. La barre de moves du kit a une plaque sombre arrondie par move. |
 | V14 | iPhone, une émote équipée (SHOP → EMOTES) | Un bouton **EMOTE** au-dessus du bouton MENU ; le toucher joue l'émote (hors combat, vérifié par le serveur). Il disparaît quand le menu est ouvert, et n'existe pas sur PC (touche B). Dans SHOP → EMOTES, l'indice dit « TAP EMOTE ON THE SCREEN » (PC : « PRESS B »). |
 | V15 | Manette (si dispo) | Sélectionner un bouton avec la manette l'éclaire comme le survol souris. |
+| V16 | KITS ou SHOP : acheter avec un achat **refusé** (ex. Studio, retirer des pièces entre les 2 clics) | Après « BUYING… », le bouton revient à BUY avec un **contour rouge bien visible ~0,35 s**, puis repasse ambre. |
+| V17 | Cliquer (plusieurs fois) un bouton **gris** (« NEED 160 MORE », « LEVEL 10 », « BUYING… ») ou double-cliquer EQUIP, avec un joueur / PNJ devant soi | **Aucun coup de poing** n'est donné. Plus généralement, aucun clic dans le menu ouvert ne lance de M1. |
+| V18 | Cliquer **MENU** à la souris, puis fermer avec **M** (ou CLOSE) sans bouger la souris | Le bouton MENU revient **normal** (pas resté éclairé / grossi). Pareil pour les onglets 01, 02… à la réouverture. |
+| V19 | Survoler EQUIP / BUY (KITS, SHOP), FIND MATCH / CANCEL / CHALLENGE (DUEL) | Le bouton grossit sans que son **contour soit coupé** à droite (ni en haut / bas). |
+| V20 | *Test → Device* : **iPhone** paysage (844 × 390) : MENU, onglets, EQUIP / BUY, OFF / ON, FIND MATCH, CHALLENGE, CLOSE, ACCEPT / DECLINE | Chaque bouton fait **au moins ~44 px** de haut à l'écran (facile à toucher). La liste des sections **défile** au doigt si elle ne tient pas (fine barre à droite), rien ne passe sous l'écran. Dans SETTINGS / SHOP le texte d'une ligne reste centré sur son bouton ; dans DUEL, « ON THIS SERVER » est sous FIND MATCH sans chevauchement ; dans le défi, la barre de temps et son chiffre ne sont pas coupés. |
 

@@ -157,6 +157,11 @@ end
 
 -- A setting row: name, a sentence under it, the OFF / ON buttons on the
 -- right and a faint rule at the bottom.
+-- One setting row: 52 px, taller on touch so its OFF / ON fit (the text
+-- moves down by half the difference to stay centred on them).
+local ROW_HEIGHT = math.max(52, Button.height("small") + 8)
+local ROW_TEXT_Y = (ROW_HEIGHT - 52) // 2
+
 local function settingRow(
 	content: Frame,
 	name: string,
@@ -168,13 +173,13 @@ local function settingRow(
 	local row = Theme.make("Frame", {
 		Name = name,
 		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.new(1, 0, 0, 52),
+		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = content,
 	}, {
 		Theme.text({
 			Name = "Name",
-			Position = UDim2.fromOffset(0, 8),
+			Position = UDim2.fromOffset(0, 8 + ROW_TEXT_Y),
 			Size = UDim2.fromOffset(320, 18),
 			FontFace = Theme.Fonts.Body,
 			TextSize = 15,
@@ -183,7 +188,7 @@ local function settingRow(
 		}),
 		Theme.text({
 			Name = "Description",
-			Position = UDim2.fromOffset(0, 28),
+			Position = UDim2.fromOffset(0, 28 + ROW_TEXT_Y),
 			Size = UDim2.fromOffset(320, 14),
 			FontFace = Theme.Fonts.Body,
 			TextSize = 12,

@@ -16,6 +16,7 @@
 --   equip.setEnabled(false)  -- flat and grey, no hover, presses ignored
 --   equip.setSelected(true)  -- tabs: accent outline + a bar on the left
 --   equip.setText("CONFIRM")
+--   equip.reset()            -- no hover / press (call when its parent hides it)
 --
 -- States: idle -> hover (brighter, slightly bigger) -> pressed (darker,
 -- slightly smaller). Gamepad selection counts as hover.
@@ -56,6 +57,7 @@ export type Options = {
 	layoutOrder: number?,
 	zIndex: number?,
 	visible: boolean?,
+	accent: boolean?, -- a permanent accent outline and icon (the HUD's MENU)
 	parent: Instance?,
 	onActivated: (() -> ())?,
 }
@@ -71,6 +73,7 @@ export type Button = {
 	setSelected: (selected: boolean) -> (),
 	setVariant: (variant: Variant) -> (),
 	isEnabled: () -> boolean,
+	reset: () -> (), -- drops hover / press at once (its menu was just hidden)
 	flash: () -> (), -- a short red outline (a refused request)
 	press: () -> (), -- plays the press animation (a keyboard shortcut was used)
 	pulse: (on: boolean) -> (), -- an accent ring that keeps growing out
@@ -90,10 +93,12 @@ export type BadgeOptions = {
 local Button = {}
 
 -- Height of each size, on a PC and on a touch screen (a finger needs more).
+-- On a phone the menu and the HUD are drawn at x0.8 (their smallest scale):
+-- 56 x 0.8 = 44.8, the smallest target a finger hits reliably.
 local HEIGHTS: { [Size]: { pc: number, touch: number } } = {
-	small = { pc = 28, touch = 40 },
-	medium = { pc = 34, touch = 44 },
-	large = { pc = 44, touch = 52 },
+	small = { pc = 28, touch = 56 },
+	medium = { pc = 34, touch = 56 },
+	large = { pc = 44, touch = 60 },
 }
 local TEXT_SIZES: { [Size]: number } = { small = 11, medium = 12, large = 14 }
 local PAD: { [Size]: number } = { small = 10, medium = 14, large = 18 }
@@ -104,6 +109,7 @@ local HOVER_SCALE = 1.04
 local PRESS_SCALE = 0.95
 local TAB_HOVER_SCALE = 1.015
 local TAB_PRESS_SCALE = 0.98
+local FLASH_SECONDS = 0.35 -- the red outline of flash()
 
 type Look = {
 	bg: Color3,
@@ -254,23 +260,28 @@ local function drawIcon(name: IconName, parent: Instance, order: number): Frame
 	return holder
 end
 
-local function paintIcon(icon: Frame?, color: Color3, seconds: number)
+-- Recolours an icon. Tweens it starts go into `tweens` (if given).
+local function paintIcon(icon: Frame?, color: Color3, seconds: number, tweens: { Tween }?)
 	if icon == nil then
 		return
 	end
 	for _, part in icon:GetDescendants() do
+		local tween: Tween? = nil
 		if part:IsA("Frame") and part.Name == "Part" then
 			if seconds > 0 then
-				Theme.tween(part, seconds, { BackgroundColor3 = color })
+				tween = Theme.tween(part, seconds, { BackgroundColor3 = color })
 			else
 				part.BackgroundColor3 = color
 			end
 		elseif part:IsA("UIStroke") then
 			if seconds > 0 then
-				Theme.tween(part, seconds, { Color = color })
+				tween = Theme.tween(part, seconds, { Color = color })
 			else
 				part.Color = color
 			end
+		end
+		if tween and tweens then
+			table.insert(tweens, tween)
 		end
 	end
 end
@@ -327,6 +338,7 @@ function Button.new(options: Options): Button
 	local touch = Theme.isTouch()
 	local showKey = options.keyHint ~= nil and not touch
 	local text = options.text
+	local accent = options.accent == true
 
 	local instance = Theme.make("TextButton", {
 		Name = options.name or "Button",
@@ -532,6 +544,14 @@ function Button.new(options: Options): Button
 		return "idle"
 	end
 
+	-- The last paint's tweens: a new paint stops them first, or one still
+	-- running (e.g. towards the hover size) would undo it. The stroke's is
+	-- kept apart: while the red outline of flash() shows (until flashUntil)
+	-- paint leaves the stroke alone.
+	local paintTweens: { Tween } = {}
+	local strokeTween: Tween? = nil
+	local flashUntil = 0
+
 	local function paint(seconds: number)
 		local current: Mode = mode()
 		local looks = LOOKS[variant]
@@ -541,29 +561,60 @@ function Button.new(options: Options): Button
 			wanted = table.clone(wanted)
 			wanted.bgT = math.max(wanted.bgT - 0.04, 0)
 		end
+		-- Accent: the outline (and the icon) stay in the accent colour.
+		local iconColor = wanted.text
+		if accent and (current == "idle" or current == "hover") then
+			wanted = table.clone(wanted)
+			wanted.stroke = C.Accent
+			wanted.strokeT = if current == "hover" then 0 else 0.15
+			iconColor = C.Accent
+		end
+		local strokeFree = os.clock() >= flashUntil
 		local targetScale = 1
 		if current == "pressed" then
 			targetScale = if isTab then TAB_PRESS_SCALE else PRESS_SCALE
 		elseif hovered and enabled then
 			targetScale = if isTab then TAB_HOVER_SCALE else HOVER_SCALE
 		end
+		for _, tween in paintTweens do
+			tween:Cancel()
+		end
+		table.clear(paintTweens)
+		if strokeFree and strokeTween then
+			strokeTween:Cancel()
+			strokeTween = nil
+		end
 		if seconds <= 0 then
 			plate.BackgroundColor3 = wanted.bg
 			plate.BackgroundTransparency = wanted.bgT
-			stroke.Color = wanted.stroke
-			stroke.Transparency = wanted.strokeT
+			if strokeFree then
+				stroke.Color = wanted.stroke
+				stroke.Transparency = wanted.strokeT
+			end
 			label.TextColor3 = wanted.text
 			scale.Scale = targetScale
 		else
-			Theme.tween(plate, seconds, {
-				BackgroundColor3 = wanted.bg,
-				BackgroundTransparency = wanted.bgT,
-			})
-			Theme.tween(stroke, seconds, { Color = wanted.stroke, Transparency = wanted.strokeT })
-			Theme.tween(label, seconds, { TextColor3 = wanted.text })
-			Theme.tween(scale, seconds, { Scale = targetScale }, Enum.EasingStyle.Back)
+			table.insert(
+				paintTweens,
+				Theme.tween(plate, seconds, {
+					BackgroundColor3 = wanted.bg,
+					BackgroundTransparency = wanted.bgT,
+				})
+			)
+			if strokeFree then
+				strokeTween = Theme.tween(
+					stroke,
+					seconds,
+					{ Color = wanted.stroke, Transparency = wanted.strokeT }
+				)
+			end
+			table.insert(paintTweens, Theme.tween(label, seconds, { TextColor3 = wanted.text }))
+			table.insert(
+				paintTweens,
+				Theme.tween(scale, seconds, { Scale = targetScale }, Enum.EasingStyle.Back)
+			)
 		end
-		paintIcon(icon, wanted.text, seconds)
+		paintIcon(icon, iconColor, seconds, paintTweens)
 		if key then
 			key.TextColor3 = wanted.text
 		end
@@ -627,6 +678,19 @@ function Button.new(options: Options): Button
 		end
 	end)
 
+	-- Hidden (by itself, e.g. MENU while the menu is open): Roblox does not
+	-- always send MouseLeave then, so it would come back lit up.
+	local function reset()
+		hovered = false
+		pressed = false
+		paint(0)
+	end
+	instance:GetPropertyChangedSignal("Visible"):Connect(function()
+		if not instance.Visible then
+			reset()
+		end
+	end)
+
 	local pulseTweens: { Tween } = {}
 	local function stopPulse()
 		for _, tween in pulseTweens do
@@ -664,7 +728,8 @@ function Button.new(options: Options): Button
 				return
 			end
 			enabled = value
-			instance.Active = value
+			-- (Active stays on: a press on a greyed button is still taken by
+			-- the GUI, so it never reaches combat as a punch.)
 			instance.Selectable = value
 			if not value then
 				pressed = false
@@ -688,10 +753,25 @@ function Button.new(options: Options): Button
 		isEnabled = function(): boolean
 			return enabled
 		end,
+		reset = reset,
 		flash = function()
+			-- Stop the outline's tween (setEnabled / hover just started one)
+			-- or it paints over the red on the next frame.
+			local running = strokeTween
+			if running then
+				running:Cancel()
+				strokeTween = nil
+			end
 			stroke.Color = C.BloodHi
 			stroke.Transparency = 0
-			task.delay(0.35, function()
+			local untilTime = os.clock() + FLASH_SECONDS
+			flashUntil = untilTime
+			task.delay(FLASH_SECONDS, function()
+				-- (a newer flash keeps the red for its own time)
+				if flashUntil ~= untilTime then
+					return
+				end
+				flashUntil = 0
 				if instance.Parent ~= nil then
 					paint(0.3)
 				end

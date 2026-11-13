@@ -2,8 +2,9 @@
 -- MenuController: the game menu (everything that isn't fighting).
 --
 -- Closed: a real MENU button on the left edge of the screen (an icon, the
--- word and, on a PC, its key "M"). Until the menu is opened once it sends
--- out a soft accent ring, so new players see it.
+-- word and, on a PC, its key "M"), always outlined in the accent colour.
+-- Until the menu is opened once it also sends out a soft accent ring, so
+-- new players see it.
 -- Open: the world blurs and loses its colour, a numbered list of sections
 -- on the left (tab buttons "01 KITS"...; the open one is outlined in the
 -- accent colour with a bar), the open section's panel next to it (big
@@ -34,6 +35,11 @@
 -- section still too tall then scrolls. On a short or narrow screen the list
 -- sits closer to the left edge (a narrower left column) so the panel gets
 -- the room. Sections build in the stage's pixels and never need to know.
+-- The list of sections scrolls too when it is taller than the panel (a
+-- phone: its buttons are taller for a finger).
+--
+-- A controller can pick the section MENU (or M) opens for a while:
+-- MenuController.setDefaultOverride(function() return "Duel" end).
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -50,6 +56,11 @@ local player = Players.LocalPlayer
 local C = Theme.Colors
 
 local ITEM_GAP = 6 -- between two section buttons
+local NAV_TOP = 176 -- the list's header (stage pixels)
+local ITEMS_TOP = 34 -- the first section button, under the header
+-- The list's scrolling window reaches this far past each side, so a button
+-- that grows a little under the mouse isn't cut.
+local ITEMS_BLEED = 4
 local DEFAULT_SIZE = Vector2.new(440, 280)
 local DEFAULT_SCRIM_WIDTH = 900
 local PANEL_TOP = 168
@@ -102,6 +113,7 @@ local everOpened = false -- the MENU button pulses until then
 local openLayer: CanvasGroup -- everything shown while open (fades as one)
 local fadeToken = 0
 local nav: Frame
+local navItems: ScrollingFrame -- the section buttons
 local panels: Frame -- one panel per section, inside panelsView
 local panelsView: ScrollingFrame -- scrolls when a section can't fit
 local divider: Frame
@@ -116,6 +128,7 @@ local entries: { [string]: EntryUi } = {}
 local openId: string? = nil
 local lastId: string? = nil
 local openChanged = Signal.new() :: Signal.Signal<string?>
+local defaultOverride: (() -> string?)? = nil
 
 ------------------------------------------------------------------------------
 -- Building
@@ -189,6 +202,11 @@ local function setItemActive(ui: EntryUi, active: boolean)
 	end
 end
 
+-- Height of one section button in the list.
+local function navItemHeight(): number
+	return Button.height("medium") + 4
+end
+
 -- Fits the stage to the screen for a panel of `size` (see the top).
 local function layoutStage(size: Vector2)
 	local camera = workspace.CurrentCamera
@@ -199,9 +217,8 @@ local function layoutStage(size: Vector2)
 	local layout = if viewport.X < COMPACT_BELOW.X or viewport.Y < COMPACT_BELOW.Y
 		then COMPACT
 		else REGULAR
-	nav.Position = UDim2.fromOffset(layout.navX, 176)
-	nav.Size = UDim2.fromOffset(layout.navWidth, 300)
-	divider.Position = UDim2.fromOffset(layout.dividerX, 176)
+	nav.Position = UDim2.fromOffset(layout.navX, NAV_TOP)
+	divider.Position = UDim2.fromOffset(layout.dividerX, NAV_TOP)
 	panelsView.Position = UDim2.fromOffset(layout.panelX - GUTTER, PANEL_TOP)
 
 	-- Free screen: under Roblox's top bar (its buttons are on the left,
@@ -229,6 +246,20 @@ local function layoutStage(size: Vector2)
 	panels.Size = UDim2.fromOffset(size.X, size.Y)
 	closeButton.instance.Position = UDim2.fromOffset(layout.panelX, PANEL_TOP + visible + 12)
 
+	-- The list goes down to CLOSE's bottom; past that it scrolls.
+	local navHeight = PANEL_TOP + visible + 12 + closeHeight - NAV_TOP
+	nav.Size = UDim2.fromOffset(layout.navWidth, navHeight)
+	local itemsView = navHeight - ITEMS_TOP
+	local count = 0
+	for _ in entries do
+		count += 1
+	end
+	local itemsHeight = count * navItemHeight() + math.max(count - 1, 0) * ITEM_GAP
+	local navScrolls = itemsHeight > itemsView + 0.5
+	navItems.Size = UDim2.new(1, 2 * ITEMS_BLEED, 0, itemsView + 2 * ITEMS_BLEED)
+	navItems.ScrollingEnabled = navScrolls
+	navItems.ScrollBarImageTransparency = if navScrolls then 0.6 else 1
+
 	-- Where it was drawn (y 160) if it fits there, else as high as needed.
 	local height = around + visible
 	local top =
@@ -253,9 +284,12 @@ local function setWorldDimmed(dimmed: boolean)
 	})
 end
 
--- Opens the last section seen (the first of the list the first time).
+-- Opens the section a controller asked for (setDefaultOverride), else the
+-- last section seen (the first of the list the first time).
 local function openDefault()
-	local target = lastId
+	local override = defaultOverride
+	local wanted = if override then override() else nil
+	local target = if wanted and entries[wanted] then wanted else lastId
 	if target == nil then
 		local best: EntryUi? = nil
 		for _, ui in entries do
@@ -287,9 +321,9 @@ function MenuController.register(entry: MenuEntry)
 		variant = "tab",
 		index = "00",
 		layoutOrder = entry.order,
-		height = Button.height("medium") + 4,
+		height = navItemHeight(),
 		fillWidth = true, -- as wide as the list
-		parent = nav:FindFirstChild("Items"),
+		parent = navItems,
 		onActivated = function()
 			MenuController.open(entry.id)
 		end,
@@ -301,6 +335,9 @@ function MenuController.register(entry: MenuEntry)
 		panel = nil,
 	}
 	renumber()
+	if openId then
+		layoutStage(currentSize()) -- (one more button in the list)
+	end
 end
 
 function MenuController.open(id: string)
@@ -373,6 +410,11 @@ function MenuController.close()
 		setItemActive(ui, false)
 	end
 	openId = nil
+	-- Hidden under the mouse: no MouseLeave comes, so drop the hover now.
+	for _, other in entries do
+		other.button.reset()
+	end
+	closeButton.reset()
 	-- Fade out, then hide (unless it was reopened meanwhile).
 	fadeToken += 1
 	local token = fadeToken
@@ -388,6 +430,7 @@ function MenuController.close()
 			openLayer.Visible = false
 		end
 	end)
+	menuButton.reset()
 	menuButton.instance.Visible = true
 	setWorldDimmed(false)
 	CameraController.setCursorFree("menu", false)
@@ -405,6 +448,12 @@ end
 -- Id of the open section, or nil.
 function MenuController.getOpen(): string?
 	return openId
+end
+
+-- While `pick` is set, MENU (and the M key) open the section it returns
+-- (nil: the usual one). DuelController: the DUEL section while searching.
+function MenuController.setDefaultOverride(pick: (() -> string?)?)
+	defaultOverride = pick
 end
 
 -- Fires with the id of the section just opened, or nil when the menu closes.
@@ -433,6 +482,7 @@ function MenuController.init()
 		icon = "menu",
 		keyHint = Config.Controls.MENU.Name,
 		size = "large",
+		accent = true, -- (stays easy to spot after the first open)
 		anchorPoint = Vector2.new(0, 0.5),
 		position = UDim2.new(0, 16, 0.5, MenuController.BUTTON_Y),
 		parent = gui,
@@ -476,8 +526,8 @@ function MenuController.init()
 
 	nav = Theme.make("Frame", {
 		Name = "Nav",
-		Position = UDim2.fromOffset(64, 176),
-		Size = UDim2.fromOffset(180, 260),
+		Position = UDim2.fromOffset(REGULAR.navX, NAV_TOP),
+		Size = UDim2.fromOffset(REGULAR.navWidth, 300),
 		BackgroundTransparency = 1,
 		Parent = stage,
 	}, {
@@ -489,18 +539,29 @@ function MenuController.init()
 			TextStrokeTransparency = 1,
 			Text = Theme.track("MENU", "three"),
 		}),
-		Theme.make("Frame", {
-			Name = "Items",
-			Position = UDim2.fromOffset(0, 34),
-			Size = UDim2.new(1, 0, 1, -34),
-			BackgroundTransparency = 1,
-		}, {
-			Theme.make("UIListLayout", {
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				Padding = UDim.new(0, ITEM_GAP),
-			}),
-		}),
 	})
+	-- (sized by layoutStage; scrolls only when the list can't fit)
+	navItems = Theme.make("ScrollingFrame", {
+		Name = "Items",
+		Position = UDim2.fromOffset(-ITEMS_BLEED, ITEMS_TOP - ITEMS_BLEED),
+		Size = UDim2.new(1, 2 * ITEMS_BLEED, 1, 2 * ITEMS_BLEED - ITEMS_TOP),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = false,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = C.Ink,
+		ScrollBarImageTransparency = 1,
+		Parent = nav,
+	}, {
+		Theme.padding(ITEMS_BLEED),
+		Theme.make("UIListLayout", {
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, ITEM_GAP),
+		}),
+	}) :: ScrollingFrame
 
 	-- (sized by layoutStage; scrolls only when the section can't fit)
 	panelsView = Theme.make("ScrollingFrame", {

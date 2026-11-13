@@ -388,9 +388,10 @@ local function sectionHead(parent: Instance, y: number, title: string, columns: 
 	hairline(head, UDim.new(1, 0), 0.9)
 end
 
--- Where the action button sits (top right of the detail, inside its layer).
+-- Where the action button sits (top right of the detail, inside its layer,
+-- far enough from its edge that it can grow under the mouse uncut).
 local function actionProps(name: string): (Vector2, UDim2, string)
-	return Vector2.new(1, 0), UDim2.new(1, -3, 0, 4), name
+	return Vector2.new(1, 0), UDim2.new(1, -7, 0, 4), name
 end
 
 -- Locked / not enough coins: a greyed button that says why (not clickable).

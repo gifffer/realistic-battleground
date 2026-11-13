@@ -29,6 +29,7 @@ local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local KnockoutController = require(script.Parent.KnockoutController)
+local MenuController = require(script.Parent.MenuController)
 local ParkourController = require(script.Parent.ParkourController)
 local SoundController = require(script.Parent.SoundController)
 
@@ -352,6 +353,10 @@ function CombatController.start()
 			return -- clicking a button, typing in chat...
 		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			-- (the menu is open: a click there is never a punch)
+			if MenuController.getOpen() ~= nil then
+				return
+			end
 			attackHeld = true
 			tryAttack()
 		elseif input.KeyCode == Config.Controls.BLOCK then
