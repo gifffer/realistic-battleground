@@ -276,6 +276,12 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.1,
 		fallback = "AcidSizzle",
 	},
+	BurnCry = { -- the one burnt by acid or fire reacting (a cry of pain)
+		ids = { 9116454961 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.06,
+	},
 	GloveBlast = { -- the gravity glove (a magnetic pulse)
 		ids = { 15912192112 },
 		volume = 0.9,

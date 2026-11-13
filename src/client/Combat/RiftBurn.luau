@@ -56,6 +56,10 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+
+-- A burnt fighter cries out (Shared/Sounds "BurnCry"), at most this often.
+local CRY_INTERVAL = 2.5
+local nextCry: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
 local HeadBlast = require(script.Parent.HeadBlast)
 
 local RiftBurn = {}
@@ -2219,6 +2223,12 @@ local function startBurning(model: Model, kind: string)
 	end
 	ensureHeartbeat()
 	SoundController.play(if kind == "Fire" then "Burn" else "AcidSizzle", model)
+	-- The one burning reacts (a cry of pain), not more than every few seconds.
+	local now = os.clock()
+	if now >= (nextCry[model] or 0) then
+		nextCry[model] = now + CRY_INTERVAL
+		SoundController.play("BurnCry", model)
+	end
 end
 
 ------------------------------------------------------------------------------
