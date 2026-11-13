@@ -8,26 +8,37 @@
 -- (= a seed) on the body; a moment later the legs fold. Every part stays in
 -- the body (its clothes keep showing). Every client then (Gashes watches the
 -- attribute):
---   • under the torso: the real cut through the hips (Z-Anatomy): the
---     pelvis and the sacrum in section, the femoral heads, the glutei, the
---     iliopsoas and the thigh muscles cut, the bladder and the colon, the
---     cut arteries, the yellow fat under the skin, the skin torn round the
---     edge, loops of small intestine hanging out;
---   • on each leg's top: the other face of it (the femur's head in its
---     socket, the muscles, the femoral artery and vein, fat, skin);
---   • when it happens in front of us (not a body we only see later): a
---     burst of blood both ways, a geyser out of each leg's femoral artery
---     while they stand, the iliac arteries pumping out of the upper body, blood
---     running down the legs, loose loops of intestine falling out on the
---     floor, the torso dripping.
--- Pieces from WoundKit (GoreKit "Waist" / "HipR" / "HipL" / "Gut<i>");
--- simpler ones drawn here without them (an older kit).
+--   • under the torso: the real cut through the hips (Z-Anatomy): the hip
+--     bones and the sacrum in section (a hard white rim round the red
+--     spongy bone), the glutei, the iliopsoas and the thigh muscles cut
+--     (domed, two reds, pearly fascia between them), the bladder and the
+--     colon cut across (wall, red lining, what was in them), the arteries
+--     and veins as open tubes (dark clot inside), the sciatic and femoral
+--     nerves (white cords), the yellow fat under the skin, the skin torn
+--     round the edge, blood hanging in drops, coiled loops of small
+--     intestine hanging out on their mesentery;
+--   • on each leg's top: the other face of it (the femur's head in
+--     section, the muscles, the femoral artery, vein and nerve, fat, skin,
+--     blood pooling round the artery);
+--   • when it happens in front of us (not a body we only see later): the
+--     portal's mark - the cut faces white-hot green at first, their edges
+--     glowing, fading to raw flesh (cauterised for a moment), rift energy
+--     crackling over them in arcs and sparks, a ring of green energy and
+--     blood mist bursting out along the cut plane, green motes drifting
+--     off - then a burst of blood both ways, a geyser out of each leg's
+--     femoral artery while they stand, the iliac arteries pumping out of the
+--     upper body, blood running down the legs, loose coils of intestine and
+--     a length of colon falling out on the floor, the torso dripping.
+-- Pieces from WoundKit (GoreKit "Waist" / "HipR" / "HipL" / "Gut<i>" /
+-- "Colon"); simpler ones drawn here without them (an older kit).
 --
 --   WaistCut.apply(model, live)   draws the wounds (once per body)
 --   WaistCut.isApplied(model)     whether it has been drawn on this body
 
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local GoreKit = require(script.Parent.GoreKit)
@@ -44,13 +55,33 @@ local BLOOD_WET = Color3.fromRGB(104, 8, 8)
 local FLESH = Color3.fromRGB(122, 28, 30)
 local FLESH_DARK = Color3.fromRGB(70, 10, 12)
 local BONE = Color3.fromRGB(226, 214, 190)
--- The real muscles' cut (Z-Anatomy): raw red, a darker one beside it; the fat
--- under the skin: yellow; the gut: wet pinkish grey; the vessels: dark.
-local MUSCLE = Color3.fromRGB(150, 32, 34)
-local MUSCLE_DARK = Color3.fromRGB(112, 22, 26)
-local FAT = Color3.fromRGB(222, 190, 112)
-local GUT = Color3.fromRGB(196, 140, 128)
-local VESSEL = Color3.fromRGB(88, 14, 32)
+-- The inside of the body cut across (gore.py's layers), as it looks: wet
+-- (shine) except bone, nerve and fascia.
+local MUSCLE = Color3.fromRGB(150, 28, 32) -- raw red, a darker one beside it
+local MUSCLE_DARK = Color3.fromRGB(116, 20, 26)
+local FASCIA = Color3.fromRGB(206, 186, 178) -- the pearly sheaths between them
+local FAT = Color3.fromRGB(232, 192, 98) -- yellow lobules under the skin
+local MARROW = Color3.fromRGB(162, 82, 62) -- the spongy bone inside the rim
+local GUT = Color3.fromRGB(196, 150, 140) -- small intestine: greyish pink, not candy pink
+local COLON = Color3.fromRGB(190, 146, 124) -- the colon: greyer, browner
+local MUCOSA = Color3.fromRGB(168, 50, 56) -- the gut's lining
+local LUMEN = Color3.fromRGB(72, 52, 24) -- what was in the colon
+local URINE = Color3.fromRGB(214, 168, 58)
+local MESENTERY = Color3.fromRGB(232, 202, 142) -- the gut's fatty sheet
+local ARTERY = Color3.fromRGB(212, 160, 150) -- thick pale wall
+local VEIN = Color3.fromRGB(70, 42, 84) -- thin, dark blue-purple
+local CLOT = Color3.fromRGB(40, 4, 6)
+local NERVE = Color3.fromRGB(236, 226, 198)
+local VESSEL = Color3.fromRGB(120, 20, 40) -- the small ones on the gut
+-- The portal's mark on the cut (Dr. Rift's rift green, RiftParts).
+local RIFT_GREEN = Color3.fromRGB(110, 255, 96)
+local RIFT_GLOW = Color3.fromRGB(170, 255, 150)
+local HOT = Color3.fromRGB(232, 255, 222) -- white-hot, a little green
+local EMBER = Color3.fromRGB(120, 30, 12) -- what the hot rim cools to
+local SPARKLE = "rbxasset://textures/particles/sparkles_main.dds"
+local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
+local CAUTERISED = 1.8 -- seconds the cut faces glow
+local CRACKLE = 1.5 -- seconds the energy crackles over them (motes a bit longer)
 local DRIP_TIME = 10 -- seconds the upper body drips
 local GUT_LIFETIME = 25 -- seconds the loose loops of gut stay on the floor
 -- Where the cut arteries are (gore.py: the real vessels' section, widened
@@ -59,11 +90,17 @@ local GUT_LIFETIME = 25 -- seconds the loose loops of gut stay on the floor
 -- (there is no aorta this low: the two external iliac / femoral arteries,
 -- right and left), in the torso's.
 local FEMORAL: { [string]: Vector3 } = {
-	["Right Leg"] = Vector3.new(-0.28, 1.12, -0.16),
-	["Left Leg"] = Vector3.new(0.28, 1.12, -0.16),
+	["Right Leg"] = Vector3.new(-0.26, 1.08, -0.16),
+	["Left Leg"] = Vector3.new(0.26, 1.08, -0.16),
 }
-local ILIAC = { Vector3.new(0.48, -1.15, -0.25), Vector3.new(-0.48, -1.15, -0.25) }
+local ILIAC = { Vector3.new(0.46, -1.12, -0.2), Vector3.new(-0.46, -1.14, -0.2) }
 local CUT = CFrame.new(0, -1, 0) -- the torso's cut face (torso space)
+-- What falls out of the upper body (GoreKit pieces), in order.
+local SPILL = { "Gut1", "Gut2", "Gut3", "Colon" }
+
+-- A face of the cut: its part, where it is in the part's space (`at`: its
+-- centre, Y out of the cut), its half size (X, Z), the gore drawn on it.
+type Face = { part: BasePart, at: CFrame, half: Vector2, gore: Model }
 
 local done: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -99,25 +136,39 @@ local function emitter(parent: Attachment, rate: number): ParticleEmitter
 	return blood
 end
 
--- Each layer's colour and shine. `skin` = the body's own skin colour.
+-- Each layer's colour and shine (Reflectance: the wet ones shine; kept low,
+-- since Reflectance mirrors the sky - much more and gut reads as chrome or
+-- plastic, not wet). `skin` = the body's own skin colour.
+local LAYERS: { [string]: { Color3 | number } } = {
+	Bone = { BONE, 0.04 },
+	Marrow = { MARROW, 0.06 },
+	FleshDark = { FLESH_DARK, 0.12 },
+	Muscle = { MUSCLE, 0.12 },
+	MuscleDark = { MUSCLE_DARK, 0.12 },
+	Fascia = { FASCIA, 0.1 },
+	Fat = { FAT, 0.12 },
+	Gut = { GUT, 0.12 },
+	Colon = { COLON, 0.1 },
+	Mucosa = { MUCOSA, 0.13 },
+	Lumen = { LUMEN, 0.12 },
+	Urine = { URINE, 0.18 },
+	Mesentery = { MESENTERY, 0.1 },
+	Artery = { ARTERY, 0.12 },
+	Vein = { VEIN, 0.14 },
+	Clot = { CLOT, 0.16 },
+	Nerve = { NERVE, 0.06 },
+	Vessel = { VESSEL, 0.12 },
+	Blood = { BLOOD_WET, 0.17 },
+}
+
 local function painter(skin: Color3): (layer: string) -> (Color3, number)
 	return function(layer: string): (Color3, number)
 		if layer == "Skin" then
 			return skin, 0
-		elseif layer == "Bone" then
-			return BONE, 0.05
-		elseif layer == "FleshDark" then
-			return FLESH_DARK, 0.2
-		elseif layer == "Muscle" then
-			return MUSCLE, 0.16
-		elseif layer == "MuscleDark" then
-			return MUSCLE_DARK, 0.16
-		elseif layer == "Fat" then
-			return FAT, 0.08
-		elseif layer == "Gut" then
-			return GUT, 0.2
-		elseif layer == "Vessel" then
-			return VESSEL, 0.18
+		end
+		local look = LAYERS[layer]
+		if look then
+			return look[1] :: Color3, look[2] :: number
 		end
 		return FLESH, 0.14
 	end
@@ -177,9 +228,10 @@ local function simpleFlaps(
 end
 
 -- The kit's piece `name` (in `part`'s own space) on `part`, or simple
--- shapes without it.
-local function dress(part: BasePart, name: string, skin: Color3, random: Random)
-	local folder = Instance.new("Folder")
+-- shapes without it. Returns what was drawn (a Model: the portal's glow
+-- lights it all up).
+local function dress(part: BasePart, name: string, skin: Color3, random: Random): Model
+	local folder = Instance.new("Model")
 	folder.Name = "WaistCut"
 	local pieces = GoreKit.get()
 	local piece = if pieces then pieces[name] else nil
@@ -243,12 +295,14 @@ local function dress(part: BasePart, name: string, skin: Color3, random: Random)
 		simpleFlaps(part, top, Vector2.new(0.5, 0.5), skin, random, folder)
 	end
 	folder.Parent = part
+	return folder
 end
 
--- A loose loop of gut, falling out of the torso's cut at `at` (world).
-local function newGut(index: number, at: CFrame, random: Random): BasePart
+-- A loose length of gut (`name`: GoreKit's "Gut<i>" / "Colon"), falling
+-- out of the torso's cut at `at` (world).
+local function newGut(name: string, at: CFrame, random: Random): BasePart
 	local pieces = GoreKit.get()
-	local piece = if pieces then pieces["Gut" .. index] else nil
+	local piece = if pieces then pieces[name] else nil
 	local gut: BasePart
 	if piece then
 		gut = GoreKit.spawn(piece, at, painter(GUT))
@@ -259,9 +313,10 @@ local function newGut(index: number, at: CFrame, random: Random): BasePart
 		local mesh = Instance.new("SpecialMesh")
 		mesh.MeshType = Enum.MeshType.Sphere
 		mesh.Parent = loop
-		loop.Size = Vector3.new(random:NextNumber(0.9, 1.4), 0.2, 0.22)
+		local thick = if name == "Colon" then 0.3 else 0.2
+		loop.Size = Vector3.new(random:NextNumber(0.9, 1.4), thick, thick + 0.02)
 		loop.Material = Enum.Material.SmoothPlastic
-		loop.Color = GUT
+		loop.Color = if name == "Colon" then COLON else GUT
 		loop.Reflectance = 0.2
 		loop.CFrame = at
 		gut = loop
@@ -275,10 +330,10 @@ local function newGut(index: number, at: CFrame, random: Random): BasePart
 	return gut
 end
 
--- The loops of small intestine slipping out of the upper body as it falls:
--- soft and wet, they slap on the floor and stay there a while.
+-- The coils of small intestine and the colon slipping out of the upper body
+-- as it falls: soft and wet, they slap on the floor and stay there a while.
 local function spill(torso: BasePart, model: Model, random: Random)
-	for index = 1, 3 do
+	for index, name in SPILL do
 		task.delay(0.15 + index * random:NextNumber(0.12, 0.3), function()
 			if torso.Parent == nil or not model:IsDescendantOf(workspace) then
 				return
@@ -292,7 +347,7 @@ local function spill(torso: BasePart, model: Model, random: Random)
 					random:NextNumber(0, math.pi * 2),
 					random:NextNumber(-0.35, 0.35)
 				)
-			local gut = newGut(index, at, random)
+			local gut = newGut(name, at, random)
 			-- (the body's parts, the server's, can't shove it away while it
 			-- slips out of them: no collision with them for a moment)
 			for _, part in model:GetChildren() do
@@ -335,6 +390,353 @@ local function drip(torso: BasePart)
 		drops.Rate = 0
 		Debris:AddItem(point, 1.5)
 	end)
+end
+
+-- ---- the portal's mark: the cut faces seared for a moment ----
+
+local function sparkEmitter(parent: Attachment): ParticleEmitter
+	local sparks = Instance.new("ParticleEmitter")
+	sparks.Name = "RiftSparks"
+	sparks.Texture = SPARKLE
+	sparks.Color = ColorSequence.new(HOT, RIFT_GREEN)
+	sparks.LightEmission = 1
+	sparks.LightInfluence = 0
+	sparks.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.09),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	sparks.Transparency = NumberSequence.new(0, 0.3)
+	sparks.Lifetime = NumberRange.new(0.12, 0.35)
+	sparks.Speed = NumberRange.new(2, 7)
+	sparks.SpreadAngle = Vector2.new(70, 70)
+	sparks.Acceleration = Vector3.new(0, -12, 0)
+	sparks.Drag = 3
+	sparks.EmissionDirection = Enum.NormalId.Top
+	sparks.Rate = 0
+	sparks.Parent = parent
+	return sparks
+end
+
+local function moteEmitter(parent: Attachment): ParticleEmitter
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "RiftMotes"
+	motes.Texture = SPARKLE
+	motes.Color = ColorSequence.new(RIFT_GLOW, RIFT_GREEN)
+	motes.LightEmission = 1
+	motes.LightInfluence = 0
+	motes.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.02),
+		NumberSequenceKeypoint.new(0.3, 0.07),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	motes.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.2, 0.1),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	motes.Lifetime = NumberRange.new(1.2, 2.4)
+	motes.Speed = NumberRange.new(0.2, 0.8)
+	motes.SpreadAngle = Vector2.new(180, 180)
+	motes.Acceleration = Vector3.new(0, 0.7, 0)
+	motes.Drag = 1
+	motes.RotSpeed = NumberRange.new(-90, 90)
+	motes.Rate = 0
+	motes.Parent = parent
+	return motes
+end
+
+-- The cut face white-hot at first (the portal sears it): the whole face lit
+-- green-white, fading to the raw flesh under it, its edge a glowing rim
+-- cooling to a dull ember, a green light dying out.
+local function cauterise(face: Face)
+	local fade = TweenInfo.new(CAUTERISED, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local glow = Instance.new("Highlight")
+	glow.Name = "Seared"
+	glow.FillColor = RIFT_GLOW
+	glow.OutlineColor = HOT
+	glow.FillTransparency = 0.2
+	glow.OutlineTransparency = 0
+	glow.DepthMode = Enum.HighlightDepthMode.Occluded
+	glow.Adornee = face.gore
+	glow.Parent = face.gore
+	TweenService:Create(glow, fade, { FillTransparency = 1, OutlineTransparency = 1 }):Play()
+	Debris:AddItem(glow, CAUTERISED + 0.1)
+	-- the rim: four thin white-hot bars along the edge
+	local rim = Instance.new("Folder")
+	rim.Name = "SearedRim"
+	local hx, hz = face.half.X, face.half.Y
+	local bars: { { CFrame | Vector3 } } = {
+		{ CFrame.new(0, 0, -hz), Vector3.new(hx * 2 + 0.05, 0.05, 0.05) },
+		{ CFrame.new(0, 0, hz), Vector3.new(hx * 2 + 0.05, 0.05, 0.05) },
+		{ CFrame.new(-hx, 0, 0), Vector3.new(0.05, 0.05, hz * 2 + 0.05) },
+		{ CFrame.new(hx, 0, 0), Vector3.new(0.05, 0.05, hz * 2 + 0.05) },
+	}
+	for _, bar in bars do
+		local size = bar[2] :: Vector3
+		local hot = Instance.new("Part")
+		hot.Name = "Rim"
+		hot.Material = Enum.Material.Neon
+		hot.Color = HOT
+		hot.Size = size
+		hot.CastShadow = false
+		hot.CFrame = face.part.CFrame * face.at * (bar[1] :: CFrame)
+		weldTo(face.part, hot, rim)
+		-- (thinner as it cools)
+		local thin = Vector3.new(
+			if size.X > 0.1 then size.X else 0.02,
+			0.02,
+			if size.Z > 0.1 then size.Z else 0.02
+		)
+		TweenService:Create(hot, fade, { Color = EMBER, Transparency = 1, Size = thin }):Play()
+	end
+	rim.Parent = face.part
+	Debris:AddItem(rim, CAUTERISED + 0.1)
+	local point = Instance.new("Attachment")
+	point.Name = "SearedLight"
+	point.CFrame = face.at * CFrame.new(0, 0.4, 0)
+	point.Parent = face.part
+	local light = Instance.new("PointLight")
+	light.Color = RIFT_GREEN
+	light.Brightness = 3
+	light.Range = 7
+	light.Shadows = false
+	light.Parent = point
+	TweenService:Create(light, fade, { Brightness = 0 }):Play()
+	Debris:AddItem(point, CAUTERISED + 0.1)
+end
+
+-- Rift energy left on the cut: short arcs jumping over the face (Beams
+-- bowed out of it, redrawn every few frames, thinning out), sparks spat
+-- off it, then green motes drifting up off it a little longer.
+local function crackle(face: Face, seed: number)
+	local random = Random.new(seed)
+	local part = face.part
+	local arcs: { { a0: Attachment, a1: Attachment, beam: Beam } } = {}
+	for _ = 1, 3 do
+		local a0 = Instance.new("Attachment")
+		a0.Name = "RiftArc"
+		a0.Parent = part
+		local a1 = Instance.new("Attachment")
+		a1.Name = "RiftArc"
+		a1.Parent = part
+		local beam = Instance.new("Beam")
+		beam.Name = "RiftArc"
+		beam.Attachment0 = a0
+		beam.Attachment1 = a1
+		beam.Color = ColorSequence.new(HOT, RIFT_GREEN)
+		beam.LightEmission = 1
+		beam.LightInfluence = 0
+		beam.FaceCamera = true
+		beam.Segments = 10
+		beam.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.4),
+			NumberSequenceKeypoint.new(0.5, 0),
+			NumberSequenceKeypoint.new(1, 0.4),
+		})
+		beam.Parent = part
+		table.insert(arcs, { a0 = a0, a1 = a1, beam = beam })
+	end
+	local point = Instance.new("Attachment")
+	point.Name = "RiftSparks"
+	point.Parent = part
+	local sparks = sparkEmitter(point)
+	local motes = moteEmitter(point)
+	local hx, hz = face.half.X * 0.92, face.half.Y * 0.92
+	-- (a point on the face, its X axis out of it: the arcs bow outward)
+	local function onFace(x: number, z: number): CFrame
+		return face.at * CFrame.new(x, 0.03, z) * CFrame.Angles(0, 0, math.pi / 2)
+	end
+	task.spawn(function()
+		local start = os.clock()
+		local stop = start + CRACKLE + 1.2
+		while os.clock() < stop and part.Parent ~= nil do
+			local left = 1 - (os.clock() - start) / CRACKLE -- (1 -> 0 while it crackles)
+			for _, arc in arcs do
+				local on = left > 0 and random:NextNumber() < 0.4 + 0.5 * left
+				arc.beam.Enabled = on
+				if on then
+					local x, z = random:NextNumber(-hx, hx), random:NextNumber(-hz, hz)
+					local reach = random:NextNumber(0.2, 0.6)
+					local turn = random:NextNumber(0, math.pi * 2)
+					local x1 = math.clamp(x + math.cos(turn) * reach, -hx, hx)
+					local z1 = math.clamp(z + math.sin(turn) * reach, -hz, hz)
+					arc.a0.CFrame = onFace(x, z)
+					arc.a1.CFrame = onFace(x1, z1)
+					local bow = random:NextNumber(0.05, 0.3)
+					arc.beam.CurveSize0 = bow
+					arc.beam.CurveSize1 = -bow * random:NextNumber(0.5, 1.5)
+					local width = random:NextNumber(0.025, 0.07) * (0.3 + 0.7 * left)
+					arc.beam.Width0 = width
+					arc.beam.Width1 = width * random:NextNumber(0.3, 1)
+				end
+			end
+			point.CFrame = face.at
+				* CFrame.new(random:NextNumber(-hx, hx), 0.03, random:NextNumber(-hz, hz))
+			if left > 0 then
+				sparks:Emit(random:NextInteger(1, 3))
+			end
+			if random:NextNumber() < 0.6 then
+				motes:Emit(1)
+			end
+			task.wait(random:NextNumber(0.04, 0.09))
+		end
+		for _, arc in arcs do
+			arc.beam:Destroy()
+			arc.a0:Destroy()
+			arc.a1:Destroy()
+		end
+		-- (the last motes and sparks still in the air: they go out first)
+		Debris:AddItem(point, 2.5)
+	end)
+end
+
+-- The moment of the cut, out along the cut plane (`plane`: its centre, Y up
+-- out of it): a ring of green energy flung out wide and fading (two Beam
+-- rings, a white one ahead), sparks and a red mist of blood thrown out flat
+-- all round.
+local function ringBurst(plane: CFrame, seed: number)
+	local random = Random.new(seed)
+	local holder = Instance.new("Part")
+	holder.Name = "WaistCutRing"
+	holder.Anchored = true
+	holder.CanCollide = false
+	holder.CanQuery = false
+	holder.CanTouch = false
+	holder.CastShadow = false
+	holder.Transparency = 1
+	holder.Size = Vector3.new(0.1, 0.1, 0.1)
+	holder.CFrame = plane
+	type Ring = {
+		points: { Attachment },
+		beams: { Beam },
+		reach: number,
+		time: number,
+		width: number,
+	}
+	local rings: { Ring } = {}
+	for _, look in
+		{
+			{
+				color = ColorSequence.new(RIFT_GLOW, RIFT_GREEN),
+				reach = 5.5,
+				time = 0.55,
+				width = 0.7,
+			},
+			{ color = ColorSequence.new(HOT), reach = 7, time = 0.4, width = 0.18 },
+		}
+	do
+		local ring: Ring =
+			{ points = {}, beams = {}, reach = look.reach, time = look.time, width = look.width }
+		for _ = 1, 4 do
+			local point = Instance.new("Attachment")
+			point.Parent = holder
+			table.insert(ring.points, point)
+		end
+		for i = 1, 4 do
+			local beam = Instance.new("Beam")
+			beam.Attachment0 = ring.points[i]
+			beam.Attachment1 = ring.points[i % 4 + 1]
+			beam.Color = look.color
+			beam.LightEmission = 1
+			beam.LightInfluence = 0
+			beam.FaceCamera = true
+			beam.Segments = 16
+			beam.Parent = holder
+			table.insert(ring.beams, beam)
+		end
+		table.insert(rings, ring)
+	end
+	local center = Instance.new("Attachment")
+	center.Parent = holder
+	local energy = sparkEmitter(center)
+	energy.Color = ColorSequence.new(HOT, RIFT_GREEN)
+	energy.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.22),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	energy.Speed = NumberRange.new(16, 26)
+	energy.Lifetime = NumberRange.new(0.25, 0.55)
+	energy.Drag = 5
+	energy.SpreadAngle = Vector2.new(4, 4)
+	energy.Acceleration = Vector3.zero
+	energy.EmissionDirection = Enum.NormalId.Front
+	local mist = Instance.new("ParticleEmitter")
+	mist.Name = "BloodMist"
+	mist.Texture = SMOKE
+	mist.Color = ColorSequence.new(BLOOD_WET, BLOOD)
+	mist.LightEmission = 0
+	mist.LightInfluence = 1
+	mist.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(1, 1.3),
+	})
+	mist.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	mist.Lifetime = NumberRange.new(0.6, 1.1)
+	mist.Speed = NumberRange.new(7, 13)
+	mist.Drag = 4
+	mist.SpreadAngle = Vector2.new(6, 6)
+	mist.Acceleration = Vector3.new(0, -5, 0)
+	mist.RotSpeed = NumberRange.new(-60, 60)
+	mist.Rotation = NumberRange.new(0, 360)
+	mist.EmissionDirection = Enum.NormalId.Front
+	mist.Rate = 0
+	mist.Parent = center
+	holder.Parent = workspace
+	-- flat all round: the emitter turned round the plane's normal between
+	-- bursts (each particle keeps the way it was thrown)
+	for i = 1, 18 do
+		center.CFrame = CFrame.Angles(0, (i + random:NextNumber(-0.4, 0.4)) / 18 * math.pi * 2, 0)
+		energy:Emit(2)
+		mist:Emit(1)
+	end
+	local start = os.clock()
+	local step: RBXScriptConnection
+	step = RunService.Heartbeat:Connect(function()
+		local elapsed = os.clock() - start
+		local alive = false
+		for _, ring in rings do
+			local t = math.clamp(elapsed / ring.time, 0, 1)
+			alive = alive or t < 1
+			local ease = 1 - (1 - t) ^ 3
+			local radius = 0.4 + (ring.reach - 0.4) * ease
+			-- (a circle from four Bezier quarters: each point's axis along it)
+			for i, point in ring.points do
+				local angle = (i - 1) / 4 * math.pi * 2
+				local at = Vector3.new(math.cos(angle), 0, math.sin(angle)) * radius
+				local along = Vector3.new(-math.sin(angle), 0, math.cos(angle))
+				point.CFrame = CFrame.fromMatrix(at, along, Vector3.yAxis)
+			end
+			for _, beam in ring.beams do
+				beam.CurveSize0 = radius * 0.5523
+				beam.CurveSize1 = radius * 0.5523
+				beam.Width0 = ring.width * (1 - 0.7 * ease)
+				beam.Width1 = beam.Width0
+				beam.Transparency = NumberSequence.new(t ^ 1.5)
+			end
+		end
+		if not alive or holder.Parent == nil then
+			step:Disconnect()
+			for _, ring in rings do
+				for _, beam in ring.beams do
+					beam.Enabled = false
+				end
+			end
+		end
+	end)
+	-- (the particles still in the air: then it goes)
+	Debris:AddItem(holder, 1.4)
+end
+
+-- The portal's mark on every face of the cut, as it happens.
+local function sear(faces: { Face }, plane: CFrame, seed: number)
+	ringBurst(plane, seed)
+	for index, face in faces do
+		cauterise(face)
+		crackle(face, seed + index * 31)
+	end
 end
 
 -- The burst of the cut, the arteries pumping, the gut falling out.
@@ -414,17 +816,32 @@ function WaistCut.apply(model: Model, live: boolean)
 	end
 	done[model] = true
 	local random = Random.new(seed)
-	dress(torso, "Waist", torso.Color, random)
+	local faces: { Face } = {
+		{
+			part = torso,
+			at = CFrame.new(0, -torso.Size.Y / 2 - 0.07, 0) * CFrame.Angles(math.pi, 0, 0),
+			half = Vector2.new(torso.Size.X / 2, torso.Size.Z / 2),
+			gore = dress(torso, "Waist", torso.Color, random),
+		},
+	}
 	local legs: { BasePart } = {}
 	for _, pair in { { "Right Leg", "HipR" }, { "Left Leg", "HipL" } } do
 		local leg = model:FindFirstChild(pair[1])
 		if leg and leg:IsA("BasePart") then
 			-- (each leg's own skin colour: the cut shows it at the rim)
-			dress(leg, pair[2], leg.Color, random)
+			table.insert(faces, {
+				part = leg,
+				at = CFrame.new(0, leg.Size.Y / 2 + 0.05, 0),
+				half = Vector2.new(leg.Size.X / 2, leg.Size.Z / 2),
+				gore = dress(leg, pair[2], leg.Color, random),
+			})
 			table.insert(legs, leg)
 		end
 	end
 	if live then
+		-- (the cut plane where it is now: the torso's bottom, still on the legs)
+		local plane = CFrame.new((torso.CFrame * CUT).Position) * torso.CFrame.Rotation
+		sear(faces, plane, seed)
 		bleed(model, torso, legs, seed, random)
 	end
 end

@@ -37,19 +37,31 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
   Waist      Dr. Rift's finisher (PortalCut, the body cut in two at the
              hips; anatomy/waist.npz, extract_waist.py): the face under the
              upper body, in the R6 torso's space (2 x 2 x 1, its bottom at
-             Y = -1): the real cut through the hip joints - hip bones,
-             sacrum and femoral heads in section (Bone), the muscles cut
-             (Muscle / MuscleDark alternating), bladder, colon and loops of
-             small intestine hanging out (Gut), the cut arteries' ends
-             (Vessel), the fat under the skin (Fat), torn skin hanging over
-             the edge (Skin), a dark floor under it all (FleshDark)
+             Y = -1), worked out cell by cell (paint_face): the real cut
+             through the hip joints - hip bones and sacrum in section, a
+             white rim (Bone) round the spongy core (Marrow); the muscles cut,
+             domed (Muscle / MuscleDark alternating), fascia between them
+             (Fascia); the bladder and the colon cut across, whole rings
+             side by side (gut_sections): wall (Gut), lining (Mucosa),
+             contents (Urine / Lumen); the arteries and
+             veins as open tubes (Artery, Vein), their clot (Clot); the
+             sciatic, femoral and obturator nerves (Nerve); the fat under
+             the skin in lobules (Fat); torn skin at the edge (Skin); drops
+             of blood hanging (Blood); coiled loops of small intestine
+             hanging out (Gut, its torn lining: Mucosa) on their mesentery
+             (Mesentery, its vessels: Vessel); a dark floor (FleshDark)
   HipR / HipL  ...the other face of it, on each leg's top (R6 leg space:
-             1 x 2 x 1, its top at Y = 1): the femur's head in its socket,
-             the thigh and hip muscles, the femoral artery and vein, fat,
-             skin folding up and out (same layers)
-  Gut<i>     loose lengths of the real small intestine (Gut), coiled, a
-             torn end trailing, centred; the first with a strip of its
-             mesentery (Fat, Vessel): they fall out of the upper body
+             1 x 2 x 1, its top at Y = 1): the femur's head in section, the
+             thigh and hip muscles, the femoral artery, vein and nerve, fat,
+             skin, blood pooled round the artery (same layers)
+  Gut<i>     loose lengths of small intestine lying folded in hairpin
+             loops side by side, fanning out (Gut, torn ends: Mucosa) on
+             their torn mesentery (Mesentery, Vessel), a torn end trailing,
+             centred: they fall out of the upper body
+  Colon      a torn length of the sigmoid colon (Colon: puckered pouches
+             between three bands; Mesentery: its flattened fatty tags;
+             torn ends: Mucosa,
+             Lumen), centred: it falls out too
   Splat<i> / Streak<i> / Pool<i>   blood on the floor (Blood): flat blots
              with droplets, stretched drops, a pool; 1 stud across, laid in
              X-Z (the game sizes and turns them)
@@ -97,6 +109,18 @@ COLORS = {
     "Tendon": (0.85, 0.80, 0.72),
     "Gut": (0.74, 0.52, 0.48),
     "Vessel": (0.33, 0.05, 0.12),
+    # (Dr. Rift's cut: the inside of the body in section)
+    "Fascia": (0.80, 0.74, 0.70),
+    "Marrow": (0.55, 0.26, 0.18),
+    "Mucosa": (0.55, 0.15, 0.16),
+    "Lumen": (0.24, 0.17, 0.08),
+    "Urine": (0.80, 0.62, 0.20),
+    "Artery": (0.80, 0.56, 0.52),
+    "Vein": (0.22, 0.13, 0.28),
+    "Clot": (0.14, 0.01, 0.02),
+    "Nerve": (0.92, 0.88, 0.76),
+    "Mesentery": (0.88, 0.76, 0.52),
+    "Colon": (0.74, 0.58, 0.50),
 }
 
 
@@ -649,6 +673,7 @@ def build(add_object):
     piece("HipL", hip_l, "cut")
     for i, layers in enumerate(gut_lengths(random.Random(9494))):
         piece(f"Gut{i + 1}", layers, "cut")
+    piece("Colon", colon_length(random.Random(9595)), "cut")
     return slots, kinds
 
 
@@ -720,56 +745,6 @@ def thicken(bm, factor):
     return bm
 
 
-def tube(path, radius, rng, segments=10, rib=0.18, ribs=9.0):
-    """A soft tube along `path` (points): an intestine (ribbed: its folds),
-    closed at both ends."""
-    pts = [Vector(p) for p in path]
-    bm = bmesh.new()
-    rings = []
-    length = 0.0
-    prev_side = None
-    for i, p in enumerate(pts):
-        if i > 0:
-            length += (p - pts[i - 1]).length
-        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
-        ref = Vector((0, 1, 0)) if abs(t.y) < 0.9 else Vector((1, 0, 0))
-        side = t.cross(ref).normalized() if prev_side is None else (prev_side - t * prev_side.dot(t)).normalized()
-        prev_side = side
-        up = t.cross(side).normalized()
-        r = radius * (1 + rib * math.sin(length / radius * ribs / 6))
-        rings.append([bm.verts.new(p + (side * math.cos(2 * math.pi * k / segments)
-                                        + up * math.sin(2 * math.pi * k / segments)) * r)
-                      for k in range(segments)])
-    for i in range(len(rings) - 1):
-        for k in range(segments):
-            j = (k + 1) % segments
-            bm.faces.new((rings[i][k], rings[i][j], rings[i + 1][j], rings[i + 1][k]))
-    bm.faces.new(list(reversed(rings[0])))
-    bm.faces.new(rings[-1])
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
-    bmesh.ops.triangulate(bm, faces=bm.faces[:])
-    lumpy(bm, rng, radius * 0.12, 14.0)
-    return bm
-
-
-def hanging_loop(rng, a, b, depth, radius):
-    """A loop of gut hanging out of the cut from `a` to `b` (both on it),
-    sagging `depth` out of it, swinging a little to one side."""
-    a, b = Vector(a), Vector(b)
-    sway = Vector((rng.uniform(-0.15, 0.15), 0, rng.uniform(-0.15, 0.15)))
-    path = []
-    n = 16
-    for i in range(n + 1):
-        t = i / n
-        p = a.lerp(b, t)
-        # (down, and back a little: once the upper body lies on its back
-        # they droop to the floor)
-        p += Vector((0, -0.86, 0.5)) * depth * math.sin(math.pi * t) ** 0.8
-        p += sway * math.sin(math.pi * t)
-        path.append(p)
-    return tube(path, radius, rng)
-
-
 def rim_walls(rng, half, y, height, thick, sign):
     """The fat under the skin: a band just inside the box's edge (`half` = the
     footprint's half size), from y up (`sign` = 1: up, -1: down) `height`."""
@@ -792,7 +767,7 @@ def rim_walls(rng, half, y, height, thick, sign):
     return bm_join_all(walls)
 
 
-def rim_flaps(rng, half, y, down, count, size=(0.12, 0.34), length=(0.05, 0.26)):
+def rim_flaps(rng, half, y, down, count, size=(0.12, 0.34), length=(0.05, 0.26), curl=(0.6, 2.2)):
     """Torn skin round a box's edge (footprint `half`), at height `y`: a
     ragged lip of skin all round, and uneven flaps of it hanging out and
     over the edge (`down` = the way they fall: (0, -1, 0) under the upper
@@ -826,7 +801,7 @@ def rim_flaps(rng, half, y, down, count, size=(0.12, 0.34), length=(0.05, 0.26))
         turn = rng.uniform(-0.45, 0.45)
         out = Vector((out.x * math.cos(turn) - out.z * math.sin(turn), rng.uniform(-0.2, 0.3) * -up,
                       out.x * math.sin(turn) + out.z * math.cos(turn)))
-        flaps.append(flap(rng, base, out, down, rng.uniform(*size), rng.uniform(*length), rng.uniform(0.6, 2.2)))
+        flaps.append(flap(rng, base, out, down, rng.uniform(*size), rng.uniform(*length), rng.uniform(*curl)))
     return bm_join_all(flaps)
 
 
@@ -837,9 +812,6 @@ def floor_plate(half, y, thick, rng):
     for v in out.verts:
         v.co = Vector((v.co.x * 2 * half[0] * 0.985, y + v.co.y * thick, v.co.z * 2 * half[1] * 0.985))
     return lumpy(out, rng, 0.012, 8.0)
-
-
-WAIST_FOLD = 0.93  # how much of the box's footprint the anatomy is widened to
 
 
 def section(bm, plane_y, up, sag, rng, rough, grow=0.0):
@@ -1010,33 +982,304 @@ def _region_outline(mask, xs, zs, plane_y, spacing):
     return bm
 
 
-def fill_footprint(rng, out, centre, half, plane_y, up, step=0.02):
-    """The cut face filled with meat, wall to wall: the real sections of the
-    muscles and the gut kept where they are, every empty bit of the R6
-    footprint between them given to the nearest one (they swell and spread
-    once cut, nothing left bare but the bone), each made a flat plug.
-    Neighbours get different colours ("muscle" / "muscle_dark") so the
-    muscles read apart. Returns `out` with its "muscle" / "gut" replaced
-    and "muscle_dark" added."""
+# ---- the faces of the cut, worked out cell by cell ----
+#
+# Each face is laid out on a fine grid (STEP studs) over the R6 part's
+# footprint: the real sections of the bones, muscles and gut (Z-Anatomy, cut
+# by the plane and widened to the box) say which cell is what; the empty
+# cells between them go to the nearest muscle; a band round the edge is the
+# fat under the skin. Then every region is made its own solid plug, shaped by
+# a height field (how far it bulges out of the cut):
+#   - a cut muscle swells out, domed, its surface grained by its bundles
+#     (fascicles), thin pearly lines of fascia between neighbours;
+#   - a cut bone shows its hard white rim (cortical bone) round a pitted,
+#     reddish spongy core (cancellous bone, marrow);
+#   - the colon and the bladder are rings: their wall, the red lining
+#     (mucosa) inside it, and what was in them (dark: the colon's; amber:
+#     urine) sunk a little;
+#   - the arteries and veins are short tubes sticking out, open, their dark
+#     clotted lumen showing (an artery's wall thick and pale, a vein's thin,
+#     dark, collapsed); the big nerves white cords;
+#   - the fat under the skin in yellow lobules.
+
+FOLD = (0.9, 0.8)  # how much of the box's footprint (X, Z) the anatomy is widened to (the rest: the fat)
+STEP = 0.0125  # studs: the grid the faces are worked out on
+
+
+def noise2(rng, cell):
+    """A smooth random field over X-Z (about -1..1), its features about
+    `cell` studs across: f(x, z) on arrays."""
+    from scipy.ndimage import map_coordinates
+
+    n = 64
+    grid = np.array([[rng.uniform(-1, 1) for _ in range(n)] for _ in range(n)])
+    ox, oz = rng.uniform(0, n), rng.uniform(0, n)
+
+    def f(x, z):
+        return 1.6 * map_coordinates(grid, [np.asarray(z, float) / cell + oz, np.asarray(x, float) / cell + ox],
+                                     order=3, mode="grid-wrap")
+
+    return f
+
+
+def ridges(f):
+    """A noise field folded into cells (bumps between thin creases: the
+    bundles of a cut muscle, the lobules of fat): -1 (crease) .. 1."""
+    return lambda x, z: 1 - 2 * np.clip(np.abs(f(x, z)), 0, 1)
+
+
+def sampler(grid, xs, zs):
+    """A grid [z, x] (cell centres `xs` x `zs`) read at any (x, z) arrays."""
+    from scipy.ndimage import map_coordinates
+
+    def at(x, z):
+        return map_coordinates(grid, [(np.asarray(z, float) - zs[0]) / (zs[1] - zs[0]),
+                                      (np.asarray(x, float) - xs[0]) / (xs[1] - xs[0])], order=1, mode="nearest")
+
+    return at
+
+
+def refine(bm, longest):
+    """A flat fill's long triangles split until no edge is longer than
+    `longest` (so a height field can shape it)."""
+    for _ in range(8):
+        long = [e for e in bm.edges if e.calc_length() > longest]
+        if not long:
+            break
+        bmesh.ops.subdivide_edges(bm, edges=long, cuts=1)
+        bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    bmesh.ops.beautify_fill(bm, faces=bm.faces[:], edges=[e for e in bm.edges if not e.is_boundary])
+    return bm
+
+
+def mask_plug(mask, xs, zs, plane_y, up, height, longest=0.05, spacing=STEP * 1.5):
+    """A region of the grid (`mask` [z, x]) made a solid plug out of the cut:
+    its outline smoothed, its cap shaped by `height(x, z)` (studs out of the
+    plane, on arrays), its sides going a little into the body (no base: it is
+    inside the part). None when there is nothing."""
+    if mask.sum() < 3:
+        return None
+    flat = _region_outline(mask, xs, zs, plane_y, spacing)
+    if flat is None:
+        return None
+    refine(flat, longest)
+    for v in flat.verts:
+        v.co.y = plane_y + up * 0.04
+    ext = bmesh.ops.extrude_face_region(flat, geom=flat.faces[:])
+    cap = [v for v in ext["geom"] if isinstance(v, bmesh.types.BMVert)]
+    hs = height(np.array([v.co.x for v in cap]), np.array([v.co.z for v in cap]))
+    for v, h in zip(cap, hs):
+        v.co.y = plane_y - up * max(0.006, float(h))
+    bmesh.ops.recalc_face_normals(flat, faces=flat.faces[:])
+    orient_plug(flat, plane_y, up)
+    base = [f for f in flat.faces if all(abs(v.co.y - (plane_y + up * 0.04)) < 1e-5 for v in f.verts)]
+    bmesh.ops.delete(flat, geom=base, context="FACES_ONLY")
+    return flat if len(flat.faces) >= 3 else None
+
+
+def split_faces(bm, tags):
+    """A bmesh whose faces are tagged (`tags[i]`: face i's layer) split into
+    one bmesh per tag: {tag: bmesh}."""
+    out = {}
+    for tag in set(tags):
+        part = bm.copy()
+        part.faces.ensure_lookup_table()
+        bmesh.ops.delete(part, geom=[part.faces[i] for i, t in enumerate(tags) if t != tag], context="FACES")
+        out[tag] = part
+    bm.free()
+    return out
+
+
+def vessel_stub(rng, centre, radius, plane_y, up, length, artery):
+    """A cut artery or vein: a short tube out of the cut at `centre` (X, Z),
+    open, a little bent, its end torn a bit unevenly; inside, sunk, its dark
+    clotted lumen. An artery's wall is thick, a vein's thin and collapsed
+    (flattened). Returns {layer: bmesh} ("Artery" / "Vein", "Clot")."""
+    seg = 12
+    flat = 1.0 if artery else rng.uniform(0.5, 0.65)
+    wall = radius * (0.34 if artery else 0.16)
+    turn = rng.uniform(0, 2 * math.pi)
+    lean = Vector((math.cos(turn), 0, math.sin(turn))) * rng.uniform(0.1, 0.35)
+    out = Vector((0, -up, 0))
+    bm = bmesh.new()
+    tags = []
+
+    def ring(t, r, back=0.0, jag=0.0):
+        c = Vector((centre[0], plane_y + up * 0.04, centre[1])) + (out * (length + 0.04) + lean * length * t * t) * t
+        c -= out * back
+        return [bm.verts.new(c + Vector((math.cos(2 * math.pi * k / seg) * r,
+                                          rng.uniform(-jag, jag) if jag else 0.0,
+                                          math.sin(2 * math.pi * k / seg) * r * flat))) for k in range(seg)]
+
+    outer = [ring(0.0, radius), ring(0.5, radius * 1.03), ring(1.0, radius, jag=radius * 0.15)]
+    inner_r = radius - wall
+    lip = ring(1.0, inner_r)
+    deep = ring(1.0, inner_r * 0.92, back=radius * 0.9)
+
+    def band(a, b, tag):
+        for k in range(seg):
+            j = (k + 1) % seg
+            bm.faces.new((a[k], a[j], b[j], b[k]))
+            tags.append(tag)
+
+    wall_tag = "Artery" if artery else "Vein"
+    band(outer[0], outer[1], wall_tag)
+    band(outer[1], outer[2], wall_tag)
+    band(outer[2], lip, wall_tag)
+    band(lip, deep, "Clot")
+    bottom = bm.verts.new(sum((v.co for v in deep), Vector()) / seg - out * radius * 0.2)
+    for k in range(seg):
+        bm.faces.new((deep[k], deep[(k + 1) % seg], bottom))
+        tags.append("Clot")
+    # lip at the torn end: matched to the outer ring's jagged heights
+    for a, b in zip(outer[2], lip):
+        b.co.y = a.co.y
+    bm.normal_update()
+    # (outward: the outer wall's normals away from the axis)
+    bm.faces.ensure_lookup_table()
+    f0 = bm.faces[0]
+    radial = f0.calc_center_median() - Vector((centre[0], f0.calc_center_median().y, centre[1]))
+    if f0.normal.dot(radial) < 0:
+        for f in bm.faces:
+            f.normal_flip()
+    bm.normal_update()
+    return split_faces(bm, tags)
+
+
+def drop(rng, at, size, down):
+    """A drop of blood hanging from `at` (a teardrop, stretched `down`)."""
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=6, v_segments=5, radius=1.0)
+    down = Vector(down).normalized()
+    for v in bm.verts:
+        t = v.co.dot(Vector((0, -1, 0)))  # (1 at the bottom)
+        r = size * (0.55 + 0.45 * max(0.0, t))
+        v.co = Vector((v.co.x * r, 0, v.co.z * r)) + down * (size * 1.4 * (t + 1) * (1 + rng.uniform(0, 0.6)))
+        v.co += Vector(at)
+    bm.normal_update()
+    return bm
+
+
+def gut_sections(found, X, Z, keep_off, least=0.085):
+    """The gut cut across (`found`: [(name, its cells)], the bladder first):
+    each section a whole ring at least `least` stud in radius (the colon,
+    squeezed thin by the widening to the R6 part, would be a crescent with no
+    room for its lining or what is in it: then it is made the oval it really
+    is, on its middle, along its length, of its area), then moved the least
+    it can off the ones before it and off `keep_off` (bone, the fat under the
+    skin) - they lie side by side, not in one another. Returns [(name,
+    cells)], the bladder first, each one its own."""
     from scipy.ndimage import distance_transform_edt
 
-    hx, hz = half[0] * 0.995, half[1] * 0.995
-    xs = np.arange(centre[0] - hx + step / 2, centre[0] + hx, step)
-    zs = np.arange(centre[1] - hz + step / 2, centre[1] + hz, step)
-    bone = np.zeros((len(zs), len(xs)), bool)
-    for _name, plug in out.get("bone", []):
-        bone |= _raster(plug, xs, zs, up)
-    soft = [(g, name, plug) for g in ("muscle", "gut") for name, plug in out.get(g, [])]
-    labels = np.full(bone.shape, -1, int)
+    step = float(X[0, 1] - X[0, 0])
+    order = sorted(found, key=lambda f: ("bladder" not in f[0].lower(), -int(f[1].sum())))
+    taken = keep_off.copy()
+    out = []
+    for name, m in order:
+        count = int(m.sum())
+        if count < 3:
+            continue
+        if distance_transform_edt(m, sampling=step).max() < least * 0.6:
+            cx, cz = float(X[m].mean()), float(Z[m].mean())
+            # (its long way: the cells' main axis)
+            cov = np.cov(np.stack([X[m] - cx, Z[m] - cz]))
+            w, v = np.linalg.eigh(cov)
+            ax = v[:, 1]
+            radius = max(least, math.sqrt(count * step * step / math.pi))
+            aspect = min(1.3, math.sqrt(max(w[1], 1e-9) / max(w[0], 1e-9)))
+            a, b = radius * math.sqrt(aspect), radius / math.sqrt(aspect)
+            u = (X - cx) * ax[0] + (Z - cz) * ax[1]
+            t = -(X - cx) * ax[1] + (Z - cz) * ax[0]
+            ang = np.arctan2(t, u)
+            wob = 1 + 0.06 * np.sin(3 * ang + count) + 0.04 * np.sin(5 * ang + 1.7 * count)
+            m = (u / a) ** 2 + (t / b) ** 2 < wob ** 2
+            count = int(m.sum())
+        best = None
+        for ring in range(0, 40):
+            for k in range(max(1, ring * 6)):
+                a = 2 * math.pi * k / max(1, ring * 6)
+                dx, dz = int(round(math.cos(a) * ring)), int(round(math.sin(a) * ring))
+                moved = np.roll(np.roll(m, dz, 0), dx, 1)
+                if (dz > 0 and moved[:dz].any()) or (dz < 0 and moved[dz:].any()):
+                    continue
+                if (dx > 0 and moved[:, :dx].any()) or (dx < 0 and moved[:, dx:].any()):
+                    continue
+                if (moved & taken).sum() <= count * 0.03:
+                    best = moved
+                    break
+            if best is not None:
+                break
+        m = (best if best is not None else m) & ~taken
+        taken |= m
+        out.append((name, m))
+    return out
+
+
+def paint_face(rng, raw, centre, half, plane_y, up):
+    """One face of the cut, from the real sections (`raw`: {group: [(name,
+    plug)]}, cut_face) laid on the grid (see above). Returns {layer: [bmesh]}
+    and where each artery's end is ({name: Vector})."""
+    from scipy.ndimage import distance_transform_edt, label
+
+    hx, hz = half
+    cx, cz = centre
+    xs = np.arange(cx - hx * 0.995 + STEP / 2, cx + hx * 0.995, STEP)
+    zs = np.arange(cz - hz * 0.995 + STEP / 2, cz + hz * 0.995, STEP)
+    X, Z = np.meshgrid(xs, zs)
+    leg = up < 0
+
+    def s(h):  # (a leg's face, looking up: bulges less than the hanging one)
+        return 0.012 + h * 0.5 if leg else h
+
+    out = {}
+    ends = {}
+
+    def add(layer, bm):
+        if bm is not None and len(bm.faces) >= 3:
+            out.setdefault(layer, []).append(bm)
+
+    def edt(mask):
+        return distance_transform_edt(mask, sampling=STEP)
+
+    def swell(mask):
+        # (how far into a region, softened: no ridge down its middle)
+        from scipy.ndimage import gaussian_filter
+
+        return gaussian_filter(edt(mask), 2.0)
+
+    # the bones
+    bones = [(name, _raster(plug, xs, zs, up)) for name, plug in raw.get("bone", [])]
+    bone = np.zeros(X.shape, bool)
+    for _name, m in bones:
+        bone |= m
+    # the fat under the skin: a band round the edge, thicker over the belly
+    edge = np.minimum(hx - np.abs(X - cx), hz - np.abs(Z - cz))
+    wob = noise2(rng, 0.1)
+    thick = 0.062 + 0.012 * wob(X, Z) + 0.02 * (Z < cz)
+    fat = (edge < thick) & ~bone
+    # the soft parts: each piece of gut first (each made a whole ring, room
+    # kept for it: see gut_sections), then each muscle, then every empty cell
+    # given to the nearest (they swell once cut)
+    guts = gut_sections([(name, _raster(plug, xs, zs, up)) for name, plug in raw.get("gut", [])],
+                        X, Z, bone | fat)
+    soft = [("gut", name, None) for name, _m in guts] + [("muscle", name, plug) for name, plug in raw.get("muscle", [])]
+    labels = np.full(X.shape, -1, int)
+    own = []
     for k, (_g, _name, plug) in enumerate(soft):
-        m = _raster(plug, xs, zs, up) & (labels < 0)
-        labels[m] = k
-    if not soft or (labels < 0).all():
-        return out
-    _d, (iz, ix) = distance_transform_edt(labels < 0, return_indices=True)
-    labels = labels[iz, ix]
-    labels[bone] = -1
-    # neighbours (shared border length) for the colours
+        m = guts[k][1] if plug is None else _raster(plug, xs, zs, up)
+        own.append(m)
+        labels[m & (labels < 0) & ~bone] = k
+    if (labels >= 0).any():
+        _d, (iz, ix) = distance_transform_edt(labels < 0, return_indices=True)
+        labels = labels[iz, ix]
+    labels[fat | bone] = -1
+    # (round the gut only its own section is gut: the rest, the fat it lies in)
+    for k, (g, _name, _plug) in enumerate(soft):
+        if g == "gut":
+            extra = (labels == k) & ~own[k]
+            fat |= extra
+            labels[extra] = -1
+    # neighbouring muscles in two shades (by shared border)
     touch = {}
     for a, b in ((labels[:, 1:], labels[:, :-1]), (labels[1:, :], labels[:-1, :])):
         diff = (a != b) & (a >= 0) & (b >= 0)
@@ -1052,54 +1295,130 @@ def fill_footprint(rng, out, centre, half, plane_y, up, step=0.02):
             if other is not None and other in shade:
                 cost[shade[other]] += n
         shade[k] = 0 if cost[0] <= cost[1] else 1
-    for g in ("muscle", "gut"):
-        for _name, plug in out.get(g, []):
-            plug.free()
-    new = {g: list(v) for g, v in out.items() if g not in ("muscle", "gut")}
-    m = 0.995
-    cx, cz = centre
-    for k, (group, name, _plug) in enumerate(soft):
-        if sizes[k] < 3:
+
+    grain = ridges(noise2(rng, 0.022))
+    fine = noise2(rng, 0.012)
+    # the fat: yellow lobules
+    lobes = ridges(noise2(rng, 0.04))
+    add("Fat", mask_plug(fat & ~bone, xs, zs, plane_y, up,
+                         lambda x, z: s(0.05 + 0.005 * lobes(x, z) + 0.0015 * fine(x, z)), 0.065, 0.03))
+    # the muscles: the fascia between them, each one domed and grained
+    muscles = np.zeros(X.shape, bool)
+    for k, (g, _name, _plug) in enumerate(soft):
+        if g == "muscle":
+            muscles |= labels == k
+    add("Fascia", mask_plug(muscles, xs, zs, plane_y, up, lambda x, z: s(0.03 + 0.002 * fine(x, z)), 0.08, 0.025))
+    for k, (g, name, _plug) in enumerate(soft):
+        region = labels == k
+        if sizes[k] < 4:
             continue
-        flat = _region_outline(labels == k, xs, zs, plane_y, step * 1.6)
-        if flat is None:
-            continue
-        sag = {"muscle": rng.uniform(0.04, 0.09), "gut": rng.uniform(0.06, 0.12)}[group]
-        if up < 0:
-            sag = 0.03 + sag * 0.35
-        plug = extrude_plug(flat, plane_y, up, sag, rng, 0.004)
-        cut(plug, [((cx + half[0] * m, 0, 0), (1, 0, 0)), ((cx - half[0] * m, 0, 0), (-1, 0, 0)),
-                   ((0, 0, cz + half[1] * m), (0, 0, 1)), ((0, 0, cz - half[1] * m), (0, 0, -1))], fill=True)
-        orient_plug(plug, plane_y, up)
-        if len(plug.faces) < 4:
-            plug.free()
-            continue
-        key = "gut" if group == "gut" else ("muscle", "muscle_dark")[shade[k]]
-        new.setdefault(key, []).append((name, plug))
-    return new
+        d = edt(region)
+        if g == "muscle":
+            core = d > 0.015
+            at = sampler(swell(region), xs, zs)
+            base = rng.uniform(0.036, 0.056)
+            add(("Muscle", "MuscleDark")[shade[k]],
+                mask_plug(core, xs, zs, plane_y, up,
+                          lambda x, z, at=at, base=base: s(base + 0.03 * (1 - np.exp(-at(x, z) / 0.03))
+                                                           + 0.002 * grain(x, z)), 0.035))
+        else:
+            # a piece of gut cut across: wall, lining, what was in it (sunk);
+            # by how deep into it (its own widest), so each one is a ring
+            at = sampler(d, xs, zs)
+            top = rng.uniform(0.055, 0.08)
+            deep = float(d.max())
+            wall = region & (d <= max(0.016, deep * 0.3))
+            lining = region & (d > max(0.016, deep * 0.3)) & (d <= max(0.03, deep * 0.55))
+            inside = region & (d > max(0.03, deep * 0.55))
+            if not inside.any():
+                lining = region & (d > max(0.016, deep * 0.3))
+            add("Gut", mask_plug(wall, xs, zs, plane_y, up,
+                                 lambda x, z, at=at, top=top: s(top + np.minimum(at(x, z), 0.03) * 0.3), 0.03))
+            add("Mucosa", mask_plug(lining, xs, zs, plane_y, up,
+                                    lambda x, z, top=top: s(top - 0.002 + 0.005 * grain(x, z)), 0.02))
+            content = "Urine" if "bladder" in name.lower() else "Lumen"
+            add(content, mask_plug(inside, xs, zs, plane_y, up,
+                                   lambda x, z, top=top: s(top - 0.028 + 0.002 * fine(x, z)), 0.03))
+    # the bones: their white rim, the spongy core
+    for name, m in bones:
+        d = edt(m)
+        cortex = 0.016 if leg else 0.022
+        top = 0.022 + rng.uniform(0, 0.008)
+        add("Bone", mask_plug(m, xs, zs, plane_y, up, lambda x, z, top=top: s(top + 0.001 * fine(x, z)), 0.05))
+        pits = noise2(rng, 0.011)
+        add("Marrow", mask_plug(m & (d > cortex), xs, zs, plane_y, up,
+                                lambda x, z, top=top, pits=pits: s(top + 0.0015 - 0.007 * np.clip((pits(x, z) - 0.05) * 2.5, 0, 1)),
+                                0.02))
+    # the vessels: tubes sticking out, open; the nerves: white cords
+    for group in ("vessel", "nerve"):
+        for name, plug in raw.get(group, []):
+            m = _raster(plug, xs, zs, up)
+            parts, n = label(m)
+            for i in range(1, n + 1):
+                cells = parts == i
+                count = int(cells.sum())
+                if count < 3:
+                    continue
+                c = (float(X[cells].mean()), float(Z[cells].mean()))
+                r = max(0.026, min(0.075, math.sqrt(count * STEP * STEP / math.pi)))
+                if group == "nerve":
+                    d = edt(cells)
+                    at = sampler(d, xs, zs)
+                    add("Nerve", mask_plug(cells, xs, zs, plane_y, up,
+                                           lambda x, z, at=at: s(0.06 + np.minimum(at(x, z), 0.03) * 0.6
+                                                                 + 0.006 * grain(x, z)), 0.012))
+                    continue
+                artery = "artery" in name.lower()
+                length = s(rng.uniform(0.1, 0.15) if artery else rng.uniform(0.06, 0.09))
+                for layer, bm in vessel_stub(rng, c, r, plane_y, up, length, artery).items():
+                    add(layer, bm)
+                if artery:
+                    key = name if name not in ends else f"{name}#{i}"
+                    ends[key] = Vector((c[0], plane_y - up * length, c[1]))
+    # blood: pooled on a leg's face round its femoral artery (it fills the
+    # low places), hanging in drops under the upper body's
+    if leg:
+        for name, at in ends.items():
+            if "Femoral artery" in name:
+                ring = noise2(rng, 0.08)
+                dist = np.hypot(X - at.x, Z - at.z)
+                pool = (dist < 0.15 + 0.06 * ring(X, Z)) & ~bone
+                add("Blood", mask_plug(pool, xs, zs, plane_y, up, lambda x, z: s(0.048) + 0.0 * x, 0.06))
+    else:
+        for at in ends.values():
+            for _ in range(2):
+                p = at + Vector((rng.uniform(-0.03, 0.03), 0.0, rng.uniform(-0.03, 0.03)))
+                add("Blood", drop(rng, p, rng.uniform(0.014, 0.022), (0, -1, 0)))
+        for _ in range(14):  # (from the fat and the skin at the edge)
+            a = rng.uniform(0, 2 * math.pi)
+            ex, ez = math.cos(a), math.sin(a)
+            k = min(hx / max(abs(ex), 1e-3), hz / max(abs(ez), 1e-3)) * rng.uniform(0.86, 0.95)
+            p = Vector((cx + ex * k, plane_y - 0.055, cz + ez * k))
+            add("Blood", drop(rng, p, rng.uniform(0.012, 0.02), (0, -1, 0)))
+    return out, ends
 
 
 def cut_face(rng, anatomy, centre, half, plane_y, up, select, side=0):
     """The cut through the body, one side of it: each Z-Anatomy object cut
     by the plane (`up` = +1: the upper body, the face looking down; -1: a
     leg, the face looking up), widened to the R6 footprint (`half`, round
-    `centre` in X-Z): its real cross-section there made a solid plug (cut
-    bone: solid white; muscle: its meat), each bulging out of the plane by
-    its own amount (flesh sags out, bone doesn't). `select(name, v)` ->
-    whether to keep an object; `side` (+1 / -1): only that half of the body
-    (X > 0 / X < 0: a leg's). Returns {group: [(name, bmesh)]}."""
+    `centre` in X-Z, FOLD of it), its real cross-section there made a plug,
+    then the whole face worked out cell by cell (paint_face). `select(name,
+    v)` -> whether to keep an object; `side` (+1 / -1): only that half of
+    the body (X > 0 / X < 0: a leg's). Returns ({layer: [bmesh]}, {artery:
+    its cut end})."""
     pts = np.concatenate([v[np.abs(v[:, 1] - plane_y) < 0.08] for g in ("bone", "muscle", "gut")
                           for name, v, _f in anatomy[g] if select(name, v)])
     if side:
         pts = pts[pts[:, 0] * side > 0]
     reach = outline(pts, centre)
     hx, hz = half
-    cx, cz = centre
+    fold = (hx * FOLD[0], hz * FOLD[1])
 
     def squarified(c):
         probe = bmesh.new()
         probe.verts.new(c)
-        squarify(probe, centre, (hx * WAIST_FOLD, hz * WAIST_FOLD), reach, 1.0)
+        squarify(probe, centre, fold, reach, 1.0)
         probe.verts.ensure_lookup_table()
         at = probe.verts[0].co.copy()
         probe.free()
@@ -1110,9 +1429,9 @@ def cut_face(rng, anatomy, centre, half, plane_y, up, select, side=0):
                                for name, v, _f in anatomy["bone"] if select(name, v)])
         bone_c = Vector(near.mean(0))
         bone_at = squarified(bone_c)
-    out = {}
-    for group in ("bone", "muscle", "gut", "vessel"):
-        for name, v, f in anatomy[group]:
+    raw = {}
+    for group in ("bone", "muscle", "gut", "vessel", "nerve"):
+        for name, v, f in anatomy.get(group, []):
             if not select(name, v):
                 continue
             bm = bm_of(v, f)
@@ -1121,13 +1440,13 @@ def cut_face(rng, anatomy, centre, half, plane_y, up, select, side=0):
                 if len(bm.faces) < 4:
                     bm.free()
                     continue
-            if group == "vessel":
+            if group in ("vessel", "nerve"):
                 # (thin: moved with the flesh round it, not stretched; thicker
                 # so it shows)
                 c = sum((x.co for x in bm.verts), Vector()) / len(bm.verts)
                 moved = squarified(c) - c
                 bmesh.ops.translate(bm, vec=Vector((moved.x, 0, moved.z)), verts=bm.verts)
-                thicken(bm, 1.7)
+                thicken(bm, 1.7 if group == "vessel" else 1.3)
             elif group == "bone" and side:
                 # (a leg's bones: moved together, kept their shape - the round
                 # femoral head in its socket)
@@ -1135,24 +1454,194 @@ def cut_face(rng, anatomy, centre, half, plane_y, up, select, side=0):
                     x.co.x = bone_at.x + (x.co.x - bone_c.x) * 1.15
                     x.co.z = bone_at.z + (x.co.z - bone_c.z) * 1.15
             else:
-                squarify(bm, centre, (hx * WAIST_FOLD, hz * WAIST_FOLD), reach, 1.0)
-            sag = {"bone": rng.uniform(0.02, 0.04), "muscle": rng.uniform(0.03, 0.11),
-                   "gut": rng.uniform(0.05, 0.12), "vessel": rng.uniform(0.1, 0.2)}[group]
-            if up < 0:  # (a leg's top, facing up: it doesn't hang out as much)
-                sag = 0.02 + sag * 0.4 if group != "vessel" else sag
-            rough = {"bone": 0.0015, "muscle": 0.003, "gut": 0.003, "vessel": 0.002}[group]
-            grow = {"bone": 0.0, "muscle": 0.03, "gut": 0.01, "vessel": 0.0}[group]
-            plug = section(bm, plane_y, up, sag, rng, rough, grow)
+                squarify(bm, centre, fold, reach, 1.0)
+            grow = {"muscle": 0.03, "gut": 0.01}.get(group, 0.0)
+            plug = section(bm, plane_y, up, 0.05, rng, 0.0, grow)
             bm.free()
-            if plug is None:
-                continue
-            m = 0.995
-            cut(plug, [((cx + hx * m, 0, 0), (1, 0, 0)), ((cx - hx * m, 0, 0), (-1, 0, 0)),
-                       ((0, 0, cz + hz * m), (0, 0, 1)), ((0, 0, cz - hz * m), (0, 0, -1))], fill=True)
-            orient_plug(plug, plane_y, up)
-            if len(plug.faces) >= 4:
-                out.setdefault(group, []).append((name, plug))
-    return fill_footprint(rng, out, centre, half, plane_y, up)
+            if plug is not None:
+                raw.setdefault(group, []).append((name, plug))
+    painted = paint_face(rng, raw, centre, half, plane_y, up)
+    for plugs in raw.values():
+        for _name, plug in plugs:
+            plug.free()
+    return painted
+
+
+# ---- the gut: coiled, wet, on its mesentery ----
+
+def coil(rng, start, heading, steps, step, radius, centre, reach, pull=None, target=None):
+    """The path of a length of small intestine lying in a heap: it winds
+    (turning smoothly, at random), keeps a gut's width off itself, stays
+    within `reach` of `centre`; `pull` (a vector) drags it (its weight);
+    `target`: it comes back and ends there."""
+    pts = [Vector(start)]
+    d = Vector(heading).normalized()
+    w = Vector()
+    centre = Vector(centre)
+    for i in range(steps):
+        w = w * 0.7 + Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1))) * 0.55
+        steer = Vector(w)
+        p = pts[-1]
+        for q in pts[:-5]:
+            dq = p - q
+            dist = dq.length
+            if 1e-6 < dist < radius * 2.7:
+                steer += dq / dist * (radius * 2.7 - dist) / radius * 1.6
+        off = (p - centre).length
+        if off > reach:
+            steer += (centre - p).normalized() * (0.9 + 8 * (off - reach) / reach)
+        if pull is not None:
+            steer += Vector(pull) * (1 - i / steps)
+        if target is not None:
+            t = i / steps
+            steer += (Vector(target) - p).normalized() * 3.0 * t ** 3
+        d = (d + steer * 0.3).normalized()
+        pts.append(p + d * step)
+    if target is not None:  # (bent to end exactly there)
+        miss = Vector(target) - pts[-1]
+        n = len(pts)
+        for i in range(n):
+            t = i / (n - 1)
+            pts[i] += miss * (t * t * (3 - 2 * t))
+    for _ in range(2):  # (smoothed, the ends kept)
+        pts = [pts[0]] + [(pts[i - 1] + pts[i] * 2 + pts[i + 1]) / 4 for i in range(1, len(pts) - 1)] + [pts[-1]]
+    return pts
+
+
+def gut_tube(path, radius, rng, segments=10, folds=0.03, torn=(True, True), shape=None, skin="Gut"):
+    """A length of gut along `path`: a soft tube, narrowing and swelling a
+    little (peristalsis), faint rings of its folds through the wall;
+    `shape(length, angle)` -> a radius factor (the colon's pouches). Its
+    ends torn (ragged, the red lining showing, the colon's contents in it)
+    or closed round. Returns {layer: bmesh} (`skin`, "Mucosa", "Lumen")."""
+    pts = [Vector(p) for p in path]
+    bm = bmesh.new()
+    tags = []
+    rings = []
+    length = 0.0
+    prev_side = None
+    phase = [rng.uniform(0, 6.3) for _ in range(2)]
+    tangents = []
+    for i, p in enumerate(pts):
+        if i > 0:
+            length += (p - pts[i - 1]).length
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        tangents.append(t)
+        ref = Vector((0, 1, 0)) if abs(t.y) < 0.9 else Vector((1, 0, 0))
+        side = t.cross(ref).normalized() if prev_side is None else (prev_side - t * prev_side.dot(t)).normalized()
+        prev_side = side
+        upv = t.cross(side).normalized()
+        r = radius * (1 + 0.1 * math.sin(length * 3.1 + phase[0]) * math.sin(length * 1.3 + phase[1])
+                      + folds * math.sin(length / radius * 2.4))
+        ring = []
+        for k in range(segments):
+            a = 2 * math.pi * k / segments
+            rk = r * (shape(length, a) if shape else 1.0)
+            ring.append(bm.verts.new(p + (side * math.cos(a) + upv * math.sin(a)) * rk))
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        for k in range(segments):
+            j = (k + 1) % segments
+            bm.faces.new((rings[i][k], rings[i][j], rings[i + 1][j], rings[i + 1][k]))
+            tags.append(skin)
+
+    def end(ring, centre, inward, is_torn):
+        # inward: into the tube from this end
+        if is_torn:
+            for v in ring:  # (ragged)
+                v.co += inward * rng.uniform(-0.35, 0.25) * radius
+                v.co = centre + (v.co - centre) * rng.uniform(0.9, 1.08)
+            lip = [bm.verts.new(centre + (v.co - centre) * 0.72 + inward * radius * 0.2) for v in ring]
+            core = [bm.verts.new(centre + (v.co - centre) * 0.45 + inward * radius * 0.45) for v in ring]
+            mid = bm.verts.new(centre + inward * radius * 0.6)
+            layers = ("Mucosa", "Lumen" if skin == "Colon" else "Mucosa")
+        else:
+            lip = [bm.verts.new(centre + (v.co - centre) * 0.75 - inward * radius * 0.45) for v in ring]
+            core = [bm.verts.new(centre + (v.co - centre) * 0.4 - inward * radius * 0.8) for v in ring]
+            mid = bm.verts.new(centre - inward * radius * 0.92)
+            layers = (skin, skin)
+        n = len(ring)
+        for k in range(n):
+            j = (k + 1) % n
+            bm.faces.new((ring[k], ring[j], lip[j], lip[k]))
+            tags.append(layers[0])
+            bm.faces.new((lip[k], lip[j], core[j], core[k]))
+            tags.append(layers[1])
+            bm.faces.new((core[k], core[j], mid))
+            tags.append(layers[1])
+
+    end(rings[0], pts[0], tangents[0], torn[0])
+    end(rings[-1], pts[-1], -tangents[-1], torn[1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    bm.normal_update()
+    return split_faces(bm, tags)
+
+
+def mesentery(rng, path, radius, root, width=0.45, skip=4):
+    """The gut's mesentery along `path`: a band of the fatty sheet it hangs
+    from, from the gut's inner edge toward `root`, ruffled, its far edge
+    torn; on it the vessels: an arcade along it, short straight ones (vasa
+    recta) to the gut. Returns {"Mesentery": bmesh, "Vessel": bmesh}."""
+    root = Vector(root)
+    sheet = bmesh.new()
+    rows = []
+    mids = []
+    frames = []
+    phase = rng.uniform(0, 6.3)
+    path = [Vector(p) for p in path][skip:len(path) - skip]
+    for i, p in enumerate(path):
+        toward = root - p
+        dist = toward.length
+        toward = toward.normalized() if dist > 1e-6 else Vector((0, 1, 0))
+        a = p + toward * radius * 0.55
+        reach = min(dist * width, 0.3) * (1 + 0.12 * math.sin(i * 0.37 + phase))
+        t = (path[min(i + 1, len(path) - 1)] - path[max(i - 1, 0)]).normalized()
+        frill = t.cross(toward).normalized() * 0.022 * math.sin(i * 0.8 + phase)
+        b = p + toward * (radius * 0.55 + reach) + frill
+        rows.append((sheet.verts.new(a), sheet.verts.new(b)))
+        mids.append(a.lerp(b, 0.55) + frill * 0.5)
+        frames.append((p, t, toward))
+    for i in range(len(rows) - 1):
+        sheet.faces.new((rows[i][0], rows[i + 1][0], rows[i + 1][1], rows[i][1]))
+    vessels = []
+    for i in range(0, len(mids) - 3, 3):
+        vessels.append(rod(mids[i], mids[i + 3], 0.011, 0.01, 5))
+    for i in range(1, len(mids), 3):
+        vessels.append(rod(mids[i], rows[i][0].co.copy(), 0.007, 0.006, 4))
+        # (and on round the gut's wall, both ways, branching thinner)
+        p, t, u = frames[i]
+        side = t.cross(u).normalized()
+        for sign in (1, -1):
+            reach = rng.uniform(1.3, 2.2)
+            wrap = [p + (u * math.cos(sign * reach * k / 3) + side * math.sin(sign * reach * k / 3)) * radius * 1.02
+                    + t * 0.012 * k * rng.uniform(-1, 1) for k in range(4)]
+            for k in range(3):
+                vessels.append(rod(wrap[k], wrap[k + 1], 0.0058 - k * 0.001, 0.005 - k * 0.001, 4))
+    return {"Mesentery": solidify(sheet, 0.012), "Vessel": bm_join_all(vessels)}
+
+
+def merge_layers(*pieces):
+    """Several {layer: bmesh} merged into one (by layer)."""
+    out = {}
+    for piece in pieces:
+        for layer, bm in piece.items():
+            out.setdefault(layer, []).append(bm)
+    return {layer: (bms[0] if len(bms) == 1 else bm_join_all(bms)) for layer, bms in out.items()}
+
+
+def hanging_loop(rng, a, b, depth, radius):
+    """A loop of small intestine hanging out of the cut from `a` to `b` (both
+    on it), winding, sagging about `depth` out of it (down and back: once the
+    upper body lies on its back it droops to the floor), its mesentery in
+    the loop."""
+    a, b = Vector(a), Vector(b)
+    sag = Vector((0, -0.86, 0.5))
+    mid = (a + b) / 2 + sag * depth * 0.6
+    path = coil(rng, a, sag, int(depth * 26) + 14, radius * 0.9, radius, mid, depth * 0.55,
+                pull=sag * 0.6, target=b)
+    gut = gut_tube(path, radius, rng, 10, torn=(False, False))
+    root = (a + b) / 2 + sag * 0.05
+    return merge_layers(gut, mesentery(rng, path, radius, root, 0.55, 3))
 
 
 def waist_cut(rng):
@@ -1162,59 +1651,46 @@ def waist_cut(rng):
       waist   R6 torso space (2 x 2 x 1), the face under the upper body
               (Y = -1), hanging down a little
       hip_r   R6 right leg space (1 x 2 x 1), the face on its top (Y = 1)
-      hip_l   the left leg's"""
+      hip_l   the left leg's
+    (and prints where the arteries' cut ends are: WaistCut's FEMORAL /
+    ILIAC)"""
     anatomy = load_waist()
 
-    def layers(parts, half, plane_y, up, centre):
-        # (neighbouring muscles in alternating colours: fill_footprint)
-        out = {
-            "Muscle": bm_join_all([bm for _n, bm in parts.get("muscle", [])]),
-            "MuscleDark": bm_join_all([bm for _n, bm in parts.get("muscle_dark", [])]),
-            "Bone": bm_join_all([bm for _n, bm in parts.get("bone", [])]),
-            "Gut": bm_join_all([bm for _n, bm in parts.get("gut", [])]),
-            "Vessel": bm_join_all([bm for _n, bm in parts.get("vessel", [])]),
-        }
+    def layers(painted, half, plane_y, up, centre):
+        out = {layer: bm_join_all(bms) for layer, bms in painted.items()}
         # the dark floor of the cut (nothing see-through between the parts)
         floor = floor_plate(half, 0.0, 0.012, rng)
         bmesh.ops.translate(floor, vec=Vector((centre[0], plane_y - up * 0.008, centre[1])), verts=floor.verts)
         out["FleshDark"] = floor
-        fat = rim_walls(rng, (half[0] * 0.985, half[1] * 0.985), 0.0, 0.07, 0.07, up)
-        bmesh.ops.translate(fat, vec=Vector((centre[0], plane_y - up * 0.04, centre[1])), verts=fat.verts)
-        out["Fat"] = fat
         return out
 
     # ---- the upper body's face (torso space, its bottom at Y = -1)
-    upper = cut_face(rng, anatomy, (0.0, 0.0), (1.0, 0.5), -1.0, 1,
-                     lambda name, v: (v[:, 1] > -1.0).any())
-    waist = layers(upper, (1.0, 0.5), -1.0, 1, (0.0, 0.0))
+    painted, ends = cut_face(rng, anatomy, (0.0, 0.0), (1.0, 0.5), -1.0, 1,
+                             lambda name, v: (v[:, 1] > -1.0).any())
+    print("  waist: artery ends", {k: tuple(round(c, 2) for c in v) for k, v in ends.items()})
+    waist = layers(painted, (1.0, 0.5), -1.0, 1, (0.0, 0.0))
     # loops of small intestine hanging out of it (the belly's front half)
     loops = []
-    for _ in range(4):
-        a = Vector((rng.uniform(-0.55, 0.55), -1.02, rng.uniform(-0.38, 0.05)))
-        b = a + Vector((rng.uniform(-0.35, 0.35), 0, rng.uniform(-0.12, 0.2)))
-        b.z = max(-0.42, min(0.3, b.z))
-        loops.append(hanging_loop(rng, a, b, rng.uniform(0.3, 0.9), rng.uniform(0.05, 0.065)))
-    # the lowest loops of the small intestine (just over the cut), slumping
-    # out of it
-    for name, v, f in anatomy["gut"]:
-        if name == "Jejunum":
-            spill = bm_of(v, f)
-            squarify(spill, (0.0, 0.0), (WAIST_FOLD, 0.5 * WAIST_FOLD), outline(v, (0.0, 0.0)), 0.9)
-            cut(spill, [((0, -0.82, 0), (0, 1, 0))], fill=True)
-            bmesh.ops.translate(spill, vec=Vector((0, -0.2, 0)), verts=spill.verts)
-            loops.append(spill)
-    waist["Gut"] = bm_join_all([waist["Gut"]] + loops)
-    waist["Skin"] = rim_flaps(rng, (1.0, 0.5), -1.0, (0, -1, 0), 24)
+    for i in range(3):
+        a = Vector((-0.5 + i * 0.45 + rng.uniform(-0.08, 0.08), -1.03, rng.uniform(-0.3, -0.05)))
+        b = a + Vector((rng.uniform(0.15, 0.3) * (1 if i < 2 else -1), 0, rng.uniform(-0.05, 0.12)))
+        loops.append(hanging_loop(rng, a, b, rng.uniform(0.35, 0.75), rng.uniform(0.07, 0.085)))
+    hanging = merge_layers(*loops)
+    for layer, bm in hanging.items():
+        waist[layer] = bm_join_all([waist[layer], bm]) if layer in waist else bm
+    waist["Skin"] = rim_flaps(rng, (1.0, 0.5), -1.0, (0, -1, 0), 12, (0.08, 0.2), (0.03, 0.1), (0.9, 1.7))
 
     # ---- each leg's top (its own space: 1 x 2 x 1, its top at Y = 1)
     def leg(side, leg_rng):
         # the leg's half of the body: X > 0 is the right (torso space); the
         # hips split down the middle
         cx = 0.5 * side
-        parts = cut_face(leg_rng, anatomy, (cx, 0.0), (0.5, 0.5), -1.0, -1,
-                         lambda name, v: (v[:, 1] < -1.0).any() and (v[:, 0] * side > 0.02).any(), side)
-        top = layers(parts, (0.5, 0.5), -1.0, -1, (cx, 0.0))
-        top["Skin"] = rim_flaps(leg_rng, (0.5, 0.5), -1.0, (0, 1, 0), 12, (0.14, 0.26), (0.08, 0.18))
+        painted, ends = cut_face(leg_rng, anatomy, (cx, 0.0), (0.5, 0.5), -1.0, -1,
+                                 lambda name, v: (v[:, 1] < -1.0).any() and (v[:, 0] * side > 0.02).any(), side)
+        print(f"  leg {side}: artery ends (leg space)",
+              {k: (round(v.x - cx, 2), round(v.y + 2, 2), round(v.z, 2)) for k, v in ends.items()})
+        top = layers(painted, (0.5, 0.5), -1.0, -1, (cx, 0.0))
+        top["Skin"] = rim_flaps(leg_rng, (0.5, 0.5), -1.0, (0, 1, 0), 7, (0.08, 0.18), (0.03, 0.09), (0.9, 1.6))
         bmesh.ops.translate(top["Skin"], vec=Vector((cx, 0, 0)), verts=top["Skin"].verts)
         for bm in top.values():  # torso space -> the leg's (its top at Y = 1)
             bmesh.ops.translate(bm, vec=Vector((-cx, 2.0, 0)), verts=bm.verts)
@@ -1224,47 +1700,185 @@ def waist_cut(rng):
     hip_l = leg(-1, random.Random(rng.randrange(1 << 30)))
     for piece in (waist, hip_r, hip_l):
         for layer, bm in piece.items():
-            if layer != "Skin":
+            if layer in ("Muscle", "MuscleDark", "Fat", "Fascia", "Bone", "Marrow", "FleshDark"):
                 sharp_split(bm)
     return waist, hip_r, hip_l
 
 
-def gut_lengths(rng):
-    """Loose loops of the real small intestine (Z-Anatomy's jejunum and
-    ileum, anatomy/waist.npz), torn in three, each 1 to 2 studs, centred, a
-    torn end trailing; the first with a strip of its mesentery (Fat, its
-    vessels: Vessel)."""
-    scale = 1.7  # (the real coil, a little bigger: 1 to 2 studs each)
-    _name, v, f = load_waist()["jejunum"][0]
-    whole = bm_of(v * scale, f)
-    seeds = [Vector((-0.35, 0.2, 0)), Vector((0.4, 0.15, 0)), Vector((0.0, -0.35, 0))]
-    out = []
-    for i in range(len(seeds)):
-        part = cut(bm_copy(whole), cell_planes([s * scale for s in seeds], i), fill=True)
-        c = sum((x.co for x in part.verts), Vector()) / max(1, len(part.verts))
-        bmesh.ops.translate(part, vec=-c, verts=part.verts)
-        lo = Vector([min(x.co[k] for x in part.verts) for k in range(3)])
-        hi = Vector([max(x.co[k] for x in part.verts) for k in range(3)])
-        # a torn end trailing out of the coil
-        start = Vector((hi.x * 0.7, rng.uniform(lo.y, hi.y) * 0.5, 0))
-        bend = rng.uniform(-1.0, 1.0)
-        path = [start + Vector((0.07 * k, -0.012 * k * k, 0.05 * math.sin(k * 0.8 + bend))) for k in range(9)]
-        layers = {"Gut": bm_join_all([part, tube(path, 0.075, rng, 9)])}
-        if i == 0:
-            strip = flap(rng, (lo.x * 0.5, hi.y * 0.6, 0), (1, -0.3, 0), (0, -1, 0.2), 0.22, 0.5, 0.9)
-            layers["Fat"] = strip
-            layers["Vessel"] = bm_join_all([
-                rod((lo.x * 0.5 + 0.1 * k, hi.y * 0.6, 0.03), (lo.x * 0.5 + 0.12 * k + 0.1, hi.y * 0.3, 0.03), 0.012, 0.008, 5)
-                for k in range(3)
-            ])
-        # (centred on its bounding box: it spawns where it is meant to)
-        allv = [x.co for bm in layers.values() for x in bm.verts]
-        mid = Vector([(min(c[k] for c in allv) + max(c[k] for c in allv)) / 2 for k in range(3)])
-        for bm in layers.values():
-            bmesh.ops.translate(bm, vec=-mid, verts=bm.verts)
-        out.append(layers)
-    whole.free()
+def centred(layers):
+    """{layer: bmesh} moved so its bounding box is centred on the origin (it
+    spawns where it is meant to)."""
+    allv = [x.co for bm in layers.values() for x in bm.verts]
+    mid = Vector([(min(c[k] for c in allv) + max(c[k] for c in allv)) / 2 for k in range(3)])
+    for bm in layers.values():
+        bmesh.ops.translate(bm, vec=-mid, verts=bm.verts)
+    return layers
+
+
+def folds(rng, focus, toward, legs, length, radius, fan, lift=None):
+    """The path of a length of small intestine lying folded on its mesentery,
+    as it does: side by side to and fro (hairpin loops), its legs fanning out
+    from `focus` (where the mesentery gathers) along `toward` (X-Z) and
+    `fan` radians apart, each about `length` long, a rounded turn at each
+    end; `lift(point)` -> how high it lies there (over other loops). Returns
+    the points (on the floor, Y = its radius)."""
+    toward = Vector((toward[0], 0, toward[2])).normalized()
+    side = Vector((0, 1, 0)).cross(toward).normalized()
+    near = 2.15 * radius / fan  # (the legs' inner ends a gut's width apart)
+    pts = []
+    for j in range(legs):
+        a = (j - (legs - 1) / 2) * fan + rng.uniform(-0.05, 0.05)
+        d = toward * math.cos(a) + side * math.sin(a)
+        far = near + length * rng.uniform(0.75, 1.15)
+        r0, r1 = (near, far) if j % 2 == 0 else (far, near)
+        n = max(4, int(abs(far - near) / (radius * 0.8)))
+        wob = rng.uniform(0, 6.3)
+        for i in range(n + 1):
+            t = i / n
+            r = r0 + (r1 - r0) * t
+            sway = (side * math.cos(a) - toward * math.sin(a)) * 0.025 * math.sin(t * 5 + wob)
+            pts.append(Vector(focus) + d * r + sway)
+        if j < legs - 1:  # the turn to the next leg: half round
+            a2 = a + fan
+            mid_a = (a + a2) / 2
+            rr = r1 + (radius * 1.05 if j % 2 == 0 else -radius * 0.4)
+            pts.append(Vector(focus) + (toward * math.cos(mid_a) + side * math.sin(mid_a)) * rr)
+    for _ in range(3):  # (smoothed, the ends kept)
+        pts = [pts[0]] + [(pts[i - 1] + pts[i] * 2 + pts[i + 1]) / 4 for i in range(1, len(pts) - 1)] + [pts[-1]]
+    for p in pts:
+        p.y = radius + (lift(p) if lift else 0.0)
+    return pts
+
+
+def resample(pts, step):
+    """`pts` (a path) evened out to points about `step` apart."""
+    out = [Vector(pts[0])]
+    left = 0.0
+    for i in range(1, len(pts)):
+        a, b = Vector(pts[i - 1]), Vector(pts[i])
+        seg = (b - a).length
+        t = step - left
+        while t <= seg:
+            out.append(a.lerp(b, t / seg))
+            t += step
+        left = seg - (t - step)
+    out.append(Vector(pts[-1]))
     return out
+
+
+def gut_lengths(rng):
+    """Loose lengths of small intestine torn out (jejunum / ileum: Z-Anatomy's
+    is about 0.17 stud thick at the torso's scale), each lying folded as the
+    real one does: hairpin loops side by side fanning out on their
+    mesentery (a sheet with its vessels, gathered toward its torn root), a
+    leg here and there riding a little onto the next, a torn end trailing
+    out; centred."""
+    out = []
+    for i in range(3):
+        radius = rng.uniform(0.078, 0.088)
+        a = rng.uniform(0, 2 * math.pi)
+        toward = Vector((math.cos(a), 0, math.sin(a)))
+        focus = Vector((0, 0, 0)) - toward * 0.32
+        ride = {j: rng.uniform(0.3, 0.8) * radius for j in range(8) if rng.random() < 0.35}
+        legs = (5, 6, 4)[i]
+
+        def lift(p, focus=focus, toward=toward, legs=legs, ride=ride):
+            # (which leg it is on: by its angle round the focus)
+            d = p - focus
+            side = Vector((0, 1, 0)).cross(toward).normalized()
+            a = math.atan2(d.dot(side), d.dot(toward))
+            return sum(h * math.exp(-((a - (j - (legs - 1) / 2) * 0.33) / 0.12) ** 2) for j, h in ride.items())
+
+        path = folds(rng, focus, toward, legs, rng.uniform(0.36, 0.46), radius, 0.33, lift)
+        # a torn end trailing out of it
+        d = path[-1] - path[-2]
+        d.y = 0
+        d = d.normalized() if d.length > 1e-6 else Vector((1, 0, 0))
+        side = Vector((0, 1, 0)).cross(d)
+        path += [path[-1] + d * radius * 0.9 * k + side * 0.04 * math.sin(k * 0.6) for k in range(1, 6)]
+        path = resample(path, radius * 0.75)
+        gut = gut_tube(path, radius, rng, 10, torn=(True, True))
+        # (its root just inside the loops' inner turns: the sheet fills
+        # between the legs and stops there, torn)
+        root = focus + toward * (2.15 * radius / 0.33) * 0.8 + Vector((0, 0.05, 0))
+        sheet = mesentery(rng, path[:-6], radius, root, 0.55, 2)
+        out.append(centred(merge_layers(gut, sheet)))
+    return out
+
+
+def colon_length(rng):
+    """A torn length of the sigmoid colon (it lies at the cut's height): a
+    thicker tube (about 0.28 stud), puckered into its pouches (haustra)
+    between three flat bands (taeniae), its little fatty tags (appendices
+    epiploicae: flattened fingers of fat, of all sizes, at uneven spacing
+    along the bands, lying against the wall), both ends torn, its dark
+    contents in them; centred."""
+    radius = 0.14
+    bands = [k * 2 * math.pi / 3 + 0.4 for k in range(3)]
+
+    def shape(length, a):
+        band = max(math.exp(-((math.atan2(math.sin(a - b), math.cos(a - b))) / 0.22) ** 2) for b in bands)
+        pouch = 0.8 + 0.2 * abs(math.sin(math.pi * length / 0.21)) ** 0.6
+        return band * 0.84 + (1 - band) * pouch
+
+    n = 44
+    path = [Vector(((t - 0.5) * 1.7, 0.12 * math.sin(2 * math.pi * t), 0.28 * math.sin(math.pi * t * 1.4) - 0.1))
+            for t in (i / (n - 1) for i in range(n))]
+    colon = gut_tube(path, radius, rng, 18, folds=0.0, torn=(True, True), shape=shape, skin="Colon")
+    tags = []
+    i = rng.uniform(3, 5)
+    while i < n - 4:
+        k = int(i)
+        p = path[k]
+        t = (path[k + 1] - path[k - 1]).normalized()
+        side = t.cross(Vector((0, 1, 0))).normalized()
+        upv = t.cross(side).normalized()
+        a = bands[rng.randrange(2)] + rng.uniform(-0.2, 0.2)
+        outv = (side * math.cos(a) + upv * math.sin(a)).normalized()
+        tags.append(fat_tag(rng, p + outv * radius * 0.8, outv, t, rng.uniform(0.6, 1.3)))
+        i += rng.uniform(1.6, 4.5)
+    colon["Mesentery"] = bm_join_all(tags)
+    return centred(colon)
+
+
+def fat_tag(rng, base, out, along, size):
+    """One appendix epiploica: a flattened finger of fat from `base` on the
+    colon's wall (`out`: away from it), short out of it then lying back
+    against it, toward the floor, thinning to a soft round end."""
+    out, along = Vector(out).normalized(), Vector(along).normalized()
+    flat = out.cross(along).normalized()
+    down = Vector((0, -1, 0))
+    lie = (down - out * down.dot(out))
+    lie = lie.normalized() if lie.length > 1e-3 else along
+    lie = (lie + along * rng.uniform(-0.6, 0.6)).normalized()
+    length = 0.1 * size
+    width = 0.036 * size
+    bm = bmesh.new()
+    rings = []
+    seg = 8
+    steps = 6
+    for i in range(steps + 1):
+        t = i / steps
+        # (out of the wall, curling down onto it)
+        c = Vector(base) + out * length * 0.45 * math.sin(t * 1.6) + lie * length * t
+        w = width * (0.75 + 0.6 * math.sin(math.pi * min(1.0, t * 1.15)) * (1 - 0.35 * t)) * rng.uniform(0.9, 1.1)
+        th = w * 0.5  # (flattened)
+        ax = (lie * math.cos(t * 1.6) - out * math.sin(t * 1.6) * 0.5).normalized()
+        n2 = ax.cross(flat).normalized()
+        rings.append([bm.verts.new(c + flat * math.cos(2 * math.pi * k / seg) * w
+                                   + n2 * math.sin(2 * math.pi * k / seg) * th) for k in range(seg)])
+    for i in range(steps):
+        for k in range(seg):
+            j = (k + 1) % seg
+            bm.faces.new((rings[i][k], rings[i][j], rings[i + 1][j], rings[i + 1][k]))
+    for ring, inward in ((rings[0], -1), (rings[-1], 1)):
+        c = sum((v.co for v in ring), Vector()) / seg
+        tip = bm.verts.new(c + (lie if inward > 0 else -out) * width * 0.45)
+        for k in range(seg):
+            bm.faces.new((ring[k], ring[(k + 1) % seg], tip))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    lumpy(bm, rng, 0.004, 40.0)
+    return bm
 
 
 def lua(slots, kinds):

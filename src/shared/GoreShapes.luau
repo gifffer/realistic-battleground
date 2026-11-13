@@ -56,6 +56,7 @@ local GoreShapes = {
 		Gut1 = Vector3.new(138, 3, -14),
 		Gut2 = Vector3.new(141, 3, -14),
 		Gut3 = Vector3.new(144, 3, -14),
+		Colon = Vector3.new(147, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -124,6 +125,7 @@ local GoreShapes = {
 		"Gut1",
 		"Gut2",
 		"Gut3",
+		"Colon",
 	},
 }
 

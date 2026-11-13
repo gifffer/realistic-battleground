@@ -98,8 +98,32 @@ RiftFlask.onReleased(removeProp) -- (the flask left his hand)
 
 -- A gun (ray gun: orange core; portal gun: green core). Its barrel goes
 -- along the arm's -Y (with the arm raised, where he aims).
+-- The RiftGear meshes when the place has them (Combat/RiftAssets: grip,
+-- trigger guard, coils, a glass tube of glowing fluid, the dish or the glass
+-- bulb), else a simpler gun from parts. Either way the muzzle is a part
+-- named "Tip" or "Bulb" right in `folder` (muzzleOf looks there).
 local function buildGun(arm: BasePart, folder: Folder, portal: boolean)
 	local glow = if portal then RIFT_GREEN else RAY_GLOW
+	local RiftAssets = require(script.Parent.RiftAssets)
+	local main = RiftAssets.spawn(if portal then "PortalGun" else "RayGun", arm.CFrame)
+	if main then
+		local weld = Instance.new("Weld")
+		weld.Part0 = arm
+		weld.Part1 = main
+		weld.C0 = arm.CFrame:ToObjectSpace(main.CFrame)
+		weld.Parent = main
+		main.Parent = folder
+		local tip = main:FindFirstChild("Tip")
+		if tip then
+			tip.Parent = folder -- (its weld goes with it)
+			local light = Instance.new("PointLight")
+			light.Color = glow
+			light.Brightness = 1.2
+			light.Range = 6
+			light.Parent = tip
+		end
+		return
+	end
 	local hand = CFrame.new(0, -1.05, 0)
 	local along = CFrame.Angles(0, 0, math.rad(90)) -- a cylinder's axis (X) → the arm's Y
 	stick(

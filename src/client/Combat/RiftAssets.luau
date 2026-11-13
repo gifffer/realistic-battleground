@@ -4,7 +4,8 @@
 -- docs/RIFT_FR.md): his cyborg left arm with the gravity glove, the ocular
 -- implant, the ray gun, the portal gun, the potion flask. Each piece is a few
 -- "<Piece>_<Layer>" meshes, one per material; a "<Piece>_Pivot" marker gives
--- its own origin, other markers ("Tip", "PalmPoint") points on it.
+-- its own origin, other markers ("Tip", "PalmPoint", "Cell", "Lens") points
+-- on it (a muzzle, the glove's emitter, where a light goes).
 --
 --   RiftAssets.get()                     the pieces, or nil (no kit: an old
 --                                        place; the callers build their gear
@@ -37,14 +38,15 @@ export type Layer = {
 export type Piece = {
 	name: string,
 	layers: { Layer }, -- the biggest first (the main part)
-	points: { [string]: CFrame }, -- the markers ("Tip", "PalmPoint"), piece space
+	points: { [string]: CFrame }, -- the markers ("Tip", "PalmPoint", "Cell", "Lens"), piece space
 }
 export type Paint = (layer: string) -> (Color3, Enum.Material, number)
 
 -- Every piece the kit must have (one missing: an old or half-arrived kit).
 local NAMES = { "Arm", "Eye", "RayGun", "PortalGun", "Flask" }
 -- Markers that are not drawn.
-local MARKERS: { [string]: boolean } = { Pivot = true, Tip = true, PalmPoint = true }
+local MARKERS: { [string]: boolean } =
+	{ Pivot = true, Tip = true, PalmPoint = true, Cell = true, Lens = true }
 
 -- How each layer looks unless the caller paints it: colour, material, shine,
 -- see-through.
@@ -73,7 +75,9 @@ local LOOKS: { [string]: Look } = {
 	Glow = { color = P.RIFT_GREEN, material = Enum.Material.Neon, shine = 0, clear = 0 },
 	Palm = { color = P.RIFT_GLOW, material = Enum.Material.Neon, shine = 0, clear = 0 },
 	Glass = { color = P.GLASS, material = Enum.Material.Glass, shine = 0.15, clear = 0.6 },
-	Liquid = { color = P.ACID, material = Enum.Material.SmoothPlastic, shine = 0, clear = 0.15 },
+	-- (opaque: Roblox draws nothing see-through behind a Glass-material part,
+	-- and the flask's glass may well be painted Glass)
+	Liquid = { color = P.ACID, material = Enum.Material.SmoothPlastic, shine = 0, clear = 0 },
 	Cork = {
 		color = Color3.fromRGB(150, 108, 66),
 		material = Enum.Material.Wood,
@@ -220,8 +224,8 @@ end
 -- (optional) gives each layer's colour, material and shine; `scale` makes it
 -- bigger or smaller (1 by default). The main part is returned (the others
 -- are welded to it, under it, each named after its layer; the markers are
--- invisible little parts named "Tip", "PalmPoint"); not parented yet. Nil
--- without the kit.
+-- invisible little parts named "Tip", "PalmPoint", "Cell", "Lens"); not
+-- parented yet. Nil without the kit.
 function RiftAssets.spawn(name: string, at: CFrame, paint: Paint?, scale: number?): BasePart?
 	local all = RiftAssets.get()
 	local piece = if all then all[name] else nil

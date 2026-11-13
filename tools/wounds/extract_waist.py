@@ -35,6 +35,7 @@ Writes tools/wounds/anatomy/waist.npz ("<group>__<i>__v" float32 vertices,
               colon (slab)
   vessel<i>   femoral / external iliac arteries and veins, the gluteal,
               pudendal, obturator and circumflex vessels (slab)
+  nerve<i>    sciatic, femoral and obturator nerves (slab)
   jejunum0    the whole small intestine (its own space: centred, studs, the
               same torso scale), for the loose loops falling out
 Only needed again to change what is taken; gore.py reads the .npz.
@@ -75,7 +76,12 @@ VESSELS = [
     "Inferior gluteal artery", "Internal pudendal artery", "Obturator artery",
     "Medial circumflex femoral artery", "Lateral circumflex femoral artery",
 ]
-BUDGET = {"bone": 1400, "muscle": 520, "gut": 1100, "vessel": 160}
+# The big nerves cut there (white cords in the section: the sciatic nerve
+# under the gluteus maximus, the femoral nerve beside the femoral artery,
+# the obturator nerve on the pelvis' side wall; names as NervousSystem100.fbx
+# lists them).
+NERVES = ["Sciatic nerve", "Femoral nerve", "Obturator nerve"]
+BUDGET = {"bone": 1400, "muscle": 520, "gut": 1100, "vessel": 160, "nerve": 200}
 
 
 def to_torso(p):
@@ -188,6 +194,10 @@ def main():
     for base in VESSELS:
         for name in names(base):
             put("vessel", name, slab(name, BUDGET["vessel"]))
+    load(os.path.join(FOLDER, "NervousSystem100.fbx"))
+    for base in NERVES:
+        for name in names(base):
+            put("nerve", name, slab(name, BUDGET["nerve"]))
     np.savez_compressed(OUT, **arrays)
     print("wrote", OUT, os.path.getsize(OUT) // 1024, "KB")
 
