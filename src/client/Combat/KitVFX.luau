@@ -3446,8 +3446,8 @@ function KitVFX.start()
 	end
 	-- The one killed: a thud when the body hits the floor (once it lands,
 	-- however it falls; a body already lying there: soon after death).
-	local floorParams = RaycastParams.new()
-	floorParams.FilterType = Enum.RaycastFilterType.Exclude
+	local landParams = RaycastParams.new()
+	landParams.FilterType = Enum.RaycastFilterType.Exclude
 	local function watchDeath(instance: Instance)
 		local humanoid = if instance:IsA("Model")
 			then instance:FindFirstChildOfClass("Humanoid")
@@ -3471,8 +3471,8 @@ function KitVFX.start()
 				if age < 0.15 or math.abs(torso.AssemblyLinearVelocity.Y) > 3 or torso.Anchored then
 					return
 				end
-				floorParams.FilterDescendantsInstances = { model }
-				if workspace:Raycast(torso.Position, Vector3.new(0, -2, 0), floorParams) then
+				landParams.FilterDescendantsInstances = { model }
+				if workspace:Raycast(torso.Position, Vector3.new(0, -2, 0), landParams) then
 					if connection then
 						connection:Disconnect()
 					end
