@@ -3444,6 +3444,47 @@ function KitVFX.start()
 		bored()
 		instance:GetAttributeChangedSignal(Finishers.BORED_ATTRIBUTE):Connect(bored)
 	end
+	-- The one killed: a thud when the body hits the floor (once it lands,
+	-- however it falls; a body already lying there: soon after death).
+	local floorParams = RaycastParams.new()
+	floorParams.FilterType = Enum.RaycastFilterType.Exclude
+	local function watchDeath(instance: Instance)
+		local humanoid = if instance:IsA("Model")
+			then instance:FindFirstChildOfClass("Humanoid")
+			else nil
+		if humanoid == nil then
+			return
+		end
+		local model = instance :: Model
+		humanoid.Died:Once(function()
+			local diedAt = os.clock()
+			local connection: RBXScriptConnection? = nil
+			connection = RunService.Heartbeat:Connect(function()
+				local torso = model:FindFirstChild("Torso")
+				local age = os.clock() - diedAt
+				if model.Parent == nil or torso == nil or not torso:IsA("BasePart") or age > 5 then
+					if connection then
+						connection:Disconnect()
+					end
+					return
+				end
+				if age < 0.15 or math.abs(torso.AssemblyLinearVelocity.Y) > 3 or torso.Anchored then
+					return
+				end
+				floorParams.FilterDescendantsInstances = { model }
+				if workspace:Raycast(torso.Position, Vector3.new(0, -2, 0), floorParams) then
+					if connection then
+						connection:Disconnect()
+					end
+					SoundController.play("DeathFall", model)
+				end
+			end)
+		end)
+	end
+	CollectionService:GetInstanceAddedSignal(Config.Combat.TAG):Connect(watchDeath)
+	for _, model in CollectionService:GetTagged(Config.Combat.TAG) do
+		watchDeath(model)
+	end
 	-- (fighters, and the bodies a finisher left: Server/Systems/Corpses)
 	for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do
 		CollectionService:GetInstanceAddedSignal(tag):Connect(watchBody)

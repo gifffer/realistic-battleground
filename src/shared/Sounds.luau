@@ -187,6 +187,7 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.08,
 		fallback = "HurtGrunt",
 	},
+	DeathFall = { ids = { 121870043011805 }, volume = 1, pitch = 1, pitchVariation = 0.05 }, -- the one killed hits the floor
 	BodySlam = { -- a whole body driven into the floor
 		ids = {},
 		volume = 1,
