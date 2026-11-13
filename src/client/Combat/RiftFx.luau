@@ -691,10 +691,8 @@ local function portals(data: { [string]: any })
 	else
 		door(exit * CFrame.new(0, 0, 0), seconds)
 	end
-	-- (the teleport's sound already started with the shot: "PortalShot")
-	task.delay(seconds, function()
-		SoundController.playAt("PortalClose", exit.Position)
-	end)
+	-- (one sound for the whole teleport: "Teleport", from the move's start;
+	-- the portals closing make none)
 end
 
 function RiftFx.onRemote(kind: unknown, data: unknown)
