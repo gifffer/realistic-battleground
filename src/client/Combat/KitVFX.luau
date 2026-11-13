@@ -36,6 +36,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local Kits = require(ReplicatedStorage.Shared.Kits)
+local HeatBeam = require(ReplicatedStorage.Shared.Util.HeatBeam)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Blood = require(script.Parent.Blood)
@@ -1156,16 +1157,6 @@ end
 -- (see `burn` below: a brief glow and smoke where the beam touches; the
 -- burn wound itself comes from the server)
 
--- (only the body parts: a hit on a hat / hair burns the head under it)
-local BURNABLE = table.freeze({
-	Head = true,
-	Torso = true,
-	["Left Arm"] = true,
-	["Right Arm"] = true,
-	["Left Leg"] = true,
-	["Right Leg"] = true,
-})
-
 -- The skin of a body part at `p` (part space): where, and which way is out.
 -- `margin`: room kept from a flat face's edges (the burn's radius).
 local function onSkin(limb: BasePart, p: Vector3, margin: number?): (Vector3, Vector3)
@@ -1319,8 +1310,10 @@ local BEAM_LAYERS = {
 
 -- Heat vision: the eyes charge up (energy sucked in, red light, sparks),
 -- then two beams burn straight ahead the way he faced when it started.
--- Fighters don't stop it (it burns through: charred marks where it touches
--- them, after a moment in it); a wall does (scorched, molten trail).
+-- Like the server (Shared/Util/HeatBeam), it ends on the first thing in its
+-- way: a head burns (after a moment in it: glowing skin, smoke), any other
+-- body part just blocks it (sparks glancing off, no burn); a wall gets a
+-- scorched, molten trail.
 local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	local beam = move.beam
 	local head = part(model, "Head")
@@ -1436,11 +1429,12 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	heat.Shadows = false
 	heat.Parent = impact
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
+	local trace = HeatBeam.tracer(model, { fx :: Instance })
 	local startedAt = os.clock()
-	local lastScorch, lastBurn = 0, 0
-	local contact: { [Model]: number } = {}
+	local lastScorch, lastBurn, lastGlance = 0, 0, 0
+	-- (the server's warm-up, mirrored: heat per head, on the same tick grid)
+	local contact: { [Model]: number? } = {}
+	local nextTick = startedAt + beam.from
 	local firing = false
 	local loop: Sound? = nil
 	local connection: RBXScriptConnection? = nil
@@ -1554,25 +1548,13 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			glow.Brightness = 9
 		end
 
-		-- Where it goes: through the fighters, stopped by the first thing
-		-- that isn't one (like the server).
+		-- Where it goes: stopped by a wall or by the first body in its way
+		-- (the same rule as the server).
 		local origin = head.Position + direction * 0.5
-		local skipped: { Instance } = { model, fx }
-		local touched: { RaycastResult } = {}
-		local hit: RaycastResult? = nil
-		for _ = 1, 8 do
-			params.FilterDescendantsInstances = skipped
-			hit = workspace:Raycast(origin, direction * beam.range, params)
-			local owner = if hit then hit.Instance:FindFirstAncestorOfClass("Model") else nil
-			if hit and owner and owner:FindFirstChildOfClass("Humanoid") then
-				table.insert(skipped, owner)
-				table.insert(touched, hit)
-				hit = nil
-			else
-				break
-			end
-		end
-		local target = if hit then hit.Position else origin + direction * beam.range
+		local hit = trace(origin, direction, beam.range)
+		local target = hit.position
+		local normal = hit.normal
+		local onWall = normal ~= nil and hit.fighter == nil
 		local pulse = 0.85 + math.sin(now * 40) * 0.08 + math.random() * 0.12
 		for index, layers in beams do
 			local from = eyes[index].Position
@@ -1583,14 +1565,15 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 				layer.part.Size = Vector3.new(layer.width * pulse, layer.width * pulse, length)
 			end
 		end
-		impact.WorldCFrame = if hit then facing(target, hit.Normal) else CFrame.new(target)
-		fountain.Rate = if hit then 140 else 0
+		impact.WorldCFrame = if normal then facing(target, normal) else CFrame.new(target)
+		-- (sparks off a wall; fewer off a head; a body only gets a glance)
+		fountain.Rate = if onWall then 140 elseif hit.head then 60 else 0
 		molten.CFrame = CFrame.new(target)
-		molten.Transparency = if hit then 0.15 else 1
+		molten.Transparency = if onWall then 0.15 else 1
 		molten.Size = Vector3.one * (0.6 + math.random() * 0.25)
 
 		-- Molten, then charred, trail on the floor / wall.
-		if hit and now - lastScorch > 0.05 then
+		if onWall and normal and now - lastScorch > 0.05 then
 			lastScorch = now
 			local size = random:NextNumber(0.6, 0.95)
 			local scorch = newPart(
@@ -1599,7 +1582,7 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 				Enum.Material.Neon,
 				Enum.PartType.Cylinder
 			)
-			scorch.CFrame = facing(target + hit.Normal * 0.02, hit.Normal)
+			scorch.CFrame = facing(target + normal * 0.02, normal)
 				* CFrame.Angles(0, math.rad(90), 0)
 			scorch.Parent = fx
 			animate(1.4, function(alpha)
@@ -1618,38 +1601,55 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 				end)
 			end)
 		end
-		-- Charred skin where it touches someone (after a moment in it, like
-		-- the server's warm-up), smoke rising off them.
-		local inBeam: { [Model]: boolean } = {}
-		for _, touch in touched do
-			local owner = touch.Instance:FindFirstAncestorOfClass("Model")
-			if owner then
-				inBeam[owner] = true
-				contact[owner] = (contact[owner] or now)
-				-- (a hat / hair: the head under it; the root: the torso)
-				local limb: Instance? = touch.Instance
-				if limb and limb.Parent and limb.Parent:IsA("Accessory") then
-					limb = owner:FindFirstChild("Head")
-				elseif limb and limb.Name == "HumanoidRootPart" then
-					limb = owner:FindFirstChild("Torso")
-				end
-				if
-					limb
-					and limb:IsA("BasePart")
-					and BURNABLE[limb.Name]
-					and now - contact[owner] >= beam.warmup
-					and now - lastBurn > 0.12
-				then
-					lastBurn = now
-					burn(owner, limb, touch.Position)
-					sparks(touch.Position, 6, EMBER, touch.Normal, 14, 50)
-				end
+
+		-- (only a living head that isn't knocked out burns, like the server)
+		local victim = if hit.head then hit.fighter else nil
+		if victim then
+			local humanoid = victim:FindFirstChildOfClass("Humanoid")
+			if
+				humanoid == nil
+				or humanoid.Health <= 0
+				or victim:GetAttribute("KnockedOut") == true
+			then
+				victim = nil
 			end
 		end
-		for owner in contact do
-			if not inBeam[owner] then
-				contact[owner] = nil
+		-- An arm, the chest, a leg in the way: it doesn't burn, it glances
+		-- off (a few sparks thrown back), no mark.
+		if hit.fighter and not hit.head and normal and now - lastGlance > 0.07 then
+			lastGlance = now
+			local bounce = direction - normal * 2 * direction:Dot(normal)
+			sparks(target, 4, EMBER, bounce, 12, 55)
+		end
+
+		-- The head heats up while it's in the beam, cools down twice as fast
+		-- out of it (the server's warm-up, on the same tick grid).
+		if now >= nextTick then
+			nextTick = math.max(nextTick + beam.tick, now - beam.tick)
+			for owner, value in contact do
+				if owner ~= victim then
+					local cooled = (value or 0) - beam.tick * 2
+					contact[owner] = if cooled > 0 then cooled else nil
+				end
 			end
+			if victim then
+				contact[victim] = (contact[victim] or 0) + beam.tick
+			end
+		end
+		-- Charred skin where it touches the head (once warmed up), smoke
+		-- rising off it. (The burn wound itself comes from the server.)
+		local face = hit.part
+		local at = hit.burnAt
+		if
+			victim
+			and face
+			and at
+			and (contact[victim] or 0) >= beam.warmup
+			and now - lastBurn > 0.12
+		then
+			lastBurn = now
+			burn(victim, face, at)
+			sparks(at, 6, EMBER, normal, 14, 50)
 		end
 	end)
 end

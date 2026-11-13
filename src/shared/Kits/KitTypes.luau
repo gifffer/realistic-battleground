@@ -87,10 +87,12 @@ export type MoveDef = {
 	chain: boolean?,
 	-- Beam (heat vision): from `from` to `to` seconds a beam goes straight
 	-- out of the eyes, the way the fighter faced when it started (it does
-	-- NOT follow the aim), `range` studs (stopped by walls), `radius` thick.
-	-- The fighter is rooted meanwhile. Someone in it heats up: only after
-	-- `warmup` seconds in the beam does `hit` land, every `tick` seconds
-	-- (blockable); stepping out cools them down again.
+	-- NOT follow the aim), `range` studs (stopped by walls), `radius` thick
+	-- (drawn). The fighter is rooted meanwhile. It also stops on the first
+	-- body in its way and only burns a HEAD (Shared/Util/HeatBeam): someone
+	-- whose head is in it heats up; only after `warmup` seconds in the beam
+	-- does `hit` land, every `tick` seconds (blockable); stepping out cools
+	-- them down again.
 	beam: {
 		from: number,
 		to: number,

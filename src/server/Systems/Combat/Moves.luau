@@ -34,6 +34,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
+local HeatBeam = require(ReplicatedStorage.Shared.Util.HeatBeam)
 local Destruction = require(script.Parent.Parent.Destruction)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Stamina = require(script.Parent.Parent.Stamina)
@@ -265,11 +266,13 @@ local function runCharge(state: CombatState, move: Kits.MoveDef, token: number)
 end
 
 -- Beam (heat vision): straight out of the eyes, the way the fighter faced
--- when it started (locked: it doesn't follow the aim), stopped by walls.
--- Someone in it heats up; only after `warmup` seconds in it do the hits
--- land, one every `tick`. Out of it, they cool down twice as fast.
-local burnParams = RaycastParams.new()
-burnParams.FilterType = Enum.RaycastFilterType.Include
+-- when it started (locked: it doesn't follow the aim), stopped by walls
+-- and by the first body in its way (Shared/Util/HeatBeam). It only burns
+-- the HEAD: an arm, a shoulder, the chest in the way shields it (no damage,
+-- no burn). Someone whose head is in it heats up; only after `warmup`
+-- seconds in it do the hits land, one every `tick`. Out of it, they cool
+-- down twice as fast.
+local HEAD_ONLY = table.freeze({ Head = true })
 
 local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 	local c = context()
@@ -285,9 +288,7 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 	local heat: { [CombatState]: number? } = {}
 	-- (ticks on a fixed grid: the damage doesn't depend on the frame rate)
 	local nextTick = startedAt + beam.from
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.RespectCanCollide = true
+	local trace = HeatBeam.tracer(state.model)
 	local connection: RBXScriptConnection? = nil
 	connection = RunService.Heartbeat:Connect(function()
 		local time = c.now()
@@ -309,94 +310,36 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 		local origin = if head and head:IsA("BasePart")
 			then head.Position + direction * 0.5
 			else state.root.Position + Vector3.new(0, 1.5, 0)
-		-- Walls stop it (fighters don't: they're in the box below, so the
-		-- ray goes on through them).
-		local skipped: { Instance } = { state.model }
-		local length = beam.range
-		for _ = 1, 8 do
-			params.FilterDescendantsInstances = skipped
-			local wall = workspace:Raycast(origin, direction * beam.range, params)
-			if wall == nil then
-				break
-			end
-			local owner = wall.Instance:FindFirstAncestorOfClass("Model")
-			if owner and owner:FindFirstChildOfClass("Humanoid") then
-				table.insert(skipped, owner)
-			else
-				length = wall.Distance
-				break
-			end
-		end
-		local box = CFrame.lookAt(origin + direction * (length / 2), origin + direction * length)
-		local victims, partsByModel =
-			Hitbox.query(box, Vector3.new(beam.radius * 2, beam.radius * 2, length), state.model)
-		local touched: { [CombatState]: boolean } = {}
-		for _, victimModel in victims do
-			local victim = c.getState(victimModel)
-			if victim and c.isAlive(victim) and not Knockout.isKnockedOut(victimModel) then
-				touched[victim] = true
-				local warmed = (heat[victim] or 0) + beam.tick
-				heat[victim] = warmed
-				if warmed >= beam.warmup then
-					local zone: Types.HitZone =
-						zoneFor(state, beam.hit, victimModel, partsByModel[victimModel], direction)
-					if c.resolveHit(state, victim, specFor(beam.hit, zone, move.id)) then
-						-- where it touches them, it burns through the skin
-						-- (its centre line first; past it - the beam is thick -
-						-- the body part in it closest to its axis)
-						burnParams.FilterDescendantsInstances = { victimModel }
-						local spot = workspace:Raycast(origin, direction * length, burnParams)
-						local name: string? = nil
-						local at: Vector3? = nil
-						if spot then
-							name, at = spot.Instance.Name, spot.Position
-							if spot.Instance.Parent and spot.Instance.Parent:IsA("Accessory") then
-								name = "Head" -- (a hat, hair: the head under it)
-							end
-						else
-							local best = math.huge
-							for partName in partsByModel[victimModel] or {} do
-								local limb = victimModel:FindFirstChild(partName)
-								if
-									limb
-									and limb:IsA("BasePart")
-									and partName ~= "HumanoidRootPart"
-								then
-									local along = math.clamp(
-										(limb.Position - origin):Dot(direction),
-										0,
-										length
-									)
-									local axisPoint = origin + direction * along
-									local l = limb.CFrame:PointToObjectSpace(axisPoint)
-									local half = limb.Size / 2
-									local nearest = limb.CFrame
-										* Vector3.new(
-											math.clamp(l.X, -half.X, half.X),
-											math.clamp(l.Y, -half.Y, half.Y),
-											math.clamp(l.Z, -half.Z, half.Z)
-										)
-									local distance = (nearest - axisPoint).Magnitude
-									if distance < best then
-										best, name, at = distance, partName, nearest
-									end
-								end
-							end
-						end
-						if name == "HumanoidRootPart" then
-							name = "Torso"
-						end
-						if name and at then
-							c.addBurn(victimModel, name, at)
-						end
+		-- What it ends on: a wall, a body, or the head it burns.
+		local hit = trace(origin, direction, beam.range)
+		local victimModel = if hit.head then hit.fighter else nil
+		local victim = if victimModel then c.getState(victimModel) else nil
+		local touched: CombatState? = nil
+		if
+			victim
+			and victimModel
+			and c.isAlive(victim)
+			and not Knockout.isKnockedOut(victimModel)
+		then
+			touched = victim
+			local warmed = (heat[victim] or 0) + beam.tick
+			heat[victim] = warmed
+			if warmed >= beam.warmup then
+				local zone: Types.HitZone =
+					zoneFor(state, beam.hit, victimModel, HEAD_ONLY, direction)
+				if c.resolveHit(state, victim, specFor(beam.hit, zone, move.id)) then
+					-- where it touches the round head, it burns through the skin
+					local at = hit.burnAt
+					if at then
+						c.addBurn(victimModel, "Head", at)
 					end
 				end
 			end
 		end
-		for victim, value in heat do
-			if not touched[victim] then
+		for other, value in heat do
+			if other ~= touched then
 				local cooled = (value or 0) - beam.tick * 2
-				heat[victim] = if cooled > 0 then cooled else nil
+				heat[other] = if cooled > 0 then cooled else nil
 			end
 		end
 	end)
