@@ -634,7 +634,7 @@ return table.freeze({
 		-- square root: 4 litres would only be twice as wide).
 		FINISHER_POOLS = table.freeze({
 			ENABLED = true, -- false: no big finisher pools (the spurts still land)
-			SIZE_PER_LITRE = 2.9, -- studs across for 1 litre (about 0.8 m)
+			SIZE_PER_LITRE = 3.4, -- studs across for 1 litre (grows with the square root of the litres)
 			LIFE = 240, -- seconds a finisher pool stays (the serum ring shows from 90 s)
 			MOVING = 2.5, -- studs/s: a wound moving faster smears instead of pooling
 			MAX_HEIGHT = 4.5, -- studs: a wound higher than this (in the air) pools nothing yet
@@ -642,15 +642,15 @@ return table.freeze({
 			-- One line per wound. LITRES (blood out), SECONDS (how long it keeps
 			-- coming), PULSE (seconds of spurts with the heartbeat; 0 = it only
 			-- oozes: a limb lying on the floor), BEAT (seconds between beats).
-			NECK = table.freeze({ LITRES = 1.4, SECONDS = 14, PULSE = 6, BEAT = 0.38 }), -- the bat: the head burst
-			SHOULDER = table.freeze({ LITRES = 1.1, SECONDS = 12, PULSE = 5.5, BEAT = 0.4 }), -- the arm torn off: the socket
-			TORN_ARM = table.freeze({ LITRES = 0.15, SECONDS = 9, PULSE = 0, BEAT = 0.4 }), -- the arm itself, lying on the floor
-			LIVER_HOLE = table.freeze({ LITRES = 1, SECONDS = 13, PULSE = 5.5, BEAT = 0.4 }), -- the liver torn out: the flank
-			LIVER = table.freeze({ LITRES = 0.08, SECONDS = 6, PULSE = 0, BEAT = 0.4 }), -- the liver dropped on the floor
-			WAIST_TORSO = table.freeze({ LITRES = 1.5, SECONDS = 15, PULSE = 5, BEAT = 0.38 }), -- the portal cut: the upper body
-			WAIST_LEGS = table.freeze({ LITRES = 0.8, SECONDS = 11, PULSE = 4, BEAT = 0.35 }), -- the portal cut: the legs
-			BISECT_TORSO = table.freeze({ LITRES = 1.5, SECONDS = 15, PULSE = 5, BEAT = 0.36 }), -- the Bull: the top half
-			BISECT_LEGS = table.freeze({ LITRES = 0.9, SECONDS = 12, PULSE = 4, BEAT = 0.36 }), -- the Bull: the legs
+			NECK = table.freeze({ LITRES = 3.4, SECONDS = 20, PULSE = 9, BEAT = 0.38 }), -- the bat: the head burst
+			SHOULDER = table.freeze({ LITRES = 3, SECONDS = 18, PULSE = 8, BEAT = 0.4 }), -- the arm torn off: the socket
+			TORN_ARM = table.freeze({ LITRES = 0.6, SECONDS = 14, PULSE = 0, BEAT = 0.4 }), -- the arm itself, lying on the floor
+			LIVER_HOLE = table.freeze({ LITRES = 2.6, SECONDS = 18, PULSE = 8, BEAT = 0.4 }), -- the liver torn out: the flank
+			LIVER = table.freeze({ LITRES = 0.3, SECONDS = 10, PULSE = 0, BEAT = 0.4 }), -- the liver dropped on the floor
+			WAIST_TORSO = table.freeze({ LITRES = 3.8, SECONDS = 22, PULSE = 8, BEAT = 0.38 }), -- the portal cut: the upper body
+			WAIST_LEGS = table.freeze({ LITRES = 2.4, SECONDS = 18, PULSE = 7, BEAT = 0.35 }), -- the portal cut: the legs
+			BISECT_TORSO = table.freeze({ LITRES = 3.8, SECONDS = 22, PULSE = 8, BEAT = 0.36 }), -- the Bull: the top half
+			BISECT_LEGS = table.freeze({ LITRES = 2.6, SECONDS = 18, PULSE = 7, BEAT = 0.36 }), -- the Bull: the legs
 		}),
 	}),
 
