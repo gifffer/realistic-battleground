@@ -319,7 +319,7 @@ local function takePendant(r: Rivulet): Pendant?
 			stretch = 1,
 		}
 	end
-	assert(pendant)
+	assert(pendant, "no pendant drop in the pool")
 	state.pendants += 1
 	pendantCount += 1
 	pendant.weld.Part0 = r.part
