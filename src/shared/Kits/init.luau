@@ -27,6 +27,14 @@ export type AwakeningDef = KitTypes.AwakeningDef
 export type KitDef = KitTypes.KitDef
 export type FinisherDef = KitTypes.FinisherDef
 export type GrabDef = KitTypes.GrabDef
+export type BurnDef = KitTypes.BurnDef
+export type GadgetDef = KitTypes.GadgetDef
+export type FlaskDef = KitTypes.FlaskDef
+export type RayDef = KitTypes.RayDef
+export type PortalDef = KitTypes.PortalDef
+export type WaveDef = KitTypes.WaveDef
+export type SwarmDef = KitTypes.SwarmDef
+export type ClonesDef = KitTypes.ClonesDef
 
 local Kits = {}
 
@@ -46,6 +54,7 @@ end
 add(require(script.StreetBrawler))
 add(require(script.Boxer))
 add(require(script.Bouncer))
+add(require(script.Rift))
 
 function Kits.get(id: string?): KitDef?
 	return if id then registry[id] else nil
