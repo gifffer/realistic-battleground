@@ -4,11 +4,12 @@
 --   "Bat"            Street Brawler: pulls a baseball bat from behind his
 --                    back and sets it down by the head of the opponent
 --                    lying on the ground, like a golf club; taps it on their
---                    face three times, rests it there; then a big golf
---                    swing: up over his right shoulder, then swept low
---                    across the head from his right to his left: the head
---                    bursts (the camera holds a beat on it), the bat comes
---                    out red, dripping.
+--                    face three times, rests it there; then a real golf
+--                    swing (address, slow coil up over his right shoulder,
+--                    explosive downswing) low across the head from his
+--                    right to his left: the head bursts at full speed (the
+--                    camera holds a beat on it), high finish, the bat red,
+--                    dripping.
 --   "Incinerate"     Sentinel: lifted by the throat, his heat vision point
 --                    blank into the heart: a deep hole burnt in the chest
 --                    (no blood: cauterized), smoking; thrown down.
@@ -75,7 +76,7 @@ export type Cinematic = {
 	shots: { Shot },
 }
 
-Finishers.HEAD_DISTANCE = 3.8 -- studs, attacker root → victim head (flat): under the barrel
+Finishers.HEAD_DISTANCE = 2.4 -- studs, attacker root → victim head (flat): under the barrel (a real-size bat)
 -- Bat: the way the barrel goes through the head (anchor space: from his
 -- right to his left, a little up), set on the body with the kill (world
 -- space) under this attribute: the burst flies on that way (Client/Combat/
@@ -217,8 +218,8 @@ end
 local cinematics: { [string]: Cinematic } = {
 	Bat = {
 		id = "Bat",
-		duration = 4.6,
-		kill = 2.7,
+		duration = 4.5,
+		kill = 2.62,
 		placement = "head",
 		victimAnimation = "Brawler_FinisherBatVictim",
 		events = {
@@ -229,20 +230,21 @@ local cinematics: { [string]: Cinematic } = {
 			{ time = 0.9, kind = "Tap" },
 			{ time = 1.16, kind = "Tap" },
 			{ time = 1.25, kind = "Taunt" }, -- (resting there: he mocks them)
-			{ time = 2.45, kind = "Swing" },
-			{ time = 2.7, kind = "Kill" }, -- (the camera holds a beat on it)
-			{ time = 4.35, kind = "PropAway" },
+			-- the golf swing: address 1.52, top 2.3, downswing from 2.36
+			{ time = 2.38, kind = "Swing" },
+			{ time = 2.62, kind = "Kill" }, -- (the barrel through the head, full speed)
+			{ time = 4.25, kind = "PropAway" },
 		},
 		-- (the server lays the victim out along -Z, face up: its head at
 		-- (0, -2.45, -HEAD_DISTANCE), its body beyond, its feet near
-		-- (0, -2.45, -8.3))
+		-- (0, -2.45, -6.9))
 		shots = {
 			-- From the side, wide: the body on the ground, him drawing the bat.
 			{
 				time = 0,
-				from = Vector3.new(5.6, -0.6, -3.4),
-				to = Vector3.new(4.9, -0.9, -2.9),
-				look = Vector3.new(0, -1.3, -3.4),
+				from = Vector3.new(6.6, -0.5, -2.4),
+				to = Vector3.new(5.9, -0.8, -2.0),
+				look = Vector3.new(0, -1.2, -2.2),
 				fov = 62,
 			},
 			-- Close on the face of the one on the ground (they plead): from its
@@ -250,55 +252,56 @@ local cinematics: { [string]: Cinematic } = {
 			-- the barrel comes down on the face, tap, tap.
 			{
 				time = 0.5,
-				from = Vector3.new(-1.9, -1.1, -5.4),
-				to = Vector3.new(-1.6, -1.3, -5.1),
+				from = Vector3.new(-1.9, -1.1, -4.0),
+				to = Vector3.new(-1.6, -1.3, -3.7),
 				look = "victim",
 				fov = 50,
 			},
-			-- His view, over his right shoulder (his arm at the edge of the
-			-- shot): down the bat resting on the face, lining up the shot.
+			-- From his right, past his arm: the bat resting on the face,
+			-- lining up the shot.
 			{
 				time = 1.08,
-				from = Vector3.new(2.5, 1.5, 0.6),
-				to = Vector3.new(2.2, 1.2, 0.2),
-				look = Vector3.new(0, -2.1, -3.7),
+				from = Vector3.new(3.4, 0.2, -0.2),
+				to = Vector3.new(3.1, -0.1, -0.6),
+				look = Vector3.new(0, -1.9, -2.1),
 				fov = 46,
 			},
-			-- From the ground, by the head: he raises the bat over it.
+			-- From the ground beside the head: the address, then he coils up
+			-- over it.
 			{
-				time = 1.5,
-				from = Vector3.new(-2.4, -2.4, -5.7),
-				to = Vector3.new(-2.1, -2.5, -5.3),
-				look = Vector3.new(0, 1.0, -0.8),
+				time = 1.46,
+				from = Vector3.new(-3.0, -2.3, -3.0),
+				to = Vector3.new(-2.7, -2.4, -2.6),
+				look = Vector3.new(0, 0.4, 0.2),
 				fov = 58,
 			},
-			-- From the side, low, on the head as the bat comes down: it
+			-- From the side he swings to, low, from the top of the swing: the
+			-- head and him in the frame, the bat coming down through it; it
 			-- bursts (the camera holds still a beat, pushed in); held a while
 			-- to see it (the spray, the pieces, the neck).
 			{
-				time = 2.42,
-				from = Vector3.new(-3.6, -1.4, -4.4),
-				to = Vector3.new(-3.1, -1.7, -4.9),
-				look = Vector3.new(0, -2.5, -4.2),
-				fov = 56,
+				time = 2.28,
+				from = Vector3.new(-5.6, -1.0, -0.9),
+				to = Vector3.new(-5.0, -1.3, -1.4),
+				look = Vector3.new(0, -1.1, -1.2),
+				fov = 60,
 			},
 			-- Low, past the feet of the body, from his right (clear of the
-			-- body and above it, so it never fills the frame): him in his
-			-- high finish over it, the bat red and dripping (from his left
-			-- his head hides the bat).
+			-- body and above it): him in his high finish over it, the bat red
+			-- and dripping behind his head.
 			{
-				time = 3.3,
-				from = Vector3.new(2.4, -1.6, -7.8),
-				to = Vector3.new(2.0, -1.45, -7.2),
-				look = Vector3.new(0.2, 0.1, -1.4),
+				time = 3.15,
+				from = Vector3.new(2.4, -1.6, -6.4),
+				to = Vector3.new(2.0, -1.45, -5.8),
+				look = Vector3.new(0.2, 0.1, -0.7),
 				fov = 58,
 			},
 			-- Wide, rising and slowly turning: what's left, him with the red bat.
 			{
-				time = 3.95,
-				from = Vector3.new(5.0, 0.4, -7.0),
-				to = Vector3.new(5.8, 2.4, -2.2),
-				look = Vector3.new(0, -1.6, -3.4),
+				time = 3.8,
+				from = Vector3.new(5.0, 0.4, -5.6),
+				to = Vector3.new(5.8, 2.4, -1.4),
+				look = Vector3.new(0, -1.6, -2.4),
 				fov = 60,
 			},
 		},

@@ -696,6 +696,27 @@ function CharacterAnimationController.getLastAction(model: Model): string?
 	return if entry then entry.lastAction else nil
 end
 
+-- This frame's value of `joint` in the action clip `name` playing on
+-- `model` (a clip can hold extra tracks that are not body joints, e.g. the
+-- bat's "Grip"), or nil when that clip is not playing.
+function CharacterAnimationController.getActionPose(
+	model: Model,
+	name: string,
+	joint: string
+): CFrame?
+	local entry = tracked[model]
+	if entry == nil then
+		return nil
+	end
+	for index = #entry.action, 1, -1 do
+		local layer = entry.action[index]
+		if layer.name == name then
+			return layer.pose[joint]
+		end
+	end
+	return nil
+end
+
 -- Undoes a reaction shown too early (our prediction, when the server says
 -- the hit was dodged): fades the action out, ends the hit-stop and the flinch.
 function CharacterAnimationController.cancelReaction(model: Model)

@@ -1631,7 +1631,7 @@ local function startCinematic(
 				return false
 			end
 			look = look.Unit
-			local bodyAt = stand + look * 5.75 + Vector3.new(0, -2.4, 0)
+			local bodyAt = stand + look * (Finishers.HEAD_DISTANCE + 1.95) + Vector3.new(0, -2.4, 0)
 			if
 				#workspace:GetPartBoundsInBox(
 					CFrame.lookAt(bodyAt, bodyAt + look),
@@ -1643,7 +1643,7 @@ local function startCinematic(
 			end
 			return floorAt(stand, stand.Y)
 				and floorAt(stand + look * Finishers.HEAD_DISTANCE, stand.Y)
-				and floorAt(stand + look * 7.6, stand.Y)
+				and floorAt(stand + look * (Finishers.HEAD_DISTANCE + 3.8), stand.Y)
 		end
 		local stand: Vector3? = nil
 		for _, direction in candidates do

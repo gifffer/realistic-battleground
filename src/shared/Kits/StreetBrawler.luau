@@ -114,8 +114,8 @@ local kit: KitTypes.KitDef = {
 	-- through their head. (impact / duration = the cinematic's kill / duration)
 	finisher = {
 		animation = "Brawler_FinisherBat",
-		impact = 2.7,
-		duration = 4.6,
+		impact = 2.62,
+		duration = 4.5,
 		cinematic = "Bat",
 	},
 

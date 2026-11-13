@@ -288,7 +288,15 @@ local function buildBottle(broken: boolean): Model
 	return model
 end
 
+-- The bat's wrists: what turns it in the fist every frame (see holdProp).
+local wristLinks: { [Model]: RBXScriptConnection } = {}
+
 local function removeProp(model: Model)
+	local link = wristLinks[model]
+	if link then
+		wristLinks[model] = nil
+		link:Disconnect()
+	end
 	local prop = props[model]
 	if prop then
 		props[model] = nil
@@ -297,79 +305,162 @@ local function removeProp(model: Model)
 end
 
 -- A wooden baseball bat held by its handle (finisher). Same layout as the
--- bottle: pivot = the grip, its length along -Y.
-local BAT_WOOD = Color3.fromRGB(168, 118, 70)
-local BAT_TILT = 32 -- degrees
+-- bottle: pivot = the right fist (the grip), its length along -Y.
+-- Real size: 0.85 m (34 in) = 2.8 studs at the R6 scale (a 2-stud arm is a
+-- 0.6 m arm), from the knob 0.95 studs above the right fist (the left fist
+-- is on the handle between them) to the end 1.85 studs below it. Turned
+-- like a real maple bat: a flared knob, a thin taped handle, a long taper,
+-- the barrel and a rounded end cap. A little thicker than true scale (R6
+-- fists are big), barrel / handle as on a real bat.
+local BAT_WOOD = Color3.fromRGB(201, 160, 108) -- light maple
+local BAT_WOOD_DARK = Color3.fromRGB(176, 134, 86) -- the knob, a little darker
+local BAT_TAPE = Color3.fromRGB(30, 30, 33)
+local BAT_TILT = 32 -- degrees: the bat across the fist when no clip turns it
+local BAT_GRIP = CFrame.new(0, -0.85, 0) -- the right fist, in the arm
+local BAT_KNOB = 0.95 -- studs from the right fist to the knob's end
+local BAT_LENGTH = 2.8
+local BAT_HANDLE = 0.115 -- diameters
+local BAT_BARREL = 0.27
+local function batPart(
+	model: Model,
+	name: string,
+	from: number, -- studs from the knob's end
+	length: number,
+	diameter: number,
+	color: Color3,
+	material: Enum.Material
+): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = Enum.PartType.Cylinder -- (a cylinder's axis is its X)
+	part.Size = Vector3.new(length, diameter, diameter)
+	part.Material = material
+	part.Color = color
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Massless = true
+	part.CastShadow = diameter > 0.1
+	-- (turned so its X runs along the bat, +X toward the knob)
+	part.CFrame = CFrame.new(0, BAT_KNOB - from - length / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
+	part.Parent = model
+	return part
+end
 local function buildBat(): Model
 	local model = Instance.new("Model")
 	model.Name = "Bat"
-	local alongY = CFrame.Angles(0, 0, math.rad(90))
-	local function piece(
-		name: string,
-		length: number,
-		diameter: number,
-		center: number,
-		color: Color3,
-		material: Enum.Material
-	)
-		local part = Instance.new("Part")
-		part.Name = name
-		part.Shape = Enum.PartType.Cylinder
-		part.Size = Vector3.new(length, diameter, diameter)
-		part.Material = material
-		part.Color = color
-		part.CanCollide = false
-		part.CanQuery = false
-		part.CanTouch = false
-		part.Massless = true
-		part.CFrame = CFrame.new(0, -center, 0) * alongY
-		part.Parent = model
+	local wood, fabric = Enum.Material.Wood, Enum.Material.Fabric
+	-- The knob: a flat disc, then flaring into the handle.
+	batPart(model, "Knob", 0, 0.05, 0.2, BAT_WOOD_DARK, wood)
+	batPart(model, "KnobFlare", 0.05, 0.04, 0.16, BAT_WOOD_DARK, wood)
+	batPart(model, "KnobNeck", 0.09, 0.03, 0.13, BAT_WOOD, wood)
+	-- The handle (the bat's root part: the one welded to the fist).
+	batPart(model, "Handle", 0.1, 1.0, BAT_HANDLE, BAT_WOOD, wood)
+	-- Grip tape over the hands' part of the handle, its spiral wraps a little
+	-- proud of it, a finishing band at its end.
+	batPart(model, "Tape", 0.1, 0.84, BAT_HANDLE + 0.018, BAT_TAPE, fabric)
+	for index = 0, 8 do
+		local wrap = batPart(
+			model,
+			"TapeWrap",
+			0.13 + index * 0.09,
+			0.016,
+			BAT_HANDLE + 0.03,
+			BAT_TAPE,
+			fabric
+		)
+		wrap.CFrame *= CFrame.Angles(0, 0, math.rad(12)) -- (the wraps go round at a slant)
 	end
-	-- A big bat, ~4.2 studs (the finisher's poses were solved with these
-	-- lengths: the barrel lands on the head, both hands on the handle).
-	-- (a long handle: room for both fists, the left one under the right)
-	piece("Knob", 0.1, 0.3, -0.92, BAT_WOOD, Enum.Material.Wood)
-	piece("Grip", 1.7, 0.17, -0.02, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
-	piece("Handle", 0.55, 0.19, 1.05, BAT_WOOD, Enum.Material.Wood)
-	piece("Taper", 0.65, 0.28, 1.62, BAT_WOOD, Enum.Material.Wood)
-	piece("Barrel", 1.3, 0.42, 2.6, BAT_WOOD, Enum.Material.Wood)
-	local tip = Instance.new("Part")
-	tip.Name = "Tip"
-	tip.Shape = Enum.PartType.Ball
-	tip.Size = Vector3.new(0.42, 0.42, 0.42)
-	tip.Material = Enum.Material.Wood
-	tip.Color = BAT_WOOD
-	tip.CanCollide = false
-	tip.CanQuery = false
-	tip.CanTouch = false
-	tip.Massless = true
-	tip.CFrame = CFrame.new(0, -3.25, 0)
-	tip.Parent = model
+	batPart(model, "TapeEnd", 0.92, 0.035, BAT_HANDLE + 0.036, BAT_TAPE, fabric)
+	-- The taper: the handle swelling into the barrel (short overlapping
+	-- steps, each a little thicker).
+	local steps = 10
+	local taperFrom, taperTo = 1.07, 1.81
+	local step = (taperTo - taperFrom) / steps
+	for index = 1, steps do
+		local share = (index - 0.5) / steps
+		local eased = share * share * (3 - 2 * share) -- (slow at both ends, like a turned bat)
+		local diameter = BAT_HANDLE + (BAT_BARREL - BAT_HANDLE) * eased
+		batPart(
+			model,
+			`Taper{index}`,
+			taperFrom + (index - 1) * step,
+			step + 0.01,
+			diameter,
+			BAT_WOOD,
+			wood
+		)
+	end
+	-- The barrel and its rounded end cap (a squashed ball).
+	local barrel =
+		batPart(model, "Barrel", taperTo, BAT_LENGTH - 0.05 - taperTo, BAT_BARREL, BAT_WOOD, wood)
+	local cap = Instance.new("Part")
+	cap.Name = "Tip"
+	cap.Size = Vector3.new(0.1, BAT_BARREL, BAT_BARREL)
+	cap.Material = wood
+	cap.Color = BAT_WOOD
+	cap.CanCollide = false
+	cap.CanQuery = false
+	cap.CanTouch = false
+	cap.Massless = true
+	local dome = Instance.new("SpecialMesh")
+	dome.MeshType = Enum.MeshType.Sphere
+	dome.Parent = cap
+	cap.CFrame = barrel.CFrame * CFrame.new(-barrel.Size.X / 2, 0, 0)
+	cap.Parent = model
+	model.PrimaryPart = model:FindFirstChild("Handle") :: BasePart
 	model.WorldPivot = CFrame.new()
 	return model
 end
 
--- Puts the prop in `model`'s right hand for `duration` seconds.
-local function holdProp(model: Model, kind: string, duration: number)
+-- Puts the prop in `model`'s right hand for `duration` seconds. The bat:
+-- `grip` gives its angle in the fist this frame (the wrists: the finisher's
+-- clip, CombatClips "Grip"), nil = BAT_TILT.
+local function holdProp(model: Model, kind: string, duration: number, grip: (() -> CFrame?)?)
 	removeProp(model)
 	local arm = model:FindFirstChild("Right Arm")
 	if arm == nil or not arm:IsA("BasePart") then
 		return
 	end
-	local prop = if kind == "Bat" then buildBat() else buildBottle(kind == "BrokenBottle")
+	local isBat = kind == "Bat"
+	local prop = if isBat then buildBat() else buildBottle(kind == "BrokenBottle")
 	-- The grip is at the bottom of the arm (the fist), the bottle sticks out.
-	-- The bat leans back across the fist, so both hands can hold it (the
-	-- finisher's poses were solved with this angle: BAT_TILT).
-	local grip = arm.CFrame
-		* CFrame.new(0, -0.85, 0)
-		* CFrame.Angles(0, 0, if kind == "Bat" then math.rad(BAT_TILT) else 0)
-	prop:PivotTo(grip)
-	for _, part in prop:GetChildren() do
-		if part:IsA("BasePart") then
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = arm
-			weld.Part1 = part
-			weld.Parent = part
+	-- The bat leans across the fist, so both hands can hold it.
+	local rest = BAT_GRIP * CFrame.Angles(0, 0, math.rad(if isBat then BAT_TILT else 0))
+	prop:PivotTo(arm.CFrame * rest)
+	local root = prop.PrimaryPart
+	if isBat and root then
+		-- The handle on a weld the wrists turn; the rest of the bat on it.
+		local wrist = Instance.new("Weld")
+		wrist.Name = "Wrist"
+		wrist.Part0 = arm
+		wrist.Part1 = root
+		wrist.C0 = rest
+		-- (Part1 = Part0 * C0 * C1:Inverse(): C1 = the fist's frame seen from the handle)
+		wrist.C1 = root.CFrame:ToObjectSpace(arm.CFrame * rest)
+		wrist.Parent = root
+		for _, part in prop:GetChildren() do
+			if part:IsA("BasePart") and part ~= root then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = root
+				weld.Part1 = part
+				weld.Parent = part
+			end
+		end
+		if grip then
+			wristLinks[model] = RunService.RenderStepped:Connect(function()
+				local angle = grip()
+				wrist.C0 = if angle then BAT_GRIP * angle else rest
+			end)
+		end
+	else
+		for _, part in prop:GetChildren() do
+			if part:IsA("BasePart") then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = arm
+				weld.Part1 = part
+				weld.Parent = part
+			end
 		end
 	end
 	prop.Parent = model
@@ -691,9 +782,10 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	end
 end
 
--- The finisher's bat in `model`'s hand for `duration` seconds.
-function KitEffects.showBat(model: Model, duration: number)
-	holdProp(model, "Bat", duration)
+-- The finisher's bat in `model`'s hand for `duration` seconds. `grip`:
+-- its angle in the fist this frame (the wrists), nil = held still.
+function KitEffects.showBat(model: Model, duration: number, grip: (() -> CFrame?)?)
+	holdProp(model, "Bat", duration, grip)
 end
 
 -- The bat just went through a head: its barrel coated red (thick at the
@@ -713,7 +805,13 @@ function KitEffects.bloodyBat(model: Model)
 	if not (barrel and barrel:IsA("BasePart") and tip and tip:IsA("BasePart")) then
 		return
 	end
-	local function coat(name: string, on: BasePart, shape: Enum.PartType, size: Vector3, at: CFrame)
+	local function coat(
+		name: string,
+		on: BasePart,
+		shape: Enum.PartType,
+		size: Vector3,
+		at: CFrame
+	): Part
 		local part = Instance.new("Part")
 		part.Name = name
 		part.Shape = shape
@@ -732,6 +830,7 @@ function KitEffects.bloodyBat(model: Model)
 		weld.Part1 = part
 		weld.Parent = part
 		part.Parent = prop
+		return part
 	end
 	-- (a cylinder's axis is its X; along the barrel, -X goes toward the tip)
 	local width = barrel.Size.Y + 0.02
@@ -749,14 +848,18 @@ function KitEffects.bloodyBat(model: Model)
 		Vector3.new(0.12, width, width),
 		CFrame.new(barrel.Size.X * 0.12, 0, 0)
 	)
-	coat(
+	-- (the end cap: a squashed ball, like the cap itself)
+	local capCoat = coat(
 		"BloodTip",
 		tip,
-		Enum.PartType.Ball,
+		Enum.PartType.Block,
 		tip.Size + Vector3.new(0.02, 0.02, 0.02),
 		CFrame.new()
 	)
-	local taper = prop:FindFirstChild("Taper")
+	local dome = Instance.new("SpecialMesh")
+	dome.MeshType = Enum.MeshType.Sphere
+	dome.Parent = capCoat
+	local taper = prop:FindFirstChild("Taper8")
 	if taper and taper:IsA("BasePart") then
 		local random = Random.new(17) -- (the same spots on every client)
 		for index = 1, 4 do
@@ -767,7 +870,7 @@ function KitEffects.bloodyBat(model: Model)
 				taper,
 				Enum.PartType.Block,
 				Vector3.new(random:NextNumber(0.06, 0.16), 0.02, random:NextNumber(0.05, 0.1)),
-				CFrame.new(random:NextNumber(-0.25, 0.25), 0, 0)
+				CFrame.new(random:NextNumber(-0.04, 0.04), 0, 0)
 					* CFrame.Angles(angle, 0, 0)
 					* CFrame.new(0, radius, 0)
 			)

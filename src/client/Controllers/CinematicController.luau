@@ -385,7 +385,14 @@ local function playEvent(
 				away = other.time
 			end
 		end
-		KitEffects.showBat(attacker, away - event.time)
+		-- (the bat turns in his fist with his clip's "Grip": the wrists
+		-- cocking and releasing through the swing)
+		local clip = CharacterAnimationController.getLastAction(attacker)
+		KitEffects.showBat(attacker, away - event.time, function(): CFrame?
+			return if clip
+				then CharacterAnimationController.getActionPose(attacker, clip, "Grip")
+				else nil
+		end)
 		SoundController.play("BatDraw", attacker)
 	elseif kind == "Plea" then
 		SoundController.play("VictimPlea", victim)
