@@ -1,5 +1,7 @@
 # Dr. Rift : importer son équipement (RiftGear)
 
+> **Bras** : le bras mécanique n'utilise plus ce fichier. C'est maintenant un bras R6 en métal fait de pièces (même taille que le vrai bras, sans doigts), toujours bien placé. `RiftGear.fbx` ne sert plus qu'aux **pistolets** et à la **fiole**.
+
 Le bras mécanique du Dr. Rift, le pistolet à rayon, le pistolet à portails et la fiole des potions sont de **vrais modèles 3D** (plaques boulonnées, servos, vérins chromés, tuyaux, cellule d'énergie verte, doigts articulés...). Ils sont dans **`assets/rift/RiftGear.fbx`**.
 
 Sans ce fichier, le jeu marche quand même : il dessine une version plus simple avec des pièces Roblox (et l'Output affiche une fois `[RiftAssets] RiftGear has no pieces`).

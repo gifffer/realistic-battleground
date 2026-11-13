@@ -146,7 +146,7 @@ local HIT_SOUNDS: { [string]: string } = {
 	ExplosiveFlask = "HeavyHit",
 	RayGun = "Burn",
 	OverchargedRay = "Burn",
-	GravityGlove = "GloveBlast",
+	GravityGlove = "HeavyHit", -- (the blast itself: from the move start, RiftFx)
 	GravitySlam = "GloveBlast",
 	RiftSwarm = "Hit",
 }

@@ -299,6 +299,9 @@ local function chargeGlove(model: Model, seconds: number)
 	end)
 end
 
+-- The teleport sound playing for each Dr. Rift (stopped on a fizzle).
+local teleportSounds: { [Model]: Sound? } = setmetatable({}, { __mode = "k" }) :: any
+
 function RiftFx.onAction(model: Model, animation: string)
 	local kind, seconds = propOf(animation)
 	if kind then
@@ -311,6 +314,15 @@ function RiftFx.onAction(model: Model, animation: string)
 			end)
 		end
 	end
+	if animation == "Rift_Portal" then
+		-- The teleport sound from the start of the move (0.78 s before he
+		-- steps through): the file takes a moment to get going, so it is
+		-- heard as he comes out. Cut if the shot fizzles.
+		teleportSounds[model] = SoundController.play("Teleport", model)
+	elseif animation == "Rift_Glove" then
+		-- (its blast from the start: the file takes a moment to get going)
+		SoundController.play("GloveBlast", model)
+	end
 	if animation == "Rift_Glove" or animation == "Rift_Slam" then
 		chargeGlove(model, if animation == "Rift_Slam" then 0.55 else 0.36)
 	elseif animation == "Rift_Awaken" then
@@ -319,8 +331,17 @@ function RiftFx.onAction(model: Model, animation: string)
 	end
 end
 
+local function stopTeleportSound(model: Model)
+	local sound = teleportSounds[model]
+	teleportSounds[model] = nil
+	if sound then
+		sound:Destroy()
+	end
+end
+
 function RiftFx.stopAction(model: Model)
 	removeProp(model)
+	stopTeleportSound(model)
 end
 
 ------------------------------------------------------------------------------
@@ -667,9 +688,6 @@ function RiftFx.onRemote(kind: unknown, data: unknown)
 				bolt(from, to)
 			end
 			SoundController.play("PortalShot", by)
-			-- The teleport sound starts now, half a second before he steps
-			-- through, so it's heard as he comes out (not after).
-			SoundController.play("Teleport", by)
 		end
 	elseif kind == "Portals" then
 		portals(info)
@@ -679,6 +697,7 @@ function RiftFx.onRemote(kind: unknown, data: unknown)
 		if typeof(by) == "Instance" and by:IsA("Model") then
 			where = where or muzzleOf(by)
 			SoundController.play("PortalFizzle", by)
+			stopTeleportSound(by)
 			-- (our own portal move: the step through won't happen)
 			-- (the step through won't happen: everyone stops his clip)
 			CharacterAnimationController.stopAction(by, "Rift_Portal")
@@ -708,7 +727,6 @@ function RiftFx.onHit(victim: Model, _attacker: Model, moveId: string)
 			flash(torso.Position, 0.7)
 			shakeNear(torso.Position, 3, 0.3)
 		end
-		SoundController.play("GloveBlast", victim)
 	end
 end
 

@@ -5,13 +5,9 @@
 --   RiftGear.watch(model)     dressed while its "Kit" attribute is "Rift"
 --   RiftGear.palmOf(model)    the glove's emitter (where its power comes out)
 --
--- The gear is the RiftGear meshes when the place has them (RiftAssets:
--- salvaged plates, servos, pistons, hoses, a power cell, an articulated
--- metal hand); without them (an old place) a simpler version built from
--- parts. Either way it is measured once built and fitted on the real Left
--- Arm (fitArm: scaled and moved so its shoulder pad sits on the top of the
--- arm, its glove at the hand, flush with the torso), so an import that
--- scaled or moved the meshes, or a bigger character, cannot misplace it.
+-- The arm is an R6 arm of metal built from parts: the real arm's own block
+-- (its size, so it can't be misplaced), plated, with a glowing power cell
+-- and the glove's emitter under it. No fingers, no meshes.
 -- The real Left Arm is hidden while he wears the mechanical one (on this
 -- client: its Transparency, saved and given back when the kit changes), and
 -- so is what lies on its skin (the cuts of Gashes, the bruises of Wounds,
@@ -24,7 +20,6 @@ local RiftGear = {}
 
 local KIT = "Rift"
 local P = require(script.Parent.RiftParts)
-local RiftAssets = require(script.Parent.RiftAssets)
 local STEEL = P.STEEL
 local STEEL_DARK = P.STEEL_DARK
 local BRASS = P.BRASS
@@ -32,21 +27,8 @@ local CABLE = P.CABLE
 local RIFT_GREEN = P.RIFT_GREEN
 local RIFT_GLOW = P.RIFT_GLOW
 local ghost = P.ghost
-local stick = P.stick
 local emitter = P.emitter
 local sparkTexture = P.sparkTexture
-
-local CHROME = Color3.fromRGB(198, 202, 208)
-local ALONG_X_TO_Y = CFrame.Angles(0, 0, math.rad(90)) -- a cylinder's axis (X) → Y
-
--- How the mechanical arm sits on the real one, in fractions of the Left
--- Arm's size (tools/rift/build_rift_gear.py, fit_arm, draws its pictures the
--- same way):
-local ARM_LENGTH = 1.1 -- its height (2.2 studs on a 2-stud arm: the glove a bit past the hand)
-local SHOULDER_CAP = 0.025 -- how far its shoulder pad rises over the arm's top
-local INNER = 0.48 -- nothing past this toward the torso (+X: the torso's side is at 0.5)
-local MAX_WIDTH = 1.25 -- the widest it may be (X: the shoulder servo sticks out, outside)
-local MAX_DEPTH = 1.12 -- the deepest (Z)
 
 type Dressed = {
 	arm: BasePart,
@@ -85,185 +67,10 @@ local function cylinder(
 		Enum.PartType.Cylinder
 	)
 end
--- A finger of the glove: segments from its knuckle, hanging down and
--- curling, a little more at each joint, toward `out` (the palm's side), as
--- in the meshes.
-local function buildFinger(
-	add: (BasePart, CFrame) -> (),
-	base: Vector3,
-	out: Vector3,
-	curls: { number },
-	lengths: { number },
-	width: number
-)
-	local side = out:Cross(Vector3.new(0, -1, 0)).Unit -- the joints' axis
-	local at = base
-	add(
-		ghost(
-			"Knuckle",
-			Vector3.new(width, width, width),
-			STEEL_DARK,
-			Enum.Material.Metal,
-			Enum.PartType.Ball
-		),
-		CFrame.new(at)
-	)
-	local total = 0
-	for index, curl in curls do
-		local length = lengths[index]
-		total += math.rad(curl)
-		local d = (Vector3.new(0, -1, 0) * math.cos(total) + out * math.sin(total)).Unit
-		local w = width * (1 - 0.08 * (index - 1))
-		local frame = CFrame.fromMatrix(at + d * (length / 2), side, d)
-		add(metal("Finger", Vector3.new(w, length, w * 1.05), STEEL), frame)
-		at += d * length
-		if index < #curls then
-			add(
-				ghost(
-					"Joint",
-					Vector3.new(w * 0.85, w * 0.85, w * 0.85),
-					STEEL_DARK,
-					Enum.Material.Metal,
-					Enum.PartType.Ball
-				),
-				CFrame.new(at)
-			)
-		end
-	end
-	add(
-		ghost(
-			"Fingertip",
-			Vector3.new(width * 0.8, width * 0.8, width * 0.8),
-			STEEL_DARK,
-			Enum.Material.Metal,
-			Enum.PartType.Ball
-		),
-		CFrame.new(at)
-	)
-end
-
--- The mechanical left arm from parts (Left Arm space: 1 x 2 x 1, the
--- shoulder at Y = +1, the hand's end at Y = -1; +X faces the torso, -Z is
--- the front). The same arm as the meshes: a pauldron, a narrower upper arm,
--- the elbow servo, a forearm tapering to the wrist, a hand hanging with its
--- palm (the emitter) toward the body, its fingers together, the thumb in
--- front. fitArm then puts it at its place.
-local function buildArmParts(arm: BasePart, folder: Folder)
-	local function add(part: BasePart, offset: CFrame)
-		stick(arm, part, offset, folder)
-	end
-	local cx = -0.03 -- the arm's own axis
-	-- The shoulder: a rounded pauldron, a lame under its outer edge, the
-	-- dark joint inside.
-	local dome = metal("Pauldron", Vector3.new(1.04, 0.5, 1.02), STEEL)
-	local round = Instance.new("SpecialMesh")
-	round.MeshType = Enum.MeshType.Sphere
-	round.Parent = dome
-	add(dome, CFrame.new(cx - 0.05, 0.74, 0) * CFrame.Angles(0, 0, math.rad(8)))
-	add(
-		metal("Lame", Vector3.new(0.07, 0.17, 0.78), STEEL),
-		CFrame.new(cx - 0.5, 0.6, 0) * CFrame.Angles(0, 0, math.rad(-14))
-	)
-	add(cylinder("ShoulderRing", 0.42, 0.04, BRASS), CFrame.new(cx, 0.62, 0) * ALONG_X_TO_Y)
-	-- The upper arm: a dark core, an armour shell, two pistons (front, back).
-	add(cylinder("UpperArm", 0.37, 0.5, STEEL_DARK), CFrame.new(cx, 0.37, 0) * ALONG_X_TO_Y)
-	add(cylinder("Shell", 0.42, 0.3, STEEL), CFrame.new(cx, 0.33, 0) * ALONG_X_TO_Y)
-	for _, z in { -0.47, 0.45 } do
-		add(cylinder("Piston", 0.06, 0.36, STEEL_DARK), CFrame.new(cx, 0.32, z) * ALONG_X_TO_Y)
-		local rod = cylinder("Rod", 0.032, 0.4, CHROME, Enum.Material.SmoothPlastic)
-		rod.Reflectance = 0.3
-		add(rod, CFrame.new(cx, -0.02, z * 0.95) * ALONG_X_TO_Y)
-		add(cylinder("Mount", 0.055, 0.08, BRASS), CFrame.new(cx, -0.2, z * 0.92))
-	end
-	-- The elbow: a thin link, a servo across it, brass flanges, a chrome axle.
-	add(cylinder("ElbowLink", 0.23, 0.3, STEEL_DARK), CFrame.new(cx, 0, 0) * ALONG_X_TO_Y)
-	add(cylinder("Elbow", 0.22, 0.75, STEEL_DARK), CFrame.new(cx, 0, 0.03))
-	for _, x in { cx - 0.39, cx + 0.39 } do
-		add(cylinder("Flange", 0.24, 0.045, BRASS), CFrame.new(x, 0, 0.03))
-	end
-	local axle = cylinder("ElbowAxle", 0.07, 0.92, CHROME, Enum.Material.SmoothPlastic)
-	axle.Reflectance = 0.3
-	add(axle, CFrame.new(cx, 0, 0.03))
-	-- The forearm: a dark core, three plate rings narrowing to the wrist,
-	-- the glowing power cell in front.
-	add(cylinder("Core", 0.3, 0.5, STEEL_DARK), CFrame.new(cx, -0.37, 0) * ALONG_X_TO_Y)
-	for index, ring in { { -0.195, 0.45 }, { -0.36, 0.4 }, { -0.52, 0.35 } } do
-		local plate = cylinder("Plate" .. index, ring[2], 0.14, STEEL)
-		add(plate, CFrame.new(cx, ring[1], 0) * ALONG_X_TO_Y)
-	end
-	local cell = cylinder("Cell", 0.07, 0.36, RIFT_GREEN, Enum.Material.Neon)
-	add(cell, CFrame.new(cx, -0.36, -0.42) * ALONG_X_TO_Y)
-	for _, y in { -0.17, -0.55 } do
-		add(cylinder("CellCap", 0.085, 0.04, BRASS), CFrame.new(cx, y, -0.42) * ALONG_X_TO_Y)
-	end
-	-- Hoses down the back.
-	for _, x in { cx + 0.15, cx - 0.2 } do
-		add(
-			cylinder("Hose", 0.04, 0.8, CABLE, Enum.Material.Rubber),
-			CFrame.new(x, 0.2, 0.43) * ALONG_X_TO_Y
-		)
-	end
-	-- The wrist: narrow, a brass ring, a chrome collar.
-	add(cylinder("Wrist", 0.31, 0.04, BRASS), CFrame.new(cx, -0.61, 0) * ALONG_X_TO_Y)
-	add(
-		cylinder("WristCollar", 0.25, 0.08, CHROME, Enum.Material.SmoothPlastic),
-		CFrame.new(cx, -0.67, 0) * ALONG_X_TO_Y
-	)
-	-- The hand: flat, an armour plate on its back (outside), the emitter
-	-- (Palm) in its palm (toward the body).
-	add(metal("Hand", Vector3.new(0.33, 0.31, 0.59), STEEL_DARK), CFrame.new(cx, -0.87, 0))
-	add(metal("BackOfHand", Vector3.new(0.07, 0.3, 0.63), STEEL), CFrame.new(cx - 0.19, -0.87, 0))
-	add(cylinder("EmitterRing", 0.15, 0.025, BRASS), CFrame.new(cx + 0.175, -0.87, 0))
-	add(
-		cylinder("Palm", 0.12, 0.03, RIFT_GLOW, Enum.Material.Neon),
-		CFrame.new(cx + 0.185, -0.87, 0)
-	)
-	add(
-		cylinder("Knuckles", 0.09, 0.62, STEEL_DARK),
-		CFrame.new(cx, -1.02, 0) * CFrame.Angles(0, math.rad(90), 0)
-	)
-	-- Four fingers side by side (front to back), the thumb in front.
-	local toPalm = Vector3.new(1, 0, 0)
-	for _, finger in
-		{
-			{ -0.225, 0.12, 0.095, 0.07 },
-			{ -0.075, 0.13, 0.1, 0.075 },
-			{ 0.075, 0.12, 0.095, 0.07 },
-			{ 0.225, 0.1, 0.08, 0.065 },
-		}
-	do
-		buildFinger(
-			add,
-			Vector3.new(cx, -1.035, finger[1]),
-			toPalm,
-			{ 6, 20, 28 },
-			{ finger[2], finger[3], finger[4] },
-			0.135
-		)
-	end
-	buildFinger(
-		add,
-		Vector3.new(cx + 0.09, -0.83, -0.33),
-		Vector3.new(0.55, 0, -0.35).Unit,
-		{ 22, 16, 16 },
-		{ 0.1, 0.08, 0.065 },
-		0.145
-	)
-end
 
 ------------------------------------------------------------------------------
 -- Dressing
 ------------------------------------------------------------------------------
-
--- Welds a spawned piece (placed at `base`'s CFrame times its offset) to `base`.
-local function weldTo(base: BasePart, main: BasePart, folder: Folder)
-	local weld = Instance.new("Weld")
-	weld.Part0 = base
-	weld.Part1 = main
-	weld.C0 = base.CFrame:ToObjectSpace(main.CFrame)
-	weld.Parent = main
-	main.Parent = folder
-end
 
 -- A green light at `at` (a marker of the meshes: the power cell; or the
 -- glowing part itself), out while `shown` is hidden (a light has no
@@ -288,110 +95,86 @@ local function addLight(
 	follow()
 end
 
--- A part of a spawned piece: a marker or a layer, by name.
-local function partNamed(main: BasePart, name: string): BasePart?
-	local found = if main.Name == name then main else main:FindFirstChild(name)
-	return if found and found:IsA("BasePart") then found else nil
-end
-
--- Fits the built arm (every part in `folder`, welded to the arm or to each
--- other) on the real arm: measures the box round what it draws, in Left Arm
--- space, then scales it (uniformly, about the arm's centre) and moves it so
--- it is ARM_LENGTH arms tall, its top SHOULDER_CAP over the arm's top,
--- centred in Z, centred in X but never past INNER toward the torso; and
--- welds everything again where it now is. Whatever the meshes' import did
--- (another scale, another origin) and however big the character is, the
--- arm ends up the same on the shoulder. Done before the folder is parented
--- (its welds do nothing yet).
-local function fitArm(arm: BasePart, folder: Folder)
-	local space = arm.CFrame
-	local parts: { BasePart } = {}
-	local lo = Vector3.one * math.huge
-	local hi = -lo
-	for _, item in folder:GetDescendants() do
-		if item:IsA("BasePart") then
-			table.insert(parts, item)
-			-- (the markers are invisible: not part of its shape)
-			if item.Transparency < 1 then
-				local at = space:ToObjectSpace(item.CFrame)
-				local half = item.Size / 2
-				local r, u, b = at.RightVector, at.UpVector, at.LookVector
-				local reach = Vector3.new(
-					math.abs(r.X) * half.X + math.abs(u.X) * half.Y + math.abs(b.X) * half.Z,
-					math.abs(r.Y) * half.X + math.abs(u.Y) * half.Y + math.abs(b.Y) * half.Z,
-					math.abs(r.Z) * half.X + math.abs(u.Z) * half.Y + math.abs(b.Z) * half.Z
-				)
-				lo = lo:Min(at.Position - reach)
-				hi = hi:Max(at.Position + reach)
-			end
-		end
-	end
-	local extent = hi - lo
-	if extent.X <= 0 or extent.Y <= 0 or extent.Z <= 0 then
-		return
-	end
-	local size = arm.Size
-	local k = math.min(
-		size.Y * ARM_LENGTH / extent.Y,
-		size.X * MAX_WIDTH / extent.X,
-		size.Z * MAX_DEPTH / extent.Z
-	)
-	local x = -(lo.X + hi.X) / 2 * k
-	if hi.X * k + x > size.X * INNER then
-		x = size.X * INNER - hi.X * k
-	end
-	local top = size.Y / 2 + size.Y * SHOULDER_CAP
-	local shift = Vector3.new(x, top - hi.Y * k, -(lo.Z + hi.Z) / 2 * k)
-	for _, part in parts do
-		local at = space:ToObjectSpace(part.CFrame)
-		part.Size *= k
-		part.CFrame = space * CFrame.new(at.Position * k + shift) * at.Rotation
-	end
-	-- (each weld: Part1.CFrame = Part0.CFrame * C0 * C1:Inverse())
-	for _, item in folder:GetDescendants() do
-		if item:IsA("Weld") and item.Part0 and item.Part1 then
-			item.C0 = item.Part0.CFrame:ToObjectSpace(item.Part1.CFrame) * item.C1
-		end
-	end
-end
-
+-- The mechanical arm: an R6 arm of metal (the same block as the real one,
+-- 1 x 2 x 1 at the default size, a hair bigger so it covers it), plated:
+-- a shoulder cap, an elbow and a wrist band, a green power cell in front,
+-- vents on the outside, the gravity glove's emitter under the "hand" (the
+-- bottom face). No fingers. Welded to the real arm (hidden): it moves with it.
 local function buildArm(arm: BasePart, folder: Folder, connections: { RBXScriptConnection })
-	-- (how big the character is: 1 for a 2-stud arm. Its glow and sparks
-	-- grow with it; not with fitArm's scale, which also undoes the import's)
-	local scale = arm.Size.Y / 2
-	local main = RiftAssets.spawn("Arm", arm.CFrame)
-	if main then
-		weldTo(arm, main, folder)
-	else
-		buildArmParts(arm, folder)
+	local size = arm.Size
+	local w, h, d = size.X, size.Y, size.Z
+	local u = h / 2 -- (1 at the default size)
+	local function add(part: BasePart, offset: CFrame)
+		part.CFrame = arm.CFrame * offset
+		local weld = Instance.new("Weld")
+		weld.Part0 = arm
+		weld.Part1 = part
+		weld.C0 = offset
+		weld.Parent = part
+		part.Parent = folder
 	end
-	fitArm(arm, folder)
-	if main then
-		local glow = partNamed(main, "Glow")
-		local cell = partNamed(main, "Cell") or glow
-		if cell and glow then
-			addLight(cell, glow, 5 * scale, 0.8, connections)
+	-- The casing (the arm's own block).
+	add(metal("Casing", Vector3.new(w + 0.04, h + 0.02, d + 0.04), STEEL_DARK), CFrame.new())
+	-- Shoulder cap: a thicker plate over the top, bolted.
+	add(
+		metal("Shoulder", Vector3.new(w + 0.12, 0.55 * u, d + 0.12), STEEL),
+		CFrame.new(0, h / 2 - 0.27 * u, 0)
+	)
+	add(
+		metal("ShoulderRim", Vector3.new(w + 0.14, 0.06 * u, d + 0.14), BRASS),
+		CFrame.new(0, h / 2 - 0.55 * u, 0)
+	)
+	for _, x in { -1, 1 } do
+		for _, z in { -1, 1 } do
+			add(
+				metal("Bolt", Vector3.new(0.09, 0.09, 0.09) * u, BRASS, Enum.PartType.Ball),
+				CFrame.new(x * (w / 2 + 0.06), h / 2 - 0.27 * u, z * (d / 2 + 0.02))
+			)
 		end
-	else
-		local cell = folder:FindFirstChild("Cell")
-		if cell and cell:IsA("BasePart") then
-			addLight(cell, cell, 5 * scale, 0.8, connections)
-		end
 	end
-	local palm = folder:FindFirstChild("Palm", true)
-	if palm and palm:IsA("BasePart") then
-		local hum = emitter(palm, {
-			Name = "PalmHum",
-			Color = ColorSequence.new(RIFT_GLOW, RIFT_GREEN),
-			LightEmission = 1,
-			Size = NumberSequence.new(0.18 * scale, 0),
-			Transparency = NumberSequence.new(0.3, 1),
-			Lifetime = NumberRange.new(0.2, 0.35),
-			Speed = NumberRange.new(0.5 * scale, 1.5 * scale),
-			Rate = 6,
-		})
-		sparkTexture(hum)
+	-- Elbow and wrist bands.
+	add(metal("Elbow", Vector3.new(w + 0.1, 0.14 * u, d + 0.1), BRASS), CFrame.new(0, -0.05 * u, 0))
+	add(metal("Wrist", Vector3.new(w + 0.1, 0.1 * u, d + 0.1), BRASS), CFrame.new(0, -0.68 * u, 0))
+	-- The "hand": a heavier block at the end.
+	add(
+		metal("Hand", Vector3.new(w + 0.08, 0.3 * u, d + 0.08), STEEL),
+		CFrame.new(0, -h / 2 + 0.14 * u, 0)
+	)
+	-- The power cell, behind a frame, in front of the forearm.
+	add(
+		metal("CellFrame", Vector3.new(0.34 * u, 0.46 * u, 0.04), STEEL),
+		CFrame.new(0, -0.37 * u, -d / 2 - 0.03)
+	)
+	local cell =
+		ghost("Cell", Vector3.new(0.22 * u, 0.34 * u, 0.04), RIFT_GREEN, Enum.Material.Neon)
+	add(cell, CFrame.new(0, -0.37 * u, -d / 2 - 0.05))
+	addLight(cell, cell, 5 * u, 0.8, connections)
+	-- Vents on the outside of the upper arm.
+	for index = 0, 2 do
+		add(
+			metal("Vent", Vector3.new(0.03, 0.05 * u, d * 0.6), CABLE),
+			CFrame.new(-w / 2 - 0.03, 0.32 * u - index * 0.12 * u, 0)
+		)
 	end
+	-- A hose down the back.
+	add(
+		cylinder("Hose", 0.05 * u, 1.1 * u, CABLE, Enum.Material.Rubber),
+		CFrame.new(0, 0.05 * u, d / 2 + 0.06) * CFrame.Angles(0, 0, math.rad(90))
+	)
+	-- The glove's emitter, under the hand (where its power comes out).
+	local palm = cylinder("Palm", 0.3 * u, 0.04, RIFT_GLOW, Enum.Material.Neon)
+	add(palm, CFrame.new(0, -h / 2 - 0.025, 0) * CFrame.Angles(0, 0, math.rad(90)))
+	local hum = emitter(palm, {
+		Name = "PalmHum",
+		Color = ColorSequence.new(RIFT_GLOW, RIFT_GREEN),
+		LightEmission = 1,
+		Size = NumberSequence.new(0.18 * u, 0),
+		Transparency = NumberSequence.new(0.3, 1),
+		Lifetime = NumberRange.new(0.2, 0.35),
+		Speed = NumberRange.new(0.5 * u, 1.5 * u),
+		Rate = 6,
+	})
+	sparkTexture(hum)
 end
 
 -- What other modules put on the real arm's skin, in folders under it: the
