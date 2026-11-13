@@ -36,6 +36,7 @@ local Bisect = require(script.Parent.Bisect)
 local BloodGush = require(script.Parent.BloodGush)
 local BloodAge = require(script.Parent.BloodAge)
 local HeadBlast = require(script.Parent.HeadBlast)
+local WaistCut = require(script.Parent.WaistCut)
 
 local Gashes = {}
 
@@ -1610,6 +1611,8 @@ function Gashes.watch(model: Model)
 			end
 		elseif name == ArmRip.ATTRIBUTE then
 			ArmRip.apply(model, true)
+		elseif name == WaistCut.ATTRIBUTE then
+			WaistCut.apply(model, true)
 		elseif name == "BoneTaken" then
 			ArmRip.boneTaken(model)
 		elseif name == Bisect.ATTRIBUTE then
@@ -1653,6 +1656,7 @@ function Gashes.watch(model: Model)
 	refreshAll(model)
 	HeadBlast.apply(model, false) -- (a body whose head burst before we saw it)
 	ArmRip.apply(model, false) -- (or whose arm was torn off)
+	WaistCut.apply(model, false) -- (or who was cut in two)
 	Bisect.apply(model, false) -- (or that was torn in two)
 end
 

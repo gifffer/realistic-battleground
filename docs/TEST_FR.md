@@ -544,3 +544,33 @@ normale). Couronnes, anneaux et petites éclaboussures : seulement à moins de 4
 | W13 | Finisher **bras** / **foie**, regarder le moignon / l'organe | Les gouttes tombent **lentement** et se détachent comme des gouttes qui pendent (image `pendant2x2` si importée) ; au sol, taches rondes. **Artère** (batte) : entre deux battements le jet ne s'arrête pas, il raccourcit, et du sang **goutte** du trou ; après la fin, ~3 s de gouttes lentes. |
 | W14 | 16 combattants qui saignent dans une flaque (MicroProfiler : `BloodDrops`, `BloodPool`, `BloodAge`, `BloodTracks`) | Moins de ~1 ms par image au total pour le sang au sol ; jamais plus de 8 couronnes et 6 anneaux en même temps. |
 | W15 | **Pluie** | Rien de spécial : il n'y a pas de météo (attribut `Weather`) sur cette branche ; la dilution par la pluie viendra avec elle. |
+
+## Kit Dr. Rift / savant cyborg (`claude/compassionate-goodall-wdn4q1`)
+
+**Ré-importer `assets/wounds/WoundKit.fbx` avant** : il contient les pièces de la coupe en deux (bassin, haut des cuisses, intestins).
+Dans **Studio**, tous les kits sont débloqués ; dans le jeu publié, Dr. Rift demande le **niveau 8** et **800 coins**.
+Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**. Les sons n'ont pas encore d'ID (ceux qui ont un remplaçant jouent le remplaçant, les autres ne jouent rien).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Équiper le kit | Ton **bras gauche** devient mécanique : épaulière en tôle, rails, piston, coude à rotule, avant-bras blindé avec une **fenêtre verte qui brille**, câbles, **gant de métal** avec une paume verte. Une **lentille verte** remplace l'œil droit (sangle autour de la tête). Les autres joueurs le voient aussi. Changer de kit : tout disparaît. |
+| R2 | **1** (Acid Flask) | Il sort une **fiole** verte et la lance de côté. Elle vole en tournant, en arc. Au contact (quelqu'un, un mur, le sol) : verre qui éclate, **éclaboussure verte**, fumée. La personne touchée et celles autour (7 studs, sans mur entre) **grésillent** (étincelles vertes + fumée sur le corps), perdent de la vie quelques secondes et sont ralenties. Une **flaque d'acide** qui bouillonne reste 5 s : marcher dedans brûle. |
+| R3 | **2** (Ray Gun) | Il se met de profil, **pistolet à rayon** (cœur orange) au bout du bras, tir : **rayon orange** jusqu'au premier corps ou au premier mur, étincelles aux deux bouts, petit recul du bras. La cible **prend feu** (petites flammes + fumée, lumière orange) et perd de la vie 3 s. À travers un mur : rien. |
+| R4 | **3** (Gravity Glove) | Il ramène le gant à la hanche puis pousse la paume en avant avec un grand pas : tout ce qui est devant **s'envole** (ragdoll), même en bloquant. Éclair vert sur la cible. |
+| R5 | **4** (Portal Gun) en visant le **sol** au loin | Pistolet à portails (cœur vert). Un tir vert part vers l'endroit visé, **un portail rond** s'ouvre à plat sur le sol, un **portail debout** s'ouvre devant lui ; il entre et **ressort au portail du sol**. Les portails se referment. |
+| R6 | **4** en visant un **mur** | Le portail s'ouvre sur le mur, il ressort debout devant le mur. |
+| R7 | **4** en visant **trop haut** (le ciel), le vide, un plafond, ou plus loin que 80 studs | Le tir **grésille** (étincelles), pas de portail, il ne bouge pas. Le pistolet revient en **2,5 s** (au lieu de 10) et ça ne coûte pas d'endurance. |
+| R8 | **4** vers un endroit hors de la map, dans une salle de duel, ou sans place pour lui | Raté comme R7. En **duel** : impossible de sortir de la salle. |
+| R9 | Remplir la jauge, **G** (DIMENSION RIFT) | Il lève le gant (étincelles aspirées), puis écarte les bras : un portail s'ouvre derrière lui, et **2 copies de lui** sortent de portails à côté de lui. Elles marchent vers l'ennemi le plus proche et frappent. |
+| R10 | Frapper un clone | **Un seul coup** et il repart dans un portail. Les clones ne frappent jamais leur Dr. Rift ni entre eux. |
+| R11 | Un clone met quelqu'un KO | Le KO compte pour **toi** (pas pour le clone). |
+| R12 | **1** en Awakening (Explosive Flask) | Fiole orange : **boule de feu**, fumée noire, braises, onde au sol, trace brûlée qui reste, la caméra tremble. Tout le monde autour (10 studs) **s'envole** à l'opposé de l'explosion et brûle un peu. |
+| R13 | **2** en Awakening (Overcharged Ray) | Deux mains, jambes écartées, gros **rayon** plus épais qui **traverse tout le monde** sur la ligne (jusqu'au mur), grand recul. |
+| R14 | **3** en Awakening (Rift Swarm) en pointant quelqu'un | Les clones **disparaissent dans un portail et réapparaissent autour de lui**, frappent 3 fois, le 3ᵉ coup le met au sol. Les clones détruits **reviennent** pour ce coup. Personne visé : grésillement. |
+| R15 | **4** en Awakening (Gravity Slam) | Petit saut, il pose un genou et **écrase le gant au sol** : anneau vert + poussière qui part tout autour, tous ceux autour (13 studs) **décollent**. |
+| R16 | Fin de l'awakening / mort / reset de manche en duel | Les clones repartent dans des portails. |
+| R17 | Se faire frapper en Dr. Rift | Un peu **plus** de dégâts que les autres kits (vieux). |
+| R18 | **Finisher** sur un KO (Dummy) | Bandes noires. Il tend le **gant** : le corps est **soulevé** du sol et reste debout, mou, les pieds qui pendent (étincelles vertes sur lui). Il sort le **pistolet à portails** et tire sur sa taille : un **portail vert s'ouvre à plat autour de ses hanches**. Gros plan sur son visage (il supplie). Le portail **se referme d'un coup** : le corps est **coupé en deux**. Le haut (torse, tête, bras) **tombe en arrière**, les **jambes restent debout** un moment en giclant du sang vers le haut par saccades, puis **s'effondrent**. Des intestins tombent du haut du corps, flaques, sang sur le Dr. Rift. ~4,6 s. |
+| R19 | Regarder les deux coupes | Haut du corps : coupe à la taille avec le **vrai bassin** (os), les muscles, la graisse sous la peau, les intestins qui pendent. Jambes : coupe avec le **fémur**, les muscles de la cuisse, les artères. |
+| R20 | Un joueur qui arrive après | Il voit le corps en deux morceaux avec les coupes, sans le sang qui gicle. |
+| R21 | Le Dr. Rift quitte le jeu (ou meurt) **avant** la coupe | Tout s'arrête (portail, pistolet), la victime retombe KO, entière. |

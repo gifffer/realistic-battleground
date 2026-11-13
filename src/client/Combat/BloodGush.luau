@@ -329,7 +329,7 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 	hole.Parent = part
 	local jet = jetEmitter(hole, options.size)
 	local mist = mistEmitter(hole)
-	local ignore: { Instance } = options.ignore or { part }
+	local ignore: { Instance } = options.ignore or { part :: Instance }
 	local key = { artery = options.seed } -- (its own pool; landings merge into it)
 	local beam, from, to = streamBeam(hole, options.size)
 	local owner = part:FindFirstAncestorOfClass("Model")
