@@ -200,6 +200,8 @@ local function weldTo(part: BasePart, piece: BasePart, folder: Instance)
 	piece.Parent = folder
 end
 
+local warnedMissing: { [string]: boolean } = {}
+
 local function simplePart(name: string, shape: Enum.PartType, size: Vector3, color: Color3): Part
 	local part = Instance.new("Part")
 	part.Name = name
@@ -319,21 +321,103 @@ local function dress(part: BasePart, name: string, skin: Color3, random: Random)
 			folder
 		)
 	else
-		-- A leg's top: raw, the femur's head in it, the artery's end.
+		-- A leg's top: a real cross-section of the thigh, built from parts
+		-- (the kit's piece missing). Leg space, the face at Y = top: the
+		-- skin rim, the yellow fat under it, the big muscles as separate red
+		-- bellies with pale sheaths between them, the femur (white rim,
+		-- yellow-red marrow) a little to the outside and back, the femoral
+		-- artery (open, pale wall), the vein (dark, collapsed) and the nerve
+		-- (a yellow cord) in front and inside, blood pooling over it all.
+		if not warnedMissing[name] then
+			warnedMissing[name] = true
+			warn(
+				`[WaistCut] WoundKit has no "{name}" piece: re-import assets/wounds/WoundKit.fbx (docs/WOUNDS_FR.md)`
+			)
+		end
+		local sx, sz = part.Size.X, part.Size.Z
 		local top = part.CFrame * CFrame.new(0, part.Size.Y / 2, 0)
-		local raw = simplePart("Raw", Enum.PartType.Block, Vector3.new(1.02, 0.1, 1.02), FLESH)
-		raw.CFrame = top * CFrame.new(0, 0.03, 0)
-		weldTo(part, raw, folder)
-		local sign = if name == "HipR" then 1 else -1
-		local head = simplePart("Bone", Enum.PartType.Cylinder, Vector3.new(0.1, 0.32, 0.32), BONE)
-		head.CFrame = top * CFrame.new(0.05 * sign, 0.06, 0.02) * CFrame.Angles(0, 0, math.pi / 2)
-		weldTo(part, head, folder)
-		local artery =
-			simplePart("Vessel", Enum.PartType.Cylinder, Vector3.new(0.16, 0.08, 0.08), VESSEL)
-		artery.CFrame = top
-			* CFrame.new(-0.27 * sign, 0.08, -0.16)
-			* CFrame.Angles(0, 0, math.pi / 2)
-		weldTo(part, artery, folder)
+		local sign = if name == "HipR" then 1 else -1 -- (+X = outside for the right leg)
+		local upright = CFrame.Angles(0, 0, math.pi / 2) -- a cylinder's axis (X) up
+		local function slab(label: string, size: Vector3, color: Color3, lift: number, at: Vector3?)
+			local bit = simplePart(label, Enum.PartType.Block, size, color)
+			bit.CFrame = top * CFrame.new((at or Vector3.zero) + Vector3.new(0, lift, 0))
+			weldTo(part, bit, folder)
+			return bit
+		end
+		local function disc(
+			label: string,
+			d: number,
+			h: number,
+			color: Color3,
+			x: number,
+			z: number,
+			lift: number,
+			squash: number?
+		)
+			local bit = simplePart(label, Enum.PartType.Cylinder, Vector3.new(h, d, d), color)
+			bit.CFrame = top * CFrame.new(x, lift, z) * upright
+			if squash then
+				local mesh = Instance.new("SpecialMesh")
+				mesh.MeshType = Enum.MeshType.Cylinder
+				mesh.Scale = Vector3.new(1, 1, squash)
+				mesh.Parent = piece
+			end
+			weldTo(part, bit, folder)
+			return bit
+		end
+		-- Skin (the rim), the fat under it, the dark deep flesh as a floor.
+		slab("Skin", Vector3.new(sx + 0.03, 0.06, sz + 0.03), skin, 0.02)
+		slab("Fat", Vector3.new(sx - 0.04, 0.08, sz - 0.04), FAT, 0.03)
+		slab("Deep", Vector3.new(sx - 0.16, 0.09, sz - 0.16), FLESH_DARK, 0.035)
+		-- The muscle bellies (quadriceps in front, adductors inside,
+		-- hamstrings behind, the gluteal side), bulging a little, two reds.
+		local bellies = {
+			{ x = 0.02, z = -0.24, d = 0.42, c = MUSCLE }, -- rectus / vastus in front
+			{ x = 0.25 * sign, z = -0.08, d = 0.36, c = MUSCLE_DARK }, -- vastus lateralis
+			{ x = -0.22 * sign, z = -0.02, d = 0.38, c = MUSCLE_DARK }, -- adductors
+			{ x = -0.12 * sign, z = 0.24, d = 0.36, c = MUSCLE }, -- hamstrings
+			{ x = 0.2 * sign, z = 0.24, d = 0.34, c = MUSCLE_DARK }, -- gluteal / biceps
+			{ x = 0.05 * sign, z = 0.06, d = 0.3, c = MUSCLE }, -- vastus intermedius
+		}
+		for _, belly in bellies do
+			local d = belly.d * math.min(sx, sz) + random:NextNumber(-0.02, 0.02)
+			-- (a pale sheath round it, then the meat)
+			disc("Fascia", d + 0.035, 0.1, FASCIA, belly.x * sx, belly.z * sz, 0.055)
+			disc(
+				"Muscle",
+				d,
+				0.12 + random:NextNumber(0, 0.03),
+				belly.c,
+				belly.x * sx,
+				belly.z * sz,
+				0.06
+			)
+		end
+		-- The femur: cortical rim, marrow inside, standing proud of the meat.
+		local fx, fz = 0.1 * sign * sx, 0.06 * sz
+		disc("Bone", 0.24 * sx, 0.18, BONE, fx, fz, 0.08)
+		disc("Marrow", 0.15 * sx, 0.185, MARROW, fx, fz, 0.083)
+		-- The femoral artery (pale wall, open red lumen), the vein beside it
+		-- (dark, flattened), the nerve (yellow) - in front, inside.
+		local ax, az = -0.18 * sign * sx, -0.3 * sz
+		disc("Artery", 0.11 * sx, 0.22, ARTERY, ax, az, 0.09)
+		disc("Lumen", 0.06 * sx, 0.225, BLOOD_WET, ax, az, 0.092)
+		disc("Vein", 0.12 * sx, 0.15, VEIN, ax - 0.1 * sign * sx, az + 0.02, 0.07, 0.55)
+		disc("Nerve", 0.06 * sx, 0.16, NERVE, ax + 0.09 * sign * sx, az - 0.03, 0.075)
+		-- Blood pooling on the face, glossy, and a clot.
+		local pool = disc(
+			"Blood",
+			0.55 * sx,
+			0.02,
+			BLOOD_WET,
+			random:NextNumber(-0.1, 0.1),
+			random:NextNumber(-0.1, 0.1),
+			0.14,
+			0.8
+		)
+		pool.Transparency = 0.25
+		pool.Reflectance = 0.2
+		disc("Clot", 0.14 * sx, 0.05, CLOT, -0.05 * sign * sx, 0.2 * sz, 0.12)
 		simpleFlaps(part, top, Vector2.new(0.5, 0.5), skin, random, folder)
 	end
 	folder.Parent = part
