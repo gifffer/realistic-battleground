@@ -14,18 +14,29 @@
 --      moment later (the clunk) a CAN drops out of the tray, rolling a little towards them.
 --      Max one can every Config.Cola.COOLDOWN seconds per player; at most MAX_PER_MACHINE
 --      cans lying in front of one machine and MAX_TOTAL in the server (the oldest goes).
---      A can nobody drinks disappears after CAN_LIFETIME seconds.
---   2. The can on the ground has its own prompt, "DRINK". Using it: the can goes into the
---      player's right hand (welded to the Right Arm, so it follows the arm that every client
---      animates), everyone sees the "Emote_Drink" clip (Remotes.CombatAction, like an emote),
---      and the player walks slower meanwhile (Movement speed modifier "Drinking").
---   3. At the end, the can is crushed a bit and tossed away; it disappears EMPTY_LIFETIME
+--      A can nobody picks up disappears after CAN_LIFETIME seconds.
+--      REFUSED (nothing drops) when the player already has a can in their pocket, or when
+--      the last can the machine gave them is still lying on the floor: you can never end
+--      up with more than ONE (the client shows why: SpezColaController).
+--   2. The can on the ground has its own prompt, "PICK UP". Using it puts the can in the
+--      player's POCKET: the can on the ground goes away and the player gets the attribute
+--      "SpezCola" = true (that's the whole "inventory": one slot, one can at most).
+--      Refused when they already carry one.
+--   3. Later, the USE_ITEM key (Config.Controls, R) asks the server (Remotes.UseItem) to
+--      drink it: a fresh can appears in the player's right hand (welded to the Right Arm,
+--      so it follows the arm that every client animates), everyone sees the "Emote_Drink"
+--      clip (Remotes.CombatAction, like an emote), and the player walks slower meanwhile
+--      (Movement speed modifier "Drinking"). The pocket is empty from that moment.
+--   4. At the end, the can is crushed a bit and tossed away; it disappears EMPTY_LIFETIME
 --      seconds later.
---   Refused (nothing happens, nothing shown): in a duel, knocked out, dead, in a finisher's
---   cutscene, in combat (the player's CombatUntil attribute), or busy (attacking, blocking,
+--   Drinking is refused (nothing happens, the can stays in the pocket): in a duel, knocked
+--   out, dead, in a finisher's cutscene, in combat (the player's CombatUntil attribute),
+--   holding a weapon in the right hand (Shared/Weapons), or busy (attacking, blocking,
 --   stunned, sliding...: Combat.isIdle).
---   Cancelled (the can just falls): getting hit (Combat.onDamaged), attacking / blocking /
---   sliding meanwhile, dying.
+--   Cancelled (the can just falls, it is lost): getting hit (Combat.onDamaged), attacking /
+--   blocking / sliding meanwhile, dying.
+--   Dying with a can in the pocket: it falls out where you died (anyone can pick it up).
+--   Being knocked out or in a duel: you keep it (you just can't drink it there).
 --
 -- The cans live in Workspace > SpezColaCans (the client plays the "can falls" sound when
 -- one arrives there). Each can: a Model tagged "SpezColaCan", PrimaryPart "Body".
@@ -40,6 +51,7 @@ local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Combat = require(script.Parent.Combat)
 local Knockout = require(script.Parent.Knockout)
 local Movement = require(script.Parent.Movement)
+local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
 
 local CC = Config.Cola
 
@@ -50,6 +62,8 @@ local CAN_TAG = "SpezColaCan"
 local FOLDER_NAME = "SpezColaCans"
 local DRINK_ANIMATION = "Emote_Drink"
 local SPEED_KEY = "Drinking"
+-- The player attribute that says "has a can in the pocket" (read by the client's HUD).
+local CARRY_ATTRIBUTE = "SpezCola"
 -- A cylinder part's round axis is its X axis: this turn makes it point UP (Y).
 local UPRIGHT = CFrame.Angles(0, 0, math.pi / 2)
 -- Where the can sits in the right fist, in the Right Arm's space (the R6 arm is 1 x 2 x 1, its
@@ -77,12 +91,14 @@ type Machine = {
 	busyUntil: number,
 }
 
--- "Loose": on the ground, can be taken. "Held": being drunk. "Empty": crushed, thrown away.
+-- "Loose": on the ground, can be picked up. "Held": being drunk. "Empty": crushed, thrown
+-- away.
 type Can = {
 	model: Model,
 	body: BasePart,
-	prompt: ProximityPrompt,
+	prompt: ProximityPrompt?, -- the "PICK UP" prompt (only cans that lie on the ground have one)
 	machine: Machine?,
+	owner: Player?, -- who got it from a machine (nil: fell out of someone's pocket)
 	state: "Loose" | "Held" | "Empty",
 	born: number,
 }
@@ -99,6 +115,8 @@ local machines: { [Model]: Machine } = {}
 local allCans: { Can } = {} -- every can in the world (oldest first)
 local drinks: { [Player]: Drink } = {}
 local lastCanAt: { [Player]: number } = {}
+-- "Drink my can" key: 3 presses at once, then one per second (more is a hacked client).
+local useLimiter = RateLimiter.new(3, 1)
 local folder: Folder
 
 ------------------------------------------------------------------------------
@@ -342,7 +360,10 @@ end
 -- away a few seconds later.
 local function releaseCan(can: Can, velocity: Vector3)
 	can.state = "Empty"
-	can.prompt.Enabled = false
+	local prompt = can.prompt
+	if prompt then
+		prompt.Enabled = false
+	end
 	unweld(can)
 	local body = can.body
 	body.Massless = false
@@ -378,6 +399,10 @@ local function canDrink(player: Player, character: Model, humanoid: Humanoid): b
 		return false
 	end
 	if character:GetAttribute("InCinematic") == true then
+		return false
+	end
+	-- Holding something to throw (a bone...): the right hand is already taken.
+	if character:GetAttribute("Weapon") ~= nil then
 		return false
 	end
 	local combatUntil = player:GetAttribute("CombatUntil")
@@ -422,39 +447,16 @@ local function endDrink(drink: Drink, finished: boolean, leaving: boolean?)
 	end
 end
 
-local function startDrink(player: Player, can: Can)
-	local character = player.Character
-	if character == nil or can.state ~= "Loose" then
-		return
-	end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local arm = character:FindFirstChild("Right Arm")
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if
-		humanoid == nil
-		or arm == nil
-		or not arm:IsA("BasePart")
-		or root == nil
-		or not root:IsA("BasePart")
-	then
-		return
-	end
-	-- (the prompt's distance is checked by Roblox; a small margin for the server's view)
-	if (root.Position - can.body.Position).Magnitude > CC.DRINK_DISTANCE + 4 then
-		return
-	end
-	if not canDrink(player, character, humanoid) then
-		return
-	end
-
-	-- The can is ours now: off the machine's list, into the hand.
+-- Puts `can` in the player's right fist and starts the drinking clip. Everything has been
+-- checked already (drinkFromPocket).
+local function holdAndDrink(
+	player: Player,
+	character: Model,
+	humanoid: Humanoid,
+	arm: BasePart,
+	can: Can
+)
 	can.state = "Held"
-	can.prompt.Enabled = false
-	local machine = can.machine
-	if machine then
-		removeFrom(machine.cans, can)
-		can.machine = nil
-	end
 	local body = can.body
 	body.Anchored = false
 	body.CanCollide = false
@@ -496,6 +498,10 @@ local function startDrink(player: Player, can: Can)
 				or weld.Part0 == nil
 				or Knockout.isKnockedOut(character)
 				or not Combat.isIdle(character)
+				-- took something in the right hand meanwhile (a bone): the can falls
+				or character:GetAttribute("Weapon") ~= nil
+				-- pulled into a duel meanwhile (no drinking there)
+				or character:GetAttribute("DuelId") ~= nil
 			if gone then
 				endDrink(drink, false, player.Parent == nil)
 				return
@@ -507,6 +513,77 @@ local function startDrink(player: Player, can: Can)
 			end
 		end
 	end)
+end
+
+-- The USE_ITEM key (Remotes.UseItem): drink the can from the pocket. Refused silently
+-- (the can stays in the pocket) when the player can't drink right now.
+local function drinkFromPocket(player: Player)
+	if player:GetAttribute(CARRY_ATTRIBUTE) ~= true then
+		return
+	end
+	local character = player.Character
+	if character == nil then
+		return
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local arm = character:FindFirstChild("Right Arm")
+	if humanoid == nil or arm == nil or not arm:IsA("BasePart") then
+		return
+	end
+	if not canDrink(player, character, humanoid) then
+		return
+	end
+
+	-- Out of the pocket, into the hand: a new can, built right in the fist (where the weld
+	-- puts it anyway: no jump on the first frame). "FromPocket" tells the clients it didn't
+	-- fall out of a machine (no "can falls" sound).
+	player:SetAttribute(CARRY_ATTRIBUTE, nil)
+	local model, body = buildCan(arm.CFrame * GRIP)
+	model:SetAttribute("FromPocket", true)
+	body.CanCollide = false
+	body.Massless = true
+	local can: Can = {
+		model = model,
+		body = body,
+		prompt = nil,
+		machine = nil,
+		owner = nil,
+		state = "Held",
+		born = os.clock(),
+	}
+	model.Parent = folder
+	table.insert(allCans, can)
+	holdAndDrink(player, character, humanoid, arm, can)
+	trimOldest(allCans, CC.MAX_TOTAL)
+end
+
+-- The "PICK UP" prompt of a can on the ground: into the pocket (max one).
+local function pickUp(player: Player, can: Can)
+	if can.state ~= "Loose" or can.model.Parent == nil then
+		return
+	end
+	if player:GetAttribute(CARRY_ATTRIBUTE) == true then
+		return -- already one in the pocket (the client says so)
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if character == nil or humanoid == nil or humanoid.Health <= 0 then
+		return
+	end
+	if Knockout.isKnockedOut(character) or Combat.isInCinematic(character) then
+		return
+	end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	-- (the prompt's distance is checked by Roblox; a small margin for the server's view)
+	if
+		root == nil
+		or not root:IsA("BasePart")
+		or (root.Position - can.body.Position).Magnitude > CC.DRINK_DISTANCE + 4
+	then
+		return
+	end
+	destroyCan(can)
+	player:SetAttribute(CARRY_ATTRIBUTE, true)
 end
 
 ------------------------------------------------------------------------------
@@ -539,8 +616,73 @@ local function flashButton(button: BasePart)
 	TweenService:Create(button, TweenInfo.new(0.45), { Color = color :: Color3 }):Play()
 end
 
--- Drops a can out of the machine's tray.
-local function dispense(machine: Machine)
+-- Puts a can on the ground at `cframe`, thrown with `velocity`, with its "PICK UP" prompt.
+-- `machine` = the machine it came out of (nil: fell out of someone's pocket), `owner` = who
+-- got it from that machine.
+local function spawnLooseCan(cframe: CFrame, velocity: Vector3, machine: Machine?, owner: Player?)
+	local model, body = buildCan(cframe)
+	if owner then
+		-- (read by the clients: "your can is still on the floor")
+		model:SetAttribute("OwnerId", owner.UserId)
+	end
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "PickUpPrompt"
+	prompt.ActionText = "PICK UP"
+	prompt.ObjectText = "SPEZCOLA"
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = CC.DRINK_DISTANCE
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = body
+
+	local can: Can = {
+		model = model,
+		body = body,
+		prompt = prompt,
+		machine = machine,
+		owner = owner,
+		state = "Loose",
+		born = os.clock(),
+	}
+	prompt.Triggered:Connect(function(player)
+		pickUp(player, can)
+	end)
+	model.Parent = folder
+	pcall(function()
+		body:SetNetworkOwner(nil) -- the server moves it (no client can throw it around)
+	end)
+	body.AssemblyLinearVelocity = velocity
+	-- a bit of spin around the vertical, so it never starts rolling
+	body.AssemblyAngularVelocity = Vector3.new(0, math.random() * 2 - 1, 0)
+	-- Once it lies still, it stays put: no slow creeping roll on a sloped floor.
+	task.delay(1.5, function()
+		if
+			can.state == "Loose"
+			and model.Parent ~= nil
+			and body.AssemblyLinearVelocity.Magnitude < 1
+		then
+			body.AssemblyLinearVelocity = Vector3.zero
+			body.AssemblyAngularVelocity = Vector3.zero
+		end
+	end)
+
+	if machine then
+		table.insert(machine.cans, can)
+		trimOldest(machine.cans, CC.MAX_PER_MACHINE)
+	end
+	table.insert(allCans, can)
+	trimOldest(allCans, CC.MAX_TOTAL)
+
+	task.delay(CC.CAN_LIFETIME, function()
+		if can.state == "Loose" and model.Parent ~= nil then
+			destroyCan(can)
+		end
+	end)
+end
+
+-- Drops a can out of the machine's tray, for `player`.
+local function dispense(machine: Machine, player: Player)
 	local dispenser = machine.dispenser
 	local out = dispenser.CFrame.LookVector
 	local flatOut = Vector3.new(out.X, 0, out.Z)
@@ -555,59 +697,36 @@ local function dispense(machine: Machine)
 	local lying = CFrame.lookAt(position, position + flatOut)
 		* CFrame.Angles(-math.pi / 2, 0, 0)
 		* CFrame.Angles(0, math.pi, 0)
-	local model, body = buildCan(lying)
+	-- out of the tray, a little push towards the player
+	spawnLooseCan(lying, flatOut * 6 + Vector3.new(0, 1.5, 0), machine, player)
+end
 
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Name = "DrinkPrompt"
-	prompt.ActionText = "DRINK"
-	prompt.ObjectText = "SPEZCOLA"
-	prompt.KeyboardKeyCode = Enum.KeyCode.E
-	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = CC.DRINK_DISTANCE
-	prompt.RequiresLineOfSight = false
-	prompt.Parent = body
-
-	local can: Can = {
-		model = model,
-		body = body,
-		prompt = prompt,
-		machine = machine,
-		state = "Loose",
-		born = os.clock(),
-	}
-	prompt.Triggered:Connect(function(player)
-		startDrink(player, can)
-	end)
-	model.Parent = folder
-	pcall(function()
-		body:SetNetworkOwner(nil) -- the server moves it (no client can throw it around)
-	end)
-	-- out of the tray, a little push towards the player, a bit of spin (around the vertical,
-	-- so it never starts rolling)
-	body.AssemblyLinearVelocity = flatOut * 6 + Vector3.new(0, 1.5, 0)
-	body.AssemblyAngularVelocity = Vector3.new(0, math.random() * 2 - 1, 0)
-	-- Once it lies still, it stays put: no slow creeping roll on a sloped floor.
-	task.delay(1.5, function()
-		if
-			can.state == "Loose"
-			and model.Parent ~= nil
-			and body.AssemblyLinearVelocity.Magnitude < 1
-		then
-			body.AssemblyLinearVelocity = Vector3.zero
-			body.AssemblyAngularVelocity = Vector3.zero
+-- Is the last can a machine gave `player` still lying on the floor (not picked up yet)?
+local function hasCanWaiting(player: Player): boolean
+	for _, can in allCans do
+		if can.owner == player and can.state == "Loose" and can.model.Parent ~= nil then
+			return true
 		end
-	end)
+	end
+	return false
+end
 
-	table.insert(machine.cans, can)
-	table.insert(allCans, can)
-	trimOldest(machine.cans, CC.MAX_PER_MACHINE)
-	trimOldest(allCans, CC.MAX_TOTAL)
-
-	task.delay(CC.CAN_LIFETIME, function()
-		if can.state == "Loose" and model.Parent ~= nil then
-			destroyCan(can)
-		end
-	end)
+-- Dying with a can in the pocket: it falls out, there (anyone can pick it up).
+local function dropFromPocket(player: Player, character: Model)
+	if player:GetAttribute(CARRY_ATTRIBUTE) ~= true then
+		return
+	end
+	player:SetAttribute(CARRY_ATTRIBUTE, nil)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root == nil or not root:IsA("BasePart") or root.Parent == nil then
+		return -- (no body left to drop it from: it is just lost)
+	end
+	-- lying on its side, at hip height, a small hop to the side
+	local position = root.Position + root.CFrame.RightVector * 0.8
+	local lying = CFrame.new(position)
+		* CFrame.Angles(0, math.random() * math.pi * 2, 0)
+		* CFrame.Angles(-math.pi / 2, 0, 0)
+	spawnLooseCan(lying, root.CFrame.RightVector * 3 + Vector3.new(0, 4, 0), nil, nil)
 end
 
 local function onMachinePrompt(machine: Machine, player: Player)
@@ -636,12 +755,17 @@ local function onMachinePrompt(machine: Machine, player: Player)
 	if time < machine.busyUntil then
 		return -- the machine is still dropping the last one
 	end
+	-- One can at most: refused when there's one in the pocket, or when the last one this
+	-- machine (or another) gave them still lies on the floor. (The client explains why.)
+	if player:GetAttribute(CARRY_ATTRIBUTE) == true or hasCanWaiting(player) then
+		return
+	end
 	lastCanAt[player] = time
 	machine.busyUntil = time + CC.DISPENSE_DELAY + 0.2
 	flashButton(machine.button)
 	task.delay(CC.DISPENSE_DELAY, function()
 		if machine.model.Parent ~= nil then
-			dispense(machine)
+			dispense(machine, player)
 		end
 	end)
 end
@@ -719,6 +843,46 @@ function SpezCola.start()
 			endDrink(drink, false, true)
 		end
 		lastCanAt[player] = nil
+		-- (a can of theirs still on the floor belongs to nobody now)
+		for _, can in allCans do
+			if can.owner == player then
+				can.owner = nil
+				can.model:SetAttribute("OwnerId", nil)
+			end
+		end
+	end)
+
+	-- The pocket: the can falls out when you die; a new life always starts empty.
+	local function watchCharacter(player: Player, character: Model)
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		if humanoid == nil or not humanoid:IsA("Humanoid") then
+			return
+		end
+		humanoid.Died:Connect(function()
+			dropFromPocket(player, character)
+		end)
+	end
+	local function watchPlayer(player: Player)
+		player.CharacterAdded:Connect(function(character)
+			-- (died without a Died event, e.g. the body was removed: don't keep it forever)
+			player:SetAttribute(CARRY_ATTRIBUTE, nil)
+			task.spawn(watchCharacter, player, character)
+		end)
+		if player.Character then
+			task.spawn(watchCharacter, player, player.Character)
+		end
+	end
+	Players.PlayerAdded:Connect(watchPlayer)
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+
+	-- The USE_ITEM key: drink the can in the pocket (no arguments: anything sent is ignored).
+	Remotes.UseItem.OnServerEvent:Connect(function(player: Player)
+		if not useLimiter.allow(player) then
+			return
+		end
+		drinkFromPocket(player)
 	end)
 
 	CollectionService:GetInstanceAddedSignal(MACHINE_TAG):Connect(function(instance)

@@ -212,4 +212,9 @@ return table.freeze({
 	--                        velocity: Vector3)
 	-- It broke there (hit someone / a wall / the floor, or dropped): two halves.
 	WeaponBroke = event("WeaponBroke"),
+
+	-- client → server  ()
+	-- "R pressed" (Config.Controls.USE_ITEM): drink the SpezCola in my pocket. The server
+	-- checks I carry one and can drink now (Server/Systems/SpezCola), and rate-limits it.
+	UseItem = event("UseItem"),
 })

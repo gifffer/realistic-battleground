@@ -58,6 +58,9 @@ return table.freeze({
 		CAMERA_TOGGLE = Enum.KeyCode.Z,
 		-- Play the equipped emote (Shop). Not while fighting.
 		EMOTE = Enum.KeyCode.B,
+		-- Use what's in your pocket (the 1-slot inventory, bottom-right): drink your
+		-- SpezCola. (G is taken by AWAKEN, 1-4 by the kit moves, E by the prompts.)
+		USE_ITEM = Enum.KeyCode.R,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,
@@ -502,17 +505,20 @@ return table.freeze({
 	}),
 
 	-- SpezCola machines (Server/Systems/SpezCola, Client/Controllers/SpezColaController):
-	-- free, purely for fun. Take a can, it drops out of the tray, pick it up and drink it.
+	-- free, purely for fun. Take a can, it drops out of the tray, PICK IT UP (it goes in your
+	-- pocket: one can at most, the machine refuses while you have one or while yours still
+	-- lies on the floor) and drink it whenever you want with Controls.USE_ITEM (R).
+	-- You keep it when knocked out or in a duel (no drinking there); it falls out when you die.
 	Cola = table.freeze({
 		COOLDOWN = 4, -- seconds between two cans for one player
 		MAX_PER_MACHINE = 4, -- cans lying around one machine (the oldest goes first)
 		MAX_TOTAL = 30, -- cans in the whole server
-		CAN_LIFETIME = 90, -- seconds before a can nobody drank disappears
+		CAN_LIFETIME = 90, -- seconds before a can nobody picked up disappears
 		EMPTY_LIFETIME = 10, -- seconds an empty (crushed) can stays on the ground
 		DISPENSE_DELAY = 0.55, -- seconds between the button and the can falling (the clunk)
 		DRINK_TIME = 2.3, -- length of the "Emote_Drink" clip (Client/Animation/CombatClips)
 		DRINK_SPEED = 0.7, -- walking speed × this while drinking
 		PROMPT_DISTANCE = 8, -- studs (the machine's button)
-		DRINK_DISTANCE = 6, -- studs (a can on the ground)
+		DRINK_DISTANCE = 6, -- studs (the "PICK UP" prompt of a can on the ground)
 	}),
 })
