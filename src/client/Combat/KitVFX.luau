@@ -1247,6 +1247,15 @@ local function skinOval(
 	return piece
 end
 
+-- Heat vision hits the server confirmed (Remotes.CombatEvent "Hit", from
+-- KitVFX.onHit): victim -> its caster and when. The burn glow only shows
+-- while these keep coming (a block, a parry, a protected or untouchable
+-- head gets none).
+local HEAT_VISION = "HeatVision"
+local BEAM_CONFIRM = 0.4 -- (s) a confirmed hit lasts this long past its tick
+type BeamHit = { by: Model, at: number }
+local beamHits: { [Model]: BeamHit } = setmetatable({}, { __mode = "k" }) :: any
+
 -- Where the beam touches a body: the skin glowing hot for a moment, smoke
 -- rising off it. (The burn itself - the skin burnt through, the skull or
 -- cooked muscle showing - is a "Burn" wound from the server, drawn by
@@ -1431,9 +1440,6 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	local trace = HeatBeam.tracer(model, { fx :: Instance })
 	local startedAt = os.clock()
 	local lastScorch, lastBurn, lastGlance = 0, 0, 0
-	-- (the server's warm-up, mirrored: heat per head, on the same tick grid)
-	local contact: { [Model]: number? } = {}
-	local nextTick = startedAt + beam.from
 	local firing = false
 	local loop: Sound? = nil
 	local connection: RBXScriptConnection? = nil
@@ -1601,7 +1607,8 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			end)
 		end
 
-		-- (only a living head that isn't knocked out burns, like the server)
+		-- (only a head the server could burn: living, not knocked out, not
+		-- protected, not in a cutscene, in the same fight)
 		local victim = if hit.head then hit.fighter else nil
 		if victim then
 			local humanoid = victim:FindFirstChildOfClass("Humanoid")
@@ -1609,6 +1616,10 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 				humanoid == nil
 				or humanoid.Health <= 0
 				or victim:GetAttribute("KnockedOut") == true
+				or victim:GetAttribute("Protected") == true
+				or victim:GetAttribute("InCinematic") == true
+				or victim:GetAttribute("BeingFinished") == true
+				or victim:GetAttribute("DuelId") ~= model:GetAttribute("DuelId")
 			then
 				victim = nil
 			end
@@ -1621,31 +1632,20 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 			sparks(target, 4, EMBER, bounce, 12, 55)
 		end
 
-		-- The head heats up while it's in the beam, cools down twice as fast
-		-- out of it (the server's warm-up, on the same tick grid).
-		if now >= nextTick then
-			nextTick = math.max(nextTick + beam.tick, now - beam.tick)
-			for owner, value in contact do
-				if owner ~= victim then
-					local cooled = (value or 0) - beam.tick * 2
-					contact[owner] = if cooled > 0 then cooled else nil
-				end
-			end
-			if victim then
-				contact[victim] = (contact[victim] or 0) + beam.tick
-			end
+		-- Charred skin where it touches the head, smoke rising off it: only
+		-- while the server says it burns (its warm-up done; it alone knows a
+		-- block or a parry; the burn wound itself comes from the server too).
+		-- Until then the head only heats up: fewer sparks off it.
+		local confirmed = if victim then beamHits[victim] else nil
+		local burning = confirmed ~= nil
+			and confirmed.by == model
+			and now - confirmed.at <= beam.tick + BEAM_CONFIRM
+		if hit.head and not burning then
+			fountain.Rate = 25
 		end
-		-- Charred skin where it touches the head (once warmed up), smoke
-		-- rising off it. (The burn wound itself comes from the server.)
 		local face = hit.part
 		local at = hit.burnAt
-		if
-			victim
-			and face
-			and at
-			and (contact[victim] or 0) >= beam.warmup
-			and now - lastBurn > 0.12
-		then
+		if victim and burning and face and at and now - lastBurn > 0.12 then
 			lastBurn = now
 			burn(victim, face, at)
 			sparks(at, 6, EMBER, normal, 14, 50)
@@ -2305,6 +2305,10 @@ end
 
 -- Extra effects where some of these moves land.
 function KitVFX.onHit(victim: Model, attacker: Model, moveId: string)
+	if moveId == HEAT_VISION then
+		-- (the beam burns that head: from now on, it chars where it touches)
+		beamHits[victim] = { by = attacker, at = os.clock() }
+	end
 	local torso = part(victim, "Torso")
 	if torso == nil then
 		return

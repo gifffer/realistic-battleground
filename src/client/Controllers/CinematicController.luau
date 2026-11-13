@@ -433,8 +433,9 @@ local function onStarted(
 end
 
 -- The server ended a cinematic. Cut short (not killed): stop it all now.
--- (Ended early although killed - the victim left: the Bull's run stops
--- there too, his root is put where his body is.)
+-- (Ended early although killed - someone left or he died: the camera and
+-- the hold on attacks end now; the Bull's run stops there too, his root is
+-- put where his body is. Other finishers' last beats still play.)
 local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	if typeof(attacker) ~= "Instance" or not attacker:IsA("Model") then
 		return
@@ -450,10 +451,24 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 		CharacterAnimationController.pinRoot(attacker, nil)
 	end
 	if killed == true then
-		if charge and early then
+		if not early then
+			return -- (played to the end: everything stops on its own)
+		end
+		-- (after the kill, but the server let him go already: our camera and
+		-- the hold on our attacks end now; the wounds stay)
+		if charge then
+			-- (the rest of the run, the toss and the landing: not played)
+			run.cancelled = true
+			KitVFX.cancelFinisher(attacker)
 			CharacterAnimationController.stopAction(attacker, "Bull_Finisher")
 		end
-		return -- (played to the end: everything stops on its own)
+		if run.stopCamera then
+			run.stopCamera()
+		end
+		if attacker == player.Character then
+			CombatController.releaseAttacks()
+		end
+		return
 	end
 	run.cancelled = true
 	KitEffects.stopAction(attacker) -- the bat

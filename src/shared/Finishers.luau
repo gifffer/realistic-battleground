@@ -194,9 +194,11 @@ function Finishers.chargeRoot(time: number, short: number): Vector3
 			+ tangent(to) * ((u3 - u2) * span)
 	end
 	if short > 0 then
-		-- (he starts closer: the run itself is shorter, the rest the same)
+		-- (he starts closer: the run itself is shorter, the rest the same;
+		-- eased, so his speed doesn't jump as he sets off or at the impact)
 		local C = Finishers.CHARGE
-		local share = math.clamp((C.impact - t) / (C.impact - C.run), 0, 1)
+		local u = math.clamp((C.impact - t) / (C.impact - C.run), 0, 1)
+		local share = u * u * (3 - 2 * u)
 		at += Vector3.new(0, 0, -short * share)
 	end
 	return at

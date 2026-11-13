@@ -28,7 +28,7 @@ HeatBeam.HEAD_RADIUS = 0.6 -- the round head you see (per stud of head height)
 HeatBeam.HEAD_PAD = 0.3 -- leeway around it (the beam has some width)
 
 local MAX_WALLS = 8 -- (fighters skipped by the wall ray)
-local MAX_PASSES = 4 -- (lines beside a face that go on)
+local MAX_PASSES = 8 -- (faces a line can pass beside, one per fighter)
 local BACKSTEP = 0.5 -- (the body cast starts at the head's centre: a face
 -- pressed against the attacker's still counts)
 local REFRESH = 0.25 -- (s) the list of bodies is rebuilt this often
@@ -221,14 +221,25 @@ function HeatBeam.tracer(owner: Model, ignore: { Instance }?): Trace
 				result.burnAt = at
 				return true
 			end
-			-- beside the face (a corner of the head box, a big hat): goes on
-			local index = table.find(bodies, part)
-			if index == nil then
+			-- beside the face (a corner of the head box, a big hat): goes on,
+			-- past that whole head at once (its head and every hat on it: one
+			-- pass per fighter, however many accessories they wear)
+			local removed = false
+			for index = #bodies, 1, -1 do
+				local body = bodies[index]
+				local holder = body.Parent
+				local onFighter = body == head
+					or (holder ~= nil and holder:IsA("Accessory") and holder.Parent == fighter)
+				if onFighter then
+					bodies[index] = bodies[#bodies]
+					bodies[#bodies] = nil
+					table.insert(beside, body)
+					removed = true
+				end
+			end
+			if not removed then
 				return false
 			end
-			bodies[index] = bodies[#bodies]
-			bodies[#bodies] = nil
-			table.insert(beside, part)
 			bodyParams.FilterDescendantsInstances = bodies
 		end
 		return false
