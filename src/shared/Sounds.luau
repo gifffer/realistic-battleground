@@ -300,7 +300,7 @@ local sounds: { [string]: SoundInfo } = {
 		-- (the file starts with about half a second of nothing, and its
 		-- whoosh peaks after that: skipped, so the peak lands as he steps
 		-- through, 0.78 s into the move)
-		start = 0.3,
+		start = 0.1,
 	},
 	PortalShot = { -- the portal gun's shot
 		ids = {},
