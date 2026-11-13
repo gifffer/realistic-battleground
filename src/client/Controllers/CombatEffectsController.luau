@@ -669,7 +669,10 @@ local function onCombatEvent(
 			SoundController.play(if strong then "HeavyHit" else "Hit", victim)
 		end
 		-- Blood and torn skin: decided by the server (same on every screen).
-		KitEffects.punchLanded(victim, attacker) -- (many punches: split knuckles)
+		if kind == "Hit" and moveId == nil then
+			-- (bare-fist M1s only - not a kick, a bottle, a bat: split knuckles)
+			KitEffects.punchLanded(victim, attacker)
+		end
 		if bloodArg == true then
 			-- (more for the heavy blows and the kits' moves)
 			local amount = if strong then 2.6 elseif moveId then 1.7 else 1

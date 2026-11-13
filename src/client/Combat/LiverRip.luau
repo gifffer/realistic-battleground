@@ -217,7 +217,10 @@ function LiverRip.rip(victim: Model, attacker: Model)
 			Blood.drop(
 				liver.Position - Vector3.new(0, 0.3, 0),
 				liver.AssemblyLinearVelocity * 0.5,
-				Random.new():NextNumber(0.06, 0.11)
+				Random.new():NextNumber(0.06, 0.11),
+				nil,
+				Blood.passiveScale(), -- (a drip: it falls slowly, lands round)
+				{ passive = true }
 			)
 			task.wait(Random.new():NextNumber(0.08, 0.2))
 		end
@@ -227,6 +230,7 @@ function LiverRip.rip(victim: Model, attacker: Model)
 	local drops = emitter(drip, 30)
 	drops.EmissionDirection = Enum.NormalId.Bottom
 	drops.Speed = NumberRange.new(0.5, 2)
+	Blood.dripEmitter(drops) -- (it only drips: real drops fall slowly)
 	liver.Parent = workspace
 	-- soft and wet: it jiggles in his hand, slaps and slumps on the floor
 	-- (its surface detail first, in the workspace: then it squashes too)

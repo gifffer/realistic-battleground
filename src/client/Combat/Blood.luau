@@ -37,6 +37,7 @@
 --   Blood.drop(position, velocity, size, random?, gravity?, info?)  one drop.
 --       A wound dripping: gravity = Blood.passiveScale(), info = {passive = true}.
 --   Blood.passiveScale()  the `gravity` multiplier of a drop that drips
+--   Blood.dripEmitter(emitter)  a dripping emitter: slow fall, hanging drops
 --   Blood.ballistic(origin, velocity, size, options?)  a drop whose landing
 --       is computed once (no part flying): for particle bursts, so what flies
 --       also lands. Returns where it lands.
@@ -103,6 +104,15 @@ export type SplatInfo = {
 	dropSize: number?, -- (the drop's own size, studs: big ones splash a crown)
 	material: Enum.Material?, -- (the ground it hit)
 	micro: boolean?, -- (a tiny drop thrown by a splash: no crown, no ripple)
+}
+
+-- Options of Blood.ballistic (a drop whose landing is computed at once).
+export type BallisticOptions = {
+	ignore: { Instance }?, -- (bodies its path goes through: the wound's own)
+	random: Random?,
+	delay: number?, -- (seconds before it leaves)
+	gravity: number?, -- studs/s² (default workspace.Gravity; a drip: Config.Blood.PASSIVE_GRAVITY)
+	info: SplatInfo?, -- given to its splash (its colour, kind...)
 }
 
 -- The `gravity` multiplier (× workspace.Gravity) of a drop that only DRIPS:
@@ -406,6 +416,13 @@ local function freeSplasher(now: number): Splasher?
 	return nil
 end
 
+-- (Blood.drop and Blood.ballistic are made further down, with the drops in
+-- flight; these two names are filled in there. A function can only call
+-- what already exists when it RUNS, and these run long after the module
+-- has loaded.)
+local dropLater: (Vector3, Vector3, number, Random?, number?, SplatInfo?) -> ()
+local ballisticLater: (Vector3, Vector3, number, BallisticOptions?) -> Vector3?
+
 -- A big drop hitting a hard (or wet) floor after a long fall: a crown of
 -- fingers rising and breaking into droplets (0.22 s), plus 2-5 real tiny
 -- drops thrown out of its rim, on the side it was going (a slanted drop
@@ -448,7 +465,7 @@ local function crown(
 		if ahead then
 			out = (out + ahead * 1.5).Unit -- (mostly ahead: a slanted drop's wave)
 		end
-		Blood.drop(
+		dropLater(
 			position + normal * 0.04,
 			out * rand:NextNumber(2, 4) + normal * rand:NextNumber(3, 6),
 			rand:NextNumber(0.015, 0.025),
@@ -458,9 +475,6 @@ local function crown(
 		)
 	end
 end
-
--- (Blood.ballistic, made further down with the drops in flight)
-local ballisticLater: (Vector3, Vector3, number, BallisticOptions?) -> Vector3?
 
 -- Ripple rings on pools: a few carriers reused (CAPS.RIPPLES at once).
 type Ripple = { part: Part, decal: Decal, busyUntil: number }
@@ -546,13 +560,15 @@ local function intoPool(
 	for _ = 1, rand:NextInteger(2, if size > 0.15 then 5 else 3) do
 		local a = rand:NextNumber(0, math.pi * 2)
 		local out = Vector3.new(math.cos(a), 0, math.sin(a))
+		local tiny: SplatInfo = { micro = true, start = PALETTE.ARTERIAL_LIGHT }
+		local options: BallisticOptions = { random = rand, info = tiny }
 		ballisticLater(
 			position + normal * 0.05,
 			(out * rand:NextNumber(0.7, 1.1) + normal * rand:NextNumber(0.8, 1.3)).Unit
 				* speed
 				* rand:NextNumber(0.7, 1.1),
 			rand:NextNumber(0.012, 0.02),
-			{ random = rand, info = { micro = true, start = PALETTE.ARTERIAL_LIGHT } }
+			options
 		)
 	end
 end
@@ -896,6 +912,7 @@ function Blood.drop(
 )
 	newDrop(position, velocity, size, nil, rng, gravity, info)
 end
+dropLater = Blood.drop
 
 function Blood.strand(
 	point: Vector3,
@@ -1094,14 +1111,6 @@ RunService.Heartbeat:Connect(step)
 
 local pending = 0
 
-export type BallisticOptions = {
-	ignore: { Instance }?, -- (bodies its path goes through: the wound's own)
-	random: Random?,
-	delay: number?, -- (seconds before it leaves)
-	gravity: number?, -- studs/s² (default workspace.Gravity; a drip: Config.Blood.PASSIVE_GRAVITY)
-	info: SplatInfo?, -- given to its splash (its colour, kind...)
-}
-
 -- A drop leaving `origin` at `velocity`: where it lands is found now (a few
 -- rays along its arc), its mark appears there when it gets there.
 function Blood.ballistic(
@@ -1236,6 +1245,22 @@ function Blood.droplets(emitter: ParticleEmitter, kind: string): boolean
 		emitter.Rotation = NumberRange.new(0)
 	end
 	return true
+end
+
+-- An emitter of blood that only DRIPS (a stump, a torn organ): its particles
+-- fall with the drips' slow gravity (Config.Blood.PASSIVE_GRAVITY), and with
+-- the "hanging drop" picture (a drop swelling, necking, letting go) once it
+-- is uploaded. Call it after Blood.droplets.
+function Blood.dripEmitter(emitter: ParticleEmitter)
+	emitter.Acceleration = Vector3.new(0, -Config.Blood.PASSIVE_GRAVITY, 0)
+	local id = BloodStain.image("pendant2x2", nil, 1)
+	if id ~= 0 then
+		emitter.Texture = "rbxassetid://" .. id
+		emitter.FlipbookLayout = Enum.ParticleFlipbookLayout.Grid2x2
+		emitter.FlipbookMode = Enum.ParticleFlipbookMode.OneShot
+		emitter.Orientation = Enum.ParticleOrientation.FacingCameraWorldUp
+		emitter.Squash = NumberSequence.new(0)
+	end
 end
 
 ------------------------------------------------------------------------------

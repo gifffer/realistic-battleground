@@ -856,7 +856,10 @@ function KitEffects.bloodSpray(
 	local _, toward = impactPoint(part, attacker)
 	local much = (amount or 1) * (if zone == "Head" then 1.25 else 1)
 	local heavy = much >= 2
-	if zone == "Head" then
+	if zone == "Head" and not heavy and BloodFace.isFresh(victim) then
+		-- the first punch on an intact face: a few drops, not a spray
+		much *= 0.45
+	elseif zone == "Head" then
 		-- (a blow on an already open wound sprays more: up to ×1.9)
 		much *= math.min(1 + 0.3 * BloodFace.openWounds(victim), 1.9)
 	end

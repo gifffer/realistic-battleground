@@ -939,6 +939,12 @@ local function kill(r: Rivulet)
 	givePendant(r)
 	removeStream(r)
 	deactivate(r)
+	-- (forget it as its wound's last run: a string key is never let go by
+	-- the weak table, it would keep the old body in memory after a respawn)
+	local source = r.opts.source
+	if source ~= nil and bySource[source] == r then
+		bySource[source] = nil
+	end
 	local index = table.find(resting, r)
 	if index then
 		table.remove(resting, index)
@@ -1290,7 +1296,11 @@ RunService.Heartbeat:Connect(function(dt: number)
 		while index <= #resting do
 			local r = resting[index]
 			local doneAt = r.doneAt or now
-			if r.dead or r.part.Parent == nil then
+			if r.dead then
+				table.remove(resting, index) -- (kill already done: just forget it)
+				continue
+			end
+			if r.part.Parent == nil then
 				kill(r)
 				continue
 			end

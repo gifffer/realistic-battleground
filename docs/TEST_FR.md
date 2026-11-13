@@ -429,12 +429,12 @@ Réglage d'éclairage conseillé pour le mouillé : `Lighting.Technology = Futur
 | R4 | Deux clients (Test > 2 joueurs), même coup | Les gouttes tombent **aux mêmes endroits** sur les deux écrans (à peu près). |
 | R5 | Un joueur qui saigne (Bleeding) reste **immobile** ~10 s | Le sang **coule de la plaie** sur la peau, les gouttes tombent **du bout de la coulure** ; une **flaque** grandit sous lui (vite puis plus lentement), brillante au début, avec des lobes. Sur une pente, elle s'étale vers le bas. |
 | R6 | Flaque près d'un trottoir / d'une marche | Elle s'arrête au bord ; si le sol tombe, du sang **coule le long du bord**. |
-| R7 | Marcher dans une flaque fraîche puis s'éloigner | **Empreintes** gauche/droite : pleines, puis partielles, puis des traces ; plus rien après ~9 pas. Pas d'empreinte dans du sang sec. |
+| R7 | Marcher dans une flaque fraîche puis s'éloigner | **Empreintes** gauche/droite : pleines, puis partielles, puis des traces, chacune plus pâle que la précédente ; plus rien après ~6-7 pas. Pas d'empreinte dans du sang sec. |
 | R8 | Coup qui saigne au **visage** plusieurs fois | Souvent le **nez saigne** (coulure jusqu'à la lèvre, gouttes du menton), parfois la **lèvre** ; sur un coup lourd, un crachat de sang. Pas plus de ~14 marques sur le visage (détails : tests F ci-dessous). |
 | R9 | Coup qui saigne au **torse** d'un joueur avec un t-shirt | Une tache **s'étend dans le tissu** pendant ~30 s, plus sombre et mate que sur la peau. Sans t-shirt : un film plus clair sur la peau. |
 | R10 | Frapper un visage qui saigne, puis donner des coups dans le vide | Les **jointures** sont rouges ; chaque coup projette une **ligne de petites gouttes** (de plus en plus petites) au sol ; ça s'estompe en ~1 min. |
 | R11 | Finisher **batte** / **bras** / **foie** | Les jets sont de **vraies gouttes** qui retombent avec la gravité et se cassent en gouttelettes ; là où les jets tombent fort : une **vague de grosses taches** ; la flaque grandit et suit la pente. L'attaquant a des taches allongées sur lui, même sur la tête ronde (pas de carrés). |
-| R12 | Taper un KO qui saigne puis le laisser au sol | Une flaque se forme sous lui. S'il glisse / est poussé : une **traînée** de sang. En se relevant : une **empreinte de main**. |
+| R12 | Taper un KO qui saigne puis le laisser au sol | Une flaque se forme sous lui. S'il glisse / est poussé : une **traînée** de sang continue (détails : W8). En se relevant : une **empreinte de main**. |
 | R13 | Coupure au verre | Plus de **cubes en plastique** qui rebondissent : des gouttes qui volent et tachent le sol. Le sang dans la coupure brille au début puis fonce. |
 | R14 | Mourir / réapparaître | Tout le sang **sur le corps** disparaît ; le sang au sol reste et vieillit normalement. |
 | R15 | 16 joueurs / 2 finishers en même temps (ou Graphismes au minimum dans Échap) | Pas de chute d'images ; au minimum, moins de taches restent (les plus vieilles s'effacent en premier, les flaques en dernier). |
@@ -469,3 +469,29 @@ c'est là qu'on règle.
 | F16 | Caméra à plus de 60 studs d'un combattant qui saigne | Pas d'animation (les coulures sont posées d'un coup, pas de goutte qui pend : des gouttes simples). Revenir près : tout s'anime de nouveau. |
 | F17 | 16 Dummies qui saignent du visage en même temps (MicroProfiler, étiquette `BloodRivulet`) | Moins de 0,4 ms par image ; pas plus de 4 coulures qui bougent par combattant, 3 gouttes qui pendent. |
 | F18 | `Config.Blood.FACE.CUTS = false` | Plus de coupures ni d'éraflures ; nez et lèvre saignent toujours. |
+
+### Sang dans le monde, v2 (gouttes au sol, flaques, traces)
+
+Même principe : `crown4x4`, `rippleRing`, `starburst`, `serumHalo`, `drag`, `shoeRunL/R`,
+`pendant2x2` sont à 0 tant qu'elles ne sont pas importées. Sans elles : pas de couronne (seulement
+ses gouttelettes), pas d'anneau sur la flaque, pas d'auréole jaune ; les étoiles de gouttelettes, les
+traînées et les empreintes de course prennent une image proche (gouttelettes, traînée, empreinte
+normale). Couronnes, anneaux et petites éclaboussures : seulement à moins de 40 studs de la caméra.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| W1 | Un Dummy qui saigne (Bleeding), **immobile** 30 s, regarder ses pieds | Les gouttes tombent **moins vite** qu'un jet et laissent des taches **rondes au bord crénelé** (pas des ovales). Les premières tombent dans la flaque qui se forme. |
+| W2 | Pendant W1, une goutte tombe dans la flaque | Un **anneau** s'élargit sur la flaque (~0,35 s), deux petites éclaboussures sautent, et 2-5 **gouttelettes** sont projetées **autour** de la flaque, où elles s'accumulent. |
+| W3 | W1 continue ~1 min | Autour de la flaque, des **étoiles de gouttelettes** (max 4 par flaque) : le dessin typique « quelqu'un a saigné debout ici ». Elles disparaissent avec la flaque. |
+| W4 | Un combattant qui saigne **marche** | Une traînée de gouttes ; leurs petites queues pointent **vers l'avant** (le sens de la marche). |
+| W5 | Gouttes qui tombent de **haut** (tête d'un joueur qui saute, bras arraché levé) sur béton | Plus la chute est haute, plus il y a de **gouttelettes satellites** autour (la tache elle-même reste de la même taille sur le béton). Grosse goutte de haut sur sol dur ou mouillé, de près : une **couronne** (doigts de sang qui montent et se cassent, 0,2 s) et 2-5 gouttelettes projetées du côté où elle allait. Sur herbe / sable : pas de couronne. Caméra qui regarde droit vers le bas : pas d'image de couronne. |
+| W6 | **Courir** (> 14 studs/s) à travers une flaque fraîche | Parfois (~1 fois sur 3) une **glissade** : une longue traînée qui sort de la flaque dans le sens de la course. Ensuite des empreintes de **course** (l'avant du pied, étiré vers l'avant), plus espacées qu'en marchant, de plus en plus pâles (~6-7). |
+| W7 | Regarder une flaque **4 min** (Échap > horloge, ou attendre) | Le reflet mouillé **rétrécit vers le centre** (le bord sèche d'abord ; les lobes fins foncent avant le milieu), un **bord sombre** apparaît vers 30-60 s, le centre fonce un peu (il gélifie), puis vers 90-180 s un **anneau jaune pâle** (sérum) apparaît autour. La flaque disparaît vers 4 min. |
+| W8 | **ThrowOut** / **BodySlam** / **Powerbomb** sur un Dummy qui saigne | À l'impact : une **éclaboussure sous la tête** et 4-6 gouttelettes projetées autour. S'il glisse : **une seule traînée continue**, striée, qui s'allonge tant qu'il glisse dans la même direction (une nouvelle au-delà de 2,5 studs ou s'il tourne de plus de 20°), de plus en plus pâle. S'il saigne encore, elle ne disparaît jamais tout à fait. |
+| W9 | Un KO qui **ne saigne pas** glisse à travers une flaque | La traînée part de la flaque, pâlit vite et s'arrête après ~5-6 studs. |
+| W10 | Un KO avec seulement une **coupure à la tête** (verre) qui glisse | Une traînée **étroite** sous la tête (pas de la largeur du torse). |
+| W11 | KO qui saigne allongé sur une **pente** | La flaque commence un peu **plus bas** que le corps, du côté de la pente. |
+| W12 | **Nuit** (`Lighting.ClockTime = 0`) | Le sang frais paraît **presque noir** et se voit surtout par son **reflet mouillé** (plus fort qu'en plein jour). Il faut `Lighting.Technology = Future` et `EnvironmentSpecularScale` ≥ 0,5. Retour au jour (12) : en ~5 s, couleurs normales. |
+| W13 | Finisher **bras** / **foie**, regarder le moignon / l'organe | Les gouttes tombent **lentement** et se détachent comme des gouttes qui pendent (image `pendant2x2` si importée) ; au sol, taches rondes. **Artère** (batte) : entre deux battements le jet ne s'arrête pas, il raccourcit, et du sang **goutte** du trou ; après la fin, ~3 s de gouttes lentes. |
+| W14 | 16 combattants qui saignent dans une flaque (MicroProfiler : `BloodDrops`, `BloodPool`, `BloodAge`, `BloodTracks`) | Moins de ~1 ms par image au total pour le sang au sol ; jamais plus de 8 couronnes et 6 anneaux en même temps. |
+| W15 | **Pluie** | Rien de spécial : il n'y a pas de météo (attribut `Weather`) sur cette branche ; la dilution par la pluie viendra avec elle. |

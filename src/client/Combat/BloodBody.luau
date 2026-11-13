@@ -43,7 +43,7 @@ local BloodBody = {}
 local PALETTE = Config.Blood.PALETTE
 local EXTRA = (Config.Blood :: any).PALETTE :: any
 -- (v2 colours, the same values here if the palette doesn't have them yet)
-local FABRIC_WET: Color3 = EXTRA.FABRIC_WET or Color3.fromRGB(22, 8, 8) -- wet dark cloth
+local FABRIC_WET: Color3 = EXTRA.FABRIC_WET or Color3.fromRGB(84, 10, 10) -- wet dark cloth
 local RAW: Color3 = EXTRA.RAW or Color3.fromRGB(190, 80, 72) -- raw skin
 local MAX_SOAKS_PER_PART = 3
 local MAX_SOAKS = 6 -- per character (each soak is 3 pictures: + the wet halo, its fringe)
@@ -279,7 +279,7 @@ function BloodBody.soak(model: Model, part: BasePart, point: Vector3, amount: nu
 		)
 	end
 	local fringe = ring(1.5, PALETTE.ARTERIAL_LIGHT, 0.7)
-	local halo = ring(1.35, FABRIC_WET, 0.55)
+	local halo = ring(1.2, FABRIC_WET, 0.6) -- (inside the pale fringe, so the fringe still shows)
 	local record = BloodStain.place("soak", at, out, Vector3.new(0, -1, 0), size, size * 1.15, {
 		onto = skin,
 		random = random,

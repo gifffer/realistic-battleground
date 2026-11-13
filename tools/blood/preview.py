@@ -24,7 +24,7 @@ PAL = {
     "DRYING": (62, 13, 11),
     "DRY": (48, 14, 11),
     "OLD": (42, 21, 16),
-    "FABRIC_SOAK": (70, 12, 12),
+    "FABRIC_SOAK": (96, 11, 11),
 }
 
 
@@ -315,7 +315,7 @@ PAL.update(
         "SALIVA": (168, 38, 36),
         "SERUM": (214, 176, 96),
         "RAW": (190, 80, 72),
-        "FABRIC_WET": (22, 8, 8),
+        "FABRIC_WET": (84, 10, 10),
     }
 )
 V2_FILES = [
@@ -424,7 +424,7 @@ def dark_cloth(seed):
 def panel_cloth_v2():
     c = cotton(14)
     place(c, "wick_halo_1", 250, 240, 450, (0.8, 0.55, 0.45), 0.0, 0.45)  # pale plasma fringe (1.25x)
-    place(c, "wick_halo_1", 250, 240, 360, col("FABRIC_WET"), 0.0, 0.4)  # wet halo (same size)
+    place(c, "wick_halo_1", 250, 240, 330, col("FABRIC_WET"), 0.0, 0.4)  # wet halo (1.2x the soak, like the game)
     place(c, "soak_2", 250, 240, 360, col("FABRIC_SOAK"))
     place(c, "wick_weave_1", 420, 430, 150, col("FABRIC_WET"), 0.0, 0.4)
     place(c, "soak_3", 420, 430, 150, col("FABRIC_SOAK"))

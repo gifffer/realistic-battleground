@@ -303,6 +303,20 @@ local function jetDrops(
 	end
 end
 
+-- Blood welling out of the hole between beats and after: it only DRIPS
+-- (slow gravity, a round drop where it lands), it is not thrown.
+local function oozeDrop(hole: Attachment, size: number, random: Random)
+	local frame = hole.WorldCFrame
+	Blood.drop(
+		frame.Position + frame.LookVector * 0.05,
+		frame.LookVector * random:NextNumber(0.3, 1),
+		size * random:NextNumber(0.35, 0.55),
+		random,
+		Blood.passiveScale(),
+		{ passive = true }
+	)
+end
+
 -- An artery torn open at `local` (in `part`'s space; out along its LookVector).
 function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 	if not Config.Blood.ENABLED then
@@ -371,10 +385,12 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 				beam.Transparency = NumberSequence.new(0.6, 1)
 				jet:Emit(math.floor(10 * strength) + 2)
 			end
-			-- between beats: it wells out and runs
-			jet.Rate = 18 * strength
-			jet.Speed = NumberRange.new(1, 2.5)
+			-- between beats: it never stops (a real artery pulses in LENGTH,
+			-- research): a weaker, shorter stream, and it wells out and drips
+			jet.Rate = 260 * (0.3 + 0.7 * strength) * 0.35
+			jet.Speed = NumberRange.new(speed * 0.45, speed * 0.6)
 			mist.Rate = 0
+			oozeDrop(hole, options.size, random)
 			task.wait(0.06)
 			if beam then
 				beam.Transparency = NumberSequence.new(1)
@@ -387,7 +403,13 @@ function BloodGush.artery(part: BasePart, localCFrame: CFrame, options: Options)
 		-- it keeps oozing a little
 		jet.Speed = NumberRange.new(0.3, 1)
 		jet.Rate = 6
-		task.wait(3)
+		for _ = 1, 8 do -- (3 s of slow drips)
+			if hole.Parent == nil then
+				break
+			end
+			oozeDrop(hole, options.size * 0.7, random)
+			task.wait(0.375)
+		end
 		jet.Rate = 0
 		if from and to then
 			from:Destroy()

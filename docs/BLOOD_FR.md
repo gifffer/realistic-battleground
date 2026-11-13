@@ -100,7 +100,7 @@ IMAGES = table.freeze({
 | `crown_4x4` | 1024 (16 images) | Goutte qui s'écrase : couronne qui monte, lance des gouttelettes, retombe | `crown4x4` | rien |
 | `ripple_ring_1` | 256 | Onde sur une flaque quand une goutte tombe dedans | `rippleRing` | rien |
 | `starburst_1..2` | 512 | Gouttelettes en étoile autour d'une flaque où quelqu'un saigne sans bouger | `starburst` | `satellites` |
-| `wick_halo_1..2` | 512 | Auréole mouillée autour d'une tache sur un t-shirt (même taille que `soak` ; la frange pâle à 1,25×) | `wickHalo` | `soak` |
+| `wick_halo_1..2` | 512 | Auréole autour d'une tache sur un t-shirt : la zone mouillée (1,2× la tache `soak`) et la frange pâle où le plasma est allé plus loin (1,5×) | `wickHalo` | `soak` |
 
 ### Groupe 2
 
@@ -128,3 +128,18 @@ IMAGES = table.freeze({
 Pour importer : pareil qu'au-dessus (Gestionnaire de contenus → Importation en bloc), en choisissant **seulement les nouvelles images** (pas `preview.png` ni `preview_v2.png`), puis colle chaque ID dans `Config.Blood.IMAGES` à la bonne place (ordre des numéros). `serum_halo_<n>` va toujours avec `pool_<n>`.
 
 Astuce : importe aussi les images des bleus (`Config.Injuries.BRUISE_IMAGES`, encore à 0) : les yeux au beurre noir apparaissent alors et encadrent les nouvelles coupures.
+
+### La nuit, la pluie
+
+- **Nuit** (`Lighting.ClockTime` avant 6 h 30 ou après 18 h 30) : le sang frais fonce et brille
+  plus (dans le noir, on voit le sang à son reflet). Pour que ce reflet existe : `Lighting.Technology
+  = Future` et `Lighting.EnvironmentSpecularScale` au moins **0,5**.
+- **Pluie** : pas de météo sur cette branche, donc pas de sang dilué. Quand une météo existera, lire
+  `workspace:GetAttribute("Weather") == "Rain"` dans `BloodAge` / `BloodPool` (bord rose qui s'étale
+  vers le bas, flaques qui ne sèchent pas).
+
+### Réglages de réalisme (à connaître en testant)
+
+- **Premier coup de poing sur un visage intact** (pas de bleu, pas encore saigné, coup normal) : presque rien. La giclée est réduite à 45 % et, au mieux (4 fois sur 10, coup de face), un petit filet de sang d'une narine qui s'arrête en 6 à 12 s. Ensuite chaque coup qui fait saigner allonge un peu les saignements de nez (jusqu'à ×1,5) : le visage « s'ouvre » au fil du combat.
+- **Empreintes de pas** : chaque pas garde 70 % du sang du précédent (`WORLD.FOOT_DECAY = 0.7`, réel : 60-75 %), environ 7 empreintes puis plus rien.
+- **Sang sur un t-shirt** : la tache fraîche est cramoisie (`PALETTE.FABRIC_SOAK`), entourée d'une zone mouillée rouge sombre (`PALETTE.FABRIC_WET`) puis d'une frange rose pâle. Sur un t-shirt sombre, ça se voit surtout comme une zone plus foncée et rougeâtre.

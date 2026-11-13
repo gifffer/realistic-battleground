@@ -194,6 +194,7 @@ local function drip(arm: BasePart)
 	drops.EmissionDirection = Enum.NormalId.Top
 	drops.Speed = NumberRange.new(0.5, 2)
 	drops.SpreadAngle = Vector2.new(40, 40)
+	Blood.dripEmitter(drops) -- (it only drips: real drops fall slowly)
 	-- (and real drops falling from it: they land, they make marks, a pool
 	-- where it lies)
 	task.spawn(function()
@@ -204,7 +205,9 @@ local function drip(arm: BasePart)
 				point.WorldPosition,
 				arm.AssemblyLinearVelocity * 0.5,
 				random:NextNumber(0.05, 0.1),
-				random
+				random,
+				Blood.passiveScale(), -- (a drip: it falls slowly, lands round)
+				{ passive = true }
 			)
 			task.wait(random:NextNumber(0.12, 0.3))
 		end

@@ -21,6 +21,7 @@
 --
 --   BloodFace.hit(model, attacker, info, random)   a head hit that drew blood
 --   BloodFace.openWounds(model)    how many face wounds bleed now
+--   BloodFace.isFresh(model)       true: no bloody hit yet, no bruise (an intact face)
 --   BloodFace.noteAction(model)    the fighter did something (not idle)
 --   BloodFace.onGetUp(model)       back on his feet: a wipe, a graze
 --   BloodFace.watch(model)         knock-outs (sideways runs, the halo pool)
@@ -181,6 +182,13 @@ local function headBruise(model: Model): number
 	return worst
 end
 
+-- An intact face: no bloody hit yet and no bruise. The first punch on it
+-- sprays much less (KitEffects) and opens a small nose trickle at most.
+function BloodFace.isFresh(model: Model): boolean
+	local state = states[model]
+	return (state == nil or state.bloodyHits == 0) and headBruise(model) == 0
+end
+
 local handHook: ((Model, BasePart, number) -> ())? = nil
 
 function BloodFace.setHandHook(hook: (Model, BasePart, number) -> ())
@@ -284,8 +292,15 @@ end
 -- The wounds
 ------------------------------------------------------------------------------
 
-local function nose(state: State, random: Random, broken: boolean)
-	local seconds = random:NextNumber(15, 40) + (if broken then 20 else 0)
+-- `light`: the first blow on an intact face. Real noses rarely pour on the
+-- first punch: at most a short trickle from one nostril that stops quickly.
+-- After that, each bloody hit makes the next nosebleed last a bit longer
+-- (the vessels are already broken), up to ×1.5.
+local function nose(state: State, random: Random, broken: boolean, light: boolean?)
+	local escalate = math.min(1 + 0.1 * (state.bloodyHits - 1), 1.5)
+	local seconds = if light
+		then random:NextNumber(6, 12)
+		else random:NextNumber(15, 40) * escalate + (if broken then 20 else 0)
 	local wasActive = isActive(state.wounds.nose, os.clock())
 	local wound = woundOf(state, "nose", 1, seconds)
 	wound.start, wound.finish = random:NextNumber(0.8, 1.2), random:NextNumber(3, 4)
@@ -305,7 +320,7 @@ local function nose(state: State, random: Random, broken: boolean)
 				{ point = CHIN + side(Vector3.new(0.03, 0, 0), sign) },
 			},
 			width = 0.045 * (if broken then 1.5 else 1),
-			volume = 0.45,
+			volume = if light then 0.2 else 0.45,
 			start = PALETTE.ARTERIAL,
 			-- (a later nosebleed rides this one's wet track)
 			source = `{state.model:GetFullName()}|nose|{sign}`,
@@ -314,7 +329,7 @@ local function nose(state: State, random: Random, broken: boolean)
 		local splitRandom = Random.new(random:NextInteger(1, 2 ^ 30))
 		spec.onGuide = function(run: BloodRivulet.Rivulet, index: number)
 			-- on the upper lip it may split: a thinner run round the other side
-			if index ~= 1 or splitRandom:NextNumber() > 0.35 then
+			if light or index ~= 1 or splitRandom:NextNumber() > 0.35 then
 				return
 			end
 			local head = headOf(state.model)
@@ -526,7 +541,11 @@ function BloodFace.hit(model: Model, attacker: Model?, info: HitInfo?, random: R
 	local hitSide = hitInfo.side or "Front"
 	local uppish = moveId ~= nil and UPPISH[moveId] == true
 	local glass = moveId ~= nil and GLASS[moveId] == true
-	local softened = headBruise(model) >= 2
+	local bruise = headBruise(model)
+	local softened = bruise >= 2
+	-- the FIRST bloody punch on an intact face (no bruise, no glass, not a
+	-- heavy blow): little blood - a light nose trickle at most
+	local fresh = state.bloodyHits == 1 and not heavy and not glass and bruise == 0
 	local hitSign = if hitSide == "Right" then 1 elseif hitSide == "Left" then -1 else 0
 	-- cuts already open: a new blow reopens them (always on that side)
 	for _, wound in state.wounds do
@@ -540,7 +559,11 @@ function BloodFace.hit(model: Model, attacker: Model?, info: HitInfo?, random: R
 	end
 	-- the nose or the mouth
 	local roll = random:NextNumber()
-	if hitSide == "Front" then
+	if fresh then
+		if hitSide == "Front" and roll < 0.4 then
+			nose(state, random, false, true)
+		end
+	elseif hitSide == "Front" then
 		if roll < (if uppish then 0.8 else 0.55) then
 			local broken = heavy and isActive(state.wounds.nose, now) and random:NextNumber() < 0.25
 			nose(state, random, broken)

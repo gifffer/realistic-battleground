@@ -351,12 +351,12 @@ return table.freeze({
 			DRY = Color3.fromRGB(48, 14, 11), -- matte, turning reddish-brown (dried blood is never pure red)
 			OLD = Color3.fromRGB(42, 21, 16), -- brown-black crust (end of its life)
 			GLOSS = Color3.fromRGB(30, 2, 2), -- the wet film on a pool (dark: the sky reflects)
-			FABRIC_SOAK = Color3.fromRGB(70, 12, 12), -- soaked into a shirt / pants...
+			FABRIC_SOAK = Color3.fromRGB(96, 11, 11), -- soaked into a shirt / pants (fresh: crimson on a light shirt)...
 			FABRIC_SOAK_DRY = Color3.fromRGB(46, 17, 13), -- ...once dry
 			SALIVA = Color3.fromRGB(168, 38, 36), -- blood mixed with saliva / mucus (spit, mouth)
 			SERUM = Color3.fromRGB(214, 176, 96), -- the clear-yellow fluid around an old pool / a graze
 			RAW = Color3.fromRGB(190, 80, 72), -- scraped skin (graze, split knuckle)
-			FABRIC_WET = Color3.fromRGB(22, 8, 8), -- a wet dark patch on cloth (darkens any colour)
+			FABRIC_WET = Color3.fromRGB(84, 10, 10), -- the wet patch round a soak (darkens a dark shirt; on a white one it must read pink-red: a black ring reads as dirt)
 		}),
 		-- Passive blood (drips, a run's drop, a stump pouring) falls with this
 		-- gravity (studs/s²) instead of workspace.Gravity: real drops fall slower.
@@ -600,7 +600,7 @@ return table.freeze({
 			CROWN_RANGE = 40, -- studs from the camera: farther, no splash crown / ripple
 			CROWN_MIN_SIZE = 0.07, -- a drop at least this big (studs)...
 			CROWN_MIN_HEIGHT = 1.5, -- ...falling at least this far (studs) splashes a crown
-			FOOT_DECAY = 0.65, -- each footprint keeps this much of the previous one's blood
+			FOOT_DECAY = 0.7, -- each footprint keeps this much of the previous one's blood (real: 0.6-0.75, about 7 prints)
 			STARBURSTS_PER_POOL = 4, -- rings of tiny drops around a pool someone drips into
 		}),
 	}),

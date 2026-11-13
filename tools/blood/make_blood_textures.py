@@ -1287,6 +1287,10 @@ def lipfilm(seed, W=256, H=64):
     for x, y, r in beads:
         g = np.exp(-(((S.X - x) / (r * 1.1)) ** 2 + ((S.Y - y) / (r * 1.3)) ** 2))
         t = np.maximum(t, 0.78 * g * meniscus(d, 1.5))
+    # (critic pass) a thin film of blood + saliva is see-through: the lip
+    # shows under it. Only the beads, where it is thick, are opaque. A film
+    # drawn opaque reads as pink paint.
+    A = A * (0.42 + 0.58 * smooth(0.1, 0.55, t))
     return to_rgba(lum(np.clip(t, 0, 1)), A)
 
 
@@ -1318,18 +1322,23 @@ def crust_from(rng, A, cell, gap_p=0.12, lam=3.0):
     h, w = A.shape
     edge, pid = crack_plates(rng, h, w, cell)
     d = depth_of(A)
-    plate_t = np.random.default_rng(int(rng.integers(1 << 30))).uniform(0.3, 0.62, pid.max() + 1)[pid]
+    plate_t = np.random.default_rng(int(rng.integers(1 << 30))).uniform(0.26, 0.55, pid.max() + 1)[pid]
     lost = np.random.default_rng(int(rng.integers(1 << 30))).random(pid.max() + 1)[pid]
     # only part of the plate borders are open cracks (a real crust is not a mosaic)
-    opened = smooth(0.0, 0.8, noise(rng, (h, w), cell * 0.6))
-    crack = (1 - smooth(0.35, 1.0, edge)) * opened
+    # (critic pass) dried blood on skin cracks only here and there, in fine
+    # hairlines: a mosaic of open white cracks reads as tree bark.
+    opened = smooth(0.4, 1.3, noise(rng, (h, w), cell * 0.6))
+    crack = (1 - smooth(0.3, 0.8, edge)) * opened
     near_edge = 1 - smooth(4, 14, d)
     gone = (lost < gap_p * (0.3 + 1.7 * near_edge)).astype(F32)
     lift = (1 - smooth(0.8, 3.0, edge)) * opened  # open plate borders curl up: thinner, lighter
     ring = np.exp(-(((d - 2.5) / 2.5) ** 2))
     t = plate_t * (1 - 0.35 * lift) + 0.3 * ring + 0.07 * noise(rng, (h, w), 1.0)
     t = np.clip(t * meniscus(d, lam) * 1.15, 0, 1)
-    cov = A * (1 - crack * 0.85) * (1 - gone)
+    cov = A * (1 - crack * 0.7) * (1 - gone)
+    # thin dried film is a see-through reddish-brown stain, only the thick
+    # middle is opaque (else the whole crust reads as a black marker line)
+    cov = cov * (0.78 + 0.22 * smooth(0.2, 0.6, t))
     return t, cov
 
 
@@ -1775,10 +1784,15 @@ def wipe_smear(seed, W=512, H=256):
     start = smooth(W * 0.03, W * 0.1, X + 14 * noise(rng, (H, W), 8))
     stri = fbm(rng, (H, W), [((2.0, 30), 1.0), ((4, 70), 0.6), ((10, 12), 0.5)])
     thr = -1.6 + 2.4 * prog**1.2
-    cov = film * start * end * smooth(thr - 0.45, thr + 0.45, stri + 1.1 * lanes - 0.4)
+    streaks = smooth(thr - 0.6, thr + 0.6, stri + 0.8 * lanes - 0.4)
+    # (critic pass) a wipe leaves a thin continuous film with denser streaks
+    # in it, never separate opaque stripes (those read as brush strokes);
+    # the film itself breaks up toward the end of the wipe
+    base = 0.3 * (1 - 0.7 * prog) * smooth(-0.8, 0.6, noise(rng, (H, W), (6, 30)))
+    cov = film * start * end * np.maximum(base, streaks)
     t = 0.08 + 0.26 * (1 - prog) ** 1.6 + 0.1 * lanes * (1 - 0.5 * prog) + 0.04 * np.clip(stri, -1, 2)
     t = t + 0.12 * np.exp(-(((X - endx) / 3.0) ** 2)) * film  # blood piles up a little where the hand lifted
-    A = cov * (0.4 + 0.6 * smooth(0.04, 0.35, t))
+    A = cov * (0.3 + 0.55 * smooth(0.04, 0.35, t))
     return to_rgba(lum(np.clip(t, 0, 0.6)), np.clip(A, 0, 1))
 
 
@@ -1847,19 +1861,25 @@ def split_knuckle(seed=2800, N=256):
         x = N * (0.24 + 0.26 * i) + rng.normal(0, 4)
         y = N * 0.5 + 6 * (i - 1) ** 2 + rng.normal(0, 3)
         P = Shape(N, N, rng, warps=((6, 3.0), (2, 1.0)))
-        P.add(ellipse(x, y, rng.uniform(22, 28), rng.uniform(14, 19), rng.normal(0, 0.2), random_harm(rng, [(3, 6, 0.1)])))
-        raw = smooth(-0.6, 0.6, -P.D / 4 + 0.6 * noise(rng, (N, N), (1, 6)))  # scraped: ragged, scratched along X
+        # (critic pass) the scrape is ragged and see-through, not a neat oval
+        # with a dark slit in it (that read as an eye)
+        P.add(ellipse(x, y, rng.uniform(18, 26), rng.uniform(8, 12), rng.normal(0, 0.2), random_harm(rng, [(2, 5, 0.25), (6, 9, 0.1)])))
+        raw = smooth(-0.6, 0.6, -P.D / 4 + 1.0 * noise(rng, (N, N), (1, 6)))  # scraped: ragged, scratched along X
         L = np.where(raw > 0.05, 0.92 - 0.12 * smooth(-1, 1, noise(rng, (N, N), (0.8, 7))), L)
-        A = np.maximum(A, 0.75 * raw)
+        A = np.maximum(A, 0.55 * raw)
         S = Shape(N, N, rng, warps=((4, 0.8), (1.5, 0.3)))
         ang = rng.normal(0, 0.15)
-        ln = rng.uniform(12, 18)
-        S.add(ucap(x - np.cos(ang) * ln, y - np.sin(ang) * ln, 1.0, x, y, rng.uniform(2.4, 3.2)))
-        S.add(ucap(x, y, 2.8, x + np.cos(ang) * ln, y + np.sin(ang) * ln, 1.0), 2)
+        ln = rng.uniform(15, 22)
+        # a thin ragged split, then the blood that oozed out of it runs a
+        # little way down the finger (a short trickle, not a round blob)
+        S.add(ucap(x - np.cos(ang) * ln, y - np.sin(ang) * ln, 0.8, x, y, rng.uniform(1.5, 2.0)))
+        S.add(ucap(x, y, 1.8, x + np.cos(ang) * ln, y + np.sin(ang) * ln, 0.8), 2)
         if rng.random() < 0.85:
-            S.add(circle(x + rng.normal(0, 4), y + rng.uniform(4, 7), rng.uniform(3, 4.5)), 3)
+            bx = x + rng.normal(0, 4)
+            run_l = rng.uniform(8, 18)
+            S.add(ucap(bx, y + 1, 2.0, bx + rng.normal(0, 2), y + run_l, 2.6), 3)
         sl = S.alpha()
-        L = np.where(sl > 0.02, L * (1 - sl) + 0.3 * sl, L)
+        L = np.where(sl > 0.02, L * (1 - sl) + 0.4 * sl, L)
         A = np.maximum(A, sl)
     return to_rgba(np.clip(L, 0, 1), np.clip(A, 0, 1))
 
