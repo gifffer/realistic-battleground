@@ -7,10 +7,11 @@
 -- Only in a fight, never from a finisher, and rare (Config.HeavyGore): the
 -- server counts the combo each fighter takes (the same attacker's hits that
 -- land, close enough together). Once it is big, the attacker's next HEAVY
--- blow may snap the forearm / the shin on the side it hit (an open
--- fracture: a broken leg limps) or, rarer, tear the arm off. The fighter
--- stays alive and playable; the blow that knocks him out has higher odds.
--- Then his combo starts over and nothing more happens to him for a while.
+-- blow rolls ONCE: it may snap the forearm / the shin on the side it hit
+-- (an open fracture: a broken leg limps) or, rarer, tear the arm off. The
+-- fighter stays alive and playable; the blow that knocks him out has higher
+-- odds. Hit or miss, his combo then starts over (another big combo for
+-- another roll); after a hit, nothing more happens to him for a while.
 -- Caps per body (MAX_TORN_LIMBS, MAX_FRACTURES). It stays until death (a
 -- limb doesn't grow back, an open fracture doesn't close: a kill's healing
 -- leaves it), then goes with the body (the torn limb after TORN_LIMB_TIME).
@@ -21,7 +22,7 @@
 -- in workspace.TornLimbs (the aim and the finishers' placement leave that
 -- folder out). It only collides with the map (the dead bodies' group).
 --
---   HeavyGore.landed(victim, attacker, blow) -> brokeLeg   (a hit landed)
+--   HeavyGore.landed(victim, attacker, blow) -> Outcome   (a hit landed)
 
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -218,12 +219,21 @@ end
 local OTHER =
 	{ RightArm = "LeftArm", LeftArm = "RightArm", RightLeg = "LeftLeg", LeftLeg = "RightLeg" }
 
+-- What a blow did: brokeLeg (he limps), torn = the limb torn off (its
+-- HeavyGoreUtil.LIMBS key) or nil.
+export type Outcome = {
+	brokeLeg: boolean,
+	torn: string?,
+}
+
+local NOTHING: Outcome = table.freeze({ brokeLeg = false, torn = nil })
+
 -- `attacker` landed a blow on `victim` (normal combat: not a finisher, not
 -- blocked). Counts it in the combo; at the end of a big one, a heavy blow
--- may break him. Returns true if it broke a leg (he limps).
-function HeavyGore.landed(victim: Model, attacker: Model, blow: Blow): boolean
+-- rolls once and may break him.
+function HeavyGore.landed(victim: Model, attacker: Model, blow: Blow): Outcome
 	if not enabled() or (not G.IN_DUELS and victim:GetAttribute("DuelId") ~= nil) then
-		return false
+		return NOTHING
 	end
 	local time = os.clock()
 	local combo = combos[victim]
@@ -242,34 +252,33 @@ function HeavyGore.landed(victim: Model, attacker: Model, blow: Blow): boolean
 	combo.lastAt = time
 	local big = combo.hits >= G.COMBO_HITS or combo.damage >= G.COMBO_DAMAGE
 	if not (big and blow.heavy) or time < combo.quietUntil then
-		return false
+		return NOTHING
 	end
-	local tear = if blow.knockedOut then G.KO_TEAR_CHANCE else G.TEAR_CHANCE
-	local breaks = if blow.knockedOut then G.KO_FRACTURE_CHANCE else G.FRACTURE_CHANCE
+	-- One roll per big combo, hit or miss: the next one needs a new big combo.
+	combo.hits = 0
+	combo.damage = 0
 	local key = limbHit(blow)
+	-- (a limb that can't come off only rolls for a fracture)
+	local tear = if not (LIMBS[key].arm or G.TEAR_LEGS)
+		then 0
+		elseif blow.knockedOut then G.KO_TEAR_CHANCE
+		else G.TEAR_CHANCE
+	local breaks = if blow.knockedOut then G.KO_FRACTURE_CHANCE else G.FRACTURE_CHANCE
 	local roll = random:NextNumber()
-	local done = false
-	local brokeLeg = false
-	if roll < tear and (LIMBS[key].arm or G.TEAR_LEGS) then
-		done = tearLimb(victim, key, blow.from)
+	if roll < tear and tearLimb(victim, key, blow.from) then
+		combo.quietUntil = time + G.COOLDOWN
+		return { brokeLeg = false, torn = key }
 	end
-	if not done and roll < tear + breaks then
+	if roll < tear + breaks then
 		-- (that one already broken or gone: the other one)
 		for _, which in { key, OTHER[key] } do
 			if fracture(victim, which) then
-				done = true
-				brokeLeg = not LIMBS[which].arm
-				break
+				combo.quietUntil = time + G.COOLDOWN
+				return { brokeLeg = not LIMBS[which].arm, torn = nil }
 			end
 		end
 	end
-	if done then
-		-- (his combo starts over, and he is left alone for a while)
-		combo.hits = 0
-		combo.damage = 0
-		combo.quietUntil = time + G.COOLDOWN
-	end
-	return brokeLeg
+	return NOTHING
 end
 
 return table.freeze(HeavyGore)

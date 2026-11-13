@@ -24,6 +24,12 @@
 --                    puts his foot on their chest and pulls, three times:
 --                    the shoulder gives, the arm comes off. He holds it up,
 --                    looks at it, throws it down by the body.
+--   "PortalCut"      Dr. Rift: his gravity glove pulls the opponent up off
+--                    the floor and holds them standing, limp; he draws the
+--                    portal gun and opens a portal flat around their waist,
+--                    looks at them, and lets it close: cut in two. The upper
+--                    body falls back off the legs, the legs stay standing a
+--                    moment, spurting, then fold.
 --
 -- One timeline, read by the server (placement, the killing blow) and by
 -- every client (camera, sounds, blood, the bat). Times in seconds from the
@@ -38,7 +44,8 @@ export type Event = {
 	-- "Prop" (the bat appears), "PropAway", "Plea" (the victim speaks),
 	-- "Swing" (whoosh), "Body" / "Face" (a punch lands), "Kill" (the
 	-- killing blow), "Gut" / "Dig" / "Rip" / "Drop" (the liver: the hand
-	-- goes in, digs, tears it out, throws it down)
+	-- goes in, digs, tears it out, throws it down), "Lift" / "Aim" /
+	-- "PortalOpen" / "PortalClose" / "Cut" / "Fold" (PortalCut)
 	kind: string,
 }
 
@@ -66,6 +73,8 @@ export type Cinematic = {
 	-- "charge" = the victim stood up CHARGE.victim studs in front of him,
 	-- facing him, a clear run between them (Finishers.CHARGE).
 	placement: "head" | "front" | "side" | "charge",
+	-- "front" only: studs between the two roots (default HOLD_DISTANCE).
+	distance: number?,
 	victimAnimation: string?, -- played on the victim (held up / laid out)
 	events: { Event },
 	shots: { Shot },
@@ -112,6 +121,12 @@ Finishers.ARM_THROW_FROM = CFrame.new(
 	0.7308
 )
 Finishers.ARM_THROW_VELOCITY = Vector3.new(3, -2, -1) -- anchor space, studs/s
+-- PortalCut: the victim stands this far in front of him (root to root), and
+-- the portal lies flat around their waist (anchor space, its centre at the
+-- bottom of their torso = where they are cut).
+Finishers.PORTAL_DISTANCE = 3.4
+Finishers.PORTAL_RING = CFrame.new(0, -1, -3.4)
+Finishers.PORTAL_RADIUS = 1.9 -- studs: wide open (round their hips)
 
 -- "charge" (the Bull's "Gore"): his run, his leap and his landing.
 --   victim   studs from the anchor to where the victim stands (facing him)
@@ -427,6 +442,82 @@ local cinematics: { [string]: Cinematic } = {
 				from = Vector3.new(5.2, 1.6, -5.4),
 				to = Vector3.new(5.6, 2.0, -3.4),
 				look = Vector3.new(0.6, -2.2, -2.0),
+				fov = 60,
+			},
+		},
+	},
+	PortalCut = {
+		id = "PortalCut",
+		duration = 4.6,
+		kill = 2.55,
+		placement = "front",
+		distance = 3.4, -- (= PORTAL_DISTANCE)
+		victimAnimation = "Rift_FinisherPortalCutVictim",
+		events = {
+			{ time = 0.15, kind = "Lift" }, -- the glove pulls them up
+			{ time = 0.95, kind = "Aim" }, -- the portal gun comes out
+			{ time = 1.15, kind = "PortalOpen" }, -- flat around the waist
+			{ time = 1.6, kind = "Plea" },
+			{ time = 2.35, kind = "PortalClose" }, -- it shrinks...
+			{ time = 2.55, kind = "Cut" }, -- ...shut: cut in two (the kill)
+			{ time = 3.4, kind = "Fold" }, -- the legs give way
+		},
+		-- (the victim stands at (0, 0, -3.4), facing him; the cut at Y = -1)
+		shots = {
+			-- Wide, from his right: the glove up, the body pulled up off the floor.
+			{
+				time = 0,
+				from = Vector3.new(6.2, 0.2, -1.2),
+				to = Vector3.new(5.8, 0.4, -1.6),
+				look = Vector3.new(0, -0.6, -2.2),
+				fov = 60,
+			},
+			-- Over his right shoulder: the portal gun aimed at their waist.
+			{
+				time = 0.95,
+				from = Vector3.new(1.7, 1.3, 2.6),
+				to = Vector3.new(1.5, 1.0, 1.9),
+				look = Vector3.new(0, -0.8, -3.4),
+				fov = 50,
+			},
+			-- Low, close: the portal flat around their hips.
+			{
+				time = 1.15,
+				from = Vector3.new(-2.8, -1.4, -6.2),
+				to = Vector3.new(-2.3, -1.2, -5.7),
+				look = Vector3.new(0, -1, -3.4),
+				fov = 46,
+			},
+			-- Their face: limp, pleading.
+			{
+				time = 1.6,
+				from = Vector3.new(-1.1, 1.0, -6.3),
+				to = Vector3.new(-0.8, 0.9, -5.9),
+				look = "victim",
+				fov = 40,
+			},
+			-- Wide and low, from his left: it closes, the upper body falls back.
+			{
+				time = 2.3,
+				from = Vector3.new(-6.0, -1.5, -2.6),
+				to = Vector3.new(-6.6, -1.2, -2.4),
+				look = Vector3.new(0, -1.3, -3.8),
+				fov = 58,
+			},
+			-- Low, by the legs still standing, spurting.
+			{
+				time = 3.05,
+				from = Vector3.new(2.6, -2.3, -5.6),
+				to = Vector3.new(3.0, -2.0, -6.0),
+				look = Vector3.new(0, -1.4, -3.6),
+				fov = 52,
+			},
+			-- From above: what is left.
+			{
+				time = 3.85,
+				from = Vector3.new(4.0, 3.6, 1.2),
+				to = Vector3.new(4.6, 4.2, 1.8),
+				look = Vector3.new(0, -2.5, -4.2),
 				fov = 60,
 			},
 		},

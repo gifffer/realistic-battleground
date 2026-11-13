@@ -21,6 +21,7 @@ local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local BloodGush = require(script.Parent.BloodGush)
 local Gashes = require(script.Parent.Gashes)
@@ -137,8 +138,48 @@ local function simpleWound(
 	weldTo(part, shaft, folder)
 end
 
+-- Pieces drawn simple because the kit wasn't there yet (folder -> draws it
+-- again): redrawn from the kit once it arrives.
+local simple: { [Instance]: () -> () } = {}
+local kitWatch: RBXScriptConnection? = nil
+local retrying = false
+
+local function retrySimple()
+	retrying = false
+	local list = {}
+	for folder, redo in simple do
+		table.insert(list, { folder = folder, redo = redo })
+	end
+	for _, entry in list do
+		if entry.folder.Parent == nil then
+			simple[entry.folder] = nil -- (gone with its part)
+		else
+			entry.redo()
+		end
+	end
+	if next(simple) == nil and kitWatch then
+		kitWatch:Disconnect()
+		kitWatch = nil
+	end
+end
+
+-- Something arrived in ReplicatedStorage (the kit, maybe): try again a
+-- moment later (once, however many things arrive meanwhile).
+local function watchKit()
+	if kitWatch then
+		return
+	end
+	kitWatch = ReplicatedStorage.DescendantAdded:Connect(function()
+		if not retrying then
+			retrying = true
+			task.delay(0.5, retrySimple)
+		end
+	end)
+end
+
 -- The kit's piece `name` (in `part`'s own space) on `part`, or `fallback`
--- without it. Once: the folder `tag` on the part says it's there.
+-- without it. Once: the folder `tag` on the part says it's there (drawn
+-- simple, it is drawn again from the kit once the kit has the piece).
 local function dress(
 	part: BasePart,
 	name: string,
@@ -146,17 +187,34 @@ local function dress(
 	skin: Color3,
 	fallback: (Instance) -> ()
 )
-	if part:FindFirstChild(tag) then
-		return
+	local pieces = GoreKit.get()
+	local piece = if pieces then pieces[name] else nil
+	local existing = part:FindFirstChild(tag)
+	if existing then
+		if piece == nil or existing:GetAttribute("Simple") ~= true then
+			return
+		end
+		simple[existing] = nil
+		existing:Destroy()
 	end
 	local folder = Instance.new("Folder")
 	folder.Name = tag
-	local pieces = GoreKit.get()
-	local piece = if pieces then pieces[name] else nil
 	if piece then
 		weldTo(part, GoreKit.spawn(piece, part.CFrame, painter(skin)), folder)
 	else
+		folder:SetAttribute("Simple", true)
 		fallback(folder)
+		if GoreShapes.slots[name] then
+			-- (a kit piece: redrawn once the kit is there)
+			simple[folder] = function()
+				dress(part, name, tag, skin, fallback)
+			end
+			-- (fires too when the body it is on is destroyed)
+			folder.Destroying:Once(function()
+				simple[folder] = nil
+			end)
+			watchKit()
+		end
 	end
 	folder.Parent = part
 end

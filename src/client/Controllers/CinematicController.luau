@@ -29,6 +29,7 @@ local BloodGush = require(script.Parent.Parent.Combat.BloodGush)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
+local RiftFx = require(script.Parent.Parent.Combat.RiftFx)
 local CameraController = require(script.Parent.CameraController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
@@ -57,6 +58,11 @@ local SHAKES: { [string]: Shake } = {
 	Strain = { at = 0, strength = 1.2, punch = 1.5 },
 	Pop = { at = 0, strength = 3, punch = 5 },
 	Tear = { at = 0, strength = 4.5, punch = 9 },
+	-- (Dr. Rift's portal)
+	Lift = { at = 0, strength = 1.5, punch = 2 },
+	PortalOpen = { at = 0, strength = 1, punch = 2 },
+	Cut = { at = 0, strength = 5, punch = 10 },
+	Fold = { at = 0, strength = 1.5, punch = 2 },
 	-- (the Sentinel's)
 	Beam = { at = 0, strength = 1.5, punch = 3 },
 	Burnt = { at = 0, strength = 3, punch = 6 },
@@ -105,12 +111,14 @@ local ATTACKER_CLIPS = {
 	"Bouncer_FinisherArmRip",
 	"Sentinel_Finisher",
 	"Bull_Finisher",
+	"Rift_FinisherPortalCut",
 }
 local VICTIM_CLIPS = {
 	"Boxer_FinisherVictim",
 	"Bouncer_FinisherArmRipVictim",
 	"Sentinel_FinisherVictim",
 	"Bull_FinisherVictim",
+	"Rift_FinisherPortalCutVictim",
 }
 local runs: { [Model]: Run } = {}
 -- Which camera is ours now (a new cinematic takes the camera over; the old
@@ -313,7 +321,13 @@ local function playEvent(
 		SoundController.play("BodyShot", victim)
 	elseif kind == "Face" then
 		SoundController.play("HeavyHit", victim)
-		KitEffects.bloodSpray(victim, attacker, "Head", 3)
+		KitEffects.bloodSpray(
+			victim,
+			attacker,
+			"Head",
+			3,
+			KitEffects.bloodSeed(math.floor(event.time * 1000), victim, "Head")
+		)
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)
@@ -340,6 +354,24 @@ local function playEvent(
 			then torso.Position
 			else victim:GetPivot().Position
 		BloodGush.splatter(attacker, from, 22, math.floor(event.time * 1000))
+	elseif
+		kind == "Lift"
+		or kind == "Aim"
+		or kind == "PortalOpen"
+		or kind == "PortalClose"
+		or kind == "Cut"
+	then
+		-- (the body in two itself: WaistCut, from the server's "CutInHalf")
+		RiftFx.cinematic(kind, attacker, victim, anchor)
+		if kind == "Cut" then
+			local torso = victim:FindFirstChild("Torso")
+			local from = if torso and torso:IsA("BasePart")
+				then torso.Position
+				else victim:GetPivot().Position
+			BloodGush.splatter(attacker, from, 10, math.floor(event.time * 1000))
+		end
+	elseif kind == "Fold" then
+		SoundController.play("LimbDrop", victim)
 	elseif kind == "Throw" then
 		-- (the arm off itself: ArmRip, from the server's "ArmTorn")
 		ArmRip.thrown(attacker, anchor)
@@ -473,6 +505,7 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	run.cancelled = true
 	KitEffects.stopAction(attacker) -- the bat
 	LiverRip.cancel(attacker)
+	RiftFx.cancelCinematic(attacker)
 	KitVFX.cancelFinisher(attacker)
 	for _, clip in ATTACKER_CLIPS do
 		CharacterAnimationController.stopAction(attacker, clip)

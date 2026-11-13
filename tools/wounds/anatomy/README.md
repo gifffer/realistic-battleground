@@ -33,6 +33,18 @@ to where the wounds are, decimated and moved into the R6 torso's space:
 
 The derived pieces are shared alike under the same licence, with this credit.
 
+`waist.npz` holds a slab of the hips round the cut of Dr. Rift's finisher (PortalCut, the body cut
+in two at the hip joints), also from **Z-Anatomy** (CC BY-SA 4.0), taken from the Z-Anatomy
+repository's `SkeletalSystem100.fbx`, `MuscularSystem100.fbx`, `VisceralSystem100.fbx` and
+`CardioVascular41.fbx` by `tools/wounds/extract_waist.py`: both **hip bones**, the **sacrum**, the
+**coccyx**, the tops of both **femurs**; the muscles round the hips (glutei, iliacus, psoas major,
+obturators, piriformis, gemelli, tensor fasciae latae, sartorius, rectus femoris, pectineus,
+adductors, quadratus femoris, vastus lateralis, pelvic floor, the lowest abdominal wall); the
+**urinary bladder**, the **sigmoid** and **descending colon**, the lowest loops of the
+**small intestine** and the whole small intestine (jejunum); the femoral, external iliac, gluteal,
+pudendal, obturator and circumflex vessels. They make `Gore_RiftWaist_*`, `Gore_RiftHipR_*`, `Gore_RiftHipL_*`,
+`Gore_RiftGut1_*`..`Gore_RiftGut3_*` and `Gore_RiftColon_*` in `WoundKit.fbx`, shared alike under the same licence.
+
 `limbs.npz` holds, also from **Z-Anatomy** (CC BY-SA 4.0), taken from Z-Anatomy's `Startup.blend` by
 `tools/wounds/extract_limbs.py`, decimated and moved into the R6 limbs' and torso's spaces, for the
 heavy hits' gore:

@@ -261,6 +261,7 @@ function Grab.run(
 			local candidate = tools.getState(model)
 			if
 				candidate
+				and candidate.owner == nil -- (Dr. Rift's clones vanish when touched)
 				and tools.isAlive(candidate)
 				and not Knockout.isKnockedOut(model)
 				and candidate.holding == nil

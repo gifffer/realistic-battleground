@@ -763,29 +763,33 @@ def build_bore(size, v, seed, chest):
 
 # --- The open fractures ("Break": heavy hits, Client/Combat/HeavyGore) -------
 # A huge blow at the end of a big combo snaps the forearm / the shin: the
-# real bones (Z-Anatomy, limbs.npz) broken obliquely, jagged, the cortex
-# round the marrow at each broken end; the upper fragment angulated so its
-# end has gone out through the front of the limb, through a torn hole in the
-# skin; in the hole the real muscles torn, the fat, torn vessels and nerves,
-# clotted blood, splinters of bone. One insert per limb (the left ones
+# real bones (Z-Anatomy, limbs.npz) broken obliquely, jagged, each broken
+# end a thick solid cortex round the sunk dark marrow; one fragment
+# angulated so that a short length of it, its broken end facing out, has
+# gone out through the front of the limb, through a torn hole in the skin
+# (the forearm: the radius' upper fragment, pointing down; the shin: the
+# tibia's lower fragment, pointing up - seen end on from above); in the hole
+# the real muscles torn, the fat, torn vessels and nerves, clotted blood,
+# splinters of bone. One insert per limb (the left ones
 # mirrored), body only, size "L", at fracture.BREAK_AT. Last in the kit (the
 # others' numbers don't move).
 #   hole      its length (along the limb) and width on the skin
 #   depth     how deep the torn hole goes
 #   bones     each bone (limbs.npz order): where it breaks (insert Y), the
-#             fracture's slope, the cortex (share of its half width); its
+#             fracture's slope, the cortex (share of its half width), `thin`
+#             (its width scaled: the blocky limb's bones were widened); its
 #             upper fragment's broken end: how far out of the skin (studs;
 #             < 0: still in the hole), how high, the shaft's tilt; the
 #             lower fragment's the same (None: it stays as it is)
 BREAK_VARIANTS = {
     "BreakArm": dict(limb="arm", length=0.62, width=0.4, depth=0.44, lip=0.06, rag=1.5,
-                     bones=(dict(y=0.0, slope=0.75, cortex=0.36, out=0.3, tip=-0.36, tilt=math.radians(52),
+                     bones=(dict(y=0.0, slope=0.5, cortex=0.36, out=0.22, tip=-0.2, tilt=math.radians(64),
                                  low=-0.3, tip_low=-0.02, tilt_low=math.radians(14)),
                             dict(y=0.07, slope=0.6, cortex=0.38, out=-0.1, tip=-0.12, tilt=math.radians(30),
                                  low=-0.36, tip_low=0.0, tilt_low=math.radians(10)))),
-    "BreakLeg": dict(limb="leg", length=0.74, width=0.48, depth=0.34, lip=0.065, rag=1.5,
-                     bones=(dict(y=0.0, slope=0.6, cortex=0.3, out=0.24, tip=-0.3, tilt=math.radians(32),
-                                 low=-0.12, tip_low=0.02, tilt_low=math.radians(8)),
+    "BreakLeg": dict(limb="leg", length=0.52, width=0.42, depth=0.3, lip=0.06, rag=1.5,
+                     bones=(dict(y=0.0, slope=0.35, cortex=0.34, thin=0.78, out=-0.12, tip=0.1,
+                                 tilt=math.radians(10), low=0.3, tip_low=0.02, tilt_low=math.radians(66)),
                             dict(y=0.16, slope=0.8, cortex=0.36, out=None, low=None))),
 }
 BREAK_LOOK_LAYERS = ("Lip", "Dermis", "Fat", "Flesh", "FleshDark", "Muscle", "MuscleDark", "Bone", "Marrow",
@@ -1039,45 +1043,62 @@ def build_break(name, v, seed):
     bones, marrow, chips, film, shreds = [], [], [], [], []
     for bone, spec in zip(parts["bone"], v["bones"]):
         bone = fracture.solid(bone)
+        if spec.get("thin"):
+            # (the blocky limb's bones were widened to fill it: the one that
+            # comes out a little less, or it fills the whole hole)
+            middle = fracture.section(bone, spec["y"], 0.04)[0]
+            for vert in bone.verts:
+                vert.co.x = middle.x + (vert.co.x - middle.x) * spec["thin"]
+                vert.co.z = middle.z + (vert.co.z - middle.z) * spec["thin"]
+            bone.normal_update()
         toward = Vector((rng.uniform(-0.3, 0.3), 0, 1))  # (the fracture rises toward the front)
         upper, upper_m, lower, lower_m, fr = fracture.break_bone(
             bone, rng, spec["y"], spec["slope"], toward, spec["cortex"], fr_sink(spec), 0.012)
         centre = fr.centre
-        pieces_up = [upper_m]
+        with_upper, with_lower = [upper_m], [lower_m]
+        # the fragment whose broken end came out of the skin (if one did)
+        out_upper = spec["out"] is not None and spec["out"] > 0
+        out_lower = spec["low"] is not None and spec["low"] > 0
         # a shred of real muscle torn off with it, stuck near its end
-        if spec["out"] is not None and spec["out"] > 0:
-            near = Vector((centre.x, spec["y"] + fr.radius * 2.5, centre.z + fr.radius))
+        if out_upper or out_lower:
+            # (down its shaft, by the skin: its broken end left clear)
+            reach = fr.radius * (2.5 if out_upper else -4.5)
+            near = Vector((centre.x, spec["y"] + reach, centre.z + fr.radius))
             for m in sorted(parts["muscle"], key=lambda mb: min((vv.co - near).length for vv in mb.verts))[:2]:
                 ball = bmesh.new()
-                bmesh.ops.create_icosphere(ball, subdivisions=2, radius=rng.uniform(0.07, 0.1))
-                bmesh.ops.translate(ball, vec=near + Vector((rng.uniform(-0.03, 0.03), rng.uniform(0, 0.1), 0)),
-                                    verts=ball.verts)
+                bmesh.ops.create_icosphere(ball, subdivisions=2, radius=rng.uniform(0.06, 0.085))
+                along = rng.uniform(0, 0.1) * (1 if out_upper else -1)
+                bmesh.ops.translate(ball, vec=near + Vector((rng.uniform(-0.03, 0.03), along, 0)), verts=ball.verts)
                 gore.lumpy(ball, rng, 0.02, 40.0)
                 chunk, _cut = fracture.boolean(m.copy(), ball)
                 ball.free()
                 if len(chunk.faces):
                     gore.lumpy(chunk, rng, 0.006, 60.0)
                     shreds.append(chunk)
-                    pieces_up.append(chunk)
+                    (with_upper if out_upper else with_lower).append(chunk)
+        # (the one that comes out: through the middle of the hole)
         x = min(c.x + v["width"] * 0.22, max(c.x - v["width"] * 0.22, centre.x))
         if spec["out"] is not None:
-            place_fragment(rng, upper, pieces_up, spec["tilt"], (x, spec["tip"], spec["out"]), True)
+            at = c.x if out_upper else x
+            place_fragment(rng, upper, with_upper, spec["tilt"], (at, spec["tip"], spec["out"]), True)
         if spec["low"] is not None:
-            place_fragment(rng, lower, [lower_m], spec["tilt_low"], (x, spec["tip_low"], spec["low"]), False)
+            at = c.x if out_lower else x
+            place_fragment(rng, lower, with_lower, spec["tilt_low"], (at, spec["tip_low"], spec["low"]), False)
         for bm in [upper, upper_m, lower, lower_m]:
             gore.cut(bm, keep_planes, fill=bm in (upper, lower))
-        # blood smeared on the end that came out, from the skin to its tip
-        if spec["out"] is not None and spec["out"] > 0:
-            low_end = spec["tip"] + 0.4
-            film.append(fracture.blood_film(upper, rng, lambda p: -0.04 < p.z < 0.14 and p.y < low_end, 0.004, -0.05))
+        if out_upper or out_lower:
+            # blood on the end that came out: a collar where it left the
+            # skin (the rest of it clean ivory: it reads as bone)
+            piece = upper if out_upper else lower
+            film.append(fracture.blood_film(piece, rng, lambda p: -0.04 < p.z < 0.016, 0.004, -0.6))
             # splinters of its wall in the hole
             for _ in range(3):
                 shard = fracture.splinter(bone, rng, Vector((centre.x, spec["y"] + rng.uniform(-0.05, 0.05),
-                                                             centre.z)), fr.radius * rng.uniform(0.35, 0.55))
+                                                             centre.z)), fr.radius * rng.uniform(0.3, 0.45))
                 if len(shard.faces):
                     sc = sum((vv.co for vv in shard.verts), Vector()) / len(shard.verts)
                     a = rng.uniform(0, 2 * math.pi)
-                    to = Vector((c.x + math.cos(a) * v["width"] * 0.25, c.y + math.sin(a) * v["length"] * 0.25,
+                    to = Vector((c.x + math.cos(a) * v["width"] * 0.28, c.y + math.sin(a) * v["length"] * 0.28,
                                  -depth * rng.uniform(0.5, 0.85)))
                     m = (Matrix.Translation(to) @ Matrix.Rotation(rng.uniform(0, 6.3), 4, "Y")
                          @ Matrix.Rotation(rng.uniform(0, 6.3), 4, "X") @ Matrix.Translation(-sc))
@@ -1658,6 +1679,7 @@ def main():
             objects.append(add_object(f"{name}_{layer}", bm, offset, layer))
         shapes.append((name, index, kind, size, False, dict(v, reach_depth=deep), pts, reach))
         index += 1
+    bore_seed = seed
     # The open fractures (heavy hits), after the bores: the right limbs'
     # inserts, then the left ones (the same, mirrored: X -> -X).
     for name, v in BREAK_VARIANTS.items():
@@ -1672,6 +1694,8 @@ def main():
                 objects.append(add_object(f"{name}{side}_{layer}", bm, offset, layer))
             shapes.append((name + side, index, "Break", "L", False, dict(v, reach_depth=deep), pts, reach))
             index += 1
+    # (the noise as the bores left it: what is built after keeps its shapes)
+    noise.seed_set(bore_seed % 100000)
     # The head shell pieces.
     for name, mesh in build_head_shell().items():
         ob = bpy.data.objects.new(name, mesh)
@@ -1895,10 +1919,12 @@ GORE_CONTEXT = {
 
 # The open fractures' pictures (preview_<Insert>_<view>.png): the insert in
 # the whole limb (its skin with the hole, the block round it), from the
-# front and a little to the side, and from below.
+# front and a little to the side, from below, and from above (as a third
+# person camera sees it).
 BREAK_VIEWS = {
     "q": (Vector((1.3, -0.4, 1.6)), Vector((0, -0.15, 0)), 1.5),
     "low": (Vector((0.5, -1.0, 1.6)), Vector((0, -0.05, 0)), 0.9),
+    "top": (Vector((0.3, 2.0, 1.4)), Vector((0, -0.05, 0)), 1.0),
 }
 
 

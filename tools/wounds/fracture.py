@@ -15,8 +15,8 @@ fat under the skin, torn vessels and nerves, clotted blood.
 Here the bones are the real ones (their real shape, their real place in the
 limb), broken with a jagged fracture surface (a boolean with a cutter whose
 face is the fracture: oblique, toothed, a little different on each side),
-their cut faces split into the cortex (Bone) and the marrow (Marrow, sunk
-into the bone); the muscles, vessels and nerves are the real ones too.
+the middle of their broken ends (inside the cortex: a thick solid ring) sunk
+in and drawn as the marrow (Marrow); the muscles, vessels and nerves are the real ones too.
 
 Insert axes (as every wound insert): X along the skin (the limb's -X), Y up,
 Z out of the skin (the limb's -Z), the skin at Z = 0, the origin the point
@@ -147,10 +147,9 @@ class Fracture:
         self.seed = Vector((rng.uniform(0, 90), rng.uniform(0, 90), rng.uniform(0, 90)))
         self.spike = rng.uniform(-0.6, 0.6)  # where across the high side the spike is
 
-    def height(self, x, z, side=0.0, flat=False):
+    def height(self, x, z, side=0.0):
         """`side`: another draw of its fine teeth (the two fragments don't
-        fit exactly: crumbs of bone were lost). `flat`: only its slope (the
-        floor of the marrow cavity under it)."""
+        fit exactly: crumbs of bone were lost)."""
         p = Vector((x, 0, z)) - self.centre
         r = self.radius
         # -1 .. 1 across the bone (held there past it: the surface stays
@@ -158,17 +157,15 @@ class Fracture:
         along = max(-1.2, min(1.2, p.dot(self.toward) / r))
         across = max(-1.5, min(1.5, p.cross(Vector((0, 1, 0))).dot(self.toward) / r))
         h = self.slope * along * r
-        if flat:
-            return self.y + h + r * 0.06 * noise.noise(Vector((x * 30 / r, z * 30 / r, 3.0)) + self.seed)
         q = Vector((x * 9 / r, z * 9 / r, side * 7)) + self.seed
-        ridge = 1 - 2 * abs(noise.noise(q * 0.45))  # sharp ridges
-        h += r * (0.34 * ridge + 0.14 * noise.noise(q * 1.3) + 0.03 * noise.noise(q * 3.1))
+        ridge = 1 - 2 * abs(noise.noise(q * 0.22))  # a few sharp ridges
+        h += r * (0.2 * ridge + 0.08 * noise.noise(q * 0.7) + 0.025 * noise.noise(q * 2.2))
         # the spike: up on the high side, narrow across it
-        spike = max(0.0, along - 0.15) ** 1.6 * max(0.0, 1 - abs(across - self.spike) / 0.55)
-        h += r * 0.8 * spike
+        spike = max(0.0, along - 0.15) ** 1.6 * max(0.0, 1 - abs(across - self.spike) / 0.7)
+        h += r * 0.45 * spike
         return self.y + h
 
-    def cutter(self, lo, hi, upper, side=0.0, gap=0.0, step=None, flat=False):
+    def cutter(self, lo, hi, upper, side=0.0, gap=0.0, step=None):
         """A closed solid whose face toward the bone is the fracture surface
         (upper: above it, else below it) over x in lo.x..hi.x, z in
         lo.z..hi.z."""
@@ -183,7 +180,7 @@ class Fracture:
             for k in range(nz + 1):
                 x = lo.x + (hi.x - lo.x) * i / nx
                 z = lo.z + (hi.z - lo.z) * k / nz
-                y = self.height(x, z, side, flat) + (gap if upper else -gap)
+                y = self.height(x, z, side) + (gap if upper else -gap)
                 row.append(bm.verts.new((x, y, z)))
             grid.append(row)
         cap = [[bm.verts.new((v.co.x, far, v.co.z)) for v in row] for row in grid]
@@ -244,52 +241,64 @@ def canal(bone, ratio):
     return inner
 
 
-def hollowed(fragment, inner, fracture, lo, hi, upper, side, gap, sink):
-    """The fragment with its marrow cavity open at the break: the canal
-    taken out of it `sink` deep under the fracture surface. (bone, marrow:
-    the cavity's floor, dark red)."""
-    # (its floor: a smooth face `sink` under the jagged one's lowest)
-    deeper = fracture.cutter(lo, hi, upper, side, gap / 2 + sink + fracture.radius * 0.45, flat=True)
-    reach, _cut = boolean(inner.copy(), fracture.cutter(lo, hi, upper, side, gap / 2 - 0.01))
-    plug, _cut = boolean(reach, deeper, "DIFFERENCE")
-    out, from_plug = boolean(fragment, plug, "DIFFERENCE")
-    plug.free()
-    deeper.free()
-    # the cavity's floor (facing out of the break) is the marrow; its walls
-    # stay bone (the cortex's inside)
-    out.faces.ensure_lookup_table()
-    up = Vector((0, 1 if upper else -1, 0))
+def recessed(fragment, cut_faces, canal_tree, upper, sink, radius):
+    """The marrow at a broken end: the middle of the fragment's fracture
+    surface (what is inside the canal) sunk `sink` into the bone, smoothly
+    (the cortex round it stays: a thick solid ring, no thin shell). Returns
+    the marrow: a copy of that sunk middle a hair out of it (dark red)."""
+    fragment.faces.ensure_lookup_table()
+    cut = [fragment.faces[i] for i in cut_faces]
+    into = Vector((0, 1 if upper else -1, 0))
+    soft = radius * 0.18  # (the cortex's inner edge: no step)
+    weight = {}
+    for face in cut:
+        for v in face.verts:
+            if v in weight:
+                continue
+            w = 0.0
+            if inside(canal_tree, v.co):
+                hit = canal_tree.find_nearest(v.co)
+                distance = (hit[0] - v.co).length if hit[0] is not None else soft
+                w = min(1.0, distance / soft)
+            weight[v] = w
+    for v, w in weight.items():
+        v.co += into * sink * (w * w * (3 - 2 * w))
+    fragment.normal_update()
     marrow = bmesh.new()
     lookup = {}
-    floor = [out.faces[i] for i in from_plug if out.faces[i].normal.dot(-up) > 0.2]
-    for face in floor:
+    for face in cut:
+        if min(weight[v] for v in face.verts) < 0.25:
+            continue
         verts = []
         for v in face.verts:
             if v not in lookup:
-                lookup[v] = marrow.verts.new(v.co - up * 0.0015)
+                lookup[v] = marrow.verts.new(v.co - into * 0.002)
             verts.append(lookup[v])
         try:
             marrow.faces.new(verts)
         except ValueError:
             pass
-    bmesh.ops.delete(out, geom=floor, context="FACES_ONLY")
     marrow.normal_update()
-    return out, marrow
+    return marrow
 
 
 def break_bone(bone, rng, y, slope, toward, cortex, sink, gap=0.012):
-    """The real bone `bone` (insert axes, along Y) broken at height y: (upper
-    fragment, its marrow, lower fragment, its marrow, the fracture).
-    `cortex`: how much of the bone's half width is its hard wall."""
+    """The real bone `bone` (insert axes, along Y, a closed solid) broken at
+    height y: (upper fragment, its marrow, lower fragment, its marrow, the
+    fracture). `cortex`: how much of the bone's half width is its hard wall
+    (the marrow shows inside it, sunk `sink`)."""
     centre, radius, lo, hi = section(bone, y, 0.04)
     fracture = Fracture(rng, y, centre, radius, toward, slope)
     margin = Vector((radius * 1.6, 0, radius * 1.6))
     lo, hi = lo - margin, hi + margin
     inner = canal(bone, 1 - cortex)
-    upper, _cut = boolean(bone, fracture.cutter(lo, hi, True, 0.0, gap / 2))
-    lower, _cut = boolean(bone, fracture.cutter(lo, hi, False, 1.0, gap / 2))
-    upper, upper_marrow = hollowed(upper, inner, fracture, lo, hi, True, 0.0, gap, sink)
-    lower, lower_marrow = hollowed(lower, inner, fracture, lo, hi, False, 1.0, gap, sink)
+    canal_tree = BVHTree.FromBMesh(inner)
+    # (a fine cutter: the marrow's edge on it is smooth)
+    step = radius / 16
+    upper, upper_cut = boolean(bone, fracture.cutter(lo, hi, True, 0.0, gap / 2, step))
+    lower, lower_cut = boolean(bone, fracture.cutter(lo, hi, False, 1.0, gap / 2, step))
+    upper_marrow = recessed(upper, upper_cut, canal_tree, True, sink, radius)
+    lower_marrow = recessed(lower, lower_cut, canal_tree, False, sink, radius)
     inner.free()
     return upper, upper_marrow, lower, lower_marrow, fracture
 
@@ -337,14 +346,17 @@ def blood_film(bm, rng, keep, offset=0.004, threshold=0.0):
             src.faces.new(verts)
         except ValueError:
             pass
-    for _ in range(1):
+    for _ in range(2):
         bmesh.ops.subdivide_edges(src, edges=src.edges[:], cuts=1, use_grid_fill=True)
         bmesh.ops.triangulate(src, faces=src.faces[:])
     src.normal_update()
     seed = Vector((rng.uniform(0, 50), rng.uniform(0, 50), rng.uniform(0, 50)))
     # (it runs down: patches longer along Y)
+    # (`keep` again on the finer faces: a big face of the bone half in it
+    # leaves nothing outside it)
     gone = [f for f in src.faces
-            if noise.noise(Vector((1, 0.35, 1)) * f.calc_center_median() * 9 + seed) < threshold]
+            if not keep(f.calc_center_median())
+            or noise.noise(Vector((1, 0.35, 1)) * f.calc_center_median() * 9 + seed) < threshold]
     bmesh.ops.delete(src, geom=gone, context="FACES")
     for v in src.verts:
         v.co += v.normal * offset
