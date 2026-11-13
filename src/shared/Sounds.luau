@@ -351,6 +351,9 @@ local sounds: { [string]: SoundInfo } = {
 	-- In 3D at the substation when the power goes: a transformer blowing (a sharp bang + an
 	-- electric crackle). Empty = only the sparks and the flash.
 	TransformerBlow = { ids = {}, volume = 1, pitch = 1, pitchVariation = 0.05 },
+	-- 2D, while the lights stutter just before the cut: an electric buzz / crackle of the
+	-- struggling grid (about 3 s). Empty = only the flickering.
+	PowerBuzz = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
 
 	-- SpezCola machines (the free cola machines of the city) -------------------------------
 	-- The machine humming (LOOP, in 3D at the machine).

@@ -180,6 +180,9 @@ local function bed(slotName: string): Sound?
 	return sound
 end
 
+-- The fog muffling last applied to the beds (0 = none).
+local appliedFog = 0
+
 -- The fog's muffling on one 2D bed (0 = clear → 1 = full fog).
 local function setFogMuffle(sound: Sound?, fog: number)
 	local eq = if sound then sound:FindFirstChild("Fog") else nil
@@ -469,10 +472,14 @@ local function update(deltaTime: number)
 	end
 
 	-- the fog muffles the outdoor bed and the rain (not in the park: always sunny there)
+	-- (only when it changed: no lookups every frame on a clear day)
 	local fog = WeatherController.fogIntensity() * (1 - park)
-	setFogMuffle(dayBed, fog)
-	setFogMuffle(nightBed, fog)
-	setFogMuffle(rainLoop, fog)
+	if math.abs(fog - appliedFog) > 0.005 or (fog == 0 and appliedFog ~= 0) then
+		appliedFog = fog
+		setFogMuffle(dayBed, fog)
+		setFogMuffle(nightBed, fog)
+		setFogMuffle(rainLoop, fog)
+	end
 
 	-- 3. the places
 	if now >= nextSync then

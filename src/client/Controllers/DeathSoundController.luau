@@ -22,8 +22,16 @@ local DeathSoundController = {}
 
 local DEFAULT_DEATH_SOUND = "Died"
 
+-- The sounds already muted (so a sound moved inside the character is not hooked twice).
+-- Weak keys: a destroyed character's sounds are forgotten by themselves.
+local muted: { [Sound]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+
 -- Mutes one default death sound (and keeps it muted).
 local function mute(sound: Sound)
+	if muted[sound] then
+		return
+	end
+	muted[sound] = true
 	sound.Volume = 0
 	sound.SoundId = ""
 	sound:Stop()

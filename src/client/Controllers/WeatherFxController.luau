@@ -19,6 +19,7 @@
 --     • a soft HALO around every lit street lamp near you.
 --     (the muffled city sounds are done by CityAudioController)
 --   POWER CUT
+--     • while the lights stutter (server: Ambience.powerFlicker), the grid BUZZES (PowerBuzz);
 --     • the transformer at the substation (Config.Weather.SUBSTATION) BLOWS just before the
 --       dark: a burst of sparks, smoke, a blue-white flash, and the TransformerBlow sound;
 --     • while the power is out, the red emergency lights PULSE slowly.
@@ -376,13 +377,14 @@ local function updateBodySplashes(rate: number)
 			end
 		end
 	end
+	-- (first person: your head is hidden and the camera sits in it: the splashes of the head
+	-- AND the shoulders would spray into the lens, so they all stop)
+	local head = if character then character:FindFirstChild("Head") else nil
+	local firstPerson = head ~= nil
+		and head:IsA("BasePart")
+		and (head :: BasePart).LocalTransparencyModifier > 0.5
 	for _, emitter in bodySplashes do
-		local part = emitter.Parent
-		-- (first person: your head is hidden, its splashes would hit the lens)
-		local hidden = part ~= nil
-			and part:IsA("BasePart")
-			and (part :: BasePart).LocalTransparencyModifier > 0.5
-		emitter.Rate = if hidden then 0 else rate
+		emitter.Rate = if firstPerson then 0 else rate
 	end
 end
 
@@ -628,6 +630,10 @@ local function onWeatherChanged()
 	local untilBlow = started + W.POWER_FLICKER - 0.35 - workspace:GetServerTimeNow()
 	if untilBlow < -1 then
 		return -- joined in the middle of it
+	end
+	-- the grid buzzing while the lights stutter (not heard from the park)
+	if untilBlow > 1 and ParkAtmosphereController.blend() < 0.5 then
+		SoundController.play2D("PowerBuzz")
 	end
 	task.delay(math.max(0, untilBlow), function()
 		if ParkAtmosphereController.blend() > 0.5 then

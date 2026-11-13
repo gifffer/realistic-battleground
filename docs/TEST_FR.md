@@ -424,7 +424,7 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | T1 | Forcer un train (Studio, barre de commande côté **serveur**) : `workspace:SetAttribute("TrainForce", true)` | 5 s d'alerte : les deux signaux au bout du pont passent du vert (au repos) au rouge clignotant, la caméra tremble un peu si tu es près des voies (à moins de 60 studs). Puis une locomotive rouge (phares allumés, numéro 4417) + un wagon couvert tagué + un wagon-citerne sortent du tunnel, traversent le pont à ~70 studs/s, roues qui tournent, et rentrent dans l'autre tunnel. Le tremblement grandit quand le train approche. |
 | T2 | Rester sur la voie (même avec toute ta vie, même juste après le spawn) | **Toujours mortel** : bruit de choc, le corps est **démembré** (tête, bras, jambes arrachés, projetés avec le train, moignons rouges avec l'os, sang qui gicle, flaque sous le torse), la victime **hurle**. Tous les joueurs voient la même chose. Ta caméra suit ton torse jusqu'au respawn. |
 | T3 | Se faire frapper par quelqu'un juste avant le train | Fil des kills : « <lui> threw <toi> under a train » (il a le kill). Sinon : « <toi> was hit by a train ». |
-| T4 | Sans rien forcer | En Studio : un train ~15 s après la construction de la ville puis toutes les ~35 s. En jeu publié : 40–70 s après le lancement, puis toutes les 70–130 s, en alternant le sens. |
+| T4 | Sans rien forcer | En Studio : un train ~15 s après la construction de la ville puis toutes les ~35 s. En jeu publié : 40–70 s après le lancement, puis toutes les 95–155 s, en alternant le sens. |
 | T5 | En duel | Jamais touché par le train. |
 
 | T6 | Sons du train | Klaxon au début de l'alerte puis quand la loco sort du tunnel ; bruit de roulement (en 3D) qui suit le train, plus fort quand il est proche. |
@@ -455,6 +455,7 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | P1 | Entrer dans le parc | Petit texte discret en haut « SAFE ZONE — No fighting in the park » qui disparaît après ~3 s. |
 | P2 | Frapper / move / dash-attaque / finisher dans le parc, ou frapper quelqu'un dans le parc depuis l'extérieur | Rien : pas d'animation de coup (côté client), le serveur refuse tout, personne n'est touché ni achevé dans le parc. Le dash et le blocage marchent toujours. |
 | A1 | Regarder les PNJ de près | Cheveux en couches (frange, chignon, cheveux longs, rasé…), casquettes avec visière et bouton, bonnets avec revers, casquettes plates, casques audio, lunettes avec monture et verres (parfois solaires), boucles d'oreilles, montre, collier. Barman : tablier avec bretelles, poche (stylo, décapsuleur) et serviette sur l'épaule. Vendeurs : badge sur cordon à la couleur de la boutique. Rien ne flotte quand ils bougent. |
+
 #### v7 : sons, train, météo plus immersive
 
 | # | Test | Résultat attendu |
@@ -469,7 +470,7 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | R4 | Pluie / orage, regarder la pluie quelques secondes | Les gouttes tombent **penchées** (un peu sous la pluie, beaucoup en orage) et de temps en temps une **rafale** les penche plus fort 1–3 s. |
 | R5 | Orage : regarder les éclairs | L'éclair tombe dans une direction au hasard (souvent devant toi), le flash est **bleuté** et éclaire tout l'écran. Environ 1 sur 5 tombe **près** : flash plus fort, la rue s'éclaire un instant, la caméra **tremble** un peu, et le tonnerre (quand il aura un son) claque presque tout de suite. |
 | F1 | Brouillard (`WeatherForce = "Fog"`) | Une **nappe basse** qui dérive lentement au ras du sol autour de toi (pas dans le bar / les boutiques ni dans le parc), un **halo** doux autour des lampadaires allumés, la musique et la pluie de la ville un peu **étouffées**. Tout revient à la normale à la fin. |
-| F2 | Coupure de courant (de nuit : `WeatherForce = "PowerCut"`) | Les lumières **grésillent / clignotent ~3,5 s**, puis le transformateur de la **sous-station** (nord du Lot 9) **saute** : gerbe d'**étincelles**, fumée, flash bleu-blanc (son `TransformerBlow` vide pour l'instant). Pendant le noir, les lumières rouges de secours **pulsent** doucement. Le retour en vague marche comme avant. |
+| F2 | Coupure de courant (de nuit : `WeatherForce = "PowerCut"`) | Les lumières **grésillent / clignotent ~3,5 s** (son `PowerBuzz` vide pour l'instant), puis le transformateur de la **sous-station** (nord du Lot 9) **saute** : gerbe d'**étincelles**, fumée, flash bleu-blanc (son `TransformerBlow` vide pour l'instant). Pendant le noir, les lumières rouges de secours **pulsent** doucement. Le retour en vague marche comme avant. |
 | F3 | Être dans le parc pendant pluie / brouillard / coupure | Rien de tout ça : toujours ensoleillé, pas de gouttes, pas de brume, pas d'étincelles. |
 
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
