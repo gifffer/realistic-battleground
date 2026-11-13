@@ -324,9 +324,9 @@ return table.freeze({
 		-- flesh running down for acid, mottled char for fire); without (0),
 		-- simpler patches.
 		BURN_IMAGES = table.freeze({
-			acid = table.freeze({ 0, 0, 0 }), -- acid_1..3.png
-			fire = table.freeze({ 0, 0, 0 }), -- fire_1..3.png
-			halo = 0, -- burn_halo.png
+			acid = table.freeze({ 131778333760722, 126361621625485, 94024882070515 }), -- acid_1..3.png
+			fire = table.freeze({ 126783746008106, 105061454734886, 79962622099236 }), -- fire_1..3.png
+			halo = 106354500879013, -- burn_halo.png
 		}),
 		-- A smashed bottle leaves bits of glass stuck in the skin; this often it
 		-- only grazes them (glass, no torn cut).
