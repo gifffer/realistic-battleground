@@ -18,7 +18,10 @@
 --     burst itself — thin pieces of skull (scalp outside, bone inside), brain,
 --     an eye, teeth, a spray and a mist of blood, the hair / hat sent flying,
 --     and on the floor a big splash with drops thrown out in lines, the way
---     real blood spatters. The same pieces on every client (the seed).
+--     real blood spatters. Most of it flung off the way the bat went (the
+--     server's Finishers.BAT_SWEEP_ATTRIBUTE): small bits on top of the big
+--     pieces, a long fan of drops on the floor, a red cloud drifting after
+--     it. The same pieces on every client (the seed).
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
@@ -27,6 +30,7 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Corpse = require(ReplicatedStorage.Shared.Util.Corpse)
+local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local GoreKit = require(script.Parent.GoreKit)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local Blood = require(script.Parent.Blood)
@@ -48,6 +52,7 @@ local IRIS = Color3.fromRGB(52, 38, 30)
 local BRAIN_BLOODY = Color3.fromRGB(152, 72, 72)
 local TOOTH = Color3.fromRGB(236, 230, 212)
 local PIECE_LIFETIME = 240 -- seconds at most the pieces stay (they go with the body before)
+local BIT_LIFETIME = 7 -- seconds the small bits stay (then fade)
 local MARK_LIFETIME = 30 -- seconds the blood stays on the floor (fading the last third)
 local MAX_MARKS = 220 -- blood marks on the floor at once (several finishers...)
 -- Pools never pushed out by newer drops (they fade on their own).
@@ -590,6 +595,37 @@ end
 -- The body whose head is bursting (its pieces go when it goes).
 local bursting: Model? = nil
 
+-- Fades a piece out, then removes it.
+local function fadeOut(piece: BasePart)
+	if not piece.Parent then
+		return
+	end
+	-- (every layer: a soft piece shows through its welded copy)
+	local fade = TweenInfo.new(0.6)
+	for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
+		if item:IsA("BasePart") and item.Transparency < 1 then
+			TweenService:Create(item, fade, { Transparency = 1 }):Play()
+		end
+	end
+	Debris:AddItem(piece, 0.65)
+end
+
+-- How often a flying piece checks whether it lies still (seconds).
+local SETTLE_STEP = 0.2
+
+-- The characters a piece's rays ignore, shared by every piece: fetched at
+-- most once per check, not once per piece per check.
+local ignoredBodies: { Instance } = {}
+local ignoredAt = -math.huge
+local function bodiesToIgnore(): ({ Instance }, number)
+	local now = os.clock()
+	if now - ignoredAt >= SETTLE_STEP then
+		ignoredBodies = CollectionService:GetTagged(Config.Combat.TAG)
+		ignoredAt = now
+	end
+	return ignoredBodies, ignoredAt
+end
+
 -- A piece of the head stays on the floor until the body is removed (a
 -- respawn, a reset): then it goes too. Once it lies still it is fixed
 -- there (it can't sink or slip through the floor, nothing nudges it).
@@ -606,17 +642,7 @@ local function keepPiece(piece: BasePart)
 			-- (a body left by a finisher stays a while longer, as a copy:
 			-- Server/Systems/Corpses; its pieces stay as long)
 			task.delay(Corpse.timeLeft(body), function()
-				if not piece.Parent then
-					return
-				end
-				-- (every layer: a soft piece shows through its welded copy)
-				local fade = TweenInfo.new(0.6)
-				for _, item in { piece :: Instance, table.unpack(piece:GetDescendants()) } do
-					if item:IsA("BasePart") and item.Transparency < 1 then
-						TweenService:Create(item, fade, { Transparency = 1 }):Play()
-					end
-				end
-				Debris:AddItem(piece, 0.65)
+				fadeOut(piece)
 			end)
 		end
 		body.Destroying:Once(remove)
@@ -643,14 +669,18 @@ local function keepPiece(piece: BasePart)
 	task.spawn(function()
 		local still = 0
 		local last = piece.Position
+		local filtered: number? = nil -- (when the list it filters was fetched)
 		while piece.Parent and not piece.Anchored do
-			task.wait(0.2)
+			task.wait(SETTLE_STEP)
 			if not piece:IsDescendantOf(workspace) then
 				break
 			end
-			local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
-			table.insert(ignore, piece)
-			params.FilterDescendantsInstances = ignore
+			local bodies, stamp = bodiesToIgnore()
+			if stamp ~= filtered then
+				filtered = stamp
+				params.FilterDescendantsInstances = bodies
+				params:AddToFilter(piece)
+			end
 			local position = piece.Position
 			-- (did it pass through a floor / wall since the last check?)
 			local crossed = workspace:Raycast(last, position - last, params)
@@ -670,7 +700,7 @@ local function keepPiece(piece: BasePart)
 				piece.AssemblyLinearVelocity.Magnitude < 0.3
 				and piece.AssemblyAngularVelocity.Magnitude < 0.5
 			then
-				still += 0.2
+				still += SETTLE_STEP
 				if still >= 0.8 then
 					local below = workspace:Raycast(
 						position,
@@ -688,7 +718,7 @@ local function keepPiece(piece: BasePart)
 	end)
 end
 
-local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
+local function launch(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
 	piece.CanCollide = true
 	piece.CanQuery = false
 	piece.CanTouch = false
@@ -701,7 +731,19 @@ local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Rand
 	piece.AssemblyLinearVelocity = velocity
 	piece.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 28)
 	piece.Parent = workspace
+end
+
+local function fly(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
+	launch(piece, at, velocity, random)
 	keepPiece(piece)
+end
+
+-- A small bit (splinter, crumb, shred): not kept, no settle check (many of
+-- them, too small to matter); it fades out after a few seconds.
+local function flyBit(piece: BasePart, at: Vector3, velocity: Vector3, random: Random)
+	launch(piece, at, velocity, random)
+	Debris:AddItem(piece, BIT_LIFETIME + 1)
+	task.delay(BIT_LIFETIME, fadeOut, piece)
 end
 
 -- Two parts stuck together into one piece (the other one rides along).
@@ -859,27 +901,80 @@ local function realPieces(head: BasePart, away: Vector3, random: Random): boolea
 	return true
 end
 
+-- Small bits more, on top of the big pieces: bone splinters, crumbs of
+-- brain, shreds of scalp (skin outside, bone under it), a tooth or two.
+local function bits(at: Vector3, away: Vector3, skin: Color3, random: Random)
+	for _ = 1, 16 do
+		local splinter = newPart(
+			"Splinter",
+			Vector3.new(random:NextNumber(0.03, 0.06), 0.025, random:NextNumber(0.08, 0.18)),
+			if random:NextNumber() < 0.75 then BONE else BONE_EDGE,
+			false
+		)
+		flyBit(splinter, at, outward(random, away, 1.3, 28), random)
+	end
+	for _ = 1, 10 do
+		local size = random:NextNumber(0.06, 0.13)
+		local crumb = newPart(
+			"Brain",
+			Vector3.new(size, size * 0.8, size),
+			if random:NextNumber() < 0.5 then BRAIN else BRAIN_BLOODY,
+			true
+		)
+		roundMesh(crumb) -- (a sphere mesh: squashed by Squish)
+		flyBit(crumb, at, outward(random, away, 1, 17), random)
+		Squish.soft(crumb, { softness = 0.5, sag = 0.24, stiffness = 170, lifetime = BIT_LIFETIME })
+	end
+	for _ = 1, 6 do
+		local width = random:NextNumber(0.12, 0.24)
+		local depth = random:NextNumber(0.1, 0.2)
+		local shred = newPart("Scalp", Vector3.new(width, 0.04, depth), skin, false)
+		local under = newPart("Bone", Vector3.new(width * 0.9, 0.035, depth * 0.9), BONE_EDGE, true)
+		stuck(shred, under, CFrame.new(0, -0.035, 0))
+		flyBit(shred, at, outward(random, away, 1.5, 22), random)
+	end
+	for _ = 1, 2 do
+		flyBit(
+			newPart("Tooth", Vector3.new(0.07, 0.1, 0.06), TOOTH, false),
+			at,
+			outward(random, away, 1.6, 22),
+			random
+		)
+	end
+end
+
+-- The way the bat went through (the server's, world space), or nil.
+local function sweepOf(model: Model): Vector3?
+	local value = model:GetAttribute(Finishers.BAT_SWEEP_ATTRIBUTE)
+	if typeof(value) == "Vector3" and value.Magnitude > 0.1 then
+		return value.Unit
+	end
+	return nil
+end
+
 local function burst(model: Model, head: BasePart, torso: BasePart, random: Random)
 	bursting = model
 	local at = head.Position
-	-- Away from the attacker: he stands past the head, so toward the body.
+	-- Away from the attacker: he stands past the head, so toward the body;
+	-- and mostly on the way the bat went (it sweeps it all off to his left).
 	local flat = Vector3.new(torso.Position.X - at.X, 0, torso.Position.Z - at.Z)
-	local away = if flat.Magnitude > 0.1 then flat.Unit * 0.7 else Vector3.zero
+	local flatAway = if flat.Magnitude > 0.1 then flat.Unit else Vector3.zero
+	local away = flatAway * 0.7
+	local sweep = sweepOf(model)
+	local across = if sweep then Vector3.new(sweep.X, 0, sweep.Z) else Vector3.zero
+	-- (along the floor; without a sweep: away from him)
+	local sweepFlat = if across.Magnitude > 0.1
+		then across.Unit
+		elseif flatAway.Magnitude > 0 then flatAway
+		else Vector3.xAxis
+	if across.Magnitude > 0.1 then
+		away = away * 0.35 + sweepFlat * 0.95
+	end
 
-	if realPieces(head, away, random) then
-		-- (a few bone splinters and bits of brain more, smaller than the kit's)
-		for _ = 1, 8 do
-			local splinter = newPart(
-				"Splinter",
-				Vector3.new(random:NextNumber(0.03, 0.06), 0.025, random:NextNumber(0.08, 0.18)),
-				BONE,
-				false
-			)
-			fly(splinter, at, outward(random, away, 1.3, 26), random)
-		end
-	else
+	if not realPieces(head, away, random) then
 		simplePieces(head, at, away, random)
 	end
+	bits(at, away, head.Color, random)
 
 	-- The hair / hat: sent flying.
 	for _, accessory in model:GetChildren() do
@@ -911,7 +1006,11 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 	-- burst's own mist below)
 	Blood.spray(at, Vector3.new(0, 1, 0) + away, 4, model, true)
 	Blood.spray(at, away + Vector3.new(0, 0.3, 0), 2.5, model, true)
-	Blood.spray(at, -away + Vector3.new(0, 0.6, 0), 1.5, model, true)
+	-- some back up at him (he stands past the head)
+	Blood.spray(at, -flatAway + Vector3.new(0, 0.6, 0), 2, model, true)
+	-- the bulk of it, low along the sweep (over the floor, onto whatever is
+	-- there)
+	Blood.spray(at, sweepFlat + Vector3.new(0, 0.15, 0), 5, model, true)
 	-- In the air: a spray of fine drops, and a red mist.
 	local point = Instance.new("Attachment")
 	point.WorldPosition = at
@@ -943,16 +1042,51 @@ local function burst(model: Model, head: BasePart, torso: BasePart, random: Rand
 	mist.Acceleration = Vector3.new(0, -8, 0)
 	mist.Drag = 5
 	mist:Emit(20)
-	Debris:AddItem(point, 1.6)
+	-- A cloud that hangs on after it, drifting off the way the bat went and
+	-- sinking slowly (seen through the held frame).
+	local cloud = bloodEmitter(point)
+	cloud.SpreadAngle = Vector2.new(60, 60)
+	cloud.EmissionDirection = Enum.NormalId.Front
+	cloud.Speed = NumberRange.new(1, 3.5)
+	cloud.Lifetime = NumberRange.new(1.4, 2.4)
+	cloud.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.6),
+		NumberSequenceKeypoint.new(1, 2.2),
+	})
+	cloud.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.72),
+		NumberSequenceKeypoint.new(0.5, 0.86),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	cloud.Rotation = NumberRange.new(0, 360)
+	cloud.RotSpeed = NumberRange.new(-25, 25)
+	cloud.LightInfluence = 0.6
+	cloud.Acceleration = sweepFlat * 0.8 + Vector3.new(0, -1.2, 0)
+	cloud.Drag = 2
+	-- (an attachment's Front: its look vector; along the sweep, a bit up)
+	point.WorldCFrame = CFrame.lookAt(at, at + sweepFlat + Vector3.new(0, 0.35, 0))
+	cloud:Emit(14)
+	Debris:AddItem(point, 2.6)
 
 	-- On the floor: a big splash where the head was, drops thrown out in
-	-- lines all around (more of them away from the attacker).
+	-- lines all around (more of them away from the attacker), and a long fan
+	-- of them along the sweep, a second splash where the bulk came down.
 	splash(at, 2.4, random)
 	for _ = 1, 12 do
 		local angle = random:NextNumber(0, math.pi * 2)
 		local direction = (Vector3.new(math.cos(angle), 0, math.sin(angle)) + away * 0.5).Unit
 		castOff(at, direction, random:NextNumber(1.8, 4.2), random)
 	end
+	local side = sweepFlat:Cross(Vector3.yAxis)
+	for _ = 1, 8 do
+		local direction = (sweepFlat + side * random:NextNumber(-0.45, 0.45)).Unit
+		castOff(at, direction, random:NextNumber(4, 7.5), random)
+	end
+	local landing = at + sweepFlat * random:NextNumber(1.8, 2.6)
+	local later = Random.new(random:NextInteger(1, 2 ^ 20)) -- (same on every client)
+	task.delay(0.12, function()
+		splash(landing, 1.3, later)
+	end)
 end
 
 ------------------------------------------------------------------------------

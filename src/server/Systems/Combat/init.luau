@@ -1040,7 +1040,10 @@ end
 
 -- The bat finisher: the head bursts. Every client shows it (and the neck
 -- left open) from this attribute, its value = the seed of the pieces.
-local function blowHead(victim: Model)
+-- `sweep`: the way the bat went through it (world space): the pieces and
+-- the spray fly on that way (set first: the clients read it with the seed).
+local function blowHead(victim: Model, sweep: Vector3)
+	setAttribute(victim, Finishers.BAT_SWEEP_ATTRIBUTE, sweep)
 	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
 end
 
@@ -1916,7 +1919,8 @@ local function startCinematic(
 		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
 		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
 			if cinematic.id == "Bat" then
-				blowHead(target)
+				-- (low across the head, from his right to his left)
+				blowHead(target, anchor:VectorToWorldSpace(Finishers.BAT_SWEEP))
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
 			elseif cinematic.id == "Incinerate" then

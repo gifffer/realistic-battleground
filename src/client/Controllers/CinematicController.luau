@@ -8,8 +8,11 @@
 --   • the two fighters' clients also play its CAMERA: black bars top and
 --     bottom, a few shots cut together (behind the attacker, from the
 --     ground, close on the impact, wide), the camera shaking and pushing in
---     on each blow. The player can't move during it (the server holds both
---     characters); the normal camera comes back at the end.
+--     on each blow; on some (the bat through the head) it holds still a
+--     beat, pushed in, the picture hit pale and harsh, then eases back
+--     slowly: the blow feels slowed down. The player can't move during it
+--     (the server holds both characters); the normal camera comes back at
+--     the end.
 --
 -- The server can cut it short before the killing blow (the attacker dies,
 -- someone leaves: Remotes.FinisherEnded with killed = false): everything
@@ -42,8 +45,20 @@ local BAR_HEIGHT = 0.11 -- of the screen, top and bottom
 local BAR_TIME = 0.35
 
 -- Camera shake: a kick that dies out fast (strength in degrees, push-in in
--- field of view).
-type Shake = { at: number, strength: number, punch: number }
+-- field of view). Optional: `freeze` seconds the camera holds still on it,
+-- pushed in (a held frame: the blow feels slowed down), `decay` how fast the
+-- push-in dies out (7 by default, as the shake; lower = a slow return,
+-- the shot drifting back out), `flash` a colour hit on
+-- the screen (the picture goes harsh and pale, then comes back).
+type Shake = {
+	at: number,
+	strength: number,
+	punch: number,
+	freeze: number?,
+	decay: number?,
+	flash: boolean?,
+}
+local DEFAULT_DECAY = 7
 local SHAKES: { [string]: Shake } = {
 	Body = { at = 0, strength = 1.2, punch = 2 },
 	Face = { at = 0, strength = 2, punch = 3 },
@@ -67,6 +82,13 @@ local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
 -- (event names other finishers use too, shaken differently in these;
 -- a negative push-in widens the view: the Bull's charge)
 local KIT_SHAKES: { [string]: { [string]: Shake } } = {
+	-- (the Street Brawler's: the taps, the bat coming down widening the view,
+	-- then the held frame on the head bursting, a slow way back)
+	Bat = {
+		Tap = { at = 0, strength = 0.5, punch = 1.2 },
+		Swing = { at = 0, strength = 0.6, punch = -3 },
+		Kill = { at = 0, strength = 6, punch = 13, freeze = 0.16, decay = 2.8, flash = true },
+	},
 	Incinerate = {
 		Grab = { at = 0, strength = 1, punch = 1 },
 		Beam = { at = 0, strength = 2, punch = 4 }, -- point blank into the chest
@@ -86,6 +108,9 @@ local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 		Huff = { at = 0, strength = 0.6, punch = 0.5 },
 	},
 }
+
+-- (the colour hit: pale and a little warm, like an overexposed frame)
+local FLASH_TINT = Color3.fromRGB(255, 222, 214)
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
@@ -190,6 +215,40 @@ local function playCamera(
 	local random = Random.new()
 	local lastLook: Vector3? = nil
 	local lastIndex = 0
+	local stopped = false
+	-- (the colour hits of the blows: one grade on our camera, made on the
+	-- first, gone with the cutscene)
+	local grade: ColorCorrectionEffect? = nil
+	for _, shake in shakes do
+		if shake.flash then
+			task.delay(shake.at, function()
+				if stopped or cameraGeneration ~= generation then
+					return
+				end
+				if grade == nil then
+					local made = Instance.new("ColorCorrectionEffect")
+					made.Name = "FinisherFlash"
+					made.Parent = camera
+					grade = made
+				end
+				local effect = grade :: ColorCorrectionEffect
+				effect.Brightness = 0.22
+				effect.Contrast = 0.45
+				effect.Saturation = -0.6
+				effect.TintColor = FLASH_TINT
+				TweenService:Create(
+					effect,
+					TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{
+						Brightness = 0,
+						Contrast = 0,
+						Saturation = 0,
+						TintColor = Color3.new(1, 1, 1),
+					}
+				):Play()
+			end)
+		end
+	end
 
 	RunService:UnbindFromRenderStep("FinisherCamera") -- (an older one)
 	RunService:BindToRenderStep(
@@ -217,8 +276,38 @@ local function playCamera(
 				lastIndex = index
 				lastLook = nil -- (a cut: the new shot frames its target at once)
 			end
+			-- Shakes and push-ins from the blows, dying out; a blow that holds
+			-- the frame stops the shot moving meanwhile (`held`: how long it
+			-- has been held in this shot).
+			local kick, punch, held = 0, 0, 0
+			for _, shake in shakes do
+				local age = t - shake.at
+				if age >= 0 then
+					local freeze = shake.freeze or 0
+					local decay = shake.decay or DEFAULT_DECAY
+					local inShot = shake.at >= shot.time
+					if age < freeze then
+						punch += shake.punch -- (still, pushed in)
+						if inShot then
+							held += age
+						end
+					else
+						local after = age - freeze
+						if inShot then
+							held += freeze
+						end
+						-- (the shake always dies out fast; the push-in at its pace)
+						if after < 0.6 then
+							kick += shake.strength * math.exp(-after * DEFAULT_DECAY)
+						end
+						if after < 4.2 / decay then
+							punch += shake.punch * math.exp(-after * decay)
+						end
+					end
+				end
+			end
 			local ends = if shots[index + 1] then shots[index + 1].time else cinematic.duration
-			local alpha = smooth((t - shot.time) / math.max(ends - shot.time, 1e-3))
+			local alpha = smooth((t - held - shot.time) / math.max(ends - shot.time, 1e-3))
 			local position = anchor * shot.from:Lerp(shot.to, alpha)
 			local look: Vector3
 			if shot.look == "victim" or shot.look == "heart" then
@@ -244,16 +333,6 @@ local function playCamera(
 				look = anchor * (shot.look :: Vector3)
 				lastLook = nil
 			end
-			-- Shakes and push-ins from the blows, dying out.
-			local kick, punch = 0, 0
-			for _, shake in shakes do
-				local age = t - shake.at
-				if age >= 0 and age < 0.6 then
-					local fade = math.exp(-age * 7)
-					kick += shake.strength * fade
-					punch += shake.punch * fade
-				end
-			end
 			local wobble = CFrame.Angles(
 				math.rad(random:NextNumber(-kick, kick)),
 				math.rad(random:NextNumber(-kick, kick)),
@@ -264,12 +343,15 @@ local function playCamera(
 		end
 	)
 
-	local stopped = false
 	local function stop()
 		if stopped then
 			return
 		end
 		stopped = true
+		if grade then
+			grade:Destroy()
+			grade = nil
+		end
 		if cameraGeneration ~= generation then
 			return -- (a newer cutscene has the camera)
 		end
@@ -307,6 +389,10 @@ local function playEvent(
 		SoundController.play("BatDraw", attacker)
 	elseif kind == "Plea" then
 		SoundController.play("VictimPlea", victim)
+	elseif kind == "Tap" then
+		SoundController.play("BatTap", victim)
+	elseif kind == "Taunt" then
+		SoundController.play("BrawlerTaunt", attacker)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
 	elseif kind == "Body" or kind == "Dig" or kind == "Stomp" then
@@ -317,8 +403,14 @@ local function playEvent(
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)
-		-- it goes all over him (and his bat)
-		BloodGush.splatter(attacker, victim:GetPivot().Position, 14, math.floor(event.time * 1000))
+		SoundController.play("BatImpact", victim)
+		-- it goes all over him, his face too, and the bat comes out red
+		local head = victim:FindFirstChild("Head")
+		local from = if head and head:IsA("BasePart")
+			then head.Position
+			else victim:GetPivot().Position
+		BloodGush.splatter(attacker, from, 26, math.floor(event.time * 1000))
+		KitEffects.bloodyBat(attacker)
 	elseif kind == "Gut" then
 		SoundController.play("KnockoutPunch", victim)
 		LiverRip.gut(victim, attacker)
@@ -373,10 +465,14 @@ local function onStarted(
 		local overrides = KIT_SHAKES[cinematic.id]
 		local shake = (overrides and overrides[event.kind]) or SHAKES[event.kind]
 		if shake then
-			table.insert(
-				shakes,
-				{ at = event.time, strength = shake.strength, punch = shake.punch }
-			)
+			table.insert(shakes, {
+				at = event.time,
+				strength = shake.strength,
+				punch = shake.punch,
+				freeze = shake.freeze,
+				decay = shake.decay,
+				flash = shake.flash,
+			})
 		end
 	end
 	local old = runs[attacker]

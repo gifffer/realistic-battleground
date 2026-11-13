@@ -696,6 +696,101 @@ function KitEffects.showBat(model: Model, duration: number)
 	holdProp(model, "Bat", duration)
 end
 
+-- The bat just went through a head: its barrel coated red (thick at the
+-- tip, thinning toward the handle, a few spots up the taper) and dripping
+-- real drops on the floor for a while. Goes with the bat.
+local BAT_BLOOD = Color3.fromRGB(96, 8, 8)
+local BAT_DRIP_TIME = 1.6 -- seconds it drips
+local BAT_DRIP_EVERY = 0.11
+function KitEffects.bloodyBat(model: Model)
+	local held: Model? = props[model]
+	if held == nil or held.Name ~= "Bat" then
+		return
+	end
+	local prop: Model = held
+	local barrel = prop:FindFirstChild("Barrel")
+	local tip = prop:FindFirstChild("Tip")
+	if not (barrel and barrel:IsA("BasePart") and tip and tip:IsA("BasePart")) then
+		return
+	end
+	local function coat(name: string, on: BasePart, shape: Enum.PartType, size: Vector3, at: CFrame)
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Shape = shape
+		part.Size = size
+		part.Material = Enum.Material.SmoothPlastic
+		part.Color = BAT_BLOOD
+		part.Reflectance = 0.08 -- (wet)
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.Massless = true
+		part.CastShadow = false
+		part.CFrame = on.CFrame * at
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = on
+		weld.Part1 = part
+		weld.Parent = part
+		part.Parent = prop
+	end
+	-- (a cylinder's axis is its X; along the barrel, -X goes toward the tip)
+	local width = barrel.Size.Y + 0.02
+	coat(
+		"BloodCoat",
+		barrel,
+		Enum.PartType.Cylinder,
+		Vector3.new(barrel.Size.X * 0.55, width, width),
+		CFrame.new(-barrel.Size.X * 0.225, 0, 0)
+	)
+	coat(
+		"BloodRing",
+		barrel,
+		Enum.PartType.Cylinder,
+		Vector3.new(0.12, width, width),
+		CFrame.new(barrel.Size.X * 0.12, 0, 0)
+	)
+	coat(
+		"BloodTip",
+		tip,
+		Enum.PartType.Ball,
+		tip.Size + Vector3.new(0.02, 0.02, 0.02),
+		CFrame.new()
+	)
+	local taper = prop:FindFirstChild("Taper")
+	if taper and taper:IsA("BasePart") then
+		local random = Random.new(17) -- (the same spots on every client)
+		for index = 1, 4 do
+			local angle = index * 1.7
+			local radius = taper.Size.Y / 2
+			coat(
+				"BloodSpot",
+				taper,
+				Enum.PartType.Block,
+				Vector3.new(random:NextNumber(0.06, 0.16), 0.02, random:NextNumber(0.05, 0.1)),
+				CFrame.new(random:NextNumber(-0.25, 0.25), 0, 0)
+					* CFrame.Angles(angle, 0, 0)
+					* CFrame.new(0, radius, 0)
+			)
+		end
+	end
+	-- Drops falling off the tip (Blood: they splash where they land), flung
+	-- a little the way the bat moves.
+	task.spawn(function()
+		local started = os.clock()
+		local last = tip.Position
+		while os.clock() - started < BAT_DRIP_TIME do
+			local waited = task.wait(BAT_DRIP_EVERY)
+			if props[model] ~= prop or tip.Parent == nil then
+				return
+			end
+			local now = tip.Position
+			local fling = (now - last) / math.max(waited, 1e-3) * 0.35
+			last = now
+			Blood.drop(now - Vector3.new(0, tip.Size.Y / 2, 0), fling, 0.05)
+		end
+	end)
+end
+
 -- Our move was refused by the server: take the prop back.
 function KitEffects.stopAction(model: Model)
 	swingToken[model] = (swingToken[model] or 0) + 1 -- (no more swings of it)
