@@ -2833,6 +2833,9 @@ end
 -- as it burns), the hole lit from inside, sparks and thick smoke pouring out
 -- of it. No blood (cauterized), no burn marks around it: the hole is the
 -- server's bore.
+-- Bodies whose fall a finisher already sounded (no second thud at death).
+local thudded: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
 local function pointBlank(attacker: Model, victim: Model, time: number, token: number)
 	local head = part(attacker, "Head")
 	local torso = part(victim, "Torso")
@@ -3380,7 +3383,8 @@ function KitVFX.finisherEvent(kind: string, attacker: Model, victim: Model, anch
 	elseif kind == "Toss" then
 		SoundController.play("HeavySwing", attacker)
 	elseif kind == "Thud" then
-		SoundController.play("BodySlam", victim)
+		SoundController.play("DeathFall", victim)
+		thudded[victim] = os.clock() -- (the death thud is this one)
 		local torso = part(victim, "Torso")
 		if torso then
 			local floor = floorAt(torso.Position)
@@ -3476,7 +3480,10 @@ function KitVFX.start()
 					if connection then
 						connection:Disconnect()
 					end
-					SoundController.play("DeathFall", model)
+					local thud = thudded[model]
+					if thud == nil or os.clock() - thud > 3 then
+						SoundController.play("DeathFall", model)
+					end
 				end
 			end)
 		end)
