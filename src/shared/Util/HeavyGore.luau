@@ -10,6 +10,7 @@
 --   "Fracture_<Limb>"   an open fracture: bone out of the forearm / shin
 --   "TeethOut"          teeth knocked out (they fly out when it is set)
 --   "JawBroken"         the jaw broken: the mouth torn open, crooked
+-- They stay until death (a kill's healing leaves them: Server/Combat).
 -- The torn limb itself leaves the body: it lies in workspace.TornLimbs, in a
 -- model of its own tagged HeavyGore.TAG (its "Limb" attribute = the limb,
 -- "Seed", "TornAt" = server time): the clients draw its torn end on it.
@@ -47,7 +48,7 @@ local LIMBS: { [string]: Limb } = {
 		arm = true,
 		stump = "ShoulderL",
 		limbEnd = "ArmEndL",
-		fracture = "ForearmBreak",
+		fracture = "ForearmBreakL",
 	},
 	RightLeg = {
 		part = "Right Leg",
@@ -63,7 +64,7 @@ local LIMBS: { [string]: Limb } = {
 		arm = false,
 		stump = "HipL",
 		limbEnd = "LegEndL",
-		fracture = "ShinBreak",
+		fracture = "ShinBreakL",
 	},
 }
 for _, limb in LIMBS do
@@ -79,6 +80,12 @@ end
 
 function HeavyGore.fractureAttribute(key: string): string
 	return HeavyGore.FRACTURE_PREFIX .. key
+end
+
+-- An open fracture in a leg of `model` (they limp: it never heals).
+function HeavyGore.hasLegFracture(model: Model): boolean
+	return model:GetAttribute(HeavyGore.FRACTURE_PREFIX .. "RightLeg") ~= nil
+		or model:GetAttribute(HeavyGore.FRACTURE_PREFIX .. "LeftLeg") ~= nil
 end
 
 -- "LimbTorn_RightArm" -> ("Torn", "RightArm"); nil for any other attribute.

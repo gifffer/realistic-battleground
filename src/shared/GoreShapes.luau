@@ -65,6 +65,8 @@ local GoreShapes = {
 		ForearmBreak = Vector3.new(165, 3, -14),
 		ShinBreak = Vector3.new(168, 3, -14),
 		JawBroken = Vector3.new(171, 3, -14),
+		ForearmBreakL = Vector3.new(174, 3, -14),
+		ShinBreakL = Vector3.new(177, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -147,6 +149,8 @@ local GoreShapes = {
 	fracture = {
 		"ForearmBreak",
 		"ShinBreak",
+		"ForearmBreakL",
+		"ShinBreakL",
 	},
 	jaw = {
 		"JawBroken",

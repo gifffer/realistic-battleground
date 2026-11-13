@@ -350,15 +350,21 @@ return table.freeze({
 		-- Legs torn off on a knock-out (the fighter may get up after): off,
 		-- legs only come off on a kill.
 		KO_TEAR_LEGS = false,
-		-- The plain finisher's killing blow: a limb torn off, a fracture,
-		-- the jaw broken (teeth out with it).
-		FINISHER_TEAR_CHANCE = 0.55,
-		FINISHER_FRACTURE_CHANCE = 0.5,
-		FINISHER_JAW_CHANCE = 0.45,
-		-- The Boxer's finisher: teeth out on the last punch to the face, and
-		-- this chance of a broken jaw on the kill.
-		COMBO_JAW_CHANCE = 0.6,
-		-- At most per body.
+		-- A finisher's killing blow, on top of its own gore: the chance of a
+		-- limb torn off, of an open fracture, of the jaw broken (teeth out
+		-- with it). "Plain": the kneeling strike (no cinematic, or a fighter
+		-- missing an arm for his). The cinematic ones (Shared/Finishers):
+		-- Bat (the head burst: no jaw left), ArmRip (the right arm torn
+		-- off: another limb at most), KnockoutCombo (teeth out on its last
+		-- punch to the face, the liver), Incinerate (the heart).
+		FINISHER_GORE = table.freeze({
+			Plain = table.freeze({ tear = 0.55, fracture = 0.5, jaw = 0.45 }),
+			Bat = table.freeze({ tear = 0.45, fracture = 0.4, jaw = 0 }),
+			ArmRip = table.freeze({ tear = 0.3, fracture = 0.4, jaw = 0 }),
+			KnockoutCombo = table.freeze({ tear = 0, fracture = 0.35, jaw = 0.6 }),
+			Incinerate = table.freeze({ tear = 0.35, fracture = 0.4, jaw = 0 }),
+		}) :: { [string]: { tear: number, fracture: number, jaw: number } },
+		-- At most per body (the Bouncer's torn arm counts).
 		MAX_TORN_LIMBS = 2,
 		MAX_FRACTURES = 2,
 		-- A torn limb flies off (studs/s), then lies there this long.

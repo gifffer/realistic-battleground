@@ -54,6 +54,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
 local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
+local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -602,11 +603,14 @@ local function addShards(victim: CombatState, attacker: CombatState, zone: strin
 	end
 end
 
--- A kill (or nothing at all, see onKill): every injury is healed.
+-- A kill (or nothing at all, see onKill): every injury is healed. Not the
+-- heavy hits' gore (HeavyGore: a torn limb, an open fracture, teeth and
+-- jaw stay until death), nor the limp of a broken shin.
 local function healInjuries(state: CombatState)
+	local limping = HeavyGoreUtil.hasLegFracture(state.model)
 	state.legDamage = 0
-	state.limping = false
-	setAttribute(state.model, "Limping", false)
+	state.limping = limping
+	setAttribute(state.model, "Limping", limping)
 	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
 		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
@@ -1476,6 +1480,13 @@ end
 local CHARGE_TURNS = { 0, 45, -45, 90, -90, 135, -135, 180 } -- degrees
 local LANE_END = -24 -- anchor Z where the top half may land, at most
 
+-- What the finishers' placement looks past: the two fighters, the torn
+-- limbs lying around (HeavyGore: not walls).
+local function placementIgnore(attacker: Model, victim: Model): { Instance }
+	local limbs = workspace:FindFirstChild(HeavyGoreUtil.FOLDER)
+	return if limbs then { attacker, victim, limbs } else { attacker, victim }
+end
+
 local function chargePlacement(attacker: Model, victim: Model, root: BasePart): (CFrame?, number)
 	local RUN = Finishers.CHARGE
 	local victimRoot = victim:FindFirstChild("HumanoidRootPart")
@@ -1486,13 +1497,14 @@ local function chargePlacement(attacker: Model, victim: Model, root: BasePart): 
 	toward = if toward.Magnitude > 0.1
 		then toward.Unit
 		else Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+	local ignore = placementIgnore(attacker, victim)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { attacker, victim }
+	params.FilterDescendantsInstances = ignore
 	params.RespectCanCollide = true
 	local overlap = OverlapParams.new()
 	overlap.FilterType = Enum.RaycastFilterType.Exclude
-	overlap.FilterDescendantsInstances = { attacker, victim }
+	overlap.FilterDescendantsInstances = ignore
 	overlap.RespectCanCollide = true
 	-- (someone standing in the way doesn't count: only the map)
 	local function onBody(part: BasePart): boolean
@@ -1599,13 +1611,14 @@ local function startCinematic(
 			table.insert(candidates, past:Cross(Vector3.new(0, 1, 0)))
 			table.insert(candidates, -past:Cross(Vector3.new(0, 1, 0)))
 		end
+		local ignore = placementIgnore(state.model, target)
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = { state.model, target }
+		params.FilterDescendantsInstances = ignore
 		params.RespectCanCollide = true
 		local overlap = OverlapParams.new()
 		overlap.FilterType = Enum.RaycastFilterType.Exclude
-		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.FilterDescendantsInstances = ignore
 		overlap.RespectCanCollide = true
 		-- Where he'd stand (his feet on the floor there, if there is one).
 		local function standingAt(direction: Vector3): Vector3
@@ -1692,13 +1705,14 @@ local function startCinematic(
 		local body = if torso and torso:IsA("BasePart") then torso.Position else victimRoot.Position
 		local toward = Vector3.new(body.X - root.Position.X, 0, body.Z - root.Position.Z)
 		toward = if toward.Magnitude > 0.1 then toward.Unit else root.CFrame.LookVector
+		local ignore = placementIgnore(state.model, target)
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = { state.model, target }
+		params.FilterDescendantsInstances = ignore
 		params.RespectCanCollide = true
 		local overlap = OverlapParams.new()
 		overlap.FilterType = Enum.RaycastFilterType.Exclude
-		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.FilterDescendantsInstances = ignore
 		overlap.RespectCanCollide = true
 		-- The floor's height under `at` (y of a root standing there), or nil.
 		local function floorUnder(at: Vector3): number?
@@ -1949,9 +1963,6 @@ local function startCinematic(
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
-				if random:NextNumber() < Config.HeavyGore.COMBO_JAW_CHANCE then
-					HeavyGore.jaw(target)
-				end
 			elseif cinematic.id == "Incinerate" then
 				-- (every client lets the hole smoke and cool down, from when
 				-- the beam stopped: KitVFX, bodies seen later too)
@@ -1978,6 +1989,12 @@ local function startCinematic(
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
 			end
+			-- On top of its own: a limb torn off, a fracture, the jaw
+			-- (HeavyGore: rare, each finisher its own chances).
+			local chances = Config.HeavyGore.FINISHER_GORE[cinematic.id]
+			if chances then
+				HeavyGore.finisherKill(target, root.Position, chances)
+			end
 		end
 		-- (the attacker stays held until the end of the cutscene)
 	end)
@@ -1988,6 +2005,27 @@ end
 function Combat.isInCinematic(model: Model): boolean
 	local state = states[model]
 	return state ~= nil and now() < state.cinematicUntil
+end
+
+-- Can this cinematic be played on these two? Every one needs both his
+-- hands (the bat, the punches and the liver, the grip on the arm, the hand
+-- on the throat), the Bouncer's the victim's right arm too: one of them torn
+-- off (HeavyGore, a knock-out he got up from), the plain finisher instead.
+local function cinematicFits(
+	attacker: Model,
+	victim: Model,
+	cinematic: Finishers.Cinematic
+): boolean
+	if
+		attacker:FindFirstChild("Right Arm") == nil
+		or attacker:FindFirstChild("Left Arm") == nil
+	then
+		return false
+	end
+	if cinematic.id == "ArmRip" then
+		return victim:FindFirstChild("Right Arm") ~= nil and victim:GetAttribute("ArmTorn") == nil
+	end
+	return true
 end
 
 -- Finisher on a KO'd fighter: kneel and strike; the victim dies at impact
@@ -2005,6 +2043,10 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	-- ledge), the plain finisher instead; nobody is moved.
 	local charge: CFrame? = nil
 	local short = 0
+	if cinematic and not cinematicFits(state.model, target, cinematic) then
+		finisher = Kits.finisher(nil)
+		cinematic = nil
+	end
 	if cinematic and cinematic.placement == "charge" then
 		charge, short = chargePlacement(state.model, target, state.root)
 		if charge == nil then
@@ -2038,7 +2080,11 @@ local function startFinisher(state: CombatState, target: Model): boolean
 		Knockout.finish(target, state.model)
 		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
 		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
-			HeavyGore.finisherKill(target, state.root.Position)
+			HeavyGore.finisherKill(
+				target,
+				state.root.Position,
+				Config.HeavyGore.FINISHER_GORE.Plain
+			)
 		end
 	end)
 	return true

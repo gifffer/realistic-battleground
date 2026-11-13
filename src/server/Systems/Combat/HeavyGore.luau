@@ -6,19 +6,22 @@
 --   • a heavy blow that KNOCKS OUT: to the head, teeth knocked out; to the
 --     body / legs, the arm / leg on that side torn off (legs: off by
 --     default, they may get up) or an open fracture;
---   • the plain finisher's killing blow: a limb torn off, a fracture, the
+--   • a finisher's killing blow (the plain one and each cinematic one,
+--     Config.HeavyGore.FINISHER_GORE): a limb torn off, a fracture, the
 --     jaw broken;
---   • the Boxer's finisher: teeth out on its last punch to the face, maybe
---     the jaw broken on the kill.
--- Caps per body (MAX_TORN_LIMBS, MAX_FRACTURES); everything goes with the
--- body (the torn limb after TORN_LIMB_TIME).
+--   • the Boxer's finisher: teeth out on its last punch to the face.
+-- Caps per body (MAX_TORN_LIMBS, MAX_FRACTURES). It stays until death (a
+-- limb doesn't grow back, an open fracture doesn't close: a kill's healing
+-- leaves it), then goes with the body (the torn limb after TORN_LIMB_TIME).
 --
--- A torn limb leaves the body (it can't be dragged along when they get up,
--- nor hit): it flies off in a model of its own (a Humanoid in it: the
--- shirt / pants still show on it), tagged HeavyGoreUtil.TAG.
+-- A torn limb leaves the body (it can't be dragged along when they get up):
+-- it flies off in a model of its own (a dead Humanoid in it: the shirt /
+-- pants still show on it, the hitboxes skip it), tagged HeavyGoreUtil.TAG,
+-- in workspace.TornLimbs (the aim and the finishers' placement leave that
+-- folder out). It only collides with the map (the dead bodies' group).
 --
 --   HeavyGore.knockoutBlow(victim, from, zone, side) -> brokeLeg
---   HeavyGore.finisherKill(victim, from)
+--   HeavyGore.finisherKill(victim, from, chances)
 --   HeavyGore.teeth(victim)
 --   HeavyGore.jaw(victim)
 
@@ -28,12 +31,16 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Destruction = require(script.Parent.Parent.Destruction)
 
 local G = Config.HeavyGore
 local LIMBS = HeavyGoreUtil.LIMBS
 local KEYS = HeavyGoreUtil.KEYS
 
 local HeavyGore = {}
+
+-- A finisher's chances (Config.HeavyGore.FINISHER_GORE).
+export type Chances = { tear: number, fracture: number, jaw: number }
 
 local random = Random.new()
 
@@ -46,7 +53,11 @@ local function seed(): number
 end
 
 local function count(victim: Model, attribute: (string) -> string): number
-	local total = 0
+	-- (the Bouncer's torn arm counts as a torn limb)
+	local total = if attribute == HeavyGoreUtil.tornAttribute
+			and victim:GetAttribute("ArmTorn") ~= nil
+		then 1
+		else 0
 	for _, key in KEYS do
 		if victim:GetAttribute(attribute(key)) ~= nil then
 			total += 1
@@ -123,13 +134,24 @@ local function tearLimb(victim: Model, key: string, from: Vector3): boolean
 	humanoid.RequiresNeck = false
 	humanoid.EvaluateStateMachine = false
 	humanoid.Parent = holder
+	-- (dead: Hitbox.query only takes living ones)
+	humanoid.Health = 0
 	for _, item in victim:GetChildren() do
 		if item:IsA("Clothing") then
 			item:Clone().Parent = holder
+		elseif item:IsA("Accessory") then
+			-- worn on that limb: goes with it (else, still welded to it, it
+			-- would pull it back with the body when it gets up)
+			local handle = item:FindFirstChild("Handle")
+			local weld = if handle then handle:FindFirstChildWhichIsA("JointInstance") else nil
+			if weld and (weld.Part0 == part or weld.Part1 == part) then
+				item.Parent = holder
+			end
 		end
 	end
+	-- (solid on the map, not on fighters: the dead bodies' group)
+	part.CollisionGroup = Destruction.DEAD_GROUP
 	part.CanCollide = true
-	part.CanQuery = false -- (out of the hitboxes and the aim)
 	part.CanTouch = false
 	part.Massless = false
 	part.Anchored = false
@@ -223,14 +245,14 @@ function HeavyGore.knockoutBlow(
 	return false
 end
 
--- The plain finisher's killing blow (the body is dead).
-function HeavyGore.finisherKill(victim: Model, from: Vector3)
+-- A finisher's killing blow (the body is dead), with these `chances`.
+function HeavyGore.finisherKill(victim: Model, from: Vector3, chances: Chances)
 	if not enabled() then
 		return
 	end
 	local start = random:NextInteger(1, #KEYS)
 	local torn: string? = nil
-	if random:NextNumber() < G.FINISHER_TEAR_CHANCE then
+	if random:NextNumber() < chances.tear then
 		for offset = 0, #KEYS - 1 do
 			local key = KEYS[(start + offset - 1) % #KEYS + 1]
 			if tearLimb(victim, key, from) then
@@ -239,7 +261,7 @@ function HeavyGore.finisherKill(victim: Model, from: Vector3)
 			end
 		end
 	end
-	if random:NextNumber() < G.FINISHER_FRACTURE_CHANCE then
+	if random:NextNumber() < chances.fracture then
 		for offset = 1, #KEYS do
 			local key = KEYS[(start + offset - 1) % #KEYS + 1]
 			if key ~= torn and fracture(victim, key) then
@@ -247,7 +269,7 @@ function HeavyGore.finisherKill(victim: Model, from: Vector3)
 			end
 		end
 	end
-	if random:NextNumber() < G.FINISHER_JAW_CHANCE then
+	if random:NextNumber() < chances.jaw then
 		HeavyGore.jaw(victim)
 	end
 end

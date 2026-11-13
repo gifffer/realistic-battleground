@@ -39,6 +39,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local CombatClips = require(script.Parent.Parent.Animation.CombatClips)
 local MovementClips = require(script.Parent.Parent.Animation.MovementClips)
 local R6Pose = require(script.Parent.Parent.Animation.R6Pose)
@@ -758,9 +759,10 @@ local function track(model: Model, owner: Player?)
 	end
 	local humanoid = model:WaitForChild("Humanoid", 10)
 	local root = model:WaitForChild("HumanoidRootPart", 10)
-	-- Joints are created with the parts; wait for the last one we need.
+	-- Joints are created with the parts; wait for the last one we need
+	-- (unless that leg was torn off: HeavyGore).
 	local torso = model:WaitForChild("Torso", 10)
-	if torso then
+	if torso and model:GetAttribute(HeavyGoreUtil.tornAttribute("LeftLeg")) == nil then
 		torso:WaitForChild("Left Hip", 10)
 	end
 	if
@@ -773,6 +775,7 @@ local function track(model: Model, owner: Player?)
 	then
 		return
 	end
+	-- (a limb torn off, HeavyGore: its joint is gone, the rest still moves)
 	local motors = R6Pose.findMotors(model)
 	if motors == nil then
 		return -- not an R6 character: leave it to Roblox

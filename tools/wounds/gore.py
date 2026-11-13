@@ -74,10 +74,12 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
              MuscleDark), the raw inside, fat, skin, blood
   ArmEndL / ShoulderL / LegEndL / HipL   the same on the left: mirrored
   ForearmBreak / ShinBreak   open fractures (R6 arm / leg space): the real
-             radius and ulna / tibia and fibula snapped obliquely, the upper
-             fragment's splintered end out of the front face (Bone), the
-             skin torn round it (Skin), its swollen raw edge (Flesh), the
-             hole (FleshDark), torn muscle, fat, blood running down
+             radius and ulna / tibia and fibula both snapped obliquely, the
+             upper fragments' splintered shafts out of the front face at two
+             angles (Bone), the skin torn round them (Skin), its swollen raw
+             edge (Flesh), the hole (FleshDark), torn muscle, fat, blood
+             running down
+  ForearmBreakL / ShinBreakL   the same on the left: mirrored
   JawBroken  the jaw broken (head space): the mouth torn open, crooked
              (FleshDark), torn lips (Muscle, MuscleDark), the real teeth,
              some knocked out or loose, the lower ones pushed aside (Tooth),
@@ -1296,43 +1298,104 @@ def ring_tube(rng, centre, rx, ry, depth, radius, segments=28, sides=6):
     return bm
 
 
-def open_fracture(rng, bones, break_y, tilt, out=0.3, thick=1.35):
-    """An open fracture in an R6 limb (1 x 2 x 1, its centre the origin):
-    the real pair of bones (`bones`, their middle at the origin; `thick`:
-    scaled up to read in the game) snapped obliquely at `break_y`, the upper
-    fragment's sharp, splintered end pushed out of the front face (-Z) by
-    `out` studs, tilted `tilt` radians; round it the skin torn open and
-    lifted, the swollen raw edge, the fat, torn muscle, blood running down.
-    {layer: bmesh}."""
-    bone = bones
+def split_bones(bm):
+    """The two largest loose parts of `bm` (the radius and the ulna, the
+    tibia and the fibula), each its own bmesh; stray bits dropped."""
+    bm.verts.index_update()
+    seen, parts = set(), []
+    for v in bm.verts:
+        if v.index in seen:
+            continue
+        seen.add(v.index)
+        stack, part = [v], []
+        while stack:
+            a = stack.pop()
+            part.append(a.index)
+            for e in a.link_edges:
+                b = e.other_vert(a)
+                if b.index not in seen:
+                    seen.add(b.index)
+                    stack.append(b)
+        parts.append(set(part))
+    parts.sort(key=len, reverse=True)
+    out = []
+    for keep in parts[:2]:
+        copy = bm_copy(bm)
+        bmesh.ops.delete(copy, geom=[v for i, v in enumerate(copy.verts) if i not in keep], context="VERTS")
+        copy.normal_update()
+        out.append(copy)
+    return out
+
+
+def snapped_shaft(rng, bone, break_y, tilt, out, shift, thick, length=1.05):
+    """One long bone (`bone`, its middle at the origin, along Y) snapped
+    obliquely at `break_y`: the upper fragment, `length` long, its sharp,
+    splintered end pushed `out` studs out of the front face (-Z), tilted
+    `tilt` radians, moved `shift` along X. The rest kept inside the limb.
+    (bone, its tip, where it comes through the skin)."""
     bmesh.ops.scale(bone, vec=(thick, thick, thick), verts=bone.verts)
     bmesh.ops.translate(bone, vec=(0, break_y, 0), verts=bone.verts)
     # an oblique break: its sharp end toward the front (where it comes out)
-    normal = Vector((rng.uniform(-0.2, 0.2), -1.0, 1.1)).normalized()
+    normal = Vector((rng.uniform(-0.25, 0.25), -1.0, rng.uniform(0.9, 1.3))).normalized()
     at = Vector((0, break_y, 0))
-    cut(bone, [(at, normal), ((0, break_y + 0.9, 0), (0, 1, 0))], fill=True)
+    cut(bone, [(at, normal), ((0, break_y + length, 0), (0, 1, 0))], fill=True)
     phase = rng.uniform(0, 6.3)
     for v in bone.verts:  # splintered: long and short spikes on the broken end
         d = (v.co - at).dot(normal)
-        if d > -0.05:
+        if d > -0.06:
             spike = 0.5 + 0.5 * math.sin(v.co.x * 61 + phase) * math.sin(v.co.z * 47 + phase)
-            v.co += normal * 0.07 * spike * (1 + d / 0.05) + Vector((0, 0, rng.uniform(-0.01, 0.01)))
+            v.co += normal * 0.13 * spike * (1 + d / 0.06) + Vector((0, 0, rng.uniform(-0.015, 0.015)))
     bone.normal_update()
     # pulled out: turned about a point up the shaft, the end to the front
-    pivot = Vector((0, break_y + 0.4, 0))
+    pivot = Vector((0, break_y + length * 0.6, 0))
     turn = Matrix.Translation(pivot) @ Matrix.Rotation(tilt, 4, "X") @ Matrix.Translation(-pivot)
     bmesh.ops.transform(bone, matrix=turn, verts=bone.verts)
     tip = min(v.co.z for v in bone.verts)
-    bmesh.ops.translate(bone, vec=(0, 0, (-0.5 - out) - tip), verts=bone.verts)
+    bmesh.ops.translate(bone, vec=(shift, 0, (-0.5 - out) - tip), verts=bone.verts)
     # (what would come out anywhere else: away)
     cut(bone, [((0, 0, 0.47), (0, 0, 1)), ((0.47, 0, 0), (1, 0, 0)), ((-0.47, 0, 0), (-1, 0, 0)),
                ((0, 0.97, 0), (0, 1, 0)), ((0, -0.97, 0), (0, -1, 0))], fill=True)
     bone.normal_update()
-    # where it goes through the skin
-    crossing = [v.co for v in bone.verts if -0.53 < v.co.z < -0.47] or [Vector((0, break_y, -0.5))]
-    centre = sum(crossing, Vector()) / len(crossing)
-    ex, ey = centre.x, centre.y - 0.03
-    rx, ry = 0.15, 0.2
+    tip = min((v.co for v in bone.verts), key=lambda co: co.z).copy()
+    crossing = [v.co for v in bone.verts if -0.54 < v.co.z < -0.46]
+    exit_at = sum(crossing, Vector()) / len(crossing) if crossing else Vector((shift, break_y, -0.5))
+    return bone, tip, exit_at
+
+
+def open_fracture(rng, bones, break_y, tilt, out=0.5, thick=1.2):
+    """An open fracture in an R6 limb (1 x 2 x 1, its centre the origin):
+    the real pair of long bones (`bones`, their middle at the origin;
+    `thick`: scaled up to read in the game) snapped obliquely at `break_y`,
+    each upper fragment's sharp, splintered shaft out through the front
+    face (-Z), the larger one `out` studs, the other less, at another
+    angle (two broken bones, apart); round them the skin torn open and
+    lifted, the swollen raw edge, the fat, torn muscle, blood running down.
+    {layer: bmesh}."""
+    pair = split_bones(bones)
+    shafts, coated, exits = [], [], []
+    for i, bone in enumerate(pair):
+        x = sum((v.co.x for v in bone.verts), 0.0) / max(1, len(bone.verts))
+        side = 1 if x >= 0 else -1
+        shaft, tip, exit_at = snapped_shaft(
+            rng, bone,
+            break_y + (0 if i == 0 else rng.uniform(0.08, 0.16)),
+            tilt * (1.0 if i == 0 else rng.uniform(0.7, 0.82)),
+            out * (1.0 if i == 0 else rng.uniform(0.55, 0.7)),
+            side * 0.05, thick)
+        shafts.append(shaft)
+        exits.append(exit_at)
+        # blood down its underside, from the skin most of the way to the tip
+        under = Vector((0, -0.04, 0))
+        coated.append(rod(exit_at + under, exit_at.lerp(tip, 0.75) + under, 0.04, 0.02, 7))
+    bone = bm_join_all(shafts)
+    for b in shafts:
+        b.free()
+    # where they go through the skin: the hole round both
+    lo = Vector((min(e.x for e in exits), min(e.y for e in exits), 0))
+    hi = Vector((max(e.x for e in exits), max(e.y for e in exits), 0))
+    ex, ey = (lo.x + hi.x) / 2, (lo.y + hi.y) / 2 - 0.03
+    rx = min(0.25, max(0.15, (hi.x - lo.x) / 2 + 0.12))
+    ry = min(0.3, max(0.2, (hi.y - lo.y) / 2 + 0.14))
     face = -0.5
 
     def on_face(a, k=1.0, depth=0.0):
@@ -1383,6 +1446,7 @@ def open_fracture(rng, bones, break_y, tilt, out=0.3, thick=1.35):
         blood.append(rod(start, end, 0.018, 0.01, 6))
         blood.append(blob(rng, end, (0.022, 0.03, 0.01), 8, 6))
     blood.append(blob(rng, (ex, ey - ry * 0.45, face - 0.01), (rx * 0.6, ry * 0.4, 0.008), 12, 6, 0.003))
+    blood += coated
     return {
         "Bone": bm_join_all([bone] + chips),
         "FleshDark": hole,
@@ -1526,8 +1590,14 @@ def heavy_gore(rng_seed, anatomy, piece):
         for bm in layers.values():
             bm.free()
     limbs = load_limbs()
-    piece("ForearmBreak", open_fracture(random.Random(rng_seed + 1), limbs["forearm"][0], -0.4, math.radians(52), 0.28),
-          "fracture")
-    piece("ShinBreak", open_fracture(random.Random(rng_seed + 2), limbs["shin"][0], -0.45, math.radians(62), 0.3, 1.1),
-          "fracture")
+    forearm = open_fracture(random.Random(rng_seed + 1), limbs["forearm"][0], -0.4, math.radians(40), 0.5, 1.25)
+    shin = open_fracture(random.Random(rng_seed + 2), limbs["shin"][0], -0.45, math.radians(44), 0.5, 1.05)
+    # (the left ones: mirrored now, the kit takes the right ones' meshes)
+    forearm_left, shin_left = mirrored(forearm), mirrored(shin)
+    piece("ForearmBreak", forearm, "fracture")
+    piece("ShinBreak", shin, "fracture")
     piece("JawBroken", broken_jaw(random.Random(rng_seed + 3), anatomy), "jaw")
+    # the left forearm and shin (after the jaw: the pieces above keep their
+    # slots)
+    piece("ForearmBreakL", forearm_left, "fracture")
+    piece("ShinBreakL", shin_left, "fracture")
