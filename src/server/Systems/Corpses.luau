@@ -22,6 +22,8 @@
 -- replaced by a fresh one if the body is still whole when it is removed.
 --
 --   Corpses.track(model)   a player's body was just finished off (Knockout)
+--   Corpses.onCopy(fn)     fn(copy, original) once a copy is in the game
+--                          (Combat: the bone of a torn arm, still takeable)
 
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
@@ -46,6 +48,7 @@ type Entry = {
 
 local entries: { [Model]: Entry } = {}
 local folder: Folder? = nil
+local copyCallbacks: { (copy: Model, original: Model) -> () } = {}
 
 local function corpseFolder(): Folder
 	local current = folder
@@ -203,7 +206,16 @@ local function release(entry: Entry)
 	if corpse then
 		corpse.Parent = corpseFolder()
 		Debris:AddItem(corpse, left)
+		for _, callback in copyCallbacks do
+			task.spawn(callback, corpse, entry.model)
+		end
 	end
+end
+
+-- `callback(copy, original)` each time a copy takes a body's place (it is
+-- in the game then; the original is being removed).
+function Corpses.onCopy(callback: (copy: Model, original: Model) -> ())
+	table.insert(copyCallbacks, callback)
 end
 
 function Corpses.track(model: Model)
