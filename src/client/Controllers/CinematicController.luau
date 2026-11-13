@@ -25,6 +25,7 @@ local TweenService = game:GetService("TweenService")
 
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local ArmRip = require(script.Parent.Parent.Combat.ArmRip)
@@ -365,6 +366,18 @@ local function playCamera(
 	return stop
 end
 
+-- The clip a kit's attacker plays for cinematic `id` (its finisher's
+-- animation), or nil.
+local function finisherClip(id: string): string?
+	for _, kit in Kits.list() do
+		local finisher = kit.finisher
+		if finisher and finisher.cinematic == id then
+			return finisher.animation
+		end
+	end
+	return nil
+end
+
 -- The effects of one moment of the timeline (every client).
 local function playEvent(
 	cinematic: Finishers.Cinematic,
@@ -385,14 +398,18 @@ local function playEvent(
 				away = other.time
 			end
 		end
-		-- (the bat turns in his fist with his clip's "Grip": the wrists
-		-- cocking and releasing through the swing)
-		local clip = CharacterAnimationController.getLastAction(attacker)
-		KitEffects.showBat(attacker, away - event.time, function(): CFrame?
-			return if clip
-				then CharacterAnimationController.getActionPose(attacker, clip, "Grip")
-				else nil
-		end)
+		-- (the bat turns in his fist with his finisher clip's "Grip": the
+		-- wrists cocking and releasing through the swing; read by name, not
+		-- from his last action, which another clip can take over)
+		local clip = finisherClip(cinematic.id)
+		local grip: (() -> CFrame?)? = nil
+		if clip then
+			local name: string = clip
+			grip = function(): CFrame?
+				return CharacterAnimationController.getActionPose(attacker, name, "Grip")
+			end
+		end
+		KitEffects.showBat(attacker, away - event.time, grip)
 		SoundController.play("BatDraw", attacker)
 	elseif kind == "Plea" then
 		SoundController.play("VictimPlea", victim)

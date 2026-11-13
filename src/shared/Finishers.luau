@@ -230,8 +230,9 @@ local cinematics: { [string]: Cinematic } = {
 			{ time = 0.9, kind = "Tap" },
 			{ time = 1.16, kind = "Tap" },
 			{ time = 1.25, kind = "Taunt" }, -- (resting there: he mocks them)
-			-- the golf swing: address 1.52, top 2.3, downswing from 2.36
-			{ time = 2.38, kind = "Swing" },
+			-- the golf swing: address 1.52, top 2.29 (the hips already turning
+			-- back), the bat turns over at 2.35; the whoosh as it speeds up
+			{ time = 2.46, kind = "Swing" },
 			{ time = 2.62, kind = "Kill" }, -- (the barrel through the head, full speed)
 			{ time = 4.25, kind = "PropAway" },
 		},
