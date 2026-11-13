@@ -1044,9 +1044,13 @@ local function blowHead(victim: Model)
 	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
 end
 
--- The Boxer's finisher: the liver torn out under the right ribs. A "Tear"
--- cut (Gashes draws the hole, broken ribs in it, through the clothes).
-local function tearLiverOut(victim: Model)
+-- The Boxer's finisher: the hand goes in under the right ribs ("Gut"), the
+-- liver is torn out. A "Tear" cut at Finishers.LIVER_WOUND (Gashes draws
+-- the hole, broken ribs in it, through the clothes): a free slot, else over
+-- the first cut. Its old value (or false) is written in `before` once, to be
+-- put back if the finisher is cut short before the kill. Returns the
+-- attribute it set.
+local function tearLiverOut(victim: Model, before: { [string]: any }): string
 	local index = 1
 	for candidate = 1, Gash.MAX_PER_PART do
 		if victim:GetAttribute(Gash.attribute("Torso", candidate)) == nil then
@@ -1054,17 +1058,23 @@ local function tearLiverOut(victim: Model)
 			break
 		end
 	end
+	local name = Gash.attribute("Torso", index)
+	if before[name] == nil then
+		local old = victim:GetAttribute(name)
+		before[name] = if old == nil then false else old
+	end
 	setAttribute(
 		victim,
-		Gash.attribute("Torso", index),
+		name,
 		Gash.encode({
 			kind = "Tear",
 			size = "L",
-			point = Vector3.new(0.5, -0.3, -0.5), -- its right, under the ribs, in front
+			point = Finishers.LIVER_WOUND,
 			angle = 0,
 			seed = random:NextInteger(1, 2 ^ 30),
 		})
 	)
+	return name
 end
 
 -- The Bull's finisher: his horns go into the ribcage. One big "Tear" (two
@@ -1893,6 +1903,28 @@ local function startCinematic(
 			end
 		end)
 	end
+	-- (the Boxer's: the hole opens as the hand goes in, "Gut"; cut short
+	-- before the kill, it closes again)
+	local liverAttribute: string? = nil
+	if cinematic.id == "KnockoutCombo" then
+		local gutAt = cinematic.kill
+		for _, event in cinematic.events do
+			if event.kind == "Gut" then
+				gutAt = event.time
+			end
+		end
+		task.delay(math.min(gutAt, cinematic.kill), function()
+			if
+				not over
+				and liverAttribute == nil
+				and target.Parent
+				and state.attackToken == token
+				and isAlive(state)
+			then
+				liverAttribute = tearLiverOut(target, woundsBefore)
+			end
+		end)
+	end
 	task.delay(cinematic.kill, function()
 		if over then
 			return
@@ -1918,7 +1950,9 @@ local function startCinematic(
 			if cinematic.id == "Bat" then
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
-				tearLiverOut(target)
+				if liverAttribute == nil then
+					liverAttribute = tearLiverOut(target, woundsBefore)
+				end
 			elseif cinematic.id == "Incinerate" then
 				-- (every client lets the hole smoke and cool down, from when
 				-- the beam stopped: KitVFX, bodies seen later too)
@@ -1944,6 +1978,11 @@ local function startCinematic(
 			elseif cinematic.id == "Gore" then
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
+			end
+		elseif cinematic.id == "KnockoutCombo" then
+			-- (it didn't die after all: no hole left in a living body)
+			for attribute, previous in woundsBefore do
+				setAttribute(target, attribute, if previous == false then nil else previous)
 			end
 		end
 		-- (the attacker stays held until the end of the cutscene)

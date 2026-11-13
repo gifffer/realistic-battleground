@@ -24,6 +24,7 @@
 --                                 part in the workspace
 --   Squish.soft(part, options)   `part`: the piece (its welded children
 --                                 squash with it)
+--   Squish.squeeze(part, along, amount)  squashed by a hand closing on it
 
 local RunService = game:GetService("RunService")
 
@@ -140,6 +141,23 @@ function Squish.soft(part: BasePart, options: Options?)
 		lastAlong = 1,
 		lastNormal = Vector3.yAxis,
 	})
+end
+
+-- Squeezes a soft piece (`part`, given to `soft`) along the world
+-- direction `along`: it squashes by `amount` (0.3 = a lot) and wobbles back
+-- (a fist closing on it). Does nothing if it isn't soft (any more).
+function Squish.squeeze(part: BasePart, along: Vector3, amount: number)
+	if along.Magnitude < 1e-3 then
+		return
+	end
+	for _, soft in softs do
+		if soft.root == part then
+			soft.normal = along.Unit
+			soft.offset = -math.clamp(amount, 0, 0.6)
+			soft.speed = 0
+			return
+		end
+	end
 end
 
 -- The local axis of `frame` closest to the world direction `n`.
