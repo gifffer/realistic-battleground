@@ -36,7 +36,7 @@ local kit: KitTypes.KitDef = {
 		{
 			id = "HeatVision",
 			name = "HEAT VISION",
-			description = "Eyes glow, then burn straight ahead. Only hurts those who stay in it.",
+			description = "Eyes glow, then burn straight ahead. Only burns a head that stays in it: the body blocks it.",
 			animation = "Sentinel_HeatVision",
 			duration = 3.15,
 			cooldown = 12,
@@ -52,6 +52,7 @@ local kit: KitTypes.KitDef = {
 				hit = {
 					at = 0,
 					damage = 3.5,
+					zone = "Head", -- (only the head burns: an arm, the chest in the way block it)
 					stun = 0.12,
 					hitbox = Vector3.zero, -- (the beam has its own)
 					blockCost = 3, -- (per tick: blocking the whole beam ≈ 18 stamina)
