@@ -32,3 +32,17 @@ to where the wounds are, decimated and moved into the R6 torso's space:
   the **hip bones** and the **sacrum**.
 
 The derived pieces are shared alike under the same licence, with this credit.
+
+`limbs.npz` holds, also from **Z-Anatomy** (CC BY-SA 4.0), taken from Z-Anatomy's `Startup.blend` by
+`tools/wounds/extract_limbs.py`, decimated and moved into the R6 limbs' and torso's spaces, for the
+heavy hits' gore: the right **radius** and **ulna**, **tibia** and **fibula** (the open fractures:
+`Gore_ForearmBreak_*`, `Gore_ShinBreak_*`), the right **femur** and the muscles of the thigh
+(**rectus femoris**, **vastus lateralis, medialis and intermedius**, **sartorius**, **gracilis**,
+**adductor longus, brevis and magnus**, **biceps femoris** (long head), **semitendinosus**,
+**semimembranosus**, **tensor fasciae latae**) for the leg torn off (`Gore_LegEnd*_*`), the right
+**hip bone** round its socket and the muscles round the hip joint (**gluteus maximus, medius and
+minimus**, **iliacus**, **psoas major**, **pectineus**, **quadratus femoris**, the tops of the
+adductors, rectus femoris, sartorius and tensor fasciae latae) for what stays on the body
+(`Gore_Hip*_*`). The left side's pieces are the right ones mirrored. The broken jaw
+(`Gore_JawBroken_*`) uses the teeth of `head.npz`. The derived pieces are shared alike under the
+same licence, with this credit.

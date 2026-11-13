@@ -333,6 +333,43 @@ return table.freeze({
 		HURT_SOUND_HEALTH = 70,
 	}),
 
+	-- Gore of the very strong hits (Shared/Util/HeavyGore): RARE. Only a heavy
+	-- blow that KNOCKS OUT (and the finishers), never a plain hit. Decided by
+	-- the server, drawn on every client. Off with Injuries.SKIN_TEAR too.
+	HeavyGore = table.freeze({
+		ENABLED = true,
+		-- A knock-out blow counts as heavy at this damage or more (or the
+		-- 4th M1, or a blow that knocks down / launches).
+		HEAVY_DAMAGE = 9,
+		-- A heavy knock-out blow to the head: teeth knocked out.
+		KO_TEETH_CHANCE = 0.6,
+		-- To the body (the arm on that side) or the legs: the limb torn off,
+		-- else an open fracture (bone out of the forearm / shin).
+		KO_TEAR_CHANCE = 0.12,
+		KO_FRACTURE_CHANCE = 0.3,
+		-- Legs torn off on a knock-out (the fighter may get up after): off,
+		-- legs only come off on a kill.
+		KO_TEAR_LEGS = false,
+		-- The plain finisher's killing blow: a limb torn off, a fracture,
+		-- the jaw broken (teeth out with it).
+		FINISHER_TEAR_CHANCE = 0.55,
+		FINISHER_FRACTURE_CHANCE = 0.5,
+		FINISHER_JAW_CHANCE = 0.45,
+		-- The Boxer's finisher: teeth out on the last punch to the face, and
+		-- this chance of a broken jaw on the kill.
+		COMBO_JAW_CHANCE = 0.6,
+		-- At most per body.
+		MAX_TORN_LIMBS = 2,
+		MAX_FRACTURES = 2,
+		-- A torn limb flies off (studs/s), then lies there this long.
+		LIMB_FLING_SPEED = 24,
+		LIMB_FLING_UP = 16,
+		TORN_LIMB_TIME = 12,
+		-- Teeth flying out: how many (min, max), how long they lie there.
+		TEETH_COUNT = table.freeze({ 2, 5 }),
+		TEETH_TIME = 8,
+	}),
+
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish
 	-- you (M1 on you while you're down); otherwise you get back up.
 	Knockout = table.freeze({

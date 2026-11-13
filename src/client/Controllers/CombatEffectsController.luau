@@ -45,6 +45,7 @@ local SoundController = require(script.Parent.SoundController)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
+local HeavyGore = require(script.Parent.Parent.Combat.HeavyGore)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local KitLooks = require(script.Parent.Parent.Combat.KitLooks)
 local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
@@ -845,6 +846,7 @@ end
 function CombatEffectsController.start()
 	KitLooks.start() -- bull horns, sentinel cape
 	KitVFX.start() -- smashed walls, the Bull's strides
+	HeavyGore.start() -- the torn limbs lying around
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
 	-- Something thrown (Shared/Weapons): flying, then broken where it hit.
 	Remotes.WeaponThrown.OnClientEvent:Connect(

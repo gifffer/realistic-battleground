@@ -56,6 +56,15 @@ local GoreShapes = {
 		Gut2 = Vector3.new(138, 3, -14),
 		Gut3 = Vector3.new(141, 3, -14),
 		GutPile = Vector3.new(144, 3, -14),
+		LegEnd = Vector3.new(147, 3, -14),
+		Hip = Vector3.new(150, 3, -14),
+		ArmEndL = Vector3.new(153, 3, -14),
+		ShoulderL = Vector3.new(156, 3, -14),
+		LegEndL = Vector3.new(159, 3, -14),
+		HipL = Vector3.new(162, 3, -14),
+		ForearmBreak = Vector3.new(165, 3, -14),
+		ShinBreak = Vector3.new(168, 3, -14),
+		JawBroken = Vector3.new(171, 3, -14),
 	} :: { [string]: Vector3 },
 	skull = {
 		"Skull1",
@@ -126,6 +135,21 @@ local GoreShapes = {
 		"Gut2",
 		"Gut3",
 		"GutPile",
+	},
+	dismember = {
+		"LegEnd",
+		"Hip",
+		"ArmEndL",
+		"ShoulderL",
+		"LegEndL",
+		"HipL",
+	},
+	fracture = {
+		"ForearmBreak",
+		"ShinBreak",
+	},
+	jaw = {
+		"JawBroken",
 	},
 }
 

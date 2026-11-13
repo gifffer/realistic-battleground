@@ -1,6 +1,7 @@
 --!strict
 -- GoreKit: the gore pieces of the finishers (the burst head of the bat, the
--- Boxer's liver, the Bouncer's torn arm) in the imported
+-- Boxer's liver, the Bouncer's torn arm) and of the heavy hits (HeavyGore:
+-- limbs torn off, open fractures, a broken jaw) in the imported
 -- WoundKit model: "Gore_<Piece>_<Layer>" meshes made from real anatomy
 -- (tools/wounds/gore.py, Shared/GoreShapes). HeadBlast puts copies of them
 -- where they were in the head, then lets them fly.
@@ -96,10 +97,20 @@ function GoreKit.get(): { [string]: Piece }?
 		end
 	end
 	-- (the torn arm's pieces came later, then the Bull's (the body torn in
-	-- two, the guts): a kit without them still has the head's; the
-	-- finishers check for their own pieces and draw simpler ones then)
+	-- two, the guts), then the heavy hits' (limbs torn off, fractures, the
+	-- jaw): a kit without them still has the head's; each check for their
+	-- own pieces and draw simpler ones then)
 	local optional: { [string]: boolean } = {}
-	for _, list in { GoreShapes.limb, GoreShapes.bisect, GoreShapes.gut } do
+	for _, list in
+		{
+			GoreShapes.limb,
+			GoreShapes.bisect,
+			GoreShapes.gut,
+			GoreShapes.dismember,
+			GoreShapes.fracture,
+			GoreShapes.jaw,
+		}
+	do
 		for _, name in list do
 			optional[name] = true
 		end

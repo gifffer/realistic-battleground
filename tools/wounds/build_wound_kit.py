@@ -54,7 +54,7 @@ import sys
 import bpy  # first: it makes the other Blender modules importable
 import bmesh  # noqa: E402
 import numpy as np  # noqa: E402
-from mathutils import Vector, noise  # noqa: E402
+from mathutils import Matrix, Vector, noise  # noqa: E402
 from mathutils.bvhtree import BVHTree  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1424,6 +1424,29 @@ GORE_VIEWS = {
     "Hips": (Vector((1.4, 2.2, -2.6)), Vector((0, -1.0, 0)), 2.6),
     "GutPile": (Vector((0.9, 1.3, -1.6)), Vector((0, 0.12, 0)), 1.3),
     "Gut1": (Vector((0.6, 0.6, -1.6)), Vector((0, 0, 0)), 0.8),
+    # the heavy hits ("<piece>@<view>": another view of the same piece)
+    "LegEnd": (Vector((1.4, 2.2, -2.4)), Vector((0, 0.7, 0)), 1.9),
+    "Hip": (Vector((1.8, -1.4, -2.6)), Vector((0.4, -1.1, 0)), 2.4),
+    "ArmEndL": (Vector((-1.4, 2.2, -2.4)), Vector((0, 0.7, 0)), 1.9),
+    "ShoulderL": (Vector((-2.8, 0.5, -1.4)), Vector((-1.0, 0.4, 0)), 2.0),
+    "ForearmBreak": (Vector((1.3, 0.3, -2.6)), Vector((0, -0.4, -0.5)), 1.5),
+    "ForearmBreak@side": (Vector((2.8, 0.2, -0.6)), Vector((0, -0.4, -0.4)), 1.5),
+    "ShinBreak": (Vector((-1.3, 0.3, -2.6)), Vector((0, -0.45, -0.5)), 1.5),
+    "JawBroken": (Vector((0.6, 0.15, -2.6)), Vector((0, -0.15, 0)), 1.4),
+    "JawBroken@side": (Vector((2.6, -0.2, -1.0)), Vector((0, -0.25, 0)), 1.5),
+}
+# (what is drawn round them: (where, size, the face left open) boxes, or
+# "head": the round head)
+GORE_CONTEXT = {
+    "Waist": [((0, 0, 0), (2, 2, 1), "bottom")],
+    "Hips": [((-0.5, -2, 0), (1, 2, 1), "top"), ((0.5, -2, 0), (1, 2, 1), "top")],
+    "LegEnd": [((0, 0, 0), (1, 2, 1), "top")],
+    "ArmEndL": [((0, 0, 0), (1, 2, 1), "top")],
+    "Hip": [((0, 0, 0), (2, 2, 1), None), ((-0.5, -2, 0), (1, 2, 1), None)],
+    "ShoulderL": [((0, 0, 0), (2, 2, 1), None)],
+    "ForearmBreak": [((0, 0, 0), (1, 2, 1), None)],
+    "ShinBreak": [((0, 0, 0), (1, 2, 1), None)],
+    "JawBroken": "head",
 }
 
 
@@ -1434,31 +1457,34 @@ def render_gore_preview(slots):
     scene.view_settings.view_transform = "Standard"
     scene.view_settings.exposure = -1.0
     for name, (eye, target, width) in GORE_VIEWS.items():
-        if name not in slots:
+        piece = name.split("@")[0]
+        if piece not in slots:
             continue
-        slot = slots[name]
-        boxes = []
-        if name == "Waist":
-            boxes = [((0, 0, 0), (2, 2, 1), "bottom")]
-        elif name == "Hips":
-            boxes = [((-0.5, -2, 0), (1, 2, 1), "top"), ((0.5, -2, 0), (1, 2, 1), "top")]
+        slot = slots[piece]
+        boxes = GORE_CONTEXT.get(piece, [])
         context = []
+        if boxes == "head":
+            context.append(add_object(f"ctx_{name}", gore.head_surface(), slot, "Skin"))
+            boxes = []
         for at, size, opened in boxes:
             bm = bmesh.new()
             bmesh.ops.create_cube(bm, size=1.0)
             bmesh.ops.scale(bm, vec=size, verts=bm.verts)
-            gone = [f for f in bm.faces if (f.normal.y < -0.9 if opened == "bottom" else f.normal.y > 0.9)]
+            gone = [f for f in bm.faces if opened and (f.normal.y < -0.9 if opened == "bottom" else f.normal.y > 0.9)]
             bmesh.ops.delete(bm, geom=gone, context="FACES")
             context.append(add_object(f"ctx_{name}", bm, slot + Vector(at), "Skin"))
         at = slot + target
         cam.location = at + eye
-        cam.rotation_euler = (-eye).to_track_quat("-Z", "Y").to_euler()
+        # (looking at it, the kit's up (+Y) up in the picture)
+        back = eye.normalized()
+        right = Vector((0, 1, 0)).cross(back).normalized()
+        cam.rotation_euler = Matrix((right, back.cross(right), back)).transposed().to_euler()
         cam.data.ortho_scale = width
         fill = scene.objects.get("fill")
         if fill:  # (lit from the camera too)
             fill.hide_render = False
             fill.rotation_euler = cam.rotation_euler
-        scene.render.filepath = f"{OUT}/preview_{name}.png"
+        scene.render.filepath = f"{OUT}/preview_{name.replace('@', '_')}.png"
         bpy.ops.render.render(write_still=True)
         for ob in context:
             mesh = ob.data

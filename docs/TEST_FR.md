@@ -463,3 +463,23 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Gore des coups très forts (`feature/gore-heavy-hits`)
+
+Rare exprès : seulement sur un **coup lourd qui met KO** (≥ `HEAVY_DAMAGE` dégâts, ou le 4ᵉ M1, ou un coup qui met au sol) et sur les **finishers**. Réglages : `Config.HeavyGore` (chances, plafonds, durées). Pour tester vite, monter temporairement les chances `KO_*` à 1. **Ré-importer `assets/wounds/WoundKit.fbx`** dans Studio d'abord (sinon : formes simples, voir H12).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| H1 | Coup lourd **à la tête** qui met KO (ex. 4ᵉ M1 au visage) | Parfois (~60 %) : **2 à 5 vraies dents** sortent de la bouche en volant vers l'avant, avec un jet de sang ; elles rebondissent au sol et disparaissent après ~8 s. Les autres joueurs voient la même chose. |
+| H2 | Coup lourd **au corps** qui met KO | Parfois : le **bras du côté du coup** est **arraché** à l'épaule (~12 %) et **vole** loin de l'attaquant (avec sa manche), ou une **fracture ouverte** de l'avant-bras (~30 %) : les **deux os (radius, cubitus)** cassés en biseau sortent de la peau déchirée, chair à vif, graisse jaune, sang qui coule. |
+| H3 | Bras arraché (H2) | Sur le torse : l'**épaule ouverte** (vraie omoplate, muscles arrachés, peau déchirée), elle **gicle par saccades**, flaque ; le bras au sol : bout à vif, **tête de l'os** qui dépasse, il gicle et goutte. Le bras reste ~12 s puis disparaît. On ne peut **ni frapper ni viser** le bras au sol. |
+| H4 | Se relever après H2 (bras arraché) | Le joueur **joue toujours** (il manque juste le bras) ; il ne peut plus prendre d'os (« Take the bone ») sans bras droit. Le bras au sol **ne suit pas** le corps quand il se relève. |
+| H5 | Coup lourd **aux jambes** qui met KO | Parfois une **fracture ouverte du tibia** (le tibia et le péroné cassés, l'os sort sur le devant du tibia) ; en se relevant, le joueur **boite**. Jamais de jambe arrachée sur un KO (`KO_TEAR_LEGS = false`). |
+| H6 | **Finisher simple** (non cinématique) qui tue | Parfois : un **membre arraché** (bras ou **jambe** : la hanche ouverte, vrai os iliaque, fessiers arrachés ; sur la jambe, les vrais muscles de la cuisse coupés et la **tête du fémur** qui dépasse), une **fracture** ouverte sur un autre membre, la **mâchoire cassée** (H8). |
+| H7 | Finisher **Boxer** (KnockoutCombo) | Au **dernier coup au visage**, des dents volent ; à la mort, ~60 % de chances de **mâchoire cassée**. |
+| H8 | Mâchoire cassée | La bouche **déchirée et ouverte**, tordue (plus basse d'un côté, coin fendu dans la joue), lèvres à vif gonflées, **dents du haut** avec des trous et des dents de travers, **dents du bas** décalées sur le côté, du sang coule sur le menton. Jamais sur une tête explosée (batte). |
+| H9 | Un joueur qui **arrive après** / le **corps laissé** 10 s après le finisher | Il voit les mêmes plaies (épaule/hanche ouverte, fractures, mâchoire), sans rejouer les jets de sang ni les dents qui volent. Un membre encore au sol : son bout à vif est dessiné aussi. |
+| H10 | Plafonds | Jamais plus de **2 membres arrachés** ni **2 fractures** par corps ; les dents ne sortent qu'**une fois** par corps. |
+| H11 | Duel | Pas de KO en duel, donc rien de tout ça en duel. |
+| H12 | Ancien `WoundKit` (pas ré-importé) | Le gore marche quand même avec des **formes simples** (disque à vif, os en bloc, dents en petits cubes) ; le reste du gore (tête, foie, bras du Bouncer) n'est pas désactivé. |
+| H13 | `Config.HeavyGore.ENABLED = false` ou `Injuries.SKIN_TEAR = false` | Plus aucun de ces effets. |

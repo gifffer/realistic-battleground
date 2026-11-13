@@ -70,6 +70,7 @@ local Movement = require(script.Parent.Movement)
 local PlayerData = require(script.Parent.PlayerData)
 local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
+local HeavyGore = require(script.HeavyGore)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
 local State = require(script.State)
@@ -875,7 +876,18 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 
 	if Knockout.isKnockedOut(victim.model) then
-		-- That hit knocked them out: no stun or knockback on a limp body.
+		-- That hit knocked them out: no stun or knockback on a limp body. A
+		-- heavy one may break them (HeavyGore: rare; never heat vision).
+		local heavy = damage >= Config.HeavyGore.HEAVY_DAMAGE
+			or spec.kind == "Finisher"
+			or spec.knockdown ~= nil
+		if heavy and not spec.burns then
+			if HeavyGore.knockoutBlow(victim.model, from, zone :: Types.HitZone, side) then
+				-- (a broken shin: they limp if they get up)
+				victim.limping = true
+				setAttribute(victim.model, "Limping", true)
+			end
+		end
 		event(spec.kind, true, true)
 		return true
 	end
@@ -1251,6 +1263,7 @@ local function offerBone(victim: Model, arm: BasePart)
 			or isBusy(state)
 			or isStunned(state)
 			or state.weapon ~= nil
+			or state.model:FindFirstChild("Right Arm") == nil -- (torn off: no hand to hold it)
 			or state.model:GetAttribute("DuelId") ~= nil -- (no weapons in a duel)
 			or victim:GetAttribute("BoneTaken") == true
 			or arm.Parent == nil
@@ -1879,6 +1892,23 @@ local function startCinematic(
 			end)
 		end
 	end
+	if cinematic.id == "KnockoutCombo" then
+		-- the last punch to the face (Shared/Finishers: the last "Face")
+		-- knocks teeth out
+		local lastFace: number? = nil
+		for _, event in cinematic.events do
+			if event.kind == "Face" then
+				lastFace = event.time
+			end
+		end
+		if lastFace then
+			task.delay(lastFace, function()
+				if not over and target.Parent and state.attackToken == token and isAlive(state) then
+					HeavyGore.teeth(target)
+				end
+			end)
+		end
+	end
 	if cinematic.id == "Gore" then
 		-- the horns going into the ribcage (Shared/Finishers "Gore": "Impact")
 		local impact = Finishers.CHARGE.impact
@@ -1919,6 +1949,9 @@ local function startCinematic(
 				blowHead(target)
 			elseif cinematic.id == "KnockoutCombo" then
 				tearLiverOut(target)
+				if random:NextNumber() < Config.HeavyGore.COMBO_JAW_CHANCE then
+					HeavyGore.jaw(target)
+				end
 			elseif cinematic.id == "Incinerate" then
 				-- (every client lets the hole smoke and cool down, from when
 				-- the beam stopped: KitVFX, bodies seen later too)
@@ -2003,6 +2036,10 @@ local function startFinisher(state: CombatState, target: Model): boolean
 			return
 		end
 		Knockout.finish(target, state.model)
+		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
+		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
+			HeavyGore.finisherKill(target, state.root.Position)
+		end
 	end)
 	return true
 end
