@@ -6,7 +6,9 @@
 --                    shoulder, then swept low across the head of the
 --                    opponent lying on the ground, from his right to his
 --                    left: the head bursts.
---   "Incinerate"     Sentinel: lifted by the throat, heat vision point blank.
+--   "Incinerate"     Sentinel: lifted by the throat, his heat vision point
+--                    blank into the heart: a deep hole burnt in the chest
+--                    (no blood: cauterized), smoking; thrown down.
 --   "Gore"           Bull: gored, lifted on the horns, shaken, slammed down.
 --   "KnockoutCombo"  Boxer: hauls the opponent up by the collar, two hooks
 --                    to the body, hook, hook, cross, then a left hook into
@@ -43,7 +45,8 @@ export type Shot = {
 	time: number,
 	from: Vector3,
 	to: Vector3,
-	look: Vector3 | "victim",
+	-- ("heart": the Sentinel's bore on the victim's chest, Shared/Util/Gash)
+	look: Vector3 | "victim" | "heart",
 	fov: number,
 }
 
@@ -62,6 +65,10 @@ export type Cinematic = {
 }
 
 Finishers.HEAD_DISTANCE = 3.8 -- studs, attacker root → victim head (flat): under the barrel
+-- Incinerate: on the victim when it died, the server time when the beam
+-- stopped (the hole smoking and cooling down from then: Client/Combat/KitVFX,
+-- also on a body seen later).
+Finishers.BORED_ATTRIBUTE = "HeartBored"
 Finishers.HOLD_DISTANCE = 2.2 -- studs between the two roots (Boxer: within punching reach)
 -- "side": where the victim's root is laid (anchor space): on its back, its
 -- head to his left, its right side (the arm he pulls) toward him.
@@ -328,70 +335,103 @@ local cinematics: { [string]: Cinematic } = {
 	},
 }
 
--- Sentinel: "Incinerate" - he grabs them by the throat, lifts them off
--- their feet, his eyes charge, and he burns their head point blank; drops
--- what's left. Bull: "Gore" - horns into the belly, lifted up on them,
--- shaken like a rag, slammed down into the floor.
+-- Sentinel: "Incinerate" - he takes them by the throat and lifts them off
+-- their feet, his eyes charge, he looks down and burns straight into their
+-- heart, point blank: a deep hole in the chest, so hot nothing bleeds (the
+-- server's "Bore" cut, drawn by Gashes: the ribs cut, the lung, the heart
+-- burnt through). The beam stops, the hole glows and smokes; he throws the
+-- body down on its back and the camera closes in on the smoking hole.
+-- Bull: "Gore" - horns into the belly, lifted up on them, shaken like a
+-- rag, slammed down into the floor.
 cinematics.Incinerate = {
 	id = "Incinerate",
-	duration = 4.2,
-	kill = 2.9,
+	duration = 5.6,
+	kill = 4.05, -- (on its back on the floor: KILL_POSE)
 	placement = "front",
 	victimAnimation = "Sentinel_FinisherVictim",
 	events = {
-		{ time = 0.4, kind = "Grab" },
-		{ time = 1.0, kind = "Charge" },
-		{ time = 1.55, kind = "Beam" },
-		{ time = 2.9, kind = "Burnt" },
+		{ time = 0.3, kind = "Grab" }, -- the hand on the throat
+		{ time = 0.6, kind = "Lift" }, -- off their feet, choking
+		{ time = 0.9, kind = "Charge" }, -- the eyes charge (his head goes down)
+		{ time = 1.4, kind = "Beam" }, -- both beams into the heart
+		{ time = 2.1, kind = "Ribs" }, -- through the ribs (the bore: M)
+		{ time = 2.5, kind = "Heart" }, -- through the heart (the bore: L)
+		{ time = 2.9, kind = "Burnt" }, -- the beam stops
+		{ time = 3.4, kind = "Toss" }, -- thrown down
+		{ time = 3.85, kind = "Thud" }, -- on its back on the floor
 	},
 	shots = {
-		-- Over his right shoulder: he grabs them by the throat.
+		-- Over his right shoulder: he takes them by the throat.
 		{
 			time = 0,
-			from = Vector3.new(2.2, 1.2, 3.2),
-			to = Vector3.new(1.8, 1.0, 2.6),
-			look = Vector3.new(0, 0.8, -2.2),
+			from = Vector3.new(2.2, 1.3, 3.0),
+			to = Vector3.new(1.8, 1.1, 2.4),
+			look = Vector3.new(0.4, 0.9, -2.0),
 			fov = 58,
 		},
-		-- Low, from the side: lifted off their feet.
+		-- Low, from the side: lifted off their feet, the legs dangling.
 		{
-			time = 0.75,
-			from = Vector3.new(4.8, -1.6, -1.0),
-			to = Vector3.new(4.4, -1.8, -1.2),
-			look = Vector3.new(0, 1.2, -1.4),
+			time = 0.6,
+			from = Vector3.new(4.4, -1.8, -0.6),
+			to = Vector3.new(4.0, -1.9, -0.9),
+			look = Vector3.new(0.5, 0.6, -1.5),
 			fov = 55,
 		},
-		-- Close on his eyes, charging.
+		-- Close on his eyes, charging; his head goes down.
 		{
-			time = 1.0,
-			from = Vector3.new(-1.8, 1.6, -0.9),
-			to = Vector3.new(-1.6, 1.55, -0.75),
-			look = Vector3.new(0, 1.5, 0),
+			time = 0.9,
+			from = Vector3.new(-1.7, 1.5, -1.1),
+			to = Vector3.new(-1.45, 1.42, -0.95),
+			look = Vector3.new(0.05, 1.35, -0.3),
 			fov = 40,
 		},
-		-- In profile: the beams point blank into the face.
+		-- Profile, a little above: both beams down into the chest.
 		{
-			time = 1.55,
-			from = Vector3.new(-4.2, 1.6, -0.9),
-			to = Vector3.new(-3.9, 1.5, -0.9),
-			look = Vector3.new(0.2, 1.7, -1.0),
+			time = 1.4,
+			from = Vector3.new(3.8, 2.0, -0.5),
+			to = Vector3.new(3.5, 1.85, -0.7),
+			look = Vector3.new(0.6, 1.0, -1.0),
 			fov = 50,
 		},
-		-- Past his left shoulder, close on the face burning.
+		-- Close on the chest, between them: it burns in.
 		{
-			time = 2.25,
-			from = Vector3.new(-1.8, 2.2, 0.6),
-			to = Vector3.new(-1.5, 2.1, 0.4),
-			look = Vector3.new(0.6, 2.0, -1.6),
+			time = 1.9,
+			from = Vector3.new(1.9, 0.55, -0.35),
+			to = Vector3.new(1.65, 0.6, -0.45),
+			look = "heart",
+			fov = 42,
+		},
+		-- His view, high over his right shoulder: down the beams into the hole.
+		{
+			time = 2.45,
+			from = Vector3.new(1.25, 3.0, 0.6),
+			to = Vector3.new(1.1, 2.7, 0.35),
+			look = "heart",
 			fov = 45,
 		},
-		-- Wide: the smoking body drops, him standing over it.
+		-- The beam stops: the hole glowing, smoking.
 		{
-			time = 2.95,
-			from = Vector3.new(5, 1.5, -6),
-			to = Vector3.new(5.5, 1.8, -3),
-			look = Vector3.new(0, -0.5, -1.8),
-			fov = 60,
+			time = 2.9,
+			from = Vector3.new(2.2, 0.4, -0.1),
+			to = Vector3.new(2.0, 0.5, -0.3),
+			look = "heart",
+			fov = 38,
+		},
+		-- Wide: thrown down on its back.
+		{
+			time = 3.4,
+			from = Vector3.new(5.5, 1.2, -1.5),
+			to = Vector3.new(5.8, 1.6, -2.2),
+			look = Vector3.new(0.4, -1.4, -2.8),
+			fov = 62,
+		},
+		-- Slowly down onto the hole, still smoking, him standing beyond.
+		{
+			time = 4.0,
+			from = Vector3.new(2.0, 0.7, -2.5),
+			to = Vector3.new(1.05, -0.95, -3.7),
+			look = "heart",
+			fov = 48,
 		},
 	},
 }

@@ -21,6 +21,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
+local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local ArmRip = require(script.Parent.Parent.Combat.ArmRip)
@@ -70,7 +71,15 @@ local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
 local GORE_BLOOD: { [string]: number } = { Gore = 3, Shake = 1, Slam = 2 }
 -- (an event name both kits use, shaken differently in these finishers)
 local KIT_SHAKES: { [string]: { [string]: Shake } } = {
-	Incinerate = { Grab = { at = 0, strength = 1, punch = 1 } },
+	Incinerate = {
+		Grab = { at = 0, strength = 1, punch = 1 },
+		Beam = { at = 0, strength = 2, punch = 4 }, -- point blank into the chest
+		Ribs = { at = 0, strength = 1.2, punch = 1.5 }, -- through the ribs
+		Heart = { at = 0, strength = 2.2, punch = 3 }, -- through the heart
+		Burnt = { at = 0, strength = 0.8, punch = 1.5 }, -- the beam stops
+		Toss = { at = 0, strength = 0.6, punch = 0 },
+		Thud = { at = 0, strength = 2, punch = 2.5 }, -- the body hits the floor
+	},
 	Gore = { Stomp = { at = 0, strength = 1.5, punch = 2 } },
 }
 
@@ -160,6 +169,7 @@ local function playCamera(
 	local start = os.clock()
 	local random = Random.new()
 	local lastLook: Vector3? = nil
+	local lastIndex = 0
 
 	RunService:UnbindFromRenderStep("FinisherCamera") -- (an older one)
 	RunService:BindToRenderStep(
@@ -183,15 +193,28 @@ local function playCamera(
 				end
 			end
 			local shot = shots[index]
+			if index ~= lastIndex then
+				lastIndex = index
+				lastLook = nil -- (a cut: the new shot frames its target at once)
+			end
 			local ends = if shots[index + 1] then shots[index + 1].time else cinematic.duration
 			local alpha = smooth((t - shot.time) / math.max(ends - shot.time, 1e-3))
 			local position = anchor * shot.from:Lerp(shot.to, alpha)
 			local look: Vector3
-			if shot.look == "victim" then
-				local head = victim:FindFirstChild("Head")
-				local target = if head and head:IsA("BasePart")
-					then head.Position
-					else anchor.Position
+			if shot.look == "victim" or shot.look == "heart" then
+				local target = anchor.Position
+				if shot.look == "heart" then
+					-- (the Sentinel's bore, on the front of the chest)
+					local torso = victim:FindFirstChild("Torso")
+					if torso and torso:IsA("BasePart") then
+						target = torso.CFrame * Gash.HEART
+					end
+				else
+					local head = victim:FindFirstChild("Head")
+					if head and head:IsA("BasePart") then
+						target = head.Position
+					end
+				end
 				-- follow it smoothly (it tumbles)
 				lastLook = if lastLook
 					then lastLook:Lerp(target, 1 - math.exp(-10 * dt))

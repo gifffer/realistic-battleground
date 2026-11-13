@@ -27,8 +27,8 @@ local kit: KitTypes.KitDef = {
 	-- Cinematic kill (Shared/Finishers "Incinerate").
 	finisher = {
 		animation = "Sentinel_Finisher",
-		impact = 2.9,
-		duration = 4.2,
+		impact = 4.05,
+		duration = 5.6,
 		cinematic = "Incinerate",
 	},
 

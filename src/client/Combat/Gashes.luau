@@ -14,6 +14,9 @@
 --      (tools/wounds): the skin edge, the pink cut edge, the red flesh, yellow
 --      fat on the body, blood in it and running down. Deep slashes show the
 --      muscle (body) or the skull at the bottom (head).
+-- The Sentinel's finisher ("Bore") is a deep hole burnt over the heart: its
+-- insert is a closed cup (the ribs cut, the lung's edge, the heart burnt
+-- through), so the inside of the torso shell is opened around it.
 -- Everything here is visual and local: every client builds the same thing.
 --
 -- The wound models are imported in Studio once (docs/WOUNDS_FR.md):
@@ -115,6 +118,59 @@ local BURN_LOOKS: { [string]: Look } = {
 -- (the bottom of a burn on the head: the skull, a little scorched)
 local SKULL = Color3.fromRGB(206, 190, 160)
 local BURN_BACKING = Color3.fromRGB(58, 22, 14)
+
+-- The Sentinel's bore ("Bore": BoreS / M / L): the beam went into the chest
+-- over the heart, so hot that nothing bled. Everything it touched is seared:
+-- the crust black, the cut skin cooked brown, the fat rendered, the muscle
+-- grey-brown; the ribs' bone off-white, their cartilage blue-white and
+-- glossy, the lung's edge pink-grey, the heart's muscle dark red, the inside
+-- of its chamber darker still. No blood layer at all.
+local BORE_LOOKS: { [string]: Look } = {
+	Char = { color = CHARRED, reflectance = 0, material = Enum.Material.Slate },
+	Eschar = {
+		color = Color3.fromRGB(122, 80, 50),
+		reflectance = 0.04,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Fat = {
+		color = Color3.fromRGB(188, 138, 62),
+		reflectance = 0.16,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Muscle = {
+		color = Color3.fromRGB(104, 46, 36),
+		reflectance = 0.06,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Bone = {
+		color = Color3.fromRGB(226, 214, 190),
+		reflectance = 0.05,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Cartilage = {
+		color = Color3.fromRGB(198, 212, 220),
+		reflectance = 0.14,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Lung = {
+		color = Color3.fromRGB(178, 134, 138),
+		reflectance = 0.03,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Heart = {
+		color = Color3.fromRGB(92, 16, 18),
+		reflectance = 0.1,
+		material = Enum.Material.SmoothPlastic,
+	},
+	HeartDark = {
+		color = Color3.fromRGB(38, 7, 8),
+		reflectance = 0.02,
+		material = Enum.Material.SmoothPlastic,
+	},
+}
+-- Behind the bore's cup (never seen: the cup is closed; only if a crack
+-- showed between its rim and the skin's cells).
+local BORE_BACKING = Color3.fromRGB(30, 8, 6)
 
 local BACKING_COLOR = Color3.fromRGB(46, 4, 4) -- deep inside a cut
 local BACKING_DEPTH = 0.14 -- under the skin, below the deepest insert (0.115)
@@ -356,9 +412,16 @@ type Placed = {
 }
 
 local function shapeFor(data: Gash.Data, head: boolean): (string, WoundShapes.Shape?)
+	local kind, size = data.kind, data.size
+	if kind == "Bore" and (head or not boreInKit) then
+		-- (an older kit without the bore: a big burn there instead)
+		kind, size = "Burn", if size == "S" then "M" else "L"
+	end
 	-- (a burn: its own insert; an older kit without it: the laceration's)
-	local kind = if data.kind == "Burn" and not burnInKit then "Lac" else data.kind
-	local name = kind .. data.size .. (if head then "_Head" else "")
+	if kind == "Burn" and not burnInKit then
+		kind = "Lac"
+	end
+	local name = kind .. size .. (if head then "_Head" else "")
 	return name, WoundShapes.shapes[name]
 end
 
@@ -900,6 +963,118 @@ local FRAME_OF: { [string]: string } = {
 	LeftLeg = "Shell_FrameLeft",
 }
 
+-- One coordinate of a vector (1 = X, 2 = Y, 3 = Z).
+local function axisOf(v: Vector3, axis: number): number
+	return if axis == 1 then v.X elseif axis == 2 then v.Y else v.Z
+end
+
+-- The two axes across `axis`, in order (X: Y Z, Y: X Z, Z: X Y).
+local function across(axis: number): (number, number)
+	if axis == 1 then
+		return 2, 3
+	elseif axis == 2 then
+		return 1, 3
+	end
+	return 1, 2
+end
+
+-- A vector from its coordinate along `axis` and along the two across it.
+local function fromAxes(axis: number, along: number, u: number, v: number): Vector3
+	if axis == 1 then
+		return Vector3.new(along, u, v)
+	elseif axis == 2 then
+		return Vector3.new(u, along, v)
+	end
+	return Vector3.new(u, v, along)
+end
+
+-- How far under the skin the core starts (see buildBoxSkin): a cut deeper
+-- than this needs a hole in the core.
+local CORE_INSET = 0.16
+local CORE_MARGIN = 0.03 -- room left around a deep cut
+
+-- The core of a box part (size `core`, centred), with a tunnel through it
+-- where each deep cut is (the bore: on the torso's front). Several boxes
+-- then, merged into few.
+local function buildCore(part: BasePart, core: Vector3, cuts: { Placed }, parent: Instance)
+	local axis: number? = nil
+	local holes: { { number } } = {} -- {u0, u1, v0, v1} across `axis`
+	for _, cut in cuts do
+		local depth = cut.shape.depth
+		if depth == nil or depth <= CORE_INSET then
+			continue
+		end
+		local normal = cut.frame.ZVector
+		local cutAxis = if math.abs(normal.X) > 0.9
+			then 1
+			elseif math.abs(normal.Y) > 0.9 then 2
+			else 3
+		if axis ~= nil and axis ~= cutAxis then
+			continue -- (deep cuts on crossing faces: only the first one's axis)
+		end
+		axis = cutAxis
+		-- the face's width runs along X (front / back) or Z (sides), its
+		-- height along Y (cuts are never on the top / bottom)
+		local ext = turnedExtent(cut.shape.extent, cut.data.angle)
+		local a, b = across(cutAxis)
+		local halfA = if a == 2 then ext.Y else ext.X
+		local halfB = if b == 2 then ext.Y else ext.X
+		local center = cut.frame.Position
+		local ca, cb = axisOf(center, a), axisOf(center, b)
+		table.insert(holes, {
+			ca - halfA - CORE_MARGIN,
+			ca + halfA + CORE_MARGIN,
+			cb - halfB - CORE_MARGIN,
+			cb + halfB + CORE_MARGIN,
+		})
+	end
+	if axis == nil then
+		newTile(part, core, CFrame.identity, parent).Name = "Core"
+		return
+	end
+	local a, b = across(axis)
+	local halfU, halfV = axisOf(core, a) / 2, axisOf(core, b) / 2
+	local length = axisOf(core, axis)
+	-- The grid: the core's edges and the holes' edges inside it.
+	local function edges(half: number, first: number): { number }
+		local list = { -half, half }
+		for _, hole in holes do
+			for k = first, first + 1 do
+				if hole[k] > -half and hole[k] < half then
+					table.insert(list, hole[k])
+				end
+			end
+		end
+		table.sort(list)
+		return list
+	end
+	local us, vs = edges(halfU, 1), edges(halfV, 3)
+	local columns, rows = #us - 1, #vs - 1
+	local keep: { { boolean } } = {}
+	for i = 1, columns do
+		keep[i] = {}
+		local u = (us[i] + us[i + 1]) / 2
+		for j = 1, rows do
+			local v = (vs[j] + vs[j + 1]) / 2
+			-- (a cell of no width: two edges at the same place)
+			local cut = us[i + 1] - us[i] < 1e-3 or vs[j + 1] - vs[j] < 1e-3
+			for _, hole in holes do
+				if u > hole[1] and u < hole[2] and v > hole[3] and v < hole[4] then
+					cut = true
+				end
+			end
+			keep[i][j] = not cut
+		end
+	end
+	for _, rect in rectangles(keep, columns, rows) do
+		local u0, u1 = us[rect.i], us[rect.i + rect.w]
+		local v0, v1 = vs[rect.j], vs[rect.j + rect.h]
+		local size = fromAxes(axis, length, u1 - u0, v1 - v0)
+		local center = fromAxes(axis, 0, (u0 + u1) / 2, (v0 + v1) / 2)
+		newTile(part, size, CFrame.new(center), parent).Name = "Core"
+	end
+end
+
 -- A torso (or a limb) rebuilt like Roblox draws it: a box with bevelled
 -- edges. The bevelled frame comes from the kit, with the shirt / pants
 -- painted on it; the inside of each face is flat tiles (with the hole of a
@@ -996,10 +1171,12 @@ local function buildBoxSkin(
 		end
 	end
 	-- A skin-coloured core deep inside: a hairline gap between two tiles
-	-- shows skin, never the sky through the body.
-	local core = part.Size - Vector3.new(0.32, 0.32, 0.32)
+	-- shows skin, never the sky through the body. A deep cut (the bore)
+	-- would end inside it: the core is left out around it (a tunnel through
+	-- it, in boxes; the cut's own insert is a closed cup).
+	local core = part.Size - Vector3.new(2 * CORE_INSET, 2 * CORE_INSET, 2 * CORE_INSET)
 	if core.X > 0.05 and core.Y > 0.05 and core.Z > 0.05 then
-		newTile(part, core, CFrame.identity, parent).Name = "Core"
+		buildCore(part, core, cuts, parent)
 	end
 end
 
@@ -1010,11 +1187,16 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		return
 	end
 	local origin = Vector3.new(cut.shape.index * WoundShapes.spacing, WoundShapes.markerDrop, 0)
-	local burnt = cut.data.kind == "Burn"
+	-- (a bore drawn with a burn's insert, in an older kit: burnt too)
+	local bored = cut.shape.kind == "Bore"
+	local burnt = cut.data.kind == "Burn" or cut.data.kind == "Bore"
 	local onHead = cut.face == nil
 	for _, item in pieces do
 		local layer = string.match(item.Name, "_(%a+)$") or ""
-		local look = if burnt then BURN_LOOKS[layer] else LOOKS[layer]
+		local look = if bored
+			then BORE_LOOKS[layer]
+			elseif burnt then BURN_LOOKS[layer]
+			else LOOKS[layer]
 		if look == nil then
 			continue -- (a burn: no blood in it)
 		end
@@ -1040,6 +1222,23 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		reachX, reachY = math.max(reachX, math.abs(point.X)), math.max(reachY, math.abs(point.Y))
 	end
 	local width = 2 * reachX + 0.06
+	if bored then
+		-- (the bore's cup is closed and goes far deeper than the usual
+		-- plate, which would cut through it: the plate goes behind its
+		-- bottom, in case a crack shows past its rim)
+		local depth = (cut.shape.depth or BACKING_DEPTH) + 0.04
+		local thickness = math.abs(cut.frame.ZVector:Dot(part.Size))
+		local backing = Instance.new("Part")
+		backing.Name = "Backing"
+		backing.Size = Vector3.new(width, 2 * reachY + 0.06, 0.02)
+		backing.Color = BORE_BACKING
+		backing.Material = Enum.Material.SmoothPlastic
+		backing.CFrame = part.CFrame
+			* cut.frame
+			* CFrame.new(0, 0, -math.min(depth, thickness - 0.12))
+		setUp(backing, part, parent)
+		return
+	end
 	-- On a block: one flat plate. On the head: a few plates following its
 	-- curve (a flat one would cross the ends of a long cut).
 	local plates = if cut.face == nil then 5 else 1
@@ -1193,7 +1392,7 @@ local function refresh(model: Model, partName: string)
 		connection = nil,
 		tint = {},
 	}
-	-- The skin repainted with the part (the Incinerate chars the head black)
+	-- The skin repainted with the part (if something recolours the real part)
 	local function retint()
 		for _, item in folder:GetDescendants() do
 			if item:IsA("BasePart") and item.Name == "Skin" then
