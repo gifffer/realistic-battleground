@@ -59,7 +59,9 @@ local FADE_IN: { [string]: number } = {
 	HurtGuard = 0.3,
 	HurtIdle = 0.4,
 	LimpWalk = 0.2,
+	LimpWalkLeft = 0.2,
 	LimpIdle = 0.3,
+	LimpIdleLeft = 0.3,
 	Walk = 0.15,
 	Run = 0.15,
 	BullRun = 0.15,
@@ -113,6 +115,18 @@ local RUN_START_SPEED = 14
 local RUN_STOP_SPEED = 12
 local CROUCH_WALK_START = 1.5
 local CROUCH_WALK_STOP = 0.5
+-- Limp clips, by the hurt leg (the "LimpLeg" attribute; written for the
+-- right one, mirrored for the left).
+local LIMP_WALK: { [string]: string } = table.freeze({ Right = "LimpWalk", Left = "LimpWalkLeft" })
+local LIMP_IDLE: { [string]: string } = table.freeze({ Right = "LimpIdle", Left = "LimpIdleLeft" })
+local LIMP_CLIPS: { [string]: boolean } = table.freeze({
+	LimpWalk = true,
+	LimpWalkLeft = true,
+	LimpIdle = true,
+	LimpIdleLeft = true,
+})
+-- The limp walk is authored for this speed (studs/s): walking, slowed by the limp.
+local LIMP_WALK_SPEED = Config.Character.WALK_SPEED * Config.Injuries.LIMP_SPEED
 -- Characters farther than this from the camera aren't animated by us
 -- (too far to see the difference, saves work with 16 players).
 local MAX_DISTANCE = 200
@@ -243,10 +257,12 @@ local function movementClip(entry: Tracked, state: string?): string?
 		and onGround
 		and entry.model:GetAttribute("Limping") == true
 	then
+		local side = if entry.model:GetAttribute("LimpLeg") == "Left" then "Left" else "Right"
+		local walkClip = LIMP_WALK[side]
 		local current = entry.movement[#entry.movement]
-		local walking = current ~= nil and current.target == 1 and current.name == "LimpWalk"
+		local walking = current ~= nil and current.target == 1 and current.name == walkClip
 		local threshold = if walking then CROUCH_WALK_STOP else CROUCH_WALK_START
-		return if horizontalSpeed(entry.root) > threshold then "LimpWalk" else "LimpIdle"
+		return if horizontalSpeed(entry.root) > threshold then walkClip else LIMP_IDLE[side]
 	end
 	if state == "Crouch" then
 		local current = entry.movement[#entry.movement]
@@ -312,9 +328,9 @@ end
 
 -- Playback speed of a clip.
 local function playbackRate(entry: Tracked, name: string): number
-	if name == "LimpWalk" then
-		-- Authored for 12 studs/s (walking speed × the limp's slowdown).
-		return math.clamp(horizontalSpeed(entry.root) / 12, 0.6, 1.6)
+	if name == "LimpWalk" or name == "LimpWalkLeft" then
+		-- The steps follow the real speed (slowed further by a leg hit...).
+		return math.clamp(horizontalSpeed(entry.root) / LIMP_WALK_SPEED, 0.6, 1.5)
 	elseif name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
@@ -426,9 +442,7 @@ end
 -- A limp clip is playing (or fading in) on the movement channel.
 isLimping = function(entry: Tracked): boolean
 	local current = entry.movement[#entry.movement]
-	return current ~= nil
-		and current.target == 1
-		and (current.name == "LimpWalk" or current.name == "LimpIdle")
+	return current ~= nil and current.target == 1 and LIMP_CLIPS[current.name] == true
 end
 
 -- Damped spring pulling the flinch back to zero (the head wobbles and settles).

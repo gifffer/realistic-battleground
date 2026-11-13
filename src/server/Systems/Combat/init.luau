@@ -292,8 +292,15 @@ local function injure(
 		-- The leg on the side the kick came from (from the front: the right one).
 		part = if side == "Left" then "Left Leg" else "Right Leg"
 		victim.legDamage += damage
+		if part == "Left Leg" then
+			victim.leftLegDamage += damage
+		end
 		if not victim.limping and victim.legDamage >= INJ.LIMP_LEG_DAMAGE then
 			victim.limping = true
+			-- The limp favours the leg that took the most ("LimpLeg": which
+			-- one hurts, for the walk every client draws).
+			local left = victim.leftLegDamage * 2 > victim.legDamage
+			setAttribute(victim.model, "LimpLeg", if left then "Left" else "Right")
 			setAttribute(victim.model, "Limping", true)
 		end
 	end
@@ -604,8 +611,10 @@ end
 -- A kill (or nothing at all, see onKill): every injury is healed.
 local function healInjuries(state: CombatState)
 	state.legDamage = 0
+	state.leftLegDamage = 0
 	state.limping = false
 	setAttribute(state.model, "Limping", false)
+	setAttribute(state.model, "LimpLeg", nil)
 	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
 		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
@@ -1006,6 +1015,7 @@ function Combat.register(model: Model, player: Player?)
 		knockdownToken = 0,
 		knockedDownUntil = 0,
 		legDamage = 0,
+		leftLegDamage = 0,
 		limping = false,
 		lastDamagedAt = -math.huge,
 		regenCarry = 0,
@@ -1022,6 +1032,7 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Awakened", false)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
+	model:SetAttribute("LimpLeg", nil)
 	-- A player fights with the kit saved in their profile.
 	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
