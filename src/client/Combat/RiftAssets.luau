@@ -1,11 +1,11 @@
 --!strict
 -- RiftAssets: Dr. Rift's gear as real meshes, in the imported RiftGear model
 -- (assets/rift/RiftGear.fbx, made by tools/rift/build_rift_gear.py; see
--- docs/RIFT_FR.md): his cyborg left arm with the gravity glove, the ocular
--- implant, the ray gun, the portal gun, the potion flask. Each piece is a few
--- "<Piece>_<Layer>" meshes, one per material; a "<Piece>_Pivot" marker gives
--- its own origin, other markers ("Tip", "PalmPoint", "Cell", "Lens") points
--- on it (a muzzle, the glove's emitter, where a light goes).
+-- docs/RIFT_FR.md): his cyborg left arm with the gravity glove, the ray gun,
+-- the portal gun, the potion flask. Each piece is a few "<Piece>_<Layer>"
+-- meshes, one per material; a "<Piece>_Pivot" marker gives its own origin,
+-- other markers ("Tip", "PalmPoint", "Cell") points on it (a muzzle, the
+-- glove's emitter, where a light goes).
 --
 --   RiftAssets.get()                     the pieces, or nil (no kit: an old
 --                                        place; the callers build their gear
@@ -18,8 +18,9 @@
 --                                        nil without the kit. Not parented.
 --
 -- The pieces' spaces (studs, Roblox axes):
---   Arm        Left Arm space (shoulder at Y = +1, the glove's end at Y = -1)
---   Eye        Head space, for the classic head mesh at scale 1.25
+--   Arm        Left Arm space (shoulder at Y = +1, the glove's end at Y = -1);
+--              RiftGear measures it once spawned and fits it on the real arm
+--              (so an import that scaled or moved it a bit cannot show)
 --   RayGun / PortalGun   Right Arm space (the fist at Y = -1, barrel along -Y)
 --   Flask      its own centre
 
@@ -38,13 +39,15 @@ export type Layer = {
 export type Piece = {
 	name: string,
 	layers: { Layer }, -- the biggest first (the main part)
-	points: { [string]: CFrame }, -- the markers ("Tip", "PalmPoint", "Cell", "Lens"), piece space
+	points: { [string]: CFrame }, -- the markers ("Tip", "PalmPoint", "Cell"), piece space
 }
 export type Paint = (layer: string) -> (Color3, Enum.Material, number)
 
 -- Every piece the kit must have (one missing: an old or half-arrived kit).
-local NAMES = { "Arm", "Eye", "RayGun", "PortalGun", "Flask" }
--- Markers that are not drawn.
+-- (An older kit also has an "Eye" piece, the implant he no longer wears:
+-- it is simply not used.)
+local NAMES = { "Arm", "RayGun", "PortalGun", "Flask" }
+-- Markers that are not drawn ("Lens": the old eye's).
 local MARKERS: { [string]: boolean } =
 	{ Pivot = true, Tip = true, PalmPoint = true, Cell = true, Lens = true }
 
@@ -224,7 +227,7 @@ end
 -- (optional) gives each layer's colour, material and shine; `scale` makes it
 -- bigger or smaller (1 by default). The main part is returned (the others
 -- are welded to it, under it, each named after its layer; the markers are
--- invisible little parts named "Tip", "PalmPoint", "Cell", "Lens"); not
+-- invisible little parts named "Tip", "PalmPoint", "Cell"); not
 -- parented yet. Nil without the kit.
 function RiftAssets.spawn(name: string, at: CFrame, paint: Paint?, scale: number?): BasePart?
 	local all = RiftAssets.get()

@@ -1,7 +1,6 @@
 """
 Builds Dr. Rift's mechanical gear as real meshes: his cyborg left arm with
-the gravity glove, his ocular implant, the ray gun, the portal gun and the
-flask of his potions.
+the gravity glove, the ray gun, the portal gun and the flask of his potions.
 
     venv/bin/python -I tools/rift/build_rift_gear.py assets/rift [--preview <dir>]
 
@@ -20,16 +19,16 @@ Markers (tiny cubes, never shown):
   <Piece>_Pivot   where the piece's own origin is (see below)
   <Piece>_Tip     the muzzle of a gun
   Arm_PalmPoint   where the glove's power comes out
-  Arm_Cell, Eye_Lens   where their green lights go
+  Arm_Cell       where its green light goes
   Kit_Origin / Kit_Up / Kit_Out   1 stud apart: how the importer turned and
                                   scaled the file (as in WoundKit.fbx)
 
 The axes are Roblox's (Y up, the front is -Z, +X is the character's right):
   Arm        Left Arm space (1 x 2 x 1, shoulder at Y = +1, hand at Y = -1;
-             +X faces the torso)
-  Eye        Head space, for the classic head mesh at scale 1.25 (a rounded
-             cylinder of radius 0.6, straight from Y = -0.3 to 0.3); it sits
-             on the RIGHT eye of the default face (X = +0.175, Y = +0.12)
+             +X faces the torso). The game does not trust it blindly: it
+             measures the spawned arm and fits it on the real Left Arm
+             (RiftGear.luau, fitArm; fit_arm below does the same for the
+             pictures), so a different import scale or origin cannot move it.
   RayGun / PortalGun   Right Arm space: the fist at Y = -1.05, the barrel
              along -Y (forward when the arm is raised), the top of the gun
              toward -Z
@@ -50,13 +49,13 @@ PREVIEW = sys.argv[sys.argv.index("--preview") + 1] if "--preview" in sys.argv e
 # Where each piece sits in the kit (its pivot), well apart.
 PIECES = {
     "Arm": (0.0, 0.0, 0.0),
-    "Eye": (4.0, 0.0, 0.0),
     "RayGun": (8.0, 0.0, 0.0),
     "PortalGun": (12.0, 0.0, 0.0),
     "Flask": (16.0, 0.0, 0.0),
 }
 
-# The classic head (see tools/wounds/build_wound_kit.py) and the eye on it.
+# The classic head (see tools/wounds/build_wound_kit.py) and the default
+# face's eyes on it (pictures only).
 HEAD_RADIUS = 0.6
 EYE_X, EYE_Y = 0.175, 0.12
 
@@ -328,201 +327,250 @@ class Piece:
 
 # --- The arm ------------------------------------------------------------------------
 # (Left Arm space, 1 x 2 x 1: the shoulder at the top, Y = +1; +X faces the
-# torso, whose side is at X = +0.5 from the arm's centre: nothing goes past
-# X = +0.48. Read from the top: the shoulder (Y 0.55..0.99), the upper arm
-# (0.1..0.6), the elbow (Y ~0.03), the forearm (-0.08..-0.62), the wrist
-# (-0.62..-0.72), the glove (-0.72..-1.46, its emitter at Y ~ -1.07). A bit
-# wider than the R6 arm (about 1.08 x 2.45 x 1.06): it reads as a heavy limb.)
-ELBOW_Y = 0.03
-WRIST_Y = -0.7
-KNUCKLE_Y = -1.02
-EMITTER_Y = -1.07
+# torso, -Z is the front. Shaped like an arm, not a can: read from the top,
+# a pauldron over the shoulder (Y 0.53..1.0, its lower edge dropping on the
+# outer side, two lames under it), a narrower upper arm (0.12..0.62), the
+# elbow joint (Y ~0, a servo across the arm on a thin link), a forearm that
+# tapers from the elbow to a narrow wrist (-0.12..-0.62), the wrist (~-0.67),
+# then a hand hanging as a relaxed hand does: its palm toward the thigh (+X,
+# the glove's emitter in it), four fingers side by side, gently curled
+# toward the palm, the thumb in front (-Z). The game then fits it on the
+# real arm (fit_arm), whatever the import did to it.)
+ELBOW_Y = 0.0
+WRIST_Y = -0.67
+KNUCKLE_Y = -1.01
+PALM_Y = -0.86
+HAND_GROW = 1.2  # the hand, bigger than built (Y: a bit less)
+WIDEN = 1.45  # (the body of the arm, built thin, made this much thicker: see build_arm)
 
 
-def finger(p, base, out, curls=(25, -20, -65), width=0.17, thick=0.155, lengths=(0.2, 0.16, 0.13)):
-    """A finger of 3 segments from the knuckle `base`, opening along `out`
-    (a horizontal unit vector), curling back in round the emitter."""
+def surface_solid(fn, nu, nv, thick, wrap=False):
+    """A plate of thickness `thick` from a surface fn(u, v, inset) (u, v in
+    0..1; `inset` moves the point inward): its outer side, its inner side and
+    the edges between. A pole (all points of a row at one place) is merged."""
+    bm = bmesh.new()
+    us = [i / nu for i in range(nu)] if wrap else [i / (nu - 1) for i in range(nu)]
+    vs = [j / (nv - 1) for j in range(nv)]
+    outer = [[bm.verts.new(fn(u, v, 0.0)) for v in vs] for u in us]
+    inner = [[bm.verts.new(fn(u, v, thick)) for v in vs] for u in us]
+    cols = nu if wrap else nu - 1
+    for i in range(cols):
+        a, b = i, (i + 1) % nu
+        for j in range(nv - 1):
+            bm.faces.new((outer[a][j], outer[b][j], outer[b][j + 1], outer[a][j + 1]))
+            bm.faces.new((inner[a][j + 1], inner[b][j + 1], inner[b][j], inner[a][j]))
+        for j in (0, nv - 1):  # the top and bottom edges
+            bm.faces.new((outer[a][j], inner[a][j], inner[b][j], outer[b][j]))
+    if not wrap:
+        for i in (0, nu - 1):  # the side edges
+            for j in range(nv - 1):
+                bm.faces.new((outer[i][j], outer[i][j + 1], inner[i][j + 1], inner[i][j]))
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bmesh.ops.dissolve_degenerate(bm, dist=1e-6, edges=bm.edges[:])
+    return bm
+
+
+def finger(p, base, out, curls=(6, 20, 28), width=0.082, thick=0.09, lengths=(0.1, 0.08, 0.06)):
+    """A finger of 3 segments from the knuckle `base`, hanging down and
+    curling toward `out` (a horizontal unit vector: the palm's side)."""
     side = out.cross(Vector((0, -1, 0))).normalized()  # the joints' axis
     at = Vector(base)
     # knuckle servo
-    p.add("SteelDark", cyl(width * 0.5, width * 1.4, segs=14, bevel=0.012), aim_y(at, side))
-    p.add("Chrome", cyl(width * 0.2, width * 1.62, segs=8), aim_y(at, side))
+    p.add("SteelDark", cyl(width * 0.5, width * 1.15, segs=10, bevel=0.008), aim_y(at, side))
+    p.add("Chrome", cyl(width * 0.2, width * 1.3, segs=8), aim_y(at, side))
+    total = 0.0
     for i, (curl, L) in enumerate(zip(curls, lengths)):
-        if L < 1e-3:
-            continue
-        d = (Vector((0, -1, 0)) * math.cos(math.radians(curl)) + out * math.sin(math.radians(curl))).normalized()
-        w = width * (1 - 0.1 * i)
-        t = thick * (1 - 0.1 * i)
+        total += curl
+        d = (Vector((0, -1, 0)) * math.cos(math.radians(total)) + out * math.sin(math.radians(total))).normalized()
+        w = width * (1 - 0.08 * i)
+        t = thick * (1 - 0.08 * i)
         back = side.cross(d)  # out of the back of the finger
         frame = Matrix((side, d, back)).transposed().to_4x4()
         frame.translation = at + d * (L / 2)
         # the segment: a dark inner bone, an armour shell over its back
-        p.add("SteelDark", box(w * 0.78, L * 0.96, t * 0.8, bevel=0.02, segments=1), frame)
+        p.add("SteelDark", box(w * 0.8, L * 0.98, t * 0.8, bevel=0.015, segments=1), frame)
         shell = frame.copy()
-        shell.translation = at + d * (L * 0.48) + back * (t * 0.12)
-        p.add("Steel", box(w, L * 0.82, t * 0.78, bevel=0.03, segments=2, taper=0.86), shell)
-        # two rivets on each shell, a tendon pin on the side
-        for f in (0.28, 0.68):
-            p.rivet("Steel", at + d * (L * f) + back * (t * 0.52), back, r=0.012)
+        shell.translation = at + d * (L * 0.47) + back * (t * 0.14)
+        p.add("Steel", box(w, L * 0.8, t * 0.72, bevel=0.022, segments=2, taper=0.9), shell)
+        p.rivet("Steel", at + d * (L * 0.45) + back * (t * 0.5), back, r=0.01)
         at = at + d * L
-        if i < len(curls) - 1 and lengths[i + 1] > 1e-3:
-            p.add("SteelDark", cyl(w * 0.4, w * 1.16, segs=12, bevel=0.008), aim_y(at, side))
-            p.add("Chrome", cyl(w * 0.15, w * 1.34, segs=8), aim_y(at, side))
+        if i < len(curls) - 1:
+            p.add("SteelDark", cyl(w * 0.42, w * 1.05, segs=10), aim_y(at, side))
+            p.add("Chrome", cyl(w * 0.16, w * 1.18, segs=8), aim_y(at, side))
     # the fingertip: a hard pad
-    p.add("SteelDark", sphere(width * 0.4, 12, 8), Matrix.Translation(at) @ S(1, 0.8, 1))
+    p.add("SteelDark", sphere(width * 0.42, 10, 6), Matrix.Translation(at) @ S(1, 0.8, 1))
 
 
 def build_arm():
     p = Piece("Arm")
-    cx = -0.04  # the arm's own axis leans a hair away from the torso
-    # --- the shoulder: a rounded pauldron over a dark rim, a second plate ---------------
-    dome = lathe([(0, 0), (0.5, 0), (0.5, 0.07), (0.48, 0.16), (0.43, 0.24), (0.33, 0.31), (0.17, 0.35), (0, 0.36)], segs=40)
-    p.add("Steel", dome, T(cx, 0.6, 0) @ R(0, 0, 4) @ S(0.94, 0.95, 0.94))
-    p.add("SteelDark", lathe([(0, 0), (0.49, 0), (0.49, 0.045), (0, 0.045)], segs=40), T(cx, 0.565, 0))  # the rim
-    # a flared collar under the rim, from the upper arm out to the dome (no mushroom overhang)
-    p.add("SteelDark", lathe([(0, 0.44), (0.335, 0.44), (0.36, 0.49), (0.42, 0.54), (0.46, 0.57), (0, 0.57)], segs=32), T(cx, 0, 0))
-    for a in range(0, 360, 30):  # rivets round the rim
-        u = azim(a)
-        if u.x * 0.47 + cx < 0.42:
-            p.rivet("Steel", Vector((cx + u.x * 0.47, 0.59, u.z * 0.47)), Vector((u.x, 0, u.z)), r=0.018)
-    # a second, older plate over the outer side (salvaged, a bit crooked), bolted
-    tilt = T(cx, 0, 0) @ R(0, 0, -5)
-    p.add("Steel", shell_arc(0.49, 0.535, 0.48, 0.74, 145, 215, segs=12, bevel=0.014), tilt)
-    for a in (151, 209):
-        for y in (0.53, 0.69):
-            p.bolt("Brass", tilt @ (azim(a) * 0.537 + Vector((0, y, 0))), tilt.to_3x3() @ azim(a), r=0.022, h=0.014)
-    # a raised ridge over the dome, front to back
-    ridge = [Vector((cx - 0.02, 0.6 + 0.34 * math.sin(math.radians(a)) + 0.02, 0.47 * math.cos(math.radians(a)) * 0.97)) for a in range(25, 160, 9)]
-    p.add("SteelDark", tube(ridge, 0.026, segs=8, smooth=3))
-    # vents at the back of the dome
-    for i in range(3):
-        p.add("SteelDark", box(0.32, 0.026, 0.07, bevel=0.01, segments=1), T(cx - 0.05, 0.84 - i * 0.06, 0.3 + i * 0.045) @ R(-28 - i * 9, 0, 0))
-    # a status light on the front
-    p.add("SteelDark", cyl(0.045, 0.035, segs=16, bevel=0.01, axis="Z"), T(0.12, 0.76, -0.42) @ R(-30, 0, 0))
-    p.add("Glow", sphere(0.028, 10, 6), T(0.12, 0.77, -0.44))
-    # --- the shoulder servo, under the dome on the outer side --------------------------
-    sy = 0.46
-    p.add("SteelDark", cyl(0.2, 0.14, segs=28, bevel=0.022, axis="X"), T(-0.4, sy, 0))
-    p.add("Brass", gear_ring(0.22, 0.045, 18, 0.04), T(-0.48, sy, 0) @ R(0, 0, 90))
-    p.add("Chrome", cyl(0.065, 0.12, segs=16, bevel=0.01, axis="X"), T(-0.52, sy, 0))
-    p.add("SteelDark", hexbolt(0.045, 0.025), T(-0.575, sy, 0) @ R(0, 0, 90))
-    for i in range(6):
-        a = math.radians(i * 60 + 30)
-        p.bolt("Chrome", (-0.505, sy + 0.14 * math.sin(a), 0.14 * math.cos(a)), (-1, 0, 0), r=0.015, h=0.01)
-    # --- the upper arm: a dark core, armour over it ---------------------------------
-    p.add("SteelDark", cyl(0.3, 0.56, segs=28, r2=0.33, bevel=0.02), T(cx, 0.33, 0))
-    p.add("SteelDark", torus(0.32, 0.02, segs=28, rsegs=6), T(cx, 0.16, 0))
-    # a curved armour plate over the front and the outer side
-    p.add("Steel", shell_arc(0.34, 0.385, 0.18, 0.52, 150, 290, segs=18), T(cx, 0, 0))
-    for a in (158, 200, 242, 282):
-        for y in (0.22, 0.48):
-            p.rivet("Steel", azim(a) * 0.387 + Vector((cx, y, 0)), azim(a), r=0.016)
+    cx = -0.02  # the arm's own axis, a hair away from the torso
+    # --- the upper arm: narrower than the shoulder, a dark core, armour over it ------
+    p.add("SteelDark", cyl(0.25, 0.5, segs=28, r2=0.29, bevel=0.02), T(cx, 0.36, 0))
+    # a curved plate over the front and the outer side
+    p.add("Steel", shell_arc(0.28, 0.315, 0.17, 0.48, 150, 290, segs=18), T(cx, 0, 0))
+    for a in (160, 205, 250, 282):
+        for y in (0.22, 0.43):
+            p.rivet("Steel", azim(a) * 0.317 + Vector((cx, y, 0)), azim(a), r=0.014)
     # a dark scrap plate at the back
-    p.add("SteelDark", shell_arc(0.33, 0.37, 0.22, 0.5, 45, 125, segs=12), T(cx, 0, 0))
+    p.add("SteelDark", shell_arc(0.27, 0.305, 0.2, 0.46, 45, 125, segs=12), T(cx, 0, 0))
     for a in (52, 118):
-        p.bolt("Brass", azim(a) * 0.372 + Vector((cx, 0.36, 0)), azim(a), r=0.018)
-    # --- hydraulics: one piston in front, one at the back-outer, over the elbow ---------
-    front = ((-0.06, 0.52, -0.43), (-0.06, -0.24, -0.41))
-    back = ((-0.34, 0.5, 0.3), (-0.34, -0.22, 0.33))
-    p.piston(*front, r=0.05, rod=0.026, split=0.5)
-    p.piston(*back, r=0.044, rod=0.023, split=0.52)
+        p.bolt("Brass", azim(a) * 0.307 + Vector((cx, 0.33, 0)), azim(a), r=0.016)
+    p.add("SteelDark", torus(0.255, 0.018, segs=28, rsegs=6), T(cx, 0.13, 0))
+    # --- hydraulics: a "biceps" piston in front, a "triceps" one at the back --------
+    front = ((cx, 0.5, -0.33), (cx, -0.2, -0.3))
+    back = ((cx - 0.08, 0.48, 0.32), (cx - 0.08, -0.18, 0.29))
+    p.piston(*front, r=0.045, rod=0.024, split=0.5)
+    p.piston(*back, r=0.04, rod=0.021, split=0.52)
     for (a, b), toward in ((front, -1), (back, 1)):
         for q in (a, b):
-            p.add("SteelDark", box(0.13, 0.08, 0.12, bevel=0.02), T(q[0], q[1], q[2] - toward * 0.06))
-    # --- the elbow: a servo across the arm ------------------------------------------
-    p.add("SteelDark", cyl(0.25, 0.6, segs=32, bevel=0.03, axis="X"), T(cx, ELBOW_Y, 0.03))
-    for x in (cx - 0.32, cx + 0.32):
-        p.add("Brass", cyl(0.265, 0.04, segs=32, bevel=0.009, axis="X"), T(x, ELBOW_Y, 0.03))
+            p.add("SteelDark", box(0.1, 0.07, 0.09, bevel=0.015), T(q[0], q[1], q[2] - toward * 0.045))
+    # --- the elbow: a thin link, a servo across it ------------------------------------
+    p.add("SteelDark", cyl(0.16, 0.3, segs=20, bevel=0.01), T(cx, ELBOW_Y, 0))
+    p.add("SteelDark", cyl(0.17, 0.52, segs=32, bevel=0.025, axis="X"), T(cx, ELBOW_Y, 0.02))
+    for x in (cx - 0.27, cx + 0.27):
+        p.add("Brass", cyl(0.185, 0.035, segs=32, bevel=0.008, axis="X"), T(x, ELBOW_Y, 0.02))
         s = math.copysign(1, x - cx)
         for i in range(6):
             a = math.radians(i * 60 + 30)
-            p.bolt("Chrome", (x + s * 0.02, ELBOW_Y + 0.2 * math.sin(a), 0.03 + 0.2 * math.cos(a)), (s, 0, 0), r=0.015, h=0.01)
-    p.add("Chrome", cyl(0.08, 0.76, segs=20, bevel=0.012, axis="X"), T(cx, ELBOW_Y, 0.03))
-    p.add("SteelDark", hexbolt(0.06, 0.03), T(cx - 0.38, ELBOW_Y, 0.03) @ R(0, 0, 90))
-    # the elbow guard at the back
-    p.add("Steel", shell_arc(0.27, 0.315, ELBOW_Y - 0.14, ELBOW_Y + 0.15, 55, 125, segs=10), T(cx, 0, 0.03))
-    # --- the forearm: segmented plates round a dark core, wide at the elbow ----------
-    p.add("SteelDark", cyl(0.29, 0.66, segs=28, r2=0.32, bevel=0.02), T(cx, -0.37, 0))
-    window = (252, 288)  # the front, where the power cell shows
-    bands = ((-0.09, -0.24, 0.39), (-0.265, -0.415, 0.375), (-0.44, -0.6, 0.36))
+            p.bolt("Chrome", (x + s * 0.018, ELBOW_Y + 0.13 * math.sin(a), 0.02 + 0.13 * math.cos(a)), (s, 0, 0), r=0.012, h=0.008)
+    p.add("Chrome", cyl(0.055, 0.64, segs=16, bevel=0.01, axis="X"), T(cx, ELBOW_Y, 0.02))
+    p.add("SteelDark", hexbolt(0.045, 0.025), T(cx - 0.32, ELBOW_Y, 0.02) @ R(0, 0, 90))
+    # the elbow guard at the back (the point of the elbow)
+    p.add("Steel", shell_arc(0.19, 0.23, ELBOW_Y - 0.13, ELBOW_Y + 0.13, 50, 130, segs=10), T(cx, 0, 0.05))
+    p.rivet("Steel", (cx, ELBOW_Y, 0.05 + 0.232), (0, 0, 1), r=0.016)
+    # --- the forearm: wide at the elbow, tapering to the wrist ------------------------
+    p.add("SteelDark", cyl(0.19, 0.5, segs=28, r2=0.28, bevel=0.02), T(cx, -0.37, 0))
+    window = (254, 286)  # the front, where the power cell shows
+    bands = ((-0.12, -0.27, 0.31), (-0.29, -0.43, 0.275), (-0.45, -0.59, 0.24))
     for y1, y0, r in bands:
-        p.add("Steel", shell_arc(r - 0.045, r, y0, y1, window[1], window[0] + 360, segs=30, bevel=0.014), T(cx, 0, 0))
-        for a in range(window[1] + 14, window[0] + 360 - 8, 30):
-            p.rivet("Steel", azim(a) * (r + 0.002) + Vector((cx, (y0 + y1) / 2, 0)), azim(a), r=0.014)
-    # the window frame and its glass, the power cell behind
-    for a in window:
-        p.add("SteelDark", box(0.05, 0.53, 0.08, bevel=0.012), T(*(azim(a) * 0.37 + Vector((cx, -0.34, 0)))) @ R(0, -a, 0))
-    p.add("Glass", shell_arc(0.345, 0.357, -0.59, -0.1, window[0] - 3, window[1] + 3, segs=8, bevel=0.004), T(cx, 0, 0))
-    cell = Vector((cx, -0.345, -0.25))
-    p.add("Glow", cyl(0.075, 0.36, segs=16, bevel=0.012), T(*cell))
-    for dy in (0.19, -0.19):
-        p.add("Brass", cyl(0.09, 0.04, segs=16, bevel=0.01), T(*(cell + Vector((0, dy, 0)))))
-    for dy in (-0.09, 0.0, 0.09):
-        p.add("SteelDark", torus(0.077, 0.008, segs=16, rsegs=5), T(*(cell + Vector((0, dy, 0)))))  # the cell's bands
-    p.mark("Arm_Cell", cell + Vector((0, 0, -0.16)))  # (its light: just in front of the glass)
-    # --- cables: hoses from the shoulder down the back into the forearm --------------
+        p.add("Steel", shell_arc(r - 0.04, r, y0, y1, window[1], window[0] + 360, segs=30, bevel=0.012), T(cx, 0, 0))
+        for a in range(window[1] + 14, window[0] + 360 - 8, 32):
+            p.rivet("Steel", azim(a) * (r + 0.002) + Vector((cx, (y0 + y1) / 2, 0)), azim(a), r=0.012)
+    # the power cell behind a glass, along the front of the taper
+    top, bot = Vector((cx, -0.15, -0.255)), Vector((cx, -0.57, -0.185))
+    axis = top - bot
+    mid = (top + bot) / 2
+    p.add("Glow", cyl(0.05, axis.length * 0.8, segs=16, bevel=0.01), aim_y(mid, axis))
+    for f in (0.43, -0.43):
+        p.add("Brass", cyl(0.06, 0.035, segs=16, bevel=0.008), aim_y(mid + axis * f, axis))
+    for f in (-0.15, 0.0, 0.15):
+        p.add("SteelDark", torus(0.052, 0.007, segs=16, rsegs=5), aim_y(mid + axis * f, axis))
+    p.add("Glass", box(0.13, axis.length, 0.01, bevel=0.003, segments=1), aim_y(mid + Vector((0, 0, -0.065)), axis))
+    for s in (-1, 1):  # the window's frame
+        p.add("SteelDark", box(0.035, axis.length + 0.02, 0.07, bevel=0.01), aim_y(mid + Vector((s * 0.085, 0, -0.03)), axis))
+    p.mark("Arm_Cell", mid + Vector((0, 0, -0.13)))  # (its light: just in front of the glass)
+    # --- cables: hoses from under the pauldron down the back into the forearm --------
     hoses = [
-        ([(0.16, 0.55, 0.42), (0.16, 0.36, 0.45), (0.16, 0.14, 0.43), (0.13, -0.06, 0.39), (0.1, -0.2, 0.37)], 0.034),
-        ([(0.02, 0.56, 0.45), (0.02, 0.36, 0.49), (0.0, 0.14, 0.46), (-0.02, -0.06, 0.41), (-0.04, -0.21, 0.38)], 0.04),
-        ([(-0.16, 0.55, 0.42), (-0.19, 0.36, 0.45), (-0.21, 0.14, 0.43), (-0.2, -0.05, 0.39), (-0.17, -0.2, 0.36)], 0.03),
+        ([(cx + 0.1, 0.55, 0.33), (cx + 0.1, 0.32, 0.31), (cx + 0.12, 0.08, 0.27), (cx + 0.1, -0.1, 0.27), (cx + 0.08, -0.2, 0.26)], 0.03),
+        ([(cx - 0.14, 0.55, 0.32), (cx - 0.16, 0.32, 0.29), (cx - 0.17, 0.08, 0.25), (cx - 0.14, -0.1, 0.26), (cx - 0.12, -0.2, 0.25)], 0.026),
     ]
     for pts, r in hoses:
         p.add("Rubber", tube(pts, r, segs=10, smooth=6))
         path = catmull(pts, 6)
-        for t in (0.2, 0.7):
+        for t in (0.25, 0.75):
             i = int(t * (len(path) - 1))
             p.add("Brass", tube([path[i - 1], path[i + 1]], r * 1.3, segs=10, smooth=0))
-    # a thin cable from the power cell round the wrist into the glove
-    p.add("Rubber", tube([(cx + 0.1, -0.56, -0.33), (cx + 0.22, -0.64, -0.29), (cx + 0.32, -0.74, -0.15), (cx + 0.36, -0.86, 0.0)], 0.018, segs=8))
-    # --- the wrist: a brass ring, a turning chrome collar -----------------------------
-    p.add("Brass", cyl(0.33, 0.05, segs=32, bevel=0.012), T(cx, WRIST_Y + 0.07, 0))
-    p.add("Chrome", cyl(0.27, 0.07, segs=32, bevel=0.012), T(cx, WRIST_Y + 0.01, 0))
-    p.add("SteelDark", torus(0.272, 0.012, segs=32, rsegs=5), T(cx, WRIST_Y - 0.02, 0))
-    # --- the gravity glove: a heavy hand curled round the emitter ---------------------
-    hy = (WRIST_Y - 0.04 + KNUCKLE_Y) / 2
-    hh = (WRIST_Y - 0.04) - KNUCKLE_Y
-    p.add("SteelDark", cyl(0.37, hh, segs=10, r2=0.3, bevel=0.03), T(cx, hy, 0) @ R(0, 18, 0))  # the palm frame
-    # armour plates round the hand (the back of the hand is the outer side, -X)
-    p.add("Steel", shell_arc(0.36, 0.405, KNUCKLE_Y + 0.03, WRIST_Y - 0.06, 120, 240, segs=14, bevel=0.016), T(cx, 0, 0))
-    p.add("Steel", shell_arc(0.36, 0.395, KNUCKLE_Y + 0.03, WRIST_Y - 0.08, 300, 420, segs=12, bevel=0.016), T(cx, 0, 0))
-    for a in (128, 180, 232, 308, 412):
-        for y in (KNUCKLE_Y + 0.07, WRIST_Y - 0.12):
-            p.rivet("Steel", azim(a) * 0.407 + Vector((cx, y, 0)), azim(a), r=0.015)
-    # capacitor lights on the back of the hand
-    for k, a in enumerate((165, 180, 195)):
-        u = azim(a)
-        p.add("SteelDark", box(0.035, 0.15, 0.05, bevel=0.01), aim_y(u * 0.41 + Vector((cx, hy - 0.01, 0)), (0, 1, 0)) @ R(0, -a, 0))
-        p.add("Glow", box(0.02, 0.11, 0.03, bevel=0.006), aim_y(u * 0.425 + Vector((cx, hy - 0.01, 0)), (0, 1, 0)) @ R(0, -a, 0))
-    p.add("SteelDark", cyl(0.39, 0.05, segs=40, bevel=0.012), T(cx, KNUCKLE_Y + 0.015, 0))  # the knuckle ring
-    # the emitter at the end: a brass ring, a chrome ring, the glowing disc (Palm), a hub
-    p.add("Brass", torus(0.24, 0.035, segs=32, rsegs=8), T(cx, EMITTER_Y + 0.005, 0))
-    p.add("Chrome", torus(0.175, 0.018, segs=28, rsegs=6), T(cx, EMITTER_Y - 0.002, 0))
-    p.add("Palm", cyl(0.215, 0.03, segs=32), T(cx, EMITTER_Y + 0.012, 0))
-    p.add("SteelDark", cyl(0.045, 0.03, segs=12), T(cx, EMITTER_Y - 0.008, 0))
-    for k in range(3):  # three spokes from the hub
-        a = 90 + 120 * k
-        p.add("SteelDark", box(0.16, 0.014, 0.018), T(cx, EMITTER_Y - 0.006, 0) @ R(0, -a, 0) @ T(0.12, 0, 0))
-    p.mark("Arm_PalmPoint", (cx, EMITTER_Y - 0.08, 0))
-    # three fingers and a thumb, round the emitter (the thumb toward the torso)
-    for a in (125, 180, 235):
-        finger(p, azim(a) * 0.3 + Vector((cx, KNUCKLE_Y, 0)), azim(a))
-    finger(p, azim(5) * 0.3 + Vector((cx, KNUCKLE_Y + 0.07, 0)), azim(5), curls=(35, -10, -55), lengths=(0.19, 0.15, 0.12), width=0.18, thick=0.16)
-    # a tendon cable on the back of each finger
-    for a in (125, 180, 235, 5):
-        u = azim(a)
-        p.add(
-            "Rubber",
-            tube(
-                [u * 0.36 + Vector((cx, WRIST_Y - 0.06, 0)), u * 0.415 + Vector((cx, hy, 0)), u * 0.39 + Vector((cx, KNUCKLE_Y - 0.01, 0))],
-                0.013,
-                segs=6,
-                smooth=4,
-            ),
-        )
+    # a thin cable from the power cell round the wrist into the palm
+    p.add("Rubber", tube([(cx + 0.06, -0.56, -0.2), (cx + 0.15, -0.63, -0.14), (cx + 0.16, -0.72, -0.06), (cx + 0.13, -0.78, 0.0)], 0.014, segs=8))
+    # --- the wrist: narrow, a brass ring, a turning chrome collar ----------------------
+    p.add("Brass", cyl(0.215, 0.04, segs=32, bevel=0.01), T(cx, WRIST_Y + 0.06, 0))
+    p.add("Chrome", cyl(0.165, 0.08, segs=32, bevel=0.012), T(cx, WRIST_Y, 0))
+    p.add("SteelDark", torus(0.168, 0.01, segs=32, rsegs=5), T(cx, WRIST_Y - 0.035, 0))
+    # --- the hand: flat, its palm toward the body, the emitter in it ------------------
+    h = Piece("Hand")  # (built apart, then put on a bit bigger: a heavy gauntlet)
+    hx = cx + 0.01  # its middle
+    h.add("SteelDark", box(0.19, 0.29, 0.34, bevel=0.04, segments=2, taper=1.08), T(hx, PALM_Y, 0))
+    # the back of the hand (outside, -X): an armour plate, capacitor lights on it
+    back_hand = T(hx - 0.105, PALM_Y + 0.005, 0) @ R(0, 0, -5)
+    h.add("Steel", box(0.045, 0.28, 0.37, bevel=0.018, segments=2, taper=1.06), back_hand)
+    for z in (-0.13, 0.13):
+        for y in (-0.1, 0.1):
+            h.rivet("Steel", back_hand @ Vector((-0.024, y, z)), (-1, 0, 0), r=0.012)
+    for z in (-0.06, 0.0, 0.06):
+        h.add("SteelDark", box(0.02, 0.15, 0.032, bevel=0.006), back_hand @ T(-0.026, 0, z))
+        h.add("Glow", box(0.012, 0.12, 0.018, bevel=0.004), back_hand @ T(-0.034, 0, z))
+    # the palm (+X): a pad, the emitter (Palm: a glowing disc in a brass ring)
+    ex = hx + 0.1
+    h.add("SteelDark", box(0.02, 0.26, 0.3, bevel=0.008), T(ex - 0.005, PALM_Y, 0))
+    h.add("Palm", cyl(0.095, 0.02, segs=32, axis="X"), T(ex + 0.004, PALM_Y, 0))
+    h.add("Brass", torus(0.105, 0.017, segs=32, rsegs=8), T(ex + 0.006, PALM_Y, 0) @ R(0, 0, 90))
+    h.add("Chrome", torus(0.07, 0.009, segs=28, rsegs=6), T(ex + 0.012, PALM_Y, 0) @ R(0, 0, 90))
+    h.add("SteelDark", cyl(0.025, 0.02, segs=12, axis="X"), T(ex + 0.014, PALM_Y, 0))
+    h.mark("Arm_PalmPoint", (ex + 0.08, PALM_Y, 0))
+    # the knuckles: a dark bar across the bottom of the hand
+    h.add("SteelDark", cyl(0.055, 0.38, segs=16, bevel=0.01, axis="Z"), T(hx, KNUCKLE_Y + 0.02, 0))
+    # four fingers side by side (front to back: index .. little), the thumb in front
+    out = Vector((1, 0, 0))
+    for z, lengths in ((-0.13, (0.1, 0.08, 0.06)), (-0.043, (0.11, 0.085, 0.065)), (0.043, (0.1, 0.08, 0.06)), (0.13, (0.085, 0.068, 0.054))):
+        finger(h, (hx, KNUCKLE_Y, z), out, lengths=lengths)
+    thumb_base = Vector((hx + 0.05, PALM_Y + 0.03, -0.19))
+    h.add("SteelDark", sphere(0.06, 14, 10), Matrix.Translation(thumb_base))
+    finger(h, thumb_base, Vector((0.55, 0, -0.35)).normalized(), curls=(22, 16, 16), lengths=(0.09, 0.07, 0.055), width=0.088, thick=0.095)
+    # tendon cables on the back of the hand, from the wrist to each knuckle
+    for z in (-0.13, -0.043, 0.043, 0.13):
+        h.add("Rubber", tube([(hx - 0.07, WRIST_Y - 0.04, z * 0.6), (hx - 0.135, PALM_Y, z * 0.85), (hx - 0.06, KNUCKLE_Y + 0.01, z)], 0.011, segs=6, smooth=4))
+    grow = T(cx, WRIST_Y - 0.03, 0) @ S(HAND_GROW, HAND_GROW * 0.9, HAND_GROW) @ T(-cx, -(WRIST_Y - 0.03), 0)
+    for layer, bm in h.layers.items():
+        p.add(layer, bm, grow)
+    for name, at in h.markers.items():
+        p.markers[name] = grow @ Vector(at)
+    # thicker round the arm's own axis (X, Z: WIDEN), a limb as wide as the
+    # R6 arm (the shoulder below is built at its real size, over it)
+    widen = T(cx, 0, 0) @ S(WIDEN, 1, WIDEN) @ T(-cx, 0, 0)
+    for bm in p.layers.values():
+        bmesh.ops.transform(bm, matrix=widen, verts=bm.verts)
+    for name, at in p.markers.items():
+        p.markers[name] = widen @ Vector(at)
+    # --- the shoulder: a pauldron, its edge low on the outside, high near the neck ----
+    pc = Vector((cx - 0.04, 0.7, 0))  # its centre
+    prad = Vector((0.52, 0.28, 0.51))
+
+    def edge(phi):  # how far down the pauldron goes (from the top, degrees)
+        return 72 - 22 * math.cos(phi)
+
+    def pauldron(u, v, inset):
+        phi = 2 * math.pi * u
+        t = math.radians(edge(phi)) * v
+        r = prad - Vector((inset, inset, inset))
+        return pc + Vector((math.sin(t) * math.cos(phi) * r.x, math.cos(t) * r.y, math.sin(t) * math.sin(phi) * r.z))
+
+    p.add("Steel", surface_solid(pauldron, 40, 10, 0.035, wrap=True))
+    # its rolled lower edge, rivets above it
+    rim = [pauldron(i / 48, 1.0, 0.017) for i in range(48)]
+    p.add("SteelDark", tube(rim, 0.022, segs=8, closed=True, smooth=0))
+    for i in range(0, 48, 4):
+        u = i / 48
+        if math.cos(2 * math.pi * u) < 0.6:  # (none on the torso's side)
+            q = pc + (pauldron(u, 0.86, 0.0) - pc) * 1.005
+            p.rivet("Steel", q, q - pc, r=0.016)
+    # a raised crest over the top, front to back
+    crest = [pc + Vector((-0.12 * math.cos(math.radians(a)), math.cos(math.radians(a)) * prad.y * 0.97 + 0.012, math.sin(math.radians(a)) * prad.z * 0.97)) for a in range(-62, 63, 8)]
+    p.add("SteelDark", tube(crest, 0.022, segs=8, smooth=3))
+    # a lame under it on the outer side, overlapping like armour
+
+    def lame(y_top, y_bot, r_top, r_bot, a0, a1):
+        def fn(u, v, inset):
+            a = math.radians(a0 + (a1 - a0) * u)
+            r = r_top + (r_bot - r_top) * v - inset
+            y = y_top + (y_bot - y_top) * v
+            return pc + Vector((math.cos(a) * r, y - pc.y, math.sin(a) * r * 0.97))
+
+        return fn
+
+    for y0, y1, r0, r1, a0, a1 in ((0.72, 0.56, 0.49, 0.525, 122, 238),):
+        fn = lame(y0, y1, r0, r1, a0, a1)
+        p.add("Steel", surface_solid(fn, 20, 3, 0.03))
+        p.add("SteelDark", tube([fn(i / 19, 1.0, 0.015) for i in range(20)], 0.016, segs=6, smooth=0))
+        for u in (0.12, 0.88):
+            q = fn(u, 0.5, -0.004)
+            p.bolt("Brass", q, Vector((q.x - pc.x, 0, q.z)).normalized(), r=0.018, h=0.012)
+    # the shoulder joint inside: a dark ball, a brass ring where the arm turns
+    p.add("SteelDark", sphere(0.38, 20, 10), T(cx, 0.72, 0))
+    p.add("Brass", torus(0.42, 0.025, segs=32, rsegs=6), T(cx, 0.62, 0))
     return p
 
 
-# --- The eye -------------------------------------------------------------------------
+# --- The head (pictures only: the default face) ---------------------------------------
 def on_head(x, y, lift=0.0):
     """A frame on the classic head's front at (x, y): +Y out of the skin,
     +X round the head toward its right, +Z up."""
@@ -535,115 +583,6 @@ def on_head(x, y, lift=0.0):
     m = Matrix((tangent, normal, up)).transposed().to_4x4()
     m.translation = pos
     return m
-
-
-def head_patch(outline, lift, thickness, segs_per_edge=4):
-    """A thin plate lying ON the head (bent round it): `outline` is a list of
-    (x, y) points on the face (x measured round the head, in studs)."""
-    bm = bmesh.new()
-    pts = []
-    for i in range(len(outline)):
-        a, b = Vector(outline[i]), Vector(outline[(i + 1) % len(outline)])
-        for k in range(segs_per_edge):
-            pts.append(a.lerp(b, k / segs_per_edge))
-    cx = sum(p.x for p in pts) / len(pts)
-    cy = sum(p.y for p in pts) / len(pts)
-
-    def place(x, y, r):
-        ang = x / HEAD_RADIUS
-        return Vector((r * math.sin(ang), y, -r * math.cos(ang)))
-
-    rings = 4
-    layers = []
-    for side, r in ((0, HEAD_RADIUS + lift), (1, HEAD_RADIUS + lift + thickness)):
-        grid = []
-        for k in range(rings + 1):
-            f = 1 - k / rings
-            if k == rings:
-                grid.append([bm.verts.new(place(cx, cy, r))])
-            else:
-                grid.append([bm.verts.new(place(cx + (p.x - cx) * f, cy + (p.y - cy) * f, r)) for p in pts])
-        layers.append(grid)
-    n = len(pts)
-    for side, grid in enumerate(layers):
-        for k in range(rings):
-            a, b = grid[k], grid[k + 1]
-            for i in range(n):
-                j = (i + 1) % n
-                if len(b) == 1:
-                    face = (a[i], a[j], b[0])
-                else:
-                    face = (a[i], a[j], b[j], b[i])
-                bm.faces.new(face if side == 1 else tuple(reversed(face)))
-    inner, outer = layers[0][0], layers[1][0]
-    for i in range(n):
-        j = (i + 1) % n
-        bm.faces.new((inner[i], inner[j], outer[j], outer[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
-    edge_ring = [e for e in bm.edges if e.calc_face_angle(0) > math.radians(55)]
-    bevel_edges(bm, edge_ring, thickness * 0.35, 1)
-    return bm
-
-
-def build_eye():
-    p = Piece("Eye")
-    ex = HEAD_RADIUS * math.asin(EYE_X / HEAD_RADIUS)  # the eye, measured round the head
-    # the plate grafted into the skin: round the eye, reaching back to the temple
-    outline = [
-        (ex - 0.13, EYE_Y + 0.02),
-        (ex - 0.09, EYE_Y + 0.13),
-        (ex + 0.06, EYE_Y + 0.15),
-        (ex + 0.2, EYE_Y + 0.11),
-        (ex + 0.34, EYE_Y + 0.07),
-        (ex + 0.36, EYE_Y - 0.03),
-        (ex + 0.2, EYE_Y - 0.06),
-        (ex + 0.08, EYE_Y - 0.13),
-        (ex - 0.06, EYE_Y - 0.12),
-    ]
-    p.add("Steel", head_patch(outline, -0.004, 0.018))
-    # screws holding it into the skull
-    for x, y in (
-        (ex - 0.1, EYE_Y + 0.06),
-        (ex + 0.02, EYE_Y + 0.12),
-        (ex + 0.3, EYE_Y + 0.05),
-        (ex + 0.12, EYE_Y - 0.08),
-        (ex - 0.04, EYE_Y - 0.09),
-        (ex + 0.22, EYE_Y - 0.03),
-    ):
-        f = on_head(HEAD_RADIUS * math.sin(x / HEAD_RADIUS), y, 0.012)
-        p.add("SteelDark", hexbolt(0.014, 0.008), f)
-    # the bezel round the eye: a brass ring, standing out a little
-    eye = on_head(EYE_X, EYE_Y, 0.012)
-    p.add("Brass", lathe([(0.062, -0.01), (0.104, -0.01), (0.108, 0.018), (0.098, 0.034), (0.07, 0.04), (0.062, 0.03)], segs=32), eye)
-    for k in range(4):
-        a = math.radians(45 + 90 * k)
-        p.add("SteelDark", hexbolt(0.009, 0.006), eye @ T(0.085 * math.cos(a), 0.03, 0.085 * math.sin(a)))
-    # inside: a dark barrel, the glowing lens, the iris ring and the pupil
-    p.add("SteelDark", lathe([(0, -0.01), (0.064, -0.01), (0.064, 0.03), (0.058, 0.03), (0, 0.004)], segs=24), eye)
-    p.add("Glow", lathe([(0, 0.006), (0.054, 0.006), (0.054, 0.012), (0.04, 0.02), (0, 0.024)], segs=24), eye)
-    p.add("Chrome", torus(0.036, 0.0055, segs=24, rsegs=5), eye @ T(0, 0.022, 0))
-    p.add("SteelDark", cyl(0.014, 0.01, segs=12), eye @ T(0, 0.024, 0))
-    p.add("Glass", lathe([(0, 0.026), (0.062, 0.026), (0.062, 0.03), (0.045, 0.037), (0, 0.04)], segs=24), eye)
-    p.mark("Eye_Lens", eye @ Vector((0, 0.07, 0)))  # (its light: just out of the lens)
-    # the module on the temple and its antenna going back
-    temple = on_head(HEAD_RADIUS * math.sin((ex + 0.3) / HEAD_RADIUS), EYE_Y + 0.02, 0.01)
-    p.add("SteelDark", box(0.11, 0.04, 0.09, bevel=0.012), temple @ T(0, 0.02, 0))
-    p.add("Glow", sphere(0.012, 8, 5), temple @ T(-0.03, 0.045, 0.02))
-    base = temple @ Vector((0.02, 0.04, 0.03))
-    tip = base + Vector((0.04, 0.24, 0.12))
-    p.add("Chrome", cyl(0.007, (tip - base).length, segs=6), aim_y((base + tip) / 2, tip - base))
-    p.add("Brass", cyl(0.014, 0.02, segs=8), aim_y(base, tip - base))
-    p.add("Glow", sphere(0.014, 8, 5), Matrix.Translation(tip))
-    # a cable from the bezel to the module, then back round the side of the head
-    path = []
-    for deg, dy in ((20, -0.075), (27, -0.082), (36, -0.08), (46, -0.07), (56, -0.06)):
-        a = math.radians(deg)
-        r = HEAD_RADIUS + 0.013
-        path.append(Vector((r * math.sin(a), EYE_Y + dy, -r * math.cos(a))))
-    p.add("Rubber", tube(path, 0.011, segs=6, smooth=4))
-    end = on_head(HEAD_RADIUS * math.sin(math.radians(56)), EYE_Y - 0.06, 0.0)
-    p.add("SteelDark", cyl(0.02, 0.02, segs=10), end)  # where it goes into the skull
-    return p
 
 
 # --- The guns -------------------------------------------------------------------------
@@ -801,6 +740,32 @@ def build_flask():
     return p
 
 
+# --- The fit (as RiftGear.luau's fitArm) ---------------------------------------------
+# The game measures the spawned arm (the box round its drawn parts, in Left
+# Arm space) and scales it (uniformly) and moves it so that, for an arm of
+# size A: it is ARM_LENGTH * A.Y tall, its top SHOULDER_CAP * A.Y over the
+# arm's top, centred in Z, centred in X but never past INNER * A.X toward the
+# torso, and no wider than MAX_WIDTH * A.X nor deeper than MAX_DEPTH * A.Z.
+ARM_LENGTH = 1.1
+SHOULDER_CAP = 0.025
+INNER = 0.48
+MAX_WIDTH = 1.25
+MAX_DEPTH = 1.12
+
+
+def fit_arm(point_sets, arm):
+    """The scale and the move (applied as p * k + shift) that fit the points."""
+    lo = Vector([min(p[i] for ps in point_sets for p in ps) for i in range(3)])
+    hi = Vector([max(p[i] for ps in point_sets for p in ps) for i in range(3)])
+    ext = hi - lo
+    k = min(arm.y * ARM_LENGTH / ext.y, arm.x * MAX_WIDTH / ext.x, arm.z * MAX_DEPTH / ext.z)
+    sx = -(lo.x + hi.x) / 2 * k
+    if hi.x * k + sx > arm.x * INNER:
+        sx = arm.x * INNER - hi.x * k
+    top = arm.y / 2 + arm.y * SHOULDER_CAP
+    return k, Vector((sx, top - hi.y * k, -(lo.z + hi.z) / 2 * k))
+
+
 # --- Scene & export ---------------------------------------------------------------------
 def material(layer, emit=None):
     key = "R_" + layer + ("_" + str(emit) if emit else "")
@@ -916,7 +881,7 @@ def marker(name, at):
 
 
 def all_pieces():
-    return [build_arm(), build_eye(), build_ray_gun(), build_portal_gun(), build_flask()]
+    return [build_arm(), build_ray_gun(), build_portal_gun(), build_flask()]
 
 
 def main():
@@ -1036,7 +1001,7 @@ def render_previews(out):
         ob = skin("HeldBy" + gun, box(1, 2, 1, bevel=0.02), Vector(PIECES[gun]), (0.95, 0.8, 0.45))
         ob.data.materials[0].node_tree.nodes["Principled BSDF"].inputs["Alpha"].default_value = 0.35
     for ob in build_objects(all_pieces(), {"RayGun": RAY_GLOW})[0]:
-        if ob.name.endswith(("_Pivot", "_PalmPoint", "_Tip", "_Cell", "_Lens")):
+        if ob.name.endswith(("_Pivot", "_PalmPoint", "_Tip", "_Cell")):
             ob.hide_render = True
     shots = [
         ("arm_front", (0, 0, 0), (-1.2, 0.3, -5.0), (0, -0.25, 0), 55),
@@ -1046,7 +1011,6 @@ def render_previews(out):
         ("portalgun", PIECES["PortalGun"], (-3.2, -0.6, -1.4), (0, -1.1, -0.2), 50),
         ("raygun_top", PIECES["RayGun"], (-1.2, -3.4, -1.6), (0, -1.3, -0.25), 50),
         ("flask", PIECES["Flask"], (0.4, 0.4, -2.2), (0, 0, 0), 60),
-        ("eye", PIECES["Eye"], (0.5, 0.25, -1.6), (0.2, 0.1, -0.5), 85),
     ]
     for name, base, at, target, lens in shots:
         b = Vector(base)
@@ -1070,20 +1034,20 @@ def render_previews(out):
         skin("FaceEye", eye, Vector((0, 1.5, 0)), (0.02, 0.02, 0.02))
     smile = [on_head(0.16 * math.sin(t), -0.12 - 0.07 * math.cos(t), 0.0).translation for t in [math.radians(-80 + 160 * k / 12) for k in range(13)]]
     skin("Smile", tube(smile, 0.012, segs=6, smooth=0), Vector((0, 1.5, 0)), (0.02, 0.02, 0.02))
-    arm, eye = build_arm(), build_eye()
-    PIECES_SAVE = dict(PIECES)
-    PIECES["Arm"] = (-1.5, 0, 0)
-    PIECES["Eye"] = (0, 1.5, 0)
-    objs, _ = build_objects([arm, eye])
-    PIECES.update(PIECES_SAVE)
+    # the arm as the game puts it on: fitted on the Left Arm (at X = -1.5)
+    objs, _ = build_objects([build_arm()])
+    drawn = [ob for ob in objs if not ob.name.endswith(("_Pivot", "_PalmPoint", "_Cell"))]
+    k, shift = fit_arm([[Vector(v.co) for v in ob.data.vertices] for ob in drawn], Vector((1, 2, 1)))
+    print(f"  arm fit: scale {k:.3f}, moved by {tuple(round(x, 3) for x in shift)}")
     for ob in objs:
-        if ob.name.endswith(("_Pivot", "_PalmPoint", "_Tip", "_Cell", "_Lens")):
+        ob.data.transform(T(-1.5, 0, 0) @ T(*shift) @ S(k))
+        if ob not in drawn:
             ob.hide_render = True
     for name, at, target, lens in (
         ("char_front", (-2.2, 1.6, -7.5), (-0.4, 0.3, 0), 50),
         ("char_back", (-4.5, 2.2, 5.5), (-0.6, 0.3, 0), 50),
-        ("char_face", (0.6, 1.8, -2.6), (0.1, 1.55, 0), 70),
         ("char_side", (-6.5, 1.0, -1.5), (-1.2, 0.2, 0), 50),
+        ("char_shoulder", (-3.4, 2.6, -3.2), (-1.1, 0.4, 0), 55),
     ):
         look(cam, Vector(at), Vector(target), lens)
         scene.render.filepath = f"{out}/rift_{name}_{tag}.png"

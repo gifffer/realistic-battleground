@@ -38,6 +38,14 @@ Writes tools/wounds/anatomy/waist.npz ("<group>__<i>__v" float32 vertices,
   nerve<i>    sciatic, femoral and obturator nerves (slab)
   jejunum0    the whole small intestine (its own space: centred, studs, the
               same torso scale), for the loose loops falling out
+  thighbone<i> / thighmuscle<i> / thighvessel<i> / thighnerve<i>
+              the same, but a slab of the upper THIGH (THIGH_Z, below the
+              hip joint): the femur's shaft, the quadriceps, the adductors,
+              the hamstrings, sartorius, gracilis, the femoral and deep
+              femoral vessels, the great saphenous vein, the sciatic nerve.
+              What the legs' tops show (a real thigh in section reads far
+              better there than the hip joint: a ring of bone in the middle
+              of big muscles), moved up so THIGH_Z lies on Y = -1 too.
 Only needed again to change what is taken; gore.py reads the .npz.
 """
 
@@ -53,6 +61,8 @@ OUT = "tools/wounds/anatomy/waist.npz"
 
 CUT_Z = 0.875  # metres (see above)
 SLAB = (CUT_Z - 0.07, CUT_Z + 0.08)  # what is kept round it (metres)
+THIGH_Z = 0.74  # metres: the upper thigh, under the lesser trochanter (the legs' tops)
+THIGH_SLAB = (THIGH_Z - 0.06, THIGH_Z + 0.06)
 HALF_WIDTH = 0.18  # |x| (metres): the hips (not the hands hanging beside)
 # The real torso -> the R6 torso (extract_arm.py), the cut on Y = -1.
 TORSO_CENTER = Vector((0.0, -0.01, 1.2))
@@ -82,13 +92,25 @@ VESSELS = [
 # lists them).
 NERVES = ["Sciatic nerve", "Femoral nerve", "Obturator nerve"]
 BUDGET = {"bone": 1400, "muscle": 520, "gut": 1100, "vessel": 160, "nerve": 200}
+# The upper thigh (the legs' tops), one side's names (".r" / ".l" added).
+THIGH_BONES = ["Femur"]
+THIGH_MUSCLES = [
+    "Vastus lateralis muscle", "Vastus medialis muscle", "Vastus intermedius muscle",
+    "Rectus femoris muscle", "Sartorius muscle", "Gracilis muscle", "Adductor longus",
+    "Adductor brevis", "Adductor magnus", "Long head of biceps femoris", "Semitendinosus muscle",
+    "Semimembranosus muscle", "Gluteus maximus muscle",
+]
+THIGH_VESSELS = ["Femoral artery", "Femoral vein", "Deep femoral artery", "Deep femoral vein",
+                 "Great saphenous vein"]
+THIGH_NERVES = ["Sciatic nerve", "Saphenous nerve"]
+THIGH_BUDGET = {"bone": 900, "muscle": 600, "vessel": 200, "nerve": 200}
 
 
-def to_torso(p):
+def to_torso(p, cut_z=CUT_Z):
     """anatomical metres (Z up, -Y = front, x < 0 = its right) -> R6 torso
-    studs, the cut plane on Y = -1"""
+    studs, the cut plane (`cut_z`) on Y = -1"""
     return (-(p[0] - TORSO_CENTER.x) * TORSO_SCALE.x,
-            (p[2] - CUT_Z) * TORSO_SCALE.y - 1.0,
+            (p[2] - cut_z) * TORSO_SCALE.y - 1.0,
             (p[1] - TORSO_CENTER.y) * TORSO_SCALE.z)
 
 
@@ -131,9 +153,9 @@ def decimate(v, f, budget):
     return out_v, out_f
 
 
-def slab(name, budget):
+def slab(name, budget, window=SLAB):
     v, f = world_mesh(name)
-    keep = (v[:, 2] > SLAB[0]) & (v[:, 2] < SLAB[1]) & (np.abs(v[:, 0]) < HALF_WIDTH)
+    keep = (v[:, 2] > window[0]) & (v[:, 2] < window[1]) & (np.abs(v[:, 0]) < HALF_WIDTH)
     v, f = clip(v, f, keep)
     if len(f) == 0:
         return None
@@ -149,14 +171,14 @@ def main():
     arrays = {}
     counts = {}
 
-    def put(group, name, vf):
+    def put(group, name, vf, cut_z=CUT_Z):
         if vf is None:
             print("  (nothing of", name, "in the slab)")
             return
         v, f = vf
         index = counts.get(group, 0)
         counts[group] = index + 1
-        arrays[f"{group}__{index}__v"] = np.array([to_torso(p) for p in v], dtype=np.float32)
+        arrays[f"{group}__{index}__v"] = np.array([to_torso(p, cut_z) for p in v], dtype=np.float32)
         arrays[f"{group}__{index}__f"] = f.astype(np.int32)
         arrays[f"{group}__{index}__n"] = np.array(name)
         print(f"  {group}{index}: {name}, {len(f)} triangles")
@@ -169,15 +191,23 @@ def main():
             print("  MISSING:", base)
         return found
 
+    def thigh(group, bases):
+        # (the upper thigh's slab, both sides, its plane on Y = -1 too)
+        for base in bases:
+            for name in names(base):
+                put("thigh" + group, name, slab(name, THIGH_BUDGET[group], THIGH_SLAB), THIGH_Z)
+
     print(f"cut plane: z = {CUT_Z} m (the R6 torso's bottom by the torso mapping: "
           f"{TORSO_CENTER.z - 1.0 / TORSO_SCALE.y:.3f} m, above the hip joints)")
     load(os.path.join(FOLDER, "SkeletalSystem100.fbx"))
     for name in BONES:
         put("bone", name, slab(name, BUDGET["bone"]))
+    thigh("bone", THIGH_BONES)
     load(os.path.join(FOLDER, "MuscularSystem100.fbx"))
     for base in MUSCLES:
         for name in names(base):
             put("muscle", name, slab(name, BUDGET["muscle"]))
+    thigh("muscle", THIGH_MUSCLES)
     load(os.path.join(FOLDER, "VisceralSystem100.fbx"))
     for name in GUT:
         put("gut", name, slab(name, BUDGET["gut"]))
@@ -194,10 +224,12 @@ def main():
     for base in VESSELS:
         for name in names(base):
             put("vessel", name, slab(name, BUDGET["vessel"]))
+    thigh("vessel", THIGH_VESSELS)
     load(os.path.join(FOLDER, "NervousSystem100.fbx"))
     for base in NERVES:
         for name in names(base):
             put("nerve", name, slab(name, BUDGET["nerve"]))
+    thigh("nerve", THIGH_NERVES)
     np.savez_compressed(OUT, **arrays)
     print("wrote", OUT, os.path.getsize(OUT) // 1024, "KB")
 

@@ -8,18 +8,23 @@
 -- (= a seed) on the body; a moment later the legs fold. Every part stays in
 -- the body (its clothes keep showing). Every client then (Gashes watches the
 -- attribute):
---   • under the torso: the real cut through the hips (Z-Anatomy): the hip
---     bones and the sacrum in section (a hard white rim round the red
---     spongy bone), the glutei, the iliopsoas and the thigh muscles cut
---     (domed, two reds, pearly fascia between them), the bladder and the
---     colon cut across (wall, red lining, what was in them), the arteries
---     and veins as open tubes (dark clot inside), the sciatic and femoral
---     nerves (white cords), the yellow fat under the skin, the skin torn
---     round the edge, blood hanging in drops, coiled loops of small
---     intestine hanging out on their mesentery;
---   • on each leg's top: the other face of it (the femur's head in
---     section, the muscles, the femoral artery, vein and nerve, fat, skin,
---     blood pooling round the artery);
+--   • under the torso: the real cut through the hips (Z-Anatomy), standing
+--     proud of the torso's face: the hip bones and the sacrum in section
+--     (a hard white rim round the yellow-red spongy bone), the glutei and
+--     the iliopsoas cut (domed, two reds, thin pearly fascia between
+--     them), the belly's front packed with loops of small intestine cut
+--     across (pink rings, red lining, chyme) in their yellow fat, the
+--     bladder and the colon cut across, the arteries and veins as open
+--     tubes (an artery's lumen red, a vein's clotted), the sciatic nerves
+--     (yellowish cords), the yellow fat under the skin, the skin torn round
+--     the edge, blood hanging in drops, two loops of small intestine
+--     hanging out on their mesentery;
+--   • on each leg's top: a real section of the upper thigh (the femur's
+--     shaft - a thick white ring round its marrow - the big thigh muscles,
+--     the femoral artery and vein side by side, the sciatic nerve, fat,
+--     skin, blood pooling round the artery);
+--   • anything drawn flat on those faces (a burn's pictures, a decal) is
+--     hidden: the cut is there now;
 --   • when it happens in front of us (not a body we only see later): the
 --     portal's mark - the cut faces white-hot green at first, their edges
 --     glowing, fading to raw flesh (cauterised for a moment), rift energy
@@ -27,8 +32,10 @@
 --     blood mist bursting out along the cut plane, green motes drifting
 --     off - then a burst of blood both ways, a geyser out of each leg's
 --     femoral artery while they stand, the iliac arteries pumping out of the
---     upper body, blood running down the legs, loose coils of intestine and
---     a length of colon falling out on the floor, the torso dripping.
+--     upper body, blood running down the legs, loose coils of intestine
+--     (salmon pink, smeared with blood, on their see-through mesentery) and
+--     a length of colon falling out
+--     on the floor, the torso dripping.
 -- Pieces from WoundKit (GoreKit "Waist" / "HipR" / "HipL" / "Gut<i>" /
 -- "Colon"); simpler ones drawn here without them (an older kit).
 --
@@ -51,28 +58,31 @@ local WaistCut = {}
 WaistCut.ATTRIBUTE = "CutInHalf"
 
 local BLOOD = Color3.fromRGB(78, 6, 6)
-local BLOOD_WET = Color3.fromRGB(104, 8, 8)
-local FLESH = Color3.fromRGB(122, 28, 30)
-local FLESH_DARK = Color3.fromRGB(70, 10, 12)
-local BONE = Color3.fromRGB(226, 214, 190)
--- The inside of the body cut across (gore.py's layers), as it looks: wet
--- (shine) except bone, nerve and fascia.
-local MUSCLE = Color3.fromRGB(150, 28, 32) -- raw red, a darker one beside it
-local MUSCLE_DARK = Color3.fromRGB(116, 20, 26)
-local FASCIA = Color3.fromRGB(206, 186, 178) -- the pearly sheaths between them
-local FAT = Color3.fromRGB(232, 192, 98) -- yellow lobules under the skin
-local MARROW = Color3.fromRGB(162, 82, 62) -- the spongy bone inside the rim
-local GUT = Color3.fromRGB(196, 150, 140) -- small intestine: greyish pink, not candy pink
-local COLON = Color3.fromRGB(190, 146, 124) -- the colon: greyer, browner
-local MUCOSA = Color3.fromRGB(168, 50, 56) -- the gut's lining
-local LUMEN = Color3.fromRGB(72, 52, 24) -- what was in the colon
-local URINE = Color3.fromRGB(214, 168, 58)
-local MESENTERY = Color3.fromRGB(232, 202, 142) -- the gut's fatty sheet
-local ARTERY = Color3.fromRGB(212, 160, 150) -- thick pale wall
-local VEIN = Color3.fromRGB(70, 42, 84) -- thin, dark blue-purple
-local CLOT = Color3.fromRGB(40, 4, 6)
-local NERVE = Color3.fromRGB(236, 226, 198)
-local VESSEL = Color3.fromRGB(120, 20, 40) -- the small ones on the gut
+local BLOOD_WET = Color3.fromRGB(124, 8, 10)
+local FLESH = Color3.fromRGB(140, 24, 28)
+local FLESH_DARK = Color3.fromRGB(64, 6, 10)
+local BONE = Color3.fromRGB(242, 236, 218)
+-- The inside of the body cut across (gore.py's layers), as it looks, the
+-- contrast pushed so it reads from a few studs away in daylight (Roblox
+-- lighting washes colours out: pale ones turn white). Wet (shine) except
+-- bone, nerve and fascia.
+local MUSCLE = Color3.fromRGB(172, 22, 28) -- raw red, a darker one beside it
+local MUSCLE_DARK = Color3.fromRGB(118, 12, 20)
+local FASCIA = Color3.fromRGB(226, 204, 196) -- the thin pearly sheaths between them
+local FAT = Color3.fromRGB(242, 190, 62) -- yellow lobules under the skin
+local MARROW = Color3.fromRGB(206, 110, 48) -- the spongy bone inside the rim: yellow-red
+local GUT = Color3.fromRGB(212, 118, 108) -- small intestine: salmon pink, wet
+local COLON = Color3.fromRGB(176, 112, 92) -- the colon: browner, duller
+local MUCOSA = Color3.fromRGB(176, 30, 44) -- the gut's velvety red lining
+local LUMEN = Color3.fromRGB(78, 52, 20) -- what was in the colon
+local CHYME = Color3.fromRGB(176, 146, 46) -- what was in the small intestine
+local URINE = Color3.fromRGB(226, 174, 40)
+local MESENTERY = Color3.fromRGB(184, 74, 78) -- the gut's thin sheet: red-pink, see-through
+local ARTERY = Color3.fromRGB(232, 184, 172) -- thick pale wall (its open lumen: Blood)
+local VEIN = Color3.fromRGB(58, 26, 60) -- thin, dark blue-purple, collapsed
+local CLOT = Color3.fromRGB(42, 2, 6)
+local NERVE = Color3.fromRGB(236, 212, 128) -- a yellowish cord
+local VESSEL = Color3.fromRGB(150, 14, 30) -- the small ones on the gut
 -- The portal's mark on the cut (Dr. Rift's rift green, RiftParts).
 local RIFT_GREEN = Color3.fromRGB(110, 255, 96)
 local RIFT_GLOW = Color3.fromRGB(170, 255, 150)
@@ -90,10 +100,10 @@ local GUT_LIFETIME = 25 -- seconds the loose loops of gut stay on the floor
 -- (there is no aorta this low: the two external iliac / femoral arteries,
 -- right and left), in the torso's.
 local FEMORAL: { [string]: Vector3 } = {
-	["Right Leg"] = Vector3.new(-0.26, 1.08, -0.16),
-	["Left Leg"] = Vector3.new(0.26, 1.08, -0.16),
+	["Right Leg"] = Vector3.new(-0.25, 1.12, -0.36),
+	["Left Leg"] = Vector3.new(0.25, 1.12, -0.36),
 }
-local ILIAC = { Vector3.new(0.46, -1.12, -0.2), Vector3.new(-0.46, -1.14, -0.2) }
+local ILIAC = { Vector3.new(0.47, -1.14, -0.19), Vector3.new(-0.47, -1.12, -0.19) }
 local CUT = CFrame.new(0, -1, 0) -- the torso's cut face (torso space)
 -- What falls out of the upper body (GoreKit pieces), in order.
 local SPILL = { "Gut1", "Gut2", "Gut3", "Colon" }
@@ -151,6 +161,7 @@ local LAYERS: { [string]: { Color3 | number } } = {
 	Colon = { COLON, 0.1 },
 	Mucosa = { MUCOSA, 0.13 },
 	Lumen = { LUMEN, 0.12 },
+	Chyme = { CHYME, 0.16 },
 	Urine = { URINE, 0.18 },
 	Mesentery = { MESENTERY, 0.1 },
 	Artery = { ARTERY, 0.12 },
@@ -158,8 +169,10 @@ local LAYERS: { [string]: { Color3 | number } } = {
 	Clot = { CLOT, 0.16 },
 	Nerve = { NERVE, 0.06 },
 	Vessel = { VESSEL, 0.12 },
-	Blood = { BLOOD_WET, 0.17 },
+	Blood = { BLOOD_WET, 0.2 },
 }
+-- The see-through layers of a loose length of gut (its thin mesentery).
+local SHEER: { [string]: number } = { Mesentery = 0.25 }
 
 local function painter(skin: Color3): (layer: string) -> (Color3, number)
 	return function(layer: string): (Color3, number)
@@ -225,6 +238,35 @@ local function simpleFlaps(
 			* CFrame.Angles(math.rad(random:NextNumber(-70, -30)), 0, 0)
 		weldTo(part, flap, folder)
 	end
+end
+
+-- Whatever is drawn flat on the face the cut went through (a burn's
+-- pictures, a decal: on a SurfaceGui, Decal or Texture of that face) is
+-- hidden for good: the cut is drawn there now. (What adds them later, a
+-- burn still spreading, is caught too.)
+local function clearFace(part: BasePart, face: Enum.NormalId)
+	local function hide(item: Instance)
+		if item:IsA("SurfaceGui") and item.Face == face then
+			item.Enabled = false
+			-- (a burn turns its pictures on and off with the body's
+			-- transparency: kept off)
+			item:GetPropertyChangedSignal("Enabled"):Connect(function()
+				if item.Enabled then
+					item.Enabled = false
+				end
+			end)
+		elseif item:IsA("Decal") and item.Face == face then
+			item.Transparency = 1
+		end
+	end
+	for _, item in part:GetDescendants() do
+		hide(item)
+	end
+	-- (the connection goes with the part)
+	part.DescendantAdded:Connect(function(item: Instance)
+		-- (a SurfaceGui's face is set before or right after it is parented)
+		task.defer(hide, item)
+	end)
 end
 
 -- The kit's piece `name` (in `part`'s own space) on `part`, or simple
@@ -298,6 +340,21 @@ local function dress(part: BasePart, name: string, skin: Color3, random: Random)
 	return folder
 end
 
+-- `piece` with its tube's wall first (GoreKit.spawn makes the first layer
+-- the main part: the one that collides, squashes and is shown by Squish's
+-- copy; by size alone it can be the blood smeared on it, a hair bigger).
+local function bodyFirst(piece: GoreKit.Piece): GoreKit.Piece
+	local layers = table.clone(piece.layers)
+	for index, layer in layers do
+		if layer.name == "Gut" or layer.name == "Colon" then
+			table.remove(layers, index)
+			table.insert(layers, 1, layer)
+			return { name = piece.name, layers = layers, center = layer.offset.Position }
+		end
+	end
+	return piece
+end
+
 -- A loose length of gut (`name`: GoreKit's "Gut<i>" / "Colon"), falling
 -- out of the torso's cut at `at` (world).
 local function newGut(name: string, at: CFrame, random: Random): BasePart
@@ -305,7 +362,17 @@ local function newGut(name: string, at: CFrame, random: Random): BasePart
 	local piece = if pieces then pieces[name] else nil
 	local gut: BasePart
 	if piece then
-		gut = GoreKit.spawn(piece, at, painter(GUT))
+		gut = GoreKit.spawn(bodyFirst(piece), at, painter(GUT))
+		-- (its mesentery a thin sheet: the light comes through it)
+		local layers: { Instance } = gut:GetDescendants()
+		table.insert(layers, gut)
+		for _, layer in layers do
+			local kind = string.match(layer.Name, "_(%a+)$")
+			local sheer = if kind then SHEER[kind] else nil
+			if sheer and layer:IsA("BasePart") then
+				layer.Transparency = sheer
+			end
+		end
 	else
 		-- (a sphere mesh, not a cylinder part: it can be squashed)
 		local loop = Instance.new("Part")
@@ -364,8 +431,14 @@ local function spill(torso: BasePart, model: Model, random: Random)
 				+ torso.CFrame.UpVector * -random:NextNumber(3, 6)
 				+ Vector3.new(random:NextNumber(-2, 2), 0, random:NextNumber(-2, 2))
 			gut.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(2, 6)
-			-- (its surface detail first, in the workspace: then it squashes too)
-			Squish.detail(gut, "Brain")
+			-- (the simple loop gets its surface detail drawn on, first, in
+			-- the workspace: then it squashes too. The kit's gut has its
+			-- own - vessels, smeared blood - and flat discs stuck on a tube
+			-- that thin stick out of it as fins)
+			local pieces = GoreKit.get()
+			if pieces == nil or pieces[name] == nil then
+				Squish.detail(gut, "Liver")
+			end
 			Squish.soft(
 				gut,
 				{ softness = 0.5, sag = 0.25, stiffness = 170, lifetime = GUT_LIFETIME }
@@ -824,6 +897,7 @@ function WaistCut.apply(model: Model, live: boolean)
 			gore = dress(torso, "Waist", torso.Color, random),
 		},
 	}
+	clearFace(torso, Enum.NormalId.Bottom)
 	local legs: { BasePart } = {}
 	for _, pair in { { "Right Leg", "HipR" }, { "Left Leg", "HipL" } } do
 		local leg = model:FindFirstChild(pair[1])
@@ -836,6 +910,7 @@ function WaistCut.apply(model: Model, live: boolean)
 				gore = dress(leg, pair[2], leg.Color, random),
 			})
 			table.insert(legs, leg)
+			clearFace(leg, Enum.NormalId.Top)
 		end
 	end
 	if live then

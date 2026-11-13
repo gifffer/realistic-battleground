@@ -9,20 +9,26 @@
 -- around it, both flickering), embers floating up, thin black smoke rising
 -- above the shoulders and the head, a faint pale haze over them (the heat
 -- shimmer, faked), and an orange light that flickers on everything around.
--- The skin goes dark (the torso most, the legs least) and the body
--- (clothes included) gets black charred patches with glowing specks in
--- them, spreading while it burns. When it stops: the flames die down, the
--- body smoulders (grey smoke) for 2 s, the specks cool to black and the
--- char fades away slowly. Burnt again before it has faded: the same
--- patches come back (and a few more), no new set somewhere else.
+-- The skin goes dark (the torso most, the legs least) and the burn spreads
+-- over the body (clothes included): mottled black / purple-brown char,
+-- lighter blistered and peeled patches, glossy, soot around. When it stops:
+-- the flames die down, the body smoulders (grey smoke) for 2 s.
 --
 -- ACID: the skin corroding. Clusters of pale yellow-green foam bubbles grow
 -- and pop in a little puff on the skin (always somewhere new), it froths
--- and fizzes, caustic vapour rises, raw red blotches ringed with
--- yellow-green appear and the skin turns a little raw, and drops of acid
--- fall from the body and fizz on the floor.
+-- and fizzes, caustic vapour rises, the skin turns a little raw and is
+-- eaten where the acid hit: raw red-brown flesh with a darker crusty
+-- margin, wet, running down in streaks; drops of acid fall from the body
+-- and fizz on the floor.
 --
--- The patches and bubbles are built only when they show, a few parts a
+-- The burn marks are pictures (Config.Injuries.BURN_IMAGES, made by
+-- tools/burns/make_burns.py) on the burnt parts' faces, growing while it
+-- burns. Without their ids: simpler patches (overlapping ovals). Either
+-- way they STAY when the burn ends, like the other wounds, until the body
+-- is healed (a kill, a new round: health jumps back up), dies and
+-- respawns, or leaves. Burnt again: the same marks, and a few more.
+--
+-- The marks and bubbles are built only when they show, a few parts a
 -- frame for everybody (an explosion setting many fighters on fire at once
 -- doesn't hitch).
 --
@@ -36,16 +42,19 @@
 -- it red) is left alone while it is choked.
 --
 -- Everything the burn adds is in a "RiftBurn" folder in the model (the
--- patches, bubbles) or named "RiftBurn..." under its parts (particles,
--- light); all of it is removed when it ends, when the model dies, leaves the
--- game or is destroyed. One Heartbeat drives every burning model (and stops
--- when nobody burns).
+-- patches, bubbles), "RiftBurnScar" once it ended, or named "RiftBurn..."
+-- under its parts (particles, light, the pictures' surfaces); the effects
+-- are removed when it ends or the model dies, the marks when it is healed,
+-- leaves the game or is destroyed. One Heartbeat drives every burning model
+-- (and stops when nobody burns).
 
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local HeadBlast = require(script.Parent.HeadBlast)
 
@@ -73,8 +82,10 @@ local FLAME_RED = Color3.fromRGB(170, 40, 10)
 local EMBER = Color3.fromRGB(255, 150, 50)
 local SOOT = Color3.fromRGB(38, 35, 32)
 local SMOKE_GREY = Color3.fromRGB(84, 80, 76)
-local CHAR = Color3.fromRGB(22, 17, 14) -- burnt black
-local SCORCH = Color3.fromRGB(78, 46, 26) -- singed brown edge
+local CHAR = Color3.fromRGB(26, 16, 16) -- burnt black
+local CHAR_PURPLE = Color3.fromRGB(54, 32, 36) -- the purple-brown of a deep burn
+local SCORCH = Color3.fromRGB(84, 52, 38) -- singed brown edge
+local SHEEN = Color3.fromRGB(150, 116, 112) -- peeled, wet, glossy skin
 local GLOW = Color3.fromRGB(255, 92, 20) -- a glowing speck in the char
 local FIRE_LIGHT = Color3.fromRGB(255, 128, 48)
 
@@ -82,15 +93,23 @@ local FIRE_LIGHT = Color3.fromRGB(255, 128, 48)
 local FOAM = Color3.fromRGB(204, 236, 96)
 local FROTH = Color3.fromRGB(226, 240, 168)
 local VAPOUR = Color3.fromRGB(186, 212, 116)
-local RAW = Color3.fromRGB(150, 38, 34) -- eaten skin: raw red flesh
-local CORRODED = Color3.fromRGB(170, 176, 58) -- yellow-green ring around it
-local BLISTER = Color3.fromRGB(214, 198, 116)
+local RAW = Color3.fromRGB(156, 56, 44) -- eaten skin: raw red flesh
+local RAW_DEEP = Color3.fromRGB(110, 38, 30) -- deeper, red-brown
+local CRUST = Color3.fromRGB(84, 30, 20) -- the dark crusty margin
+local SLOUGH = Color3.fromRGB(204, 158, 128) -- pale dead skin
 
--- What the whole skin shifts toward (how far: CHAR_MAX / RAW_MAX).
+-- The burn pictures' halo: soot around fire, inflamed skin around acid.
+local HALO_FIRE = Color3.fromRGB(70, 46, 36)
+local HALO_ACID = Color3.fromRGB(150, 84, 70)
+
+-- What the whole skin shifts toward (how far: CHAR_MAX / RAW_MAX; less
+-- with the pictures, which show the burn themselves).
 local SKIN_CHAR = Color3.fromRGB(40, 28, 22)
 local SKIN_RAW = Color3.fromRGB(184, 96, 80)
 local CHAR_MAX = 0.55
 local RAW_MAX = 0.38
+local CHAR_MAX_PICTURES = 0.28
+local RAW_MAX_PICTURES = 0.2
 -- How fast (share of the full tint per second): on while it burns, off
 -- after (slower: the char stays a while).
 local CHAR_ON = 0.32
@@ -98,10 +117,12 @@ local CHAR_OFF = 0.11
 local RAW_ON = 0.3
 local RAW_OFF = 0.12
 
-local MARK_FADE_FIRE = 7 -- seconds for the char patches to fade after
-local MARK_FADE_ACID = 5
+local HEAL_FADE = 1.2 -- seconds the marks take to go when healed
 local SMOULDER = 2 -- seconds of smoke once the fire is out
 local MARK_SPREAD = 2.2 -- the patches appear one by one over this time
+-- A heal (a kill, a new round) gives back at least this much health at
+-- once, or all of it (a knocked out fighter getting up gets less).
+local HEAL_JUMP = 30
 
 local HEAD_RADIUS = 0.6 -- the classic head: a rounded cylinder this wide
 local HEAD_HALF = 0.32 -- and this high (half), where patches can go
@@ -139,6 +160,11 @@ local BUBBLES: { [string]: number } = {
 -- parts a frame for everybody (an explosion sets many fighters on fire at
 -- once: no hitch).
 local BUILD_PER_FRAME = 20
+-- At most this many patches / pictures of one kind of burn on a body (burnt
+-- again and again: the old marks come back, new ones join them only up to
+-- this).
+local MAX_MARKS = 40
+local MAX_PICTURES = 110
 local CLUSTER = 3 -- bubbles in a foam cluster
 
 -- How hard each part's skin is tinted (the torso, in the middle of the
@@ -186,6 +212,30 @@ type Mark = {
 	done: boolean,
 }
 
+-- A burn picture on a face of a body part (BURN_IMAGES): grows from a
+-- small dot to its full size while it burns (acid: from its top, running
+-- down).
+type Picture = {
+	base: BasePart,
+	face: Enum.NormalId, -- (on the head: the outer face of a small plate)
+	plate: CFrame?, -- the head: where the plate goes (head space, Z out)
+	at: Vector2, -- its centre (studs from the face's top left corner)
+	size: Vector2, -- full size, studs
+	image: number,
+	color: Color3,
+	alpha: number, -- its transparency in the end
+	rotation: number,
+	drip: boolean, -- grows downward from its top (acid running)
+	layer: number, -- (ZIndex: halos under the burns)
+	showAt: number, -- (os.clock)
+	startedAt: number,
+	grow: number, -- seconds to full size
+	label: ImageLabel?, -- (built when it shows)
+	run: Frame?, -- acid: the frame that uncovers it from its top (grows down)
+	shown: boolean,
+	done: boolean,
+}
+
 -- A foam cluster (a few bubbles together): grows on the skin, pops, comes
 -- back somewhere else.
 type Bubble = {
@@ -216,22 +266,27 @@ type Session = {
 	light: PointLight?,
 	marks: { Mark },
 	glows: { BasePart }, -- the glowing specks in the char
+	pictures: { Picture },
+	surfaces: { Instance }, -- the pictures' SurfaceGuis (and head plates)
 	bubbles: { Bubble },
 	pop: ParticleEmitter?, -- the fizz of a bubble popping (moved to it)
 	popPoint: Attachment?,
 	nextDrip: number,
 	seed: number,
 	headGone: boolean, -- the head burst (HeadBlast): nothing left on it
+	healedAt: number?, -- healed while it burns: what showed before goes when it ends
 }
 
--- The patches of an ended burn, fading on the body (taken back if the same
--- burn starts again before they are gone).
-type Fade = {
+-- The marks of an ended burn, staying on the body until it is healed
+-- (taken back if the same burn starts again).
+type Scar = {
 	model: Model,
 	kind: string,
 	folder: Folder,
 	marks: { Mark },
 	glows: { BasePart },
+	pictures: { Picture },
+	surfaces: { Instance },
 	tweens: { Tween },
 	token: number, -- changes when taken back (the delayed steps then skip)
 }
@@ -254,13 +309,27 @@ type Tint = {
 
 local sessions: { [Model]: Session } = {}
 local tints: { [Model]: Tint } = {}
--- Ended burns still fading on the body (char patches): removed later.
-local fading: { [Folder]: Fade } = {}
+-- The marks of ended burns, still on the body.
+local scars: { [Folder]: Scar } = {}
 local heartbeat: RBXScriptConnection? = nil
 -- Parts that may still be built this frame (BUILD_PER_FRAME).
 local budget = BUILD_PER_FRAME
 
 local ORIGINAL_ATTRIBUTE = "RiftBurnSkin"
+
+-- The burn pictures (Config.Injuries.BURN_IMAGES), if uploaded.
+local IMAGES = Config.Injuries.BURN_IMAGES
+local function imagesOf(kind: string): { number }
+	return if kind == "Fire" then IMAGES.fire else IMAGES.acid
+end
+local function hasPictures(kind: string): boolean
+	for _, id in imagesOf(kind) do
+		if id ~= 0 then
+			return true
+		end
+	end
+	return false
+end
 
 ------------------------------------------------------------------------------
 -- Skin tint
@@ -330,13 +399,15 @@ end
 
 local function applyTint(model: Model, tint: Tint, now: number)
 	local headBusy = headIsBusy(model, tint, now)
+	local charPictures = hasPictures("Fire")
+	local rawPictures = hasPictures("Acid")
 	for part, original in tint.originals do
 		if part.Parent == nil or (headBusy and part.Name == "Head") then
 			continue
 		end
 		local weight = tint.weights[part] or 1
-		local char = tint.char * CHAR_MAX * weight
-		local raw = tint.raw * RAW_MAX * weight
+		local char = tint.char * (if charPictures then CHAR_MAX_PICTURES else CHAR_MAX) * weight
+		local raw = tint.raw * (if rawPictures then RAW_MAX_PICTURES else RAW_MAX) * weight
 		paint(tint, part, original:Lerp(SKIN_RAW, raw):Lerp(SKIN_CHAR, char))
 	end
 end
@@ -423,9 +494,15 @@ end
 -- A random spot on the sides of a body part (not its top or bottom, hidden
 -- by the body) with room for something `radius` wide: its frame (part
 -- space, Z out of the skin) and the radius that fits. `low`: the lower half
--- (where drops form).
-local function skinSpot(part: BasePart, radius: number, low: boolean?): (CFrame, number)
-	local spin = random:NextNumber(0, math.pi * 2)
+-- (where drops form). `upright`: not turned (its Y up the part: acid runs
+-- down it).
+local function skinSpot(
+	part: BasePart,
+	radius: number,
+	low: boolean?,
+	upright: boolean?
+): (CFrame, number)
+	local spin = if upright then 0 else random:NextNumber(0, math.pi * 2)
 	if part.Name == "Head" then
 		local fit = math.min(radius, 0.22)
 		local angle = random:NextNumber(0, math.pi * 2)
@@ -495,13 +572,17 @@ local function addMarks(session: Session, ownHead: boolean, share: number)
 		local wanted = (MARKS[name] or 0) * share
 		local count = math.floor(wanted) + (if random:NextNumber() < wanted % 1 then 1 else 0)
 		for index = 1, count do
+			if #session.marks >= MAX_MARKS then
+				return
+			end
 			local radius = if name == "Torso"
 				then random:NextNumber(0.28, 0.55)
 				else random:NextNumber(0.22, 0.42)
-			local offset, fit = skinSpot(base, radius)
+			local offset, fit = skinSpot(base, radius, false, not isFire)
 			local plans: { LayerPlan } = {}
 			-- One blob of the patch (a patch is a few of them overlapping: a
-			-- ragged shape, never rings).
+			-- ragged shape, never rings). `stretch` / `spin`: given, or at
+			-- random.
 			local function layer(
 				scale: number,
 				dx: number,
@@ -510,14 +591,16 @@ local function addMarks(session: Session, ownHead: boolean, share: number)
 				material: Enum.Material,
 				alpha: number,
 				lift: number,
-				glow: boolean?
+				glow: boolean?,
+				stretch: number?,
+				spin: number?
 			)
 				table.insert(plans, {
 					scale = scale,
 					dx = dx,
 					dy = dy,
-					stretch = random:NextNumber(0.5, 1),
-					spin = random:NextNumber(0, math.pi * 2),
+					stretch = stretch or random:NextNumber(0.5, 1),
+					spin = spin or random:NextNumber(0, math.pi * 2),
 					color = color,
 					material = material,
 					alpha = alpha,
@@ -529,68 +612,96 @@ local function addMarks(session: Session, ownHead: boolean, share: number)
 				return random:NextNumber(-0.32, 0.32)
 			end
 			if isFire then
-				-- A singed brown halo (two blobs), black char inside (two
-				-- blobs off centre), maybe a glowing speck in it.
-				layer(0.9, jitter() * 0.3, jitter() * 0.3, SCORCH, Enum.Material.Sand, 0.45, 0)
-				layer(0.7, jitter(), jitter(), SCORCH, Enum.Material.Sand, 0.5, 0.004)
+				-- Like a deep burn: a singed brown halo (two blobs), mottled
+				-- char inside (black and purple-brown clumps), maybe a pale
+				-- glossy patch where the skin peeled, maybe a glowing speck.
+				layer(0.95, jitter() * 0.3, jitter() * 0.3, SCORCH, Enum.Material.Sand, 0.5, 0)
+				layer(0.75, jitter(), jitter(), SCORCH, Enum.Material.Sand, 0.4, 0.004)
 				local coreX, coreY = 0, 0
-				for _ = 1, 2 do
+				for clump = 1, random:NextInteger(2, 3) do
 					coreX, coreY = jitter(), jitter()
 					layer(
-						random:NextNumber(0.38, 0.62),
+						random:NextNumber(0.3, 0.55),
 						coreX,
 						coreY,
-						CHAR,
+						if clump == 2 then CHAR_PURPLE else CHAR,
 						Enum.Material.Slate,
-						random:NextNumber(0.05, 0.2),
-						0.03
+						random:NextNumber(0.05, 0.25),
+						0.02 + clump * 0.006
 					)
 				end
-				if random:NextNumber() < 0.55 then
+				if random:NextNumber() < 0.45 then
 					layer(
-						random:NextNumber(0.1, 0.2),
+						random:NextNumber(0.14, 0.24),
+						jitter(),
+						jitter(),
+						SHEEN,
+						Enum.Material.SmoothPlastic,
+						0.2,
+						0.05
+					)
+				end
+				if random:NextNumber() < 0.45 then
+					layer(
+						random:NextNumber(0.08, 0.16),
 						coreX,
 						coreY,
 						GLOW,
 						Enum.Material.Neon,
 						0.15,
-						0.05,
+						0.055,
 						true
 					)
 				end
 			else
-				-- Yellow-green corroded skin around, raw red flesh where it
-				-- ate through (or a pale blister).
+				-- Eaten skin: a dark crusty margin, raw red-brown flesh in it,
+				-- runs going down from it (the acid flowed), maybe a pale bit
+				-- of dead skin.
 				layer(
-					0.9,
+					0.95,
 					jitter() * 0.3,
 					jitter() * 0.3,
-					CORRODED,
+					CRUST,
 					Enum.Material.SmoothPlastic,
-					0.35,
+					0.3,
 					0
 				)
-				layer(0.65, jitter(), jitter(), CORRODED, Enum.Material.SmoothPlastic, 0.3, 0.004)
 				for _ = 1, random:NextInteger(1, 2) do
 					layer(
-						random:NextNumber(0.4, 0.65),
-						jitter(),
-						jitter(),
-						RAW,
+						random:NextNumber(0.5, 0.75),
+						jitter() * 0.6,
+						jitter() * 0.6,
+						if random:NextNumber() < 0.5 then RAW else RAW_DEEP,
 						Enum.Material.SmoothPlastic,
 						0.05,
-						0.03
+						0.02
+					)
+				end
+				for _ = 1, random:NextInteger(1, 2) do
+					local x = jitter() * 1.4
+					local long = random:NextNumber(0.7, 1.2)
+					layer(
+						random:NextNumber(0.18, 0.28),
+						x,
+						-long * 0.9,
+						RAW_DEEP,
+						Enum.Material.SmoothPlastic,
+						0.1,
+						0.015,
+						false,
+						long / 0.25,
+						0
 					)
 				end
 				if random:NextNumber() < 0.4 then
 					layer(
-						random:NextNumber(0.15, 0.25),
+						random:NextNumber(0.12, 0.22),
 						jitter(),
 						jitter(),
-						BLISTER,
+						SLOUGH,
 						Enum.Material.SmoothPlastic,
-						0.1,
-						0.05
+						0.15,
+						0.04
 					)
 				end
 			end
@@ -662,6 +773,530 @@ local function stepMarks(session: Session, now: number)
 			item.mesh.Scale = Vector3.new(scale, scale, 1)
 		end
 		mark.done = t >= 1
+	end
+end
+
+------------------------------------------------------------------------------
+-- Burn pictures (BURN_IMAGES)
+------------------------------------------------------------------------------
+
+local PIXELS = 160 -- pixels per stud on the pictures' surfaces (sharp up close)
+local SIDES = { Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }
+local HEAD_PICTURE = 0.32 -- studs: a picture on the round head (a small flat plate)
+-- When the fire reaches each part (seconds, then up to FIRE_SPREAD more):
+-- from the torso outward, the legs last.
+local REACH: { [string]: number } = {
+	Torso = 0,
+	Head = 0.6,
+	["Right Arm"] = 0.4,
+	["Left Arm"] = 0.4,
+	["Right Leg"] = 1.1,
+	["Left Leg"] = 1.1,
+}
+local FIRE_SPREAD = 1.8
+-- How much of each part's length the fire burns, at least (a band along
+-- it, the rest of it up to the whole part).
+local BAND: { [string]: number } = {
+	Torso = 0.6,
+	["Right Arm"] = 0.55,
+	["Left Arm"] = 0.55,
+	["Right Leg"] = 0.5,
+	["Left Leg"] = 0.5,
+}
+local FIRE_CELL = 1.2 -- studs: the fire's pictures, one about every this much
+-- Where acid lands besides the torso (picked by weight).
+local SPLASHED =
+	{ "Right Arm", "Left Arm", "Right Arm", "Left Arm", "Head", "Right Leg", "Left Leg" }
+
+-- Width and height (studs) of a side face of a block part.
+local function faceSize(part: BasePart, face: Enum.NormalId): Vector2
+	local size = part.Size
+	if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
+		return Vector2.new(size.Z, size.Y)
+	end
+	return Vector2.new(size.X, size.Y)
+end
+
+-- Plans the pictures of a burn: only where and when, they are built when
+-- they show (stepPictures). Fire burns a band along every part, from the
+-- torso outward: the same height on all four sides of a part (where a
+-- picture goes past the edge of a side, the next side is burnt there too),
+-- big overlapping pictures making one dark area, a soft soot halo around
+-- it. Acid eats where it landed (the torso and a limb or two) and runs
+-- down, with a few smaller splashes elsewhere. `share`: of the usual
+-- amount (a burn starting again adds only a few).
+local function addPictures(session: Session, ownHead: boolean, share: number)
+	local images: { number } = {}
+	for _, id in imagesOf(session.kind) do
+		if id ~= 0 then
+			table.insert(images, id)
+		end
+	end
+	if #images == 0 then
+		return
+	end
+	local now = os.clock()
+	local isFire = session.kind == "Fire"
+	-- One picture, planned (none past MAX_PICTURES).
+	local function picture(
+		base: BasePart,
+		face: Enum.NormalId,
+		plate: CFrame?,
+		at: Vector2,
+		size: Vector2,
+		drip: boolean,
+		delay: number,
+		grow: number,
+		image: number,
+		color: Color3,
+		alpha: number,
+		layer: number
+	)
+		if #session.pictures >= MAX_PICTURES then
+			return
+		end
+		-- (fire: kept along the limb, either way up; acid: upright, it runs)
+		local flip = if drip or random:NextNumber() < 0.5 then 0 else 180
+		table.insert(session.pictures, {
+			base = base,
+			face = face,
+			-- (on the head: the halo's plate under the burn's, a hair apart)
+			plate = if plate then plate * CFrame.new(0, 0, 0.0015 * layer) else nil,
+			at = if plate then size * 0.5 else at, -- (a plate: in its middle)
+			size = size,
+			image = image,
+			color = color,
+			alpha = alpha,
+			rotation = flip + random:NextNumber(-8, 8),
+			drip = drip,
+			layer = layer,
+			showAt = now + delay,
+			startedAt = 0,
+			grow = grow,
+			label = nil,
+			run = nil,
+			shown = false,
+			done = false,
+		})
+	end
+	local function burn(
+		base: BasePart,
+		face: Enum.NormalId,
+		plate: CFrame?,
+		at: Vector2,
+		size: Vector2,
+		drip: boolean,
+		delay: number,
+		grow: number
+	)
+		local shade = random:NextNumber(0.88, 1)
+		picture(
+			base,
+			face,
+			plate,
+			at,
+			size,
+			drip,
+			delay,
+			grow,
+			images[random:NextInteger(1, #images)],
+			Color3.new(shade, shade, shade),
+			random:NextNumber(0, 0.08),
+			random:NextInteger(2, 4)
+		)
+	end
+	-- The soft halo under a burn (soot or redness), a little bigger.
+	local function halo(
+		base: BasePart,
+		face: Enum.NormalId,
+		plate: CFrame?,
+		at: Vector2,
+		size: Vector2,
+		drip: boolean,
+		delay: number,
+		grow: number
+	)
+		if IMAGES.halo ~= 0 then
+			picture(
+				base,
+				face,
+				plate,
+				at,
+				size,
+				drip,
+				delay,
+				grow,
+				IMAGES.halo,
+				if isFire then HALO_FIRE else HALO_ACID,
+				if isFire then 0.45 else 0.62,
+				1
+			)
+		end
+	end
+	-- One burn with its halo (acid, the head).
+	local function add(
+		base: BasePart,
+		face: Enum.NormalId,
+		plate: CFrame?,
+		at: Vector2,
+		size: Vector2,
+		drip: boolean,
+		delay: number,
+		grow: number
+	)
+		halo(base, face, plate, at, size * 1.35, drip, delay, grow)
+		burn(base, face, plate, at, size, drip, delay, grow)
+	end
+	-- On the round head: a small plate standing on it, just outside the skin
+	-- (a flat plate touching a round head at its middle: its edges a hair
+	-- off it; not our own head: in the way of the camera in first person).
+	local function onHead(head: BasePart, delay: number, grow: number)
+		if ownHead then
+			return
+		end
+		local frame = skinSpot(head, HEAD_PICTURE * 0.5, false, true)
+		-- (the plate is as big as its halo, the burn in its middle)
+		local plate = frame * CFrame.new(0, 0, 0.003)
+		local wide = HEAD_PICTURE * (if IMAGES.halo ~= 0 then 1.35 else 1)
+		local middle = Vector2.new(wide, wide) * 0.5
+		halo(
+			head,
+			Enum.NormalId.Back,
+			plate,
+			middle,
+			Vector2.new(wide, wide),
+			not isFire,
+			delay,
+			grow
+		)
+		burn(
+			head,
+			Enum.NormalId.Back,
+			plate,
+			middle,
+			Vector2.new(HEAD_PICTURE, HEAD_PICTURE),
+			not isFire,
+			delay,
+			grow
+		)
+	end
+	local function partNamed(name: string): BasePart?
+		local part = session.model:FindFirstChild(name)
+		return if part and part:IsA("BasePart") then part else nil
+	end
+
+	if isFire then
+		-- Every part the first time; burnt again, one or two of them more.
+		local names: { string } = {}
+		if share >= 1 then
+			names = table.clone(BODY)
+		else
+			for _ = 1, random:NextInteger(1, 2) do
+				table.insert(names, BODY[random:NextInteger(1, #BODY)])
+			end
+		end
+		for _, name in names do
+			local base = partNamed(name)
+			if base == nil then
+				continue
+			end
+			local reach = (REACH[name] or 1) + random:NextNumber(0, FIRE_SPREAD * 0.4)
+			if name == "Head" then
+				for _ = 1, if share >= 1 then 3 else 1 do
+					onHead(
+						base,
+						reach + random:NextNumber(0, FIRE_SPREAD * 0.6),
+						random:NextNumber(2, 3)
+					)
+				end
+				continue
+			end
+			-- The band: the same on its four sides.
+			local height = base.Size.Y
+			local least = if share >= 1 then BAND[name] or 0.5 else 0.35
+			local length = height * random:NextNumber(least, if share >= 1 then 1 else 0.6)
+			local top = random:NextNumber(0, height - length)
+			for _, face in SIDES do
+				local room = faceSize(base, face)
+				local columns = math.max(1, math.round(room.X))
+				local rows = math.max(1, math.ceil(length / FIRE_CELL))
+				local cell = Vector2.new(room.X / columns, length / rows)
+				local delay = reach + random:NextNumber(0, FIRE_SPREAD * 0.6)
+				-- (its ends a little ragged: not the same height on every side)
+				local middle =
+					Vector2.new(room.X * 0.5, top + length * 0.5 + random:NextNumber(-0.1, 0.1))
+				halo(
+					base,
+					face,
+					nil,
+					middle,
+					Vector2.new(room.X * 1.7, length * 1.35 + 0.4),
+					false,
+					delay,
+					random:NextNumber(2.4, 3.4)
+				)
+				for column = 1, columns do
+					for row = 1, rows do
+						-- Big (they overlap into one burn and go past the
+						-- edges of the side), longer than wide (along the
+						-- limb), not quite in a grid.
+						local width = cell.X * random:NextNumber(1.75, 2)
+						local size = Vector2.new(
+							width,
+							math.max(
+								cell.Y * random:NextNumber(1.8, 2.2),
+								width * random:NextNumber(1.1, 1.3)
+							)
+						)
+						local at = Vector2.new(
+							cell.X * (column - 0.5) + random:NextNumber(-0.12, 0.12) * cell.X,
+							top + cell.Y * (row - 0.5) + random:NextNumber(-0.18, 0.18) * cell.Y
+						)
+						burn(
+							base,
+							face,
+							nil,
+							at,
+							size,
+							false,
+							delay + random:NextNumber(0, 0.5),
+							random:NextNumber(2.2, 3.5)
+						)
+					end
+				end
+			end
+		end
+		return
+	end
+
+	-- Acid: where it landed, running down.
+	local hit: { string } = {}
+	if share >= 1 then
+		table.insert(hit, "Torso")
+		for _ = 1, random:NextInteger(1, 2) do
+			table.insert(hit, SPLASHED[random:NextInteger(1, #SPLASHED)])
+		end
+	else
+		table.insert(hit, SPLASHED[random:NextInteger(1, #SPLASHED)])
+	end
+	for index, name in hit do
+		local base = partNamed(name)
+		if base == nil then
+			continue
+		end
+		local delay = if index == 1 then 0 else random:NextNumber(0, 0.6)
+		if name == "Head" then
+			onHead(base, delay, random:NextNumber(2.5, 4))
+			continue
+		end
+		for faceIndex = 1, random:NextInteger(1, 2) do
+			local face = SIDES[random:NextInteger(1, #SIDES)]
+			local room = faceSize(base, face)
+			local s = random:NextNumber(1.1, 1.6)
+			local size = Vector2.new(s, s * random:NextNumber(1.3, 1.7))
+			local top = room.Y * random:NextNumber(0.02, 0.3)
+			add(
+				base,
+				face,
+				nil,
+				Vector2.new(room.X * random:NextNumber(0.35, 0.65), top + size.Y * 0.5),
+				size,
+				true,
+				delay + (faceIndex - 1) * random:NextNumber(0.2, 0.6),
+				random:NextNumber(2.5, 4)
+			)
+		end
+	end
+	-- Smaller splashes, here and there.
+	for _ = 1, math.max(1, math.floor(random:NextInteger(2, 4) * share)) do
+		local name = BODY[random:NextInteger(1, #BODY)]
+		local base = partNamed(name)
+		if base == nil then
+			continue
+		end
+		if name == "Head" then
+			onHead(base, random:NextNumber(0.2, 1.5), random:NextNumber(2, 3))
+			continue
+		end
+		local face = SIDES[random:NextInteger(1, #SIDES)]
+		local room = faceSize(base, face)
+		local s = random:NextNumber(0.45, 0.7)
+		local size = Vector2.new(s, s * random:NextNumber(1.2, 1.6))
+		add(
+			base,
+			face,
+			nil,
+			Vector2.new(
+				room.X * random:NextNumber(0.25, 0.75),
+				room.Y * random:NextNumber(0.15, 0.6)
+			),
+			size,
+			true,
+			random:NextNumber(0.2, 1.5),
+			random:NextNumber(1.5, 2.5)
+		)
+	end
+end
+
+-- Shows a SurfaceGui only while its part does (our own limbs in first
+-- person: a picture ignores LocalTransparencyModifier; a limb hidden and
+-- replaced by its copy with a hole while a glass cut is open, Gashes: the
+-- burn would cover the hole).
+local function followPart(gui: SurfaceGui, part: BasePart)
+	local function follow()
+		gui.Enabled = part.LocalTransparencyModifier < 0.99 and part.Transparency < 0.99
+	end
+	local link = part:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(follow)
+	local hidden = part:GetPropertyChangedSignal("Transparency"):Connect(follow)
+	gui.Destroying:Once(function()
+		link:Disconnect()
+		hidden:Disconnect()
+	end)
+	follow()
+end
+
+local function newSurface(name: string, face: Enum.NormalId, layer: number): SurfaceGui
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = name
+	gui.Face = face
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = PIXELS
+	gui.LightInfluence = 1 -- (lit like the skin)
+	gui.ZOffset = layer
+	gui.MaxDistance = 250
+	return gui
+end
+
+-- Where a picture goes: the clipping frame on its face of the part (one
+-- SurfaceGui per face and kind, made once), or on the head a small plate
+-- of its own (under the head: hidden with it if it bursts).
+local function holderOf(session: Session, picture: Picture): GuiObject
+	local base = picture.base
+	local plate = picture.plate
+	if plate then
+		local piece = ghost(
+			"RiftBurnPlate",
+			Vector3.new(picture.size.X, picture.size.Y, 0.01),
+			CHAR,
+			Enum.Material.SmoothPlastic
+		)
+		piece.Transparency = 1
+		stick(base, piece, plate, base)
+		table.insert(session.surfaces, piece)
+		local gui = newSurface("RiftBurnSurface", picture.face, 1)
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.fromScale(1, 1)
+		frame.BackgroundTransparency = 1
+		frame.Parent = gui
+		gui.Parent = piece
+		return frame
+	end
+	local name = `RiftBurn{session.kind}{picture.face.Name}`
+	local found = base:FindFirstChild(name)
+	local clip = if found then found:FindFirstChild("Clip") else nil
+	if clip and clip:IsA("Frame") then
+		return clip
+	end
+	local gui = newSurface(name, picture.face, if session.kind == "Fire" then 2 else 3)
+	local frame = Instance.new("Frame")
+	frame.Name = "Clip"
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundTransparency = 1
+	frame.ClipsDescendants = true -- (a burn crossing the edge goes on the next side)
+	frame.Parent = gui
+	followPart(gui, base)
+	gui.Parent = base
+	table.insert(session.surfaces, gui)
+	return frame
+end
+
+-- A picture's size `t` (0..1) of the way through its growth: a dot
+-- spreading fast then slowly. Acid runs down: the whole picture is there,
+-- uncovered from its top by a frame growing down steadily (stretching it
+-- would squash it).
+local RUN_WIDTH = 1.15 -- (the frame a little wider: the picture is turned a little)
+local function pictureSize(picture: Picture, t: number): UDim2
+	if picture.drip then
+		-- (the frame uncovering it: all its width, more and more of its length)
+		return UDim2.fromOffset(
+			picture.size.X * RUN_WIDTH * PIXELS,
+			picture.size.Y * (0.15 + 0.85 * t) * PIXELS
+		)
+	end
+	local eased = 1 - (1 - t) * (1 - t)
+	return UDim2.fromOffset(
+		picture.size.X * (0.2 + 0.8 * eased) * PIXELS,
+		picture.size.Y * (0.2 + 0.8 * eased) * PIXELS
+	)
+end
+
+-- What grows: the picture, or (acid) the frame uncovering it.
+local function grower(picture: Picture): GuiObject?
+	return if picture.run then picture.run else picture.label
+end
+
+local function buildPicture(session: Session, picture: Picture)
+	local label = Instance.new("ImageLabel")
+	label.Name = "Burn"
+	label.BackgroundTransparency = 1
+	label.Image = `rbxassetid://{picture.image}`
+	label.ImageColor3 = picture.color
+	label.ImageTransparency = 1
+	label.Rotation = picture.rotation
+	label.ZIndex = picture.layer
+	local holder = holderOf(session, picture)
+	if picture.drip then
+		-- Acid: at its full size in a frame hanging from its top, growing
+		-- down (clipping it).
+		local run = Instance.new("Frame")
+		run.Name = "Run"
+		run.BackgroundTransparency = 1
+		run.ClipsDescendants = true
+		run.ZIndex = picture.layer
+		run.AnchorPoint = Vector2.new(0.5, 0)
+		run.Position =
+			UDim2.fromOffset(picture.at.X * PIXELS, (picture.at.Y - picture.size.Y * 0.5) * PIXELS)
+		run.Size = pictureSize(picture, 0)
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.new(0.5, 0, 0, picture.size.Y * 0.5 * PIXELS)
+		label.Size = UDim2.fromOffset(picture.size.X * PIXELS, picture.size.Y * PIXELS)
+		label.Parent = run
+		run.Parent = holder
+		picture.run = run
+	else
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.fromOffset(picture.at.X * PIXELS, picture.at.Y * PIXELS)
+		label.Size = pictureSize(picture, 0)
+		label.Parent = holder
+	end
+	picture.label = label
+end
+
+local function stepPictures(session: Session, now: number)
+	for _, picture in session.pictures do
+		if picture.done or now < picture.showAt then
+			continue
+		end
+		if not picture.shown then
+			local cost = if picture.plate then 2 else 1
+			if budget < cost or picture.base.Parent == nil then
+				continue
+			end
+			budget -= cost
+			buildPicture(session, picture)
+			picture.shown = true
+			picture.startedAt = now
+		end
+		local label = picture.label
+		local growing = grower(picture)
+		if label == nil or growing == nil then
+			picture.done = true
+			continue
+		end
+		local t = math.min((now - picture.startedAt) / picture.grow, 1)
+		growing.Size = pictureSize(picture, t)
+		label.ImageTransparency = 1 - (1 - picture.alpha) * math.min(t * 3, 1)
+		picture.done = t >= 1
 	end
 end
 
@@ -1233,13 +1868,21 @@ local function ensureHeartbeat()
 	end
 end
 
--- Stops the fading of ended patches (taken back, or wiped).
-local function haltFade(fade: Fade)
-	fade.token += 1
-	for _, tween in fade.tweens do
+-- Stops what is still moving on a scar (taken back, healed, or wiped).
+local function haltScar(scar: Scar)
+	scar.token += 1
+	for _, tween in scar.tweens do
 		tween:Cancel()
 	end
-	table.clear(fade.tweens)
+	table.clear(scar.tweens)
+end
+
+-- Removes the pictures' surfaces (and head plates) of a burn.
+local function removeSurfaces(surfaces: { Instance })
+	for _, item in surfaces do
+		item:Destroy()
+	end
+	table.clear(surfaces)
 end
 
 -- Everything of a model's burn gone now (destroyed, out of the game).
@@ -1253,12 +1896,14 @@ local function wipe(model: Model)
 		if session.light then
 			session.light:Destroy()
 		end
+		removeSurfaces(session.surfaces)
 		session.folder:Destroy()
 	end
-	for folder, fade in fading do
-		if fade.model == model then
-			fading[folder] = nil
-			haltFade(fade)
+	for folder, scar in scars do
+		if scar.model == model then
+			scars[folder] = nil
+			haltScar(scar)
+			removeSurfaces(scar.surfaces)
 			folder:Destroy()
 		end
 	end
@@ -1266,14 +1911,52 @@ local function wipe(model: Model)
 	stopHeartbeatIfIdle()
 end
 
-local function play(fade: Fade, instance: Instance, info: TweenInfo, goal: { [string]: any })
+local function play(scar: Scar, instance: Instance, info: TweenInfo, goal: { [string]: any })
 	local tween = TweenService:Create(instance, info, goal)
 	tween:Play()
-	table.insert(fade.tweens, tween)
+	table.insert(scar.tweens, tween)
 end
 
--- The burn ends: the effects die out, the patches fade, the skin goes back
--- (slowly, in the Heartbeat).
+-- The body is healed (a kill, a new round): its burn marks fade away
+-- (still burning: those already there go when it ends).
+local function heal(model: Model)
+	local burning = sessions[model]
+	if burning then
+		burning.healedAt = os.clock()
+	end
+	for folder, scar in scars do
+		if scar.model ~= model then
+			continue
+		end
+		scars[folder] = nil
+		haltScar(scar)
+		local fade = TweenInfo.new(HEAL_FADE, Enum.EasingStyle.Sine)
+		for _, mark in scar.marks do
+			for _, item in mark.layers do
+				if item.part.Parent then
+					play(scar, item.part, fade, { Transparency = 1 })
+				end
+			end
+		end
+		for _, picture in scar.pictures do
+			local label = picture.label
+			if label and label.Parent then
+				play(scar, label, fade, { ImageTransparency = 1 })
+			end
+		end
+		local surfaces = scar.surfaces
+		for _, item in surfaces do
+			item.Name = "RiftBurnHealed" -- (a new burn meanwhile makes its own)
+		end
+		task.delay(HEAL_FADE, function()
+			removeSurfaces(surfaces)
+			folder:Destroy()
+		end)
+	end
+end
+
+-- The burn ends: the effects die out, the skin goes back (slowly, in the
+-- Heartbeat); the marks stay (a scar).
 local function stopBurning(model: Model)
 	local session = sessions[model]
 	sessions[model] = nil
@@ -1342,29 +2025,41 @@ local function stopBurning(model: Model)
 			end
 		end
 	end
-	-- The patches stay a while, then fade (and go).
+	-- The marks stay. Those not shown yet never will (the burn didn't get
+	-- there); those still growing end their growth (not frozen half-grown).
 	local folder = session.folder
-	local markFade = if isFire then MARK_FADE_FIRE else MARK_FADE_ACID
-	local fade: Fade = {
+	local scar: Scar = {
 		model = model,
 		kind = session.kind,
 		folder = folder,
-		marks = session.marks,
+		marks = {},
 		glows = session.glows,
+		pictures = {},
+		surfaces = session.surfaces,
 		tweens = {},
 		token = 0,
 	}
 	local now = os.clock()
+	local finish = TweenInfo.new(0.6, Enum.EasingStyle.Quad)
+	-- Healed while it burnt: what was there then fades away now.
+	local healedAt = session.healedAt or -math.huge
+	local fade = TweenInfo.new(HEAL_FADE, Enum.EasingStyle.Sine)
 	for _, mark in session.marks do
 		if not mark.shown then
-			continue -- (never showed: nothing built)
+			continue
 		end
-		-- One still growing ends its growth (it doesn't freeze half-grown).
+		if mark.startedAt <= healedAt then
+			for _, item in mark.layers do
+				TweenService:Create(item.part, fade, { Transparency = 1 }):Play()
+				Debris:AddItem(item.part, HEAL_FADE)
+			end
+			continue
+		end
 		if not mark.done then
 			local left = (1 - math.min((now - mark.startedAt) / mark.grow, 1)) * mark.grow
 			for _, item in mark.layers do
 				play(
-					fade,
+					scar,
 					item.mesh,
 					TweenInfo.new(math.max(left, 0.05), Enum.EasingStyle.Quad),
 					{ Scale = Vector3.one }
@@ -1372,54 +2067,57 @@ local function stopBurning(model: Model)
 			end
 			mark.done = true
 		end
-		for _, item in mark.layers do
-			play(
-				fade,
-				item.part,
-				TweenInfo.new(
-					markFade * random:NextNumber(0.7, 1),
-					Enum.EasingStyle.Sine,
-					Enum.EasingDirection.In
-				),
-				{ Transparency = 1 }
-			)
-		end
+		table.insert(scar.marks, mark)
 	end
-	-- The glowing specks cool down to black char (and fade with the rest).
-	local token = fade.token
+	for _, picture in session.pictures do
+		local label = picture.label
+		if not picture.shown or label == nil then
+			continue
+		end
+		if picture.startedAt <= healedAt then
+			TweenService:Create(label, fade, { ImageTransparency = 1 }):Play()
+			Debris:AddItem(grower(picture) or label, HEAL_FADE)
+			continue
+		end
+		if not picture.done then
+			play(scar, label, finish, { ImageTransparency = picture.alpha })
+			local growing = grower(picture)
+			if growing then
+				play(scar, growing, finish, { Size = pictureSize(picture, 1) })
+			end
+			picture.done = true
+		end
+		table.insert(scar.pictures, picture)
+	end
+	-- The glowing specks cool down to black char.
+	local token = scar.token
 	for _, speck in session.glows do
 		local cool = random:NextNumber(0.8, 2)
-		play(fade, speck, TweenInfo.new(cool, Enum.EasingStyle.Quad), { Color = CHAR })
+		play(scar, speck, TweenInfo.new(cool, Enum.EasingStyle.Quad), { Color = CHAR })
 		task.delay(cool, function()
-			if fade.token == token and speck.Parent then
+			if scar.token == token and speck.Parent then
 				speck.Material = Enum.Material.Slate
 			end
 		end)
 	end
-	folder.Name = "RiftBurnFading"
-	fading[folder] = fade
-	task.delay(markFade + 0.1, function()
-		if fade.token == token and fading[folder] == fade then
-			fading[folder] = nil
-			folder:Destroy()
-		end
-	end)
+	folder.Name = "RiftBurnScar"
+	scars[folder] = scar
 	stopHeartbeatIfIdle()
 end
 
--- The same burn again before the last one's patches are gone: take them
--- back (they are where the body burnt; a whole new set somewhere else
--- would pile up and jump around).
-local function takeBack(model: Model, kind: string): Fade?
-	for folder, fade in fading do
-		if fade.model == model and fade.kind == kind then
-			fading[folder] = nil
-			haltFade(fade)
+-- The same burn again: take its marks back (they are where the body
+-- burnt; a whole new set somewhere else would pile up).
+local function takeBack(model: Model, kind: string): Scar?
+	for folder, scar in scars do
+		if scar.model == model and scar.kind == kind then
+			scars[folder] = nil
+			haltScar(scar)
 			if folder.Parent ~= model then
+				removeSurfaces(scar.surfaces)
 				folder:Destroy()
 				return nil
 			end
-			return fade
+			return scar
 		end
 	end
 	return nil
@@ -1454,35 +2152,44 @@ local function startBurning(model: Model, kind: string)
 		light = nil,
 		marks = {},
 		glows = {},
+		pictures = {},
+		surfaces = if back then back.surfaces else {},
 		bubbles = {},
 		pop = nil,
 		popPoint = nil,
 		nextDrip = os.clock() + 0.2,
 		seed = random:NextNumber(0, 1000),
 		headGone = false,
+		healedAt = nil,
 	}
 	-- Our own head: no patches or bubbles on it (they'd block the camera in
 	-- first person); its flames hide in first person (Heartbeat).
 	local ownHead = model == Players.LocalPlayer.Character
 	sessions[model] = session
+	local share = 1
 	if back then
-		-- The old patches come back as they were, the specks glow again; a
-		-- few new ones join them.
-		local now = os.clock()
+		-- The old marks are back as they were (finished growing), the
+		-- specks glow again; a few new ones join them.
+		share = 0.35
 		for _, mark in back.marks do
-			local gone = mark.shown and (#mark.layers == 0 or mark.layers[1].part.Parent == nil)
+			local gone = #mark.layers == 0 or mark.layers[1].part.Parent == nil
 			if mark.base.Parent == nil or gone then
 				continue -- (its head burst)
 			end
-			if mark.shown then
-				for _, item in mark.layers do
-					item.part.Transparency = item.alpha
-					item.mesh.Scale = Vector3.one
-				end
-			else
-				mark.showAt = now + random:NextNumber(0, MARK_SPREAD)
+			for _, item in mark.layers do
+				item.part.Transparency = item.alpha
+				item.mesh.Scale = Vector3.one
 			end
 			table.insert(session.marks, mark)
+		end
+		for _, picture in back.pictures do
+			local label = picture.label
+			local growing = grower(picture)
+			if label and growing and label.Parent and picture.base.Parent then
+				growing.Size = pictureSize(picture, 1)
+				label.ImageTransparency = picture.alpha
+				table.insert(session.pictures, picture)
+			end
 		end
 		for _, speck in back.glows do
 			if speck.Parent then
@@ -1491,9 +2198,11 @@ local function startBurning(model: Model, kind: string)
 				table.insert(session.glows, speck)
 			end
 		end
-		addMarks(session, ownHead, 0.35)
+	end
+	if hasPictures(kind) then
+		addPictures(session, ownHead, share)
 	else
-		addMarks(session, ownHead, 1)
+		addMarks(session, ownHead, share)
 	end
 	if kind == "Fire" then
 		lightFire(session, ownHead)
@@ -1545,6 +2254,17 @@ local function dropHead(session: Session)
 			end
 		end
 	end
+	for _, picture in session.pictures do
+		if picture.base.Name == "Head" then
+			picture.done = true -- (never built if it wasn't yet)
+			picture.shown = true
+			local label = picture.label
+			local plate = if label then label:FindFirstAncestorWhichIsA("BasePart") else nil
+			if plate and plate ~= picture.base then
+				plate:Destroy()
+			end
+		end
+	end
 	for _, bubble in session.bubbles do
 		if bubble.base.Name == "Head" then
 			bubble.nextAt = math.huge -- (never built if it wasn't yet)
@@ -1585,6 +2305,7 @@ step = function(_dt: number)
 			end
 		end
 		stepMarks(session, now)
+		stepPictures(session, now)
 		-- Our own first person: the flames / fumes around the head would
 		-- fill the view.
 		if #session.viewEmitters > 0 and model == Players.LocalPlayer.Character then
@@ -1681,6 +2402,23 @@ function RiftBurn.watch(model: Model)
 			stopBurning(model)
 		end)
 		else nil
+	-- Healed (a kill, a new round): the server gives health back at once
+	-- (the slow regeneration never does that). The burn marks go, like
+	-- the bruises and cuts. (Checked again a moment later: a new round
+	-- also puts the fire out, maybe just after.)
+	local healed: RBXScriptConnection? = nil
+	if humanoid then
+		local last = humanoid.Health
+		healed = humanoid.HealthChanged:Connect(function(health: number)
+			local gained = health - last
+			last = health
+			local full = health >= humanoid.MaxHealth - 0.01
+			if health > 0 and gained > 0 and (gained >= HEAL_JUMP or full) then
+				heal(model)
+				task.delay(0.5, heal, model)
+			end
+		end)
+	end
 	local moved: RBXScriptConnection
 	moved = model.AncestryChanged:Connect(function()
 		if not model:IsDescendantOf(game) then
@@ -1694,6 +2432,9 @@ function RiftBurn.watch(model: Model)
 		moved:Disconnect()
 		if died then
 			died:Disconnect()
+		end
+		if healed then
+			healed:Disconnect()
 		end
 		watched[model] = nil
 		wipe(model)

@@ -318,6 +318,16 @@ return table.freeze({
 			rim = 0, -- bruise_rim.png
 			petechiae = 0, -- bruise_petechiae.png
 		}),
+		-- Burn pictures (Dr. Rift's acid and fire): assets/burns/*.png uploaded
+		-- to Roblox, their image ids here (docs/WOUNDS_FR.md). With them a burn
+		-- is realistic pictures spreading over the burnt limbs (raw eroded
+		-- flesh running down for acid, mottled char for fire); without (0),
+		-- simpler patches.
+		BURN_IMAGES = table.freeze({
+			acid = table.freeze({ 0, 0, 0 }), -- acid_1..3.png
+			fire = table.freeze({ 0, 0, 0 }), -- fire_1..3.png
+			halo = 0, -- burn_halo.png
+		}),
 		-- A smashed bottle leaves bits of glass stuck in the skin; this often it
 		-- only grazes them (glass, no torn cut).
 		GLASS_GRAZE_CHANCE = 0.35,
