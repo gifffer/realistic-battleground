@@ -8,9 +8,15 @@
 -- Text shown to players is in English (game rule).
 --
 -- Rules that keep it from looking like a template:
---   • no UICorner, no pills, no filled buttons, no drop-shadowed boxes;
+--   • text and HUD stay square and boxless: hairlines, no drop shadows;
+--   • but anything you can click or tap is a REAL button (UI/Button):
+--     a filled plate with rounded corners and an outline, that lights up
+--     under the mouse and sinks when pressed. Players must never wonder
+--     whether something is clickable;
+--   • one warm amber accent (Accent) for the main action of a screen
+--     (EQUIP, BUY, FIND MATCH...) and for what is selected / equipped;
 --   • no Gotham fonts, nothing above 40 px, no exclamation marks;
---   • no saturated colour: blood red means "danger / you are hurt";
+--   • blood red means "danger / you are hurt", nothing else;
 --   • nothing centred that doesn't need to be: the middle of the screen
 --     belongs to the fight.
 --
@@ -21,6 +27,7 @@
 --   Theme.gradient(rotation, { {0, 0.4}, {1, 1} })   a transparency gradient
 --   Theme.keyCap("M1")                       an outlined key ("M1", "ESC"...)
 --   Theme.tween(instance, seconds, props, style?, direction?)
+--   (buttons: UI/Button.new / Button.badge, never hand-made)
 --
 -- Phones and small windows (layouts are drawn for 1280 × 720 and up):
 --   Theme.scaleFor(viewport, minScale)       the UIScale a block should use
@@ -45,7 +52,13 @@ Theme.Colors = table.freeze({
 	Blood = Color3.fromHex("#9E2B25"), -- danger fills (exhausted stamina)
 	BloodHi = Color3.fromHex("#B8423A"), -- danger text / lines (low HP, damage, head aim)
 	BloodDeep = Color3.fromHex("#6E1814"), -- knock-out edge vignette
+	Accent = Color3.fromHex("#E2A13B"), -- main actions, selected / equipped
+	AccentHi = Color3.fromHex("#F2BC5E"), -- accent under the mouse
+	AccentDeep = Color3.fromHex("#B87C22"), -- accent while pressed
 })
+
+-- Corner radius of buttons and cards (pixels).
+Theme.RADIUS = 6
 
 local FAMILY = {
 	Condensed = "rbxasset://fonts/families/RobotoCondensed.json",

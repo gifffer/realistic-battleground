@@ -65,7 +65,9 @@ On se bat en **arène libre**, et on peut **défier quelqu'un en duel** (best of
 
 Règle : **les touches servent seulement au combat**. Tout le reste passe par des **boutons à
 l'écran** qui ouvrent une fenêtre (GUI). Une seule fenêtre ouverte à la fois, fermeture avec ✕
-ou en cliquant le même bouton.
+ou en cliquant le même bouton. Raccourci en plus du bouton : **M** ouvre / ferme le menu (la touche
+est écrite sur le bouton **MENU** sur PC). Tout ce qui se clique a l'air d'un **vrai bouton**
+(fond plein, coins arrondis, contour, réagit au survol et à l'appui ; voir `src/client/UI/Button.luau`).
 
 **Menu latéral** (boutons-icônes à gauche de l'écran, avec le nom au survol) :
 | Bouton | Fenêtre |

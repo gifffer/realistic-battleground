@@ -9,16 +9,17 @@
 --   SILVER                                                        1112
 --   ━━━━━━━━━  ━─────────  ──────────  ──────────  ──────────
 --   BRONZE     SILVER 1100  GOLD 1300   PLATINUM 1500  DIAMOND 1700
---   188 TO GOLD · 15 WINS · 9 LOSSES                      — FIND MATCH
+--   188 TO GOLD · 15 WINS · 9 LOSSES                      [FIND MATCH]
 --
 --   ON THIS SERVER                RANK                      5 PLAYERS
---   17  Rook_77                   GOLD                    — CHALLENGE
+--   17  Rook_77                   GOLD                     [CHALLENGE]
 --   12  Mara                      SILVER                    IN A DUEL
 --   22  Nightjar                  SILVER         CHALLENGE SENT  ·  7
 --
 -- Top: your ranked standing (ELO from the save, the rank and the ladder
 -- from Shared/DuelRanks) and the ranked search: FIND MATCH, then
--- "SEARCHING · 0:23 — CANCEL", then "Waiting for a free arena…".
+-- "SEARCHING · 0:23 [CANCEL]", then "Waiting for a free arena…".
+-- FIND MATCH and CHALLENGE are accent buttons, CANCEL a dark one (UI/Button).
 -- Bottom: every other player on the server, with CHALLENGE or the reason
 -- you can't challenge them right now (in a duel, in combat...).
 --
@@ -33,6 +34,7 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local DuelRanks = require(ReplicatedStorage.Shared.DuelRanks)
+local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local DuelController = require(script.Parent.DuelController)
 local MenuController = require(script.Parent.MenuController)
@@ -59,6 +61,11 @@ local DIAMOND_CEILING = 1900
 -- How often the time-based parts (search clock, cooldowns, "in combat")
 -- are refreshed while the section is open.
 local TICK_SECONDS = 0.25
+
+-- The action row (FIND MATCH / CANCEL) and the players' rows fit a button.
+local ACTION_Y = 100
+local ACTION_HEIGHT = Button.height("small") + 4
+local ROW_HEIGHT = Button.height("small") + 8
 
 -- A refused challenge (DuelController.getState().declined), as shown in
 -- the row's reason slot for a few seconds. Keys = the server's reasons.
@@ -87,7 +94,7 @@ type RowView = {
 	seconds: number, -- cooldown left (kind "sent")
 }
 
--- A "— WORD" button (the menu's MENU / EQUIP button), right-aligned.
+-- A button (UI/Button), right-aligned, that can be turned off.
 type LineButton = {
 	button: TextButton,
 	setEnabled: (enabled: boolean) -> (),
@@ -288,82 +295,30 @@ local function sectionHead(parent: Instance, y: number, title: string): Frame
 	return head
 end
 
--- The menu's "— WORD" button, right-aligned: a short line, then the word.
--- Hover: the line grows from 18 to 28 px and the word lights up.
--- Disabled: everything at 0.65, no hover, presses ignored.
-local function lineButton(word: string, props: { [string]: any }, onPress: () -> ()): LineButton
-	props.AutomaticSize = Enum.AutomaticSize.X
-	props.Size = UDim2.fromOffset(0, 14)
-	props.BackgroundTransparency = 1
-	props.AutoButtonColor = false
-	props.Text = ""
-	local button = Theme.make("TextButton", props, {
-		row(10, Enum.HorizontalAlignment.Right),
-	}) :: TextButton
-	local line = Theme.make("Frame", {
-		Name = "Line",
-		LayoutOrder = 1,
-		Size = UDim2.fromOffset(18, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.15,
-		Parent = button,
-	}) :: Frame
-	local label = Theme.text({
-		Name = "Label",
-		LayoutOrder = 2,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		TextTransparency = 0.15,
-		TextStrokeTransparency = 1,
-		Text = Theme.track(word, "four"),
-		Parent = button,
-	}) :: TextLabel
-
-	local enabled = true
-	local hovered = false
-	local function paint(seconds: number)
-		local lit = enabled and hovered
-		local transparency = if not enabled then 0.65 elseif lit then 0 else 0.15
-		local lineSize = UDim2.fromOffset(if lit then 28 else 18, 1)
-		if seconds <= 0 then
-			-- Set directly: a 0-second tween only applies on the next frame.
-			line.Size = lineSize
-			line.BackgroundTransparency = transparency
-			label.TextTransparency = transparency
-			return
-		end
-		Theme.tween(line, seconds, { Size = lineSize, BackgroundTransparency = transparency })
-		Theme.tween(label, seconds, { TextTransparency = transparency })
-	end
-
-	button.MouseEnter:Connect(function()
-		hovered = true
-		if enabled then
-			paint(0.15)
-		end
-	end)
-	button.MouseLeave:Connect(function()
-		hovered = false
-		if enabled then
-			paint(0.15)
-		end
-	end)
-	button.Activated:Connect(function()
-		if enabled then
-			onPress()
-		end
-	end)
-
+-- A small button (UI/Button), centred on its row's height. `props` gives
+-- its Name, Position, AnchorPoint, LayoutOrder, Visible and Parent.
+-- Disabled: greyed, presses ignored.
+local function lineButton(
+	word: string,
+	props: { [string]: any },
+	onPress: () -> (),
+	variant: Button.Variant?
+): LineButton
+	local button = Button.new({
+		name = props.Name,
+		text = word,
+		variant = variant or "primary",
+		size = "small",
+		anchorPoint = props.AnchorPoint,
+		position = props.Position,
+		layoutOrder = props.LayoutOrder,
+		visible = props.Visible,
+		parent = props.Parent,
+		onActivated = onPress,
+	})
 	return {
-		button = button,
-		setEnabled = function(value: boolean)
-			if value == enabled then
-				return
-			end
-			enabled = value
-			button.Active = value
-			paint(0)
-		end,
+		button = button.instance,
+		setEnabled = button.setEnabled,
 	}
 end
 
@@ -482,7 +437,7 @@ end
 local function leftLine(parent: Instance): TextLabel
 	return micro("", {
 		Name = "Left",
-		Position = UDim2.fromOffset(0, 4),
+		Position = UDim2.new(0, 0, 0.5, -6),
 		Size = UDim2.fromOffset(340, 11),
 		TextColor3 = C.Ink2,
 		Parent = parent,
@@ -493,10 +448,10 @@ end
 local function rightGroup(parent: Instance, padding: number): Frame
 	return Theme.make("Frame", {
 		Name = "Right",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 3),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -3, 0.5, 0),
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
+		Size = UDim2.fromOffset(0, ACTION_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}, {
@@ -534,8 +489,8 @@ end
 local function buildActionRow(parent: Instance)
 	local actionRow = Theme.make("Frame", {
 		Name = "ActionRow",
-		Position = UDim2.fromOffset(0, 108),
-		Size = UDim2.new(1, 0, 0, 20),
+		Position = UDim2.fromOffset(0, ACTION_Y),
+		Size = UDim2.new(1, 0, 0, ACTION_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
@@ -545,8 +500,8 @@ local function buildActionRow(parent: Instance)
 	idleText = leftLine(idle)
 	findButton = lineButton("FIND MATCH", {
 		Name = "FindMatch",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 3),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -3, 0.5, 0),
 		Parent = idle,
 	}, function()
 		DuelController.findMatch()
@@ -585,13 +540,13 @@ local function buildActionRow(parent: Instance)
 		Parent = searchRight,
 	}, function()
 		DuelController.cancelSearch()
-	end)
+	end, "secondary")
 
 	-- Waiting (a match was found, every arena is busy).
 	local waiting = modeGroup(actionRow, "waiting")
 	Theme.text({
 		Name = "Left",
-		Position = UDim2.fromOffset(0, 2),
+		Position = UDim2.new(0, 0, 0.5, -7),
 		Size = UDim2.fromOffset(340, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
@@ -643,7 +598,7 @@ local function buildActionRow(parent: Instance)
 	-- the server works (searching / waiting). No spinner.
 	sweepLine = Theme.make("Frame", {
 		Name = "SweepLine",
-		Position = UDim2.fromOffset(0, 132),
+		Position = UDim2.fromOffset(0, ACTION_Y + ACTION_HEIGHT + 2),
 		Size = UDim2.new(1, 0, 0, 1),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.9,
@@ -869,7 +824,7 @@ end
 local function createRow(target: Player): Row
 	local frame = Theme.make("Frame", {
 		Name = target.Name,
-		Size = UDim2.new(1, 0, 0, 30),
+		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = rowsFrame,
 	}) :: Frame
@@ -916,7 +871,7 @@ local function createRow(target: Player): Row
 	local challenge = lineButton("CHALLENGE", {
 		Name = "Challenge",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
+		Position = UDim2.new(1, -3, 0.5, 0),
 		Visible = false,
 		Parent = action,
 	}, function()
@@ -926,8 +881,8 @@ local function createRow(target: Player): Row
 	end)
 	local reason = Theme.make("Frame", {
 		Name = "Reason",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 30),
 		BackgroundTransparency = 1,

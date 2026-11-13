@@ -23,6 +23,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local CameraController = require(script.Parent.CameraController)
 local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
+local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 -- After a click, saves that still hold the OLD value can arrive for a short
@@ -57,57 +58,54 @@ local function keyLabel(key: Enum.KeyCode): string
 	return KEY_LABELS[key] or string.upper(key.Name)
 end
 
--- "OFF   ON" in text, the chosen one bright and underlined (no pill, no switch).
-local function createToggle(parent: Instance, onClick: () -> ()): Toggle
+-- [ OFF ][ ON ]: two real buttons side by side. The chosen one is filled
+-- (ON in the accent colour, OFF dark with an accent outline), the other is
+-- a faint plate that lights up under the mouse. `onSet(value)` runs when
+-- the player picks the side that isn't chosen yet.
+local function createToggle(parent: Instance, onSet: (value: boolean) -> ()): Toggle
 	local holder = Theme.make("Frame", {
 		Name = "Toggle",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
-		Size = UDim2.fromOffset(70, 22),
+		Position = UDim2.new(1, -3, 0.5, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, Button.height("small")),
 		BackgroundTransparency = 1,
 		Parent = parent,
+	}, {
+		Theme.make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 4),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
 	})
-	local function option(text: string, x: number): TextButton
-		return Theme.text({
-			ClassName = "TextButton",
-			Name = text,
-			Position = UDim2.fromOffset(x, 0),
-			Size = UDim2.fromOffset(26, 18),
-			TextSize = 12,
-			TextColor3 = C.Ink3,
-			TextStrokeTransparency = 1,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			AutoButtonColor = false,
-			Text = Theme.track(text, "four"),
-			Parent = holder,
-		}) :: TextButton
+	local chosen: boolean? = nil
+	local function option(text: string, value: boolean, order: number): Button.Button
+		return Button.new({
+			name = text,
+			text = text,
+			variant = "tab",
+			size = "small",
+			align = "center",
+			width = 56,
+			layoutOrder = order,
+			parent = holder,
+			onActivated = function()
+				if chosen ~= value then
+					onSet(value)
+				end
+			end,
+		})
 	end
-	local off = option("OFF", 4)
-	local on = option("ON", 44)
-	local underline = Theme.make("Frame", {
-		Name = "Underline",
-		Position = UDim2.fromOffset(44, 20),
-		Size = UDim2.fromOffset(20, 2),
-		BackgroundColor3 = C.Ink,
-		Parent = holder,
-	})
-	off.Activated:Connect(onClick)
-	on.Activated:Connect(onClick)
+	local off = option("OFF", false, 1)
+	local on = option("ON", true, 2)
 
 	local function set(value: boolean)
-		local chosen = if value then on else off
-		Theme.tween(on, Theme.FAST, { TextColor3 = if value then C.Ink else C.Ink3 })
-		Theme.tween(off, Theme.FAST, { TextColor3 = if value then C.Ink3 else C.Ink })
-		-- The underline matches the chosen word's real width (known once the
-		-- text is laid out, hence the deferred call).
-		task.defer(function()
-			local width = math.max(Theme.unscaled(chosen, chosen.TextBounds.X), 8)
-			local x = chosen.Position.X.Offset + (chosen.Size.X.Offset - width) / 2
-			Theme.tween(underline, 0.18, {
-				Position = UDim2.fromOffset(x, 20),
-				Size = UDim2.fromOffset(width - 3, 2),
-			}, Enum.EasingStyle.Quart)
-		end)
+		chosen = value
+		on.setVariant(if value then "primary" else "tab")
+		on.setSelected(false)
+		off.setVariant(if value then "tab" else "secondary")
+		off.setSelected(not value)
 	end
 	return { set = set }
 end
@@ -157,7 +155,7 @@ local function sectionTitle(content: Frame, text: string, y: number)
 	})
 end
 
--- A setting row: name, a sentence under it, the OFF / ON toggle on the
+-- A setting row: name, a sentence under it, the OFF / ON buttons on the
 -- right and a faint rule at the bottom.
 local function settingRow(
 	content: Frame,
@@ -165,7 +163,7 @@ local function settingRow(
 	y: number,
 	title: string,
 	description: string,
-	onClick: () -> ()
+	onSet: (value: boolean) -> ()
 ): Toggle
 	local row = Theme.make("Frame", {
 		Name = name,
@@ -201,7 +199,7 @@ local function settingRow(
 			BackgroundTransparency = 0.9,
 		}),
 	})
-	return createToggle(row, onClick)
+	return createToggle(row, onSet)
 end
 
 local function buildWindow(content: Frame)
@@ -212,7 +210,11 @@ local function buildWindow(content: Frame)
 		12,
 		"First-person camera",
 		"See the fight through your character's eyes.",
-		toggleFirstPerson
+		function(value)
+			if value ~= firstPerson then
+				toggleFirstPerson()
+			end
+		end
 	)
 	setFirstPerson(firstPerson) -- show the current value
 
@@ -223,7 +225,11 @@ local function buildWindow(content: Frame)
 		98,
 		"Block duel requests",
 		"Nobody can challenge you. Ranked search still works.",
-		toggleBlockDuels
+		function(value)
+			if value ~= blockDuels then
+				toggleBlockDuels()
+			end
+		end
 	)
 	setBlockDuels(blockDuels)
 

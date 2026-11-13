@@ -20,8 +20,10 @@
 -- • Hidden while knocked out or while the menu is open. Fades back when
 --   nothing happens for a while (like the health block).
 -- • Screen size: the block follows it (Theme.autoScale). On a phone the
---   slots and "AWAKEN" are the buttons (a tap uses the move), and the
---   block sits higher, clear of Roblox's jump button.
+--   slots and "AWAKEN" are the buttons (a tap uses the move): each slot
+--   gets a dark rounded plate so it reads as a button, and the block sits
+--   higher, clear of Roblox's jump button.
+-- • "[G] AWAKEN" sits on an accent plate (it is the one thing to press).
 --
 -- Everything is read from attributes the server sets on our character
 -- ("Kit", "CD_<moveId>", "Fury", "Awakened", "AwakenedUntil") and from
@@ -163,15 +165,33 @@ local function keyCap(parent: Instance, text: string, size: Vector2): (Frame, UI
 end
 
 local function buildSlot(index: number, holder: GuiObject): Slot
+	local touch = Theme.isTouch()
 	local button = Theme.make("TextButton", {
 		Name = `Slot{index}`,
 		Position = UDim2.fromOffset(2, 2 + (index - 1) * SLOT_HEIGHT),
-		Size = UDim2.new(1, -4, 0, SLOT_HEIGHT),
-		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -4, 0, if touch then SLOT_HEIGHT - 2 else SLOT_HEIGHT),
+		-- (a phone: a dark rounded plate, so each move reads as a button)
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = if touch then 0.55 else 1,
 		AutoButtonColor = false,
 		Text = "",
 		Parent = holder,
 	}) :: TextButton
+	if touch then
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, 4), Parent = button })
+		Theme.make("UIStroke", {
+			Thickness = 1,
+			Color = C.Ink,
+			Transparency = 0.8,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Parent = button,
+		})
+		Theme.make("UIPadding", {
+			PaddingLeft = UDim.new(0, 2),
+			PaddingRight = UDim.new(0, 6),
+			Parent = button,
+		})
+	end
 	local cap, stroke, keyText = keyCap(button, tostring(index), Vector2.new(22, 18))
 	cap.Position = UDim2.fromOffset(0, 3)
 	local name = Theme.text({
@@ -380,16 +400,29 @@ local function build()
 		BackgroundColor3 = C.Ink,
 		Parent = track,
 	})
+	-- On an accent plate: it is the one thing to press.
 	furyGo = Theme.make("Frame", {
 		Name = "FuryGo",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -2, 0, 130),
-		Size = UDim2.fromOffset(0, 18),
+		Position = UDim2.new(1, -2, 0, 126),
+		Size = UDim2.fromOffset(0, 26),
 		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundTransparency = 1,
+		BackgroundColor3 = C.Accent,
+		BackgroundTransparency = 0.82,
 		Visible = false,
 		Parent = furyGroup,
 	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
+		Theme.make("UIStroke", {
+			Thickness = 1.5,
+			Color = C.Accent,
+			Transparency = 0.1,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+		Theme.make("UIPadding", {
+			PaddingLeft = UDim.new(0, 4),
+			PaddingRight = UDim.new(0, 10),
+		}),
 		Theme.make("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,
 			HorizontalAlignment = Enum.HorizontalAlignment.Right,
@@ -406,8 +439,8 @@ local function build()
 	local goButton = Theme.make("TextButton", {
 		Name = "GoButton",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 126),
-		Size = UDim2.fromOffset(130, 26),
+		Position = UDim2.new(1, 0, 0, 124),
+		Size = UDim2.fromOffset(130, 30),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
 		Text = "",
@@ -426,6 +459,7 @@ local function build()
 		Size = UDim2.fromOffset(0, 18),
 		FontFace = Theme.Fonts.LabelBold,
 		TextSize = 13,
+		TextColor3 = C.AccentHi,
 		Text = Theme.track("AWAKEN", "three"),
 		Parent = furyGo,
 	})
@@ -642,8 +676,8 @@ local function setFuryState(state: "Charging" | "Full" | "Active")
 		Theme.tween(furyUnit, 0.12, { TextTransparency = 1 }, Enum.EasingStyle.Linear)
 		Theme.tween(furyLabel, 0.2, { TextColor3 = C.Ink })
 		furyGo.Visible = true
-		furyGo.Position = UDim2.new(1, 6, 0, 130)
-		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, -2, 0, 130) }, Enum.EasingStyle.Quart)
+		furyGo.Position = UDim2.new(1, 6, 0, 126)
+		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, -2, 0, 126) }, Enum.EasingStyle.Quart)
 		local pulse = TweenService:Create(
 			goStroke,
 			TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
