@@ -215,7 +215,7 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la jambe gauche. |
+| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la **bonne** jambe (voir B9–B13). |
 | B2 | Faire un kill en boitant | La boiterie **disparaît** (le kill soigne toutes les blessures). |
 | B3 | Frapper le Dummy plusieurs fois à la tête / au torse / aux jambes | Des **petites marques sombres** (bleus, coupure au sourcil) apparaissent là où il a été touché (3 max par partie). Elles partent à sa mort. |
 | B4 | 4ᵉ M1 visé à la **tête** | L'adversaire **saigne** un peu (3 s), même sans bouteille. |
@@ -223,6 +223,11 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 | B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
 | B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
 | B8 | Se faire frapper **à 70 PV ou moins** | Le perso pousse un **cri de douleur** (3 sons au hasard), entendu par tout le monde. |
+| B9 | Boiter (B1), marcher droit devant, regarder de profil depuis un 2ᵉ joueur | Boiterie **réaliste** (démarche antalgique) : le pied blessé **touche le sol à chaque pas**, posé à plat et prudemment, mais **très peu de temps** ; le corps retombe vite sur la bonne jambe (petite **chute de la tête** à ce moment), qui porte le poids longtemps. Rythme irrégulier « tac-TAAAC ». Jamais de jambe levée en l'air (« flamant rose »). |
+| B10 | Même chose, de face | Pendant l'appui sur la jambe blessée le buste **penche au-dessus d'elle** ; puis il repasse au-dessus de la bonne jambe. La jambe blessée avance **raide** avec la hanche qui monte et un petit arc vers l'extérieur. Bras qui balancent peu, celui du côté blessé un peu écarté. |
+| B11 | S'arrêter en boitant | Debout : bassin et poids **sur la bonne jambe**, le pied blessé **posé au sol** un peu en avant (genou souple), **main sur la cuisse blessée**. De temps en temps le perso **teste** sa jambe blessée, grimace (tête qui baisse) et repasse vite sur la bonne. Les pieds **ne glissent pas** pendant l'idle. |
+| B12 | Se faire boiter par des coups sur la jambe **gauche** (frappé de son côté gauche), puis sur la **droite** (autre vie) | La boiterie est du **bon côté** : c'est la jambe la plus touchée qui est ménagée (animation en miroir). Les autres joueurs voient le même côté. Si l'**autre** jambe prend ensuite plus de coups (même vie), la boiterie **change de côté** (fondu, pas de saut). |
+| B13 | Boiter puis ralentir / accélérer (marche normale, ralenti par un coup au tibia) | Les pas suivent la vitesse réelle (pas de patinage marqué), **même très lentement** : boiter en **bloquant** ou **étourdi** donne des petits pas lents, pas des jambes qui moulinent ; vitesse en boitant = **75 %** de la marche, pas de sprint. Accroupi en boitant : marche accroupie normale. |
 
 Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seulement toi).
 

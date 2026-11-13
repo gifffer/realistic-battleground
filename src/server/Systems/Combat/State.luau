@@ -51,6 +51,7 @@ export type CombatState = {
 
 	-- Injuries (step 5), cleared by a kill or a new life.
 	legDamage: number, -- damage taken on the legs
+	leftLegDamage: number, -- the part of it taken on the left leg
 	limping: boolean, -- legDamage reached Config.Injuries.LIMP_LEG_DAMAGE
 	lastDamagedAt: number, -- for the out-of-combat regeneration
 	regenCarry: number, -- fraction of HP regenerated, not given yet
