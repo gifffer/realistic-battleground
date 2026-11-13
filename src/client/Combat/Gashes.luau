@@ -264,6 +264,12 @@ type Kit = {
 	framesComplete: boolean, -- false: an old WoundKit (no torso cuts then)
 }
 local kit: Kit? = nil
+-- A kit found without some of its later inserts (an old kit, or one still
+-- replicating): used as it is until something is added to it, then looked
+-- through again (and the fighters drawn again: Gashes.watch).
+local partial: Kit? = nil
+local partialFrom: Instance? = nil
+local onKitChanged: (() -> ())? = nil
 local warnedMarkers = false
 local warnedOldKit = false
 
@@ -277,6 +283,9 @@ local boreInKit = false
 local function findKit(): Kit?
 	if kit then
 		return kit
+	end
+	if partial and partialFrom and partialFrom:IsDescendantOf(ReplicatedStorage) then
+		return partial
 	end
 	local assets = ReplicatedStorage:FindFirstChild("Assets")
 	local model = if assets then assets:FindFirstChild("WoundKit", true) else nil
@@ -375,7 +384,28 @@ local function findKit(): Kit?
 				.. "Delete it and import assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
 		)
 	end
-	kit = found
+	local complete = not tearMissing
+		and burnInKit
+		and boreInKit
+		and found.shellComplete
+		and found.framesComplete
+	if complete then
+		kit = found
+		partial = nil
+		partialFrom = nil
+	else
+		-- (not kept for good: the missing inserts may still arrive)
+		partial = found
+		partialFrom = model
+		model.DescendantAdded:Once(function()
+			if partial == found then
+				partial = nil
+				if onKitChanged then
+					onKitChanged()
+				end
+			end
+		end)
+	end
 	return found
 end
 
@@ -1454,6 +1484,24 @@ local function waitForKit()
 		while findKit() == nil do
 			ReplicatedStorage.DescendantAdded:Wait()
 		end
+		for model in watched do
+			if model.Parent then
+				refreshAll(model)
+			end
+		end
+	end)
+end
+
+-- The kit changed after it was found incomplete: everyone drawn again a
+-- moment later (once, however many pieces arrive meanwhile).
+local redrawing = false
+onKitChanged = function()
+	if redrawing then
+		return
+	end
+	redrawing = true
+	task.delay(0.5, function()
+		redrawing = false
 		for model in watched do
 			if model.Parent then
 				refreshAll(model)

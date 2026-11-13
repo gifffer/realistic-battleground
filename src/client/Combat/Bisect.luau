@@ -25,6 +25,10 @@
 --   • a body seen later (or the frozen copy a finisher leaves, Server/
 --     Systems/Corpses): the torn ends, the guts lying still on the floor
 --     from one half to the other, the pools.
+-- What lies on the floor stays while the body is there; a body left by a
+-- finisher stays a while longer as a frozen copy (Corpse.timeLeft): its
+-- guts and pools stay that long too, and the copy (same "Bisected" seed)
+-- only dresses its own torn ends.
 -- Simpler shapes without the kit pieces (an older WoundKit).
 --
 --   Bisect.ATTRIBUTE           "Bisected"
@@ -35,6 +39,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Corpse = require(ReplicatedStorage.Shared.Util.Corpse)
 local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
 local GoreKit = require(script.Parent.GoreKit)
@@ -84,6 +89,7 @@ local GAP_TEAR = 2.5 -- studs between the last loop and the torso: torn off ther
 local SETTLE_TIME = 8 -- then what lies still is fixed where it lies
 local DEBRIS_GROUP = "Debris" -- (collides with the map, not with fighters)
 local GUT_PHYSICS = PhysicalProperties.new(1, 1, 0, 100, 100) -- limp, wet, no bounce
+local BEND = 70 -- degrees: most a loop bends from the one before it
 
 local done: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -312,15 +318,44 @@ local function newSegment(random: Random): Segment
 			item.CanTouch = false
 		end
 	end
+	-- (an attachment's X runs along the loop: a joint's cone limit is then
+	-- how far the next loop bends; its twist round the loop is free)
+	local alongLoop = CFrame.Angles(0, 0, math.pi / 2)
 	local start = Instance.new("Attachment")
 	start.Name = "GutStart"
-	start.CFrame = axis * CFrame.new(0, -HALF, 0)
+	start.CFrame = axis * CFrame.new(0, -HALF, 0) * alongLoop
 	start.Parent = main
 	local finish = Instance.new("Attachment")
 	finish.Name = "GutEnd"
-	finish.CFrame = axis * CFrame.new(0, HALF, 0)
+	finish.CFrame = axis * CFrame.new(0, HALF, 0) * alongLoop
 	finish.Parent = main
 	return { part = main, axis = axis, start = start, finish = finish }
+end
+
+-- The way a loop runs (world), from its start to its end.
+local function wayOf(segment: Segment): Vector3
+	return (segment.part.CFrame * segment.axis).UpVector
+end
+
+-- `direction`, turned toward `previous` (unit) until it bends at most
+-- `degrees` from it.
+local function withinBend(direction: Vector3, previous: Vector3, degrees: number): Vector3
+	if direction.Magnitude < 1e-4 then
+		return previous
+	end
+	local unit = direction.Unit
+	local limit = math.rad(degrees)
+	local dot = math.clamp(unit:Dot(previous), -1, 1)
+	if math.acos(dot) <= limit then
+		return unit
+	end
+	local across = unit - previous * dot
+	if across.Magnitude < 1e-4 then
+		-- (straight back: bent to any side)
+		across =
+			previous:Cross(if math.abs(previous.Y) > 0.95 then Vector3.xAxis else Vector3.yAxis)
+	end
+	return previous * math.cos(limit) + across.Unit * math.sin(limit)
 end
 
 -- Puts the loop from `from` toward `toward` (world), its start at `from`.
@@ -333,9 +368,20 @@ local function place(segment: Segment, from: Vector3, toward: Vector3)
 	segment.part.CFrame = frame * segment.axis:Inverse()
 end
 
+-- What this client drew on the floor for one kill, by its seed (a frozen
+-- copy of the body keeps the seed): a copy of a body drawn here does not
+-- draw them again over the ones still lying there.
+type Drawn = {
+	guts: boolean, -- the guts and the heap
+	pools: { boolean }, -- the pool under the top half, under the legs
+}
+local drawn: { [number]: Drawn } = {}
+
 -- What lies on the floor of this body (removed with it).
 type Body = {
 	model: Model,
+	seed: number,
+	drawn: Drawn,
 	items: { Instance }, -- floor things (the guts, the heap)
 	connections: { RBXScriptConnection },
 	gone: boolean,
@@ -346,8 +392,9 @@ local function keep(body: Body, item: Instance)
 	table.insert(body.items, item)
 end
 
--- The body went (respawn: Server/Systems/Corpses puts a copy in its place,
--- which draws its own; streamed out): what lay on the floor goes, at once.
+-- The body went (respawn, streamed out): what lay on the floor goes at
+-- once; for a body left by a finisher (Server/Systems/Corpses puts a frozen
+-- copy in its place) only once its time is up, fixed where it lies.
 local function release(body: Body)
 	if body.gone then
 		return
@@ -357,21 +404,52 @@ local function release(body: Body)
 		connection:Disconnect()
 	end
 	table.clear(body.connections)
-	for _, item in body.items do
-		item:Destroy()
-	end
-	table.clear(body.items)
 	if bodies[body.model] == body then
 		bodies[body.model] = nil
 	end
+	local items = table.clone(body.items)
+	table.clear(body.items)
+	local function remove()
+		for _, item in items do
+			item:Destroy()
+		end
+		-- (forgotten: a body seen after this draws its own)
+		if drawn[body.seed] == body.drawn then
+			drawn[body.seed] = nil
+		end
+	end
+	local left = Corpse.timeLeft(body.model)
+	if left <= 0 then
+		remove()
+		return
+	end
+	for _, item in items do
+		if item:IsA("BasePart") and item.Parent then
+			item.AssemblyLinearVelocity = Vector3.zero
+			item.Anchored = true
+		end
+	end
+	task.delay(left, remove)
 end
 
-local function bodyOf(model: Model): Body
+local function bodyOf(model: Model, seed: number): Body
 	local existing = bodies[model]
 	if existing then
 		return existing
 	end
-	local body: Body = { model = model, items = {}, connections = {}, gone = false }
+	local record = drawn[seed]
+	if record == nil then
+		record = { guts = false, pools = { false, false } }
+		drawn[seed] = record
+	end
+	local body: Body = {
+		model = model,
+		seed = seed,
+		drawn = record :: Drawn,
+		items = {},
+		connections = {},
+		gone = false,
+	}
 	bodies[model] = body
 	table.insert(
 		body.connections,
@@ -497,18 +575,22 @@ local function payOut(body: Body, torso: BasePart, leg: BasePart, legFrame: CFra
 	local chain: { Segment } = {}
 	local function add(from: Vector3, toward: Vector3): Segment
 		local segment = newSegment(random)
+		local last = chain[#chain]
+		if last then
+			-- (bent no further than its joint allows: it would snap round)
+			toward = from + withinBend(toward - from, wayOf(last), BEND - 10)
+		end
 		place(segment, from, toward)
 		segment.part.Parent = folder
 		keep(body, segment.part)
 		segment.part.AssemblyLinearVelocity = torso.AssemblyLinearVelocity * 0.5
 			+ leg.AssemblyLinearVelocity * 0.3
-		local last = chain[#chain]
 		if last then
 			local joint = Instance.new("BallSocketConstraint")
 			joint.Attachment0 = last.finish
 			joint.Attachment1 = segment.start
 			joint.LimitsEnabled = true
-			joint.UpperAngle = 70
+			joint.UpperAngle = BEND
 			joint.Parent = segment.part
 			local apart = Instance.new("NoCollisionConstraint")
 			apart.Part0 = last.part
@@ -588,8 +670,9 @@ local function payOut(body: Body, torso: BasePart, leg: BasePart, legFrame: CFra
 	end)
 end
 
--- Seen later (or a frozen copy): the guts lying still on the floor from the
--- torso's bottom to the hips, in lazy curves.
+-- Seen later (or a frozen copy): the guts lying still on the floor from
+-- `from` to `to`, in lazy curves. (Laid from the hips, as the live ones
+-- hang from them: cut short, they end short of the torso.)
 local function layOut(body: Body, from: Vector3, to: Vector3, random: Random, params: RaycastParams)
 	local a = floorUnder(from, 6, params)
 	local b = floorUnder(to, 6, params)
@@ -689,7 +772,7 @@ local function follow(body: Body, torso: BasePart, leg: BasePart, seed: number)
 			end
 			return
 		end
-		for _, half in halves do
+		for index, half in halves do
 			local piece = half.part
 			if piece.Parent == nil or (half.landed and half.pooled) then
 				continue
@@ -735,6 +818,7 @@ local function follow(body: Body, torso: BasePart, leg: BasePart, seed: number)
 				end
 				if half.still > 0.3 or age > 3 then
 					half.pooled = true
+					body.drawn.pools[index] = true
 					HeadBlast.pool(stump, half.pool, 6, random:NextInteger(1, 2 ^ 20))
 				end
 			end
@@ -808,9 +892,10 @@ function Bisect.apply(model: Model, live: boolean)
 	dress(torso, CFrame.identity, "Waist", skin, random)
 	dress(leg, legFrame, "Hips", skin, random)
 
-	local body = bodyOf(model)
+	local body = bodyOf(model, seed)
 	local hipsTop = leg.CFrame * legFrame
-	if live then
+	if live and not body.drawn.guts then
+		body.drawn.guts = true
 		SoundController.play("OrganDrop", model)
 		payOut(body, torso, leg, legFrame, random)
 		gutPile(
@@ -821,24 +906,35 @@ function Bisect.apply(model: Model, live: boolean)
 		)
 		bleed(model, torso, leg, legFrame, seed)
 		follow(body, torso, leg, seed)
-	else
+	elseif not live then
+		-- (a copy of a body drawn here: its guts and pools still lie there)
 		local params = floorParams()
-		local from = (torso.CFrame * CFrame.new(GUT_OUT)).Position
-		local to = (hipsTop * CFrame.new(GUT_IN)).Position
-		layOut(body, from, to, random, params)
-		-- the heap beside the legs, the pools under both halves
-		local beside = hipsTop * CFrame.new(random:NextNumber(-0.9, 0.9), -1, -0.9)
-		local floor = floorUnder(beside.Position, 4, params)
-		if floor then
-			gutPile(
-				body,
-				CFrame.new(floor.Position) * CFrame.Angles(0, random:NextNumber(0, 6.3), 0),
-				false,
-				random
-			)
+		local torsoEnd = (torso.CFrame * CFrame.new(GUT_OUT)).Position
+		local hipsEnd = (hipsTop * CFrame.new(GUT_IN)).Position
+		if not body.drawn.guts then
+			body.drawn.guts = true
+			layOut(body, hipsEnd, torsoEnd, random, params)
+			-- the heap beside the legs
+			local beside = hipsTop * CFrame.new(random:NextNumber(-0.9, 0.9), -1, -0.9)
+			local floor = floorUnder(beside.Position, 4, params)
+			if floor then
+				gutPile(
+					body,
+					CFrame.new(floor.Position) * CFrame.Angles(0, random:NextNumber(0, 6.3), 0),
+					false,
+					random
+				)
+			end
 		end
-		HeadBlast.pool(from, 4.2, 0.4, seed + 21)
-		HeadBlast.pool((hipsTop * CFrame.new(0, -1, 0)).Position, 3.2, 0.4, seed + 22)
+		-- the pools under both halves
+		if not body.drawn.pools[1] then
+			body.drawn.pools[1] = true
+			HeadBlast.pool(torsoEnd, 4.2, 0.4, seed + 21)
+		end
+		if not body.drawn.pools[2] then
+			body.drawn.pools[2] = true
+			HeadBlast.pool((hipsTop * CFrame.new(0, -1, 0)).Position, 3.2, 0.4, seed + 22)
+		end
 	end
 end
 
