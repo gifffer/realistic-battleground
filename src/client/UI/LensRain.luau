@@ -35,11 +35,11 @@ local random = Random.new()
 -- phone and on a big monitor)
 ------------------------------------------------------------------------------
 
-local MAX_DROPS = 25
+local MAX_DROPS = 14
 local MAX_TRAILS = 6 -- running drops with a trail at once
 -- New drops per second at full rain / in a thunderstorm ("a little" rain on the lens).
-local SPAWN_RATE_RAIN = 0.3
-local SPAWN_RATE_STORM = 0.8
+local SPAWN_RATE_RAIN = 0.14
+local SPAWN_RATE_STORM = 0.38
 -- Below this rain level, no new drop lands (a light drizzle does not reach the lens).
 local SPAWN_MIN_RAIN = 0.3
 -- Size of a new drop (its width).
@@ -50,7 +50,7 @@ local SIZE_CAP = 0.1
 -- A still drop grows by this share of its size per second in full rain.
 local GROW_PER_SECOND = 0.015
 -- Chance per second that a still drop older than 3 s runs down anyway (a gust, a bump).
-local EARLY_RUN_CHANCE = 0.02
+local EARLY_RUN_CHANCE = 0.04
 local LAND_TIME = 0.12
 -- Seconds a drop takes to dry once you are under cover (each drop its own).
 local DRY_TIME = NumberRange.new(2, 4)
@@ -65,9 +65,9 @@ local TRANSPARENCY = NumberRange.new(0.1, 0.3)
 local MIST_IN = 0.06
 local MIST_OUT = 0.35
 -- Their strongest look (ImageTransparency at full rain).
-local MIST_TRANSPARENCY = 0.3
-local MIST2_TRANSPARENCY = 0.45
-local WET_TRANSPARENCY = 0.4
+local MIST_TRANSPARENCY = 0.55
+local MIST2_TRANSPARENCY = 0.68
+local WET_TRANSPARENCY = 0.6
 
 -- The streak picture's layout (see the tool): 128 x 512, the drop's centre at y 450, the
 -- drop 88 px wide.
