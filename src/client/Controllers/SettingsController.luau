@@ -101,7 +101,7 @@ local function createToggle(parent: Instance, onClick: () -> ()): Toggle
 		-- The underline matches the chosen word's real width (known once the
 		-- text is laid out, hence the deferred call).
 		task.defer(function()
-			local width = math.max(chosen.TextBounds.X, 8)
+			local width = math.max(Theme.unscaled(chosen, chosen.TextBounds.X), 8)
 			local x = chosen.Position.X.Offset + (chosen.Size.X.Offset - width) / 2
 			Theme.tween(underline, 0.18, {
 				Position = UDim2.fromOffset(x, 20),

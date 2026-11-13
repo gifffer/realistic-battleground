@@ -114,6 +114,8 @@ export type MoveDef = {
 -- The kit's own way to finish a knocked-out opponent (M1 on them). Kits
 -- without one use the default finisher (Config.Knockout).
 export type FinisherDef = {
+	name: string, -- shown in the kill feed, the death screen and the Kits menu (English)
+	description: string, -- one sentence for the Kits menu
 	animation: string,
 	impact: number, -- seconds from the click to the killing blow
 	duration: number, -- can't do anything else until then

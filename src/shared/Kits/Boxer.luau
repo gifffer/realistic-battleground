@@ -111,6 +111,8 @@ local kit: KitTypes.KitDef = {
 	-- Cinematic kill (Shared/Finishers "KnockoutCombo"): hauls the opponent
 	-- up, body shots, hooks, cross, then a huge uppercut that sends them flying.
 	finisher = {
+		name = "LIVER RIP",
+		description = "Hauled up by the collar. The last hook goes in under the ribs.",
 		animation = "Boxer_FinisherCombo",
 		impact = 2.62,
 		duration = 4.1,

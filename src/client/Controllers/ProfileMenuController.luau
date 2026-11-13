@@ -343,7 +343,7 @@ local function buildLevel()
 	})
 	-- "OF 100" follows the numeral (a fixed spot left a hole after "8").
 	local function followNumeral()
-		local width = levelNum.TextBounds.X
+		local width = Theme.unscaled(levelNum, levelNum.TextBounds.X)
 		if width > 0 then -- 0 = not measured yet (keep the 56 px fallback)
 			levelOf.Position = UDim2.fromOffset(width + 14, 46)
 		end

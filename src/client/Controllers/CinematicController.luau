@@ -488,6 +488,18 @@ local function onEnded(attacker: unknown, victim: unknown, killed: unknown)
 	end
 end
 
+-- os.clock() at which the cutscene our camera is in ends (0: none). The
+-- death screen waits for it.
+function CinematicController.watchingUntil(): number
+	local latest = 0
+	for _, run in runs do
+		if run.stopCamera and not run.cancelled then
+			latest = math.max(latest, run.started + run.cinematic.duration)
+		end
+	end
+	return latest
+end
+
 function CinematicController.start()
 	makeBars()
 	Remotes.FinisherStarted.OnClientEvent:Connect(onStarted)

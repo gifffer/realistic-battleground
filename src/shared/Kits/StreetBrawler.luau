@@ -112,6 +112,8 @@ local kit: KitTypes.KitDef = {
 	-- Cinematic kill (Shared/Finishers "Bat"): a baseball bat from behind his
 	-- back, brought down on the head of the opponent lying there.
 	finisher = {
+		name = "HOME RUN",
+		description = "A baseball bat from behind his back. One swing at the head.",
 		animation = "Brawler_FinisherBat",
 		impact = 1.7,
 		duration = 3.3,

@@ -161,6 +161,8 @@ local kit: KitTypes.KitDef = {
 	-- Cinematic kill (Shared/Finishers "ArmRip"): his foot on their chest,
 	-- he pulls their right arm until it comes off at the shoulder.
 	finisher = {
+		name = "ARM RIP",
+		description = "A foot on the chest, both hands on the wrist. He pulls until it gives.",
 		animation = "Bouncer_FinisherArmRip",
 		impact = 2.35,
 		duration = 4.6,

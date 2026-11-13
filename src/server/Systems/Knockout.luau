@@ -33,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Corpses = require(script.Parent.Corpses)
 local PlayerData = require(script.Parent.PlayerData)
@@ -97,19 +98,36 @@ local function levelOf(player: Player?): number?
 	return if typeof(level) == "number" then level else nil
 end
 
+-- The kit id a fighter fights with ("Kit" attribute, set by Kits), or nil.
+local function kitOf(model: Model?): string?
+	local id = if model then model:GetAttribute("Kit") else nil
+	return if typeof(id) == "string" and Kits.get(id) then id else nil
+end
+
+-- `finisher`: the model finishing the victim (its kit's finisher is named
+-- in the line), nil for any other death.
 local function feed(
 	kind: Types.KillFeedKind,
 	victim: string,
 	killer: string?,
 	victimPlayer: Player?,
-	killerPlayer: Player?
+	killerPlayer: Player?,
+	killerModel: Model?,
+	finisher: Model?
 )
+	local details: Types.KillFeedDetails = {
+		finisher = if finisher then Kits.finisher(kitOf(finisher)).name else nil,
+		killerKit = kitOf(killerModel),
+		victimId = if victimPlayer then victimPlayer.UserId else nil,
+		killerId = if killerPlayer then killerPlayer.UserId else nil,
+	}
 	Remotes.KillFeed:FireAllClients(
 		kind,
 		victim,
 		killer,
 		levelOf(victimPlayer),
-		levelOf(killerPlayer)
+		levelOf(killerPlayer),
+		details
 	)
 end
 
@@ -288,7 +306,15 @@ local function onDied(info: FighterInfo)
 		return
 	end
 	local kind: Types.KillFeedKind = if info.finishedBy then "Finished" else "Died"
-	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
+	feed(
+		kind,
+		displayName(info.model),
+		killerName(killer, killerPlayer),
+		info.player,
+		killerPlayer,
+		killer,
+		info.finishedBy
+	)
 	rewardKill(killer, killerPlayer, info, kind)
 end
 
@@ -542,7 +568,15 @@ local function onLeaving(player: Player)
 	end
 	local killer, killerPlayer = creditedKiller(info)
 	info.dead = true
-	feed("Fled", displayName(info.model), killerName(killer, killerPlayer), player, killerPlayer)
+	feed(
+		"Fled",
+		displayName(info.model),
+		killerName(killer, killerPlayer),
+		player,
+		killerPlayer,
+		killer,
+		nil
+	)
 	rewardKill(killer, killerPlayer, info, "Fled")
 end
 

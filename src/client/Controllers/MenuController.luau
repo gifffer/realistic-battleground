@@ -22,6 +22,15 @@
 --
 -- While the menu is open the mouse cursor is free
 -- (CameraController.setCursorFree("menu", ...)).
+--
+-- Screen size: the list, the panel and CLOSE sit on one "stage" drawn for
+-- 1920 × 1080. On a smaller screen (a phone, a small window) the stage
+-- moves up (never under Roblox's top bar) and shrinks just enough for the
+-- open section to fit (its own size); on a large screen it grows a little
+-- (Theme.scaleFor). It never shrinks under ×0.8 (text stays readable): a
+-- section still too tall then scrolls. On a short or narrow screen the list
+-- sits closer to the left edge (a narrower left column) so the panel gets
+-- the room. Sections build in the stage's pixels and never need to know.
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
@@ -40,6 +49,28 @@ local DEFAULT_SCRIM_WIDTH = 900
 local PANEL_TOP = 168
 local OPEN_TIME = 0.25
 local CLOSE_TIME = 0.15
+-- What the stage must show: from just above the list (y 160) to under the
+-- CLOSE button, from the left edge to the panel's right edge + a margin.
+local STAGE_TOP = 160
+local STAGE_MARGIN = 8 -- screen pixels kept free at the top and bottom
+local MIN_TEXT_SCALE = 0.8 -- under this the 10 px captions can't be read
+local MIN_VISIBLE = 120 -- shortest visible panel when it scrolls
+-- The panel's scrolling window reaches this far past each side, so the
+-- markers drawn just left of a section's content (x -16) aren't cut off.
+local GUTTER = 24
+
+-- Where the left column and the panel sit (stage pixels).
+type Layout = {
+	navX: number,
+	navWidth: number,
+	dividerX: number,
+	panelX: number,
+	right: number, -- room kept right of the panel
+}
+local REGULAR: Layout = { navX = 64, navWidth = 180, dividerX = 268, panelX = 300, right = 40 }
+-- Short or narrow screen (a phone held sideways): a narrower left column.
+local COMPACT: Layout = { navX = 20, navWidth = 156, dividerX = 188, panelX = 208, right = 16 }
+local COMPACT_BELOW = Vector2.new(1000, 540)
 
 export type MenuEntry = {
 	id: string,
@@ -67,9 +98,14 @@ local openLayer: CanvasGroup -- everything shown while open (fades as one)
 local fadeToken = 0
 local nav: Frame
 local marker: Frame
-local panels: Frame
+local panels: Frame -- one panel per section, inside panelsView
+local panelsView: ScrollingFrame -- scrolls when a section can't fit
+local divider: Frame
 local scrimFrame: Frame
 local closeButton: TextButton
+local stage: Frame -- nav, panels and CLOSE (scaled together)
+local stageScale: UIScale
+local scrimWidthNow = DEFAULT_SCRIM_WIDTH -- unscaled
 local blur: BlurEffect
 local grade: ColorCorrectionEffect
 local entries: { [string]: EntryUi } = {}
@@ -181,10 +217,63 @@ local function setItemActive(ui: EntryUi, active: boolean)
 		Theme.tween(marker, 0.18, {
 			Position = UDim2.fromOffset(
 				-16,
-				ui.item.AbsolutePosition.Y - nav.AbsolutePosition.Y + 11
+				Theme.unscaled(nav, ui.item.AbsolutePosition.Y - nav.AbsolutePosition.Y) + 11
 			),
 		}, Enum.EasingStyle.Quart)
 	end
+end
+
+-- Fits the stage to the screen for a panel of `size` (see the top).
+local function layoutStage(size: Vector2)
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local viewport = camera.ViewportSize
+	local layout = if viewport.X < COMPACT_BELOW.X or viewport.Y < COMPACT_BELOW.Y
+		then COMPACT
+		else REGULAR
+	nav.Position = UDim2.fromOffset(layout.navX, 176)
+	nav.Size = UDim2.fromOffset(layout.navWidth, 260)
+	divider.Position = UDim2.fromOffset(layout.dividerX, 176)
+	panelsView.Position = UDim2.fromOffset(layout.panelX - GUTTER, PANEL_TOP)
+
+	-- Free screen: under Roblox's top bar (its buttons are on the left,
+	-- right where the list is), above the bottom margin.
+	local topMargin = math.max(STAGE_MARGIN, Theme.topInset("left", viewport) + 8)
+	local freeHeight = viewport.Y - topMargin - STAGE_MARGIN
+	local freeWidth = viewport.X - 2 * STAGE_MARGIN
+	-- Stage pixels above and under the panel: the list's top, CLOSE.
+	local around = PANEL_TOP - STAGE_TOP + 12 + 16 + 12
+	local width = layout.panelX + size.X + layout.right
+	-- (scaleFor with a floor of 1: never smaller than drawn by itself, only
+	-- when the section does not fit; bigger on a large screen)
+	local scale =
+		math.min(Theme.scaleFor(viewport, 1), freeHeight / (around + size.Y), freeWidth / width)
+	-- Readable first: the panel scrolls rather than going under ×0.8 (the
+	-- width must still fit: only a tiny screen goes under it).
+	scale = math.max(scale, math.min(MIN_TEXT_SCALE, freeWidth / width), 0.4)
+	local visible = math.clamp(freeHeight / scale - around, math.min(MIN_VISIBLE, size.Y), size.Y)
+	local scrolls = visible < size.Y - 0.5
+	panelsView.Size = UDim2.fromOffset(size.X + 2 * GUTTER, visible)
+	panelsView.CanvasSize = UDim2.fromOffset(size.X + 2 * GUTTER, size.Y)
+	panelsView.ScrollingEnabled = scrolls
+	panelsView.ScrollBarImageTransparency = if scrolls then 0.6 else 1
+	panels.Size = UDim2.fromOffset(size.X, size.Y)
+	closeButton.Position = UDim2.fromOffset(layout.panelX, PANEL_TOP + visible + 12)
+
+	-- Where it was drawn (y 160) if it fits there, else as high as needed.
+	local height = around + visible
+	local top =
+		math.max(topMargin, math.min(STAGE_TOP * scale, viewport.Y - STAGE_MARGIN - height * scale))
+	stageScale.Scale = scale
+	stage.Position = UDim2.fromOffset(0, top - STAGE_TOP * scale)
+	scrimFrame.Size = UDim2.new(0, scrimWidthNow * scale, 1, 0)
+end
+
+local function currentSize(): Vector2
+	local ui = if openId then entries[openId] else nil
+	return if ui and ui.entry.size then ui.entry.size else DEFAULT_SIZE
 end
 
 -- Blur + desaturation of the world behind the menu.
@@ -264,6 +353,7 @@ function MenuController.open(id: string)
 		return
 	end
 	local wasClosed = openId == nil
+	local previousScrim = scrimFrame.Size.X.Offset
 	if openId and openId ~= id then
 		local previous = entries[openId]
 		if previous and previous.panel then
@@ -277,6 +367,12 @@ function MenuController.open(id: string)
 	openId = id
 	lastId = id
 
+	-- This section's size: the panel, the backdrop and the CLOSE button
+	-- follow (layoutStage), from the top of the section.
+	local size = ui.entry.size or DEFAULT_SIZE
+	scrimWidthNow = ui.entry.scrimWidth or DEFAULT_SCRIM_WIDTH
+	layoutStage(size) -- (sets the backdrop's width at once)
+	panelsView.CanvasPosition = Vector2.zero
 	if wasClosed then
 		fadeToken += 1
 		openLayer.Visible = true
@@ -284,33 +380,20 @@ function MenuController.open(id: string)
 		menuButton.Visible = false
 		setWorldDimmed(true)
 		CameraController.setCursorFree("menu", true)
-		-- Slide in from the left.
-		nav.Position = UDim2.fromOffset(48, 176)
-		panels.Position = UDim2.fromOffset(284, 168)
-		Theme.tween(nav, 0.22, { Position = UDim2.fromOffset(64, 176) }, Enum.EasingStyle.Quart)
+		-- Slide in from the left (to where layoutStage put them).
+		local navTarget = nav.Position
+		local panelsTarget = panelsView.Position
+		nav.Position = navTarget - UDim2.fromOffset(16, 0)
+		panelsView.Position = panelsTarget - UDim2.fromOffset(16, 0)
+		Theme.tween(nav, 0.22, { Position = navTarget }, Enum.EasingStyle.Quart)
 		task.delay(0.04, function()
-			Theme.tween(
-				panels,
-				0.22,
-				{ Position = UDim2.fromOffset(300, 168) },
-				Enum.EasingStyle.Quart
-			)
+			Theme.tween(panelsView, 0.22, { Position = panelsTarget }, Enum.EasingStyle.Quart)
 		end)
-	end
-	-- This section's size: the panel, the backdrop and the CLOSE button follow.
-	local size = ui.entry.size or DEFAULT_SIZE
-	panels.Size = UDim2.fromOffset(size.X, size.Y)
-	closeButton.Position = UDim2.fromOffset(300, PANEL_TOP + size.Y + 12)
-	local scrimWidth = ui.entry.scrimWidth or DEFAULT_SCRIM_WIDTH
-	if wasClosed then
-		scrimFrame.Size = UDim2.new(0, scrimWidth, 1, 0)
 	else
-		Theme.tween(
-			scrimFrame,
-			0.2,
-			{ Size = UDim2.new(0, scrimWidth, 1, 0) },
-			Enum.EasingStyle.Quart
-		)
+		-- (from the old width: slides to the new one)
+		local target = scrimFrame.Size
+		scrimFrame.Size = UDim2.new(0, previousScrim, 1, 0)
+		Theme.tween(scrimFrame, 0.2, { Size = target }, Enum.EasingStyle.Quart)
 	end
 	(ui.panel :: Frame).Visible = true
 	-- Wait a frame so the item has its position before moving the marker.
@@ -433,12 +516,23 @@ function MenuController.init()
 		}),
 	})
 
+	-- The stage (see the top): everything but the backdrop.
+	stage = Theme.make("Frame", {
+		Name = "Stage",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Parent = openLayer,
+	})
+	stageScale = Theme.make("UIScale", { Name = "StageScale", Parent = stage })
+	divider = openLayer:FindFirstChild("Divider") :: Frame
+	divider.Parent = stage
+
 	nav = Theme.make("Frame", {
 		Name = "Nav",
 		Position = UDim2.fromOffset(64, 176),
 		Size = UDim2.fromOffset(180, 260),
 		BackgroundTransparency = 1,
-		Parent = openLayer,
+		Parent = stage,
 	}, {
 		Theme.text({
 			Name = "Header",
@@ -465,22 +559,43 @@ function MenuController.init()
 		Parent = nav,
 	})
 
+	-- (sized by layoutStage; scrolls only when the section can't fit)
+	panelsView = Theme.make("ScrollingFrame", {
+		Name = "PanelsView",
+		Position = UDim2.fromOffset(REGULAR.panelX - GUTTER, PANEL_TOP),
+		Size = UDim2.fromOffset(DEFAULT_SIZE.X + 2 * GUTTER, DEFAULT_SIZE.Y),
+		CanvasSize = UDim2.fromOffset(DEFAULT_SIZE.X + 2 * GUTTER, DEFAULT_SIZE.Y),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = false,
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = C.Ink,
+		ScrollBarImageTransparency = 1,
+		Parent = stage,
+	}) :: ScrollingFrame
 	panels = Theme.make("Frame", {
 		Name = "Panels",
-		Position = UDim2.fromOffset(300, 168),
-		Size = UDim2.fromOffset(440, 280),
+		Position = UDim2.fromOffset(GUTTER, 0),
+		Size = UDim2.fromOffset(DEFAULT_SIZE.X, DEFAULT_SIZE.Y),
 		BackgroundTransparency = 1,
-		Parent = openLayer,
+		Parent = panelsView,
 	})
 
 	closeButton = lineButton("CLOSE", {
 		Name = "Close",
 		Position = UDim2.fromOffset(300, PANEL_TOP + DEFAULT_SIZE.Y + 12),
 		Size = UDim2.fromOffset(120, 16),
-		Parent = openLayer,
+		Parent = stage,
 	})
 	closeButton.Activated:Connect(MenuController.close)
 	scrimFrame = openLayer:FindFirstChild("Scrim") :: Frame
+	-- The screen changed size (a window resized, a phone turned): refit.
+	Theme.onViewportChanged(function()
+		layoutStage(currentSize())
+	end)
+	-- The closed "— MENU" button follows the screen too (from its left edge).
+	Theme.autoScale(menuButton, 0.8)
 
 	-- World effects, local to this player (they live in Lighting on the client).
 	blur = Theme.make("BlurEffect", { Name = "MenuBlur", Size = 0, Parent = Lighting })

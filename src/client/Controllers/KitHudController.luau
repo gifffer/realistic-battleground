@@ -19,6 +19,9 @@
 --   colour with warm dark edges (nothing flashy, nothing in the centre).
 -- • Hidden while knocked out or while the menu is open. Fades back when
 --   nothing happens for a while (like the health block).
+-- • Screen size: the block follows it (Theme.autoScale). On a phone the
+--   slots and "AWAKEN" are the buttons (a tap uses the move), and the
+--   block sits higher, clear of Roblox's jump button.
 --
 -- Everything is read from attributes the server sets on our character
 -- ("Kit", "CD_<moveId>", "Fury", "Awakened", "AwakenedUntil") and from
@@ -286,6 +289,17 @@ local function build()
 		ZIndex = 2,
 		Parent = gui,
 	})
+	-- (bigger floor on a phone: the slots are what you tap)
+	Theme.autoScale(block, if Theme.isTouch() then 0.85 else 0.75)
+	-- On a phone: above Roblox's jump button (bottom right: about 95 × 90
+	-- on a small screen, 170 × 210 on a tablet), still in the corner.
+	Theme.onViewportChanged(function(viewport)
+		if not Theme.isTouch() then
+			return
+		end
+		local small = math.min(viewport.X, viewport.Y) <= 500
+		block.Position = if small then UDim2.new(1, -24, 1, -104) else UDim2.new(1, -40, 1, -224)
+	end)
 	-- One CanvasGroup per half so the idle fade dims everything at once.
 	-- (A CanvasGroup cuts what sticks out of it, outlines included: each
 	-- group has a 2 px margin all around, so positions inside are +2.)
@@ -388,6 +402,23 @@ local function build()
 	goKey.LayoutOrder = 1
 	stroke.Transparency = 0.1
 	goStroke = stroke
+	-- "[G] AWAKEN" can be clicked (cursor free) or tapped (phone), like the slots.
+	local goButton = Theme.make("TextButton", {
+		Name = "GoButton",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, 126),
+		Size = UDim2.fromOffset(130, 26),
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+		Visible = false,
+		ZIndex = 3,
+		Parent = furyGroup,
+	}) :: TextButton
+	goButton.Activated:Connect(KitController.awaken)
+	furyGo:GetPropertyChangedSignal("Visible"):Connect(function()
+		goButton.Visible = furyGo.Visible
+	end)
 	Theme.text({
 		Name = "GoWord",
 		LayoutOrder = 2,

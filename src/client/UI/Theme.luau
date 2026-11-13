@@ -21,8 +21,17 @@
 --   Theme.gradient(rotation, { {0, 0.4}, {1, 1} })   a transparency gradient
 --   Theme.keyCap("M1")                       an outlined key ("M1", "ESC"...)
 --   Theme.tween(instance, seconds, props, style?, direction?)
+--
+-- Phones and small windows (layouts are drawn for 1280 × 720 and up):
+--   Theme.scaleFor(viewport, minScale)       the UIScale a block should use
+--   Theme.autoScale(frame, minScale?)        adds a UIScale that follows the screen
+--   Theme.onViewportChanged(callback)        callback(viewport) now and on every resize
+--   Theme.isTouch()                          a touch screen with no mouse (phone, tablet)
+--   Theme.topInset(side, viewport)           height of Roblox's top bar on that side (0 if free)
 
+local GuiService = game:GetService("GuiService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local Theme = {}
 
@@ -233,6 +242,133 @@ function Theme.tween(
 	)
 	tween:Play()
 	return tween
+end
+
+------------------------------------------------------------------------------
+-- Screen size
+------------------------------------------------------------------------------
+
+-- Every layout was drawn at 1280 × 720 or more. Smaller (a phone, a small
+-- window): shrink, never under `minScale` (text must stay readable). Bigger
+-- than 1920 × 1080 (1440p, 4K): grow a little, at most ×1.35. Between the
+-- two: ×1, exactly as drawn.
+local SMALL = Vector2.new(1280, 720)
+local LARGE = Vector2.new(1920, 1080)
+local MAX_SCALE = 1.35
+
+function Theme.scaleFor(viewport: Vector2, minScale: number): number
+	local small = math.min(viewport.X / SMALL.X, viewport.Y / SMALL.Y)
+	if small < 1 then
+		return math.max(small, minScale)
+	end
+	return math.clamp(math.min(viewport.X / LARGE.X, viewport.Y / LARGE.Y), 1, MAX_SCALE)
+end
+
+-- One listener on the camera for every block that follows the screen size.
+local viewportListeners: { (Vector2) -> () } = {}
+local watchedCamera: Camera? = nil
+local cameraConnection: RBXScriptConnection? = nil
+
+local function currentViewport(): Vector2
+	local camera = workspace.CurrentCamera
+	return if camera then camera.ViewportSize else LARGE
+end
+
+local function notifyViewport()
+	local viewport = currentViewport()
+	for _, listener in table.clone(viewportListeners) do
+		listener(viewport)
+	end
+end
+
+local function watchCamera()
+	local camera = workspace.CurrentCamera
+	if camera == watchedCamera then
+		return
+	end
+	if cameraConnection then
+		cameraConnection:Disconnect()
+		cameraConnection = nil
+	end
+	watchedCamera = camera
+	if camera then
+		cameraConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(notifyViewport)
+	end
+	notifyViewport()
+end
+
+local cameraWatched = false
+
+-- Calls `callback(viewport)` now and after every resize. Returns the
+-- function that stops it.
+function Theme.onViewportChanged(callback: (Vector2) -> ()): () -> ()
+	if not cameraWatched then
+		cameraWatched = true
+		workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchCamera)
+		-- Roblox's top bar changed (shown, hidden, new buttons): refit too.
+		GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(notifyViewport)
+		watchCamera()
+	end
+	table.insert(viewportListeners, callback)
+	callback(currentViewport())
+	return function()
+		local index = table.find(viewportListeners, callback)
+		if index then
+			table.remove(viewportListeners, index)
+		end
+	end
+end
+
+-- Adds a UIScale to `frame` that follows the screen size (see scaleFor).
+-- The frame shrinks / grows around its AnchorPoint, so a block anchored to
+-- a corner stays in its corner. Stops by itself when the frame is destroyed.
+function Theme.autoScale(frame: GuiObject, minScale: number?): UIScale
+	local scale = Theme.make("UIScale", { Name = "AutoScale", Parent = frame }) :: UIScale
+	local floor = minScale or 0.7
+	local stop = Theme.onViewportChanged(function(viewport)
+		scale.Scale = Theme.scaleFor(viewport, floor)
+	end)
+	frame.Destroying:Once(stop)
+	return scale
+end
+
+-- Screen pixels (AbsolutePosition, AbsoluteSize, TextBounds: measured after
+-- every UIScale above `instance`) back to the layout's own pixels (what
+-- Size / Position offsets use inside it).
+function Theme.unscaled(instance: Instance, pixels: number): number
+	local scale = 1
+	local current: Instance? = instance
+	while current do
+		local uiScale = current:FindFirstChildOfClass("UIScale")
+		if uiScale then
+			scale *= uiScale.Scale
+		end
+		current = current.Parent
+	end
+	return if scale > 0 then pixels / scale else pixels
+end
+
+-- A touch screen with no mouse: a phone or a tablet (the move bar becomes
+-- buttons, blocks move away from the on-screen jump button).
+function Theme.isTouch(): boolean
+	return UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+end
+
+-- Screen pixels taken by Roblox's top bar (menu, chat, backpack... about
+-- 36-58 px high) at the top of the `side` edge, 0 when that side is free.
+-- For ScreenGuis with IgnoreGuiInset = true: a block anchored to the top
+-- keeps its top under this, or the buttons take its taps / hide it.
+-- (TopbarInset is the FREE part of the bar: the buttons are left of
+-- Min.X and right of Max.X.)
+function Theme.topInset(side: "left" | "right", viewport: Vector2): number
+	local free = GuiService.TopbarInset
+	if free.Height <= 0 then
+		-- Not reported (bar hidden or an old client): the classic inset.
+		local topLeft = GuiService:GetGuiInset()
+		return topLeft.Y
+	end
+	local covered = if side == "left" then free.Min.X > 1 else free.Max.X < viewport.X - 1
+	return if covered then free.Max.Y else 0
 end
 
 return table.freeze(Theme)

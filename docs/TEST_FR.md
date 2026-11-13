@@ -463,3 +463,26 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
 | S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
+
+## Interface : menu Kits, HUD, kill feed, écran de mort, écrans mobiles (`feature/ui-overhaul`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| U1 | Menu → **KITS**, choisir chaque kit | Sous MOVES et AWAKENING, une nouvelle section **FINISHER · ON A KO** : touche **[M1]**, le nom (**HOME RUN**, **LIVER RIP**, **ARM RIP**, **INCINERATE**) et une phrase. Le panneau est un peu plus haut, **— CLOSE** reste en dessous, rien n'est coupé. |
+| U2 | Kit verrouillé (niveau trop bas / pas assez de pièces) | Tout est visible mais plus terne (touches et noms), y compris le finisher ; l'action en haut à droite (LEVEL / BUY / NEED…) fonctionne comme avant (achat en deux clics, vérifié par le serveur). |
+| U3 | Finisher sur le **Dummy** avec chaque kit | Kill feed en haut à droite : `TonNom finished Dummy — LIVER RIP` (tiret **rouge**, nom du finisher en petites capitales). |
+| U4 | Tuer sans finisher (2 joueurs, l'autre tombe de la carte après un coup) | Ligne `X eliminated Y`, **sans** nom de finisher. |
+| U5 | 2 joueurs : se faire **finir** | La cinématique joue d'abord **en entier**, puis en bas au centre : **FINISHED BY**, le nom du tueur, `LV 12  BOXER — LIVER RIP`, une ligne qui se vide et **RESPAWN 2.3** qui descend ; le monde perd ses couleurs. Au respawn tout disparaît en fondu. |
+| U6 | Se faire tuer normalement | **ELIMINATED BY** + nom + niveau + kit, pas de tiret rouge. |
+| U7 | Mourir seul (tomber de la carte, personne ne t'a frappé) | **ELIMINATED / YOU DIED**, pas de nom ni de kit. |
+| U8 | En **duel** | Aucun écran de mort (l'écran de fin de duel reste le seul). |
+| U9 | Deux joueurs avec le **même nom d'affichage** | Ta ligne du kill feed est la tienne (nom en gras blanc + petit trait) uniquement quand c'est vraiment toi (comparé par UserId). |
+| U10 | *Test → Device* : **iPhone** (paysage), puis une petite fenêtre | HUD (vie à gauche, kit à droite), kill feed et tableau des joueurs plus petits mais lisibles, toujours dans leur coin. Le bloc du kit est **au-dessus du bouton de saut**. |
+| U11 | Sur iPhone : **toucher** un move de la barre du kit | Le move part (comme la touche 1-4). Jauge pleine : toucher **[G] AWAKEN** lance l'Awakening. |
+| U12 | Sur iPhone (paysage) / petite fenêtre : ouvrir le **MENU** (chaque section, surtout **KITS**) | Le menu commence **sous la barre Roblox** (boutons menu / chat / sac en haut à gauche) : **01, 02… et KITS se touchent** sans ouvrir le menu Roblox. La liste est plus près du bord gauche, le texte reste lisible (jamais plus petit que ×0.8). Si la section est trop haute, le panneau **défile** (glisser du doigt / molette, fine barre à droite) et **— CLOSE** reste visible dessous ; changer de section repart en haut. La marque de la section choisie est bien en face ; redimensionner la fenêtre le recale. |
+| U13 | Écran 1080p normal | Tout est **exactement comme avant** (mêmes tailles, mêmes places). En 1440p / 4K : un peu plus grand. |
+| U14 | Shop / Profile après un achat | Pièces, niveau/XP, cosmétiques et stats se mettent à jour comme avant ; les soulignés (EQUIPPED, réglages ON/OFF) ont la bonne largeur, même sur iPhone. |
+| U15 | Sur iPhone : le **HUD** pendant un combat | Le bloc de vie (chiffre, barres, XP) est **en haut à gauche, sous la barre Roblox**, plus en bas à gauche sous le joystick et le pouce. Sur PC il reste en bas à gauche. |
+| U16 | Sur iPhone : kill feed et tableau des joueurs (Tab / bouton) | La première ligne du kill feed et le titre PLAYERS ne passent **jamais sous les boutons Roblox** en haut à droite (s'il y en a) ; sur PC 1080p ils restent à leur place. |
+| U17 | Écran de mort (U5 / U6) | La **bande sombre** du bas apparaît **en fondu** avec le texte, et disparaît en fondu au respawn (plus de coupure sèche). |
+| U18 | Finir le **Dummy** puis quitter le jeu pendant le finisher (ou finisher sans tueur crédité) | Si le kill feed n'a pas de tueur : `Dummy died` **sans** `— NOM DU FINISHER` derrière. |

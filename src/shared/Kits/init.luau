@@ -72,6 +72,8 @@ end
 -- How a fighter with kit `id` finishes a knocked-out opponent: the kit's
 -- own finisher, or the default one (kneel and strike, Config.Knockout).
 local DEFAULT_FINISHER: FinisherDef = table.freeze({
+	name = "FINAL BLOW",
+	description = "Kneels over them and ends it.",
 	animation = "Finisher",
 	impact = Config.Knockout.FINISH_IMPACT,
 	duration = Config.Knockout.FINISH_DURATION,
