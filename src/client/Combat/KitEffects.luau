@@ -45,7 +45,7 @@ local BLOOD_COLOR = Color3.fromRGB(92, 12, 10)
 local FURY_LIGHT = Color3.fromRGB(150, 36, 28)
 
 -- Bleeding: one drop this often (seconds), stains on the floor live this long.
-local DRIP_INTERVAL = 0.22
+local DRIP_INTERVAL = 0.14
 local STAIN_LIFETIME = 30
 -- Never more than this many stains in the world (16 players bleeding...).
 local MAX_STAINS = 60
@@ -497,8 +497,8 @@ local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
 				or string.match(name, "^" .. Gash.SHARD_PREFIX .. "(%a+)_%d+$")
 			local partName = if key then Gash.PART_OF[key] else nil
 			local cut = Gash.decode(value)
-			if cut and (cut.kind == "Burn" or cut.kind == "Bore") then
-				cut = nil -- (a burn doesn't bleed: cauterized)
+			if cut and cut.kind == "Bore" then
+				cut = nil -- (the finisher's bore doesn't bleed: cauterized)
 			end
 			local shard = if cut then nil else Gash.decodeShard(value)
 			local point = if cut then cut.point elseif shard then shard.point else nil

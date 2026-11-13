@@ -301,7 +301,9 @@ return table.freeze({
 		-- Chance that a plain punch (M1 1-3) draws visible blood, per zone. Fists
 		-- rarely cut: blood is mostly for the bottle (its moves set their own
 		-- `bloodChance` in the kit). Decided by the server: everyone sees the same.
-		PUNCH_BLOOD_CHANCE = table.freeze({ Head = 0.12, Torso = 0.03, Legs = 0 }),
+		PUNCH_BLOOD_CHANCE = table.freeze({ Head = 0.35, Torso = 0.15, Legs = 0.05 }),
+		-- Kits' own blood chances, times this (bloodier fights; capped at 1).
+		BLOOD_CHANCE_SCALE = 1.6,
 		-- Glass (moves with `cuts`) cuts the skin where it lands: head or torso,
 		-- on the side facing the attacker. Realistic: a smashed bottle
 		-- makes a ragged laceration, a broken bottle a clean slash; both go

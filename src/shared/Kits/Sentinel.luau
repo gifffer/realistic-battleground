@@ -57,7 +57,8 @@ local kit: KitTypes.KitDef = {
 					hitbox = Vector3.zero, -- (the beam has its own)
 					blockCost = 3, -- (per tick: blocking the whole beam ≈ 18 stamina)
 					forward = 0,
-					bloodChance = {},
+					bloodChance = { Head = 0.35 }, -- (spits a little blood now and then)
+					bleed = { perSecond = 0.4, duration = 5 }, -- (blood runs down from the burn)
 					burns = true, -- (burnt through the skin, not bruised)
 				},
 			},

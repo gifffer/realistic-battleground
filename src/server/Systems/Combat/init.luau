@@ -842,7 +842,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	local bloodChance: number = 0
 	local chances = spec.bloodChance
 	if chances ~= nil then
-		bloodChance = chances[zone] or 0
+		bloodChance = math.min(1, (chances[zone] or 0) * INJ.BLOOD_CHANCE_SCALE)
 	elseif spec.moveId ~= nil then
 		bloodChance = 0 -- a kit move that doesn't say it cuts: no blood
 	elseif spec.kind == "Finisher" and zone == "Head" then

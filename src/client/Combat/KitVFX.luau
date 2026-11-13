@@ -2328,7 +2328,20 @@ end
 function KitVFX.onHit(victim: Model, attacker: Model, moveId: string)
 	if moveId == HEAT_VISION then
 		-- (the beam burns that head: from now on, it chars where it touches)
+		local last = beamHits[victim]
 		beamHits[victim] = { by = attacker, at = os.clock() }
+		-- blood running down from the burn (not every tick)
+		local head = part(victim, "Head")
+		if head and (last == nil or os.clock() - last.at > 0.6) then
+			local at = Vector3.new(0, 0, -0.6)
+			for index = 1, Gash.MAX_PER_PART do
+				local cut = Gash.decode(victim:GetAttribute(Gash.attribute("Head", index)))
+				if cut and cut.kind == "Burn" then
+					at = cut.point
+				end
+			end
+			BloodGush.runDown(head, at, 2, math.random(1, 2 ^ 30))
+		end
 	end
 	local torso = part(victim, "Torso")
 	if torso == nil then
