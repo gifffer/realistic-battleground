@@ -2909,9 +2909,12 @@ function KitVFX.start()
 			end
 		end)
 	end
-	CollectionService:GetInstanceAddedSignal(Config.Combat.TAG):Connect(watchBody)
-	for _, model in CollectionService:GetTagged(Config.Combat.TAG) do
-		watchBody(model)
+	-- (fighters, and the bodies a finisher left: Server/Systems/Corpses)
+	for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do
+		CollectionService:GetInstanceAddedSignal(tag):Connect(watchBody)
+		for _, model in CollectionService:GetTagged(tag) do
+			watchBody(model)
+		end
 	end
 end
 

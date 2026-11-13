@@ -19,7 +19,7 @@
 -- "Wind" attribute on workspace for events (a storm...), plus gusts from
 -- the moves' shockwaves (KitLooks.gust).
 --
---   KitLooks.start()                           watch every fighter
+--   KitLooks.start()                           watch every fighter (and corpse)
 --   KitLooks.gust(position, strength, radius)  a blast of air from there
 --   KitLooks.hornTips(model)                   the Bull's horn tips
 
@@ -194,7 +194,8 @@ local function noseRing(head: BasePart, folder: Instance)
 end
 
 -- The Bulls on screen: their breath steams every few seconds.
-local bulls: { [Model]: { head: BasePart, nextBreath: number } } = {}
+-- (a dead one doesn't: its Humanoid at 0 HP)
+local bulls: { [Model]: { head: BasePart, humanoid: Humanoid?, nextBreath: number } } = {}
 
 local function buildBull(model: Model): Instance?
 	local head = model:FindFirstChild("Head")
@@ -207,7 +208,11 @@ local function buildBull(model: Model): Instance?
 	horn(head, -1, folder)
 	noseRing(head, folder)
 	folder.Parent = head
-	bulls[model] = { head = head, nextBreath = os.clock() + random:NextNumber(1, 3) }
+	bulls[model] = {
+		head = head,
+		humanoid = model:FindFirstChildOfClass("Humanoid"),
+		nextBreath = os.clock() + random:NextNumber(1, 3),
+	}
 	return folder
 end
 
@@ -826,7 +831,8 @@ local function breatheBulls()
 			bulls[model] = nil
 			continue
 		end
-		if now >= bull.nextBreath then
+		local humanoid = bull.humanoid
+		if now >= bull.nextBreath and (humanoid == nil or humanoid.Health > 0) then
 			bull.nextBreath = now + random:NextNumber(3, 5.5)
 			if camera and (camera.CFrame.Position - bull.head.Position).Magnitude < 70 then
 				breathe(bull.head)
@@ -867,10 +873,12 @@ function KitLooks.hornTips(model: Model): { BasePart }
 end
 
 function KitLooks.start()
-	local tag = Config.Combat.TAG
-	CollectionService:GetInstanceAddedSignal(tag):Connect(watch)
-	for _, model in CollectionService:GetTagged(tag) do
-		watch(model)
+	-- (fighters, and the bodies a finisher left: Server/Systems/Corpses)
+	for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do
+		CollectionService:GetInstanceAddedSignal(tag):Connect(watch)
+		for _, model in CollectionService:GetTagged(tag) do
+			watch(model)
+		end
 	end
 	RunService.RenderStepped:Connect(updateCloths)
 	RunService.Heartbeat:Connect(breatheBulls)

@@ -19,6 +19,8 @@
 --   • Any other death (fell off the map...) gives the kill to the last
 --     attacker if there was one recently.
 --   • Every elimination is announced to everyone (Remotes.KillFeed).
+--   • A player finished off leaves their body on the floor for
+--     FINISHER_BODY_TIME seconds, even after they respawn (Corpses).
 --
 -- Replicated to clients (attributes on the fighter's model):
 --   "KnockedOut" (boolean), "KOEndsAt" (server time, workspace:GetServerTimeNow()),
@@ -32,6 +34,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Corpses = require(script.Parent.Corpses)
 local PlayerData = require(script.Parent.PlayerData)
 local Ragdoll = require(script.Parent.Ragdoll)
 
@@ -480,6 +483,9 @@ function Knockout.finish(victim: Model, attacker: Model)
 	local info = fighters[victim]
 	if info == nil or not info.knockedOut or info.finishedBy ~= attacker then
 		return
+	end
+	if info.player then
+		Corpses.track(victim) -- (their body stays after they respawn)
 	end
 	info.humanoid.Health = 0 -- → Humanoid.Died → onDied (kill credit, feed)
 end
