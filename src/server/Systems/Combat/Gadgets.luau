@@ -97,6 +97,7 @@ local function target(state: CombatState, other: CombatState): boolean
 	local c = context()
 	return other ~= state
 		and not sameSide(state, other)
+		and other.model:GetAttribute("DuelId") == state.model:GetAttribute("DuelId")
 		and c.isAlive(other)
 		and not Knockout.isKnockedOut(other.model)
 end
@@ -333,14 +334,15 @@ end
 -- Ray
 ------------------------------------------------------------------------------
 
--- The point of the segment a→b closest to p, and how far along (0-1).
+-- The point of the line a→b closest to p, and how far along it (0 at a, 1
+-- at b; outside 0-1: before / past the segment).
 local function closest(a: Vector3, b: Vector3, p: Vector3): (Vector3, number)
 	local ab = b - a
 	local length2 = ab:Dot(ab)
 	if length2 < 1e-6 then
 		return a, 0
 	end
-	local t = math.clamp((p - a):Dot(ab) / length2, 0, 1)
+	local t = (p - a):Dot(ab) / length2
 	return a + ab * t, t
 end
 
@@ -380,12 +382,20 @@ local function fireRay(
 				local body = other.root.Position
 				-- Feet to head, nearest to the line.
 				local onLine, t = closest(from, to, body)
+				local length = (to - from).Magnitude
+				-- (along the beam only: not behind the gun, not past the wall)
+				local along = t * length
+				local inRange = along > -0.3 and along < length + 0.2
+				t = math.clamp(t, 0, 1)
+				onLine = from + (to - from) * t
 				local height = math.clamp(onLine.Y - body.Y, -3, 2)
 				local point = body + Vector3.new(0, height, 0)
 				local offset = point - onLine
 				if
-					Vector3.new(offset.X, 0, offset.Z).Magnitude <= reach
+					inRange
+					and Vector3.new(offset.X, 0, offset.Z).Magnitude <= reach
 					and math.abs(offset.Y) <= reach + 1
+					and inSight(from, other.model)
 				then
 					local zone: Types.HitZone = if height > 1.1
 						then "Head"

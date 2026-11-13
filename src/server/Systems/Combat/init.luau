@@ -225,8 +225,13 @@ end
 -- Damage that would bring the victim to 0 HP knocks them out instead
 -- (Knockout), it never kills directly. `attacker` = nil for damage over
 -- time whose author is gone (bleeding).
-local function dealDamage(victim: CombatState, attacker: CombatState?, amount: number)
-	local attackerModel = if attacker then attacker.model else victim.bleedSource
+local function dealDamage(
+	victim: CombatState,
+	attacker: CombatState?,
+	amount: number,
+	source: Model?
+)
+	local attackerModel = if attacker then attacker.model else (source or victim.bleedSource)
 	if attackerModel then
 		Knockout.noteHit(victim.model, attackerModel)
 	end
@@ -284,7 +289,11 @@ local function startBurning(
 	local burning = time < victim.burnUntil
 	victim.burnPerSecond = math.max(perSecond, if burning then victim.burnPerSecond else 0)
 	victim.burnUntil = math.max(victim.burnUntil, time + duration)
-	victim.nextBurnTick = math.max(victim.nextBurnTick, time + KC.BLEED_TICK)
+	if not burning then
+		-- (an ongoing burn keeps its ticks: refreshing it, standing in a
+		-- puddle, must not push them back forever)
+		victim.nextBurnTick = time + KC.BLEED_TICK
+	end
 	victim.burnSource = attacker.model
 	victim.burnKind = kind
 	-- (clients: smoke, bubbling skin, the burn marks; Client/Combat/RiftFx)
@@ -851,7 +860,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		bleed = INJ.CRIT_BLEED
 	end
 	if bleed then
-		startBleeding(victim, attacker, bleed.perSecond, bleed.duration)
+		startBleeding(victim, credit, bleed.perSecond, bleed.duration)
 		-- Where it bleeds from (the drops fall from there, see KitEffects).
 		setAttribute(
 			victim.model,
@@ -1984,7 +1993,7 @@ local function update(dt: number)
 				state.nextBurnTick = time + KC.BLEED_TICK
 				local source = state.burnSource
 				local attacker = if source then states[source] else nil
-				dealDamage(state, attacker, state.burnPerSecond * KC.BLEED_TICK)
+				dealDamage(state, attacker, state.burnPerSecond * KC.BLEED_TICK, source)
 			end
 		end
 

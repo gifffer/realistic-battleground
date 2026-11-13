@@ -856,6 +856,9 @@ function CombatEffectsController.start()
 		end
 	)
 	RiftFx.setShake(shake)
+	RiftFx.setOnOwnFizzle(function()
+		CombatController.releaseAttacks()
+	end)
 	Remotes.RiftFx.OnClientEvent:Connect(RiftFx.onRemote)
 	Remotes.WeaponBroke.OnClientEvent:Connect(
 		function(id: unknown, throwId: unknown, position: unknown, velocity: unknown)

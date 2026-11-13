@@ -152,6 +152,9 @@ local function remove(clone: Clone)
 		return
 	end
 	clone.gone = true
+	-- (its blow that was winding up doesn't land any more)
+	clone.state.attackToken += 1
+	clone.state.stunnedUntil = math.huge
 	byModel[clone.model] = nil
 	local list = byOwner[clone.owner.model]
 	if list then
@@ -200,6 +203,24 @@ local function nearestEnemy(clone: Clone): CombatState?
 	return best
 end
 
+-- A free spot by `around` (a ring of tries), or nil.
+local function spotNear(
+	owner: CombatState,
+	around: CFrame,
+	distance: number,
+	index: number
+): CFrame?
+	for try = 0, 7 do
+		local angle = math.rad(index * 137 + try * 45)
+		local offset = Vector3.new(math.sin(angle) * distance, 0, math.cos(angle) * distance)
+		local position = around.Position + offset
+		if MapBounds.allows(owner.model, position) then
+			return CFrame.lookAt(position, Vector3.new(around.X, position.Y, around.Z))
+		end
+	end
+	return nil
+end
+
 local function think(clone: Clone)
 	local c = context()
 	local state = clone.state
@@ -225,7 +246,13 @@ local function think(clone: Clone)
 			humanoid:MoveTo(home.Position)
 		end
 		if (state.root.Position - clone.owner.root.Position).Magnitude > LEASH then
-			state.model:PivotTo(home)
+			-- (only somewhere it may stand: not in a wall, not out of the room)
+			local spot = if MapBounds.allows(clone.owner.model, home.Position)
+				then home
+				else spotNear(clone.owner, clone.owner.root.CFrame, 4, clone.slot)
+			if spot then
+				state.model:PivotTo(spot)
+			end
 		end
 	end
 end
@@ -235,6 +262,19 @@ local function spawnOne(owner: CombatState, at: CFrame, slot: number): Clone?
 	local c = context()
 	local model = build(owner)
 	if model == nil then
+		return nil
+	end
+	-- (built while the avatar loaded: still wanted? never more than `count`)
+	local kit = Kits.get(owner.kitId)
+	local def = if kit and kit.awakening then kit.awakening.clones else nil
+	local existing = byOwner[owner.model]
+	if
+		def == nil
+		or (existing and #existing >= def.count)
+		or not c.isAlive(owner)
+		or not c.isAwakened(owner)
+	then
+		model:Destroy()
 		return nil
 	end
 	model:PivotTo(at)
@@ -278,24 +318,6 @@ local function spawnOne(owner: CombatState, at: CFrame, slot: number): Clone?
 		remove(clone)
 	end)
 	return clone
-end
-
--- A free spot by `around` (a ring of tries), or nil.
-local function spotNear(
-	owner: CombatState,
-	around: CFrame,
-	distance: number,
-	index: number
-): CFrame?
-	for try = 0, 7 do
-		local angle = math.rad(index * 137 + try * 45)
-		local offset = Vector3.new(math.sin(angle) * distance, 0, math.cos(angle) * distance)
-		local position = around.Position + offset
-		if MapBounds.allows(owner.model, position) then
-			return CFrame.lookAt(position, Vector3.new(around.X, position.Y, around.Z))
-		end
-	end
-	return nil
 end
 
 function Clones.summon(owner: CombatState, def: Kits.ClonesDef)
@@ -359,9 +381,18 @@ function Clones.swarm(
 	end
 	-- Their blows: each clone, at each hit's time (counted from arriving).
 	for _, clone in ready do
+		-- (a clone stunned meanwhile - parried - stops its blows)
+		clone.state.attackToken += 1
+		local token = clone.state.attackToken
 		for _, hit in hits do
 			task.delay(0.25 + hit.at, function()
-				if clone.gone or not c.isAlive(clone.state) or not c.isAlive(victim) then
+				if
+					clone.gone
+					or clone.state.attackToken ~= token
+					or c.isStunned(clone.state)
+					or not c.isAlive(clone.state)
+					or not c.isAlive(victim)
+				then
 					return
 				end
 				if Knockout.isKnockedOut(victim.model) then

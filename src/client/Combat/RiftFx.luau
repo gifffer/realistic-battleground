@@ -22,12 +22,14 @@
 --   RiftFx.cinematic(kind, attacker, victim, anchor)   PortalCut events
 --   RiftFx.cancelCinematic(attacker)
 
+local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
@@ -61,6 +63,14 @@ local GLASS = Color3.fromRGB(200, 220, 210)
 local SHAKE_RANGE = 45
 local random = Random.new()
 local shakeCallback: Shake? = nil
+
+local onOwnFizzle: (() -> ())? = nil
+
+-- Our own portal shot fizzled: the move is over sooner (KitController's
+-- hold on our attacks is released, CombatEffectsController sets it).
+function RiftFx.setOnOwnFizzle(callback: () -> ())
+	onOwnFizzle = callback
+end
 
 -- CombatEffectsController gives us its camera shake.
 function RiftFx.setShake(shake: Shake)
@@ -169,10 +179,11 @@ local function fade(part: BasePart, seconds: number, goal: { [string]: any }?)
 	Debris:AddItem(part, seconds + 0.05)
 end
 
-local function floorUnder(position: Vector3, ignore: { Instance }): RaycastResult?
+-- The floor under `position` (fighters and loose bits don't count).
+local function floorUnder(position: Vector3): RaycastResult?
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = ignore
+	params.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
 	params.RespectCanCollide = true
 	return workspace:Raycast(position + Vector3.new(0, 1, 0), Vector3.new(0, -14, 0), params)
 end
@@ -1147,7 +1158,7 @@ local function explosion(position: Vector3, radius: number)
 	TweenService:Create(light, TweenInfo.new(0.8), { Brightness = 0 }):Play()
 	Debris:AddItem(point, 4)
 	-- The shockwave on the floor and a scorch mark.
-	local floor = floorUnder(position, {})
+	local floor = floorUnder(position)
 	if floor then
 		local ring = disc("Shock", FIRE_HOT, 0.3)
 		ring.CFrame = CFrame.lookAt(
@@ -1338,12 +1349,7 @@ local function wave(data: { [string]: any })
 	if typeof(position) ~= "Vector3" or typeof(radius) ~= "number" then
 		return
 	end
-	local by = data.by
-	local ignore: { Instance } = {}
-	if typeof(by) == "Instance" then
-		table.insert(ignore, by)
-	end
-	local floor = floorUnder(position + Vector3.new(0, 1, 0), ignore)
+	local floor = floorUnder(position + Vector3.new(0, 1, 0))
 	local ground = if floor then floor.Position else position
 	local up = CFrame.lookAt(ground + Vector3.new(0, 0.12, 0), ground + Vector3.new(0, 1, 0))
 	-- A ring of distorted air racing out, a flash in the middle.
@@ -1459,8 +1465,10 @@ function RiftFx.onRemote(kind: unknown, data: unknown)
 			where = where or muzzleOf(by)
 			SoundController.play("PortalFizzle", by)
 			-- (our own portal move: the step through won't happen)
-			if by == Players.LocalPlayer.Character then
-				CharacterAnimationController.stopAction(by, "Rift_Portal")
+			-- (the step through won't happen: everyone stops his clip)
+			CharacterAnimationController.stopAction(by, "Rift_Portal")
+			if by == Players.LocalPlayer.Character and onOwnFizzle then
+				onOwnFizzle()
 			end
 			removeProp(by)
 		end
@@ -1533,7 +1541,17 @@ function RiftFx.cinematic(kind: string, attacker: Model, victim: Model, anchor: 
 			bolt(from, at.Position)
 		end
 		local diameter = Finishers.PORTAL_RADIUS * 2
-		cut.ring = portal(flat, diameter, diameter, 0.3, -1, 0)
+		local ring = portal(flat, diameter, diameter, 0.3, -1, 0)
+		cut.ring = ring
+		-- (never left open if the cut doesn't come: someone left)
+		task.delay(2, function()
+			if ring.folder.Parent then
+				ring.folder:Destroy()
+			end
+			if cut.ring == ring then
+				cut.ring = nil
+			end
+		end)
 		SoundController.play("PortalShot", attacker)
 		task.delay(0.1, function()
 			SoundController.playAt("PortalOpen", at.Position)
