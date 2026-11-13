@@ -12,7 +12,9 @@
 --      Then the combo advances (hits 1 → 2 → 3 → 4 → 1...).
 --   3. After HIT_DELAY (the wind-up) the server puts a hitbox in front of
 --      the attacker. If the attacker got stunned meanwhile, the hit is
---      cancelled.
+--      cancelled. The victims are tested where they are AND where the
+--      attacker saw them (his ping ago, bounded: lag compensation, see
+--      Combat/Rewind.luau).
 --   4. For each model in the hitbox, resolveHit decides: dodged? parried?
 --      blocked? guard broken? or a normal hit (damage + stun, knockback on
 --      the 4th hit). Then Remotes.CombatEvent tells every client so they
@@ -74,6 +76,7 @@ local Clones = require(script.Clones)
 local Gadgets = require(script.Gadgets)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
+local Rewind = require(script.Rewind)
 local State = require(script.State)
 
 local C = Config.Combat
@@ -827,8 +830,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return true
 	end
 
-	-- 1. Dash dodge frames: the hit misses.
-	if time < victim.invulnerableUntil then
+	-- 1. Dash dodge frames: the hit misses. (Caught where he was a moment
+	-- ago: dodge frames at any time since then count, see HitSpec.rewound.)
+	if time - (spec.rewound or 0) < victim.invulnerableUntil then
 		event("Dodged", false, false)
 		return false
 	end
@@ -1110,10 +1114,13 @@ function Combat.register(model: Model, player: Player?)
 	Combat.setKit(model, if usable and data then data.equippedKit else Kits.DEFAULT)
 	CollectionService:AddTag(model, C.TAG)
 	Knockout.register(model, player)
+	-- Where it stands, frame by frame (lag compensation, Combat/Rewind).
+	Rewind.track(model, root)
 
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
 			states[model] = nil
+			Rewind.untrack(model)
 		end
 	end)
 end
@@ -2174,17 +2181,30 @@ local function startFinisher(state: CombatState, target: Model): boolean
 end
 
 -- The zone the attacker's aim ray meets on `victim`, or nil if it misses.
-local function aimZone(attacker: CombatState, victim: Model, direction: Vector3): Types.HitZone?
+-- `rootAt`: the victim was found in the hitbox there (rewound to where
+-- the attacker saw it, Combat/Rewind): the ray is cast at that body.
+local function aimZone(
+	attacker: CombatState,
+	victim: Model,
+	direction: Vector3,
+	rootAt: CFrame?
+): Types.HitZone?
 	local head = attacker.model:FindFirstChild("Head")
 	local origin = if head and head:IsA("BasePart") then head.Position else attacker.root.Position
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = { victim }
-	local hit = workspace:Raycast(origin, direction * C.AIM_RAY_LENGTH, params)
-	if hit == nil then
+	local ray = direction * C.AIM_RAY_LENGTH
+	local part: BasePart? = nil
+	if rootAt then
+		part = Hitbox.rayAt(victim, origin, ray, rootAt)
+	else
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { victim }
+		local hit = workspace:Raycast(origin, ray, params)
+		part = if hit then hit.Instance :: BasePart else nil
+	end
+	if part == nil then
 		return nil
 	end
-	local part = hit.Instance
 	-- Accessories (hats, hair...) are worn on the head.
 	if part.Parent and part.Parent:IsA("Accessory") then
 		return "Head"
@@ -2287,21 +2307,29 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	-- Everyone plays the punch (animation + swing sound).
 	Remotes.CombatAction:FireAllClients(model, `Brawler_M1_{combo}`)
 
+	-- When the fist lands (the attacker's screen showed it HIT_DELAY after
+	-- his click, which reached us one trip later).
+	local dueAt = now() + C.HIT_DELAY
 	task.delay(C.HIT_DELAY, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
 		if state.attackToken ~= token or not isAlive(state) then
 			resolved()
 			return
 		end
+		-- The victims are also tested where the attacker saw them (lag
+		-- compensation, Combat/Rewind). The attacker's own body is where
+		-- his client had it then already: we receive it one trip late too.
+		local rewind = Rewind.amount(state.player, now() - dueAt)
 		local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -C.HITBOX_FORWARD)
-		local victims, partsByModel = Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model)
+		local victims, partsByModel, rootByModel, ageByModel =
+			Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model, rewind)
 		for _, victimModel in victims do
 			local victim = states[victimModel]
 			if victim and isAlive(victim) then
 				-- Players: where their aim ray lands (no valid aim = torso).
 				-- Dummies: random.
 				local aimed: Types.HitZone = if aim
-					then aimZone(state, victimModel, aim) or "Torso"
+					then aimZone(state, victimModel, aim, rootByModel[victimModel]) or "Torso"
 					elseif state.player then "Torso"
 					else dummyZone
 				local landed: Types.HitZone =
@@ -2318,6 +2346,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 						else C.BLOCK_STAMINA_COST,
 					knockback = if isFinisher then C.KNOCKBACK_SPEED else nil,
 					attackId = attackId,
+					rewound = ageByModel[victimModel],
 				})
 			end
 		end
@@ -2852,6 +2881,7 @@ end
 
 function Combat.start()
 	-- Kit moves get the tools they need from here (see Combat/Moves.luau).
+	Rewind.start()
 	Moves.bind({
 		getState = function(model: Model): CombatState?
 			return states[model]

@@ -16,11 +16,15 @@
 --   • the hitbox (Combat Hitbox.query): which body parts overlap it,
 --   • the landing zone (Combat landingZone): aimed zone if a punch can reach
 --     it and it's in the box, else the torso, else the head.
+-- We test the others where WE see them; the server tests them there too
+-- (it rewinds them by our ping, Server/Systems/Combat/Rewind), so both
+-- agree even on a runner. The box maths are shared (Shared/Util/BoxMath).
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BoxMath = require(ReplicatedStorage.Shared.Util.BoxMath)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local C = Config.Combat
@@ -81,77 +85,6 @@ local HEAD_OFFSET = Vector3.new(0, 1.5, 0)
 
 local HitPrediction = {}
 
-------------------------------------------------------------------------------
--- Geometry
-------------------------------------------------------------------------------
-
--- Distance along the ray where it enters the box, or nil if it misses it
--- ("slab" method: the ray must be inside the box on X, Y and Z at once).
-local function rayHitsBox(origin: Vector3, direction: Vector3, box: CFrame, size: Vector3): number?
-	local o = box:PointToObjectSpace(origin)
-	local d = box:VectorToObjectSpace(direction)
-	local half = size / 2
-	local tMin, tMax = 0, math.huge
-	for _, axis in { "X", "Y", "Z" } do
-		local oa: number = (o :: any)[axis]
-		local da: number = (d :: any)[axis]
-		local ha: number = (half :: any)[axis]
-		if math.abs(da) < 1e-9 then
-			if oa < -ha or oa > ha then
-				return nil -- parallel to this slab and outside it
-			end
-		else
-			local t1, t2 = (-ha - oa) / da, (ha - oa) / da
-			if t1 > t2 then
-				t1, t2 = t2, t1
-			end
-			tMin = math.max(tMin, t1)
-			tMax = math.min(tMax, t2)
-			if tMin > tMax then
-				return nil
-			end
-		end
-	end
-	return tMin
-end
-
--- Do two rotated boxes overlap? ("Separating axis" test: they DON'T overlap
--- if there is a direction in which their shadows don't touch. For boxes,
--- checking 15 directions is enough.)
-local function boxesOverlap(a: CFrame, sizeA: Vector3, b: CFrame, sizeB: Vector3): boolean
-	local axesA = { a.RightVector, a.UpVector, a.LookVector }
-	local axesB = { b.RightVector, b.UpVector, b.LookVector }
-	local halfA = { sizeA.X / 2, sizeA.Y / 2, sizeA.Z / 2 }
-	local halfB = { sizeB.X / 2, sizeB.Y / 2, sizeB.Z / 2 }
-	local between = b.Position - a.Position
-
-	local function separated(axis: Vector3): boolean
-		if axis.Magnitude < 1e-6 then
-			return false -- parallel edges: not a real direction
-		end
-		local radiusA, radiusB = 0, 0
-		for i = 1, 3 do
-			radiusA += halfA[i] * math.abs(axesA[i]:Dot(axis))
-			radiusB += halfB[i] * math.abs(axesB[i]:Dot(axis))
-		end
-		return math.abs(between:Dot(axis)) > radiusA + radiusB
-	end
-
-	for i = 1, 3 do
-		if separated(axesA[i]) or separated(axesB[i]) then
-			return false
-		end
-	end
-	for i = 1, 3 do
-		for j = 1, 3 do
-			if separated(axesA[i]:Cross(axesB[j])) then
-				return false
-			end
-		end
-	end
-	return true
-end
-
 local function wearsAccessory(model: Model): boolean
 	return model:FindFirstChildWhichIsA("Accessory") ~= nil
 end
@@ -182,7 +115,7 @@ function HitPrediction.findVictims(
 		local parts: { [string]: boolean } = {}
 		local touched = false
 		for _, part in REST_PARTS do
-			if boxesOverlap(box, C.HITBOX_SIZE, root.CFrame * part.offset, part.size) then
+			if BoxMath.boxesOverlap(box, C.HITBOX_SIZE, root.CFrame * part.offset, part.size) then
 				parts[part.name] = true
 				touched = true
 			end
@@ -207,7 +140,7 @@ function HitPrediction.aimZone(attackerRoot: BasePart, victim: Model, aim: Vecto
 	local direction = aim * C.AIM_RAY_LENGTH
 	local closest = math.huge
 	local function test(part: RestPart)
-		local t = rayHitsBox(origin, direction, victimRoot.CFrame * part.offset, part.size)
+		local t = BoxMath.rayHitsBox(origin, direction, victimRoot.CFrame * part.offset, part.size)
 		if t and t <= 1 and t < closest then
 			closest = t
 			zone = part.zone
