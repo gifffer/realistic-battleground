@@ -41,6 +41,8 @@ local MAX_CUT_PER_BLAST = 3 -- walls cut up by one blast, at most
 local DEBRIS_GROUP = "Debris"
 local FIGHTER_GROUP = "Fighters"
 local DEAD_GROUP = "DeadBodies"
+-- (also the torn limbs lying around: Combat/HeavyGore)
+Destruction.DEAD_GROUP = DEAD_GROUP
 
 type Toggle = { instance: Instance, property: string, value: any }
 type Saved = {

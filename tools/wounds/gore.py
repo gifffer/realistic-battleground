@@ -99,6 +99,26 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
              mesentery (GutDark), ~0.9 x 0.4 x 0.7 studs, its bottom at
              Y = 0 (it lies on the floor there), centred in X and Z
 
+  The heavy hits (a heavy blow at the end of a big combo: Client/Combat/
+  HeavyGore), Z-Anatomy from limbs.npz (extract_limbs.py):
+  LegEnd     the top of the right leg torn off at the hip (R6 leg space, its
+             top at Y = 1): the real thigh muscles torn each at its own
+             height (Muscle, MuscleDark), the real femur's head out of it
+             (Bone), its torn ligament, the real femoral artery and vein and
+             the sciatic nerve torn and hanging (Artery, Vein, Nerve), the
+             fat under the skin, the skin torn round the edge, blood
+  Hip        ...and what stays on the torso (torso space, over X = 0..1 of
+             its bottom face): the real hip bone round its socket (Bone),
+             the muscles round the joint torn short and hanging (Muscle,
+             MuscleDark), the raw inside, fat, skin, blood
+  ArmEndL / ShoulderL   the left arm torn off: the Bouncer's ArmEnd /
+             Shoulder (the real humerus, shoulder blade, muscles) mirrored,
+             their skin torn ragged round the wound (no flaps)
+  LegEndL / HipL   the left leg: LegEnd / Hip mirrored
+  ArmEndR / ShoulderR   the right arm the same way (ArmEndL's, not mirrored)
+  (The open fractures are wound inserts: build_wound_kit.py "Break",
+  fracture.py.)
+
 Head space (studs): X right of the character, Y up, Z to the back, origin =
 the head's centre. Piece n sits in the kit with its head space moved to
 SLOTS[n] (written in src/shared/GoreShapes.luau).
@@ -420,7 +440,7 @@ def tear(bm, rng, near_y, amount):
     return bm
 
 
-def torn_arm(rng):
+def torn_arm(rng, ragged=False):
     """The Bouncer's finisher: (the arm's torn end, what stays on the torso),
     each {layer: bmesh}. R6 part spaces (studs): X right, Y up, Z back.
 
@@ -478,7 +498,10 @@ def torn_arm(rng):
         for _ in range(4)
     ])
     skin = []
-    for k in range(10):  # skin torn around the top edge, hanging over the sides
+    if ragged:  # (the heavy hits': the skin torn round the edge, ragged)
+        skin.append(skirt(rng, 0.995, 1, 0.002, 0.1, 0.9, 0.02, count=40, spikes=6, hx=0.5, hz=0.5))
+        fat.append(skirt(rng, 0.97, 1, 0.022, 0.07, 0.2, 0.035, count=40, spikes=4, hx=0.5, hz=0.5))
+    for k in range(0 if ragged else 10):  # skin torn around the top edge, hanging over the sides
         a = 2 * math.pi * k / 10 + rng.uniform(-0.2, 0.2)
         out = Vector((math.cos(a), 0, math.sin(a)))
         edge = 0.5 / max(abs(out.x), abs(out.z))  # (on the square's edge)
@@ -490,7 +513,7 @@ def torn_arm(rng):
         "FleshDark": floor,
         "Fat": bm_join_all(fat),
         "Bone": bone,
-        "Tendon": tendons,
+        "Tendon": tendons if not ragged else None,  # (the heavy hits': no sticks)
         "Skin": bm_join_all(skin),
     }
 
@@ -526,15 +549,30 @@ def torn_arm(rng):
              Vector((0.0, math.sin(a), math.cos(a))), (1, 0, 0),
              rng.uniform(0.12, 0.3), rng.uniform(0.03, 0.08), rng.uniform(0.1, 0.7))
         for a in angles if rng.random() < 0.8
-    ])
+    ]) if not ragged else None
     hanging = bm_join_all([
         rod((sx + 0.06, rng.uniform(0.15, 0.45), rng.uniform(-0.3, 0.3)),
             (sx + rng.uniform(0.08, 0.16), rng.uniform(-0.2, 0.05), rng.uniform(-0.35, 0.35)),
             rng.uniform(0.02, 0.035), 0.01, 6)
         for _ in range(3)
     ])
-    rim = []
-    for k in range(12):  # torn skin around the socket, curling out
+    # (the heavy hits': the skin torn round it in a ragged line, not a circle;
+    # drawn only then: the Bouncer's own pieces keep their random numbers)
+    phase = rng.uniform(0, 6.3) if ragged else 0.0
+
+    def torn(a):
+        return 1 + 0.07 * math.sin(3 * a + phase) + 0.04 * math.sin(7 * a + 2 * phase)
+
+    rim = [] if not ragged else [ragged_ring(
+        rng, [(Vector((sx + 0.003, 0.5 + math.sin(a) * 0.47 * torn(a), math.cos(a) * 0.45 * torn(a))),
+               Vector((0.0, math.sin(a), math.cos(a)))) for a in (2 * math.pi * k / 44 for k in range(44))],
+        (1, 0, 0), 0.1, 0.9, 0.02, 6)]
+    if ragged:
+        fat_ring = ragged_ring(
+            rng, [(Vector((sx + 0.005, 0.5 + math.sin(a) * 0.42 * torn(a), math.cos(a) * 0.4 * torn(a))),
+                   Vector((0.0, math.sin(a), math.cos(a)))) for a in (2 * math.pi * k / 40 for k in range(40))],
+            (1, 0, 0), 0.06, 0.2, 0.035, 4)
+    for k in range(0 if ragged else 12):  # torn skin around the socket, curling out
         a = 2 * math.pi * k / 12 + rng.uniform(-0.15, 0.15)
         base = Vector((sx + 0.01, 0.5 + math.sin(a) * 0.48, math.cos(a) * 0.45))
         out = Vector((0.0, math.sin(a), math.cos(a)))
@@ -661,10 +699,11 @@ def perimeter(s, inset=0.0, hx=1.0, hz=0.5):
     return Vector((-hx, 0, -hz)), Vector((0, 0, -1))
 
 
-def skirt(rng, y, up, inset, length, flare, thickness, count=56, spikes=9):
+def skirt(rng, y, up, inset, length, flare, thickness, count=56, spikes=9, hx=1.0, hz=0.5, cx=0.0):
     """A torn band round the edge of the torso's bottom face (the skin, the
     fat under it): from y, going down (up = -1) or up (up = 1), its end
-    ragged - long torn tongues here and there - and curling out."""
+    ragged - long torn tongues here and there - and curling out. (`hx`,
+    `hz`, `cx`: another face's half size and middle - a limb's 1 x 1.)"""
     phases = [rng.uniform(0, 6.3) for _ in range(4)]
     tongues = [(rng.random(), rng.uniform(0.6, 1.6), rng.uniform(0.008, 0.02)) for _ in range(spikes)]
     rows = 4
@@ -672,7 +711,8 @@ def skirt(rng, y, up, inset, length, flare, thickness, count=56, spikes=9):
     grid = []
     for k in range(count):
         s = k / count
-        base, out = perimeter(s, inset)
+        base, out = perimeter(s, inset, hx, hz)
+        base = base + Vector((cx, 0, 0))
         a = 2 * math.pi * s
         reach = length * (0.55 + 0.3 * math.sin(a * 5 + phases[0]) * math.sin(a * 3 + phases[1])
                           + 0.25 * rng.random())
@@ -696,8 +736,45 @@ def skirt(rng, y, up, inset, length, flare, thickness, count=56, spikes=9):
     for f in bm.faces:  # facing out of the body (solidify: inward)
         f.normal_update()
         mid = f.calc_center_median()
-        if f.normal.dot(Vector((mid.x, 0, mid.z * 2))) < 0:
+        if f.normal.dot(Vector((mid.x - cx, 0, mid.z * (hx / hz)))) < 0:
             f.normal_flip()
+    return solidify(bm, thickness)
+
+
+def ragged_ring(rng, ring, up, length, flare, thickness, spikes=6):
+    """skirt() round any closed edge: `ring` = [(point, the way out of the
+    wound there)], the torn band going `up` from it (out of the body), its
+    end ragged with torn tongues, curling outward."""
+    phases = [rng.uniform(0, 6.3) for _ in range(4)]
+    tongues = [(rng.random(), rng.uniform(0.6, 1.5), rng.uniform(0.02, 0.05)) for _ in range(spikes)]
+    rows = 4
+    up = Vector(up).normalized()
+    bm = bmesh.new()
+    grid = []
+    count = len(ring)
+    for k, (base, out) in enumerate(ring):
+        s = k / count
+        a = 2 * math.pi * s
+        reach = length * (0.55 + 0.3 * math.sin(a * 5 + phases[0]) * math.sin(a * 3 + phases[1])
+                          + 0.25 * rng.random())
+        for at, extra, width in tongues:
+            d = abs((s - at + 0.5) % 1.0 - 0.5)
+            reach += length * extra * max(0.0, 1 - d / width) ** 0.7
+        curl = flare * (0.6 + 0.4 * math.sin(a * 7 + phases[2]))
+        column = []
+        for r in range(rows + 1):
+            t = r / rows
+            along = up * math.cos(curl * t) + out * math.sin(curl * t)
+            p = base + along * reach * t + out * 0.004 * math.sin(a * 23 + r + phases[3])
+            column.append(bm.verts.new(p))
+        grid.append(column)
+    for k in range(count):
+        q = (k + 1) % count
+        for r in range(rows):
+            f = bm.faces.new((grid[k][r], grid[q][r], grid[q][r + 1], grid[k][r + 1]))
+            f.normal_update()
+            if f.normal.dot(ring[k][1]) < 0:  # (facing out of the wound; solidify: inward)
+                f.normal_flip()
     return solidify(bm, thickness)
 
 
@@ -982,7 +1059,8 @@ def build(add_object):
     slots = {}
     kinds = {
         k: []
-        for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ", "limb", "bisect", "gut", "cut")
+        for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ", "limb", "bisect", "gut", "cut",
+                  "dismember")
     }
 
     def piece(name, layers, kind=None):
@@ -1104,6 +1182,11 @@ def build(add_object):
     for i, layers in enumerate(gut_lengths(random.Random(9494))):
         piece(f"RiftGut{i + 1}", layers, "cut")
     piece("RiftColon", colon_length(random.Random(9595)), "cut")
+
+    # The heavy hits (a heavy blow at the end of a big combo): the legs torn
+    # off, the left arm and leg. (After Dr. Rift's, their own random numbers:
+    # the pieces above keep their slots.)
+    heavy_gore(6060, piece)
     return slots, kinds
 
 
@@ -2640,3 +2723,203 @@ def lua(slots, kinds):
         lines.append("\t},")
     lines += ["}", "", "return table.freeze(GoreShapes)", ""]
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# The heavy hits (a heavy blow at the end of a big combo): a leg torn off at
+# the hip, both arms / legs (the left ones mirrored). Z-Anatomy, limbs.npz
+# (extract_limbs.py).
+
+LIMB_ANATOMY = os.path.join(HERE, "anatomy", "limbs.npz")  # extract_limbs.py
+
+
+def load_limbs():
+    """limbs.npz: {group: [bmesh, ...]} (see extract_limbs.py)."""
+    data = np.load(LIMB_ANATOMY)
+    out = {}
+    for key in sorted(data.files, key=lambda k: (k.split("__")[0], int(k.split("__")[1]))):
+        group, index, kind = key.split("__")
+        if kind == "v":
+            out.setdefault(group, []).append(bm_of(data[key], data[f"{group}__{index}__f"]))
+    return out
+
+
+def mirrored(layers):
+    """{layer: bmesh} -> the same, mirrored left / right (X -> -X), faces
+    still outward (a left limb from a right one)."""
+    out = {}
+    for layer, bm in layers.items():
+        if bm is None:
+            continue
+        copy = bm_copy(bm)
+        for v in copy.verts:
+            v.co.x = -v.co.x
+        bmesh.ops.reverse_faces(copy, faces=copy.faces[:])
+        copy.normal_update()
+        out[layer] = copy
+    return out
+
+
+def square_edge(a, cx=0.0, half=0.5):
+    """The point at angle `a` on the edge of the square `half` round (cx, 0)
+    in X-Z, and the way out there."""
+    out = Vector((math.cos(a), 0, math.sin(a)))
+    edge = half / max(abs(out.x), abs(out.z))
+    return Vector((cx + out.x * edge, 0, out.z * edge)), out
+
+
+def torn_leg(rng):
+    """The leg torn off at the hip: (the leg's torn top, what stays on the
+    torso), each {layer: bmesh}. R6 spaces: the right leg (1 x 2 x 1, its
+    top face at Y = 1), the torso (its bottom face at Y = -1, the right leg
+    under X = 0..1).
+
+    The leg's top shows the real cut of the thigh's muscles (quadriceps,
+    hamstrings, adductors, sartorius, gracilis), each torn at its own height,
+    the real femur's head out of it (to the inside, as it is), the fat in a
+    yellow band, the skin torn and hanging. The hip keeps the real hip bone
+    round its empty socket and the muscles round the joint (glutei,
+    iliopsoas, pectineus...) torn short, hanging."""
+    limbs = load_limbs()
+    half = 0.47
+
+    # ---- the leg's top
+    muscles, dark = [], []
+    for index, muscle in enumerate(limbs["thighmuscle"]):
+        for v in muscle.verts:  # (wider still: they fill the blocky leg)
+            v.co.x *= 1.3
+            v.co.z *= 1.45
+        y = 1.05 + rng.uniform(0.0, 0.17)
+        cut(muscle, [
+            ((0, y, 0), (0, 1, 0)), ((0, 0.78, 0), (0, -1, 0)),
+            ((half, 0, 0), (1, 0, 0)), ((-half, 0, 0), (-1, 0, 0)),
+            ((0, 0, half), (0, 0, 1)), ((0, 0, -half), (0, 0, -1)),
+        ], fill=True)
+        if len(muscle.faces):
+            tear(muscle, rng, y, 0.05)
+            (muscles if index % 2 == 0 else dark).append(muscle)
+    for k in range(5):  # torn muscle bellies bulging out of the cut
+        a = 2 * math.pi * k / 5 + rng.uniform(-0.3, 0.3)
+        at = (math.cos(a) * rng.uniform(0.12, 0.3), 1.0, math.sin(a) * rng.uniform(0.12, 0.3))
+        belly = blob(rng, at, (rng.uniform(0.12, 0.2), rng.uniform(0.04, 0.08), rng.uniform(0.1, 0.18)), 14, 8, 0.02)
+        lumpy(belly, rng, 0.012, 30.0)
+        (muscles if k % 2 else dark).append(belly)
+    bone = limbs["femur"][0]
+    cut(bone, [((0, 0.6, 0), (0, -1, 0))], fill=True)
+    floor = bmesh.new()
+    bmesh.ops.create_cube(floor, size=1.0)
+    for v in floor.verts:
+        v.co = Vector((v.co.x * 0.96, 1.01 + v.co.y * 0.03, v.co.z * 0.96))
+    lumpy(floor, rng, 0.004, 14.0)
+    fat = []
+    for side in range(4):
+        wall = bmesh.new()
+        bmesh.ops.create_cube(wall, size=1.0)
+        bmesh.ops.subdivide_edges(wall, edges=wall.edges[:], cuts=6, use_grid_fill=True)
+        for v in wall.verts:
+            local = Vector((v.co.x * 0.98, 1.0 + v.co.y * 0.12, 0.47 + v.co.z * 0.06))
+            ang = side * math.pi / 2
+            v.co = Vector((local.x * math.cos(ang) + local.z * math.sin(ang), local.y,
+                           -local.x * math.sin(ang) + local.z * math.cos(ang)))
+        tear(wall, rng, 1.06, 0.035)
+        fat.append(wall)
+    # the real femoral artery and vein, the sciatic nerve: torn, their ends
+    # out of the cut (the nerve, thick and pale, the longest)
+    vessels = {}
+    for index, vessel in enumerate(limbs["thighvessel"]):
+        for v in vessel.verts:
+            v.co.x *= 1.3
+            v.co.z *= 1.45
+        y = 1.0 + (0.18, 0.1, 0.24)[index % 3] * rng.uniform(0.7, 1.2)
+        cut(vessel, [((0, y, 0), (0, 1, 0)), ((0, 0.8, 0), (0, -1, 0)),
+                     ((half, 0, 0), (1, 0, 0)), ((-half, 0, 0), (-1, 0, 0)),
+                     ((0, 0, half), (0, 0, 1)), ((0, 0, -half), (0, 0, -1))], fill=True)
+        if len(vessel.faces):
+            tear(vessel, rng, y, 0.02)
+            for v in vessel.verts:  # (limp: the end flops over)
+                over = max(0.0, v.co.y - 1.0)
+                v.co.x += over * over * rng.uniform(-1.5, 1.5)
+            layer = ("Artery", "Vein", "Nerve")[index % 3]
+            vessels.setdefault(layer, []).append(vessel)
+    # the round ligament of the femur's head, torn: a white string off its top
+    head = max(bone.verts, key=lambda v: v.co.y).co.copy()
+    tendons = rod(head - Vector((0, 0.02, 0)), head + Vector((0.05, 0.12, -0.03)), 0.02, 0.008, 6)
+    # the skin torn round the top edge (ragged, tongues of it, curling out)
+    # and the fat under it
+    skin = skirt(rng, 0.995, 1, 0.002, 0.1, 0.9, 0.02, count=40, spikes=6, hx=0.5, hz=0.5)
+    fat_rim = skirt(rng, 0.97, 1, 0.022, 0.07, 0.2, 0.035, count=40, spikes=4, hx=0.5, hz=0.5)
+    blood = bm_join_all([
+        drip(rng, Vector((p.x * 1.02, 0.98, p.z * 1.02)), rng.uniform(0.12, 0.35), rng.uniform(0.014, 0.022))
+        for p in (square_edge(rng.uniform(0, 2 * math.pi))[0] for _ in range(5))
+    ])
+    leg_end = {
+        "Muscle": bm_join_all(muscles),
+        "MuscleDark": bm_join_all(dark),
+        "FleshDark": floor,
+        "Fat": bm_join_all(fat + [fat_rim]),
+        "Bone": bone,
+        "Tendon": tendons,
+        "Skin": skin,
+        "Blood": blood,
+    }
+    for layer, items in vessels.items():
+        leg_end[layer] = bm_join_all(items)
+
+    # ---- the hip: the torso's bottom face over the leg (X = 0..1), opened
+    pelvis = limbs["hipbone"][0]
+    cut(pelvis, [((0, -0.72, 0), (0, 1, 0)), ((0, -1.1, 0), (0, -1, 0)),
+                 ((1.04, 0, 0), (1, 0, 0)), ((0, 0, 0.52), (0, 0, 1)), ((0, 0, -0.52), (0, 0, -1))], fill=True)
+    stubs, stubs_dark = [], []
+    for index, muscle in enumerate(limbs["hipmuscle"]):
+        y = -1.0 - rng.uniform(0.04, 0.17)
+        cut(muscle, [((0, y, 0), (0, -1, 0)), ((0, -0.75, 0), (0, 1, 0)),
+                     ((1.02, 0, 0), (1, 0, 0)), ((-0.02, 0, 0), (-1, 0, 0)),
+                     ((0, 0, 0.5), (0, 0, 1)), ((0, 0, -0.5), (0, 0, -1))], fill=True)
+        if len(muscle.faces):
+            tear(muscle, rng, y, 0.045)
+            (stubs if index % 2 == 0 else stubs_dark).append(muscle)
+    deep = bmesh.new()
+    bmesh.ops.create_cube(deep, size=1.0)
+    for v in deep.verts:
+        v.co = Vector((0.5 + v.co.x * 0.95, -1.01 + v.co.y * 0.03, v.co.z * 0.95))
+    lumpy(deep, rng, 0.004, 14.0)
+    # the skin torn round the edge of the hole (hanging, ragged) and the fat
+    # under it
+    rim = skirt(rng, -0.995, -1, 0.002, 0.1, 0.8, 0.02, count=40, spikes=6, hx=0.5, hz=0.5, cx=0.5)
+    rim_fat = skirt(rng, -0.97, -1, 0.022, 0.06, 0.18, 0.035, count=40, spikes=4, hx=0.5, hz=0.5, cx=0.5)
+    drops = bm_join_all([
+        drip(rng, Vector((rng.uniform(0.15, 0.85), -1.05, rng.uniform(-0.35, 0.35))),
+             rng.uniform(0.08, 0.25), rng.uniform(0.014, 0.022))
+        for _ in range(5)
+    ])
+    hip = {
+        "Muscle": bm_join_all(stubs),
+        "MuscleDark": bm_join_all(stubs_dark),
+        "FleshDark": deep,
+        "Fat": rim_fat,
+        "Bone": pelvis,
+        "Skin": rim,
+        "Blood": drops,
+    }
+    return leg_end, hip
+
+
+def heavy_gore(rng_seed, piece):
+    """Adds the heavy hits' pieces (see the module's doc), in this order."""
+    leg_end, hip = torn_leg(random.Random(rng_seed))
+    piece("LegEnd", leg_end, "dismember")
+    piece("Hip", hip, "dismember")
+    # the left arm and leg: the right ones mirrored (the same random numbers)
+    # the arms (the Bouncer's ArmEnd / Shoulder are the finisher's own):
+    # the skin torn ragged round the wound, no flaps
+    arm_end, shoulder = torn_arm(random.Random(7171), ragged=True)
+    piece("ArmEndL", mirrored(arm_end), "dismember")
+    piece("ShoulderL", mirrored(shoulder), "dismember")
+    leg_end, hip = torn_leg(random.Random(rng_seed))
+    piece("LegEndL", mirrored(leg_end), "dismember")
+    piece("HipL", mirrored(hip), "dismember")
+    piece("ArmEndR", arm_end, "dismember")
+    piece("ShoulderR", shoulder, "dismember")
+    for layers in (leg_end, hip):
+        for bm in layers.values():
+            bm.free()

@@ -54,6 +54,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
 local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
+local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -72,6 +73,7 @@ local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
 local Clones = require(script.Clones)
 local Gadgets = require(script.Gadgets)
+local HeavyGore = require(script.HeavyGore)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
 local State = require(script.State)
@@ -631,11 +633,14 @@ local function addShards(victim: CombatState, attacker: CombatState, zone: strin
 	end
 end
 
--- A kill (or nothing at all, see onKill): every injury is healed.
+-- A kill (or nothing at all, see onKill): every injury is healed. Not the
+-- heavy hits' gore (HeavyGore: a torn limb, an open fracture stay until
+-- death), nor the limp of a broken shin.
 local function healInjuries(state: CombatState)
+	local limping = HeavyGoreUtil.hasLegFracture(state.model)
 	state.legDamage = 0
-	state.limping = false
-	setAttribute(state.model, "Limping", false)
+	state.limping = limping
+	setAttribute(state.model, "Limping", limping)
 	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
 		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
@@ -730,6 +735,27 @@ local function awayFromAttacker(attacker: CombatState, victim: CombatState): Vec
 	local away = victim.root.Position - attacker.root.Position
 	local flat = Vector3.new(away.X, 0, away.Z)
 	return if flat.Magnitude > 1e-3 then flat.Unit else attacker.root.CFrame.LookVector
+end
+
+-- (Thrown things, the "Weapon" attribute: see throwWeapon below.)
+local function giveWeapon(state: CombatState, id: string)
+	state.weapon = id
+	setAttribute(state.model, "Weapon", id)
+end
+
+local function dropWeapon(state: CombatState, breakIt: boolean)
+	local id = state.weapon
+	if id == nil then
+		return
+	end
+	state.weapon = nil
+	-- (the break first: the clients still have it in the hand to take it from)
+	if breakIt then
+		local hand = state.model:FindFirstChild("Right Arm")
+		local at = if hand and hand:IsA("BasePart") then hand.Position else state.root.Position
+		Remotes.WeaponBroke:FireAllClients(id, nil, at, Vector3.new(0, -4, 0))
+	end
+	setAttribute(state.model, "Weapon", nil)
 end
 
 -- Decides what a hit does to `victim`. The heart of the combat rules.
@@ -922,7 +948,32 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		end
 	end
 
-	if Knockout.isKnockedOut(victim.model) then
+	-- The heavy blow that ends a big combo may break a bone open or tear an
+	-- arm off (HeavyGore: rare; never heat vision, nor a grab's catch). A
+	-- clone's hits count in its owner's combo.
+	local knockedOut = Knockout.isKnockedOut(victim.model)
+	if not spec.burns and not spec.grab then
+		local outcome = HeavyGore.landed(victim.model, credit.model, {
+			damage = damage,
+			heavy = damage >= Config.HeavyGore.HEAVY_DAMAGE
+				or spec.kind == "Finisher" -- (the 4th M1)
+				or spec.knockdown ~= nil,
+			zone = zone :: Types.HitZone,
+			side = side,
+			from = from,
+			knockedOut = knockedOut,
+		})
+		if outcome.brokeLeg then
+			-- (a broken shin: he limps, now or when he gets up)
+			victim.limping = true
+			setAttribute(victim.model, "Limping", true)
+		elseif outcome.torn == "RightArm" then
+			-- (no hand left to hold it: it breaks where the arm was)
+			dropWeapon(victim, true)
+		end
+	end
+
+	if knockedOut then
 		-- That hit knocked them out: no stun or knockback on a limp body.
 		event(spec.kind, true, true)
 		return true
@@ -1275,26 +1326,6 @@ local KILL_POSE: { [string]: CFrame } = {
 -- their feet.
 local throwSeq = 0
 
-local function giveWeapon(state: CombatState, id: string)
-	state.weapon = id
-	setAttribute(state.model, "Weapon", id)
-end
-
-local function dropWeapon(state: CombatState, breakIt: boolean)
-	local id = state.weapon
-	if id == nil then
-		return
-	end
-	state.weapon = nil
-	-- (the break first: the clients still have it in the hand to take it from)
-	if breakIt then
-		local hand = state.model:FindFirstChild("Right Arm")
-		local at = if hand and hand:IsA("BasePart") then hand.Position else state.root.Position
-		Remotes.WeaponBroke:FireAllClients(id, nil, at, Vector3.new(0, -4, 0))
-	end
-	setAttribute(state.model, "Weapon", nil)
-end
-
 -- A torn arm lying on the floor: anyone close can pull the bone out of it
 -- (a ProximityPrompt; the server checks everything again).
 local function offerBone(victim: Model, arm: BasePart)
@@ -1317,6 +1348,7 @@ local function offerBone(victim: Model, arm: BasePart)
 			or isBusy(state)
 			or isStunned(state)
 			or state.weapon ~= nil
+			or state.model:FindFirstChild("Right Arm") == nil -- (torn off: no hand to hold it)
 			or state.model:GetAttribute("DuelId") ~= nil -- (no weapons in a duel)
 			or victim:GetAttribute("BoneTaken") == true
 			or arm.Parent == nil
@@ -1529,6 +1561,13 @@ end
 local CHARGE_TURNS = { 0, 45, -45, 90, -90, 135, -135, 180 } -- degrees
 local LANE_END = -24 -- anchor Z where the top half may land, at most
 
+-- What the finishers' placement looks past: the two fighters, the torn
+-- limbs lying around (HeavyGore: not walls).
+local function placementIgnore(attacker: Model, victim: Model): { Instance }
+	local limbs = workspace:FindFirstChild(HeavyGoreUtil.FOLDER)
+	return if limbs then { attacker, victim, limbs } else { attacker, victim }
+end
+
 local function chargePlacement(attacker: Model, victim: Model, root: BasePart): (CFrame?, number)
 	local RUN = Finishers.CHARGE
 	local victimRoot = victim:FindFirstChild("HumanoidRootPart")
@@ -1539,13 +1578,14 @@ local function chargePlacement(attacker: Model, victim: Model, root: BasePart): 
 	toward = if toward.Magnitude > 0.1
 		then toward.Unit
 		else Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+	local ignore = placementIgnore(attacker, victim)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { attacker, victim }
+	params.FilterDescendantsInstances = ignore
 	params.RespectCanCollide = true
 	local overlap = OverlapParams.new()
 	overlap.FilterType = Enum.RaycastFilterType.Exclude
-	overlap.FilterDescendantsInstances = { attacker, victim }
+	overlap.FilterDescendantsInstances = ignore
 	overlap.RespectCanCollide = true
 	-- (someone standing in the way doesn't count: only the map)
 	local function onBody(part: BasePart): boolean
@@ -1725,13 +1765,14 @@ local function startCinematic(
 			table.insert(candidates, past:Cross(Vector3.new(0, 1, 0)))
 			table.insert(candidates, -past:Cross(Vector3.new(0, 1, 0)))
 		end
+		local ignore = placementIgnore(state.model, target)
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = { state.model, target }
+		params.FilterDescendantsInstances = ignore
 		params.RespectCanCollide = true
 		local overlap = OverlapParams.new()
 		overlap.FilterType = Enum.RaycastFilterType.Exclude
-		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.FilterDescendantsInstances = ignore
 		overlap.RespectCanCollide = true
 		-- Where he'd stand (his feet on the floor there, if there is one).
 		local function standingAt(direction: Vector3): Vector3
@@ -1818,13 +1859,14 @@ local function startCinematic(
 		local body = if torso and torso:IsA("BasePart") then torso.Position else victimRoot.Position
 		local toward = Vector3.new(body.X - root.Position.X, 0, body.Z - root.Position.Z)
 		toward = if toward.Magnitude > 0.1 then toward.Unit else root.CFrame.LookVector
+		local ignore = placementIgnore(state.model, target)
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = { state.model, target }
+		params.FilterDescendantsInstances = ignore
 		params.RespectCanCollide = true
 		local overlap = OverlapParams.new()
 		overlap.FilterType = Enum.RaycastFilterType.Exclude
-		overlap.FilterDescendantsInstances = { state.model, target }
+		overlap.FilterDescendantsInstances = ignore
 		overlap.RespectCanCollide = true
 		-- The floor's height under `at` (y of a root standing there), or nil.
 		local function floorUnder(at: Vector3): number?
@@ -2109,6 +2151,27 @@ function Combat.isInCinematic(model: Model): boolean
 	return state ~= nil and now() < state.cinematicUntil
 end
 
+-- Can this cinematic be played on these two? Every one needs both his
+-- hands (the bat, the punches and the liver, the grip on the arm, the hand
+-- on the throat), the Bouncer's the victim's right arm too: one of them torn
+-- off (HeavyGore: in a fight), the plain finisher instead.
+local function cinematicFits(
+	attacker: Model,
+	victim: Model,
+	cinematic: Finishers.Cinematic
+): boolean
+	if
+		attacker:FindFirstChild("Right Arm") == nil
+		or attacker:FindFirstChild("Left Arm") == nil
+	then
+		return false
+	end
+	if cinematic.id == "ArmRip" then
+		return victim:FindFirstChild("Right Arm") ~= nil and victim:GetAttribute("ArmTorn") == nil
+	end
+	return true
+end
+
 -- Finisher on a KO'd fighter: kneel and strike; the victim dies at impact
 -- unless the attacker is stunned (or dies) before. Kits can have their own,
 -- some of them cinematic (Shared/Finishers).
@@ -2124,6 +2187,10 @@ local function startFinisher(state: CombatState, target: Model): boolean
 	-- ledge), the plain finisher instead; nobody is moved.
 	local charge: CFrame? = nil
 	local short = 0
+	if cinematic and not cinematicFits(state.model, target, cinematic) then
+		finisher = Kits.finisher(nil)
+		cinematic = nil
+	end
 	if cinematic and cinematic.placement == "charge" then
 		charge, short = chargePlacement(state.model, target, state.root)
 		if charge == nil then
@@ -2609,6 +2676,7 @@ local function throwWeapon(state: CombatState, direction: Vector3)
 	local weapon = Weapons.get(state.weapon)
 	if
 		weapon == nil
+		or state.model:FindFirstChild("Right Arm") == nil -- (torn off: nothing to throw with)
 		or not isAlive(state)
 		or isStunned(state)
 		or isBusy(state)

@@ -343,6 +343,52 @@ return table.freeze({
 		HURT_SOUND_HEALTH = 70,
 	}),
 
+	-- Gore of the very strong hits (Shared/Util/HeavyGore): RARE, and only
+	-- in a fight - never from a finisher. Someone lands a BIG COMBO on a
+	-- fighter (the server counts it per victim: the same attacker's hits
+	-- that land, each less than COMBO_GAP after the last); once it is big
+	-- enough, its next HEAVY blow (HEAVY_DAMAGE or more, the 4th M1, or a
+	-- blow that knocks down / launches) rolls ONCE: it may snap a bone open
+	-- (an open fracture of the forearm / the shin on the side it hit) or,
+	-- rarer, tear an arm off. Hit or miss, the combo then starts over. The
+	-- fighter stays alive and keeps fighting (a broken shin: he limps). On
+	-- the blow that knocks him out the chances are higher.
+	-- Decided by the server, drawn on every client. Off with
+	-- Injuries.SKIN_TEAR too.
+	HeavyGore = table.freeze({
+		ENABLED = true,
+		-- A big combo: this many hits in a row by the same attacker...
+		COMBO_HITS = 6,
+		-- ...or this much damage in a row from him (whichever comes first).
+		COMBO_DAMAGE = 40,
+		-- Seconds between two of his hits for the combo to go on.
+		COMBO_GAP = 1.6,
+		-- A blow counts as heavy at this damage or more (or the 4th M1, or
+		-- a blow that knocks down / launches).
+		HEAVY_DAMAGE = 9,
+		-- The heavy blow that ends a big combo (one roll): the chance of an
+		-- open fracture, of a torn arm (a leg only rolls for a fracture)...
+		FRACTURE_CHANCE = 0.2,
+		TEAR_CHANCE = 0.05,
+		-- ...and when that blow knocks him out.
+		KO_FRACTURE_CHANCE = 0.3,
+		KO_TEAR_CHANCE = 0.1,
+		-- Legs torn off too (an R6 body without a leg can't stand: off, only
+		-- arms come off).
+		TEAR_LEGS = false,
+		-- After one of these on someone, nothing more for this long (seconds).
+		COOLDOWN = 8,
+		-- Also in duels.
+		IN_DUELS = false,
+		-- At most per body (the Bouncer's torn arm counts).
+		MAX_TORN_LIMBS = 2,
+		MAX_FRACTURES = 2,
+		-- A torn limb flies off (studs/s), then lies there this long.
+		LIMB_FLING_SPEED = 24,
+		LIMB_FLING_UP = 16,
+		TORN_LIMB_TIME = 12,
+	}),
+
 	-- Blood (client-side visuals only: nothing here changes a fight). Used by
 	-- the client's Combat/Blood*.luau modules and the gore modules.
 	-- Realistic gore: on Roblox, fill in the experience's maturity

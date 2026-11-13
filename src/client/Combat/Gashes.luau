@@ -16,7 +16,10 @@
 --      muscle (body) or the skull at the bottom (head).
 -- The Sentinel's finisher ("Bore") is a deep hole burnt over the heart: its
 -- insert is a closed cup (the ribs cut, the lung's edge, the heart burnt
--- through), so the inside of the torso shell is opened around it.
+-- through), so the inside of the torso shell is opened around it. An open
+-- fracture (Shared/Util/HeavyGore "Fracture_<Limb>": the heavy hits) is
+-- drawn the same way on the forearm / the shin: a deep torn hole in the
+-- limb's front ("Break" inserts), the real broken bone out of it.
 -- Everything here is visual and local: every client builds the same thing.
 --
 -- The wound models are imported in Studio once (docs/WOUNDS_FR.md):
@@ -25,11 +28,13 @@
 --
 --   Gashes.watch(model)   follow the cuts of this fighter
 --   Gashes.hasBore()      the kit has the Sentinel's bore inserts
+--   Gashes.hasBreak(name) the kit has this open fracture's insert
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
+local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local WoundShapes = require(ReplicatedStorage.Shared.WoundShapes)
 local ArmRip = require(script.Parent.ArmRip)
 local Bisect = require(script.Parent.Bisect)
@@ -169,6 +174,65 @@ local BORE_LOOKS: { [string]: Look } = {
 -- Behind the bore's cup (never seen: the cup is closed; only if a crack
 -- showed between its rim and the skin's cells).
 local BORE_BACKING = Color3.fromRGB(30, 8, 6)
+
+-- An open fracture ("Break": BreakArm / BreakLeg, L for the left limbs): a
+-- hole torn in the forearm / the shin from inside, the broken bone out of
+-- it. The torn skin, its pale cut edge, the yellow fat under it, the real
+-- muscles torn (two reds, one muscle from the next), the soaked tissue,
+-- clots; the bone's hard cortex white, its marrow dark red; torn vessels
+-- (arteries red, veins dark) and nerves (pale yellow); blood.
+local BREAK_LOOKS: { [string]: Look } = {
+	Lip = LOOKS.Lip,
+	Dermis = LOOKS.Dermis,
+	Fat = LOOKS.Fat,
+	Flesh = {
+		color = Color3.fromRGB(126, 22, 20),
+		reflectance = 0.16,
+		material = Enum.Material.SmoothPlastic,
+	},
+	FleshDark = {
+		color = Color3.fromRGB(52, 6, 7),
+		reflectance = 0.2,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Muscle = {
+		color = Color3.fromRGB(142, 26, 28),
+		reflectance = 0.16,
+		material = Enum.Material.SmoothPlastic,
+	},
+	MuscleDark = {
+		color = Color3.fromRGB(104, 16, 20),
+		reflectance = 0.16,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Bone = {
+		color = Color3.fromRGB(228, 218, 196),
+		reflectance = 0.05,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Marrow = {
+		color = Color3.fromRGB(96, 14, 16),
+		reflectance = 0.1,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Blood = LOOKS.Blood,
+	Artery = {
+		color = Color3.fromRGB(150, 30, 36),
+		reflectance = 0.18,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Vein = {
+		color = Color3.fromRGB(70, 26, 46),
+		reflectance = 0.18,
+		material = Enum.Material.SmoothPlastic,
+	},
+	Nerve = {
+		color = Color3.fromRGB(232, 218, 170),
+		reflectance = 0.08,
+		material = Enum.Material.SmoothPlastic,
+	},
+}
+local BREAK_BACKING = Color3.fromRGB(40, 5, 6)
 
 local BACKING_COLOR = Color3.fromRGB(46, 4, 4) -- deep inside a cut
 local BACKING_DEPTH = 0.14 -- under the skin, below the deepest insert (0.115)
@@ -376,6 +440,9 @@ local function findKit(): Kit?
 			if shape.kind == "Bore" then
 				continue -- (an older kit: no bore, see Gashes.hasBore)
 			end
+			if shape.kind == "Break" then
+				continue -- (an older kit: no open fractures' inserts, see Gashes.hasBreak)
+			end
 			if shape.kind ~= "Tear" then
 				return nil
 			end
@@ -558,6 +625,29 @@ local function placeOnBox(part: BasePart, data: Gash.Data, found: Kit): Placed?
 		frame = frame,
 		face = face.name,
 		center = Vector2.new(x + faceW / 2, faceH / 2 - y),
+	}
+end
+
+-- An open fracture of this limb (HeavyGore): its insert on the limb's
+-- front face, exactly where it was made for (the limb's breakAt).
+local function placeBreak(part: BasePart, limb: HeavyGoreUtil.Limb, seed: number): Placed?
+	local shape = WoundShapes.shapes[limb.fracture]
+	if shape == nil then
+		return nil
+	end
+	local half = part.Size / 2
+	local z = Vector3.new(0, 0, -1) -- (the front face)
+	local yAxis = Vector3.new(0, 1, 0)
+	local at = limb.breakAt
+	local origin = Vector3.new(at.X, at.Y, -half.Z)
+	return {
+		data = { kind = "Break", size = "L", point = origin, angle = 0, seed = seed },
+		shapeName = limb.fracture,
+		shape = shape,
+		frame = CFrame.fromMatrix(origin, yAxis:Cross(z), yAxis, z),
+		face = "Front",
+		-- (from the face's top-left: your right, looking at it, is its -X)
+		center = Vector2.new(half.X - at.X, half.Y - at.Y),
 	}
 end
 
@@ -1281,12 +1371,14 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 	local origin = Vector3.new(cut.shape.index * WoundShapes.spacing, WoundShapes.markerDrop, 0)
 	-- (a bore drawn with a burn's insert, in an older kit: burnt too)
 	local bored = cut.shape.kind == "Bore"
+	local broken = cut.shape.kind == "Break"
 	local burnt = cut.data.kind == "Burn" or cut.data.kind == "Bore"
 	local onHead = cut.face == nil
 	for _, item in pieces do
 		local layer = string.match(item.Name, "_(%a+)$") or ""
 		local look = if bored
 			then BORE_LOOKS[layer]
+			elseif broken then BREAK_LOOKS[layer]
 			elseif burnt then BURN_LOOKS[layer]
 			else LOOKS[layer]
 		if look == nil then
@@ -1318,16 +1410,16 @@ local function buildInsert(part: BasePart, cut: Placed, found: Kit, parent: Inst
 		reachX, reachY = math.max(reachX, math.abs(point.X)), math.max(reachY, math.abs(point.Y))
 	end
 	local width = 2 * reachX + 0.06
-	if bored then
-		-- (the bore's cup is closed and goes far deeper than the usual
-		-- plate, which would cut through it: the plate goes behind its
-		-- bottom, in case a crack shows past its rim)
+	if bored or broken then
+		-- (the bore's cup, an open fracture's, is closed and goes far
+		-- deeper than the usual plate, which would cut through it: the
+		-- plate goes behind its bottom, in case a crack shows past its rim)
 		local depth = (cut.shape.depth or BACKING_DEPTH) + 0.04
 		local thickness = math.abs(cut.frame.ZVector:Dot(part.Size))
 		local backing = Instance.new("Part")
 		backing.Name = "Backing"
 		backing.Size = Vector3.new(width, 2 * reachY + 0.06, 0.02)
-		backing.Color = BORE_BACKING
+		backing.Color = if broken then BREAK_BACKING else BORE_BACKING
 		backing.Material = Enum.Material.SmoothPlastic
 		backing.CFrame = part.CFrame
 			* cut.frame
@@ -1447,6 +1539,20 @@ local function refresh(model: Model, partName: string)
 				then
 					table.insert(cuts, placed)
 				end
+			end
+		end
+	end
+	-- An open fracture of this limb (HeavyGore): its deep insert.
+	local limb = HeavyGoreUtil.LIMBS[key]
+	local fractured = if limb then model:GetAttribute(HeavyGoreUtil.fractureAttribute(key)) else nil
+	if found and limb and typeof(fractured) == "number" then
+		local placed = placeBreak(part, limb, fractured)
+		if placed and found.pieces[placed.shapeName] and found.framesComplete then
+			table.insert(cuts, placed)
+			-- (the simpler one HeavyGore drew while the kit wasn't there)
+			local simple = part:FindFirstChild("HeavyGore_" .. limb.fracture)
+			if simple then
+				simple:Destroy()
 			end
 		end
 	end
@@ -1593,6 +1699,13 @@ function Gashes.hasBore(): boolean
 	return findKit() ~= nil and boreInKit
 end
 
+-- Does the wound kit (once found, whole) have this open fracture's insert
+-- (BreakArm...)? An older kit has not: HeavyGore draws a simpler one then.
+function Gashes.hasBreak(name: string): boolean
+	local found = findKit()
+	return found ~= nil and found.pieces[name] ~= nil and found.framesComplete
+end
+
 function Gashes.watch(model: Model)
 	watched[model] = true
 	waitForKit()
@@ -1601,6 +1714,17 @@ function Gashes.watch(model: Model)
 		local partName = if key then Gash.PART_OF[key] else nil
 		if partName then
 			refresh(model, partName)
+		elseif
+			string.sub(name, 1, #HeavyGoreUtil.FRACTURE_PREFIX) == HeavyGoreUtil.FRACTURE_PREFIX
+		then
+			-- an open fracture (HeavyGore): its insert in that limb
+			local kind, limbKey = HeavyGoreUtil.parse(name)
+			local limb = if kind == "Fracture" and limbKey
+				then HeavyGoreUtil.LIMBS[limbKey]
+				else nil
+			if limb then
+				refresh(model, limb.part)
+			end
 		elseif name == HeadBlast.ATTRIBUTE then
 			refresh(model, "Head")
 			local fresh = not HeadBlast.isApplied(model)
@@ -1630,6 +1754,20 @@ function Gashes.watch(model: Model)
 		end
 	end
 	model.Destroying:Once(forget)
+	-- A limb torn off (HeavyGore) leaves the body with its cuts drawn on it:
+	-- they go with it (destroyed with it); only forgotten here.
+	model.ChildRemoved:Connect(function(child: Instance)
+		local state = if child:IsA("BasePart") then opened[child] else nil
+		if state and child:IsA("BasePart") then
+			opened[child] = nil
+			for _, link in state.tint do
+				link:Disconnect()
+			end
+			if state.connection then
+				state.connection:Disconnect()
+			end
+		end
+	end)
 	model.AncestryChanged:Connect(function()
 		if not model:IsDescendantOf(game) then
 			forget()
