@@ -59,6 +59,7 @@ type Soft = {
 	lastSplat: number,
 	stopAt: number,
 	still: number,
+	squeezed: boolean, -- (squashed by a hand: its own direction kept till it settles)
 	lastAlong: number,
 	lastNormal: Vector3,
 }
@@ -138,6 +139,7 @@ function Squish.soft(part: BasePart, options: Options?)
 		lastSplat = 0,
 		stopAt = os.clock() + (o.lifetime or 12),
 		still = 0,
+		squeezed = false,
 		lastAlong = 1,
 		lastNormal = Vector3.yAxis,
 	})
@@ -155,6 +157,9 @@ function Squish.squeeze(part: BasePart, along: Vector3, amount: number)
 			soft.normal = along.Unit
 			soft.offset = -math.clamp(amount, 0, 0.6)
 			soft.speed = 0
+			-- (held in a still fist: no settling along gravity mid-squeeze)
+			soft.still = 0
+			soft.squeezed = true
 			return
 		end
 	end
@@ -225,6 +230,7 @@ local function update(dt: number)
 		if kick > 5 + 0.5 * gdt and not root.Anchored then
 			local normal = change.Unit
 			soft.normal = normal
+			soft.squeezed = false
 			local amount = math.clamp(kick / 45, 0.08, 1) * soft.softness
 			soft.offset = -amount
 			soft.speed = 0
@@ -275,11 +281,17 @@ local function update(dt: number)
 		if soft.offset ~= soft.offset or soft.speed ~= soft.speed then
 			soft.offset, soft.speed = 0, 0 -- (NaN: reset)
 		end
+		-- a squeeze keeps its direction until its wobble has died out
+		if soft.squeezed and math.abs(soft.offset) < 0.02 and math.abs(soft.speed) < 0.3 then
+			soft.squeezed = false
+		end
 		-- resting: it sags along gravity, its spin dies
 		if speed < 1.2 then
 			soft.still += dt
 			if soft.still > 0.15 then
-				soft.normal = soft.normal:Lerp(Vector3.yAxis, math.min(1, dt * 3)).Unit
+				if not soft.squeezed then
+					soft.normal = soft.normal:Lerp(Vector3.yAxis, math.min(1, dt * 3)).Unit
+				end
 				root.AssemblyAngularVelocity *= math.max(0, 1 - dt * 6)
 			end
 		else

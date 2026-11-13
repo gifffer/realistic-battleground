@@ -93,8 +93,10 @@ local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 		Land = { at = 0, strength = 4, punch = 6 },
 		Huff = { at = 0, strength = 0.6, punch = 0.5 },
 	},
-	-- (the Boxer's: every blow freezes the camera a beat - the clips hold the
-	-- same beat; the coil before the last one pulls the view out)
+	-- (the Boxer's: every blow freezes the camera a beat - both clips hold the
+	-- same beat; the coil before the last one pulls the view out. The wrench
+	-- and the rip don't freeze: the hand keeps turning, and the victim goes
+	-- limp on the rip - the server ragdolls it there)
 	KnockoutCombo = {
 		Grab = { at = 0, strength = 0.8, punch = 1 },
 		Body = { at = 0, strength = 1.8, punch = 3, stop = 0.05 },
@@ -102,8 +104,8 @@ local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 		Wind = { at = 0, strength = 0.3, punch = -4 },
 		Gut = { at = 0, strength = 5.5, punch = 12, stop = 0.06, flash = 1 },
 		Dig = { at = 0, strength = 1.4, punch = 1.5 },
-		Wrench = { at = 0, strength = 2.2, punch = 3, stop = 0.04, flash = 0.3 },
-		Rip = { at = 0, strength = 3.5, punch = 6, stop = 0.06, flash = 0.6 },
+		Wrench = { at = 0, strength = 2.2, punch = 3, flash = 0.3 },
+		Rip = { at = 0, strength = 3.5, punch = 6, flash = 0.6 },
 		Squeeze = { at = 0, strength = 0.5, punch = 1.5 },
 	},
 }
@@ -218,6 +220,7 @@ local function playCamera(
 	local lastLook: Vector3? = nil
 	local lastIndex = 0
 	local wobble = CFrame.identity
+	local wasHolding = false
 	-- The screen's flinch on the hardest blows (only if this one has any).
 	local grade: ColorCorrectionEffect? = nil
 	for _, shake in shakes do
@@ -257,8 +260,9 @@ local function playCamera(
 				lastLook = nil -- (a cut: the new shot frames its target at once)
 			end
 			local ends = if shots[index + 1] then shots[index + 1].time else cinematic.duration
-			-- Hit-stops: the shot's motion holds still while one runs.
-			local frozen, holding = 0, false
+			-- Hit-stops: the shot's motion holds still while one runs (and
+			-- still ends where it should: the held time is taken off its length).
+			local frozen, held, holding = 0, 0, false
 			for _, shake in shakes do
 				local length = shake.stop
 				if length then
@@ -267,12 +271,16 @@ local function playCamera(
 					if to > from then
 						frozen += to - from
 					end
+					local upTo = math.min(shake.at + length, ends)
+					if upTo > from then
+						held += upTo - from
+					end
 					if t >= shake.at and t < shake.at + length then
 						holding = true
 					end
 				end
 			end
-			local alpha = smooth((t - shot.time - frozen) / math.max(ends - shot.time, 1e-3))
+			local alpha = smooth((t - shot.time - frozen) / math.max(ends - shot.time - held, 1e-3))
 			local position = anchor * shot.from:Lerp(shot.to, alpha)
 			local look: Vector3
 			if
@@ -302,10 +310,12 @@ local function playCamera(
 						target = head.Position
 					end
 				end
-				-- follow it smoothly (it tumbles)
-				lastLook = if lastLook
-					then lastLook:Lerp(target, 1 - math.exp(-10 * dt))
-					else target
+				-- follow it smoothly (it tumbles); held on a hit-stop
+				if lastLook == nil then
+					lastLook = target
+				elseif not holding then
+					lastLook = (lastLook :: Vector3):Lerp(target, 1 - math.exp(-10 * dt))
+				end
 				look = lastLook :: Vector3
 			else
 				look = anchor * (shot.look :: Vector3)
@@ -324,14 +334,15 @@ local function playCamera(
 					flash += (shake.flash or 0) * fade
 				end
 			end
-			if not holding then
-				-- (frozen on the blow: the same jolt held)
+			if not holding or not wasHolding then
+				-- (frozen on the blow: its full jolt, taken once and held)
 				wobble = CFrame.Angles(
 					math.rad(random:NextNumber(-kick, kick)),
 					math.rad(random:NextNumber(-kick, kick)),
 					math.rad(random:NextNumber(-kick, kick) * 0.5)
 				)
 			end
+			wasHolding = holding
 			camera.CFrame = CFrame.lookAt(position, look) * wobble
 			local fov = shot.fov + ((shot.fovTo or shot.fov) - shot.fov) * alpha
 			camera.FieldOfView = math.clamp(fov - punch, 20, 100)
@@ -368,6 +379,29 @@ local function playCamera(
 	end
 	task.delay(cinematic.duration, stop)
 	return stop
+end
+
+-- How the camera shakes on `kind` in this cinematic (its own, or the usual).
+local function shakeOf(cinematic: Finishers.Cinematic, kind: string): Shake?
+	local overrides = KIT_SHAKES[cinematic.id]
+	return (overrides and overrides[kind]) or SHAKES[kind]
+end
+
+-- The victim's head / body thrown by a blow (on top of the clip): once its
+-- hit-stop is over, when it has one (frozen with the rest till then).
+local function flinchAfterStop(
+	cinematic: Finishers.Cinematic,
+	kind: string,
+	victim: Model,
+	kick: Vector3
+)
+	local shake = shakeOf(cinematic, kind)
+	local stop = if shake then shake.stop else nil
+	if stop then
+		task.delay(stop, CharacterAnimationController.flinch, victim, kick)
+	else
+		CharacterAnimationController.flinch(victim, kick)
+	end
 end
 
 -- A punch landing on the victim's `partName`: the air and sweat knocked off
@@ -418,15 +452,14 @@ local function playEvent(
 			impact(attacker, victim, "Torso", 1)
 		end
 		if event.kick then
-			CharacterAnimationController.flinch(victim, event.kick)
+			flinchAfterStop(cinematic, kind, victim, event.kick)
 		end
 	elseif kind == "Face" then
 		SoundController.play("HeavyHit", victim)
 		KitEffects.bloodSpray(victim, attacker, "Head", 3)
 		impact(attacker, victim, "Head", 1.5)
 		if event.kick then
-			-- (the head thrown by the blow, on top of the clip)
-			CharacterAnimationController.flinch(victim, event.kick)
+			flinchAfterStop(cinematic, kind, victim, event.kick)
 		end
 	elseif kind == "Dig" or kind == "Wrench" then
 		LiverRip.dig(victim, attacker, kind == "Wrench")
@@ -447,9 +480,16 @@ local function playEvent(
 		LiverRip.drop(attacker)
 	elseif kind == "Grab" then
 		SoundController.play("Grab", victim)
-	elseif kind == "Strain" or kind == "Wind" then
-		-- (pulling with all he has; the Boxer coiled for the last blow)
+	elseif kind == "Strain" then
+		-- (pulling with all he has)
 		SoundController.play("Strain", attacker)
+	elseif kind == "Wind" then
+		-- (the Boxer coiled for the last blow: a low grunt of effort)
+		local grunt = SoundController.play("HurtGrunt", attacker)
+		if grunt then
+			grunt.Volume *= 0.6
+			grunt.PlaybackSpeed *= 0.82
+		end
 	elseif kind == "Pop" then
 		ArmRip.pop(victim)
 	elseif kind == "Tear" then
@@ -490,8 +530,7 @@ local function onStarted(
 	-- The camera's shakes, at the blows' times.
 	local shakes: { Shake } = {}
 	for _, event in cinematic.events do
-		local overrides = KIT_SHAKES[cinematic.id]
-		local shake = (overrides and overrides[event.kind]) or SHAKES[event.kind]
+		local shake = shakeOf(cinematic, event.kind)
 		if shake then
 			table.insert(shakes, {
 				at = event.time,
