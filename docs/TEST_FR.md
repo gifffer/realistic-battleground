@@ -352,6 +352,7 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
 | F8 | Pendant la cinématique | Impossible de dasher, bloquer ou attaquer ; on ne peut pas lancer un duel avec l'attaquant. |
 | F9 | Un joueur qui arrive après (ou qui était loin) | Il voit le corps sans tête, le cou ouvert, sans l'explosion. |
+| F10 | Achever un **2ᵉ joueur** (n'importe quel finisher), puis regarder son corps | Il réapparaît après 5 s, mais son **corps reste** là où il est tombé jusqu'à **10 s** après le coup final (`Config.Knockout.FINISHER_BODY_TIME`), puis disparaît. Les blessures restent dessinées (tête explosée, trou, bras arraché, tête calcinée, coupures, bleus) et les morceaux au sol (crâne, foie) restent aussi longtemps. Le corps est figé : on passe à travers, on ne peut ni le frapper ni le cibler, il n'a ni nom ni barre de vie, il ne bloque ni les coups ni les lasers. Un Bull mort garde ses cornes mais ne souffle plus. Dans l'Explorer : un modèle dans `Workspace > Corpses` (tag `Corpse`, pas `Combatant`). Les mannequins, eux, restent 25 s comme avant. |
 
 ### Bleus
 
@@ -366,6 +367,54 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 | B7 | Kill / réapparition | Les bleus disparaissent. Un Dummy tué reste au sol **25 s** avant de réapparaître (le sang et les morceaux restent ~30 s). |
 
 Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'ont pas encore leur propre son : ils empruntent les coups existants avec une autre hauteur. `BatSwing`, `VictimPlea` et `BatCrush` ont leurs IDs.
+
+## Kits Sentinel et Bull (`feature/kits-sentinel-bull`)
+
+Équipe le kit dans le menu Kits (gratuits), puis teste sur un mannequin.
+
+### Sentinel
+- [ ] **Look** : cape rouge en tissu simulé (elle pend, se balance, vole en arrière quand tu bouges, réagit au vent de la map et aux ondes de choc), fermoirs dorés + chaîne, emblème. Plus de points rouges sur la tête (les yeux ne s'allument que pendant le laser).
+- [ ] **Vitesse** : il marche un peu plus lentement que les autres et ne peut pas sprinter.
+- [ ] **1 — Heat Vision** : 1 s de charge (les yeux s'allument, énergie aspirée, petits éclairs, son de charge), puis deux lasers tout droit là où il regardait au départ (ils ne suivent PAS la souris). Immobile pendant la charge et le tir, pas de dash. Il ne fait mal qu'à la TÊTE : il faut viser la tête et y rester ~0,5 s avant les dégâts. Le corps bloque le laser : s'il touche d'abord un bras, une épaule, le torse ou une jambe, il s'arrête dessus (quelques étincelles qui ricochent), sans dégâts, sans brûlure ni lueur ; un joueur caché derrière un autre est protégé. Un tir qui passe juste à côté du visage continue tout droit. Un chapeau / des cheveux sur la tête comptent comme la tête. Pas de son quand ça touche : là où le laser touche la tête, la peau brûle et disparaît (vrai trou dans la peau, bord carbonisé, peau cuite autour) et on voit le crâne dessous. Pas de sang (cautérisé). Rester au même endroit agrandit la brûlure (3 tailles). Tout le monde voit la même chose et elle reste. Le laser s'arrête sur les murs (traînée en fusion puis carbonisée). Bloquer (garde) contre un laser sur la tête coûte de l'endurance comme avant ; si les bras levés sont devant le visage, ils arrêtent le laser.
+- [ ] **2 — Thunder Clap** : éclairs dans les mains, puis clap : flash, sphère d'énergie, anneaux en cône, lignes d'air, éclairs, poussière poussée devant.
+- [ ] **3 — Skyfall** : impact au DÉCOLLAGE (cratère, fissures lumineuses, dalles soulevées, cailloux) + son, traînée en vol, poing qui se charge en descente, gros impact à l'ATTERRISSAGE + son, écran qui tremble.
+- [ ] **4 — Haymaker** : le poing se charge (énergie aspirée, éclairs), impact : flash, anneaux, lignes d'air, étincelles + son.
+
+### Bull
+- [ ] **Look** : cornes courbées avec anneaux à la base, anneau doré dans le nez, vapeur qui sort du nez de temps en temps.
+- [ ] **Vitesse** : il marche plus vite que les autres.
+- [ ] **Course (Shift)** : course de taureau (penché, tête baissée cornes devant, grosses foulées), poussière + petites fissures à chaque pas, vapeur du nez.
+- [ ] **1 — Gore Charge** : son de charge (coupé à la fin de l'attaque, ~1,2 s), yeux rouges, il gratte le sol, puis charge : nuage de poussière, fissures à chaque pas, traînées sur les cornes. La cible saigne.
+- [ ] **2 — Horn Hook** : coup de cornes vers le haut : anneau d'air, colonne de poussière, la cible décolle.
+- [ ] **3 — Stampede** : il se cabre (cailloux qui flottent), puis frappe le sol : gros impact (dalles, fissures, poussière) + son ; ralentit les cibles autour. Imblocable.
+- [ ] **4 — Bull Toss** : son à l'attrapé ET au lancer, anneau d'air vers le haut au lancer.
+
+### Murs cassables
+- [ ] La **Gore Charge** traverse les murs : le mur se troue (seulement la partie touchée), débris de la couleur / matière du mur, poussière.
+- [ ] Les gros impacts cassent aussi les murs proches : Thunder Clap, Skyfall (atterrissage), Haymaker, Horn Hook, Stampede.
+- [ ] Le sol, les sols surélevés / toits, les murs des arènes de duel et les murs invisibles ne cassent jamais.
+- [ ] Les murs se reconstruisent ~25 s après le dernier coup (pas si quelqu'un est dedans).
+- [ ] Pour protéger une partie de la map : tag CollectionService `Unbreakable` ou attribut `Unbreakable = true` (sur la part ou un de ses parents).
+
+### Finishers (adversaire KO + M1)
+- [ ] **Sentinel — Incinerate** (**ré-importer `assets/wounds/WoundKit.fbx` avant**, il contient le trou « Bore » ; ~5,6 s) : il attrape l'adversaire par la gorge (bruit d'étouffement) et le soulève, les pieds ne touchent plus le sol et battent faiblement ; on entend son cœur battre. Gros plan sur ses yeux qui chargent (son de charge, éclairs), sa tête **se penche vers la poitrine**. Les deux lasers convergent **à bout portant dans le cœur** (côté **gauche** de la victime, en haut de la poitrine) : plan de profil avec les deux rayons, gros plan sur la poitrine, puis vue au-dessus de son épaule droite qui plonge dans le trou. Le trou **se creuse** pendant le tir (petit → moyen avec un craquement de côtes → grand : le cœur est traversé, le battement s'arrête). **Aucune goutte de sang** (cautérisé) ; la lumière du laser éclaire **l'intérieur** du trou, étincelles, grosse fumée qui sort du trou ; la victime convulse puis devient molle. Le rayon s'arrête : le bord du trou est **rouge-orange incandescent** et refroidit vers le **noir** en quelques secondes, fumée et braises qui montent. Dans le trou on voit les organes : peau carbonisée au bord, graisse cuite, muscle, **côtes coupées** (os blanc cassé, cartilage blanc-bleuté), bord du **poumon** (rose-gris), **cœur** traversé (rouge sombre, cavité presque noire) ; le trou ne traverse pas le dos. Il **jette le corps** sur le dos (bruit de chute, poussière), puis la caméra **descend lentement** sur le trou qui fume encore. Le t-shirt est troué autour du trou. Un joueur qui arrive après voit encore un peu de fumée sur le corps. La tête n'est plus brûlée.
+- [ ] **Sentinel — Incinerate, cas limites** : la victime avait déjà des coupures sur le torse (bouteille) : celle qui est sur le cœur disparaît, le trou la remplace ; finisher coupé avant la mort (l'attaquant quitte) : le trou disparaît, les coupures d'avant reviennent, plus de fumée / lueur. Avec un vieux `WoundKit` (pas ré-importé) : une grande brûlure à la place du trou, pas d'erreur.
+- [ ] **Bull — Gore** (**ré-importer `WoundKit` avant**, ~4,4 s) :
+  - **Placement** : l'adversaire KO est remis **debout, sonné**, à ~11 studs devant le Bull, face à lui. Contre un mur ou au bord d'un vide, le Bull se tourne vers un côté libre ; s'il n'y a de place nulle part, la course est plus courte (~7 studs). Jamais de course à travers un mur dans un endroit dégagé.
+  - **0 → 0,6 s** : plan bas derrière le Bull, puis plan près de la victime : il souffle (vapeur), baisse la tête, **gratte le sol du sabot** deux fois (poussière, petites fissures).
+  - **0,6 → 1,1 s** : il **charge** (~10 studs en une demi-seconde, rugissement, nuage de poussière derrière, fissures à chaque foulée, lignes de vitesse) ; la caméra le suit de côté, au ras du sol.
+  - **1,1 s** : les **cornes dans la cage thoracique** (craquement de côtes, gerbe de sang des deux côtés des cornes, éclats d'os, sang sur le Bull) ; la victime se plie par-dessus sa tête ; un **trou** déchiré dans la poitrine (à travers le t-shirt). Il l'emporte sur quelques studs.
+  - **1,45 s** : il **saute** (impact au décollage), la victime sur les cornes ; elle bascule en arrière au-dessus de sa tête.
+  - **1,85 s** (le coup final) : en l'air, il donne un coup de tête : le corps se **déchire en deux à la taille**. Le **haut** (torse, bras, tête) part en avant et vers le haut en tournant et retombe ~6-8 studs plus loin ; les **jambes** tombent en arrière. Gerbe de sang dans les deux sens, pluie de sang.
+  - **Les intestins** sortent du torse pendant que les deux moitiés s'éloignent : une chaîne de boucles roses qui **se déroule** le long du trajet du haut du corps, retombe et reste **au sol, en boucles, des jambes jusqu'au torse** ; un **tas d'intestins** tombe près des jambes (mou, il s'écrase). Si les moitiés partent trop loin, l'intestin se déchire côté torse.
+  - **Bouts arrachés** : sous le torse, les vrais muscles déchirés, la colonne (vertèbres + disque) qui dépasse, des nerfs qui pendent, l'intestin qui bombe, graisse jaune et peau retroussée ; au-dessus des jambes, le bassin (os iliaques, sacrum), l'autre moitié du disque, muscles, peau.
+  - **Sang** : l'aorte et la veine cave **giclent par saccades** sous le torse, les deux artères iliaques au-dessus des jambes ; bruit sourd et éclaboussure quand chaque moitié touche le sol ; **traînée** de sang au sol là où le haut du corps glisse ; une **flaque** s'étend sous chaque moitié.
+  - **2,25 s** : le Bull **atterrit** entre les deux moitiés (gros impact, fissures, poussière). Plan au ras du sol depuis les jambes : les intestins qui partent vers le haut du corps, le Bull au milieu ; il **souffle** au-dessus (vapeur), regarde les jambes derrière lui ; plan large d'en haut.
+  - Sans le nouveau `WoundKit` (ancien kit) : des formes simples (chair sombre, os, boucles roses en cylindres) au lieu des vraies pièces, rien ne casse.
+- [ ] **Bull — Gore, corps vu plus tard** : un joueur qui arrive après (ou le **corps figé** de `Workspace > Corpses` après la réapparition, F10) voit les deux moitiés là où elles sont tombées, les bouts arrachés, les intestins **posés au sol** d'une moitié à l'autre (immobiles), le tas d'intestins et les flaques ; pas de jets ni d'animation.
+- [ ] **Bull — Gore coupé avant 1,85 s** (le Bull meurt, un joueur part) : tout s'arrête, le Bull reste **là où on le voyait** (pas de téléportation au bout de la course), la victime retombe KO, entière (le trou dans la poitrine disparaît).
+- [ ] **Bull — Gore** sur un **mannequin** : même chose ; les deux moitiés disparaissent avec lui (25 s).
+- [ ] Coupés en cours (l'attaquant meurt...) : tout s'arrête proprement, la caméra revient.
 
 ## Kit Bouncer / Videur (`claude/bouncer-kit`)
 

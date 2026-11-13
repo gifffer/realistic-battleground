@@ -46,6 +46,8 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local KitLooks = require(script.Parent.Parent.Combat.KitLooks)
+local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -228,6 +230,18 @@ local function onCombatantAdded(instance: Instance)
 			playing = value
 		end)
 	end
+end
+
+-- A body left by a finisher (Server/Systems/Corpses): a frozen copy of a
+-- dead fighter, not a fighter. Only its wounds are drawn again (bruises,
+-- cuts, a burst head, a torn arm...), as for any body seen late.
+local corpses: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local function onCorpseAdded(instance: Instance)
+	if not instance:IsA("Model") or corpses[instance] then
+		return
+	end
+	corpses[instance] = true
+	Wounds.watch(instance)
 end
 
 local function onCombatantRemoved(instance: Instance)
@@ -669,7 +683,7 @@ local function onCombatEvent(
 		-- Blood and torn skin: decided by the server (same on every screen).
 		if bloodArg == true then
 			-- (more for the heavy blows and the kits' moves)
-			local amount = if strong then 2.6 elseif moveId then 1.7 else 1
+			local amount = if strong then 3.8 elseif moveId then 2.5 else 1.6
 			KitEffects.bloodSpray(victim, attacker, zone, amount)
 		end
 		if typeof(skinTearSeedArg) == "number" then
@@ -735,6 +749,10 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	-- Cinematic finishers: not predicted, played only when the server starts them.
 	Brawler_FinisherBat = true,
 	Boxer_FinisherCombo = true,
+	Sentinel_Finisher = true,
+	Sentinel_FinisherVictim = true, -- lifted by the throat
+	Bull_Finisher = true,
+	Bull_FinisherVictim = true, -- on his horns
 	Brawler_Awaken = true,
 	Boxer_Awaken = true,
 	Boxer_SlipCounter = true,
@@ -825,6 +843,8 @@ local function onKillEffect(effect: unknown, position: unknown)
 end
 
 function CombatEffectsController.start()
+	KitLooks.start() -- bull horns, sentinel cape
+	KitVFX.start() -- smashed walls, the Bull's strides
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
 	-- Something thrown (Shared/Weapons): flying, then broken where it hit.
 	Remotes.WeaponThrown.OnClientEvent:Connect(
@@ -868,6 +888,11 @@ function CombatEffectsController.start()
 	CollectionService:GetInstanceRemovedSignal(tag):Connect(onCombatantRemoved)
 	for _, instance in CollectionService:GetTagged(tag) do
 		onCombatantAdded(instance)
+	end
+	local corpseTag = Config.Combat.CORPSE_TAG
+	CollectionService:GetInstanceAddedSignal(corpseTag):Connect(onCorpseAdded)
+	for _, instance in CollectionService:GetTagged(corpseTag) do
+		onCorpseAdded(instance)
 	end
 
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)

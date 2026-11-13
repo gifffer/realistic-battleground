@@ -37,6 +37,30 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
   Splat<i> / Streak<i> / Pool<i>   blood on the floor (Blood): flat blots
              with droplets, stretched drops, a pool; 1 stud across, laid in
              X-Z (the game sizes and turns them)
+  Waist      the Bull's finisher (the body torn in two at the hips): the torn
+             bottom of the R6 torso, in torso space (2 x 2 x 1, its bottom
+             face at Y = -1), a cap over the whole bottom face: torn skin
+             hanging round the edge (Skin), the fat under it (Fat), the real
+             abdominal and back muscles torn each at its own height
+             (Muscle, MuscleDark), the real lumbar spine torn through a disc
+             (Bone, Cartilage) with nerves hanging from it (Tendon), loops of
+             the real small intestine (jejunum) bulging and hanging out
+             (Gut), the colon (GutDark), the raw inside (FleshDark), blood
+             (Blood). Z-Anatomy, torso.npz.
+  Hips       ...and what goes off with the legs: the top of the pelvis, in
+             torso space too, placed as if the legs were still on (their
+             tops at Y = -1, at X = +-0.5): the real hip bones, sacrum and
+             last lumbar vertebra (Bone, Cartilage), the bottom of the same
+             muscles torn short (Muscle, MuscleDark), the raw flesh on the
+             legs' tops (FleshDark), fat and torn skin pointing up (Fat,
+             Skin), intestine spilling over it (Gut, GutDark), blood (Blood)
+  Gut1..3    a short piece of small intestine (Gut, ~0.5 x 0.16 studs,
+             lumpy, a little bent) with its torn mesentery along it
+             (GutDark): its long axis along Y, centred - links of a chain
+             lying on the floor between the two halves
+  GutPile    a heap of loops of the real jejunum (Gut) with bits of its
+             mesentery (GutDark), ~0.9 x 0.4 x 0.7 studs, its bottom at
+             Y = 0 (it lies on the floor there), centred in X and Z
 
 Head space (studs): X right of the character, Y up, Z to the back, origin =
 the head's centre. Piece n sits in the kit with its head space moved to
@@ -55,6 +79,7 @@ from mathutils import Vector
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANATOMY = os.path.join(HERE, "anatomy", "head.npz")
 ARM_ANATOMY = os.path.join(HERE, "anatomy", "arm.npz")  # extract_arm.py
+TORSO_ANATOMY = os.path.join(HERE, "anatomy", "torso.npz")  # extract_anatomy.py --torso
 GORE_ORIGIN = Vector((0.0, 0.0, -14.0))  # kit space: away from the inserts / frames
 SLOT_STEP = 3.0
 CUT_Y = -0.27  # the head bursts above this; below stays (the jaw)
@@ -79,11 +104,17 @@ COLORS = {
     "MuscleDark": (0.42, 0.07, 0.08),
     "Fat": (0.85, 0.72, 0.42),
     "Tendon": (0.85, 0.80, 0.72),
+    "Gut": (0.86, 0.56, 0.55),  # the small intestine: pink, wet (glossy)
+    "GutDark": (0.58, 0.30, 0.30),  # its mesentery, the colon: darker
+    "Heart": (0.42, 0.05, 0.06),
+    "HeartDark": (0.20, 0.02, 0.03),
+    "Lung": (0.72, 0.52, 0.54),
+    "Cartilage": (0.80, 0.85, 0.88),
 }
 
 
-def load_anatomy():
-    data = np.load(ANATOMY)
+def load_anatomy(path=ANATOMY):
+    data = np.load(path)
     groups = {}
     for key in data.files:
         group, index, kind = key.split("__")
@@ -515,13 +546,393 @@ def bm_join_all(parts):
     return out
 
 
+def tris_of(bm):
+    return sum(len(f.verts) - 2 for f in bm.faces)
+
+
+def decimate(bm, tris):
+    """Fewer triangles (about `tris`), the shape kept."""
+    total = tris_of(bm)
+    if total <= tris:
+        return bm
+    mesh = bpy.data.meshes.new("tmp")
+    bm.to_mesh(mesh)
+    bm.free()
+    ob = bpy.data.objects.new("tmp", mesh)
+    bpy.context.scene.collection.objects.link(ob)
+    ob.modifiers.new("t", "TRIANGULATE")
+    mod = ob.modifiers.new("d", "DECIMATE")
+    mod.ratio = tris / total
+    evaluated = ob.evaluated_get(bpy.context.evaluated_depsgraph_get()).to_mesh()
+    out = bmesh.new()
+    out.from_mesh(evaluated)
+    bpy.data.objects.remove(ob)
+    bpy.data.meshes.remove(mesh)
+    out.normal_update()
+    return out
+
+
+def placed(v, scale=(1, 1, 1), shift=(0, 0, 0)):
+    """Torso.npz vertices scaled about the torso's centre, then moved."""
+    return v * np.array(scale, dtype=np.float32) + np.array(shift, dtype=np.float32)
+
+
+# The abdomen is narrower than the blocky R6 torso: widened across to fill it.
+WIDEN = (1.16, 1.0, 1.0)
+TEAR_Y = -1.0  # the torso's bottom face / the legs' tops: where the body tears
+HIDDEN_ABOVE = TEAR_Y + 0.03  # (Waist: above its raw floor, inside the torso: not kept)
+HIDDEN_BELOW = TEAR_Y - 0.04  # (Hips: under its raw floor, inside the legs)
+
+
+def perimeter(s, inset=0.0, hx=1.0, hz=0.5):
+    """The point at `s` (0..1, by length) round the edge of the torso's
+    bottom face (2 x 1, `inset` inside it), and the way out there (the
+    corners rounded)."""
+    hx, hz = hx - inset, hz - inset
+    total = 4 * hx + 4 * hz
+    d = (s % 1.0) * total
+    # front (-Z) left to right, right side, back right to left, left side
+    for length, start, step, normal in (
+        (2 * hx, Vector((-hx, 0, -hz)), Vector((1, 0, 0)), Vector((0, 0, -1))),
+        (2 * hz, Vector((hx, 0, -hz)), Vector((0, 0, 1)), Vector((1, 0, 0))),
+        (2 * hx, Vector((hx, 0, hz)), Vector((-1, 0, 0)), Vector((0, 0, 1))),
+        (2 * hz, Vector((-hx, 0, hz)), Vector((0, 0, -1)), Vector((-1, 0, 0))),
+    ):
+        if d <= length:
+            point = start + step * d
+            # (near a corner: the way out turns, half and half at the corner)
+            near = min(d, length - d)
+            if near < 0.08:
+                other = normal.cross(Vector((0, 1, 0))) * (1 if d < length / 2 else -1)
+                normal = normal.lerp(other, 0.5 * (1 - near / 0.08)).normalized()
+            return point, normal
+        d -= length
+    return Vector((-hx, 0, -hz)), Vector((0, 0, -1))
+
+
+def skirt(rng, y, up, inset, length, flare, thickness, count=56, spikes=9):
+    """A torn band round the edge of the torso's bottom face (the skin, the
+    fat under it): from y, going down (up = -1) or up (up = 1), its end
+    ragged - long torn tongues here and there - and curling out."""
+    phases = [rng.uniform(0, 6.3) for _ in range(4)]
+    tongues = [(rng.random(), rng.uniform(0.6, 1.6), rng.uniform(0.008, 0.02)) for _ in range(spikes)]
+    rows = 4
+    bm = bmesh.new()
+    grid = []
+    for k in range(count):
+        s = k / count
+        base, out = perimeter(s, inset)
+        a = 2 * math.pi * s
+        reach = length * (0.55 + 0.3 * math.sin(a * 5 + phases[0]) * math.sin(a * 3 + phases[1])
+                          + 0.25 * rng.random())
+        for at, extra, width in tongues:  # torn tongues
+            d = abs((s - at + 0.5) % 1.0 - 0.5)
+            reach += length * extra * max(0.0, 1 - d / width) ** 0.7
+        curl = flare * (0.6 + 0.4 * math.sin(a * 7 + phases[2]))
+        column = []
+        for r in range(rows + 1):
+            t = r / rows
+            along = Vector((0, up, 0)) * math.cos(curl * t) + out * math.sin(curl * t)
+            p = Vector((base.x, y, base.z)) + along * reach * t
+            p += out * 0.004 * math.sin(a * 23 + r + phases[3])  # (crumpled)
+            column.append(bm.verts.new(p))
+        grid.append(column)
+    for k in range(count):
+        q = (k + 1) % count
+        for r in range(rows):
+            bm.faces.new((grid[k][r], grid[q][r], grid[q][r + 1], grid[k][r + 1]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    for f in bm.faces:  # facing out of the body (solidify: inward)
+        f.normal_update()
+        mid = f.calc_center_median()
+        if f.normal.dot(Vector((mid.x, 0, mid.z * 2))) < 0:
+            f.normal_flip()
+    return solidify(bm, thickness)
+
+
+def raw_floor(rng, y, inset=0.03):
+    """The raw, dark inside closing the torn face (2 x 1 at height y), lumpy."""
+    bm = bmesh.new()
+    bmesh.ops.create_grid(bm, x_segments=20, y_segments=10, size=1.0)
+    half = max(max(abs(v.co.x), abs(v.co.y)) for v in bm.verts)
+    for v in bm.verts:  # (made in X-Y, a square): onto X-Z, 2 x 1
+        v.co = Vector((v.co.x / half * (1 - inset), y, v.co.y / half * (0.5 - inset)))
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    phases = [rng.uniform(0, 6.3) for _ in range(4)]
+    for v in bm.verts:
+        v.co.y += 0.02 * math.sin(v.co.x * 9 + phases[0]) * math.sin(v.co.z * 11 + phases[1]) + rng.uniform(-0.006, 0.006)
+    return bm
+
+
+def solid_floor(rng, y, facing):
+    """raw_floor made a thin slab (seen from both sides), its top facing
+    `facing` (+1 up, -1 down)."""
+    top = raw_floor(rng, y)
+    for f in top.faces:
+        f.normal_update()
+        if f.normal.y * facing < 0:
+            f.normal_flip()
+    return solidify(top, 0.03)
+
+
+def drip(rng, start, length, width):
+    """A drip of blood hanging from `start`: a thin tapering string and its drop."""
+    end = start + Vector((rng.uniform(-0.02, 0.02), -length, rng.uniform(-0.02, 0.02)))
+    string = rod(start, end, width, width * 0.45, 6)
+    drop = blob(rng, end, (width * 1.3, width * 1.8, width * 1.3), 8, 6)
+    return bm_join_all([string, drop])
+
+
+def torn_muscles(rng, groups, keep_above, top, bottom, spread, back_drop=0.0):
+    """Each muscle cut where the body tore, each at its own height (torn
+    fibres at the end), then kept between `bottom` and `top`. Returns
+    (light, dark) lists. `back_drop`: the back's muscles moved down by it
+    (as the spine: their thick part at the tear)."""
+    light, dark = [], []
+    index = 0
+    for name in ("abdominal", "back"):
+        for v, f in groups[name]:
+            v = placed(v, WIDEN)
+            if name == "back":  # (thicker: they fill the back of the cut)
+                middle = v.mean(0)
+                v = (v - middle) * np.array((1.35, 1, 1.35), dtype=np.float32) + middle
+                v[:, 1] += back_drop
+            bm = bm_of(v, f)
+            y = TEAR_Y + (-1 if keep_above else 1) * rng.uniform(*spread)
+            sign = -1 if keep_above else 1
+            cut(bm, [((0, y, 0), (0, sign, 0)), ((0, top, 0), (0, 1, 0)), ((0, bottom, 0), (0, -1, 0))], fill=True)
+            if len(bm.faces):
+                tear(bm, rng, y, 0.04)
+                (light if index % 2 == 0 else dark).append(bm)
+            else:
+                bm.free()
+            index += 1
+    return light, dark
+
+
+def torn_waist(rng):
+    """The Bull's finisher: (the torso's torn bottom, the top of the pelvis
+    with the legs), each {layer: bmesh}, both in R6 torso space (see the
+    module's doc: Waist, Hips)."""
+    t = load_anatomy(TORSO_ANATOMY)
+
+    # ---- Waist: what stays on the torso (above the tear), its cap below
+    # (what is above the raw floor is hidden in the torso: cut away)
+    drop = TEAR_Y - 0.08 - float(t["lumbar"][1][0][:, 1].min())  # (L4's bottom just out of the cut)
+    muscles, muscles_dark = torn_muscles(rng, t, True, HIDDEN_ABOVE, -1.4, (0.02, 0.14), drop)
+    # the lumbar spine (L3, L4) moved down to the tear, torn through the
+    # disc under L4 (its upper half still on the bone)
+    spine = bm_join_all([bm_of(placed(v, (1, 1, 1), (0, drop, 0)), f) for v, f in t["lumbar"][:2]])
+    cut(spine, [((0, HIDDEN_ABOVE, 0), (0, 1, 0))], fill=True)
+    disc = bm_of(placed(t["disc"][1][0], (1, 1, 1), (0, drop, 0)), t["disc"][1][1])
+    disc_mid = float(np.mean(t["disc"][1][0][:, 1])) + drop
+    cut(disc, [((0, disc_mid - 0.01, 0), (0, -1, 0))], fill=True)
+    tear(disc, rng, disc_mid - 0.01, 0.015)
+    canal = Vector((0.0, TEAR_Y - 0.04, 0.19))  # (the spinal canal, behind the bodies)
+    nerves = bm_join_all([
+        rod(canal + Vector((rng.uniform(-0.03, 0.03), 0.04, rng.uniform(-0.02, 0.02))),
+            canal + Vector((rng.uniform(-0.06, 0.06), -rng.uniform(0.08, 0.22), rng.uniform(-0.05, 0.05))),
+            rng.uniform(0.008, 0.014), 0.005, 5)
+        for _ in range(5)
+    ])
+    # the small intestine: its lower loops, widened, sagging out of the
+    # opening (the lower, the more)
+    jv, jf = t["jejunum"][0]
+    # (the whole mass moved down: most of it out of the opening, hanging,
+    # spread over the front half of the cut)
+    jv = jv.copy()
+    jv[:, 0] = jv[:, 0] * 1.3 + 0.03
+    jv[:, 1] = -0.9 + (jv[:, 1] + 0.44) * 0.72
+    jv[:, 2] = -0.1 + (jv[:, 2] + 0.18) * 1.5
+    gut = bm_of(jv, jf)
+    cut(gut, [((0, HIDDEN_ABOVE, 0), (0, 1, 0))], fill=True)
+    gut = decimate(gut, 3600)
+    lumpy(gut, rng, 0.006, 14.0)
+    colon = []
+    for v, f in t["colon"][:2]:  # (ascending, descending)
+        bm = bm_of(placed(v, (1.25, 1, 1)), f)
+        cut(bm, [((0, HIDDEN_ABOVE, 0), (0, 1, 0)), ((0, TEAR_Y - 0.12, 0), (0, -1, 0))], fill=True)
+        if len(bm.faces):
+            tear(bm, rng, TEAR_Y - 0.12, 0.03)
+            colon.append(bm)
+    # the skin torn round the edge, hanging and curling out; the fat inside it
+    skin = skirt(rng, TEAR_Y + 0.005, -1, 0.003, 0.11, 0.8, 0.02)
+    fat = skirt(rng, TEAR_Y + 0.03, -1, 0.024, 0.06, 0.15, 0.04, spikes=5)
+    # shreds of torn muscle hanging from the walls of the cut
+    for k in range(12):
+        base, out = perimeter((k + rng.random() * 0.6) / 12, 0.09)
+        top = Vector((base.x, TEAR_Y - 0.01, base.z))
+        shred = blob(rng, top + Vector((0, -0.05, 0)) - out * 0.02,
+                     (rng.uniform(0.025, 0.05), rng.uniform(0.05, 0.1), rng.uniform(0.02, 0.035)), 8, 6, 0.01)
+        (muscles if k % 2 == 0 else muscles_dark).append(shred)
+    blood = []
+    for _ in range(7):
+        base, _out = perimeter(rng.random())
+        at = Vector((base.x * rng.uniform(0.3, 0.9), TEAR_Y - rng.uniform(0.04, 0.12), base.z * rng.uniform(0.3, 0.9)))
+        blood.append(drip(rng, at, rng.uniform(0.06, 0.18), rng.uniform(0.012, 0.02)))
+    waist = {
+        "Gut": gut,
+        "GutDark": bm_join_all(colon),
+        "Muscle": bm_join_all(muscles),
+        "MuscleDark": bm_join_all(muscles_dark),
+        "Bone": spine,
+        "Cartilage": disc,
+        "Tendon": nerves,
+        "Fat": fat,
+        "Skin": skin,
+        "FleshDark": solid_floor(rng, TEAR_Y - 0.015, -1),
+        "Blood": bm_join_all(blood),
+    }
+
+    # ---- Hips: what goes with the legs (below the tear), as if they were on
+    muscles, muscles_dark = torn_muscles(rng, t, False, TEAR_Y + 0.3, HIDDEN_BELOW, (0.02, 0.16))
+    pelvis = []
+    for v, f in t["hipbone"] + t["sacrum"]:
+        bm = bm_of(placed(v, (1.12, 1, 1)), f)
+        cut(bm, [((0, HIDDEN_BELOW, 0), (0, -1, 0))], fill=True)
+        pelvis.append(bm)
+    l5 = bm_of(*t["lumbar"][2])
+    cut(l5, [((0, HIDDEN_BELOW, 0), (0, -1, 0))], fill=True)
+    pelvis.append(l5)
+    lower_disc = bm_of(*t["disc"][1])
+    middle = float(np.mean(t["disc"][1][0][:, 1]))
+    cut(lower_disc, [((0, middle + 0.01, 0), (0, 1, 0))], fill=True)
+    tear(lower_disc, rng, middle + 0.01, 0.015)
+    # the intestine's lowest loops spilling over the top (their torn ends
+    # up), the sigmoid colon
+    jv, jf = t["jejunum"][0]
+    jv = placed(jv, (1.3, 1, 1.15), (0.03, 0.2, -0.04))
+    spill = bm_of(jv, jf)
+    cut(spill, [((0, TEAR_Y + 0.2, 0), (0, 1, 0)), ((0, HIDDEN_BELOW, 0), (0, -1, 0))], fill=True)
+    tear(spill, rng, TEAR_Y + 0.2, 0.025)
+    spill = decimate(spill, 1800)
+    lumpy(spill, rng, 0.006, 14.0)
+    sv, sf = t["colon"][2]
+    sigmoid = bm_of(placed(sv, (1.2, 1, 1), (0, 0.32, -0.05)), sf)
+    cut(sigmoid, [((0, HIDDEN_BELOW, 0), (0, -1, 0))], fill=True)
+    # the skin torn round the edge, standing up and curling out; the fat inside it
+    skin = skirt(rng, TEAR_Y - 0.005, 1, 0.003, 0.12, 0.9, 0.02)
+    fat = skirt(rng, TEAR_Y - 0.03, 1, 0.024, 0.07, 0.15, 0.04, spikes=5)
+    pools = []
+    for _ in range(5):  # blood pooled on the raw tops
+        at = Vector((rng.uniform(-0.8, 0.8), TEAR_Y + 0.01, rng.uniform(-0.35, 0.35)))
+        pools.append(blob(rng, at, (rng.uniform(0.08, 0.18), 0.012, rng.uniform(0.06, 0.14)), 12, 6, 0.004))
+    hips = {
+        "Bone": decimate(bm_join_all(pelvis), 2600),
+        "Cartilage": lower_disc,
+        "Muscle": bm_join_all(muscles),
+        "MuscleDark": bm_join_all(muscles_dark),
+        "Gut": spill,
+        "GutDark": sigmoid,
+        "Fat": fat,
+        "Skin": skin,
+        "FleshDark": solid_floor(rng, TEAR_Y + 0.015, 1),
+        "Blood": bm_join_all(pools),
+    }
+    return waist, hips
+
+
+def gut_segment(rng, length=0.5, radius=0.072):
+    """A short piece of small intestine, along Y, centred: a lumpy, a
+    little bent tube (Gut), closed at its torn ends, its mesentery torn
+    along its inner side (GutDark)."""
+    rings, segments = 22, 12
+    bend = rng.uniform(0.04, 0.09) * rng.choice((-1, 1))
+    twist = rng.uniform(-0.03, 0.03)
+    phase = rng.uniform(0, 6.3)
+
+    def centre(t):  # t in [-1, 1]
+        return Vector((bend * (1 - t * t), t * length / 2, twist * t * t * t))
+
+    bm = bmesh.new()
+    rows = []
+    for k in range(rings + 1):
+        t = -1 + 2 * k / rings
+        p = centre(t)
+        ahead = (centre(min(1, t + 0.01)) - centre(max(-1, t - 0.01))).normalized()
+        side = ahead.cross(Vector((0, 0, 1))).normalized()
+        up = side.cross(ahead).normalized()
+        # bulges between the narrowings, thinner at the torn ends
+        r = radius * (1 + 0.12 * math.sin(t * 12 + phase)) * (0.72 + 0.28 * math.sqrt(max(0.0, 1 - t ** 8)))
+        row = []
+        for s in range(segments):
+            a = 2 * math.pi * s / segments
+            rr = r * (1 + rng.uniform(-0.04, 0.04))
+            row.append(bm.verts.new(p + (side * math.cos(a) + up * math.sin(a)) * rr))
+        rows.append(row)
+    for k in range(rings):
+        for s in range(segments):
+            q = (s + 1) % segments
+            bm.faces.new((rows[k][s], rows[k][q], rows[k + 1][q], rows[k + 1][s]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    lumpy(bm, rng, 0.008, 22.0)
+    # the torn ends: the dark red inside showing, sunk in a little
+    ends = bmesh.new()
+    for row, end in ((rows[0], -1), (rows[-1], 1)):
+        ring_ = [ends.verts.new(v.co) for v in row]  # (the tube's own edge: no crack)
+        c = ends.verts.new(centre(end) - Vector((0, end * radius * 0.35, 0)))
+        for s in range(segments):
+            f = ends.faces.new((ring_[s], ring_[(s + 1) % segments], c))
+            f.normal_update()
+            if f.normal.y * end < 0:  # (facing out of the end)
+                f.normal_flip()
+    # the mesentery: a thin torn sheet along the inner side of the bend
+    sheet = bmesh.new()
+    inner = Vector((-1 if bend > 0 else 1, 0, 0))
+    edge_rows = []
+    for k in range(9):
+        t = -0.8 + 1.6 * k / 8
+        p = centre(t) + inner * radius * 0.7
+        width = rng.uniform(0.04, 0.09) * (1 - 0.5 * abs(t))
+        edge_rows.append((sheet.verts.new(p), sheet.verts.new(p + inner * width + Vector((0, 0, rng.uniform(-0.02, 0.02))))))
+    for k in range(8):
+        a, b = edge_rows[k], edge_rows[k + 1]
+        sheet.faces.new((a[0], b[0], b[1], a[1]))
+    mesentery = solidify(sheet, 0.014)
+    # centred (its box), for the chain
+    lo = Vector([min(v.co[k] for v in bm.verts) for k in range(3)])
+    hi = Vector([max(v.co[k] for v in bm.verts) for k in range(3)])
+    dark = bm_join_all([mesentery, ends])
+    for part in (bm, dark):
+        bmesh.ops.translate(part, vec=-(lo + hi) / 2, verts=part.verts)
+    return {"Gut": bm, "GutDark": dark}
+
+
+def gut_pile(rng):
+    """A heap of loops of the real jejunum (see the module's doc)."""
+    t = load_anatomy(TORSO_ANATOMY)
+    v, f = t["jejunum"][0]
+    v = v.astype(np.float64)
+    c = (v.min(0) + v.max(0)) / 2
+    # laid down: the torso's up -> along the floor (Z), its depth -> up
+    x = (v[:, 0] - c[0]) * 0.82
+    z = (v[:, 1] - c[1]) * 0.8
+    y = (v[:, 2] - v[:, 2].min()) * 0.82
+    y += 0.16 * np.clip(1 - (x / 0.47) ** 2 - (z / 0.36) ** 2, 0, 1)  # heaped up in the middle
+    pile = bm_of(np.stack([x, y, z], axis=1), f)
+    pile = decimate(pile, 3200)
+    lumpy(pile, rng, 0.007, 14.0)
+    low = min(vv.co.y for vv in pile.verts)
+    bmesh.ops.translate(pile, vec=(0, -low, 0), verts=pile.verts)
+    # bits of mesentery among the loops
+    bits = bm_join_all([
+        blob(rng, (rng.uniform(-0.3, 0.3), rng.uniform(0.06, 0.2), rng.uniform(-0.22, 0.22)),
+             (rng.uniform(0.04, 0.08), rng.uniform(0.015, 0.03), rng.uniform(0.04, 0.07)), 8, 5, 0.008)
+        for _ in range(7)
+    ])
+    return {"Gut": pile, "GutDark": bits}
+
+
 def build(add_object):
     """Adds the gore pieces to the kit. `add_object(name, bm, offset, layer)`.
     Returns {piece: slot (kit-space Vector)} and the lists by kind."""
     rng = random.Random(4242)
     anatomy = load_anatomy()
     slots = {}
-    kinds = {k: [] for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ", "limb")}
+    kinds = {
+        k: []
+        for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ", "limb", "bisect", "gut")
+    }
 
     def piece(name, layers, kind=None):
         slot = GORE_ORIGIN + Vector((len(slots) * SLOT_STEP, 0, 0))
@@ -622,6 +1033,16 @@ def build(add_object):
     piece("Humerus", bone, "limb")
     piece("HumerusA", {"Bone": top}, "limb")
     piece("HumerusB", {"Bone": bottom}, "limb")
+
+    # The Bull's finisher: the body torn in two at the hips, the guts
+    # between the halves. (Last, their own random numbers: the pieces above
+    # keep their slots.)
+    waist, hips = torn_waist(random.Random(8383))
+    piece("Waist", waist, "bisect")
+    piece("Hips", hips, "bisect")
+    for i in range(3):
+        piece(f"Gut{i + 1}", gut_segment(random.Random(9191 + i)), "gut")
+    piece("GutPile", gut_pile(random.Random(9494)), "gut")
     return slots, kinds
 
 

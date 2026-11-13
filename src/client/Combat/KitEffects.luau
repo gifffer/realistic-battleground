@@ -32,6 +32,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local KitVFX = require(script.Parent.KitVFX)
 local Blood = require(script.Parent.Blood)
 
 local KitEffects = {}
@@ -44,7 +45,7 @@ local BLOOD_COLOR = Color3.fromRGB(92, 12, 10)
 local FURY_LIGHT = Color3.fromRGB(150, 36, 28)
 
 -- Bleeding: one drop this often (seconds), stains on the floor live this long.
-local DRIP_INTERVAL = 0.22
+local DRIP_INTERVAL = 0.14
 local STAIN_LIFETIME = 30
 -- Never more than this many stains in the world (16 players bleeding...).
 local MAX_STAINS = 60
@@ -92,6 +93,10 @@ local HEAVY_MOVES = table.freeze({
 	KnockoutCombo = true,
 	Slip_Counter = true,
 	SlipPlus_Counter = true,
+	Haymaker = true,
+	Skyfall = true,
+	GoreCharge = true,
+	HornHook = true,
 	Shove = true,
 	HammerFist = true,
 	DoubleHammer = true,
@@ -105,7 +110,7 @@ local HEAVY_MOVES = table.freeze({
 local REACTIONS: { [string]: string } = {
 	LiverShot = "HitLiver",
 }
--- Sound when the move LANDS.
+-- Sound when the move LANDS ("" = none).
 local HIT_SOUNDS: { [string]: string } = {
 	BottleSmash = "BottleBreak",
 	Headbutt = "Headbutt",
@@ -120,6 +125,14 @@ local HIT_SOUNDS: { [string]: string } = {
 	UppercutPlus = "HeavyHit",
 	KnockoutCombo = "HeavyHit",
 	SlipPlus_Counter = "HeavyHit",
+	HeatVision = "", -- (no sound: the skin just chars where it touches)
+	ThunderClap = "HeavyHit",
+	Skyfall = "HeavyHit",
+	Haymaker = "HeavyHit",
+	GoreCharge = "Tackle",
+	HornHook = "HeavyHit",
+	Stampede = "KickLow",
+	BullToss = "Tackle",
 	Shove = "BodyShot",
 	HammerFist = "HeavyHit",
 	DoubleHammer = "HeavyHit",
@@ -135,7 +148,7 @@ local HIT_SOUNDS: { [string]: string } = {
 	Powerbomb_Hold = "BodySlam",
 	ThrowOut_Hold = "Tackle",
 }
--- Sound when the move STARTS (the swing).
+-- Sound when the move STARTS (the swing; "" = none).
 local START_SOUNDS: { [string]: string } = {
 	Brawler_Bottle = "HeavySwing",
 	Brawler_BrokenBottle = "Slash",
@@ -153,6 +166,16 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
+	-- (the Sentinel and Bull moves play their own sounds at the right
+	-- moment: KitVFX)
+	Sentinel_HeatVision = "",
+	Sentinel_ThunderClap = "",
+	Sentinel_Skyfall = "",
+	Sentinel_Haymaker = "",
+	Bull_GoreCharge = "",
+	Bull_HornHook = "HeavySwing",
+	Bull_Stampede = "",
+	Bull_Toss = "",
 	Bouncer_Shove = "HeavySwing",
 	Bouncer_Grab = "Swing",
 	Bouncer_HammerFist = "HeavySwing",
@@ -474,6 +497,9 @@ local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
 				or string.match(name, "^" .. Gash.SHARD_PREFIX .. "(%a+)_%d+$")
 			local partName = if key then Gash.PART_OF[key] else nil
 			local cut = Gash.decode(value)
+			if cut and cut.kind == "Bore" then
+				cut = nil -- (the finisher's bore doesn't bleed: cauterized)
+			end
 			local shard = if cut then nil else Gash.decodeShard(value)
 			local point = if cut then cut.point elseif shard then shard.point else nil
 			local part = if partName then model:FindFirstChild(partName) else nil
@@ -600,6 +626,15 @@ function KitEffects.watch(model: Model)
 		setFury(entry, model:GetAttribute("Awakened") == true)
 	end)
 	setFury(entry, model:GetAttribute("Awakened") == true)
+	-- The server cuts a move when its fighter is stunned / knocked down /
+	-- out: its effects (heat vision beam, landing...) stop with it.
+	for _, attribute in { "Stunned", "KnockedOut", "Ragdolled" } do
+		model:GetAttributeChangedSignal(attribute):Connect(function()
+			if model:GetAttribute(attribute) == true then
+				KitVFX.stop(model)
+			end
+		end)
+	end
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
 			watched[model] = nil
@@ -636,8 +671,9 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	end
 	local token = (swingToken[model] or 0) + 1
 	swingToken[model] = token
+	KitVFX.onAction(model, animation, move)
 	local sound = START_SOUNDS[animation]
-	if sound and not silent then
+	if sound and sound ~= "" and not silent then
 		SoundController.play(sound, model)
 		-- A flurry (jab rush, kick combo...): every blow whooshes, not just
 		-- the first one.
@@ -663,12 +699,17 @@ end
 -- Our move was refused by the server: take the prop back.
 function KitEffects.stopAction(model: Model)
 	swingToken[model] = (swingToken[model] or 0) + 1 -- (no more swings of it)
+	KitVFX.stop(model)
 	removeProp(model)
 end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
-	SoundController.play(HIT_SOUNDS[moveId] or "Hit", victim)
+	local hitSound = HIT_SOUNDS[moveId] or "Hit"
+	if hitSound ~= "" then
+		SoundController.play(hitSound, victim)
+	end
+	KitVFX.onHit(victim, attacker, moveId)
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
 	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil

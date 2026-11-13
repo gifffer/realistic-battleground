@@ -21,12 +21,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local CollectionService = game:GetService("CollectionService")
 local Config = require(ReplicatedStorage.Shared.Config)
+local Breakable = require(ReplicatedStorage.Shared.Util.Breakable)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local AimController = require(script.Parent.AimController)
+local CameraController = require(script.Parent.CameraController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
 local SoundController = require(script.Parent.SoundController)
@@ -129,6 +132,53 @@ local function chargeInterrupted(character: Model): boolean
 		or character:GetAttribute("KnockedOut") == true
 end
 
+-- A charge that smashes walls (Bull): the server breaks them, but its
+-- answer comes a few ms later; meanwhile our own body would hit the wall
+-- and stop. So we let it through on our side right away (its collision off
+-- for us only), and put it back if the server didn't break it after all.
+local wallParams = OverlapParams.new()
+wallParams.FilterType = Enum.RaycastFilterType.Exclude
+wallParams.RespectCanCollide = true
+local opened: { [BasePart]: boolean } = {}
+local insideParams = OverlapParams.new()
+insideParams.FilterType = Enum.RaycastFilterType.Include
+-- Collision back on a wall the server didn't break, once we're out of it.
+local function closeWall(part: BasePart)
+	if part.Parent == nil or part:GetAttribute("Broken") == true then
+		opened[part] = nil
+		return
+	end
+	local character = player.Character
+	if character then
+		insideParams.FilterDescendantsInstances = { character }
+		if #workspace:GetPartBoundsInBox(part.CFrame, part.Size, insideParams) > 0 then
+			task.delay(0.25, closeWall, part) -- still in it: not yet
+			return
+		end
+	end
+	opened[part] = nil
+	part.CanCollide = true
+end
+local function openWalls(character: Model, root: BasePart, radius: number)
+	local fighters = CollectionService:GetTagged(Config.Combat.TAG)
+	wallParams.FilterDescendantsInstances = fighters
+	local look = root.CFrame.LookVector
+	local feetY = root.Position.Y - 3
+	local under = Breakable.support(root, fighters) -- (never what we stand on)
+	for _, part in workspace:GetPartBoundsInRadius(root.Position + look * 2.5, radius, wallParams) do
+		if
+			not opened[part]
+			and part ~= under
+			and not part:IsDescendantOf(character)
+			and Breakable.check(part, feetY)
+		then
+			opened[part] = true
+			part.CanCollide = false
+			task.delay(1.5, closeWall, part)
+		end
+	end
+end
+
 -- Charge: push our character forward during the charge window.
 local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
 	local charge = move.charge
@@ -153,11 +203,67 @@ local function startCharge(move: Kits.MoveDef, character: Model, root: BasePart)
 			brake()
 			return
 		end
+		local breaks = charge.breaks
+		if breaks and elapsed >= charge.from then
+			openWalls(character, root, breaks)
+		end
 		if not pushing and elapsed >= charge.from then
 			pushing = true
 			local look = root.CFrame.LookVector
 			local forward = Vector3.new(look.X, 0, look.Z).Unit
 			Push.apply(root, forward * charge.speed, charge.to - elapsed)
+		end
+	end)
+end
+
+-- Leap (skyfall): our own client throws our character up and forward.
+-- (until when the leap's push runs: a late refusal takes it back)
+local leapUntil = 0
+local function startLeap(move: Kits.MoveDef, character: Model, root: BasePart)
+	local leap = move.leap
+	if leap == nil then
+		return
+	end
+	chargeToken += 1
+	local token = chargeToken
+	task.delay(leap.at, function()
+		if chargeToken ~= token or root.Parent == nil or chargeInterrupted(character) then
+			return
+		end
+		local look = root.CFrame.LookVector
+		local forward = Vector3.new(look.X, 0, look.Z)
+		forward = if forward.Magnitude > 1e-3 then forward.Unit else Vector3.new(0, 0, -1)
+		root.AssemblyLinearVelocity = forward * leap.forward + Vector3.new(0, leap.up, 0)
+		Push.apply(root, forward * leap.forward, leap.time)
+		leapUntil = os.clock() + leap.time
+	end)
+end
+
+-- Beam (heat vision): the beam goes the way we faced when it started, so
+-- our character stops turning with the camera until it ends.
+local beamToken = 0
+local function holdForBeam(move: Kits.MoveDef)
+	local beam = move.beam
+	if beam == nil then
+		return
+	end
+	beamToken += 1
+	local token = beamToken
+	CameraController.holdRotation("beam", true)
+	local startedAt = os.clock()
+	local connection: RBXScriptConnection? = nil
+	connection = RunService.Heartbeat:Connect(function()
+		local character = player.Character
+		-- (ends on time, on a refusal / newer beam, or when the server cuts
+		-- it: stunned, knocked down / out)
+		local cut = character == nil or chargeInterrupted(character)
+		if beamToken ~= token or cut or os.clock() - startedAt > beam.to then
+			if connection then
+				connection:Disconnect()
+			end
+			if beamToken == token then
+				CameraController.holdRotation("beam", false)
+			end
 		end
 	end)
 end
@@ -191,6 +297,8 @@ local function tryMove(slot: number)
 	CharacterAnimationController.playAction(character, move.animation)
 	KitEffects.onAction(character, move.animation)
 	startCharge(move, character, root)
+	startLeap(move, character, root)
+	holdForBeam(move)
 	-- Each request gets a number: a refusal names it (see onMoveRefused).
 	requestSeq += 1
 	pending = { id = requestSeq, animation = move.animation }
@@ -256,6 +364,18 @@ local function onMoveRefused(_slot: unknown, requestId: unknown)
 	end
 	pending = nil
 	brake()
+	if os.clock() < leapUntil then
+		-- refused after we already jumped: back down, no forward push
+		leapUntil = 0
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			local velocity = root.AssemblyLinearVelocity
+			root.AssemblyLinearVelocity = Vector3.new(0, math.min(velocity.Y, 0), 0)
+			Push.apply(root, Vector3.zero, 0.05)
+		end
+	end
+	beamToken += 1
+	CameraController.holdRotation("beam", false)
 	CharacterAnimationController.stopAction(character, current.animation)
 	KitEffects.stopAction(character)
 	CombatController.releaseAttacks()

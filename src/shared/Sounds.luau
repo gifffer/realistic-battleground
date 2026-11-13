@@ -187,6 +187,7 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.08,
 		fallback = "HurtGrunt",
 	},
+	DeathFall = { ids = { 121870043011805 }, volume = 1, pitch = 1, pitchVariation = 0.05 }, -- the one killed hits the floor
 	BodySlam = { -- a whole body driven into the floor
 		ids = {},
 		volume = 1,
@@ -234,6 +235,31 @@ local sounds: { [string]: SoundInfo } = {
 		pitch = 1,
 		pitchVariation = 0.06,
 	},
+
+	-- Sentinel / Bull ---------------------------------------------------------
+	LaserCharge = { -- the eyes charging (heat vision). The file lasts 3 s: played 3× faster (1 s)
+		ids = { 129456040607483 },
+		volume = 0.8,
+		pitch = 3,
+		pitchVariation = 0,
+	},
+	LaserBeam = { ids = { 139620337204036 }, volume = 0.8, pitch = 1, pitchVariation = 0 }, -- (looped while it fires)
+	LaserStop = { ids = { 76801901356843 }, volume = 0.8, pitch = 1, pitchVariation = 0 }, -- the beam cut off
+	Sizzle = { -- flesh searing under the beam (finisher; looped). No file yet: the beam, higher
+		ids = {},
+		volume = 0.55,
+		pitch = 1.8,
+		pitchVariation = 0.04,
+		fallback = "LaserBeam",
+	},
+	ThunderClap = { ids = { 139210252225248 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
+	SkyfallJump = { ids = { 74149238738530 }, volume = 1, pitch = 1, pitchVariation = 0.04 }, -- the take-off impact
+	Slam = { ids = { 91288569991875 }, volume = 1, pitch = 1, pitchVariation = 0.04 }, -- the skyfall landing
+	Haymaker = { ids = { 104231707453256 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
+	BullSnort = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.08 },
+	BullCharge = { ids = { 129959965821462 }, volume = 1, pitch = 1, pitchVariation = 0.04 },
+	Stomp = { ids = { 74149238738530 }, volume = 1, pitch = 0.9, pitchVariation = 0.04 }, -- stampede
+	BullToss = { ids = { 138432031406888 }, volume = 1, pitch = 1, pitchVariation = 0.05 }, -- grab and throw
 
 	-- Movement -------------------------------------------------------------
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },

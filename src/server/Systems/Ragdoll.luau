@@ -118,6 +118,11 @@ function Ragdoll.disable(model: Model, owner: Player?)
 	if not Ragdoll.isRagdolled(model) then
 		return
 	end
+	-- Torn in two (the Bull's finisher, Combat): its hip joints are gone, it
+	-- never stands up again.
+	if model:GetAttribute("Bisected") ~= nil then
+		return
+	end
 	local torso = model:FindFirstChild("Torso")
 	local root = model:FindFirstChild("HumanoidRootPart")
 	local humanoid = model:FindFirstChildOfClass("Humanoid")

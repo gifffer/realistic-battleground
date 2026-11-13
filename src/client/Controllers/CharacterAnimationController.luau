@@ -62,6 +62,7 @@ local FADE_IN: { [string]: number } = {
 	LimpIdle = 0.3,
 	Walk = 0.15,
 	Run = 0.15,
+	BullRun = 0.15,
 }
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
@@ -159,6 +160,9 @@ local tracked: { [Model]: Tracked } = {}
 local predictedBlock = false
 -- Reused every frame (no table created per frame).
 local sprintPose: { [string]: CFrame } = {}
+-- Bodies held at a place of their own (pinRoot): where the torso's centre
+-- is this frame (world), or nil once it's over.
+local pins: { [Model]: () -> Vector3? } = setmetatable({}, { __mode = "k" }) :: any
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -251,8 +255,9 @@ local function movementClip(entry: Tracked, state: string?): string?
 		return if horizontalSpeed(entry.root) > threshold then "CrouchWalk" else "CrouchIdle"
 	elseif state == "Slide" or state == "Climb" or state == "Vault" then
 		return state
-	elseif state == nil then
-		-- Standing up: our own walk / run instead of Roblox's. Nothing in the
+	elseif state == nil or state == "Walk" or state == "Sprint" then
+		-- Standing up (our own state is nil, the others' "Walk" / "Sprint"
+		-- from the server): our own walk / run instead of Roblox's. Nothing in the
 		-- air (Roblox's jump / fall animation plays) or when standing still.
 		local airborne = entry.humanoid:GetState() == Enum.HumanoidStateType.Freefall
 			or entry.humanoid:GetState() == Enum.HumanoidStateType.Jumping
@@ -263,10 +268,12 @@ local function movementClip(entry: Tracked, state: string?): string?
 		-- Walk ↔ run with a gap between the two speeds ("hysteresis"), so a
 		-- speed hovering around one value doesn't flicker between the clips.
 		local current = entry.movement[#entry.movement]
-		local running = current ~= nil and current.target == 1 and current.name == "Run"
-		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED)
-			then "Run"
-			else "Walk"
+		local running = current ~= nil
+			and current.target == 1
+			and (current.name == "Run" or current.name == "BullRun")
+		-- (the Bull runs his own way: head down, horns first)
+		local run = if entry.model:GetAttribute("Kit") == "Bull" then "BullRun" else "Run"
+		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED) then run else "Walk"
 	end
 	return nil
 end
@@ -320,6 +327,13 @@ local function playbackRate(entry: Tracked, name: string): number
 			horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED * 1.35,
 			0.8,
 			1.5
+		)
+	elseif name == "BullRun" then
+		-- (authored for the Bull's sprint: faster than everyone's)
+		return math.clamp(
+			horizontalSpeed(entry.root) / (Config.Character.SPRINT_SPEED * 1.15) * 1.35,
+			0.8,
+			1.6
 		)
 	elseif name == "Vault" then
 		return 1 / Config.Climb.VAULT_DURATION
@@ -488,6 +502,22 @@ local function compose(entry: Tracked)
 			result = result * R6Pose.toTransform(motor, flinchRotation(entry.flinch, share))
 			any = true
 		end
+		-- Pinned (pinRoot): the torso's centre put where it must be, whatever
+		-- the root part does; the clip's own turn kept.
+		-- (torso = root · C0 · Transform · C1⁻¹, solved for Transform's position)
+		local pin = if joint == "Root" then pins[entry.model] else nil
+		if pin then
+			local at = pin()
+			if at then
+				local joint0 = entry.root.CFrame * motor.C0
+				local turn = result.Rotation
+				local tail = (turn * motor.C1:Inverse()).Position
+				result = CFrame.new(joint0:PointToObjectSpace(at) - tail) * turn
+				any = true
+			else
+				pins[entry.model] = nil
+			end
+		end
 
 		if any then
 			motor.Transform = result
@@ -511,7 +541,7 @@ local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
 		else state == "Sprint"
 	-- Our Run clip already leans the body: no extra lean on top of it.
 	local current = entry.movement[#entry.movement]
-	local ownRun = current ~= nil and current.name == "Run"
+	local ownRun = current ~= nil and (current.name == "Run" or current.name == "BullRun")
 	if sprinting and not ownRun and horizontalSpeed(entry.root) > MOVING_SPEED then
 		target = math.clamp(horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED, 0, 1)
 	end
@@ -524,12 +554,15 @@ local function onPreSimulation(dt: number)
 	local cameraPosition = if camera then camera.CFrame.Position else Vector3.zero
 
 	for model, entry in tracked do
-		if entry.humanoid.Health <= 0 or model.Parent == nil then
+		if model.Parent == nil then
 			continue
 		end
-		-- Limp (knocked out): physics moves the body, not us. Forget what we
-		-- were playing so nothing resumes when it gets up (GetUp plays then).
-		if model:GetAttribute("Ragdolled") == true then
+		-- Limp (knocked out) or dead: physics moves the body, not us. Forget
+		-- what we were playing so nothing resumes when it gets up (GetUp
+		-- plays then). (Dead too: a finisher's clip moved its root part to
+		-- where the clip had put the body - a pose left on top would count
+		-- twice.)
+		if entry.humanoid.Health <= 0 or model:GetAttribute("Ragdolled") == true then
 			-- Give every joint we posed back its last Roblox pose first:
 			-- a pose left in Transform would stay stuck (the root joint
 			-- stays on during the ragdoll, and all of them after it).
@@ -537,6 +570,14 @@ local function onPreSimulation(dt: number)
 				if motor.Transform == written then
 					motor.Transform = entry.lastBase[motor] or CFrame.new()
 				end
+			end
+			-- The root joint above all: a finisher clip leaves its root
+			-- offset in it (the server has already moved the root there),
+			-- and the torso would be drawn that far away again (under the
+			-- floor, up in the air, beside its limbs).
+			local rootJoint = entry.root:FindFirstChild("RootJoint")
+			if rootJoint and rootJoint:IsA("Motor6D") then
+				rootJoint.Transform = CFrame.identity
 			end
 			entry.flinch = Vector3.zero
 			entry.flinchSpeed = Vector3.zero
@@ -569,7 +610,7 @@ local function onPreSimulation(dt: number)
 		updateFlinch(entry, dt)
 
 		local busy = #entry.movement > 0 or #entry.stance > 0 or #entry.action > 0
-		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero
+		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero or pins[model] ~= nil
 		if busy or extras or next(entry.lastWritten) ~= nil then
 			compose(entry)
 		end
@@ -633,6 +674,18 @@ function CharacterAnimationController.stopAction(model: Model, name: string)
 			layer.target = 0
 			layer.fadeOut = ACTION_FADE_OUT
 		end
+	end
+end
+
+-- Holds the body of `model` at a place of its own while its clips play:
+-- `at()` gives where its torso's centre is this frame (world), nil once
+-- over (then the body is back on its root part). nil `at`: let go now.
+-- (The Bull's finisher: his root waits where he ends, his body runs there.)
+function CharacterAnimationController.pinRoot(model: Model, at: (() -> Vector3?)?)
+	if at then
+		pins[model] = at
+	else
+		pins[model] = nil
 	end
 end
 
