@@ -263,9 +263,10 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0,
 		looped = true,
 	},
-	-- A distant thunder rumble (one shot), heard 1 to 4 s after the flash. Put 2 or 3 different
-	-- ones: a random one plays each time, at a random volume between 60 and 100 %.
-	Thunder = { ids = {}, volume = 0.9, pitch = 1, pitchVariation = 0.08 },
+	-- A thunder clap / rumble (one shot, 2D), heard 1 to 4 s after a far flash (at 60 to 100 %
+	-- of this volume, a little lower or higher each time) and 0.15 to 0.5 s after a close one
+	-- (louder). You can add 1 or 2 more ids: a random one plays each time.
+	Thunder = { ids = { 139319051979882 }, volume = 0.85, pitch = 1, pitchVariation = 0.08 },
 
 	-- Music and city ambience (Client/Controllers/CityAudioController) ---------------------
 	-- The OUTDOOR beds: 2D, heard everywhere outside, crossfaded with the day / night cycle,
@@ -350,10 +351,16 @@ local sounds: { [string]: SoundInfo } = {
 	-- Power cut (Client/Controllers/WeatherFxController) ----------------------------------
 	-- In 3D at the substation when the power goes: a transformer blowing (a sharp bang + an
 	-- electric crackle). Empty = only the sparks and the flash.
-	TransformerBlow = { ids = {}, volume = 1, pitch = 1, pitchVariation = 0.05 },
+	TransformerBlow = {
+		ids = { 140278004623742 },
+		volume = 1,
+		pitch = 1,
+		pitchVariation = 0.05,
+	},
 	-- 2D, while the lights stutter just before the cut: an electric buzz / crackle of the
-	-- struggling grid (about 3 s). Empty = only the flickering.
-	PowerBuzz = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
+	-- struggling grid (cut short when the transformer blows). Also, very quiet and short, in
+	-- 3D at a stuttering street lamp near you when it cuts out. Empty = only the flickering.
+	PowerBuzz = { ids = { 115768564143330 }, volume = 0.4, pitch = 1, pitchVariation = 0.05 },
 
 	-- SpezCola machines (the free cola machines of the city) -------------------------------
 	-- The machine humming (LOOP, in 3D at the machine).

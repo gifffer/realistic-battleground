@@ -6,11 +6,12 @@
 -- are switched on and off, a handful of screen frames):
 --
 --   RAIN / THUNDERSTORM
---     • DROPS ON THE SCREEN: very rarely (every 6 to 12 s in the rain, a bit more often in a
---       thunderstorm), one to three small water drops land on the "lens", slide down slowly
---       and dry out in 1 to 3 s. Only when the camera is OUTSIDE in the open (not under a
---       roof or an awning, not inside the bar or a shop, never in the park), never in the
---       middle of the screen.
+--     • WATER ON THE LENS (Client/UI/LensRain): pictures of real drops land now and then,
+--       sit, grow, merge, and the big ones run down with a wet trail; a fine mist at the
+--       edges in heavy rain. Only when the camera is OUTSIDE in the open (not under a roof
+--       or an awning, not inside the bar or a shop); it dries in a few seconds under cover
+--       and is wiped at once in the park or a duel. Never much in the middle of the screen.
+--       Needs the pictures uploaded (Config.Weather.SCREEN_RAIN_IMAGES): until then, none.
 --     • RIPPLES in the puddles near you (tagged CityPuddle): small rings that open and fade.
 --     • SPLASHES on your own head and shoulders while you stand in the rain.
 --     (the drips under the roof edges, CityDrip, are switched on by the server: Ambience)
@@ -19,10 +20,15 @@
 --     • a soft HALO around every lit street lamp near you.
 --     (the muffled city sounds are done by CityAudioController)
 --   POWER CUT
---     • while the lights stutter (server: Ambience.powerFlicker), the grid BUZZES (PowerBuzz);
+--     • while the lights stutter (server: Ambience.powerFlicker), the grid BUZZES (PowerBuzz),
+--       cut short when the transformer blows;
 --     • the transformer at the substation (Config.Weather.SUBSTATION) BLOWS just before the
 --       dark: a burst of sparks, smoke, a blue-white flash, and the TransformerBlow sound;
 --     • while the power is out, the red emergency lights PULSE slowly.
+--
+--   STUTTERING STREET LAMPS (any weather, at night)
+--     • a lamp with Flicker = true gives a short, faint crackle (PowerBuzz) when it cuts out,
+--       if you are close.
 --
 -- The park is always sunny: nothing of this happens in it (ParkAtmosphereController.blend()).
 -- In a duel you are in an arena: no screen drops there either.
@@ -31,10 +37,12 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local CityZones = require(ReplicatedStorage.Shared.Util.CityZones)
 local ParkAtmosphereController = require(script.Parent.ParkAtmosphereController)
+local LensRain = require(script.Parent.Parent.UI.LensRain)
 local SoundController = require(script.Parent.SoundController)
 local WeatherController = require(script.Parent.WeatherController)
 
@@ -54,14 +62,6 @@ local RING = "rbxasset://textures/particles/explosion01_shockwave_main.dds"
 ------------------------------------------------------------------------------
 -- Tuning
 ------------------------------------------------------------------------------
-
--- Screen drops: seconds between two bursts (rain / thunderstorm), drops per burst, the most
--- on screen at once, their size in pixels and how long one lives.
-local DROP_GAP_RAIN = NumberRange.new(6, 12)
-local DROP_GAP_STORM = NumberRange.new(3.5, 7)
-local DROP_MAX = 8
-local DROP_SIZE = NumberRange.new(7, 20)
-local DROP_LIFE = NumberRange.new(1.2, 3)
 
 -- Puddle ripples: only the puddles this close to the camera, rings per second per puddle
 -- (a big puddle gets more), checked this often.
@@ -119,153 +119,33 @@ local function cameraPosition(): Vector3?
 end
 
 ------------------------------------------------------------------------------
--- Screen drops
+-- Rain on the lens (the drops themselves: Client/UI/LensRain)
 ------------------------------------------------------------------------------
 
-type Drop = {
-	frame: Frame,
-	stroke: UIStroke,
-	shine: Frame,
-	born: number,
-	life: number,
-	x: number, -- scale
-	y: number, -- scale
-	slide: number, -- pixels it slides down over its life
-}
+local LENS_CHECK_EVERY = 0.25
+local nextLensCheck = 0
+-- The rain falling on the lens (0 = none: under a roof, indoors...) and "wipe it all now".
+local lensRain = 0
+local lensClear = false
 
-local dropGui: ScreenGui
-local drops: { Drop } = {}
-local nextDropAt = 0
-
-local function buildDropGui()
-	dropGui = Instance.new("ScreenGui")
-	dropGui.Name = "RainOnScreen"
-	dropGui.ResetOnSpawn = false
-	dropGui.IgnoreGuiInset = true
-	dropGui.DisplayOrder = 1 -- under the HUD and the menus
-	dropGui.Parent = player:WaitForChild("PlayerGui")
-end
-
--- A point on the screen away from the middle (the left / right thirds, or the top band).
-local function edgePoint(): (number, number)
-	if random:NextNumber() < 0.75 then
-		local x = if random:NextNumber() < 0.5
-			then random:NextNumber(0.04, 0.3)
-			else random:NextNumber(0.7, 0.96)
-		return x, random:NextNumber(0.06, 0.7)
+local function updateLens(dt: number, intensity: number, storm: boolean, park: number)
+	if not LensRain.available() then
+		return -- (pictures not uploaded: nothing on the screen, see docs/RAIN_FR.md)
 	end
-	return random:NextNumber(0.1, 0.9), random:NextNumber(0.04, 0.16)
-end
-
--- One water drop on the lens: a round blob (an exception to the "no rounded corners" rule
--- of the UI: it is water, not interface), lighter at its rim and with a small shine, as if
--- it bent the light.
-local function spawnDrop()
-	if #drops >= DROP_MAX then
-		return
-	end
-	local size = random:NextNumber(DROP_SIZE.Min, DROP_SIZE.Max)
-	local x, y = edgePoint()
-	local frame = Instance.new("Frame")
-	frame.Name = "Drop"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.fromScale(x, y)
-	frame.Size = UDim2.fromOffset(size, size * random:NextNumber(1.05, 1.3))
-	frame.BackgroundColor3 = Color3.fromRGB(214, 224, 234)
-	frame.BackgroundTransparency = 1
-	frame.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(1, 0)
-	corner.Parent = frame
-	-- darker in the middle, lighter towards the bottom (light bent through the drop)
-	local gradient = Instance.new("UIGradient")
-	gradient.Rotation = 90
-	gradient.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.5),
-		NumberSequenceKeypoint.new(0.5, 0.85),
-		NumberSequenceKeypoint.new(1, 0.35),
-	})
-	gradient.Parent = frame
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(240, 246, 252)
-	stroke.Thickness = 1
-	stroke.Transparency = 1
-	stroke.Parent = frame
-	local shine = Instance.new("Frame")
-	shine.Name = "Shine"
-	shine.AnchorPoint = Vector2.new(0.5, 0.5)
-	shine.Position = UDim2.fromScale(0.34, 0.3)
-	shine.Size = UDim2.fromScale(0.26, 0.22)
-	shine.BackgroundColor3 = Color3.new(1, 1, 1)
-	shine.BackgroundTransparency = 1
-	shine.BorderSizePixel = 0
-	local shineCorner = Instance.new("UICorner")
-	shineCorner.CornerRadius = UDim.new(1, 0)
-	shineCorner.Parent = shine
-	shine.Parent = frame
-	frame.Parent = dropGui
-	table.insert(drops, {
-		frame = frame,
-		stroke = stroke,
-		shine = shine,
-		born = os.clock(),
-		life = random:NextNumber(DROP_LIFE.Min, DROP_LIFE.Max),
-		x = x,
-		y = y,
-		slide = random:NextNumber(14, 60),
-	})
-end
-
--- Every frame: the drops slide down (slowly, then a little faster, like a real drop running)
--- and dry out.
-local function updateDrops()
 	local now = os.clock()
-	for index = #drops, 1, -1 do
-		local drop = drops[index]
-		local alpha = (now - drop.born) / drop.life
-		if alpha >= 1 then
-			drop.frame:Destroy()
-			table.remove(drops, index)
-			continue
-		end
-		-- fade in fast (0.1 of its life), stay, fade out over the last 40 %
-		local visible = math.min(alpha / 0.1, 1) * math.clamp((1 - alpha) / 0.4, 0, 1)
-		drop.frame.BackgroundTransparency = 1 - 0.22 * visible
-		drop.stroke.Transparency = 1 - 0.5 * visible
-		drop.shine.BackgroundTransparency = 1 - 0.55 * visible
-		drop.frame.Position =
-			UDim2.new(drop.x, 0, drop.y, math.floor(drop.slide * alpha * alpha + 0.5))
+	if now >= nextLensCheck then
+		nextLensCheck = now + LENS_CHECK_EVERY
+		local _, _, covered, indoors = WeatherController.rainState()
+		-- the park is always sunny and a duel is an arena: wiped at once
+		lensClear = player:GetAttribute("InDuel") == true or ParkAtmosphereController.inPark()
+		local position = cameraPosition()
+		local open = not covered
+			and not indoors
+			and position ~= nil
+			and CityZones.musicZoneAt(position) == nil
+		lensRain = if open and not lensClear then intensity * (1 - park) else 0
 	end
-end
-
--- Should a drop land on the lens now? (Raining hard enough, the camera outside in the open.)
-local function lensInTheRain(): boolean
-	local intensity, _, covered, indoors = WeatherController.rainState()
-	if intensity * (1 - ParkAtmosphereController.blend()) < 0.5 or covered or indoors then
-		return false
-	end
-	if player:GetAttribute("InDuel") == true or ParkAtmosphereController.inPark() then
-		return false
-	end
-	local position = cameraPosition()
-	return position ~= nil and CityZones.musicZoneAt(position) == nil
-end
-
-local function tickDrops()
-	local now = os.clock()
-	if now >= nextDropAt then
-		local _, storm = WeatherController.rainState()
-		local gap = if storm then DROP_GAP_STORM else DROP_GAP_RAIN
-		nextDropAt = now + random:NextNumber(gap.Min, gap.Max)
-		if lensInTheRain() then
-			for _ = 1, random:NextInteger(1, if storm then 3 else 2) do
-				spawnDrop()
-			end
-		end
-	end
-	if #drops > 0 then
-		updateDrops()
-	end
+	LensRain.step(dt, lensRain, storm, lensClear)
 end
 
 ------------------------------------------------------------------------------
@@ -614,6 +494,81 @@ local function updateEmergencyPulse(pulsing: boolean)
 	end
 end
 
+-- Lowers a sound to silence over `seconds`, then stops and removes it.
+local function fadeOut(sound: Sound, seconds: number)
+	local tween = TweenService:Create(sound, TweenInfo.new(seconds), { Volume = 0 })
+	tween.Completed:Connect(function()
+		sound:Destroy()
+	end)
+	tween:Play()
+end
+
+-- The street lamps that stutter (attribute Flicker, server: Ambience) give a short, faint
+-- electric crackle when they cut out, if you are close (the PowerBuzz sound, very quiet).
+-- Each lamp near the camera is watched (its light's Enabled), the far ones are forgotten.
+local CRACKLE_RANGE = 26 -- studs: heard only this close
+local CRACKLE_WATCH_RANGE = 60
+local CRACKLE_VOLUME = 0.3 -- share of PowerBuzz's volume
+local CRACKLE_LENGTH = NumberRange.new(0.3, 0.7) -- seconds before it is cut
+local CRACKLE_COOLDOWN = 2.5 -- seconds between two crackles (all lamps)
+local crackleWatch: { [BasePart]: RBXScriptConnection } = {}
+local nextCrackle = 0
+
+local function crackle(lamp: BasePart)
+	local now = os.clock()
+	local position = cameraPosition()
+	if now < nextCrackle or position == nil or ParkAtmosphereController.blend() > 0.5 then
+		return
+	end
+	if (lamp.Position - position).Magnitude > CRACKLE_RANGE then
+		return
+	end
+	nextCrackle = now + CRACKLE_COOLDOWN
+	local sound = SoundController.playAt("PowerBuzz", lamp.Position, CRACKLE_RANGE + 10)
+	if sound then
+		sound.Volume *= CRACKLE_VOLUME
+		-- a random bit of the buzz, cut short
+		sound.TimePosition = random:NextNumber(0, 1.5)
+		task.delay(random:NextNumber(CRACKLE_LENGTH.Min, CRACKLE_LENGTH.Max), function()
+			if sound.Parent then
+				fadeOut(sound, 0.08)
+			end
+		end)
+	end
+end
+
+-- Every second: watch the stuttering lamps near the camera, forget the far ones.
+local function updateCrackleWatch()
+	local position = cameraPosition()
+	for _, instance in CollectionService:GetTagged("CityLamp") do
+		if not instance:IsA("BasePart") or instance:GetAttribute("Flicker") ~= true then
+			continue
+		end
+		local lamp = instance :: BasePart
+		local near = position ~= nil and (lamp.Position - position).Magnitude < CRACKLE_WATCH_RANGE
+		local watching: RBXScriptConnection? = crackleWatch[lamp]
+		if near and watching == nil then
+			local light = lightOf(lamp)
+			if light then
+				crackleWatch[lamp] = light:GetPropertyChangedSignal("Enabled"):Connect(function()
+					if not light.Enabled then
+						crackle(lamp)
+					end
+				end)
+			end
+		elseif not near and watching then
+			watching:Disconnect()
+			crackleWatch[lamp] = nil
+		end
+	end
+	for lamp, connection in crackleWatch do
+		if lamp.Parent == nil then
+			connection:Disconnect()
+			crackleWatch[lamp] = nil
+		end
+	end
+end
+
 -- The power cut's timeline, from the server's attributes: started at WeatherStartedAt, the
 -- lights stutter for POWER_FLICKER s, then dark for POWER_DARK s.
 local scheduledCut = -1
@@ -631,11 +586,16 @@ local function onWeatherChanged()
 	if untilBlow < -1 then
 		return -- joined in the middle of it
 	end
-	-- the grid buzzing while the lights stutter (not heard from the park)
+	-- the grid buzzing and crackling while the lights stutter (not heard from the park)
+	local buzz: Sound? = nil
 	if untilBlow > 1 and ParkAtmosphereController.blend() < 0.5 then
-		SoundController.play2D("PowerBuzz")
+		buzz = SoundController.play2D("PowerBuzz")
 	end
 	task.delay(math.max(0, untilBlow), function()
+		-- the buzz dies with the grid (it stops fast just as the transformer blows)
+		if buzz then
+			fadeOut(buzz, 0.25)
+		end
 		if ParkAtmosphereController.blend() > 0.5 then
 			return -- (from the park you neither see nor hear the substation)
 		end
@@ -665,13 +625,13 @@ end
 -- Lifecycle
 ------------------------------------------------------------------------------
 
-local function update()
+local function update(dt: number)
 	local now = os.clock()
 	local park = ParkAtmosphereController.blend()
 
 	-- rain
-	tickDrops()
 	local intensity, storm, covered, indoors = WeatherController.rainState()
+	updateLens(dt, intensity, storm, park)
 	local rain = intensity * (1 - park)
 	if now >= nextRippleCheck then
 		nextRippleCheck = now + RIPPLE_CHECK_EVERY
@@ -686,6 +646,7 @@ local function update()
 	if now >= nextHaloCheck then
 		nextHaloCheck = now + HALO_CHECK_EVERY
 		updateHalos(fog)
+		updateCrackleWatch()
 	end
 
 	-- power cut
@@ -693,7 +654,7 @@ local function update()
 end
 
 function WeatherFxController.start()
-	buildDropGui()
+	LensRain.build(player:WaitForChild("PlayerGui"))
 	buildGroundFog()
 	workspace:GetAttributeChangedSignal("Weather"):Connect(onWeatherChanged)
 	onWeatherChanged()

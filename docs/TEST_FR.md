@@ -468,10 +468,26 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | R2 | Pluie, regarder une flaque proche | Petits **cercles** qui s'ouvrent et disparaissent à la surface. |
 | R3 | Pluie, rester dehors en 3ᵉ personne | Petites éclaboussures sur la **tête et les épaules** de ton perso. En 1ʳᵉ personne : pas d'éclaboussures devant l'objectif. |
 | R4 | Pluie / orage, regarder la pluie quelques secondes | Les gouttes tombent **penchées** (un peu sous la pluie, beaucoup en orage) et de temps en temps une **rafale** les penche plus fort 1–3 s. |
-| R5 | Orage : regarder les éclairs | L'éclair tombe dans une direction au hasard (souvent devant toi), le flash est **bleuté** et éclaire tout l'écran. Environ 1 sur 5 tombe **près** : flash plus fort, la rue s'éclaire un instant, la caméra **tremble** un peu, et le tonnerre (quand il aura un son) claque presque tout de suite. |
+| R5 | Orage : regarder les éclairs | L'éclair tombe dans une direction au hasard (souvent devant toi), le flash est **bleuté** et éclaire tout l'écran. Environ 1 sur 5 tombe **près** : flash plus fort, la rue s'éclaire un instant, la caméra **tremble** un peu, et le tonnerre claque presque tout de suite. |
 | F1 | Brouillard (`WeatherForce = "Fog"`) | Une **nappe basse** qui dérive lentement au ras du sol autour de toi (pas dans le bar / les boutiques ni dans le parc), un **halo** doux autour des lampadaires allumés, la musique et la pluie de la ville un peu **étouffées**. Tout revient à la normale à la fin. |
-| F2 | Coupure de courant (de nuit : `WeatherForce = "PowerCut"`) | Les lumières **grésillent / clignotent ~3,5 s** (son `PowerBuzz` vide pour l'instant), puis le transformateur de la **sous-station** (nord du Lot 9) **saute** : gerbe d'**étincelles**, fumée, flash bleu-blanc (son `TransformerBlow` vide pour l'instant). Pendant le noir, les lumières rouges de secours **pulsent** doucement. Le retour en vague marche comme avant. |
+| F2 | Coupure de courant (de nuit : `WeatherForce = "PowerCut"`) | Les lumières **grésillent / clignotent ~3,5 s** (son `PowerBuzz`), puis le transformateur de la **sous-station** (nord du Lot 9) **saute** : gerbe d'**étincelles**, fumée, flash bleu-blanc (son `TransformerBlow`). Pendant le noir, les lumières rouges de secours **pulsent** doucement. Le retour en vague marche comme avant. |
 | F3 | Être dans le parc pendant pluie / brouillard / coupure | Rien de tout ça : toujours ensoleillé, pas de gouttes, pas de brume, pas d'étincelles. |
+
+#### v8 : pluie réaliste sur l'écran, tonnerre, transformateur, grésillement
+
+(R1 ci-dessus est remplacé par ces tests. Avant : importer les images de `assets/raindrops/`, voir `docs/RAIN_FR.md`.)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L1 | Pluie **sans** les IDs d'images (tous à `0`) | **Aucune** goutte sur l'écran (plus les petites taches rondes). Le reste de la pluie marche. |
+| L2 | Pluie, dehors à découvert, IDs collés | De temps en temps (≈ 1 goutte toutes les 3 s) une **vraie goutte d'eau** se pose, surtout sur les côtés / en haut, presque jamais au centre : reflet en haut à gauche, bord sombre, bas plus clair, on voit le jeu à travers. Elle apparaît d'un coup (petite puis à sa taille). |
+| L3 | Rester 30 s à 1 min sous la pluie | Les gouttes restent en place et **grossissent** doucement ; deux gouttes qui se touchent **fusionnent** ; une grosse goutte finit par **couler** vers le bas (de plus en plus vite, en zigzaguant un peu) avec une courte **traînée** mouillée, et sort de l'écran. Jamais plus de 25 gouttes. |
+| L4 | Orage (`"Storm"`) | Plus de gouttes, et sur les **bords** de l'écran une **buée** de minuscules gouttelettes + un léger voile humide qui apparaissent en ~10–20 s. Le centre reste net. |
+| L5 | Passer sous un auvent / le viaduc, entrer dans le bar ou une boutique | Tout **sèche** en 2–4 s (les gouttes pâlissent et rétrécissent, la buée s'efface). Ressortir : ça recommence petit à petit. |
+| L6 | Entrer dans le parc, ou lancer un duel, avec des gouttes à l'écran | Tout **disparaît d'un coup**. |
+| L7 | Orage : attendre un éclair | Le **tonnerre** se fait entendre 1 à 4 s après un éclair lointain (plus ou moins fort), presque tout de suite et plus fort après un éclair proche. |
+| L8 | Coupure de courant (nuit, `"PowerCut"`) | Pendant les ~3,5 s de clignotement : un **grésillement électrique** ; il se coupe net quand le **transformateur saute** (bang + crépitement, en 3D depuis la sous-station, plus faible si tu es loin). |
+| L9 | Nuit, se tenir près d'un lampadaire qui grésille (il se coupe une fraction de seconde de temps en temps) | Un petit **crépitement** très discret à chaque coupure (pas plus d'un toutes les 2,5 s), rien si tu es à plus de ~25 studs. |
 
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
 
