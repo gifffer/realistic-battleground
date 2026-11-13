@@ -320,8 +320,21 @@ function RiftFx.onAction(model: Model, animation: string)
 		-- heard as he comes out. Cut if the shot fizzles.
 		teleportSounds[model] = SoundController.play("Teleport", model)
 	elseif animation == "Rift_Glove" then
-		-- (its blast from the start: the file takes a moment to get going)
-		SoundController.play("GloveBlast", model)
+		-- The blast, timed on the clip (the palm out at 0.36 s), not on the
+		-- server's answer, which comes later.
+		task.delay(0.3, function()
+			if model.Parent then
+				SoundController.play("GloveBlast", model)
+			end
+		end)
+	elseif animation == "Rift_RayGun" or animation == "Rift_MegaRay" then
+		-- The shot, timed on the clip (0.32 / 0.45 s).
+		local big = animation == "Rift_MegaRay"
+		task.delay(if big then 0.45 else 0.32, function()
+			if model.Parent then
+				SoundController.play(if big then "RayGunBig" else "RayGun", model)
+			end
+		end)
 	end
 	if animation == "Rift_Glove" or animation == "Rift_Slam" then
 		chargeGlove(model, if animation == "Rift_Slam" then 0.55 else 0.36)
@@ -568,9 +581,7 @@ local function ray(data: { [string]: any })
 		TweenService:Create(light, TweenInfo.new(seconds + 0.1), { Brightness = 0 }):Play()
 		Debris:AddItem(point, 1)
 	end
-	if typeof(by) == "Instance" and by:IsA("Model") then
-		SoundController.play(if big == true then "RayGunBig" else "RayGun", by)
-	end
+	-- (its sound plays from the move's start, at the shot: RiftFx.onAction)
 	shakeNear(to, if big == true then 2.5 else 0.8, 0.2)
 end
 
@@ -655,6 +666,25 @@ local function portals(data: { [string]: any })
 		return
 	end
 	door(entry, seconds)
+	-- Our own character: we simulate it, so we move it ourselves, at the
+	-- moment the server does (else it stays put until the server's move
+	-- reaches us).
+	local by, land, travelIn = data.by, data.land, data.travelIn
+	if
+		typeof(by) == "Instance"
+		and by == Players.LocalPlayer.Character
+		and typeof(land) == "CFrame"
+		and typeof(travelIn) == "number"
+	then
+		local character = by :: Model
+		task.delay(math.max(0, travelIn), function()
+			local root = character:FindFirstChild("HumanoidRootPart")
+			if character.Parent and root and root:IsA("BasePart") then
+				character:PivotTo(land)
+				root.AssemblyLinearVelocity = Vector3.zero
+			end
+		end)
+	end
 	-- On the floor: a flat round one; on a wall: a door.
 	if math.abs(exit.LookVector.Y) > 0.7 then
 		portal(exit, 4.4, 4.4, 0.22, seconds, 0.25)

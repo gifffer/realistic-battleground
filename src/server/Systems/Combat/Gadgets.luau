@@ -508,6 +508,10 @@ local function usePortal(
 			by = state.model,
 			entry = entry,
 			exit = face,
+			-- (where he comes out, and when: his own client moves him there
+			-- itself at that moment, it simulates its character)
+			land = exit,
+			travelIn = portal.travel - portal.open,
 			seconds = portal.travel - portal.open + 0.7,
 		})
 		-- Stepping in: he can't be hit in between.
@@ -529,8 +533,29 @@ local function usePortal(
 		end
 		Push.cancel(state.root)
 		state.knockbackUntil = 0
+		-- (a player's client simulates its own character and would keep it
+		-- where it was for a while: the server takes it for the move, then
+		-- gives it back)
+		local root = state.root
+		local owner = state.player
+		local owned = owner ~= nil and root:CanSetNetworkOwnership()
+		if owned then
+			root:SetNetworkOwner(nil)
+		end
 		state.model:PivotTo(exit)
-		state.root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyLinearVelocity = Vector3.zero
+		if owned then
+			task.delay(0.1, function()
+				if
+					root.Parent
+					and root:CanSetNetworkOwnership()
+					and owner
+					and owner.Character == state.model
+				then
+					root:SetNetworkOwner(owner)
+				end
+			end)
+		end
 	end)
 end
 

@@ -276,13 +276,13 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.1,
 		fallback = "AcidSizzle",
 	},
-	GloveBlast = { -- the gravity glove: a deep thump of air
-		ids = { 1842641928 },
+	GloveBlast = { -- the gravity glove (a magnetic pulse)
+		ids = { 15912192112 },
 		volume = 0.9,
-		pitch = 0.85,
+		pitch = 1,
 		pitchVariation = 0.05,
 		fallback = "Tackle",
-		length = 1.3,
+		length = 1.5,
 	},
 	RiftImpact = { -- a heavy impact of the Awakening (the arms flung out, the gravity slam)
 		ids = { 71947288327190 },
