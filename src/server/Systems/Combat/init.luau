@@ -604,8 +604,8 @@ local function addShards(victim: CombatState, attacker: CombatState, zone: strin
 end
 
 -- A kill (or nothing at all, see onKill): every injury is healed. Not the
--- heavy hits' gore (HeavyGore: a torn limb, an open fracture, teeth and
--- jaw stay until death), nor the limp of a broken shin.
+-- heavy hits' gore (HeavyGore: a torn limb, an open fracture stay until
+-- death), nor the limp of a broken shin.
 local function healInjuries(state: CombatState)
 	local limping = HeavyGoreUtil.hasLegFracture(state.model)
 	state.legDamage = 0
@@ -879,19 +879,29 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		end
 	end
 
-	if Knockout.isKnockedOut(victim.model) then
-		-- That hit knocked them out: no stun or knockback on a limp body. A
-		-- heavy one may break them (HeavyGore: rare; never heat vision).
-		local heavy = damage >= Config.HeavyGore.HEAVY_DAMAGE
-			or spec.kind == "Finisher"
-			or spec.knockdown ~= nil
-		if heavy and not spec.burns then
-			if HeavyGore.knockoutBlow(victim.model, from, zone :: Types.HitZone, side) then
-				-- (a broken shin: they limp if they get up)
-				victim.limping = true
-				setAttribute(victim.model, "Limping", true)
-			end
+	-- The heavy blow that ends a big combo may break a bone open or tear an
+	-- arm off (HeavyGore: rare; never heat vision, nor a grab's catch).
+	local knockedOut = Knockout.isKnockedOut(victim.model)
+	if not spec.burns and not spec.grab then
+		local brokeLeg = HeavyGore.landed(victim.model, attacker.model, {
+			damage = damage,
+			heavy = damage >= Config.HeavyGore.HEAVY_DAMAGE
+				or spec.kind == "Finisher" -- (the 4th M1)
+				or spec.knockdown ~= nil,
+			zone = zone :: Types.HitZone,
+			side = side,
+			from = from,
+			knockedOut = knockedOut,
+		})
+		if brokeLeg then
+			-- (a broken shin: he limps, now or when he gets up)
+			victim.limping = true
+			setAttribute(victim.model, "Limping", true)
 		end
+	end
+
+	if knockedOut then
+		-- That hit knocked them out: no stun or knockback on a limp body.
 		event(spec.kind, true, true)
 		return true
 	end
@@ -1906,23 +1916,6 @@ local function startCinematic(
 			end)
 		end
 	end
-	if cinematic.id == "KnockoutCombo" then
-		-- the last punch to the face (Shared/Finishers: the last "Face")
-		-- knocks teeth out
-		local lastFace: number? = nil
-		for _, event in cinematic.events do
-			if event.kind == "Face" then
-				lastFace = event.time
-			end
-		end
-		if lastFace then
-			task.delay(lastFace, function()
-				if not over and target.Parent and state.attackToken == token and isAlive(state) then
-					HeavyGore.teeth(target)
-				end
-			end)
-		end
-	end
 	if cinematic.id == "Gore" then
 		-- the horns going into the ribcage (Shared/Finishers "Gore": "Impact")
 		local impact = Finishers.CHARGE.impact
@@ -1989,12 +1982,6 @@ local function startCinematic(
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
 			end
-			-- On top of its own: a limb torn off, a fracture, the jaw
-			-- (HeavyGore: rare, each finisher its own chances).
-			local chances = Config.HeavyGore.FINISHER_GORE[cinematic.id]
-			if chances then
-				HeavyGore.finisherKill(target, root.Position, chances)
-			end
 		end
 		-- (the attacker stays held until the end of the cutscene)
 	end)
@@ -2010,7 +1997,7 @@ end
 -- Can this cinematic be played on these two? Every one needs both his
 -- hands (the bat, the punches and the liver, the grip on the arm, the hand
 -- on the throat), the Bouncer's the victim's right arm too: one of them torn
--- off (HeavyGore, a knock-out he got up from), the plain finisher instead.
+-- off (HeavyGore: in a fight), the plain finisher instead.
 local function cinematicFits(
 	attacker: Model,
 	victim: Model,
@@ -2078,14 +2065,6 @@ local function startFinisher(state: CombatState, target: Model): boolean
 			return
 		end
 		Knockout.finish(target, state.model)
-		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
-		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
-			HeavyGore.finisherKill(
-				target,
-				state.root.Position,
-				Config.HeavyGore.FINISHER_GORE.Plain
-			)
-		end
 	end)
 	return true
 end

@@ -5,14 +5,13 @@
 --     (the real shoulder blade / hip bone, torn muscles, skin), and on the
 --     limb lying there (its own model, tag HeavyGore.TAG) its torn end (the
 --     real muscles' cut, the bone's head out of it);
---   • an open fracture ("Fracture_<Limb>"): the real forearm / shin bones
---     snapped, out through the torn skin of the forearm / shin;
---   • teeth knocked out ("TeethOut"): they fly out of the mouth with blood
---     (when it happens in front of us only);
---   • a broken jaw ("JawBroken"): the mouth torn open, crooked, teeth
---     missing, blood over the chin.
--- Pieces from WoundKit (GoreKit); simpler ones drawn here without them (an
--- older kit). Everything is welded to the body's parts: it goes with them.
+--   • an open fracture ("Fracture_<Limb>"): the hole in the forearm / the
+--     shin and the real broken bone out of it are Gashes' (the limb's skin
+--     opened, the kit's "Break" insert in it); here the crack, the blood
+--     spurting and running down when it happens.
+-- Pieces from WoundKit (GoreKit, Gashes); simpler ones drawn here without
+-- them (an older kit). Everything is welded to the body's parts: it goes
+-- with them.
 --
 --   HeavyGore.watch(model)   follow a fighter's (or a body's) attributes
 --   HeavyGore.start()        draw the torn limbs lying around
@@ -22,12 +21,10 @@ local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
-local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
-local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
+local Gashes = require(script.Parent.Gashes)
 local GoreKit = require(script.Parent.GoreKit)
-local HeadBlast = require(script.Parent.HeadBlast)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local HeavyGore = {}
@@ -41,7 +38,9 @@ local TENDON = Color3.fromRGB(214, 200, 182)
 local MUSCLE = Color3.fromRGB(150, 32, 34)
 local MUSCLE_DARK = Color3.fromRGB(112, 22, 26)
 local FAT = Color3.fromRGB(222, 190, 112)
-local TOOTH = Color3.fromRGB(236, 228, 206)
+local ARTERY = Color3.fromRGB(150, 30, 36)
+local VEIN = Color3.fromRGB(70, 26, 46)
+local NERVE = Color3.fromRGB(232, 218, 170)
 local LIVE_TIME = 1.5 -- seconds: a torn limb this new is happening now
 local DRIP_TIME = 8
 
@@ -52,8 +51,6 @@ local SOCKETS: { [string]: CFrame } = {
 	RightLeg = CFrame.lookAt(Vector3.new(0.5, -1.02, 0), Vector3.new(0.5, -2, 0), Vector3.zAxis),
 	LeftLeg = CFrame.lookAt(Vector3.new(-0.5, -1.02, 0), Vector3.new(-0.5, -2, 0), Vector3.zAxis),
 }
--- An open fracture (limb space): where the bone comes out of the front.
-local FRACTURE_AT = { arm = Vector3.new(0, -0.35, -0.5), leg = Vector3.new(0, -0.4, -0.5) }
 
 local function enabled(): boolean
 	return Config.Injuries.SKIN_TEAR and Config.HeavyGore.ENABLED
@@ -78,8 +75,12 @@ local function painter(skin: Color3): (layer: string) -> (Color3, number)
 			return FAT, 0.08
 		elseif layer == "Blood" then
 			return BLOOD, 0.25
-		elseif layer == "Tooth" then
-			return TOOTH, 0.12
+		elseif layer == "Artery" then
+			return ARTERY, 0.18
+		elseif layer == "Vein" then
+			return VEIN, 0.18
+		elseif layer == "Nerve" then
+			return NERVE, 0.08
 		end
 		return FLESH, 0.14
 	end
@@ -105,7 +106,7 @@ local function simplePart(name: string, shape: Enum.PartType, size: Vector3, col
 	part.Size = size
 	part.Material = Enum.Material.SmoothPlastic
 	part.Color = color
-	part.Reflectance = if color == BONE or color == TOOTH then 0.05 else 0.15
+	part.Reflectance = if color == BONE then 0.05 else 0.15
 	return part
 end
 
@@ -220,18 +221,20 @@ local function fracture(model: Model, key: string, seed: number, live: boolean)
 		return
 	end
 	local tag = "HeavyGore_" .. limb.fracture
-	local fresh = part:FindFirstChild(tag) == nil
-	local at = if limb.arm then FRACTURE_AT.arm else FRACTURE_AT.leg
-	dress(part, limb.fracture, tag, part.Color, function(folder: Instance)
-		simpleWound(
-			part,
-			CFrame.lookAt(at, at - Vector3.zAxis),
-			0.18,
-			Vector3.new(0.14, 0.14, 0.35),
-			folder
-		)
-	end)
-	if live and fresh then
+	local at = limb.breakAt
+	if not Gashes.hasBreak(limb.fracture) and part:FindFirstChild(tag) == nil then
+		-- (an older kit: Gashes can't open the limb; a simpler wound on it)
+		dress(part, limb.fracture, tag, part.Color, function(folder: Instance)
+			simpleWound(
+				part,
+				CFrame.lookAt(at, at - Vector3.zAxis),
+				0.18,
+				Vector3.new(0.14, 0.14, 0.35),
+				folder
+			)
+		end)
+	end
+	if live then
 		SoundController.play("RibCrack", model)
 		local out = CFrame.lookAt(at, at + Vector3.new(0, -0.4, -1))
 		BloodGush.artery(part, out, {
@@ -248,89 +251,6 @@ local function fracture(model: Model, key: string, seed: number, live: boolean)
 end
 
 ------------------------------------------------------------------------------
--- Teeth, the jaw
-------------------------------------------------------------------------------
-
-local function hasFace(model: Model): BasePart?
-	local head = model:FindFirstChild("Head")
-	if head == nil or not head:IsA("BasePart") or HeadBlast.isBlown(model) then
-		return nil
-	end
-	return head
-end
-
--- Teeth fly out of the mouth (only seen live), with blood.
-local function teeth(model: Model, seed: number)
-	local head = hasFace(model)
-	if head == nil then
-		return
-	end
-	local random = Random.new(seed)
-	local mouth = head.CFrame * Vector3.new(0, -0.3, -0.55)
-	local forward = head.CFrame.LookVector
-	Blood.spray(mouth, forward + Vector3.new(0, 0.3, 0), 1.2, model)
-	local pieces = GoreKit.get()
-	local range = Config.HeavyGore.TEETH_COUNT
-	local count = random:NextInteger(range[1], range[2])
-	local names = table.clone(GoreShapes.tooth)
-	for index = 1, math.min(count, #names) do
-		local pick = random:NextInteger(index, #names)
-		names[index], names[pick] = names[pick], names[index]
-		local piece = if pieces then pieces[names[index]] else nil
-		local tooth: BasePart
-		if piece then
-			tooth = GoreKit.spawn(piece, head.CFrame, painter(head.Color))
-		else
-			tooth = simplePart("Tooth", Enum.PartType.Block, Vector3.new(0.07, 0.1, 0.06), TOOTH)
-			tooth.CFrame = CFrame.new(mouth)
-		end
-		tooth.CanCollide = false
-		tooth.CanQuery = false
-		tooth.CanTouch = false
-		local direction = (
-			forward
-			+ Vector3.new(0, random:NextNumber(0.2, 0.9), 0)
-			+ random:NextUnitVector() * 0.45
-		).Unit
-		tooth.AssemblyLinearVelocity = direction * random:NextNumber(10, 20)
-		tooth.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(10, 30)
-		tooth.Parent = workspace
-		-- (solid once out of the head: they bounce on the floor)
-		task.delay(0.12, function()
-			if tooth.Parent then
-				tooth.CanCollide = true
-			end
-		end)
-		Debris:AddItem(tooth, Config.HeavyGore.TEETH_TIME)
-	end
-end
-
-local function jaw(model: Model, seed: number, live: boolean)
-	local head = hasFace(model)
-	if head == nil then
-		return
-	end
-	local fresh = head:FindFirstChild("HeavyGore_Jaw") == nil
-	dress(head, "JawBroken", "HeavyGore_Jaw", head.Color, function(folder: Instance)
-		-- the mouth torn open: dark, raw, a few teeth
-		local raw = simplePart("Raw", Enum.PartType.Block, Vector3.new(0.5, 0.18, 0.04), FLESH_DARK)
-		raw.CFrame = head.CFrame * CFrame.new(0.03, -0.27, -0.6) * CFrame.Angles(0, 0, math.rad(-8))
-		weldTo(head, raw, folder)
-		for index = -2, 2 do
-			if index ~= 0 then
-				local tooth =
-					simplePart("Tooth", Enum.PartType.Block, Vector3.new(0.06, 0.07, 0.03), TOOTH)
-				tooth.CFrame = head.CFrame * CFrame.new(index * 0.08, -0.22, -0.62)
-				weldTo(head, tooth, folder)
-			end
-		end
-	end)
-	if live and fresh then
-		BloodGush.runDown(head, Vector3.new(0, -0.38, -0.55), 5, seed)
-	end
-end
-
-------------------------------------------------------------------------------
 -- What to draw for one attribute
 ------------------------------------------------------------------------------
 
@@ -340,15 +260,6 @@ local function apply(model: Model, name: string, live: boolean)
 	end
 	local value = model:GetAttribute(name)
 	if typeof(value) ~= "number" then
-		return
-	end
-	if name == HeavyGoreUtil.TEETH then
-		if live then
-			teeth(model, value)
-		end
-		return
-	elseif name == HeavyGoreUtil.JAW then
-		jaw(model, value, live)
 		return
 	end
 	local kind, key = HeavyGoreUtil.parse(name)

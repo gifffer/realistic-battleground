@@ -12,8 +12,10 @@ chest the Sentinel's bore cuts through - heart, sternum, ribs and their
 cartilage, pectoral and intercostal muscles, lung (Bore* inserts); the body
 torn in two at the hips - lumbar vertebrae and discs, small intestine,
 colon, abdominal and back muscles, hip bones, sacrum (Gore_Waist_*,
-Gore_Hips_*, Gore_GutPile_*); the heavy hits - the thigh's muscles, femur,
-hip bone and the muscles round the hip joint (Gore_LegEnd*_*, Gore_Hip*_*),
-the radius and ulna, tibia and fibula of the open fractures
-(Gore_ForearmBreak*_*, Gore_ShinBreak*_*), the teeth of the broken jaw
-(Gore_JawBroken_*). What was taken and how: tools/wounds/anatomy/README.md.
+Gore_Hips_*, Gore_GutPile_*); the heavy hits - the radius and ulna, the
+forearm's muscles, arteries, veins and nerves (the BreakArm* inserts), the
+tibia and fibula, the leg's muscles, vessels and nerves (BreakLeg*), the
+thigh's muscles, femur, femoral vessels and sciatic nerve, hip bone and the
+muscles round the hip joint (Gore_LegEnd*_*, Gore_Hip*_*), the arms torn off
+(Gore_ArmEndR_*, Gore_ShoulderR_*, *L: the Bouncer's anatomy). What was
+taken and how: tools/wounds/anatomy/README.md.

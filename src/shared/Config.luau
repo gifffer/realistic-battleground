@@ -333,37 +333,43 @@ return table.freeze({
 		HURT_SOUND_HEALTH = 70,
 	}),
 
-	-- Gore of the very strong hits (Shared/Util/HeavyGore): RARE. Only a heavy
-	-- blow that KNOCKS OUT (and the finishers), never a plain hit. Decided by
-	-- the server, drawn on every client. Off with Injuries.SKIN_TEAR too.
+	-- Gore of the very strong hits (Shared/Util/HeavyGore): RARE, and only
+	-- in a fight - never from a finisher. Someone lands a BIG COMBO on a
+	-- fighter (the server counts it per victim: the same attacker's hits
+	-- that land, each less than COMBO_GAP after the last); once it is big
+	-- enough, its next HEAVY blow (HEAVY_DAMAGE or more, the 4th M1, or a
+	-- blow that knocks down / launches) may snap a bone open (an open
+	-- fracture of the forearm / the shin on the side it hit) or, rarer, tear
+	-- an arm off. The fighter stays alive and keeps fighting (a broken shin:
+	-- he limps). On the blow that knocks him out the chances are higher.
+	-- Decided by the server, drawn on every client. Off with
+	-- Injuries.SKIN_TEAR too.
 	HeavyGore = table.freeze({
 		ENABLED = true,
-		-- A knock-out blow counts as heavy at this damage or more (or the
-		-- 4th M1, or a blow that knocks down / launches).
+		-- A big combo: this many hits in a row by the same attacker...
+		COMBO_HITS = 6,
+		-- ...or this much damage in a row from him (whichever comes first).
+		COMBO_DAMAGE = 30,
+		-- Seconds between two of his hits for the combo to go on.
+		COMBO_GAP = 1.6,
+		-- A blow counts as heavy at this damage or more (or the 4th M1, or
+		-- a blow that knocks down / launches).
 		HEAVY_DAMAGE = 9,
-		-- A heavy knock-out blow to the head: teeth knocked out.
-		KO_TEETH_CHANCE = 0.6,
-		-- To the body (the arm on that side) or the legs: the limb torn off,
-		-- else an open fracture (bone out of the forearm / shin).
-		KO_TEAR_CHANCE = 0.12,
-		KO_FRACTURE_CHANCE = 0.3,
-		-- Legs torn off on a knock-out (the fighter may get up after): off,
-		-- legs only come off on a kill.
-		KO_TEAR_LEGS = false,
-		-- A finisher's killing blow, on top of its own gore: the chance of a
-		-- limb torn off, of an open fracture, of the jaw broken (teeth out
-		-- with it). "Plain": the kneeling strike (no cinematic, or a fighter
-		-- missing an arm for his). The cinematic ones (Shared/Finishers):
-		-- Bat (the head burst: no jaw left), ArmRip (the right arm torn
-		-- off: another limb at most), KnockoutCombo (teeth out on its last
-		-- punch to the face, the liver), Incinerate (the heart).
-		FINISHER_GORE = table.freeze({
-			Plain = table.freeze({ tear = 0.55, fracture = 0.5, jaw = 0.45 }),
-			Bat = table.freeze({ tear = 0.45, fracture = 0.4, jaw = 0 }),
-			ArmRip = table.freeze({ tear = 0.3, fracture = 0.4, jaw = 0 }),
-			KnockoutCombo = table.freeze({ tear = 0, fracture = 0.35, jaw = 0.6 }),
-			Incinerate = table.freeze({ tear = 0.35, fracture = 0.4, jaw = 0 }),
-		}) :: { [string]: { tear: number, fracture: number, jaw: number } },
+		-- The heavy blow that ends a big combo: the chance of an open
+		-- fracture, of a torn limb (rolled first)...
+		FRACTURE_CHANCE = 0.35,
+		TEAR_CHANCE = 0.08,
+		-- ...and when that blow knocks him out.
+		KO_FRACTURE_CHANCE = 0.45,
+		KO_TEAR_CHANCE = 0.18,
+		-- Legs torn off too (an R6 body without a leg can't stand: off, only
+		-- arms come off).
+		TEAR_LEGS = false,
+		-- After one of these on someone, his combo starts over and nothing
+		-- more for this long (seconds).
+		COOLDOWN = 8,
+		-- Also in duels.
+		IN_DUELS = false,
 		-- At most per body (the Bouncer's torn arm counts).
 		MAX_TORN_LIMBS = 2,
 		MAX_FRACTURES = 2,
@@ -371,9 +377,6 @@ return table.freeze({
 		LIMB_FLING_SPEED = 24,
 		LIMB_FLING_UP = 16,
 		TORN_LIMB_TIME = 12,
-		-- Teeth flying out: how many (min, max), how long they lie there.
-		TEETH_COUNT = table.freeze({ 2, 5 }),
-		TEETH_TIME = 8,
 	}),
 
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish

@@ -1,15 +1,16 @@
 --!strict
 -- HeavyGore: the gore of the very strong hits. SERVER-AUTHORITATIVE: decides
 -- what happens, sets the attributes (Shared/Util/HeavyGore); every client
--- draws it (Client/Combat/HeavyGore), late joiners and the bodies left
--- after a finisher (Corpses) too. Rare (Config.HeavyGore):
---   • a heavy blow that KNOCKS OUT: to the head, teeth knocked out; to the
---     body / legs, the arm / leg on that side torn off (legs: off by
---     default, they may get up) or an open fracture;
---   • a finisher's killing blow (the plain one and each cinematic one,
---     Config.HeavyGore.FINISHER_GORE): a limb torn off, a fracture, the
---     jaw broken;
---   • the Boxer's finisher: teeth out on its last punch to the face.
+-- draws it (Client/Combat/HeavyGore, Client/Combat/Gashes), late joiners
+-- and the bodies left after a finisher (Corpses) too.
+--
+-- Only in a fight, never from a finisher, and rare (Config.HeavyGore): the
+-- server counts the combo each fighter takes (the same attacker's hits that
+-- land, close enough together). Once it is big, the attacker's next HEAVY
+-- blow may snap the forearm / the shin on the side it hit (an open
+-- fracture: a broken leg limps) or, rarer, tear the arm off. The fighter
+-- stays alive and playable; the blow that knocks him out has higher odds.
+-- Then his combo starts over and nothing more happens to him for a while.
 -- Caps per body (MAX_TORN_LIMBS, MAX_FRACTURES). It stays until death (a
 -- limb doesn't grow back, an open fracture doesn't close: a kill's healing
 -- leaves it), then goes with the body (the torn limb after TORN_LIMB_TIME).
@@ -20,10 +21,7 @@
 -- in workspace.TornLimbs (the aim and the finishers' placement leave that
 -- folder out). It only collides with the map (the dead bodies' group).
 --
---   HeavyGore.knockoutBlow(victim, from, zone, side) -> brokeLeg
---   HeavyGore.finisherKill(victim, from, chances)
---   HeavyGore.teeth(victim)
---   HeavyGore.jaw(victim)
+--   HeavyGore.landed(victim, attacker, blow) -> brokeLeg   (a hit landed)
 
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,8 +37,25 @@ local KEYS = HeavyGoreUtil.KEYS
 
 local HeavyGore = {}
 
--- A finisher's chances (Config.HeavyGore.FINISHER_GORE).
-export type Chances = { tear: number, fracture: number, jaw: number }
+-- A hit that landed (Server/Combat resolveHit).
+export type Blow = {
+	damage: number,
+	heavy: boolean, -- HEAVY_DAMAGE or more, the 4th M1, a knockdown / launch
+	zone: Types.HitZone,
+	side: Types.HitSide,
+	from: Vector3, -- where it came from (a torn limb flies away from it)
+	knockedOut: boolean, -- this blow knocked him out
+}
+
+-- The combo each fighter is taking (weak: gone with the body).
+type Combo = {
+	attacker: Model?,
+	hits: number,
+	damage: number,
+	lastAt: number,
+	quietUntil: number, -- nothing more on him before this
+}
+local combos: { [Model]: Combo } = setmetatable({}, { __mode = "k" }) :: any
 
 local random = Random.new()
 
@@ -186,92 +201,75 @@ local function fracture(victim: Model, key: string): boolean
 	return true
 end
 
--- (a burst head has no teeth or jaw left to break)
-local function hasFace(victim: Model): boolean
-	return victim:GetAttribute("HeadBlown") == nil and victim:FindFirstChild("Head") ~= nil
-end
-
--- Teeth knocked out of `victim` (once per body: set again, nothing new).
-function HeavyGore.teeth(victim: Model)
-	if enabled() and hasFace(victim) and victim:GetAttribute(HeavyGoreUtil.TEETH) == nil then
-		victim:SetAttribute(HeavyGoreUtil.TEETH, seed())
-	end
-end
-
--- The jaw broken (teeth out with it).
-function HeavyGore.jaw(victim: Model)
-	if enabled() and hasFace(victim) and victim:GetAttribute(HeavyGoreUtil.JAW) == nil then
-		HeavyGore.teeth(victim)
-		victim:SetAttribute(HeavyGoreUtil.JAW, seed())
-	end
-end
-
--- A heavy blow just knocked `victim` out (`from`: where it came from).
--- Returns true if it broke a leg (they limp if they get up).
-function HeavyGore.knockoutBlow(
-	victim: Model,
-	from: Vector3,
-	zone: Types.HitZone,
-	side: Types.HitSide
-): boolean
-	if not enabled() then
-		return false
-	end
-	if zone == "Head" then
-		if random:NextNumber() < G.KO_TEETH_CHANCE then
-			HeavyGore.teeth(victim)
-		end
-		return false
-	end
-	-- The arm / leg on the side it came from (from the front or the back:
-	-- either).
-	local isArm = zone ~= "Legs"
-	local right = if side == "Right"
+-- The limb on the side the blow came from: the arm for the body and the
+-- head (raised to cover it), the leg for the legs.
+local function limbHit(blow: Blow): string
+	local right = if blow.side == "Right"
 		then true
-		elseif side == "Left" then false
+		elseif blow.side == "Left" then false
 		else random:NextNumber() < 0.5
-	local key = if isArm
-		then (if right then "RightArm" else "LeftArm")
-		else (if right then "RightLeg" else "LeftLeg")
-	local roll = random:NextNumber()
-	if roll < G.KO_TEAR_CHANCE and (isArm or G.KO_TEAR_LEGS) then
-		if tearLimb(victim, key, from) then
-			return false
-		end
+	if blow.zone == "Legs" then
+		return if right then "RightLeg" else "LeftLeg"
 	end
-	if roll < G.KO_TEAR_CHANCE + G.KO_FRACTURE_CHANCE then
-		return fracture(victim, key) and not isArm
-	end
-	return false
+	return if right then "RightArm" else "LeftArm"
 end
 
--- A finisher's killing blow (the body is dead), with these `chances`.
-function HeavyGore.finisherKill(victim: Model, from: Vector3, chances: Chances)
-	if not enabled() then
-		return
+-- The other limb of the same kind (the other arm / leg).
+local OTHER =
+	{ RightArm = "LeftArm", LeftArm = "RightArm", RightLeg = "LeftLeg", LeftLeg = "RightLeg" }
+
+-- `attacker` landed a blow on `victim` (normal combat: not a finisher, not
+-- blocked). Counts it in the combo; at the end of a big one, a heavy blow
+-- may break him. Returns true if it broke a leg (he limps).
+function HeavyGore.landed(victim: Model, attacker: Model, blow: Blow): boolean
+	if not enabled() or (not G.IN_DUELS and victim:GetAttribute("DuelId") ~= nil) then
+		return false
 	end
-	local start = random:NextInteger(1, #KEYS)
-	local torn: string? = nil
-	if random:NextNumber() < chances.tear then
-		for offset = 0, #KEYS - 1 do
-			local key = KEYS[(start + offset - 1) % #KEYS + 1]
-			if tearLimb(victim, key, from) then
-				torn = key
+	local time = os.clock()
+	local combo = combos[victim]
+	if combo == nil then
+		combo = { attacker = nil, hits = 0, damage = 0, lastAt = 0, quietUntil = 0 }
+		combos[victim] = combo
+	end
+	if combo.attacker ~= attacker or time - combo.lastAt > G.COMBO_GAP then
+		-- (someone else, or too long since: a new combo)
+		combo.attacker = attacker
+		combo.hits = 0
+		combo.damage = 0
+	end
+	combo.hits += 1
+	combo.damage += blow.damage
+	combo.lastAt = time
+	local big = combo.hits >= G.COMBO_HITS or combo.damage >= G.COMBO_DAMAGE
+	if not (big and blow.heavy) or time < combo.quietUntil then
+		return false
+	end
+	local tear = if blow.knockedOut then G.KO_TEAR_CHANCE else G.TEAR_CHANCE
+	local breaks = if blow.knockedOut then G.KO_FRACTURE_CHANCE else G.FRACTURE_CHANCE
+	local key = limbHit(blow)
+	local roll = random:NextNumber()
+	local done = false
+	local brokeLeg = false
+	if roll < tear and (LIMBS[key].arm or G.TEAR_LEGS) then
+		done = tearLimb(victim, key, blow.from)
+	end
+	if not done and roll < tear + breaks then
+		-- (that one already broken or gone: the other one)
+		for _, which in { key, OTHER[key] } do
+			if fracture(victim, which) then
+				done = true
+				brokeLeg = not LIMBS[which].arm
 				break
 			end
 		end
 	end
-	if random:NextNumber() < chances.fracture then
-		for offset = 1, #KEYS do
-			local key = KEYS[(start + offset - 1) % #KEYS + 1]
-			if key ~= torn and fracture(victim, key) then
-				break
-			end
-		end
+	if done then
+		-- (his combo starts over, and he is left alone for a while)
+		combo.hits = 0
+		combo.damage = 0
+		combo.quietUntil = time + G.COOLDOWN
 	end
-	if random:NextNumber() < chances.jaw then
-		HeavyGore.jaw(victim)
-	end
+	return brokeLeg
 end
 
 return table.freeze(HeavyGore)
