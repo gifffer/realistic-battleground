@@ -255,6 +255,14 @@ Chaque étape = une branche, testée dans Studio avant de passer à la suivante.
 10. **Boutique** : titres, tenues, effets de kill, émotes (coins). Robux plus tard. ← en cours
 11. **Polish** : map finale, sons, VFX, équilibrage, optimisation, tests à 16 joueurs.
 
+**À faire plus tard (idées validées) :**
+- **Émotes spéciales** : les émotes de la boutique ne sont pas complètes pour l'instant, on les
+  refera (émotes avec objet / effet).
+- **Émote « serpillière » (mop)** : le perso sort une serpillière et nettoie ; elle peut effacer
+  le sang au sol, voire les morceaux (crânes, etc.) laissés par les finishers.
+- **Murs cassables** : les panneaux du rez-de-chaussée de la ville sont déjà tagués `Breakable`
+  pour de futurs persos qui envoient l'adversaire à travers un mur.
+
 ## 12. Questions encore ouvertes
 - Nom/visuel des cosmétiques et prix exacts (étape 10).
 - ~~KO : durée au sol, touche du finisher, PV au relevé~~ → **6 s au sol, achever = clic gauche
