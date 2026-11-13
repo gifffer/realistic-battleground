@@ -222,6 +222,94 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "OrganDrop",
 	},
 
+	-- Dr. Rift --------------------------------------------------------------
+	FlaskThrow = { -- a glass flask flung (a light whoosh, liquid sloshing)
+		ids = {},
+		volume = 0.6,
+		pitch = 1.1,
+		pitchVariation = 0.08,
+		fallback = "Swing",
+	},
+	FlaskBreak = { -- the flask bursting (thin glass)
+		ids = {},
+		volume = 0.8,
+		pitch = 1.15,
+		pitchVariation = 0.06,
+		fallback = "BottleBreak",
+	},
+	AcidSizzle = { -- acid eating into skin / the floor: a hissing fizz
+		ids = {},
+		volume = 0.7,
+		pitch = 1,
+		pitchVariation = 0.1,
+	},
+	Explosion = { -- the explosive flask: a dull, close blast
+		ids = {},
+		volume = 1,
+		pitch = 0.9,
+		pitchVariation = 0.05,
+		fallback = "HeavyHit",
+	},
+	RayGun = { -- the ray gun firing: a short electric crackle
+		ids = {},
+		volume = 0.8,
+		pitch = 1,
+		pitchVariation = 0.06,
+	},
+	RayGunBig = { -- the overcharged ray: a long, rising discharge
+		ids = {},
+		volume = 0.9,
+		pitch = 0.8,
+		pitchVariation = 0.04,
+		fallback = "RayGun",
+	},
+	Burn = { -- skin burning: a sharp hiss
+		ids = {},
+		volume = 0.6,
+		pitch = 1,
+		pitchVariation = 0.1,
+		fallback = "AcidSizzle",
+	},
+	GloveBlast = { -- the gravity glove: a deep thump of air
+		ids = {},
+		volume = 0.9,
+		pitch = 0.85,
+		pitchVariation = 0.05,
+		fallback = "Tackle",
+	},
+	PortalShot = { -- the portal gun's shot
+		ids = {},
+		volume = 0.7,
+		pitch = 1,
+		pitchVariation = 0.06,
+	},
+	PortalOpen = { -- a portal tearing open: a wet, rushing whoosh
+		ids = {},
+		volume = 0.8,
+		pitch = 1,
+		pitchVariation = 0.06,
+	},
+	PortalClose = { -- snapping shut
+		ids = {},
+		volume = 0.8,
+		pitch = 1.1,
+		pitchVariation = 0.05,
+		fallback = "PortalOpen",
+	},
+	PortalFizzle = { -- the shot that couldn't open: a sputter
+		ids = {},
+		volume = 0.6,
+		pitch = 1.2,
+		pitchVariation = 0.08,
+	},
+	BodyCut = { -- cut in two by the portal closing: a wet, heavy slice
+		ids = {},
+		volume = 1,
+		pitch = 0.9,
+		pitchVariation = 0.04,
+		fallback = "FleshTear",
+	},
+
 	-- Injuries (step 5) -----------------------------------------------------
 	-- Loops heard only by you while your health is low.
 	Heartbeat = { ids = { 7237020278 }, volume = 0.6, pitch = 1, pitchVariation = 0 },

@@ -103,6 +103,36 @@ function SoundController.play(name: string, model: Model?): Sound?
 	return sound
 end
 
+-- The same, at a point in the world (a flask bursting, a portal): from an
+-- attachment left there while it plays.
+function SoundController.playAt(name: string, position: Vector3): Sound?
+	local info = Sounds[name]
+	if info == nil then
+		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
+		return nil
+	end
+	local ids = resolveIds(name)
+	if #ids == 0 then
+		return nil
+	end
+	local point = Instance.new("Attachment")
+	point.Name = name
+	point.WorldPosition = position
+	point.Parent = workspace.Terrain
+	local sound = Instance.new("Sound")
+	sound.Name = name
+	sound.SoundId = assetUrl(pickId(name, ids))
+	sound.Volume = info.volume
+	sound.PlaybackSpeed = info.pitch
+		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
+	sound.RollOffMode = Enum.RollOffMode.InverseTapered
+	sound.RollOffMaxDistance = MAX_HEARING_DISTANCE
+	sound.Parent = point
+	sound:Play()
+	Debris:AddItem(point, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
+	return sound
+end
+
 -- A looping sound heard only by this player, not placed in the world (the
 -- heartbeat when you're hurt...). Returns it stopped, volume from Sounds;
 -- nil if the sound has no id yet. The caller plays / stops / fades it.

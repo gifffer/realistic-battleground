@@ -33,6 +33,7 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local Blood = require(script.Parent.Blood)
+local RiftFx = require(script.Parent.RiftFx)
 
 local KitEffects = {}
 
@@ -100,6 +101,12 @@ local HEAVY_MOVES = table.freeze({
 	Powerbomb_Hold = true,
 	ThrowOut_Hold = true,
 	BoneThrow = true, -- (a bone thrown into them, Shared/Weapons)
+	-- Dr. Rift
+	GravityGlove = true,
+	GravitySlam = true,
+	ExplosiveFlask = true,
+	OverchargedRay = true,
+	RiftSwarm = true,
 })
 -- Moves with their own victim reaction (instead of the usual one by zone).
 local REACTIONS: { [string]: string } = {
@@ -134,6 +141,14 @@ local HIT_SOUNDS: { [string]: string } = {
 	BodySlam_Hold = "BodySlam",
 	Powerbomb_Hold = "BodySlam",
 	ThrowOut_Hold = "Tackle",
+	-- Dr. Rift
+	AcidFlask = "AcidSizzle",
+	ExplosiveFlask = "HeavyHit",
+	RayGun = "Burn",
+	OverchargedRay = "Burn",
+	GravityGlove = "GloveBlast",
+	GravitySlam = "GloveBlast",
+	RiftSwarm = "Hit",
 }
 -- Sound when the move STARTS (the swing).
 local START_SOUNDS: { [string]: string } = {
@@ -158,6 +173,10 @@ local START_SOUNDS: { [string]: string } = {
 	Bouncer_HammerFist = "HeavySwing",
 	Bouncer_DoubleHammer = "HeavySwing",
 	Bouncer_Awaken = "Awaken",
+	Rift_Glove = "HeavySwing",
+	Rift_Slam = "HeavySwing",
+	Rift_Swarm = "Swing",
+	Rift_Awaken = "Awaken",
 }
 
 -- (a hold's clips are silent: the catch and its hits make the sounds)
@@ -630,6 +649,7 @@ local swingToken: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: an
 
 function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local move = moveByAnimation[animation]
+	RiftFx.onAction(model, animation) -- (Dr. Rift's flask, guns, glove)
 	local prop = if move then move.prop else nil
 	if move and prop then
 		holdProp(model, prop, move.duration)
@@ -664,6 +684,7 @@ end
 function KitEffects.stopAction(model: Model)
 	swingToken[model] = (swingToken[model] or 0) + 1 -- (no more swings of it)
 	removeProp(model)
+	RiftFx.stopAction(model)
 end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).

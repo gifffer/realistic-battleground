@@ -46,6 +46,7 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local HitPrediction = require(script.Parent.Parent.Combat.HitPrediction)
 local BouncerFx = require(script.Parent.Parent.Combat.BouncerFx)
 local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
+local RiftFx = require(script.Parent.Parent.Combat.RiftFx)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -204,6 +205,7 @@ local function onCombatantAdded(instance: Instance)
 	visuals[model] = visual
 	KitEffects.watch(model) -- bleeding drips, Street Fury
 	WeaponFx.watch(model) -- a bone (to throw) in the hand
+	RiftFx.watch(model) -- Dr. Rift's gear, burns (acid / fire)
 	Wounds.watch(model) -- bruises and cuts where they were hit
 	model:GetAttributeChangedSignal("Stunned"):Connect(function()
 		refreshState(visual)
@@ -659,6 +661,7 @@ local function onCombatEvent(
 		if moveId then
 			KitEffects.onHit(victim, attacker, moveId, zone)
 			BouncerFx.onHit(victim, attacker, moveId, shake)
+			RiftFx.onHit(victim, attacker, moveId)
 			if iAmAttacker then
 				CombatController.notifyMoveLanded(moveId)
 			end
@@ -742,6 +745,11 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	Bouncer_FinisherArmRip = true,
 	Bouncer_FinisherArmRipVictim = true,
 	Bouncer_Awaken = true,
+	-- Dr. Rift: his cinematic, its victim, his activation, his clones' blows.
+	Rift_FinisherPortalCut = true,
+	Rift_FinisherPortalCutVictim = true,
+	Rift_Awaken = true,
+	Rift_ClonePunch = true,
 	-- (a grab's hold clips too: only the server knows it caught someone,
 	-- KitEffects.grabOf)
 })
@@ -847,6 +855,8 @@ function CombatEffectsController.start()
 			end
 		end
 	)
+	RiftFx.setShake(shake)
+	Remotes.RiftFx.OnClientEvent:Connect(RiftFx.onRemote)
 	Remotes.WeaponBroke.OnClientEvent:Connect(
 		function(id: unknown, throwId: unknown, position: unknown, velocity: unknown)
 			if
