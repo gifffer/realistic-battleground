@@ -477,10 +477,13 @@ Place-toi au spawn et regarde vers la **gauche** (le parcours de test est à dro
   (~24 studs). Il s'arrête ~1 s à chaque bout (pose debout sur sa bonne jambe). À chaque
   tour, la jambe qui boite change (`LimpLeg` = Left / Right : visible seulement avec la
   boiterie de la branche `feature/limp-realistic` ; sur les autres branches il boite
-  toujours pareil). On peut le frapper ; il se soigne après 3 s, réapparaît 8 s après sa mort.
+  toujours pareil). On peut le frapper : touché (étourdi) il s'arrête sur place, puis repart
+  vers le même bout. Sa vie revient après 3 s sans coup, ses bleus et coupures s'effacent
+  un par un après ~13 s (comme le Dummy) ; il réapparaît 8 s après sa mort.
 - **FINISHER DEMO**, derrière à gauche : une zone sombre au sol, un mannequin gris
   (« Finisher Victim ») et un bleu, et devant une rangée de **plots rouges**, un par kit
-  (nom du kit + nom du finisher écrits au-dessus).
+  (nom du kit + nom du finisher écrits au-dessus). Si tu tues un des deux mannequins
+  hors démo, une paire neuve réapparaît ~4 s après.
 
 | # | Test | Résultat attendu |
 |---|---|---|

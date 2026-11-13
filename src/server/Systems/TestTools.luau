@@ -33,6 +33,8 @@ local LIMP_TO = Vector3.new(-36, 0, -24)
 local LIMP_PAUSE = 1.2 -- seconds standing (on its good leg) at each end
 local LIMP_WALK_TIMEOUT = 10 -- seconds: stuck, turn around anyway
 local HEAL_AFTER = 3 -- seconds without damage: back to full health
+local WOUNDS_HEAL_AFTER = 13 -- seconds without damage: cuts and bruises go
+local WOUND_HEAL_STEP = 1.5 -- seconds between two (as TrainingDummies)
 local RESPAWN_AFTER = 8 -- seconds a dead test dummy lies there
 
 -- Finisher stage (from the spawn, studs): the victim lies in the middle,
@@ -43,6 +45,7 @@ local BUTTON_SPACING = 5
 local ATTACKER_GAP = 3.2 -- studs between the attacker and the body
 local SETTLE_TIME = 1.5 -- seconds for the knocked-out body to fall
 local BODY_TIME = 8 -- seconds the bodies stay after the finisher
+local IDLE_RESPAWN_AFTER = 4 -- seconds a dead idle stage dummy lies there
 
 local VICTIM_COLOR = Color3.fromRGB(120, 120, 120)
 local ATTACKER_COLOR = Color3.fromRGB(70, 90, 140)
@@ -81,7 +84,8 @@ local function spawnFighter(name: string, color: Color3, at: Vector3, toward: Ve
 	return model
 end
 
--- Back to full health after HEAL_AFTER seconds without damage (not while
+-- Back to full health after HEAL_AFTER seconds without damage, then its
+-- cuts and bruises go one by one, like the training dummies (not while
 -- knocked out: it gets up or gets finished).
 local function healWhenLeftAlone(model: Model, humanoid: Humanoid)
 	local lastDamagedAt = 0
@@ -92,14 +96,18 @@ local function healWhenLeftAlone(model: Model, humanoid: Humanoid)
 		end
 		previous = health
 	end)
+	local nextWoundHealAt = 0
 	task.spawn(function()
 		while model.Parent and humanoid.Health > 0 do
-			if
-				not Knockout.isKnockedOut(model)
-				and os.clock() - lastDamagedAt > HEAL_AFTER
-				and humanoid.Health < humanoid.MaxHealth
-			then
-				humanoid.Health = humanoid.MaxHealth
+			if not Knockout.isKnockedOut(model) then
+				local now = os.clock()
+				if now - lastDamagedAt > HEAL_AFTER and humanoid.Health < humanoid.MaxHealth then
+					humanoid.Health = humanoid.MaxHealth
+				end
+				if now - lastDamagedAt > WOUNDS_HEAL_AFTER and now >= nextWoundHealAt then
+					nextWoundHealAt = now + WOUND_HEAL_STEP
+					Combat.healOneInjury(model)
+				end
 			end
 			task.wait(0.5)
 		end
@@ -110,8 +118,16 @@ end
 -- Limping dummy
 ------------------------------------------------------------------------------
 
--- Walks to `point`; false if it didn't get there in time.
-local function walkTo(humanoid: Humanoid, point: Vector3): boolean
+-- Can't walk right now (knocked out, stunned, held).
+local function cannotWalk(model: Model): boolean
+	return Knockout.isKnockedOut(model)
+		or model:GetAttribute("Stunned") == true
+		or model:GetAttribute("InCinematic") == true
+end
+
+-- Walks to `point`; false if it didn't get there in time, or got hit on the
+-- way (then it stops where it is, like a stunned player).
+local function walkTo(model: Model, humanoid: Humanoid, root: BasePart, point: Vector3): boolean
 	local done = false
 	local reached = false
 	local connection = humanoid.MoveToFinished:Connect(function(success)
@@ -120,7 +136,11 @@ local function walkTo(humanoid: Humanoid, point: Vector3): boolean
 	end)
 	humanoid:MoveTo(point)
 	local deadline = os.clock() + LIMP_WALK_TIMEOUT
-	while not done and os.clock() < deadline and humanoid.Parent do
+	while not done and os.clock() < deadline and model.Parent do
+		if cannotWalk(model) then
+			humanoid:MoveTo(root.Position)
+			break
+		end
 		task.wait(0.1)
 	end
 	connection:Disconnect()
@@ -132,6 +152,7 @@ local function spawnLimper()
 	local b = groundAt(LIMP_TO, 3)
 	local model = spawnFighter("Limping Dummy", LIMP_COLOR, a, b)
 	local humanoid = model:FindFirstChildOfClass("Humanoid") :: Humanoid
+	local root = model:FindFirstChild("HumanoidRootPart") :: BasePart
 	-- (the pace of a limping player: Movement, Config.Injuries.LIMP_SPEED)
 	humanoid.WalkSpeed = Config.Character.WALK_SPEED * Config.Injuries.LIMP_SPEED
 	healWhenLeftAlone(model, humanoid)
@@ -148,18 +169,16 @@ local function spawnLimper()
 		local goal = b
 		while model.Parent and humanoid.Health > 0 do
 			-- Knocked out, stunned, held: wait until it can walk again.
-			if
-				Knockout.isKnockedOut(model)
-				or model:GetAttribute("Stunned") == true
-				or model:GetAttribute("InCinematic") == true
-			then
+			if cannotWalk(model) then
 				task.wait(0.25)
 				continue
 			end
 			-- (set again each lap: healing its injuries clears them)
 			model:SetAttribute("Limping", true)
 			model:SetAttribute("LimpLeg", leg)
-			walkTo(humanoid, goal)
+			if not walkTo(model, humanoid, root, goal) and cannotWalk(model) then
+				continue -- (hit on the way: same goal once it can walk)
+			end
 			task.wait(LIMP_PAUSE)
 			goal = if goal == b then a else b
 			leg = if leg == "Left" then "Right" else "Left"
@@ -174,8 +193,10 @@ end
 local prompts: { ProximityPrompt } = {}
 local stageModels: { Model } = {}
 local busy = false
+local stageGeneration = 0 -- +1 each time the stage is cleared
 
 local function clearStage()
+	stageGeneration += 1
 	for _, model in stageModels do
 		if model.Parent then
 			model:Destroy()
@@ -197,8 +218,23 @@ local function spawnPair(kit: Kits.KitDef?): (Model, Model)
 	end
 	table.insert(stageModels, victim)
 	table.insert(stageModels, attacker)
+	local generation = stageGeneration
 	for _, model in { victim, attacker } do
-		healWhenLeftAlone(model, model:FindFirstChildOfClass("Humanoid") :: Humanoid)
+		local humanoid = model:FindFirstChildOfClass("Humanoid") :: Humanoid
+		healWhenLeftAlone(model, humanoid)
+		-- The idle pair killed by a player: a fresh pair a bit later (a demo
+		-- clears and respawns the stage itself).
+		if kit == nil then
+			humanoid.Died:Connect(function()
+				task.delay(IDLE_RESPAWN_AFTER, function()
+					if busy or stageGeneration ~= generation then
+						return
+					end
+					clearStage()
+					spawnPair(nil)
+				end)
+			end)
+		end
 	end
 	return attacker, victim
 end
