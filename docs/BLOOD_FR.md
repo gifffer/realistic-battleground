@@ -123,7 +123,7 @@ IMAGES = table.freeze({
 | Fichiers | Taille | Ce que c'est | Clé dans `IMAGES` |
 |---|---|---|---|
 | `scalp_split_1` | 256 | Cuir chevelu / front éclaté en étoile (coup de batte, tête contre le sol) | `scalpSplit` (sinon `browCut`) |
-| `flesh_tear_1..2` | 512 | Plaie arrachée **en couleur** : bord de peau, graisse jaune, muscle déchiré, cavité pleine de sang | `fleshTear` (teinte blanche !) |
+| ~~`flesh_tear_1..2`~~ | 512 | **NE PAS IMPORTER** : refusée par la modération Roblox (avertissement sur le compte). `fleshTear` reste à 0. | — |
 
 Pour importer : pareil qu'au-dessus (Gestionnaire de contenus → Importation en bloc), en choisissant **seulement les nouvelles images** (pas `preview.png` ni `preview_v2.png`), puis colle chaque ID dans `Config.Blood.IMAGES` à la bonne place (ordre des numéros). `serum_halo_<n>` va toujours avec `pool_<n>`.
 
@@ -143,3 +143,11 @@ Astuce : importe aussi les images des bleus (`Config.Injuries.BRUISE_IMAGES`, en
 - **Premier coup de poing sur un visage intact** (pas de bleu, pas encore saigné, coup normal) : presque rien. La giclée est réduite à 45 % et, au mieux (4 fois sur 10, coup de face), un petit filet de sang d'une narine qui s'arrête en 6 à 12 s. Ensuite chaque coup qui fait saigner allonge un peu les saignements de nez (jusqu'à ×1,5) : le visage « s'ouvre » au fil du combat.
 - **Empreintes de pas** : chaque pas garde 70 % du sang du précédent (`WORLD.FOOT_DECAY = 0.7`, réel : 60-75 %), environ 7 empreintes puis plus rien.
 - **Sang sur un t-shirt** : la tache fraîche est cramoisie (`PALETTE.FABRIC_SOAK`), entourée d'une zone mouillée rouge sombre (`PALETTE.FABRIC_WET`) puis d'une frange rose pâle. Sur un t-shirt sombre, ça se voit surtout comme une zone plus foncée et rougeâtre.
+
+## ⚠️ Modération Roblox
+
+Roblox modère chaque image importée. `flesh_tear_2` (chair ouverte en couleur) a été **refusée** et a valu un avertissement au compte. Règle pour la suite :
+
+- **jamais d'image de chair, d'organe ou de plaie ouverte réaliste** : ces éléments se font avec des pièces (Parts / meshes) dans le jeu, pas avec des images ;
+- les images de sang restent des **taches en niveaux de gris** teintées par le jeu (éclaboussures, flaques, coulures), qui passent la modération ;
+- si tu as importé `flesh_tear_1`, il vaut mieux la **supprimer** de tes ressources pour éviter un deuxième avertissement.

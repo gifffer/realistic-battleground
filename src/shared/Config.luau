@@ -528,36 +528,39 @@ return table.freeze({
 			beamStream = table.freeze({ 135594613079576 }), -- beam_stream
 			-- v2 details on the fighters (0 = not uploaded yet: an uploaded
 			-- picture of a close kind is drawn instead, see docs/BLOOD_FR.md)
-			rivuletStrip = table.freeze({ 0, 0, 0 }), -- rivulet_strip_1..3 (else "run")
-			rivuletBead = table.freeze({ 0, 0 }), -- rivulet_bead_1..2
-			rivuletFork = table.freeze({ 0, 0 }), -- rivulet_fork_1..2
-			browCut = table.freeze({ 0, 0 }), -- browcut_1..2 (else "skinSmear")
-			cheekCut = table.freeze({ 0 }), -- cheekcut_1 (else "skinSmear")
-			lipFilm = table.freeze({ 0 }), -- lipfilm_1 (else "skinSmear")
-			wipeSmear = table.freeze({ 0, 0 }), -- wipe_smear_1..2 (else "skinSmear")
-			crustStrip = table.freeze({ 0, 0 }), -- crust_strip_1..2 (else: no crust picture)
-			crustPatch = table.freeze({ 0, 0 }), -- crust_patch_1..2
-			spit = table.freeze({ 0, 0 }), -- spit_1..2
-			abrasion = table.freeze({ 0, 0 }), -- abrasion_1..2 (else "skinSmear")
-			splitKnuckle = table.freeze({ 0 }), -- split_knuckle_1 (else "knuckles")
-			wickHalo = table.freeze({ 0, 0 }), -- wick_halo_1..2 (else "soak")
-			wickWeave = table.freeze({ 0 }), -- wick_weave_1
-			froth4x4 = table.freeze({ 0 }), -- froth_4x4 (else p_mist_8x8)
-			pendant2x2 = table.freeze({ 0 }), -- pendant_2x2
+			rivuletStrip = table.freeze({ 100346535090011, 110604478267351, 82698353383871 }), -- rivulet_strip_1..3 (else "run")
+			rivuletBead = table.freeze({ 135979741247839, 122834661572547 }), -- rivulet_bead_1..2
+			rivuletFork = table.freeze({ 71095220678891, 71274475403062 }), -- rivulet_fork_1..2
+			browCut = table.freeze({ 74392188791197, 104168856657120 }), -- browcut_1..2 (else "skinSmear")
+			cheekCut = table.freeze({ 116411472783083 }), -- cheekcut_1 (else "skinSmear")
+			lipFilm = table.freeze({ 107014616933821 }), -- lipfilm_1 (else "skinSmear")
+			wipeSmear = table.freeze({ 92012326076640, 103011312188202 }), -- wipe_smear_1..2 (else "skinSmear")
+			crustStrip = table.freeze({ 130585832246902, 117648492973558 }), -- crust_strip_1..2 (else: no crust picture)
+			crustPatch = table.freeze({ 128001428689526, 138052353223010 }), -- crust_patch_1..2
+			spit = table.freeze({ 97734736135706, 94100067775351 }), -- spit_1..2
+			abrasion = table.freeze({ 139500125178501, 99973089746061 }), -- abrasion_1..2 (else "skinSmear")
+			splitKnuckle = table.freeze({ 81428781559324 }), -- split_knuckle_1 (else "knuckles")
+			wickHalo = table.freeze({ 130352555506995, 74931157464131 }), -- wick_halo_1..2 (else "soak")
+			wickWeave = table.freeze({ 72719573380217 }), -- wick_weave_1
+			froth4x4 = table.freeze({ 118371954145824 }), -- froth_4x4 (else p_mist_8x8)
+			pendant2x2 = table.freeze({ 99574857270541 }), -- pendant_2x2
 			-- v2 details in the world (floors, pools, tracks)
-			crown4x4 = table.freeze({ 0 }), -- crown_4x4 (else: no crown, only its tiny drops)
-			rippleRing = table.freeze({ 0 }), -- ripple_ring_1 (else: no ripple)
-			starburst = table.freeze({ 0, 0 }), -- starburst_1..2 (else "satellites")
-			serumHalo = table.freeze({ 0, 0, 0 }), -- serum_halo_1..3, in pairs with pool_1..3
-			drag = table.freeze({ 0, 0 }), -- drag_1..2 (else "smear")
-			shoeRunL = table.freeze({ 0 }), -- shoe_run_L_1 (else "footL")
-			shoeRunR = table.freeze({ 0 }), -- shoe_run_R_1 (else "footR")
+			crown4x4 = table.freeze({ 112579069365148 }), -- crown_4x4 (else: no crown, only its tiny drops)
+			rippleRing = table.freeze({ 85645245730750 }), -- ripple_ring_1 (else: no ripple)
+			starburst = table.freeze({ 111666805106796, 93606236237598 }), -- starburst_1..2 (else "satellites")
+			serumHalo = table.freeze({ 90985594653033, 108670503849941, 130952450009466 }), -- serum_halo_1..3, in pairs with pool_1..3
+			drag = table.freeze({ 123680049539259, 126526466461890 }), -- drag_1..2 (else "smear")
+			shoeRunL = table.freeze({ 72765684284944 }), -- shoe_run_L_1 (else "footL")
+			shoeRunR = table.freeze({ 84666117785445 }), -- shoe_run_R_1 (else "footR")
 			-- v2 extreme wounds (finishers). No code draws them yet: ready for
 			-- when a finisher wants a torn wound decal.
-			scalpSplit = table.freeze({ 0 }), -- scalp_split_1: Y / star split of the scalp (else "browCut")
+			scalpSplit = table.freeze({ 106404236391579 }), -- scalp_split_1: Y / star split of the scalp (else "browCut")
 			-- flesh_tear_1..2: a torn-open wound (skin edge, yellow fat, muscle,
 			-- deep wet cavity). The ONLY picture in colour: draw it with
 			-- Decal.Color3 = white (1, 1, 1), never a blood tint.
+			-- Kept at 0 ON PURPOSE: flesh_tear_2 was refused by Roblox moderation
+			-- (too gory for an image) and flesh_tear_1 is not used for the same
+			-- reason. Don't upload pictures of open flesh: build it with parts.
 			fleshTear = table.freeze({ 0, 0 }),
 		}),
 		-- A picture not uploaded yet borrows the picture of a close kind that is
