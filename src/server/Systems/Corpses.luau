@@ -101,12 +101,13 @@ local function freeze(copy: Model)
 			item.CanCollide = false
 			item.CanTouch = false
 			item.CanQuery = false
-		elseif item:IsA("JointInstance") then
-			if outside(item.Part0) or outside(item.Part1) then
-				table.insert(removed, item)
-			end
-		elseif item:IsA("WeldConstraint") or item:IsA("NoCollisionConstraint") then
-			if outside(item.Part0) or outside(item.Part1) then
+		elseif
+			item:IsA("JointInstance")
+			or item:IsA("WeldConstraint")
+			or item:IsA("NoCollisionConstraint")
+		then
+			local joint = item :: any -- (all three have Part0 / Part1)
+			if outside(joint.Part0) or outside(joint.Part1) then
 				table.insert(removed, item)
 			end
 		elseif item:IsA("Constraint") then

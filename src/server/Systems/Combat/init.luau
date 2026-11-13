@@ -1437,7 +1437,7 @@ local CHARGE_TURNS = { 0, 45, -45, 90, -90, 135, -135, 180 } -- degrees
 local LANE_END = -24 -- anchor Z where the top half may land, at most
 
 local function chargePlacement(attacker: Model, victim: Model, root: BasePart): (CFrame?, number)
-	local C = Finishers.CHARGE
+	local RUN = Finishers.CHARGE
 	local victimRoot = victim:FindFirstChild("HumanoidRootPart")
 	local at = if victimRoot and victimRoot:IsA("BasePart")
 		then victimRoot.Position
@@ -1461,7 +1461,7 @@ local function chargePlacement(attacker: Model, victim: Model, root: BasePart): 
 	end
 	local function clear(anchor: CFrame, short: number): boolean
 		local feet = anchor.Position.Y - 3
-		for _, z in { -short, -5.5, -C.victim, -13.5, C.ends.Z, -19, LANE_END + 1.5 } do
+		for _, z in { -short, -5.5, -RUN.victim, -13.5, RUN.ends.Z, -19, LANE_END + 1.5 } do
 			local from = (anchor * CFrame.new(0, 1, z)).Position
 			local hit = workspace:Raycast(from, Vector3.new(0, -8, 0), params)
 			if hit == nil or math.abs(hit.Position.Y - feet) > 1.25 then
@@ -1490,7 +1490,7 @@ local function chargePlacement(attacker: Model, victim: Model, root: BasePart): 
 	if floor then
 		start = Vector3.new(start.X, floor.Position.Y + 3, start.Z)
 	end
-	for _, short in { 0, C.short } do
+	for _, short in { 0, RUN.short } do
 		for _, turn in CHARGE_TURNS do
 			local direction = CFrame.Angles(0, math.rad(turn), 0):VectorToWorldSpace(toward)
 			-- (the anchor: where a full run would start, behind him if shorter)
