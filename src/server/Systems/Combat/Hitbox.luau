@@ -43,6 +43,9 @@ local SPREAD = table.freeze({ 0, -1, 1 })
 
 local Hitbox = {}
 
+-- Seconds back each victim was found at (see query).
+type Ages = { [Model]: number }
+
 -- See-through box for 0.15 s (Studio only), to check hitboxes visually:
 -- red = the hitbox, blue = a torso put back where the attacker saw it.
 local function showDebugBox(cframe: CFrame, size: Vector3, color: Color3)
@@ -100,13 +103,15 @@ end
 -- `rewind` (seconds, from Combat/Rewind.amount): also test the fighters
 -- where they were that long ago. Third result: for the ones found that
 -- way, the root CFrame they were found at (the aim ray is then cast at
--- that same body, see rayAt).
+-- that same body, see rayAt). Fourth result: for the ones found ONLY
+-- that way (not in the box now), how long ago (seconds): their dodge
+-- frames must count over that time too (State.HitSpec.rewound).
 function Hitbox.query(
 	cframe: CFrame,
 	size: Vector3,
 	ignore: Model,
 	rewind: number?
-): ({ Model }, { [Model]: { [string]: boolean } }, { [Model]: CFrame })
+): ({ Model }, { [Model]: { [string]: boolean } }, { [Model]: CFrame }, Ages)
 	if SHOW_DEBUG then
 		showDebugBox(cframe, size, HITBOX_COLOR)
 	end
@@ -114,6 +119,7 @@ function Hitbox.query(
 	local result: { Model } = {}
 	local partsByModel: { [Model]: { [string]: boolean } } = {}
 	local rootByModel: { [Model]: CFrame } = {}
+	local ageByModel: Ages = {}
 
 	-- Where the attacker saw them (tested first: it picks the zone).
 	if rewind and rewind > 0 then
@@ -128,7 +134,8 @@ function Hitbox.query(
 				continue
 			end
 			for _, step in SPREAD do
-				local rootAt = Rewind.rootAt(model, math.max(rewind + step * C.REWIND_TOLERANCE, 0))
+				local age = math.max(rewind + step * C.REWIND_TOLERANCE, 0)
+				local rootAt = Rewind.rootAt(model, age)
 				local parts = if rootAt
 					then partsInBoxAt(model, liveRoot, rootAt, cframe, size)
 					else nil
@@ -136,6 +143,7 @@ function Hitbox.query(
 					table.insert(result, model)
 					partsByModel[model] = parts
 					rootByModel[model] = rootAt
+					ageByModel[model] = age
 					local torso = if SHOW_DEBUG then model:FindFirstChild("Torso") else nil
 					if torso and torso:IsA("BasePart") then
 						local shift = rootAt * liveRoot.CFrame:Inverse()
@@ -153,7 +161,9 @@ function Hitbox.query(
 	params.FilterDescendantsInstances = { ignore }
 	for _, part in workspace:GetPartBoundsInBox(cframe, size, params) do
 		local model = part:FindFirstAncestorOfClass("Model")
-		if model and not rootByModel[model] then
+		if model and rootByModel[model] then
+			ageByModel[model] = nil -- (in the box now too: not only back then)
+		elseif model then
 			local parts = partsByModel[model]
 			if parts == nil and isAlive(model) then
 				parts = {}
@@ -165,7 +175,7 @@ function Hitbox.query(
 			end
 		end
 	end
-	return result, partsByModel, rootByModel
+	return result, partsByModel, rootByModel, ageByModel
 end
 
 -- The first part of `model` (a body part or a worn accessory's handle)

@@ -158,7 +158,7 @@ local function strike(
 ): { CombatState }
 	local c = context()
 	local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -hit.forward)
-	local victims, partsByModel, rootByModel =
+	local victims, partsByModel, rootByModel, ageByModel =
 		Hitbox.query(boxCFrame, hit.hitbox, state.model, rewind)
 	if hit.breaks then
 		-- a heavy blow: the walls around go too
@@ -178,7 +178,9 @@ local function strike(
 				aim,
 				rootByModel[victimModel]
 			)
-			if c.resolveHit(state, victim, specFor(hit, zone, moveId)) then
+			local spec = specFor(hit, zone, moveId)
+			spec.rewound = ageByModel[victimModel]
+			if c.resolveHit(state, victim, spec) then
 				table.insert(reached, victim)
 			end
 		end

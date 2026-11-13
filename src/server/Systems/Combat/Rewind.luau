@@ -17,8 +17,10 @@
 -- Config.Combat.REWIND_MAX, so a laggy (or lag-switching) player gets
 -- no reach the others don't have beyond that.
 --
--- Only POSITIONS are rewound. States (blocking, dodge frames, KO...) are
--- always the current ones: a block that is up when the hit lands counts.
+-- Only POSITIONS are rewound. States (blocking, KO...) are the current
+-- ones: a block that is up when the hit lands counts. Dodge frames favour
+-- the defender too: a victim caught only where he WAS dodges the hit if
+-- he dashed at any time since then (State.HitSpec.rewound).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,6 +29,10 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.Shared.Config)
 
 local C = Config.Combat
+local IS_STUDIO = RunService:IsStudio()
+-- (Studio only: prints each rewind, to check the lag tests are meaningful)
+local SHOW_DEBUG = C.DEBUG_HITBOXES and IS_STUDIO
+local STUDIO_EXTRA_PING = if IS_STUDIO then C.REWIND_STUDIO_EXTRA_PING else 0
 
 -- Samples kept per fighter (one per Heartbeat: 60 a second; a bit more
 -- than REWIND_HISTORY seconds even if the server runs faster).
@@ -130,8 +136,21 @@ function Rewind.amount(player: Player?, lateBy: number): number
 	end
 	local ok, ping = pcall(player.GetNetworkPing, player)
 	local roundTrip = if ok and typeof(ping) == "number" and ping == ping then ping else 0
-	local amount = roundTrip + C.REWIND_INTERPOLATION + math.max(lateBy, 0)
-	return math.clamp(amount, 0, C.REWIND_MAX)
+	roundTrip += STUDIO_EXTRA_PING
+	local amount =
+		math.clamp(roundTrip + C.REWIND_INTERPOLATION + math.max(lateBy, 0), 0, C.REWIND_MAX)
+	if SHOW_DEBUG then
+		print(
+			string.format(
+				"[Rewind] %s: round trip %.3f s, late %.3f s -> rewind %.3f s",
+				player.Name,
+				roundTrip,
+				math.max(lateBy, 0),
+				amount
+			)
+		)
+	end
+	return amount
 end
 
 function Rewind.start()

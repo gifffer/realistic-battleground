@@ -770,8 +770,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		return false
 	end
 
-	-- 1. Dash dodge frames: the hit misses.
-	if time < victim.invulnerableUntil then
+	-- 1. Dash dodge frames: the hit misses. (Caught where he was a moment
+	-- ago: dodge frames at any time since then count, see HitSpec.rewound.)
+	if time - (spec.rewound or 0) < victim.invulnerableUntil then
 		event("Dodged", false, false)
 		return false
 	end
@@ -2154,7 +2155,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 		-- his client had it then already: we receive it one trip late too.
 		local rewind = Rewind.amount(state.player, now() - dueAt)
 		local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -C.HITBOX_FORWARD)
-		local victims, partsByModel, rootByModel =
+		local victims, partsByModel, rootByModel, ageByModel =
 			Hitbox.query(boxCFrame, C.HITBOX_SIZE, state.model, rewind)
 		for _, victimModel in victims do
 			local victim = states[victimModel]
@@ -2179,6 +2180,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 						else C.BLOCK_STAMINA_COST,
 					knockback = if isFinisher then C.KNOCKBACK_SPEED else nil,
 					attackId = attackId,
+					rewound = ageByModel[victimModel],
 				})
 			end
 		end

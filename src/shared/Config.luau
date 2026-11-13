@@ -147,6 +147,11 @@ return table.freeze({
 		REWIND_TOLERANCE = 0.06,
 		-- Positions remembered per fighter (seconds; > REWIND_MAX + TOLERANCE).
 		REWIND_HISTORY = 0.6,
+		-- Studio only: added to the measured round trip (seconds). Studio's
+		-- simulated lag (Incoming Replication Lag) may not show in the ping
+		-- the server measures: if the rewind printed in the Output (with
+		-- DEBUG_HITBOXES) stays near REWIND_INTERPOLATION, set it to that lag.
+		REWIND_STUDIO_EXTRA_PING = 0,
 
 		-- Being hit.
 		HIT_STUN = 0.5, -- longer than M1_INTERVAL: a started combo can't be escaped

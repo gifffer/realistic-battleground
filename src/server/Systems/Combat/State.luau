@@ -99,6 +99,11 @@ export type HitSpec = {
 	-- A thrown thing (Shared/Weapons): where it hit from. It can't be
 	-- parried or slipped (no one to stun / counter there); a block faces it.
 	from: Vector3?,
+	-- Lag compensation (Combat/Hitbox.query): the victim was caught only
+	-- where he was this long ago (seconds), not where he is now. His dodge
+	-- frames then count over that whole time: a dash started since then
+	-- still dodges it.
+	rewound: number?,
 }
 
 return nil

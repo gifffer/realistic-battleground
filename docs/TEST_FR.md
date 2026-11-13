@@ -470,17 +470,22 @@ Le serveur teste maintenant chaque coup (M1, coups de kit, charge, prise) **auss
 l'attaquant **voyait** sa cible : il « remonte le temps » de son ping + 0,1 s (jamais plus de
 0,35 s, ± 0,06 s). Pour simuler du lag : *Studio → File → Studio Settings → Network →
 Incoming Replication Lag* = `0.15`, puis *Test → Clients and Servers → 2 Players*.
+**Vérifier d'abord (L0)** que ce lag simulé est bien pris en compte, sinon les tests L2, L3,
+L6 et L12 ne veulent rien dire.
 
 | # | Test | Résultat attendu |
 |---|---|---|
+| L0 | Lag 0,15, 2 joueurs : A frappe B (M1), regarder l'Output du **serveur** | Une ligne `[Rewind] … round trip … -> rewind …` par coup. Avec 0,15 de lag, **rewind ≈ 0,25 s** (round trip ≈ 0,15). Si le round trip reste ≈ 0 (rewind ≈ 0,1) : Studio ne compte pas ce lag dans le ping, mettre `REWIND_STUDIO_EXTRA_PING = 0.15` dans `Shared/Config` (Studio seulement) et refaire : rewind ≈ 0,25. Remettre `0` après les tests. |
 | L1 | Dans Studio, frapper le Dummy (M1) | Comme avant : boîte **rouge** (la hitbox) ; en plus une petite boîte **bleue** sur le torse du Dummy (là où le serveur l'a « vu »). Aucune ligne rouge dans l'Output. |
 | L2 | 2 joueurs avec lag 0,15 : B **sprinte de gauche à droite** devant A, A clique quand son poing touche B **sur son écran** | Le coup **compte** (dégâts, réaction) dans la grande majorité des cas. Avant : presque toujours raté. |
 | L3 | Même chose, B court **en s'éloignant** de A | Si le poing touche sur l'écran de A, ça compte ; la boîte bleue est derrière B (là où A le voyait). |
 | L4 | A frappe B, la réaction prédite (instantanée) chez A | Elle n'est presque plus jamais **annulée** juste après (le serveur et l'écran de A sont d'accord). |
 | L5 | B est à 10 studs ou plus de A, A frappe dans le vide | **Rien** : la compensation ne rallonge pas la portée (0,35 s max). |
 | L6 | Visée tête pendant que B court (A vise la tête sur son écran) | Le coup est compté **à la tête** (zone calculée sur le corps « remonté »). |
-| L7 | B **bloque** (F) quand le coup arrive | Toujours **bloqué** : seule la **position** est remontée, pas l'état (garde, parade, dash). |
+| L7 | B **bloque** (F) quand le coup arrive | Toujours **bloqué** : seule la **position** est remontée, pas l'état (garde, parade). |
 | L8 | Dash (Q) de B au bon moment | Toujours **esquivé** (les frames d'esquive comptent comme avant). |
+| L12 | Lag 0,15 : B **dashe un peu tôt** pour s'éloigner (Q, ~0,1–0,2 s avant que le poing de A arrive), A frappe | **Esquivé** (« Dodged »), même si la boîte bleue montre B encore dans la hitbox : touché seulement là où il **était**, ses frames d'esquive depuis ce moment-là comptent. Avant la correction, le coup passait. |
+| L13 | Lag 0,15 : Bouncer, prise (Chokehold / Body Slam) sur B qui **s'enfuit en sprint** | Si B est encore à portée de bras, il est attrapé (court déplacement devant le Bouncer). S'il est déjà **loin** (plus de ~6–7 studs du Bouncer), il n'est **pas** attrapé : jamais ramené en arrière sur plusieurs studs. |
 | L9 | Coups de kit (1–4), charge (tackle du Street Brawler) et prises du Bouncer sur une cible qui bouge | Ils touchent là où l'attaquant voit la cible (boîtes bleues), comme le M1. |
 | L10 | B meurt / réapparaît / est téléporté dans l'arène de duel, A frappe là où B était | **Rien** : l'historique est effacé lors d'une téléportation. |
 | L11 | Mettre `DEBUG_HITBOXES = false` dans `Shared/Config` | Plus aucune boîte (rouge ni bleue). |
