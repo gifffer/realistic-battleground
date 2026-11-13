@@ -20,8 +20,9 @@
 --     legs, soft;
 --   • the blood (seen happening): the aorta and the vena cava pumping out
 --     of the torso, both iliac arteries out of the hips, a wet smear along
---     the floor where the top half slid, a pool spreading under each half
---     once it lies still, the thuds;
+--     the floor where the top half slid, a big pool spreading under each
+--     half once it lies still (BloodGush.stump, Config.Blood.FINISHER_POOLS
+--     BISECT_TORSO / BISECT_LEGS: over a litre from the top half), the thuds;
 --   • a body seen later (or the frozen copy a finisher leaves, Server/
 --     Systems/Corpses): the torn ends, the guts lying still on the floor
 --     from one half to the other, the pools.
@@ -48,6 +49,8 @@ local Squish = require(script.Parent.Squish)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local Bisect = {}
+
+local POOLS = Config.Blood.FINISHER_POOLS
 
 Bisect.ATTRIBUTE = "Bisected"
 
@@ -748,7 +751,6 @@ local function follow(body: Body, torso: BasePart, leg: BasePart, seed: number)
 		still: number,
 		sound: string,
 		splash: number,
-		pool: number,
 	}
 	local halves: { Half } = {
 		{
@@ -759,7 +761,6 @@ local function follow(body: Body, torso: BasePart, leg: BasePart, seed: number)
 			still = 0,
 			sound = "BodySlam",
 			splash = 2.4,
-			pool = 4.6,
 		},
 		{
 			part = leg,
@@ -769,7 +770,6 @@ local function follow(body: Body, torso: BasePart, leg: BasePart, seed: number)
 			still = 0,
 			sound = "LimbDrop",
 			splash = 1.6,
-			pool = 3.6,
 		},
 	}
 	local params = floorParams()
@@ -830,9 +830,10 @@ local function follow(body: Body, torso: BasePart, leg: BasePart, seed: number)
 					half.still = 0
 				end
 				if half.still > 0.3 or age > 3 then
+					-- (the pool itself: BloodGush.stump, started in bleed(),
+					-- pours here now that it lies still)
 					half.pooled = true
 					body.drawn.pools[index] = true
-					HeadBlast.pool(stump, half.pool, 6, random:NextInteger(1, 2 ^ 20))
 				end
 			end
 		end
@@ -878,6 +879,15 @@ local function bleed(model: Model, torso: BasePart, leg: BasePart, legFrame: CFr
 	end
 	BloodGush.runDown(leg, Vector3.new(0, leg.Size.Y / 2, -0.5), 6, seed + 9)
 	BloodGush.runDown(torso, Vector3.new(0, -torso.Size.Y / 2, -0.5), 5, seed + 11)
+	-- the big pools: each half pours out once it lies still (in the air,
+	-- sliding: no pool yet; the top half's smear is follow()'s)
+	BloodGush.stump(torso, GUT_OUT, POOLS.BISECT_TORSO, seed + 101, {
+		ignore = ignore,
+		drag = false,
+	})
+	BloodGush.stump(leg, legFrame * Vector3.new(0, -1, 0), POOLS.BISECT_LEGS, seed + 102, {
+		ignore = ignore,
+	})
 end
 
 ------------------------------------------------------------------------------
@@ -939,14 +949,15 @@ function Bisect.apply(model: Model, live: boolean)
 				)
 			end
 		end
-		-- the pools under both halves
+		-- the pools under both halves (the same seeds as the live ones: a
+		-- pool already poured here is not laid again)
 		if not body.drawn.pools[1] then
 			body.drawn.pools[1] = true
-			HeadBlast.pool(torsoEnd, 4.2, 0.4, seed + 21)
+			BloodGush.lay(torso, GUT_OUT, POOLS.BISECT_TORSO, seed + 101)
 		end
 		if not body.drawn.pools[2] then
 			body.drawn.pools[2] = true
-			HeadBlast.pool((hipsTop * CFrame.new(0, -1, 0)).Position, 3.2, 0.4, seed + 22)
+			BloodGush.lay(leg, legFrame * Vector3.new(0, -1, 0), POOLS.BISECT_LEGS, seed + 102)
 		end
 	end
 end

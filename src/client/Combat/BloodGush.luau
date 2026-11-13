@@ -15,7 +15,8 @@
 --     line along the way it flew, and the blood gathers into a pool there;
 --   • it runs down the body from the wound, in runs that lengthen, and
 --     soaks into the clothes;
---   • a pool spreads under it, faster at first, flowing downhill;
+--   • a pool spreads under it, faster at first, flowing downhill, and
+--     keeps creeping outward a while after it stops (BloodPool);
 --   • whoever is right there gets it on them (dark spots on his front, his
 --     arms).
 --
@@ -28,6 +29,13 @@
 --   BloodGush.torso(model, local, outward, seed)   a hole in the body (the
 --                                     liver, the shoulder): the artery, the
 --                                     streaks running down
+--   BloodGush.stump(part, local, wound, seed, options?)   the big pool of a
+--                                     finisher's wound (Config.Blood.
+--                                     FINISHER_POOLS): the blood pours out
+--                                     of `local` (in `part`'s space) onto the
+--                                     floor under it, following the part
+--   BloodGush.lay(part, local, wound, seed)   that pool already there (a body
+--                                     we only see after the finisher)
 
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -45,6 +53,24 @@ local PALETTE = Config.Blood.PALETTE
 local BLOOD = PALETTE.VENOUS -- dark, once out
 local BLOOD_WET = PALETTE.ARTERIAL -- fresh, arterial (brighter)
 local GRAVITY = 60 -- studs/s², what the particles use too (they look heavier)
+local FINISHER_POOLS = Config.Blood.FINISHER_POOLS
+local STUMP_TICK = 0.1 -- seconds between two pours of a stump
+-- (where the neck pours, in the torso's space: the top, where the head was)
+BloodGush.NECK_POINT = Vector3.new(0, 1.1, 0)
+
+-- One wound of Config.Blood.FINISHER_POOLS (NECK, SHOULDER...).
+export type Wound = {
+	LITRES: number,
+	SECONDS: number,
+	PULSE: number,
+	BEAT: number,
+}
+
+export type StumpOptions = {
+	ignore: { Instance }?, -- (what the floor ray goes through: the body, an organ)
+	delay: number?, -- seconds before it starts
+	drag: boolean?, -- false: no smear while it slides (its module draws one)
+}
 
 export type Options = {
 	seconds: number, -- how long it keeps pumping
@@ -548,7 +574,7 @@ function BloodGush.neck(model: Model, seed: number)
 			beat = 0.38,
 			speed = 15,
 			size = 0.13,
-			pool = if index == 1 then 4 else 0,
+			pool = 0, -- (the big pool: BloodGush.stump below)
 			seed = seed + index,
 			ignore = { model :: Instance },
 		})
@@ -565,6 +591,15 @@ function BloodGush.neck(model: Model, seed: number)
 	})
 	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, -0.5), 7, seed + 11)
 	BloodGush.runDown(torso, Vector3.new(0, torso.Size.Y / 2, 0.5), 5, seed + 13)
+	-- the big pool spreading from the neck, where the head was (HeadBlast
+	-- lays the same one, seed + 101, for a body we only see later)
+	BloodGush.stump(
+		torso,
+		BloodGush.NECK_POINT,
+		FINISHER_POOLS.NECK,
+		seed + 101,
+		{ ignore = { model :: Instance } }
+	)
 end
 
 -- A hole torn in the body at `localPoint` (torso space), facing `outward`:
@@ -588,12 +623,229 @@ function BloodGush.torso(
 			beat = 0.4,
 			speed = speed or 11,
 			size = 0.15,
-			pool = 3.8,
+			-- (no pool here: the finisher puts its big one, BloodGush.stump,
+			-- where the body ends up)
+			pool = 0,
 			seed = seed,
 			ignore = { model :: Instance },
 		}
 	)
 	BloodGush.runDown(torso, localPoint, 9, seed + 5)
+end
+
+------------------------------------------------------------------------------
+-- The finishers' big pools
+------------------------------------------------------------------------------
+
+-- How big the pool of `wound` gets once it has spread: studs across, the
+-- front's radius then, and the area (studs²) to pour for it (BloodPool
+-- spreads that area: its front gets there CREEP seconds after the wound
+-- stops, its fingers run on beyond it).
+local function poolSize(wound: Wound): (number, number, number)
+	local size = FINISHER_POOLS.SIZE_PER_LITRE * math.sqrt(math.max(wound.LITRES, 0))
+	local radius = size / 2
+	return size, radius, math.pi * radius * radius
+end
+
+-- How much flows out at each tick (STUMP_TICK) of `wound`, adding up to
+-- `area`: the heart pumping it out in spurts (each beat a surge, the beats
+-- slowing and weakening as the pressure drops), then a steady ooze, then
+-- slower and slower. The same on every client (it doesn't depend on the
+-- frame rate).
+local function schedule(wound: Wound, area: number): { number }
+	local ticks = math.max(1, math.ceil(wound.SECONDS / STUMP_TICK))
+	local amounts: { number } = {}
+	local total = 0
+	local beat = math.max(wound.BEAT, 0.2)
+	local sinceBeat = 0
+	local oozeTime = math.max(wound.SECONDS - wound.PULSE, 0.5)
+	for index = 1, ticks do
+		local t = (index - 1) * STUMP_TICK
+		local amount: number
+		if t < 0.15 then
+			amount = 0 -- (it has to get out of the body first)
+		elseif t < wound.PULSE then
+			-- spurts: a surge on each beat, a weaker flow between
+			local pressure = 1 - 0.45 * t / wound.PULSE
+			amount = pressure * (0.3 + 1.4 * math.exp(-sinceBeat / beat * 5))
+			sinceBeat += STUMP_TICK
+			if sinceBeat >= beat then
+				sinceBeat -= beat
+				beat = math.min(beat * 1.04, 1.1) -- (the heart slows)
+			end
+		else
+			-- then it oozes: steady a while, then slower and slower
+			local u = (t - wound.PULSE) / oozeTime
+			local level = if wound.PULSE > 0 then 0.42 else 1
+			amount = level * (if u < 0.35 then 1 else math.exp(-(u - 0.35) * 4))
+		end
+		amounts[index] = amount
+		total += amount
+	end
+	if total > 0 then
+		for index, amount in amounts do
+			amounts[index] = amount / total * area
+		end
+	end
+	return amounts
+end
+
+-- The floor under a wound, through bodies, blood and `ignore`.
+local function floorParams(ignore: { Instance }): RaycastParams
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.IgnoreWater = false
+	local skip: { Instance } = table.clone(BloodStain.ground().FilterDescendantsInstances)
+	for _, item in ignore do
+		table.insert(skip, item)
+	end
+	params.FilterDescendantsInstances = skip
+	return params
+end
+
+-- The big pool of a finisher's wound: the blood pours out of `localPoint`
+-- (in `part`'s space) onto the floor under it, the way `wound` says
+-- (Config.Blood.FINISHER_POOLS), the same pool on every client (`seed`):
+--   • it follows the part as the body falls, rolls, settles (a frozen copy
+--     replacing the body: it keeps pouring where the part last was);
+--   • moving fast, or up in the air: no pool there (half of that blood is
+--     lost on the way, the rest pours out once it stops); sliding on the
+--     floor: a smear behind it;
+--   • oozing: drops fall from the wound into its pool (they splash in it,
+--     ring it with tiny drops: BloodPool.absorb).
+function BloodGush.stump(
+	part: BasePart,
+	localPoint: Vector3,
+	wound: Wound,
+	seed: number,
+	options: StumpOptions?
+)
+	if not Config.Blood.ENABLED or not FINISHER_POOLS.ENABLED or not BloodPool.claim(seed) then
+		return
+	end
+	local opts: StumpOptions = options or {}
+	local _, R, area = poolSize(wound)
+	local amounts = schedule(wound, area)
+	-- (its pool keeps spreading this long after the first blood reaches it)
+	local spreadTime = wound.SECONDS + FINISHER_POOLS.CREEP
+	local random = Random.new(seed)
+	local key = { stump = seed } -- (its own pool; it merges with those it meets)
+	task.spawn(function()
+		if opts.delay and opts.delay > 0 then
+			task.wait(opts.delay)
+		end
+		local params = floorParams(opts.ignore or {})
+		local paramsAt = os.clock()
+		local start = os.clock()
+		local last = os.clock()
+		local done = 0 -- (ticks poured so far)
+		local carried = 0 -- (blood held back while it moved)
+		local source = part.CFrame * localPoint
+		local nextDrip = 0
+		local drags = 0
+		local dragFrom: Vector3? = nil
+		while done < #amounts do
+			task.wait(STUMP_TICK)
+			local now = os.clock()
+			if now - paramsAt > 1 then
+				-- (new fighters joined: the ray goes through them too)
+				paramsAt = now
+				params = floorParams(opts.ignore or {})
+			end
+			-- where the wound is now (its body gone: where it was)
+			local previous = source
+			if part.Parent then
+				source = part.CFrame * localPoint
+			end
+			local dt = math.max(now - last, 1e-3)
+			last = now
+			local speed = (source - previous).Magnitude / dt
+			-- what flowed out since the last tick (a slow frame: a few ticks)
+			local due = math.min(#amounts, math.floor((now - start) / STUMP_TICK) + 1)
+			local amount = 0
+			while done < due do
+				done += 1
+				amount += amounts[done]
+			end
+			local hit =
+				workspace:Raycast(source + Vector3.new(0, 0.3, 0), Vector3.new(0, -14, 0), params)
+			local height = if hit then source.Y - hit.Position.Y else math.huge
+			if
+				hit == nil
+				or height > FINISHER_POOLS.MAX_HEIGHT
+				or speed > FINISHER_POOLS.MOVING
+			then
+				-- in the air / moving: half of it is lost on the way
+				carried += amount * 0.5
+				if
+					hit
+					and opts.drag ~= false
+					and height < 1.6
+					and speed > FINISHER_POOLS.MOVING
+					and drags < FINISHER_POOLS.DRAGS
+					and now - start > 0.2
+				then
+					-- sliding on the floor: a smear behind the wound
+					local from = dragFrom or hit.Position
+					local gap = hit.Position - from
+					if gap.Magnitude > 0.6 then
+						drags += 1
+						BloodStain.stain(
+							"drag",
+							from + gap / 2,
+							hit.Normal,
+							gap,
+							0.45,
+							gap.Magnitude + 0.2,
+							{
+								random = random,
+								profile = "smear",
+								category = "stain",
+								start = BLOOD,
+								material = hit.Material,
+								noEdge = true,
+								priority = 2,
+							}
+						)
+						dragFrom = hit.Position
+					elseif dragFrom == nil then
+						dragFrom = hit.Position
+					end
+				else
+					dragFrom = nil
+				end
+				continue
+			end
+			dragFrom = nil
+			if hit.Material == Enum.Material.Water then
+				continue -- (washed away)
+			end
+			BloodPool.pour(key, hit, amount + carried, R, seed, spreadTime)
+			carried = 0
+			-- oozing (after the spurts): drops falling off the wound into it
+			local t = now - start
+			if t > wound.PULSE and height > 0.25 and now >= nextDrip then
+				nextDrip = now + random:NextNumber(0.3, 0.7)
+				Blood.drop(
+					source,
+					Vector3.new(random:NextNumber(-0.3, 0.3), 0, random:NextNumber(-0.3, 0.3)),
+					random:NextNumber(0.06, 0.1),
+					random,
+					Blood.passiveScale(),
+					{ passive = true }
+				)
+			end
+		end
+	end)
+end
+
+-- The pool of a finisher's wound already there (a body we only see after
+-- the finisher, or its frozen copy): its full size at once, under
+-- `localPoint` (in `part`'s space). Once per `seed`: the live one (stump)
+-- with the same seed, or an earlier look at this body, wins.
+function BloodGush.lay(part: BasePart, localPoint: Vector3, wound: Wound, seed: number)
+	local size = poolSize(wound)
+	BloodPool.lay(part.CFrame * localPoint, size, seed)
 end
 
 return table.freeze(BloodGush)

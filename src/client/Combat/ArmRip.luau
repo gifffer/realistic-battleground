@@ -13,8 +13,10 @@
 --     at different heights round the real humerus' head, the yellow fat under
 --     the skin, the skin torn over the edges;
 --   • when it happens in front of us (not a body we only see later): a burst
---     of blood, the shoulder pumping in spurts, a pool spreading under it,
---     the arm dripping in his hand.
+--     of blood, the shoulder pumping in spurts, a big pool spreading under
+--     it (a litre and more: Config.Blood.FINISHER_POOLS.SHOULDER), the arm
+--     dripping in his hand, then a smaller pool of its own where it lies
+--     (TORN_ARM); a body we only see later: those pools already there.
 -- Pieces from WoundKit (GoreKit "Shoulder" / "ArmEnd"); simpler ones drawn
 -- here without them (an older kit).
 --
@@ -51,6 +53,10 @@ local MUSCLE = Color3.fromRGB(150, 32, 34)
 local MUSCLE_DARK = Color3.fromRGB(112, 22, 26)
 local FAT = Color3.fromRGB(222, 190, 112)
 local DRIP_TIME = 10 -- seconds the arm drips
+local POOLS = Config.Blood.FINISHER_POOLS
+-- (when the arm, thrown down, lies on the floor: the event "Throw" comes
+-- 1.27 s after "Tear", then it falls)
+local ARM_ON_FLOOR = 1.7
 -- The socket, torso space (its right side), facing out (+X).
 local SOCKET = CFrame.new(1.05, 0.5, 0) * CFrame.Angles(0, -math.pi / 2, 0)
 
@@ -236,6 +242,13 @@ function ArmRip.apply(model: Model, live: boolean)
 	dress(torso, "Shoulder", skin, random)
 	dress(arm, "ArmEnd", skin, random)
 	ArmRip.boneTaken(model) -- (seen late: already taken)
+	-- the arm's torn end, in its space
+	local armEnd = Vector3.new(0, arm.Size.Y / 2 + 0.05, 0)
+	if not live then
+		-- (a body we only see now, or its frozen copy: the pools are there)
+		BloodGush.lay(torso, SOCKET.Position, POOLS.SHOULDER, seed + 101)
+		BloodGush.lay(arm, armEnd, POOLS.TORN_ARM, seed + 102)
+	end
 	if live then
 		SoundController.play("ArmTear", model)
 		-- the artery under the arm (axillary) torn: spurting out of the
@@ -252,6 +265,16 @@ function ArmRip.apply(model: Model, live: boolean)
 			ignore = { model :: Instance },
 		})
 		drip(arm)
+		-- the big pool out of the shoulder, under the body; the arm's own
+		-- smaller one once it lies on the floor (in his hand it is moving or
+		-- too high: no pool there, its drops fall)
+		BloodGush.stump(torso, SOCKET.Position, POOLS.SHOULDER, seed + 101, {
+			ignore = { model :: Instance },
+		})
+		BloodGush.stump(arm, armEnd, POOLS.TORN_ARM, seed + 102, {
+			ignore = { model :: Instance },
+			delay = ARM_ON_FLOOR,
+		})
 	end
 end
 

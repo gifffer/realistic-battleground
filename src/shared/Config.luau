@@ -621,6 +621,53 @@ return table.freeze({
 			FOOT_DECAY = 0.7, -- each footprint keeps this much of the previous one's blood (real: 0.6-0.75, about 7 prints)
 			STARBURSTS_PER_POOL = 4, -- rings of tiny drops around a pool someone drips into
 		}),
+		-- The big pools the finishers leave (BloodGush.stump): a torn-off limb, a
+		-- head burst, a body cut in two loses a LOT of blood in a few seconds.
+		-- Each wound pours its blood on the floor under it: spurts with the
+		-- heartbeat first (PULSE seconds), then a steady ooze, then slower and
+		-- slower until SECONDS. The pool follows the body part as it falls or
+		-- slides (a smear while it slides), flows downhill, stops at curbs and
+		-- walls, merges with pools close by, then ages like any pool (wet,
+		-- clotting, the pale serum ring, dry).
+		-- LITRES: how much blood comes out. On a hard floor the pool SPREADS
+		-- (BloodPool): its edge keeps moving out while the wound pours, then
+		-- goes on creeping for CREEP seconds after it stops (slower and
+		-- slower), in TONGUES all around (each at its own speed, further
+		-- downhill, stopped by curbs and walls - then the ones beside it go
+		-- further, along the wall), and a few FINGERS of blood run on further
+		-- (FINGER_REACH studs at most), following the smallest slope or gutter.
+		-- Its size once it is done spreading: SIZE_PER_LITRE studs across for
+		-- 1 litre, × the square root of the litres (4 litres: twice as wide as
+		-- 1), the fingers on top of that:
+		--   the neck 3.4 L ≈ 8.5 studs, the torso cut in two 3.8 L ≈ 9,
+		--   the shoulder 3 L ≈ 8, the liver hole 2.6 L ≈ 7.4, the legs ≈ 7-7.4,
+		--   the torn arm 0.6 L ≈ 3.6, the liver itself 0.3 L ≈ 2.5.
+		-- (1 stud ≈ 30 cm: a big pool on a hard floor is 2-3 m across; it is a
+		-- game, it is meant to be seen. Lower SIZE_PER_LITRE for smaller ones.)
+		FINISHER_POOLS = table.freeze({
+			ENABLED = true, -- false: no big finisher pools (the spurts still land)
+			SIZE_PER_LITRE = 4.6, -- studs across for 1 litre (grows with the square root of the litres)
+			CREEP = 15, -- seconds the pool keeps spreading after its wound stops pouring
+			TONGUES = 10, -- tongues of blood around a pool (High quality; Medium 8, Low 6)
+			FINGERS = 3, -- of them running on as long fingers (High; Medium 2, Low 1)
+			FINGER_REACH = 5, -- studs: a finger runs this far beyond the pool at most
+			LIFE = 240, -- seconds a finisher pool stays (the serum ring shows from 90 s)
+			MOVING = 2.5, -- studs/s: a wound moving faster smears instead of pooling
+			MAX_HEIGHT = 4.5, -- studs: a wound higher than this (in the air) pools nothing yet
+			DRAGS = 12, -- smear marks at most per wound while its body slides
+			-- One line per wound. LITRES (blood out), SECONDS (how long it keeps
+			-- coming), PULSE (seconds of spurts with the heartbeat; 0 = it only
+			-- oozes: a limb lying on the floor), BEAT (seconds between beats).
+			NECK = table.freeze({ LITRES = 3.4, SECONDS = 20, PULSE = 9, BEAT = 0.38 }), -- the bat: the head burst
+			SHOULDER = table.freeze({ LITRES = 3, SECONDS = 18, PULSE = 8, BEAT = 0.4 }), -- the arm torn off: the socket
+			TORN_ARM = table.freeze({ LITRES = 0.6, SECONDS = 14, PULSE = 0, BEAT = 0.4 }), -- the arm itself, lying on the floor
+			LIVER_HOLE = table.freeze({ LITRES = 2.6, SECONDS = 18, PULSE = 8, BEAT = 0.4 }), -- the liver torn out: the flank
+			LIVER = table.freeze({ LITRES = 0.3, SECONDS = 10, PULSE = 0, BEAT = 0.4 }), -- the liver dropped on the floor
+			WAIST_TORSO = table.freeze({ LITRES = 3.8, SECONDS = 22, PULSE = 8, BEAT = 0.38 }), -- the portal cut: the upper body
+			WAIST_LEGS = table.freeze({ LITRES = 2.4, SECONDS = 18, PULSE = 7, BEAT = 0.35 }), -- the portal cut: the legs
+			BISECT_TORSO = table.freeze({ LITRES = 3.8, SECONDS = 22, PULSE = 8, BEAT = 0.36 }), -- the Bull: the top half
+			BISECT_LEGS = table.freeze({ LITRES = 2.6, SECONDS = 18, PULSE = 7, BEAT = 0.36 }), -- the Bull: the legs
+		}),
 	}),
 
 	-- 0 HP = knocked out (KO) on the ground, not dead. Someone can finish

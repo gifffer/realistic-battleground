@@ -30,6 +30,8 @@
 --       never silently skipped, except tiny satellites after 0.5 s)
 --   BloodStain.place(...) same, now, returns its BloodAge record (or nil)
 --   BloodStain.rescale(record, kAlong, kAcross)  grows a mark (pools, soaks)
+--   BloodStain.fit(record, at, along, kAlong, kAcross)  moves and grows a
+--       mark on the ground (a pool's tongues creeping outward)
 --   BloodStain.image(kind, random, index?)  an uploaded picture id, or 0
 --   BloodStain.resolve(kind)   the kind actually drawn (a picture not uploaded
 --       yet borrows a close kind's, Config.Blood.IMAGE_FALLBACK) and its id
@@ -233,6 +235,11 @@ local function ground(): RaycastParams
 	if now - paramsAt > 1 then
 		paramsAt = now
 		local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+		-- (the frozen bodies the finishers leave are bodies too: the floor
+		-- is under them, a pool never lands on one)
+		for _, corpse in CollectionService:GetTagged(Config.Combat.CORPSE_TAG) do
+			table.insert(ignore, corpse)
+		end
 		table.insert(ignore, folder)
 		groundParams.FilterDescendantsInstances = ignore
 	end
@@ -436,6 +443,38 @@ function BloodStain.rescale(record: BloodAge.Record, kAlong: number, kAcross: nu
 	if shape == nil or record.dead then
 		return
 	end
+	shape.kAlong, shape.kAcross = kAlong, kAcross
+	for _, piece in shape.pieces do
+		if piece.inst.Parent then
+			setPiece(shape, piece)
+		end
+	end
+end
+
+-- Moves AND grows a mark on the ground in one go (a pool's tongues of blood
+-- creeping outward): its centre goes to `at`, it points `along` (kept on its
+-- surface; nil = same direction), ×kAlong / ×kAcross its size when made.
+-- Only for a mark on the ground (one stuck to a body doesn't move).
+function BloodStain.fit(
+	record: BloodAge.Record,
+	at: Vector3,
+	along: Vector3?,
+	kAlong: number,
+	kAcross: number
+)
+	local shape = shapes[record]
+	if shape == nil or record.dead or shape.stuck then
+		return
+	end
+	local normal = shape.frame.YVector
+	local forward = shape.frame.XVector
+	if along then
+		local flat = along - normal * along:Dot(normal)
+		if flat.Magnitude > 1e-3 then
+			forward = flat.Unit
+		end
+	end
+	shape.frame = CFrame.fromMatrix(at, forward, normal)
 	shape.kAlong, shape.kAcross = kAlong, kAcross
 	for _, piece in shape.pieces do
 		if piece.inst.Parent then
@@ -704,6 +743,9 @@ export type Options = {
 	upright: boolean?, -- (a picture drawn upright: its top = along)
 	turn: number?, -- (a picture turned around its centre, radians)
 	noEdge: boolean?, -- (skip the ledge check)
+	-- (which of the 12 heights above the ground it sits at, 0-11: a pool's
+	-- pieces choose theirs, so two that overlap never share one and flicker)
+	layer: number?,
 	owner: Model?,
 	life: number?,
 }
@@ -851,11 +893,12 @@ function BloodStain.place(
 	-- (each new mark a hair higher than the last: no flicker where they
 	-- overlap; a bit more far from the camera, where depth is less precise)
 	layerCount = (layerCount + 1) % 10
+	local liftLayer = if opts.layer then math.clamp(opts.layer, 0, 11) else layerCount
 	local camera = workspace.CurrentCamera
 	local distance = if camera then (camera.CFrame.Position - at).Magnitude else 0
 	local baseLift = if stuck and model
-		then MIN_LIFT + layerCount * MARK_STEP * 0.5
-		else MIN_LIFT + layerCount * MARK_STEP + math.min(distance * 0.0001, 0.015)
+		then MIN_LIFT + liftLayer * MARK_STEP * 0.5
+		else MIN_LIFT + liftLayer * MARK_STEP + math.min(distance * 0.0001, 0.015)
 	local topLift = baseLift -- (the highest piece: the wet film goes over it)
 	local frame = CFrame.fromMatrix(at, forward, normal)
 	if stuck then
