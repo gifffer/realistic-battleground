@@ -272,6 +272,7 @@ local partialFrom: Instance? = nil
 local onKitChanged: (() -> ())? = nil
 local warnedMarkers = false
 local warnedOldKit = false
+local warnedNoBurn = false
 
 -- The kit, once it is there and complete (nil until then: it is looked for
 -- again on the next call, so a kit that replicates late still works).
@@ -280,6 +281,39 @@ local burnInKit = false
 -- ...and the Sentinel's bore over the heart (BoreS / M / L, later still)?
 local boreInKit = false
 
+-- The WoundKit to use. A place may hold more than one (an older import
+-- left beside the new one): the one with the most inserts is used, never
+-- just the first found (an old one has no burn / bore inserts: burns and
+-- the bore were then drawn with the small laceration's insert).
+local function bestKitModel(): Instance?
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	if assets == nil then
+		return nil
+	end
+	local best: Instance? = nil
+	local bestCount = -1
+	for _, item in assets:GetDescendants() do
+		if item.Name ~= "WoundKit" or item:IsA("BasePart") then
+			continue
+		end
+		local inserts: { [string]: boolean } = {}
+		local count = 0
+		for _, piece in item:GetDescendants() do
+			if piece:IsA("BasePart") then
+				local insert = string.match(piece.Name, "^(.+)_%a+$")
+				if insert and WoundShapes.shapes[insert] and not inserts[insert] then
+					inserts[insert] = true
+					count += 1
+				end
+			end
+		end
+		if count > bestCount then
+			best, bestCount = item, count
+		end
+	end
+	return best
+end
+
 local function findKit(): Kit?
 	if kit then
 		return kit
@@ -287,8 +321,7 @@ local function findKit(): Kit?
 	if partial and partialFrom and partialFrom:IsDescendantOf(ReplicatedStorage) then
 		return partial
 	end
-	local assets = ReplicatedStorage:FindFirstChild("Assets")
-	local model = if assets then assets:FindFirstChild("WoundKit", true) else nil
+	local model = bestKitModel()
 	if model == nil then
 		return nil
 	end
@@ -356,6 +389,23 @@ local function findKit(): Kit?
 	boreInKit = found.pieces.BoreS ~= nil
 		and found.pieces.BoreM ~= nil
 		and found.pieces.BoreL ~= nil
+	if not (burnInKit and boreInKit) and not warnedNoBurn then
+		-- (said only if still so a moment later: not while it replicates)
+		warnedNoBurn = true
+		task.delay(10, function()
+			local again = findKit()
+			if again and not (burnInKit and boreInKit) then
+				warn(
+					"[Gashes] WoundKit is out of date (no "
+						.. (if burnInKit then "" else "Burn* ")
+						.. (if boreInKit then "" else "Bore* ")
+						.. "inserts): the heat vision's burns and the Sentinel's bore are "
+						.. "drawn with smaller stand-ins. Delete it and import "
+						.. "assets/wounds/WoundKit.fbx again (docs/WOUNDS_FR.md)."
+				)
+			end
+		end)
+	end
 	if tearMissing and not warnedOldKit then
 		warnedOldKit = true
 		warn(
@@ -394,10 +444,12 @@ local function findKit(): Kit?
 		partial = nil
 		partialFrom = nil
 	else
-		-- (not kept for good: the missing inserts may still arrive)
+		-- (not kept for good: the missing inserts may still arrive, in this
+		-- kit or in another one arriving later)
 		partial = found
 		partialFrom = model
-		model.DescendantAdded:Once(function()
+		local watchedFrom = ReplicatedStorage:FindFirstChild("Assets") or model
+		watchedFrom.DescendantAdded:Once(function()
 			if partial == found then
 				partial = nil
 				if onKitChanged then
@@ -442,17 +494,24 @@ type Placed = {
 	center: Vector2, -- box: (u, v) from the face's top-left; head: (angle, y)
 }
 
-local function shapeFor(data: Gash.Data, head: boolean): (string, WoundShapes.Shape?)
+-- The insert drawn for a cut: its own, or (a kit without it) the nearest
+-- one this kit has. Looked up in the kit used for this drawing (never in
+-- what an earlier look at a kit still arriving had found).
+local function shapeFor(data: Gash.Data, head: boolean, found: Kit): (string, WoundShapes.Shape?)
+	local suffix = if head then "_Head" else ""
+	local function has(name: string): boolean
+		return found.pieces[name] ~= nil and WoundShapes.shapes[name] ~= nil
+	end
 	local kind, size = data.kind, data.size
-	if kind == "Bore" and (head or not boreInKit) then
+	if kind == "Bore" and (head or not has("Bore" .. size)) then
 		-- (an older kit without the bore: a big burn there instead)
 		kind, size = "Burn", if size == "S" then "M" else "L"
 	end
 	-- (a burn: its own insert; an older kit without it: the laceration's)
-	if kind == "Burn" and not burnInKit then
+	if kind == "Burn" and not has("Burn" .. size .. suffix) then
 		kind = "Lac"
 	end
-	local name = kind .. size .. (if head then "_Head" else "")
+	local name = kind .. size .. suffix
 	return name, WoundShapes.shapes[name]
 end
 
@@ -462,8 +521,8 @@ local function turnedExtent(extent: Vector2, angle: number): Vector2
 	return Vector2.new(c * extent.X + s * extent.Y, s * extent.X + c * extent.Y)
 end
 
-local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
-	local name, shape = shapeFor(data, false)
+local function placeOnBox(part: BasePart, data: Gash.Data, found: Kit): Placed?
+	local name, shape = shapeFor(data, false, found)
 	if shape == nil then
 		return nil
 	end
@@ -505,8 +564,8 @@ local function placeOnBox(part: BasePart, data: Gash.Data): Placed?
 	}
 end
 
-local function placeOnHead(_part: BasePart, data: Gash.Data): Placed?
-	local name, shape = shapeFor(data, true)
+local function placeOnHead(_part: BasePart, data: Gash.Data, found: Kit): Placed?
+	local name, shape = shapeFor(data, true, found)
 	if shape == nil then
 		return nil
 	end
@@ -1375,7 +1434,9 @@ local function refresh(model: Model, partName: string)
 		for index = 1, Gash.MAX_PER_PART do
 			local data = Gash.decode(model:GetAttribute(Gash.attribute(key, index)))
 			if data then
-				local placed = if isHead then placeOnHead(part, data) else placeOnBox(part, data)
+				local placed = if isHead
+					then placeOnHead(part, data, found)
+					else placeOnBox(part, data, found)
 				-- (no insert for it in this kit, or an old kit without the head
 				-- pieces: no hole either)
 				if

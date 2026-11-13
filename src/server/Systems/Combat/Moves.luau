@@ -289,6 +289,11 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 	-- (ticks on a fixed grid: the damage doesn't depend on the frame rate)
 	local nextTick = startedAt + beam.from
 	local trace = HeatBeam.tracer(state.model)
+	-- the head it last burnt since the last tick, and where (in its space:
+	-- it may have moved since)
+	local seenModel: Model? = nil
+	local seenHead: BasePart? = nil
+	local seenAt: Vector3? = nil
 	local connection: RBXScriptConnection? = nil
 	connection = RunService.Heartbeat:Connect(function()
 		local time = c.now()
@@ -302,18 +307,29 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 			end
 			return
 		end
-		if time < nextTick then
-			return
+		if elapsed < beam.from then
+			return -- (the eyes still charging)
 		end
-		nextTick = math.max(nextTick + beam.tick, time - beam.tick)
+		-- Where it is each frame (the same rule the clients draw it with): a
+		-- head it burns in ANY frame since the last tick counts at the tick
+		-- (someone moving across it, a head bobbing in and out of it).
 		local head = state.model:FindFirstChild("Head")
 		local origin = if head and head:IsA("BasePart")
 			then head.Position + direction * 0.5
 			else state.root.Position + Vector3.new(0, 1.5, 0)
-		-- What it ends on: a wall, a body, or the head it burns.
 		local hit = trace(origin, direction, beam.range)
-		local victimModel = if hit.head then hit.fighter else nil
-		local victim = if victimModel then c.getState(victimModel) else nil
+		local at, burnt = hit.burnAt, hit.part
+		if hit.head and hit.fighter and at and burnt then
+			seenModel, seenHead, seenAt = hit.fighter, burnt, burnt.CFrame:PointToObjectSpace(at)
+		end
+		if time < nextTick then
+			return
+		end
+		nextTick = math.max(nextTick + beam.tick, time - beam.tick)
+		local victimModel = seenModel
+		local burnAt = if seenHead and seenAt then seenHead.CFrame * seenAt else nil
+		seenModel, seenHead, seenAt = nil, nil, nil
+		local victim = if victimModel and victimModel.Parent then c.getState(victimModel) else nil
 		local touched: CombatState? = nil
 		if
 			victim
@@ -329,9 +345,8 @@ local function runBeam(state: CombatState, move: Kits.MoveDef, token: number)
 					zoneFor(state, beam.hit, victimModel, HEAD_ONLY, direction)
 				if c.resolveHit(state, victim, specFor(beam.hit, zone, move.id)) then
 					-- where it touches the round head, it burns through the skin
-					local at = hit.burnAt
-					if at then
-						c.addBurn(victimModel, "Head", at)
+					if burnAt then
+						c.addBurn(victimModel, "Head", burnAt)
 					end
 				end
 			end

@@ -11,8 +11,13 @@
 --      arms and legs don't collide.
 --   3. Only the HEAD burns. An arm, a shoulder, the chest, a leg in the
 --      way shields it (and anyone behind). The head is checked against the
---      round head you see (radius 0.6; the head part is a 2x1x1 box): a
---      line passing beside the face goes on.
+--      round head you see (radius 0.6; the head part is a 2x1x1 box), with
+--      some leeway (the beam glows wide): a head the beam visibly touches
+--      burns, even if the thin line only grazes it (above it, beside the
+--      face, or through the top of the chest right under the chin); a line
+--      passing farther beside the face goes on.
+--   The body only stops it where the beam's white-hot core touches it (a
+--   thin cast): a shoulder just under the line doesn't shield the head.
 --   A hat / hair / face accessory on the head counts as the head. Other
 --   accessories, the root part, held tools and effects don't stop it.
 
@@ -23,9 +28,13 @@ local Config = require(ReplicatedStorage.Shared.Config)
 
 local HeatBeam = {}
 
-HeatBeam.CORE_RADIUS = 0.25 -- the part of the beam that meets a body
+HeatBeam.CORE_RADIUS = 0.13 -- the part of the beam a body must touch to stop it
 HeatBeam.HEAD_RADIUS = 0.6 -- the round head you see (per stud of head height)
-HeatBeam.HEAD_PAD = 0.3 -- leeway around it (the beam has some width)
+HeatBeam.HEAD_PAD = 0.4 -- leeway around it (the beam's glow is that wide)
+-- The top of the chest right under the chin: a line through it that close
+-- to the round head burns the head (the beam's glow is on the chin)...
+HeatBeam.CHIN_PAD = 0.15
+local CHIN_DEPTH = 0.55 -- (...when the head is no deeper than this behind it)
 
 local MAX_WALLS = 8 -- (fighters skipped by the wall ray)
 local MAX_PASSES = 8 -- (faces a line can pass beside, one per fighter)
@@ -92,8 +101,8 @@ local function onHead(handle: BasePart, head: BasePart): boolean
 end
 
 -- The parts of `model` that stop the beam: its six body parts and what
--- it wears on its head.
-local function addBody(list: { Instance }, model: Model)
+-- it wears on its head. Returns its head.
+local function addBody(list: { Instance }, model: Model): BasePart?
 	for _, name in LIMBS do
 		local limb = model:FindFirstChild(name)
 		if limb and limb:IsA("BasePart") then
@@ -101,17 +110,29 @@ local function addBody(list: { Instance }, model: Model)
 		end
 	end
 	local head = model:FindFirstChild("Head")
-	if head and head:IsA("BasePart") then
-		for _, child in model:GetChildren() do
-			if child:IsA("Accessory") then
-				local handle = child:FindFirstChild("Handle")
-				if handle and handle:IsA("BasePart") and onHead(handle, head) then
-					table.insert(list, handle)
-				end
+	if head == nil or not head:IsA("BasePart") then
+		return nil
+	end
+	for _, child in model:GetChildren() do
+		if child:IsA("Accessory") then
+			local handle = child:FindFirstChild("Handle")
+			if handle and handle:IsA("BasePart") and onHead(handle, head) then
+				table.insert(list, handle)
 			end
 		end
 	end
+	return head
 end
+
+-- A head close enough to the line to burn (see the top), before `reach`.
+type Near = {
+	fighter: Model,
+	head: BasePart,
+	at: Vector3, -- the point of the round head it touches
+	along: number, -- how far along the line that is
+	distance: number, -- from the line to the head's centre
+	radius: number, -- of the round head
+}
 
 -- A tracer for the beam of `owner` (never stopped by `owner` itself nor by
 -- `ignore`). It reuses its tables: the Result it returns is the same table
@@ -127,6 +148,8 @@ function HeatBeam.tracer(owner: Model, ignore: { Instance }?): Trace
 	local skipped: { Instance } = {}
 	local bodies: { Instance } = {}
 	local beside: { Instance } = {}
+	local heads: { { fighter: Model, head: BasePart } } = {}
+	local near: { [Model]: Near } = {}
 	local builtVersion = -1
 	local builtAt = -math.huge
 	local result: Result = {
@@ -146,17 +169,78 @@ function HeatBeam.tracer(owner: Model, ignore: { Instance }?): Trace
 		end
 		builtVersion, builtAt = version, now
 		table.clear(bodies)
+		table.clear(heads)
 		for _, instance in CollectionService:GetTagged(Config.Combat.TAG) do
 			if instance ~= owner and instance:IsA("Model") then
-				addBody(bodies, instance)
+				local head = addBody(bodies, instance)
+				if head then
+					table.insert(heads, { fighter = instance, head = head })
+				end
 			end
 		end
 		bodyParams.FilterDescendantsInstances = bodies
 	end
 
+	-- The heads the line passes close enough to (before the wall, at
+	-- `reach`); returns the nearest one along the line.
+	local function nearHeads(origin: Vector3, direction: Vector3, reach: number): Near?
+		table.clear(near)
+		local nearest: Near? = nil
+		for _, entry in heads do
+			local head = entry.head
+			if head.Parent ~= entry.fighter then
+				continue -- (gone since the list was made)
+			end
+			local centre = head.Position
+			local radius = HeatBeam.HEAD_RADIUS * head.Size.Y
+			local along = (centre - origin):Dot(direction)
+			if along < 0 or along > reach then
+				continue -- (behind the eyes, or behind the wall)
+			end
+			local offset = origin + direction * along - centre
+			local distance = offset.Magnitude
+			if distance > radius + HeatBeam.HEAD_PAD then
+				continue
+			end
+			-- where it meets the skin: where the line enters the head, or
+			-- (grazing it) the point of the head nearest the line
+			local at = if distance < radius
+				then origin + direction * math.max(
+					0,
+					along - math.sqrt(radius * radius - distance * distance)
+				)
+				else centre + offset.Unit * radius
+			local found: Near = {
+				fighter = entry.fighter,
+				head = head,
+				at = at,
+				along = math.clamp((at - origin):Dot(direction), 0, reach),
+				distance = distance,
+				radius = radius,
+			}
+			near[entry.fighter] = found
+			if nearest == nil or found.along < nearest.along then
+				nearest = found
+			end
+		end
+		return nearest
+	end
+
+	local function burnHead(origin: Vector3, direction: Vector3, hit: Near)
+		local out = hit.at - hit.head.Position
+		result.length = hit.along
+		result.position = origin + direction * hit.along
+		result.normal = if out.Magnitude > 1e-3 then out.Unit else -direction
+		result.part = hit.head
+		result.fighter = hit.fighter
+		result.head = true
+		result.burnAt = hit.at
+	end
+
 	-- The first body part on the line, before `reach` (along the axis);
 	-- fills `result` and returns true, or false (none).
 	local function firstBody(origin: Vector3, direction: Vector3, reach: number): boolean
+		local nearest = nearHeads(origin, direction, reach)
 		local start = origin - direction * BACKSTEP
 		-- (the sphere's front stops at the wall: nobody is hit through it)
 		local sweep = math.max(0.05, reach + BACKSTEP - HeatBeam.CORE_RADIUS)
@@ -164,7 +248,7 @@ function HeatBeam.tracer(owner: Model, ignore: { Instance }?): Trace
 			local hit =
 				workspace:Spherecast(start, HeatBeam.CORE_RADIUS, direction * sweep, bodyParams)
 			if hit == nil then
-				return false
+				break
 			end
 			-- (something stuck on a body part - a wound, an effect - is
 			-- that body part)
@@ -179,56 +263,43 @@ function HeatBeam.tracer(owner: Model, ignore: { Instance }?): Trace
 			end
 			local worn = part.Parent ~= nil and part.Parent:IsA("Accessory")
 			local isHead = worn or (part.Name == "Head" and part.Parent == fighter)
-			local head = if isHead and fighter then fighter:FindFirstChild("Head") else nil
-			if head == nil or not head:IsA("BasePart") then
-				-- an arm, the chest, a leg: the beam stops on it
+			local close = if fighter then near[fighter] else nil
+			if not isHead then
+				-- An arm, the chest, a leg: the beam stops on it, unless a
+				-- head it touches is before it (a line grazing a head, the
+				-- top of the chest under the chin of the head it burns).
 				local along = math.clamp((hit.Position - origin):Dot(direction), 0, reach)
-				result.length = along
-				result.position = origin + direction * along
-				result.normal = hit.Normal
-				result.part = part
-				result.fighter = fighter
-				result.head = false
-				result.burnAt = nil
+				local chin = close ~= nil
+					and part.Name == "Torso"
+					and close.distance <= close.radius + HeatBeam.CHIN_PAD
+				if close and chin and close.along <= along + CHIN_DEPTH then
+					burnHead(origin, direction, close)
+				elseif nearest and nearest.along <= along then
+					burnHead(origin, direction, nearest)
+				else
+					result.length = along
+					result.position = origin + direction * along
+					result.normal = hit.Normal
+					result.part = part
+					result.fighter = fighter
+					result.head = false
+					result.burnAt = nil
+				end
 				return true
 			end
-			-- The head: does the line really meet the round head?
-			local centre = head.Position
-			local radius = HeatBeam.HEAD_RADIUS * head.Size.Y
-			local along = math.clamp((centre - origin):Dot(direction), 0, reach)
-			local closest = origin + direction * along
-			local offset = closest - centre
-			local distance = offset.Magnitude
-			if distance <= radius + HeatBeam.HEAD_PAD then
-				-- where it meets the skin: where the line enters the head,
-				-- or (grazing it) the point of the head nearest the line
-				local at: Vector3
-				if distance < radius then
-					at = origin
-						+ direction
-							* math.max(0, along - math.sqrt(radius * radius - distance * distance))
-				else
-					at = centre + offset.Unit * radius
-				end
-				local length = math.clamp((at - origin):Dot(direction), 0, reach)
-				local out = at - centre
-				result.length = length
-				result.position = origin + direction * length
-				result.normal = if out.Magnitude > 1e-3 then out.Unit else -direction
-				result.part = head
-				result.fighter = fighter
-				result.head = true
-				result.burnAt = at
+			if close then
+				burnHead(origin, direction, close)
 				return true
 			end
 			-- beside the face (a corner of the head box, a big hat): goes on,
 			-- past that whole head at once (its head and every hat on it: one
 			-- pass per fighter, however many accessories they wear)
+			local head = if fighter then fighter:FindFirstChild("Head") else nil
 			local removed = false
 			for index = #bodies, 1, -1 do
 				local body = bodies[index]
 				local holder = body.Parent
-				local onFighter = body == head
+				local onFighter = (head ~= nil and body == head)
 					or (holder ~= nil and holder:IsA("Accessory") and holder.Parent == fighter)
 				if onFighter then
 					bodies[index] = bodies[#bodies]
@@ -238,9 +309,15 @@ function HeatBeam.tracer(owner: Model, ignore: { Instance }?): Trace
 				end
 			end
 			if not removed then
-				return false
+				break
 			end
 			bodyParams.FilterDescendantsInstances = bodies
+		end
+		-- Nothing in the way of a head the beam touches (passing just over
+		-- it, beside the face): it burns.
+		if nearest then
+			burnHead(origin, direction, nearest)
+			return true
 		end
 		return false
 	end
