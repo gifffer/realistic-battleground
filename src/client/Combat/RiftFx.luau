@@ -640,8 +640,7 @@ local function portals(data: { [string]: any })
 	else
 		door(exit * CFrame.new(0, 0, 0), seconds)
 	end
-	SoundController.playAt("PortalOpen", entry.Position)
-	SoundController.playAt("PortalOpen", exit.Position)
+	-- (the teleport's sound already started with the shot: "PortalShot")
 	task.delay(seconds, function()
 		SoundController.playAt("PortalClose", exit.Position)
 	end)
@@ -668,6 +667,9 @@ function RiftFx.onRemote(kind: unknown, data: unknown)
 				bolt(from, to)
 			end
 			SoundController.play("PortalShot", by)
+			-- The teleport sound starts now, half a second before he steps
+			-- through, so it's heard as he comes out (not after).
+			SoundController.play("Teleport", by)
 		end
 	elseif kind == "Portals" then
 		portals(info)

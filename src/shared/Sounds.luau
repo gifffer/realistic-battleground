@@ -15,6 +15,8 @@
 --   pitch           playback speed: 1 = normal, 0.8 = lower and heavier
 --   pitchVariation  each play is randomly a bit higher / lower (0.08 = ±8 %)
 --   fallback        name of another sound to use while `ids` is empty
+--   start           seconds skipped at the beginning of the file (a sound
+--                   that starts with a blank), nil = from the start
 --   length          seconds: only the start of it is played (a long file
 --                   cut short with a quick fade), nil = all of it
 --
@@ -27,6 +29,7 @@ export type SoundInfo = {
 	pitch: number,
 	pitchVariation: number,
 	fallback: string?,
+	start: number?,
 	length: number?,
 }
 
@@ -286,6 +289,15 @@ local sounds: { [string]: SoundInfo } = {
 		volume = 1,
 		pitch = 1,
 		pitchVariation = 0.04,
+	},
+	Teleport = { -- Dr. Rift going through his portal (played from the shot:
+		-- it must already be heard when he comes out; raise `start` if the
+		-- file begins with a blank)
+		ids = { 1013378689 },
+		volume = 0.9,
+		pitch = 1,
+		pitchVariation = 0.03,
+		start = 0,
 	},
 	PortalShot = { -- the portal gun's shot
 		ids = {},

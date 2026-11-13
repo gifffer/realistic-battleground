@@ -115,6 +115,7 @@ function SoundController.play(name: string, model: Model?): Sound?
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMaxDistance = MAX_HEARING_DISTANCE
 	sound.Parent = root
+	sound.TimePosition = info.start or 0
 	sound:Play()
 	cutShort(sound, info.length)
 	-- Removed once finished (TimeLength is 0 until the file is loaded, hence
@@ -148,6 +149,7 @@ function SoundController.playAt(name: string, position: Vector3): Sound?
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMaxDistance = MAX_HEARING_DISTANCE
 	sound.Parent = point
+	sound.TimePosition = info.start or 0
 	sound:Play()
 	cutShort(sound, info.length)
 	Debris:AddItem(point, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
