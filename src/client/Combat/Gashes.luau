@@ -21,6 +21,7 @@
 -- drawn (the blood effects still play).
 --
 --   Gashes.watch(model)   follow the cuts of this fighter
+--   Gashes.hasBore()      the kit has the Sentinel's bore inserts
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -213,6 +214,8 @@ local warnedOldKit = false
 -- again on the next call, so a kit that replicates late still works).
 -- Does the kit have the burn inserts (made after the first kits)?
 local burnInKit = false
+-- ...and the Sentinel's bore over the heart (BoreS / M / L, later still)?
+local boreInKit = false
 
 local function findKit(): Kit?
 	if kit then
@@ -274,6 +277,9 @@ local function findKit(): Kit?
 			if shape.kind == "Burn" then
 				continue -- (an older kit: burns use the laceration's insert)
 			end
+			if shape.kind == "Bore" then
+				continue -- (an older kit: no bore, see Gashes.hasBore)
+			end
 			if shape.kind ~= "Tear" then
 				return nil
 			end
@@ -281,6 +287,9 @@ local function findKit(): Kit?
 		end
 	end
 	burnInKit = found.pieces.BurnS ~= nil and found.pieces.BurnL_Head ~= nil
+	boreInKit = found.pieces.BoreS ~= nil
+		and found.pieces.BoreM ~= nil
+		and found.pieces.BoreL ~= nil
 	if tearMissing and not warnedOldKit then
 		warnedOldKit = true
 		warn(
@@ -1251,6 +1260,12 @@ local function waitForKit()
 			end
 		end
 	end)
+end
+
+-- Does the wound kit (once found) have the bore inserts (BoreS / M / L)?
+-- An older kit has not: nothing is drawn for a bore then.
+function Gashes.hasBore(): boolean
+	return findKit() ~= nil and boreInKit
 end
 
 function Gashes.watch(model: Model)

@@ -85,11 +85,14 @@ function GoreKit.get(): { [string]: Piece }?
 			table.insert(piece.layers, layer)
 		end
 	end
-	-- (the torn arm's pieces came later: a kit without them still has the
-	-- head's; ArmRip draws simpler ones itself then)
+	-- (the torn arm's pieces came later, then the Bull's (the body torn in
+	-- two, the guts): a kit without them still has the head's; the
+	-- finishers check for their own pieces and draw simpler ones then)
 	local optional: { [string]: boolean } = {}
-	for _, name in GoreShapes.limb do
-		optional[name] = true
+	for _, list in { GoreShapes.limb, GoreShapes.bisect, GoreShapes.gut } do
+		for _, name in list do
+			optional[name] = true
+		end
 	end
 	for name in GoreShapes.slots do
 		if found[name] == nil and not optional[name] then
