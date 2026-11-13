@@ -243,6 +243,7 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0,
 	},
 	LaserBeam = { ids = { 139620337204036 }, volume = 0.8, pitch = 1, pitchVariation = 0 }, -- (looped while it fires)
+	LaserStop = { ids = { 76801901356843 }, volume = 0.8, pitch = 1, pitchVariation = 0 }, -- the beam cut off
 	Sizzle = { -- flesh searing under the beam (finisher; looped). No file yet: the beam, higher
 		ids = {},
 		volume = 0.55,

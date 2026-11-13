@@ -1456,6 +1456,7 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 		end
 		if loop then
 			loop:Stop()
+			SoundController.play("LaserStop", model) -- (only once it really fired)
 		end
 		if charge then
 			charge:Stop()
@@ -2875,6 +2876,7 @@ local function pointBlank(attacker: Model, victim: Model, time: number, token: n
 			end
 			if loop then
 				loop:Stop()
+				SoundController.play("LaserStop", attacker)
 			end
 			if sizzle then
 				sizzle:Stop()

@@ -152,11 +152,15 @@ end
 function GoreKit.spawn(
 	piece: Piece,
 	at: CFrame,
-	paint: (layer: string) -> (Color3, number)
+	paint: (layer: string) -> (Color3, number),
+	skip: { [string]: boolean }? -- layers left out
 ): BasePart
 	local main: BasePart? = nil
 	local mainOffset = CFrame.identity
 	for _, layer in piece.layers do
+		if skip and skip[layer.name] then
+			continue
+		end
 		local part = layer.source:Clone()
 		part:ClearAllChildren()
 		-- (the importer gives each piece a pivot at the kit's origin: far

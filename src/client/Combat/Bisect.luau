@@ -227,13 +227,17 @@ end
 
 -- The torso's open bottom, or the legs' top (`frame`: torso space on
 -- `base`). `name`: the kit's piece ("Waist" / "Hips").
+local NO_NERVES = table.freeze({ Tendon = true })
+
 local function dress(base: BasePart, frame: CFrame, name: string, skin: Color3, random: Random)
 	local parent = Instance.new("Folder")
 	parent.Name = "Bisect"
 	local pieces = GoreKit.get()
 	local piece = if pieces then pieces[name] else nil
 	if piece then
-		weldTo(base, GoreKit.spawn(piece, base.CFrame * frame, painter(skin)), parent)
+		-- (no nerves: in the kit they spread far out of the body, a big
+		-- white tree on the floor)
+		weldTo(base, GoreKit.spawn(piece, base.CFrame * frame, painter(skin), NO_NERVES), parent)
 	elseif name == "Waist" then
 		-- Raw meat under the bottom, the spine's end out of it, a loop of
 		-- bowel bulging, the skin torn round.

@@ -571,6 +571,14 @@ local function onPreSimulation(dt: number)
 					motor.Transform = entry.lastBase[motor] or CFrame.new()
 				end
 			end
+			-- The root joint above all: a finisher clip leaves its root
+			-- offset in it (the server has already moved the root there),
+			-- and the torso would be drawn that far away again (under the
+			-- floor, up in the air, beside its limbs).
+			local rootJoint = entry.root:FindFirstChild("RootJoint")
+			if rootJoint and rootJoint:IsA("Motor6D") then
+				rootJoint.Transform = CFrame.identity
+			end
 			entry.flinch = Vector3.zero
 			entry.flinchSpeed = Vector3.zero
 			entry.sprintWeight = 0
