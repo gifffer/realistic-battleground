@@ -151,3 +151,7 @@ Roblox modère chaque image importée. `flesh_tear_2` (chair ouverte en couleur)
 - **jamais d'image de chair, d'organe ou de plaie ouverte réaliste** : ces éléments se font avec des pièces (Parts / meshes) dans le jeu, pas avec des images ;
 - les images de sang restent des **taches en niveaux de gris** teintées par le jeu (éclaboussures, flaques, coulures), qui passent la modération ;
 - si tu as importé `flesh_tear_1`, il vaut mieux la **supprimer** de tes ressources pour éviter un deuxième avertissement.
+
+## Flaques « propres » (sans gouttes autour)
+
+Les images `pool_1..3` (et leurs `pool_rim` / `serum_halo`) ont des petites gouttes dessinées autour de la flaque. Sur les grosses flaques des finishers, l'image est agrandie et ces gouttes grossissent avec elle. Les images `cleanpool_1..3`, `cleanrim_1..3` et `cleanserum_1..3` ont **le même contour sans les gouttes**. Une fois importées, colle leurs IDs dans `Config.Blood.IMAGES` : `poolClean`, `poolRimClean`, `serumHaloClean` (dans l'ordre 1, 2, 3). Le jeu les utilise alors à la place des anciennes, automatiquement.

@@ -367,52 +367,6 @@ return table.freeze({
 		HURT_SOUND_HEALTH = 70,
 	}),
 
-	-- Gore of the very strong hits (Shared/Util/HeavyGore): RARE, and only
-	-- in a fight - never from a finisher. Someone lands a BIG COMBO on a
-	-- fighter (the server counts it per victim: the same attacker's hits
-	-- that land, each less than COMBO_GAP after the last); once it is big
-	-- enough, its next HEAVY blow (HEAVY_DAMAGE or more, the 4th M1, or a
-	-- blow that knocks down / launches) rolls ONCE: it may snap a bone open
-	-- (an open fracture of the forearm / the shin on the side it hit) or,
-	-- rarer, tear an arm off. Hit or miss, the combo then starts over. The
-	-- fighter stays alive and keeps fighting (a broken shin: he limps). On
-	-- the blow that knocks him out the chances are higher.
-	-- Decided by the server, drawn on every client. Off with
-	-- Injuries.SKIN_TEAR too.
-	HeavyGore = table.freeze({
-		ENABLED = true,
-		-- A big combo: this many hits in a row by the same attacker...
-		COMBO_HITS = 6,
-		-- ...or this much damage in a row from him (whichever comes first).
-		COMBO_DAMAGE = 40,
-		-- Seconds between two of his hits for the combo to go on.
-		COMBO_GAP = 1.6,
-		-- A blow counts as heavy at this damage or more (or the 4th M1, or
-		-- a blow that knocks down / launches).
-		HEAVY_DAMAGE = 9,
-		-- The heavy blow that ends a big combo (one roll): the chance of an
-		-- open fracture, of a torn arm (a leg only rolls for a fracture)...
-		FRACTURE_CHANCE = 0.2,
-		TEAR_CHANCE = 0.05,
-		-- ...and when that blow knocks him out.
-		KO_FRACTURE_CHANCE = 0.3,
-		KO_TEAR_CHANCE = 0.1,
-		-- Legs torn off too (an R6 body without a leg can't stand: off, only
-		-- arms come off).
-		TEAR_LEGS = false,
-		-- After one of these on someone, nothing more for this long (seconds).
-		COOLDOWN = 8,
-		-- Also in duels.
-		IN_DUELS = false,
-		-- At most per body (the Bouncer's torn arm counts).
-		MAX_TORN_LIMBS = 2,
-		MAX_FRACTURES = 2,
-		-- A torn limb flies off (studs/s), then lies there this long.
-		LIMB_FLING_SPEED = 24,
-		LIMB_FLING_UP = 16,
-		TORN_LIMB_TIME = 12,
-	}),
-
 	-- Blood (client-side visuals only: nothing here changes a fight). Used by
 	-- the client's Combat/Blood*.luau modules and the gore modules.
 	-- Realistic gore: on Roblox, fill in the experience's maturity
@@ -634,6 +588,12 @@ return table.freeze({
 			rippleRing = table.freeze({ 85645245730750 }), -- ripple_ring_1 (else: no ripple)
 			starburst = table.freeze({ 111666805106796, 93606236237598 }), -- starburst_1..2 (else "satellites")
 			serumHalo = table.freeze({ 90985594653033, 108670503849941, 130952450009466 }), -- serum_halo_1..3, in pairs with pool_1..3
+			-- The same pools WITHOUT the drops drawn around them (same outline,
+			-- same number): used instead of pool / pool_rim / serum_halo once
+			-- uploaded, so a big pool's drawn drops don't grow with it.
+			poolClean = table.freeze({ 139990585262771, 131795471144890, 70633199831673 }), -- cleanpool_1..3
+			poolRimClean = table.freeze({ 125318589793366, 76214080937100, 119786435512225 }), -- cleanrim_1..3
+			serumHaloClean = table.freeze({ 72011702248843, 71334546934789, 110660327470319 }), -- cleanserum_1..3
 			drag = table.freeze({ 123680049539259, 126526466461890 }), -- drag_1..2 (else "smear")
 			shoeRunL = table.freeze({ 72765684284944 }), -- shoe_run_L_1 (else "footL")
 			shoeRunR = table.freeze({ 84666117785445 }), -- shoe_run_R_1 (else "footR")
@@ -690,6 +650,59 @@ return table.freeze({
 			CROWN_MIN_HEIGHT = 1.5, -- ...falling at least this far (studs) splashes a crown
 			FOOT_DECAY = 0.7, -- each footprint keeps this much of the previous one's blood (real: 0.6-0.75, about 7 prints)
 			STARBURSTS_PER_POOL = 4, -- rings of tiny drops around a pool someone drips into
+		}),
+		-- The big pools the finishers leave (BloodGush.stump): a torn-off limb, a
+		-- head burst, a body cut in two loses a LOT of blood in a few seconds.
+		-- Each wound pours its blood on the floor under it: spurts with the
+		-- heartbeat first (PULSE seconds), then a steady ooze, then slower and
+		-- slower until SECONDS. The pool follows the body part as it falls or
+		-- slides (a smear while it slides), flows downhill, stops at curbs and
+		-- walls, merges with pools close by, then ages like any pool (wet,
+		-- clotting, the pale serum ring, dry).
+		-- LITRES: how much blood comes out. On a hard floor it makes ONE pool
+		-- (BloodPool): one uniform puddle, one colour, that forms where the
+		-- blood lands and grows smoothly from the middle while the wound
+		-- pours (never separate blotches), then goes on creeping a little for
+		-- CREEP seconds after it stops (slower and slower). On a slope it
+		-- slides and stretches a little downhill (one short run leaves it on a
+		-- real slope); against a curb or a wall it spreads on its free side;
+		-- it flows toward the body and under it (a body lying in its own
+		-- blood); two pools that meet become one.
+		-- Its size once it is done spreading: SIZE_PER_LITRE studs across for
+		-- 1 litre, × the litres to the power SIZE_POWER (a bit more than the
+		-- square root: a small wound makes a small pool):
+		--   the torso cut in two 3.8 L ≈ 9.5 studs, the neck 3.4 L ≈ 8.9,
+		--   the shoulder 3 L ≈ 8.2, the liver hole / the Bull's legs 2.6 L ≈ 7.5,
+		--   the portal's legs 2.4 L ≈ 7.1, the torn arm 0.6 L ≈ 3,
+		--   the liver itself 0.3 L ≈ 1.9.
+		-- (For scale: a body is ~5 studs long. In real life 1.5 L on a hard
+		-- floor is a pool ~1 m across, ~2 mm thick; these are about twice
+		-- that, like games and films show them - a body lying in a big dark
+		-- lake. Change SIZE_PER_LITRE to make them all bigger or smaller, in
+		-- proportion: 2.4 was the old, smaller look.)
+		FINISHER_POOLS = table.freeze({
+			ENABLED = true, -- false: no big finisher pools (the spurts still land)
+			SIZE_PER_LITRE = 4.1, -- studs across for 1 litre...
+			SIZE_POWER = 0.63, -- ...× litres ^ this (0.5 = the square root)
+			-- seconds the pool keeps spreading after its wound stops pouring
+			-- (slower and slower: you see it keep growing ~30-40 s in all)
+			CREEP = 25,
+			LIFE = 240, -- seconds a finisher pool stays (the serum ring shows from 90 s)
+			MOVING = 2.5, -- studs/s: a wound moving faster smears instead of pooling
+			MAX_HEIGHT = 4.5, -- studs: a wound higher than this (in the air) pools nothing yet
+			DRAGS = 12, -- smear marks at most per wound while its body slides
+			-- One line per wound. LITRES (blood out), SECONDS (how long it keeps
+			-- coming), PULSE (seconds of spurts with the heartbeat; 0 = it only
+			-- oozes: a limb lying on the floor), BEAT (seconds between beats).
+			NECK = table.freeze({ LITRES = 3.4, SECONDS = 20, PULSE = 9, BEAT = 0.38 }), -- the bat: the head burst
+			SHOULDER = table.freeze({ LITRES = 3, SECONDS = 18, PULSE = 8, BEAT = 0.4 }), -- the arm torn off: the socket
+			TORN_ARM = table.freeze({ LITRES = 0.6, SECONDS = 14, PULSE = 0, BEAT = 0.4 }), -- the arm itself, lying on the floor
+			LIVER_HOLE = table.freeze({ LITRES = 2.6, SECONDS = 18, PULSE = 8, BEAT = 0.4 }), -- the liver torn out: the flank
+			LIVER = table.freeze({ LITRES = 0.3, SECONDS = 10, PULSE = 0, BEAT = 0.4 }), -- the liver dropped on the floor
+			WAIST_TORSO = table.freeze({ LITRES = 3.8, SECONDS = 22, PULSE = 8, BEAT = 0.38 }), -- the portal cut: the upper body
+			WAIST_LEGS = table.freeze({ LITRES = 2.4, SECONDS = 18, PULSE = 7, BEAT = 0.35 }), -- the portal cut: the legs
+			BISECT_TORSO = table.freeze({ LITRES = 3.8, SECONDS = 22, PULSE = 8, BEAT = 0.36 }), -- the Bull: the top half
+			BISECT_LEGS = table.freeze({ LITRES = 2.6, SECONDS = 18, PULSE = 7, BEAT = 0.36 }), -- the Bull: the legs
 		}),
 	}),
 
