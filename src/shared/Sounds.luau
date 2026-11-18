@@ -412,7 +412,7 @@ local sounds: { [string]: SoundInfo } = {
 	-- normal walk: running plays louder, a light step quieter. These replace
 	-- Roblox's default footstep loop (muted by DeathSoundController).
 	FootConcrete = { -- concrete, asphalt, brick, stone, plastic (the default)
-		ids = { 129317472269932, 135085025171496, 116023211662573 },
+		ids = { 129317472269932, 135085025171496, 116023211662573, 106215312789093, 86545332952989 },
 		volume = 0.35,
 		pitch = 1,
 		pitchVariation = 0.08,
