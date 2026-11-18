@@ -79,8 +79,18 @@ local function computeTangents(
 	keyframes: { Keyframe },
 	clip: Clip
 ): { Vector3 }
-	local count = #values
-	local tangents = table.create(count, Vector3.zero)
+	local total = #values
+	local tangents = table.create(total, Vector3.zero)
+	-- A looped clip often repeats its first key at the very end (time =
+	-- length) to close the loop. That copy is not a neighbour of its own: the
+	-- loop wraps around the keys before it, and the copy gets the first key's
+	-- tangent. (Wrapping onto the copy itself made the speed jump at the
+	-- seam, once per cycle: a visible jerk.)
+	local count = total
+	local loopCopy = clip.looped and total >= 3 and times[total] >= clip.length - 1e-4
+	if loopCopy then
+		count = total - 1
+	end
 	for index = 1, count do
 		local isEnd = not clip.looped and (index == 1 or index == count)
 		if keyframes[index].tangent == "flat" or isEnd or count < 2 then
@@ -100,6 +110,9 @@ local function computeTangents(
 		if span > 0 then
 			tangents[index] = (values[after] - values[before]) / span
 		end
+	end
+	if loopCopy then
+		tangents[total] = tangents[1]
 	end
 	return tangents
 end
