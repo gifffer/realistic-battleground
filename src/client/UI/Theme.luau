@@ -1,26 +1,27 @@
 --!strict
 -- The look of the whole interface, in one place.
 --
--- Direction: quiet and minimal, like a shipped game menu (a plain list
--- of words, no boxes). The fight is the show; the interface stays small
--- and out of the way.
+-- Direction: quiet and minimal, like Roblox's own menus (its dark theme,
+-- see docs/UI_ROBLOX_STYLE.md). The fight is the show; the interface stays
+-- small and out of the way.
 --
 -- Rules:
---   • black / white / grey. One red (Accent), used SMALL: a thin bar
---     next to the selected item, a short mark on the main button. Never a
+--   • black and dark greys (Roblox's palette: Surface, Card = Slate,
+--     CardHi = Flint), white text. One red (Accent), used SMALL. Never a
 --     big red block;
---   • lists are plain text: dim grey = not picked, white + red bar =
---     picked, white = under the mouse. No plates, no numbers, no slashes;
---   • buttons are small: outlined (main action) or text only;
+--   • lists are plain text: dim grey = not picked, white + thin bar =
+--     picked, white = under the mouse;
+--   • rounded corners: RADIUS (8) on buttons and cards, RADIUS_LARGE (12)
+--     on panels, full pills in the top bar. No heavy outlines, no glows;
 --   • one font (Builder Sans) in 3 sizes: 20 titles, 13 text, 11 small.
---     Normal letter spacing. Captions only where a column needs a name;
---   • thin lines only (1 px), few of them; see-through backdrops so the
---     game still shows;
+--     Normal letter spacing;
+--   • dividers: 1 px white at DIVIDER_TRANSPARENCY, few of them;
 --   • anything you can click is a REAL button (UI/Button), never hand-made;
---   • the top bar panels (Controllers/MenuController, UI/Panel): one
---     black see-through plate (PANEL_TRANSPARENCY), no border, bold white
---     titles, grids of slightly lighter cards (Card / CardHi); what you
---     wear = thin gold outline (Gold), what you picked = white outline;
+--   • the top bar (Controllers/MenuController) copies Roblox's own: 44 px
+--     black pills at 0.3 transparency, white 22 px line icons (UI/Icons);
+--   • the top bar panels (UI/Panel): one near-black plate (Surface,
+--     SURFACE_TRANSPARENCY), Slate cards; what you wear = thin gold
+--     outline (Gold), what you picked = white outline;
 --   • blood red (Blood*) still means danger / you are hurt on the HUD;
 --   • the middle of the screen belongs to the fight.
 --
@@ -62,19 +63,29 @@ Theme.Colors = table.freeze({
 	Accent = Color3.fromHex("#D8423A"), -- THE accent (small: selection bar, main button mark)
 	AccentHi = Color3.fromHex("#EE5A50"), -- accent under the mouse
 	AccentDeep = Color3.fromHex("#A3302A"), -- accent while pressed
-	-- Panels (top bar windows): see-through black plates, slightly lighter cards.
-	Card = Color3.fromHex("#1E1E1E"), -- a card in a grid
-	CardHi = Color3.fromHex("#343434"), -- the selected card / a card under the mouse
+	-- Panels (top bar windows), from Roblox's dark theme (UIBlox Colors).
+	Surface = Color3.fromHex("#121215"), -- a panel's plate, tooltips
+	Card = Color3.fromHex("#232527"), -- a card in a grid, a closed tab (Slate)
+	CardHi = Color3.fromHex("#393B3D"), -- the selected card / under the mouse (Flint)
+	Muted = Color3.fromHex("#BDBEBE"), -- secondary text in panels (Pumice)
 	Gold = Color3.fromHex("#E2B84E"), -- what you wear / have equipped (thin outline, small text)
 	Progress = Color3.fromHex("#8CC79A"), -- XP and quest bars
-	Pill = Color3.fromHex("#121215"), -- the top bar buttons (like Roblox's own)
+	Pill = Color3.fromHex("#000000"), -- the top bar pills (Roblox: black at 0.3)
+	Spot = Color3.fromHex("#D0D9FB"), -- the round mark behind an open top bar button
 })
 
--- How see-through the panels' black plate is (0 = solid).
+-- How see-through the death screen's black plate is (0 = solid).
 Theme.PANEL_TRANSPARENCY = 0.35
 
--- Corner radius of buttons and cards (pixels): none, hard edges.
-Theme.RADIUS = 0
+-- The top bar panels' plate (Surface): almost solid, like Roblox's menus.
+Theme.SURFACE_TRANSPARENCY = 0.08
+
+-- Thin lines (dividers): white at this transparency (Roblox: alpha 0.2).
+Theme.DIVIDER_TRANSPARENCY = 0.85
+
+-- Corner radius (pixels): buttons and cards, then panels.
+Theme.RADIUS = 8
+Theme.RADIUS_LARGE = 12
 
 -- One family, three weights. The names stay the same so every screen
 -- follows (they used to be different faces).

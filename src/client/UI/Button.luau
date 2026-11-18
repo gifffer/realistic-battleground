@@ -19,13 +19,13 @@
 --   equip.setText("CONFIRM")
 --   equip.reset()            -- no hover / press (call when its parent hides it)
 --
--- Minimal look, no big fills:
+-- Roblox's dark theme (docs/UI_ROBLOX_STYLE.md), rounded 8 px corners:
 --   tab        a word in a list. Dim grey; under the mouse it turns white
---              with a faint bar; picked = white + a thin white bar on its left
---              (or under it when centred). No plate.
---   primary    the main action (EQUIP, BUY). A small white outline with a
---              short red mark on its left; under the mouse it fills white.
---   secondary  a faint outline, grey text; white under the mouse.
+--              with a faint fill; picked = white + a thin white bar on its
+--              left (or under it when centred).
+--   primary    the main action (EQUIP, BUY): a white button with dark text,
+--              like Roblox's own; a little greyer under the mouse.
+--   secondary  dark see-through, a faint outline; lighter under the mouse.
 --   danger     like secondary, in blood red.
 -- Pressed = a small quick shrink. Gamepad selection counts as hover.
 -- Button.badge() draws the non-clickable twin ("✓ EQUIPPED"): just a check
@@ -148,40 +148,40 @@ local function look(
 	}
 end
 
--- Mostly see-through (a light dark backing keeps buttons readable over
--- the world). Red only as the thin bar.
+-- Primary: Roblox's white button. Others: dark, see-through (they also sit
+-- over the world on the HUD), faint outlines, no red marks.
 local LOOKS: { [Variant]: { [Mode]: Look } } = {
 	primary = {
-		idle = look(C.Scrim, 0.6, C.Ink, 0.15, C.InkHi, C.Accent, 0),
-		hover = look(C.InkHi, 0, C.InkHi, 0, C.Scrim, C.Accent, 0),
-		pressed = look(C.Ink2, 0, C.Ink2, 0, C.Scrim, C.AccentDeep, 0),
-		selected = look(C.InkHi, 0, C.InkHi, 0, C.Scrim, C.Accent, 0),
-		disabled = look(C.Scrim, 0.8, C.Ink3, 0.5, C.Ink3, C.Accent, 1),
+		idle = look(C.InkHi, 0, C.InkHi, 1, C.Surface, C.Accent, 1),
+		hover = look(C.Ink, 0, C.Ink, 1, C.Surface, C.Accent, 1),
+		pressed = look(C.Muted, 0, C.Muted, 1, C.Surface, C.Accent, 1),
+		selected = look(C.InkHi, 0, C.InkHi, 1, C.Surface, C.Accent, 1),
+		disabled = look(C.CardHi, 0.4, C.CardHi, 1, C.Ink3, C.Accent, 1),
 	},
 	secondary = {
-		idle = look(C.Scrim, 0.6, C.Ink, 0.72, C.Ink, C.Accent, 1),
-		hover = look(C.Scrim, 0.4, C.InkHi, 0.2, C.InkHi, C.Accent, 1),
-		pressed = look(C.Scrim, 0.3, C.InkHi, 0.4, C.Ink, C.Accent, 1),
-		selected = look(C.Scrim, 0.5, C.Ink, 0.55, C.InkHi, C.Accent, 0),
-		disabled = look(C.Scrim, 0.8, C.Ink3, 0.85, C.Ink3, C.Accent, 1),
+		idle = look(C.Surface, 0.4, C.InkHi, 0.78, C.Ink, C.Accent, 1),
+		hover = look(C.CardHi, 0.25, C.InkHi, 0.6, C.InkHi, C.Accent, 1),
+		pressed = look(C.Card, 0.25, C.InkHi, 0.7, C.Ink, C.Accent, 1),
+		selected = look(C.CardHi, 0.1, C.InkHi, 0.35, C.InkHi, C.Accent, 1),
+		disabled = look(C.Surface, 0.6, C.Ink3, 0.88, C.Ink3, C.Accent, 1),
 	},
 	danger = {
-		idle = look(C.Scrim, 0.6, C.BloodHi, 0.45, C.BloodHi, C.Accent, 1),
+		idle = look(C.Surface, 0.4, C.BloodHi, 0.45, C.BloodHi, C.Accent, 1),
 		hover = look(C.BloodHi, 0.8, C.BloodHi, 0, C.InkHi, C.Accent, 1),
 		pressed = look(C.BloodHi, 0.65, C.BloodHi, 0, C.InkHi, C.Accent, 1),
 		selected = look(C.BloodHi, 0.8, C.BloodHi, 0, C.InkHi, C.Accent, 1),
-		disabled = look(C.Scrim, 0.8, C.Ink3, 0.85, C.Ink3, C.Accent, 1),
+		disabled = look(C.Surface, 0.6, C.Ink3, 0.88, C.Ink3, C.Accent, 1),
 	},
 	tab = {
 		idle = look(C.InkHi, 1, C.Ink, 1, C.Ink2, C.Ink, 1),
-		hover = look(C.InkHi, 0.96, C.Ink, 1, C.InkHi, C.Ink, 0.6),
-		pressed = look(C.InkHi, 0.93, C.Ink, 1, C.Ink, C.Ink, 0.4),
+		hover = look(C.InkHi, 0.94, C.Ink, 1, C.InkHi, C.Ink, 0.6),
+		pressed = look(C.InkHi, 0.9, C.Ink, 1, C.Ink, C.Ink, 0.4),
 		selected = look(C.InkHi, 1, C.Ink, 1, C.InkHi, C.InkHi, 0),
 		disabled = look(C.InkHi, 1, C.Ink, 1, C.Ink3, C.Ink, 1),
 	},
 }
 
--- Square by default (Theme.RADIUS = 0): no UICorner at all then.
+-- Rounded (Theme.RADIUS); none at all when it is 0.
 local function corner(parent: Instance, extra: number)
 	local radius = Theme.RADIUS + (if Theme.RADIUS > 0 then extra else 0)
 	if radius > 0 then

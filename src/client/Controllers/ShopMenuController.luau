@@ -579,8 +579,9 @@ local function buildCatalog(content: Frame, host: MenuController.Host, categorie
 		Position = UDim2.fromOffset(0, GRID_SIZE.Y + 10),
 		Size = UDim2.new(1, 0, 0, ACTION_BAR),
 		BackgroundColor3 = C.Card,
-		BackgroundTransparency = 0.4,
 		Parent = content,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 	})
 	local name = Theme.text({
 		Name = "ItemName",
