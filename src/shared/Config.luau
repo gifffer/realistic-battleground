@@ -637,9 +637,9 @@ return table.freeze({
 			-- The same pools WITHOUT the drops drawn around them (same outline,
 			-- same number): used instead of pool / pool_rim / serum_halo once
 			-- uploaded, so a big pool's drawn drops don't grow with it.
-			poolClean = table.freeze({ 0, 0, 0 }), -- cleanpool_1..3
-			poolRimClean = table.freeze({ 0, 0, 0 }), -- cleanrim_1..3
-			serumHaloClean = table.freeze({ 0, 0, 0 }), -- cleanserum_1..3
+			poolClean = table.freeze({ 139990585262771, 131795471144890, 70633199831673 }), -- cleanpool_1..3
+			poolRimClean = table.freeze({ 125318589793366, 76214080937100, 119786435512225 }), -- cleanrim_1..3
+			serumHaloClean = table.freeze({ 72011702248843, 71334546934789, 110660327470319 }), -- cleanserum_1..3
 			drag = table.freeze({ 123680049539259, 126526466461890 }), -- drag_1..2 (else "smear")
 			shoeRunL = table.freeze({ 72765684284944 }), -- shoe_run_L_1 (else "footL")
 			shoeRunR = table.freeze({ 84666117785445 }), -- shoe_run_R_1 (else "footR")
