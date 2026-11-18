@@ -147,11 +147,12 @@ local CROUCH_WALK_STOP = 0.5
 -- back to the plain fall loop above FALL_FAST_STOP.
 local FALL_FAST_START = -55
 local FALL_FAST_STOP = -45
--- Landing (ALSClips): from a fall faster than these (studs/s, down), a light
--- / heavy landing plays, only when landing (nearly) on the spot (moving on,
--- the steps just carry on).
-local LAND_LIGHT_SPEED = -30
-local LAND_HEAVY_SPEED = -60
+-- Landing (ALSClips): falling this much faster (studs/s) than a plain jump
+-- comes down, a light / heavy landing plays; only when landing (nearly) on
+-- the spot (moving on, the steps just carry on), and not over a guard, a
+-- block, a stun or a crouch.
+local LAND_LIGHT_MARGIN = 15
+local LAND_HEAVY_MARGIN = 35
 local LAND_MAX_RUN = 6
 local LANDINGS = table.freeze({ LandLight = true, LandHeavy = true })
 -- Limp clips, by the hurt leg (the "LimpLeg" attribute; written for the
@@ -842,15 +843,23 @@ end
 
 -- Back on its feet after a fall: a landing to match how hard it was (only
 -- landing about on the spot; never over a move already playing).
+local function jumpSpeed(humanoid: Humanoid): number
+	if humanoid.UseJumpPower then
+		return humanoid.JumpPower
+	end
+	return math.sqrt(2 * workspace.Gravity * humanoid.JumpHeight)
+end
+
 local function landed(entry: Tracked)
 	local fall = entry.fallSpeed
 	entry.fallSpeed = 0
 	if #entry.action > 0 or horizontalSpeed(entry.root) > LAND_MAX_RUN then
 		return
 	end
-	local name = if fall < LAND_HEAVY_SPEED
+	local plain = -jumpSpeed(entry.humanoid)
+	local name = if fall < plain - LAND_HEAVY_MARGIN
 		then "LandHeavy"
-		elseif fall < LAND_LIGHT_SPEED then "LandLight"
+		elseif fall < plain - LAND_LIGHT_MARGIN then "LandLight"
 		else nil
 	local clip = if name then findClip(name) else nil
 	if name and clip then
@@ -962,6 +971,7 @@ local function onPreSimulation(dt: number)
 			table.clear(entry.prevPrevOut)
 			table.clear(entry.inertia)
 			entry.pendingInertia = nil
+			entry.fallSpeed = 0
 			entry.loco.lastYaw = nil
 			entry.loco.lastPosition = nil
 			entry.loco.lag = 0
@@ -986,14 +996,33 @@ local function onPreSimulation(dt: number)
 			end
 		end
 		if not feet then
-			entry.fallSpeed = math.min(entry.fallSpeed, entry.root.AssemblyLinearVelocity.Y)
+			local airState = entry.humanoid:GetState()
+			if
+				(
+					airState == Enum.HumanoidStateType.Freefall
+					or airState == Enum.HumanoidStateType.Jumping
+				) and not (state and ARM_MOVES[state])
+			then
+				entry.fallSpeed = math.min(entry.fallSpeed, entry.root.AssemblyLinearVelocity.Y)
+			else
+				-- (a seat, a swim, a ladder, a climb: not a fall to land from)
+				entry.fallSpeed = 0
+			end
 		end
 		setMovementClip(entry, movementClip(entry, state, feet))
-		setChannelClip(entry.stance, stanceClip(entry, state))
+		local stance = stanceClip(entry, state)
+		setChannelClip(entry.stance, stance)
 		local acting = false
 		for _, layer in entry.action do
 			-- (a landing gives way as soon as it walks off: no sliding feet)
-			if LANDINGS[layer.name] and horizontalSpeed(entry.root) > LAND_MAX_RUN then
+			if
+				LANDINGS[layer.name]
+				and (
+					horizontalSpeed(entry.root) > LAND_MAX_RUN
+					or stance ~= nil
+					or state == "Crouch"
+				)
+			then
 				layer.target = 0
 			end
 			if layer.target == 1 then

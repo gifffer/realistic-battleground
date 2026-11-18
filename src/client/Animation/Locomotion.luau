@@ -49,10 +49,11 @@ local WALK_SPEED = Config.Character.WALK_SPEED
 
 -- The gaits: their natural cycle (two steps, seconds) and speed (studs/s:
 -- the stride measured on the animation / its cycle), from als_retarget.py.
-local WALK_CYCLE, WALK_NATURAL = 1.167, 3.1
-local JOG_CYCLE, JOG_NATURAL = 0.833, 7.5
-local SPRINT_CYCLE, SPRINT_NATURAL = 0.633, 11
-local CROUCH_CYCLE, CROUCH_NATURAL = 1.167, 3
+local WALK_CYCLE, WALK_NATURAL = 1.133, 3.2
+local JOG_CYCLE, JOG_NATURAL = 0.8, 7.6
+local JOG_BACK_CYCLE = 0.667 -- (the back jog is quicker, same speed)
+local SPRINT_CYCLE, SPRINT_NATURAL = 0.6, 12.7
+local CROUCH_CYCLE, CROUCH_NATURAL = 1.133, 3.25
 -- Gait by speed (studs/s): walk → jog between JOG_FROM and JOG_TO, jog →
 -- sprint between SPRINT_FROM and SPRINT_TO (forward only: sprinting back or
 -- sideways keeps the jog, with quicker steps).
@@ -61,6 +62,8 @@ local SPRINT_FROM, SPRINT_TO = 13, 19
 -- Away from a gait's natural speed the cadence follows (speed ratio)^CADENCE,
 -- the rest is a longer / shorter stride; within these limits.
 local CADENCE = 0.6
+-- (crouched, the short steps can't stretch much: the cadence follows more)
+local CROUCH_CADENCE = 0.8
 local CADENCE_MIN, CADENCE_MAX = 0.6, 1.8
 -- Moving above / below these raw speeds (studs/s): a gap, so a speed hovering
 -- around one value doesn't flicker.
@@ -434,10 +437,12 @@ function Locomotion.update(
 	local natural = standing
 			* (walkW * WALK_NATURAL + jogW * JOG_NATURAL + sprintW * SPRINT_NATURAL)
 		+ state.crouch * CROUCH_NATURAL
-	local naturalCycle = standing * (walkW * WALK_CYCLE + jogW * JOG_CYCLE + sprintW * SPRINT_CYCLE)
+	local jogCycle = JOG_CYCLE + (JOG_BACK_CYCLE - JOG_CYCLE) * state.weights.Back
+	local naturalCycle = standing * (walkW * WALK_CYCLE + jogW * jogCycle + sprintW * SPRINT_CYCLE)
 		+ state.crouch * CROUCH_CYCLE
+	local cadence = CADENCE + (CROUCH_CADENCE - CADENCE) * state.crouch
 	local cycle = naturalCycle
-		/ math.clamp((math.max(state.speed, 0.1) / natural) ^ CADENCE, CADENCE_MIN, CADENCE_MAX)
+		/ math.clamp((math.max(state.speed, 0.1) / natural) ^ cadence, CADENCE_MIN, CADENCE_MAX)
 	local advance = 0
 	if moving then
 		state.cycle = cycle

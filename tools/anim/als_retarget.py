@@ -139,6 +139,9 @@ def retarget_frame(rest, fr, prev=None):
     pose = {}
     torso_rot = conv_rot(np.array(fr["spine_03"]["rot"]) @ rest.spine.T)
     root_pos = conv(np.array(fr["pelvis"]["head"]) - rest.pelvis) * rest.k
+    # (the source turns about the pelvis, R6 about the torso's centre: keep
+    # the R6 hip line on the pelvis whatever the torso's turn)
+    root_pos = root_pos - (torso_rot @ np.array([0.0, -1.0, 0.0]) - np.array([0.0, -1.0, 0.0]))
     pose["Root"] = (torso_rot, root_pos)
     torso = cf(root_pos, torso_rot)  # (Root C0 / C1 cancel: torso centre at the root joint)
     head_rot = conv_rot(np.array(fr["head"]["rot"]) @ rest.head.T)
@@ -148,7 +151,16 @@ def retarget_frame(rest, fr, prev=None):
         d = torso_rot.T @ (d / np.linalg.norm(d))
         c = math.asin(max(-1.0, min(1.0, d[0])))
         a = math.atan2(-d[2], -d[1])
+        if prev:
+            # (arm out sideways: the swing angle is ill-defined there and can
+            # flip; it only follows the arm as much as the arm points down /
+            # forward / back, instead of twisting the arm round)
+            t = min(1.0, max(0.0, (abs(math.cos(c)) - 0.1) / 0.4))
+            follow = t * t * (3 - 2 * t)
+            delta = (a - prev[arm] + math.pi) % (2 * math.pi) - math.pi
+            a = prev[arm] + delta * follow
         pose[arm] = (angles(a, 0, c), np.zeros(3))
+        pose[arm + "_a"] = a
     for side, hip in (("l", "LeftHip"), ("r", "RightHip")):
         ankle = to_floor(rest, fr["foot_" + side]["head"])
         widen = 0.5 - rest.hip_x * rest.k  # R6 legs are wider apart
@@ -175,6 +187,7 @@ def retarget_clip(rest, frames):
     for fr in frames:
         pose = retarget_frame(rest, fr, prev)
         prev = {h: pose[h + "_v"] for h in ("LeftHip", "RightHip")}
+        prev.update({a: pose[a + "_a"] for a in ("LeftShoulder", "RightShoulder")})
         out.append(values(pose))
     return out
 
@@ -183,9 +196,24 @@ def unwrap(series):
     return np.degrees(np.unwrap(np.radians(series), axis=0))
 
 
-def contact_frame(frames):
-    """First frame of the left foot's longest time on the floor (cyclic)."""
-    z = np.array([f["foot_l"]["head"][2] for f in frames])
+def same_frame(a, b):
+    return all(
+        np.allclose(a[k]["rot"], b[k]["rot"], atol=1e-5) and np.allclose(a[k]["head"], b[k]["head"], atol=1e-5)
+        for k in a
+    )
+
+
+def strip_closing(frames):
+    """The source ends with copies of its first frame (closing the loop): off."""
+    frames = list(frames)
+    while len(frames) > 1 and same_frame(frames[-1], frames[0]):
+        frames.pop()
+    return frames
+
+
+def contact_frame(frames, side="l"):
+    """First frame of a foot's longest time on the floor (cyclic)."""
+    z = np.array([f["foot_" + side]["head"][2] for f in frames])
     low = z < z.min() + 0.015
     n = len(z)
     best, best_len = 0, -1
@@ -200,22 +228,35 @@ def contact_frame(frames):
 
 
 def stride(frames, fps, k):
-    """Distance the body travels per cycle (studs): the planted foot's speed."""
+    """Distance the body travels per cycle (studs): the planted feet's speed
+    (median over the frames both ends of which are on the floor)."""
     n = len(frames)
-    s = contact_frame(frames)
-    p0 = np.array(frames[s]["foot_l"]["head"])
-    p1 = np.array(frames[(s + 4) % n]["foot_l"]["head"])
-    speed = np.linalg.norm((p1 - p0)[:2]) / (4 / fps)
-    return speed * (n / fps) * k
+    speeds = []
+    for side in ("l", "r"):
+        z = np.array([f["foot_" + side]["head"][2] for f in frames])
+        low = z < z.min() + 0.015
+        for i in range(n):
+            j = (i + 1) % n
+            if low[i] and low[j]:
+                a = np.array(frames[i]["foot_" + side]["head"])
+                b = np.array(frames[j]["foot_" + side]["head"])
+                speeds.append(np.linalg.norm((b - a)[:2]) * fps)
+    return float(np.median(speeds)) * (n / fps) * k
 
 
 def cycle_clip(rest, data):
-    frames = data["frames"][:-1]  # (the last frame repeats the first)
+    frames = strip_closing(data["frames"])
     vals = retarget_clip(rest, frames)
     n = len(vals)
-    s = contact_frame(frames)
+    # Phase of each source frame: the left contact at 7/16, the right one at
+    # 15/16 (piecewise linear between them: a gait isn't always even).
+    s_l, s_r = contact_frame(frames, "l"), contact_frame(frames, "r")
+    d = ((s_r - s_l) % n) / n
+    if not 0.3 <= d <= 0.7:
+        d = 0.5
+    u = ((np.arange(n) - s_l) % n) / n
+    phase_src = np.where(u < d, CONTACT_PHASE + u * (0.5 / d), CONTACT_PHASE + 0.5 + (u - d) * (0.5 / (1 - d)))
     keys = []
-    phase_src = (np.arange(n) - s) / n + CONTACT_PHASE  # phase of each source frame
     for j in JOINTS:
         rot = unwrap(np.array([v[j][0] for v in vals]))
         pos = np.array([v[j][1] for v in vals])
@@ -241,15 +282,32 @@ def cycle_clip(rest, data):
 
 def plain_clip(rest, data, looped=False, step=1):
     frames = data["frames"]
+    if looped:
+        frames = strip_closing(frames)
     vals = retarget_clip(rest, frames)
+    # (angles made continuous: a jump from +179 to -179 degrees would be
+    # played as a turn all the way round)
+    for j in JOINTS:
+        rot = unwrap(np.array([v[j][0] for v in vals]))
+        for v, r in zip(vals, rot):
+            v[j] = (r, v[j][1])
     fps = data["fps"]
-    idx = list(range(0, len(vals), step))
-    if idx[-1] != len(vals) - 1:
-        idx.append(len(vals) - 1)
+    n = len(vals)
+    idx = list(range(0, n, step))
+    if not looped and idx[-1] != n - 1:
+        idx.append(n - 1)
+    keys = [vals[i] for i in idx]
+    if looped:
+        # (loops wrap onto their first key: bring it back within 180 degrees)
+        for j in JOINTS:
+            first, last = keys[0][j][0], keys[-1][j][0]
+            shift = np.round((last - first) / 360) * 360
+            if np.abs(shift).max() > 0:
+                keys = [{**k, j: (k[j][0] - shift * (i / max(len(keys) - 1, 1)), k[j][1])} for i, k in enumerate(keys)]
     return {
-        "length": (len(vals) - 1) / fps,
+        "length": (n if looped else n - 1) / fps,
         "looped": looped,
-        "keys": [vals[i] for i in idx],
+        "keys": keys,
         "times": [i / fps for i in idx],
     }
 
