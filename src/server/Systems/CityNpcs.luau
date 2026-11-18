@@ -8,6 +8,10 @@
 -- hair (fringe, bun, long...), caps with a brim and a button, beanies with a fold, flat caps,
 -- headphones, glasses with frames and lenses, the bartender's apron (straps, pocket) and towel,
 -- the clerks' lanyard badge, watches, earrings, necklaces (see addAccessories).
+-- Down the alleys east of the ring there are two more kinds of people: the DEALER of the
+-- black market (a worn leather jacket or a hoodie with the hood up, gloves, sometimes a scar
+-- or stubble) and the VAGRANT of the squat (a long dirty coat over a hoodie, a scarf, a
+-- beanie, a beard, knitted gloves, stains on his clothes).
 -- They never move and can't be hurt:
 --   • the HumanoidRootPart is anchored: nobody can push them, gravity does nothing;
 --   • no name or health bar above them (Humanoid display distance 0);
@@ -19,10 +23,15 @@
 -- Where they stand: the city data has invisible marker parts named "NpcSpot" (Size 1,
 -- Transparency 1). Each marker gives:
 --   CFrame position = the floor point between the feet, LookVector = where they face;
---   attributes NpcRole ("Bartender" | "Clerk" | "Patron"), NpcName ("Duffy"...),
---   NpcPose ("Idle" | "WipeCounter" | "LeanBar" | "SitStool" | "ArmsCrossed" | "Phone"),
---   NpcSeed (a number: picks the colours), SeatHeight (sitting poses: seat top above the floor),
---   SeatBack (optional, sitting poses: how far behind the spot the seat's centre is; 1).
+--   attributes NpcRole ("Bartender" | "Clerk" | "Patron" | "Dealer" | "Vagrant"),
+--   NpcName ("Duffy"...), NpcPose ("Idle" | "WipeCounter" | "LeanBar" | "SitStool" |
+--   "ArmsCrossed" | "Phone" | "SitGround"; anything else: "Idle"),
+--   NpcSeed (a number: picks the colours), SeatHeight (sitting poses: seat top above the floor;
+--   SitGround: 0 = the floor itself), SeatBack (optional, sitting poses: how far behind the
+--   spot the seat's centre is; SitStool 1, SitGround 0).
+-- SitGround (sitting on the floor, back against a wall, legs stretched out): the spot is the
+-- floor point under the hips, facing AWAY from the wall, about 0.8 studs out from the wall's
+-- face (the shoulders and the back of the head then rest just off it).
 --
 -- The server only places each body STANDING on its spot (and copies the marker's
 -- attributes onto the model, plus Npc = true). The pose (sitting, leaning, arms crossed...),
@@ -65,6 +74,44 @@ local TROUSERS = {
 	Color3.fromRGB(86, 74, 58), -- khaki
 	Color3.fromRGB(58, 60, 64), -- charcoal
 }
+-- The alley people (see makeLook): worn, dark, dirty colours.
+local DEALER_LEATHER = {
+	Color3.fromRGB(34, 28, 25),
+	Color3.fromRGB(46, 34, 28),
+	Color3.fromRGB(26, 25, 26),
+}
+local DEALER_HOODIES = {
+	Color3.fromRGB(30, 30, 33),
+	Color3.fromRGB(40, 42, 38),
+	Color3.fromRGB(42, 38, 46),
+}
+local DEALER_TROUSERS = {
+	Color3.fromRGB(28, 30, 36),
+	Color3.fromRGB(32, 32, 34),
+	Color3.fromRGB(40, 38, 36),
+}
+local VAGRANT_COATS = {
+	Color3.fromRGB(74, 64, 48), -- brown
+	Color3.fromRGB(62, 66, 50), -- olive drab
+	Color3.fromRGB(70, 70, 68), -- grey
+	Color3.fromRGB(56, 46, 40), -- dark brown
+}
+local VAGRANT_HOODIES = {
+	Color3.fromRGB(92, 38, 34), -- faded red
+	Color3.fromRGB(60, 64, 72), -- faded navy
+	Color3.fromRGB(96, 92, 84), -- dirty grey
+}
+local VAGRANT_TROUSERS = {
+	Color3.fromRGB(52, 50, 46),
+	Color3.fromRGB(60, 54, 42),
+	Color3.fromRGB(44, 48, 56),
+}
+local VAGRANT_KNITS = {
+	Color3.fromRGB(40, 40, 42),
+	Color3.fromRGB(78, 42, 36),
+	Color3.fromRGB(62, 66, 52),
+	Color3.fromRGB(96, 82, 60),
+}
 local HAIRS = {
 	Color3.fromRGB(28, 22, 18),
 	Color3.fromRGB(70, 46, 30),
@@ -75,7 +122,9 @@ local HAIRS = {
 -- Hair cuts (block hair, built in layers: a top, the back, the sides, maybe a fringe).
 type HairStyle = "Short" | "Fringe" | "Side" | "Bun" | "Long" | "Buzz"
 -- What some wear on the head (instead of showing all their hair).
-type Headwear = "Cap" | "Beanie" | "FlatCap" | "Headphones"
+type Headwear = "Cap" | "Beanie" | "FlatCap" | "Headphones" | "Hood"
+-- An outer layer worn over the shirt (alley people): its details are added on the torso.
+type Jacket = "Leather" | "Hoodie" | "Coat"
 
 type Look = {
 	skin: Color3,
@@ -93,6 +142,15 @@ type Look = {
 	earrings: boolean,
 	watch: boolean,
 	necklace: boolean,
+	-- (alley people only; nil / false for everyone else)
+	jacket: Jacket?,
+	undershirt: Color3, -- what shows under an open jacket or coat
+	cloth: Enum.Material?, -- the material of the torso and sleeves (leather, worn fabric)
+	beard: Color3?,
+	gloves: Color3?,
+	scar: boolean,
+	scarf: Color3?,
+	grime: boolean, -- stains on the clothes, dirt on the skin
 }
 
 local HAIR_STYLES: { HairStyle } = { "Short", "Fringe", "Side", "Bun", "Long", "Buzz" }
@@ -128,6 +186,14 @@ local function makeLook(role: string, seed: number): Look
 		earrings = random:NextNumber() < 0.2,
 		watch = random:NextNumber() < 0.45,
 		necklace = random:NextNumber() < 0.2,
+		jacket = nil,
+		undershirt = INK,
+		cloth = nil,
+		beard = nil,
+		gloves = nil,
+		scar = false,
+		scarf = nil,
+		grime = false,
 	}
 	local glassesRoll = random:NextNumber()
 	if glassesRoll < 0.2 then
@@ -157,6 +223,57 @@ local function makeLook(role: string, seed: number): Look
 			look.headwear = "Cap"
 			look.headwearColor = Color3.fromRGB(28, 28, 30)
 		end
+	elseif role == "Dealer" then
+		-- A fence of stolen goods: dark, worn, nothing that stands out. A leather jacket open
+		-- on a dark tee, or a hoodie (the hood up, most of the time). Leather gloves, dark
+		-- trousers, a beanie or a black cap, sometimes a scar across the cheek, stubble.
+		-- (These rolls come after the common ones: the other roles keep their looks.)
+		if random:NextNumber() < 0.5 then
+			look.jacket = "Leather"
+			look.shirt = pick(DEALER_LEATHER, random)
+			look.cloth = Enum.Material.Leather
+			look.headwear = if random:NextNumber() < 0.6 then "Beanie" else "Cap"
+		else
+			look.jacket = "Hoodie"
+			look.shirt = pick(DEALER_HOODIES, random)
+			look.cloth = Enum.Material.Fabric
+			look.headwear = if random:NextNumber() < 0.7 then "Hood" else "Beanie"
+		end
+		look.sleeves = look.shirt
+		look.undershirt = if random:NextNumber() < 0.6 then INK else Color3.fromRGB(64, 64, 66)
+		look.trousers = pick(DEALER_TROUSERS, random)
+		look.headwearColor = if look.headwear == "Hood"
+			then look.shirt
+			else pick({ INK, Color3.fromRGB(38, 38, 40), Color3.fromRGB(46, 42, 38) }, random)
+		look.gloves = Color3.fromRGB(22, 20, 20)
+		look.watch = false -- (under the glove)
+		look.earrings = false
+		look.glasses = if random:NextNumber() < 0.15 then "Dark" else nil
+		look.scar = random:NextNumber() < 0.45
+		look.beard = if random:NextNumber() < 0.35 then darker(pick(HAIRS, random), 0.1) else nil
+		look.hair = look.hair or pick(HAIRS, random)
+	elseif role == "Vagrant" then
+		-- A man who sleeps out here: layers of dirty clothes (a long coat over a hoodie, a
+		-- scarf), a beanie, knitted gloves, a beard (often grey), stains, grime on the skin.
+		look.jacket = "Coat"
+		look.shirt = pick(VAGRANT_COATS, random)
+		look.sleeves = look.shirt
+		look.cloth = Enum.Material.Fabric
+		look.undershirt = pick(VAGRANT_HOODIES, random)
+		look.trousers = pick(VAGRANT_TROUSERS, random)
+		look.headwear = "Beanie"
+		look.headwearColor = pick(VAGRANT_KNITS, random)
+		look.scarf = pick(VAGRANT_KNITS, random)
+		look.gloves = darker(pick(VAGRANT_KNITS, random), 0.25)
+		look.hair = if random:NextNumber() < 0.5 then HAIRS[4] else pick(HAIRS, random)
+		look.hairStyle = "Long"
+		look.beard = look.hair
+		look.skin = look.skin:Lerp(Color3.fromRGB(70, 52, 40), 0.15) -- weathered, dirty
+		look.grime = true
+		look.glasses = nil
+		look.earrings = false
+		look.watch = false
+		look.necklace = false
 	else
 		local roll = random:NextNumber()
 		if roll < 0.2 then
@@ -490,6 +607,50 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 				* CFrame.new(0, 0.12, 0),
 			darker(color, 0.25)
 		)
+	elseif kind == "Hood" then
+		-- a hoodie's hood, up: a shell around the head, open at the face, its top edge
+		-- jutting over the forehead (the face stays in its shadow), falling onto the shoulders
+		local shade = darker(color, 0.12)
+		addBlock(
+			model,
+			head,
+			"HoodTop",
+			Vector3.new(1.46, 0.2, 1.4),
+			CFrame.new(0, 0.72, 0.06),
+			color,
+			fabric
+		)
+		addBlock(
+			model,
+			head,
+			"HoodBack",
+			-- (its top 0.02 under HoodTop's, its sides 0.1 inside the side panels: no flicker)
+			Vector3.new(1.46, 1.28, 0.22),
+			CFrame.new(0, 0.16, 0.66),
+			shade,
+			fabric
+		)
+		for _, side in { -1, 1 } do
+			addBlock(
+				model,
+				head,
+				if side < 0 then "HoodLeft" else "HoodRight",
+				Vector3.new(0.2, 1.24, 1.2),
+				CFrame.new(side * 0.73, 0.12, 0.02),
+				color,
+				fabric
+			)
+		end
+		-- the dark inside of the hood, seen under its edge on the forehead
+		addBlock(
+			model,
+			head,
+			"HoodShade",
+			Vector3.new(1.2, 0.12, 0.1),
+			CFrame.new(0, 0.56, -0.6),
+			darker(color, 0.6),
+			fabric
+		)
 	elseif kind == "Headphones" then
 		-- big headphones: the band over the head, two padded cups on the ears.
 		-- The band RESTS on whatever is on top of the head (it floated 0.07 above a bald
@@ -652,8 +813,10 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 	if head == nil or torso == nil then
 		return
 	end
-	-- Head (hair under any hat, the hat, glasses, earrings).
-	addHair(model, head, look, look.headwear ~= nil and look.headwear ~= "Headphones")
+	-- Head (hair under any hat — none shows under a hood —, the hat, glasses, earrings).
+	if look.headwear ~= "Hood" then
+		addHair(model, head, look, look.headwear ~= nil and look.headwear ~= "Headphones")
+	end
 	addHeadwear(model, head, look, if role == "Clerk" then shopColor else nil)
 	if look.glasses then
 		addGlasses(model, head, look.glasses)
@@ -670,6 +833,54 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 				Enum.Material.Metal
 			)
 		end
+	end
+
+	if look.beard then
+		-- A rough beard: a block on the chin, the jaw on both sides, a moustache over the
+		-- mouth. (The head is round: the jaw blocks stand a little proud at the front, which
+		-- reads as the volume of a beard.)
+		local beard = look.beard
+		local fabric = Enum.Material.Fabric
+		addBlock(
+			model,
+			head,
+			"BeardChin",
+			Vector3.new(0.78, 0.36, 0.22),
+			CFrame.new(0, -0.44, -0.52),
+			beard,
+			fabric
+		)
+		for _, side in { -1, 1 } do
+			addBlock(
+				model,
+				head,
+				if side < 0 then "BeardJawL" else "BeardJawR",
+				Vector3.new(0.16, 0.5, 0.62),
+				CFrame.new(side * 0.53, -0.3, -0.12),
+				darker(beard, 0.12),
+				fabric
+			)
+		end
+		addBlock(
+			model,
+			head,
+			"Moustache",
+			Vector3.new(0.5, 0.09, 0.08),
+			CFrame.new(0, -0.2, -0.635),
+			beard,
+			fabric
+		)
+	end
+	if look.scar then
+		-- an old scar across the right cheek, down from the eyebrow (its back sunk in the face)
+		addBlock(
+			model,
+			head,
+			"Scar",
+			Vector3.new(0.04, 0.34, 0.03),
+			CFrame.new(0.26, 0.04, -0.567) * CFrame.Angles(0, 0, math.rad(16)),
+			look.skin:Lerp(Color3.fromRGB(122, 58, 56), 0.55)
+		)
 	end
 
 	-- Torso: the torso is 2 wide, 2 tall, 1 deep: its front is 0.5 in front (-Z), its top 1.0
@@ -940,6 +1151,203 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			Enum.Material.Metal
 		)
 	end
+	local jacket = look.jacket
+	if jacket == "Leather" or jacket == "Coat" then
+		-- An open jacket / coat: what is under it shows down the middle of the chest (its
+		-- back on the shirt), the jacket's two front edges stand 0.02 prouder along it.
+		local half = if jacket == "Coat" then 0.32 else 0.25
+		addBlock(
+			model,
+			torso,
+			"Undershirt",
+			Vector3.new(half * 2, 1.86, 0.02),
+			CFrame.new(0, -0.06, -0.51),
+			look.undershirt,
+			Enum.Material.Fabric
+		)
+		for _, side in { -1, 1 } do
+			addBlock(
+				model,
+				torso,
+				if side < 0 then "JacketEdgeL" else "JacketEdgeR",
+				Vector3.new(0.07, 1.98, 0.04),
+				CFrame.new(side * (half + 0.025), 0, -0.52),
+				darker(look.shirt, 0.18),
+				look.cloth
+			)
+		end
+		-- the collar, turned up around the neck (a band around the top of the torso)
+		if look.scarf == nil then
+			addBlock(
+				model,
+				torso,
+				"JacketCollar",
+				Vector3.new(1.44, 0.24, 1.08),
+				CFrame.new(0, 0.92, 0),
+				darker(look.shirt, 0.1),
+				look.cloth
+			)
+		end
+		if jacket == "Leather" then
+			-- the waistband, and two slanted pocket slits
+			addBlock(
+				model,
+				torso,
+				"JacketHem",
+				Vector3.new(2.02, 0.16, 1.02),
+				CFrame.new(0, -0.92, 0),
+				darker(look.shirt, 0.15),
+				look.cloth
+			)
+			for _, side in { -1, 1 } do
+				addStrip(
+					model,
+					torso,
+					if side < 0 then "PocketL" else "PocketR",
+					Vector3.new(side * 0.5, -0.72, -0.515),
+					Vector3.new(side * 0.74, -0.34, -0.515),
+					0.05,
+					0.03,
+					darker(look.shirt, 0.4)
+				)
+			end
+		end
+	elseif jacket == "Hoodie" then
+		-- the hoodie: the front pocket, the ribbed hem, the drawstrings of the hood
+		addBlock(
+			model,
+			torso,
+			"HoodiePocket",
+			Vector3.new(1.2, 0.5, 0.04),
+			CFrame.new(0, -0.6, -0.52),
+			darker(look.shirt, 0.08),
+			Enum.Material.Fabric
+		)
+		addBlock(
+			model,
+			torso,
+			"HoodieHem",
+			Vector3.new(2.02, 0.16, 1.02),
+			CFrame.new(0, -0.93, 0),
+			darker(look.shirt, 0.15),
+			Enum.Material.Fabric
+		)
+		for _, side in { -1, 1 } do
+			addStrip(
+				model,
+				torso,
+				if side < 0 then "DrawstringL" else "DrawstringR",
+				Vector3.new(side * 0.16, 0.98, -0.515),
+				Vector3.new(side * 0.19, 0.46, -0.515),
+				0.05,
+				0.03,
+				Color3.fromRGB(150, 146, 138)
+			)
+		end
+		if look.headwear ~= "Hood" then
+			-- the hood, down, lying on the upper back and over the top of the shoulders
+			addBlock(
+				model,
+				torso,
+				"HoodDown",
+				Vector3.new(1.24, 0.5, 0.2),
+				CFrame.new(0, 0.74, 0.6),
+				darker(look.shirt, 0.1),
+				Enum.Material.Fabric
+			)
+			addBlock(
+				model,
+				torso,
+				"HoodDownTop",
+				Vector3.new(1.24, 0.14, 0.5),
+				CFrame.new(0, 1.06, 0.46),
+				darker(look.shirt, 0.1),
+				Enum.Material.Fabric
+			)
+		end
+	end
+	if look.scarf then
+		-- a scarf: a thick band around the neck, one end hanging down the chest
+		addBlock(
+			model,
+			torso,
+			"Scarf",
+			Vector3.new(1.36, 0.26, 1.12),
+			CFrame.new(0, 0.94, 0),
+			look.scarf,
+			Enum.Material.Fabric
+		)
+		addBlock(
+			model,
+			torso,
+			"ScarfEnd",
+			Vector3.new(0.32, 0.72, 0.1),
+			CFrame.new(0.36, 0.5, -0.55) * CFrame.Angles(0, 0, math.rad(-4)),
+			darker(look.scarf, 0.1),
+			Enum.Material.Fabric
+		)
+	end
+	if look.grime then
+		-- old stains: a dark patch on the chest beside the coat's opening
+		addBlock(
+			model,
+			torso,
+			"Stain",
+			Vector3.new(0.45, 0.4, 0.02),
+			CFrame.new(-0.62, -0.2, -0.51),
+			darker(look.shirt, 0.35),
+			Enum.Material.Fabric
+		)
+	end
+	for _, side in { -1, 1 } do
+		local leg = model:FindFirstChild(if side < 0 then "Left Leg" else "Right Leg") :: BasePart?
+		if leg == nil then
+			continue
+		end
+		if jacket == "Coat" then
+			-- the coat's tails, over the top of each leg (the leg is 1 × 2 × 1, its top at 1.0):
+			-- split in the middle (0.02 apart), 0.02 wider than the leg outside, so no two faces
+			-- share a plane. They follow the legs when he sits.
+			addBlock(
+				model,
+				leg,
+				if side < 0 then "CoatTailL" else "CoatTailR",
+				Vector3.new(1.02, 0.9, 1.04),
+				CFrame.new(side * 0.02, 0.56, 0),
+				look.shirt,
+				look.cloth
+			)
+		end
+		if look.grime then
+			-- dirt worn into the knees
+			addBlock(
+				model,
+				leg,
+				if side < 0 then "KneeDirtL" else "KneeDirtR",
+				Vector3.new(0.62, 0.46, 0.02),
+				CFrame.new(side * 0.06, -0.35, -0.51),
+				darker(look.trousers, 0.35),
+				Enum.Material.Fabric
+			)
+		end
+	end
+	if look.gloves then
+		-- gloves: the hand end of each arm (the arm is 1 × 2 × 1; 0.01 past its bottom)
+		local rightArm = model:FindFirstChild("Right Arm") :: BasePart?
+		for _, arm in { leftArm, rightArm } do
+			if arm then
+				addBlock(
+					model,
+					arm,
+					"Glove",
+					Vector3.new(1.04, 0.44, 1.04),
+					CFrame.new(0, -0.79, 0),
+					look.gloves,
+					if look.jacket == "Coat" then Enum.Material.Fabric else Enum.Material.Leather
+				)
+			end
+		end
+	end
 	if look.watch and leftArm then
 		-- a wristwatch near the left hand (the arm is 1 × 2 × 1: the wrist is 0.65 below)
 		addBlock(
@@ -981,6 +1389,16 @@ local function buildBody(name: string, look: Look): Model?
 	end
 	local model = result :: Model
 	model.Name = name
+	-- worn clothes: the torso and sleeves in leather or rough fabric (alley people)
+	local cloth = look.cloth
+	if cloth then
+		for _, partName in { "Torso", "Left Arm", "Right Arm" } do
+			local part = model:FindFirstChild(partName)
+			if part and part:IsA("BasePart") then
+				part.Material = cloth
+			end
+		end
+	end
 	-- No scripts (no default Animate), no Animator: the client poses the joints itself.
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("LuaSourceContainer") or descendant:IsA("Animator") then
