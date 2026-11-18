@@ -168,11 +168,7 @@ local function paintButton(ui: EntryUi, hovered: boolean)
 end
 
 local function layoutBar()
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local viewport = camera.ViewportSize
+	local viewport = Theme.viewport()
 	local left, top, height, right = barArea(viewport)
 	-- A shorter Roblox bar (old style, 36 px): our buttons shrink to match.
 	local scale = height / PILL
@@ -199,11 +195,7 @@ local function checkBarOnce()
 	if next(hiddenReasons) ~= nil then
 		return
 	end
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local viewport = camera.ViewportSize
+	local viewport = Theme.viewport()
 	local position = bar.AbsolutePosition
 	local size = bar.AbsoluteSize
 	local problem: string? = nil
@@ -425,11 +417,7 @@ local function layoutPanel(ui: EntryUi)
 	if panel == nil or view == nil or scale == nil then
 		return
 	end
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local viewport = camera.ViewportSize
+	local viewport = Theme.viewport()
 	local entry = ui.entry
 	local _, barTop, barHeight = barArea(viewport)
 	local top = barTop + barHeight + SCREEN_GAP
@@ -590,8 +578,7 @@ end
 -- Screen pixels just under the bar's left end (DuelController puts its
 -- "Searching" line there).
 function MenuController.underBar(): Vector2
-	local camera = workspace.CurrentCamera
-	local viewport = if camera then camera.ViewportSize else Vector2.new(1920, 1080)
+	local viewport = Theme.viewport()
 	local left, top, height = barArea(viewport)
 	return Vector2.new(left + 4, top + height + 8)
 end

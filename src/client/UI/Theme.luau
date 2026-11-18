@@ -281,9 +281,42 @@ local viewportListeners: { (Vector2) -> () } = {}
 local watchedCamera: Camera? = nil
 local cameraConnection: RBXScriptConnection? = nil
 
+-- The screen size. An empty full-screen ScreenGui measures it: the
+-- camera's ViewportSize can read 1 x 1 for a while (a camera swapped in
+-- before it is drawn), which shrank and pushed the whole UI off screen.
+local probe: ScreenGui? = nil
+local function screenProbe(): ScreenGui?
+	if probe then
+		return probe
+	end
+	local playerGui = game:GetService("Players").LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui == nil then
+		return nil
+	end
+	local made = Instance.new("ScreenGui")
+	made.Name = "ScreenProbe"
+	made.IgnoreGuiInset = true
+	made.ResetOnSpawn = false
+	made.Parent = playerGui
+	probe = made
+	return made
+end
+
 local function currentViewport(): Vector2
+	local gui = screenProbe()
+	if gui and gui.AbsoluteSize.X > 2 and gui.AbsoluteSize.Y > 2 then
+		return gui.AbsoluteSize
+	end
 	local camera = workspace.CurrentCamera
-	return if camera then camera.ViewportSize else LARGE
+	if camera and camera.ViewportSize.X > 2 and camera.ViewportSize.Y > 2 then
+		return camera.ViewportSize
+	end
+	return LARGE
+end
+
+-- The screen size in pixels (see currentViewport).
+function Theme.viewport(): Vector2
+	return currentViewport()
 end
 
 local function notifyViewport()
@@ -319,6 +352,10 @@ function Theme.onViewportChanged(callback: (Vector2) -> ()): () -> ()
 		workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchCamera)
 		-- Roblox's top bar changed (shown, hidden, new buttons): refit too.
 		GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(notifyViewport)
+		local gui = screenProbe()
+		if gui then
+			gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(notifyViewport)
+		end
 		watchCamera()
 	end
 	table.insert(viewportListeners, callback)
