@@ -1,6 +1,8 @@
 --!strict
 -- Ambience: the light of the city, on a cycle, and every light of the district.
 --
+-- (ALWAYS_NIGHT below: for now the city is always at NIGHT, no cycle.)
+--
 --   LATE AFTERNOON  grey, overcast, a faint warm sun behind the clouds   (6 min)
 --   DUSK            the light falls, lamps and windows come on           (1 min 30)
 --   NIGHT           wet streets, dirty orange lamps, a few neons         (6 min)
@@ -41,6 +43,10 @@ local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 
 local Ambience = {}
+
+-- Always night: no afternoon, no dusk / dawn, the lamps always on (the
+-- cycle below is kept, set this to false to bring it back).
+local ALWAYS_NIGHT = true
 
 -- Length of each phase, in seconds.
 local DAY_TIME = 360
@@ -818,9 +824,15 @@ end
 
 function Ambience.start()
 	checkTechnology()
-	-- Start in the afternoon right away.
-	setPhase("Day", DAY_TIME)
-	goTo(false, 0.1)
+	if ALWAYS_NIGHT then
+		-- Night from the start, for good (lamps, neons and windows on).
+		setPhase("Night", math.huge)
+		goTo(true, 0.1)
+	else
+		-- Start in the afternoon right away.
+		setPhase("Day", DAY_TIME)
+		goTo(false, 0.1)
+	end
 	startExisting()
 	fires()
 	task.spawn(blinkLoop)
@@ -836,7 +848,7 @@ function Ambience.start()
 		refreshLights(0)
 	end)
 	task.spawn(function()
-		while true do
+		while not ALWAYS_NIGHT do
 			task.wait(DAY_TIME)
 			setPhase("Dusk", TRANSITION)
 			goTo(true, TRANSITION)

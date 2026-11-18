@@ -153,7 +153,8 @@ local function pick(): string
 	local choices: { { kind: string, weight: number } } = {}
 	for kind, weight in weights do
 		local choice = { kind = kind, weight = weight }
-		if kind ~= "PowerCut" or powerCutAllowed() then
+		-- (a weight of 0: never picked, e.g. PowerCut = 0 in Config)
+		if weight > 0 and (kind ~= "PowerCut" or powerCutAllowed()) then
 			total += weight
 			table.insert(choices, choice)
 		end
