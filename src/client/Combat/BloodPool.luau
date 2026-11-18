@@ -1,37 +1,38 @@
 --!strict
 -- BloodPool: blood POOLING on the ground under someone bleeding (client-side).
 --
--- What a real pool does, and what this draws:
---   • it SPREADS: its edge (the "front") keeps moving outward while blood
---     pours in, fast at first, then slower and slower (it gets thinner),
---     and it keeps CREEPING a while after the wound stops (thick blood
---     spreads slowly: the edge of a real pool goes like t^(1/8));
---   • its edge is never round: it is made of TONGUES of blood all around
---     (one picture each, pushing out of the middle at their own speed), and
---     a few of them run on as long, narrow FINGERS (rivulets) that follow
---     the smallest slope, a gutter, a gap between two things;
---   • it FLOWS DOWNHILL: on a slope the tongues and fingers going down the
---     slope go further and faster, the ones going up barely move;
---   • it STOPS at a curb, a wall, a step up - only on that side: the blood
---     that can't go there pushes the tongues next to it further (it slides
---     along the wall); it flows around a small thing lying on the floor;
---   • it RUNS OVER a ledge (blood running down the side of the curb), and a
---     big pool keeps going on the lower ground (a finger past the step);
---     a crack between two floor parts doesn't stop it;
---   • two pools that meet become one (a new feed close to a pool feeds it;
---     a tongue reaching another pool stops there and wets it again);
---   • it is WET (shiny) for a while, then dulls, darkens, crusts: the middle
---     first (it stops being fed), the moving front stays bright and glossy
---     as long as it moves; the thin tongues dry first, and an old pool weeps
---     a pale ring of serum around it (BloodStain / BloodAge);
+-- A pool is ONE puddle of blood: one picture (pool_1..3, its clotting ring
+-- and its pale serum ring on top of it) that grows from the middle (a
+-- bleeder's small pool also gets a faint wet shiny film in its middle). No
+-- separate blobs: the whole pool is one shape, one colour, and it ages all
+-- at once. What it does:
+--   • it SPREADS: it starts tiny (0.3 stud) where the blood lands and its
+--     edge moves outward while blood pours in, fast at first, then slower
+--     and slower, and it keeps CREEPING a little after the wound stops (thick
+--     blood spreads slowly). It never jumps: its size always eases toward
+--     where the blood poured so far would reach;
+--   • it FLOWS DOWNHILL: on a slope its middle slides a little down the slope
+--     and it stretches that way (still one shape), and on a real slope one
+--     short run of blood leaves it downhill (joined to it: it starts under it);
+--   • it STOPS at a curb, a wall, a step up: rays all around check the ground
+--     ahead of its edge; the pool is pushed away from what stops it (it
+--     spreads on its free side) and stays smaller if it still doesn't fit -
+--     never through a wall, never hanging over a ledge;
+--   • it RUNS OVER a ledge (blood running down the side of the curb);
+--   • two pools that meet become ONE: the bigger one takes the other's blood
+--     (it grows over it and moves toward the middle of both), the other one
+--     shrinks under it and goes once it is hidden;
+--   • it is WET (shiny) for a while, then dulls, darkens, crusts, its dark
+--     clotting ring shows at its edge, and an old pool weeps a pale ring of
+--     serum around it (BloodStain / BloodAge);
 --   • someone dripping into it from above: each drop throws tiny drops
 --     around it, and after a dozen drops a "starburst" of dots rings it;
 --   • under a body lying on a slope it starts on the LOW side (blood runs
 --     out of the body downhill before it pools).
 --
--- Everything random about a pool (the tongues' directions, their speeds, the
--- fingers) is picked from its seed when it is made, and the ground is
--- checked at fixed distances: the same pool on every client.
+-- Everything random about a pool (its picture, its turn as it grows) is
+-- picked from its seed when it is made, and the ground is checked at fixed
+-- distances: the same pool on every client.
 --
 --   BloodPool.feed(key, position, area, seconds, maxRadius?)
 --       feeds the pool of `key` (a character, an artery...) at `position`:
@@ -66,27 +67,45 @@ local BloodPool = {}
 
 local PALETTE = Config.Blood.PALETTE
 local FINISHER_POOLS = Config.Blood.FINISHER_POOLS
-local START_RADIUS = 0.22 -- studs: a new pool's first size
+local START_RADIUS = 0.3 -- studs: a new pool's first size
 local STEP_HEIGHT = 0.1 -- a bump higher than this stops it (curb, step)
 local WALL_HEIGHT = 0.08 -- (the "wall" ray: this high above the ground)
-local UNEVEN = 0.4 -- studs: the ground this far ABOVE the pool's plane stops a tongue
--- (and this far BELOW it: the pictures are flat, on the pool's plane - a
--- tongue going on over ground falling away would float above it)
+local UNEVEN = 0.4 -- studs: the ground this far ABOVE the pool's plane stops it
+-- (and this far BELOW it: the picture is flat, on the pool's plane - a pool
+-- going on over ground falling away would float above it)
 local DIP = 0.15
-local SPILL_HEIGHT = 1.6 -- studs: a big pool goes on below a drop this high (a curb)
-local PROBE_STEP = 0.35 -- studs: a tongue checks the ground ahead this often
-local FINGER_STEP = 0.3 -- (a finger: this often)
-local MAX_SPEED = 3 -- studs/s: a tongue never moves faster (never jumps)
-local LOBE_DRYING = 1.4 -- the thin tongues dry this much faster than the middle
-local FINGER_DRYING = 1.6 -- (the fingers, thinner still)
+local PROBE_STEP = 0.35 -- studs: a ray checks the ground ahead this often
+local GROW_TIME = 0.9 -- seconds: the edge eases toward where the blood reaches (no jump)
+local MAX_SPEED = 1.6 -- studs/s: the edge never moves faster
+-- A finisher's pool, while its wound still pours, is this much (of its size
+-- then) behind where its blood would reach; it catches up as it creeps on.
+local CREEP_SHARE = 0.3
 local LOW_SIDE = 0.6 -- studs: a lying body's pool starts this far downhill
-local SLOPE_GAIN = 5 -- how much a slope speeds up (or holds back) a tongue
-local CREEP_POWER = 0.25 -- the front's slowing down (theory 1/8; 1/4 reads better)
-local FINGER_TURN = math.rad(55) -- a finger stopped by something turns this much
-local GUTTER_TURN = math.rad(30) -- a finger looks for lower ground this far to its sides
-local GUTTER_EVERY = 1 -- studs: a finger looks for lower ground this often
-local MAX_FINGER_PARTS = 3 -- pieces of one finger at most (it turned twice)
-local CORE_LAYER = 11 -- (the middle on top: the tongues' backs hide under it)
+-- On a slope: the full effect from this slope on (the sine of its angle:
+-- 0.2 ≈ 11.5°), the middle sliding this × its radius downhill, the pool
+-- stretched this much down the slope (1 + this: its length / its width²)...
+local SLOPE_FULL = 0.2
+local SLOPE_DRIFT = 0.35
+local SLOPE_STRETCH = 0.8
+-- ...and from this much of the full effect on (≈ 3.5°), a short run of blood
+-- leaves a finisher's pool downhill: up to this × the pool's radius beyond
+-- its edge, this fast (studs/s), once the pool is this × its full size.
+local RUN_FROM = 0.3
+local RUN_REACH = 0.6
+local RUN_SPEED = 0.2
+local RUN_START = 0.5
+local MERGE_OVERLAP = 0.85 -- two pools closer than this × (r1 + r2) become one
+-- (the one taken in hides under the other: gone once its blob is inside this
+-- × the other's radius - a pool picture's blob is not round)
+local COVERED = 0.8
+-- The wet shiny film on a bleeder's small pool: this × the blob across, this
+-- transparent (at most: 1 = invisible). Small and faint, so it stays a sheen
+-- ON the pool. A finisher's big pool has none: the film is a hard-edged
+-- shiny disc, and on a big pool it showed as a second, lighter blob in it -
+-- the big pool is ONE uniform puddle (it still looks wet: it is fresh red,
+-- then darkens as it dries, BloodAge).
+local GLOSS_SIZE = 0.5
+local GLOSS_ALPHA = 0.7
 -- seconds a finisher pool's seed stays claimed: as long as the body (or its
 -- frozen copy) can still be seen, a little more
 local CLAIM_TIME = Config.Knockout.FINISHER_BODY_TIME + 5
@@ -94,9 +113,9 @@ local CLAIM_TIME = Config.Knockout.FINISHER_BODY_TIME + 5
 -- The pictures are not filled to their edges (measured on assets/blood):
 -- pool_1..3: the blood is a blob about this fraction of the picture across
 -- (area-equivalent), its middle shifted this much (× the picture) along it;
--- pool_lobe: the blob goes from -0.48 to +0.25 of its length (its rounded
--- tip at +X, the way it flows) and 0.4 of its width. Without pictures the
--- plain shapes fill the whole size.
+-- pool_lobe (the run downhill): the blob goes from -0.48 to +0.25 of its
+-- length (its rounded tip at +X, the way it flows) and 0.4 of its width.
+-- Without pictures the plain shapes fill the whole size.
 local POOL_COVER = { 0.465, 0.39, 0.42 }
 local POOL_SHIFT = { -0.01, -0.06, -0.07 }
 -- (and its blob is not round: its longest side, × that diameter)
@@ -107,147 +126,55 @@ local LOBE_PICTURE = lobeImage ~= 0
 
 -- How a kind of pool spreads.
 type Spec = {
-	tongues: number, -- tongues of blood around it (High quality)
-	fingers: number, -- of them running on as fingers
-	parts: number, -- pieces of fingers at most (a finger turning makes a new one)
-	glossy: number, -- tongues with their own wet sheen
-	fMin: number, -- each tongue reaches this × the front...
-	fMax: number,
-	lagMin: number, -- ...this many seconds behind it (slow ones, fast ones)
-	lagMax: number,
-	wideMin: number, -- (how much the tongues overlap their neighbours)
-	wideMax: number,
-	core: number, -- the middle picture: this × the front
-	visible: number, -- the front: this × the radius the volume gives
-	fingerStart: number, -- fingers start once the front is this × its full size
-	extraMin: number, -- a finger runs this × the pool's size beyond the front...
-	extraMax: number,
-	speedMin: number, -- ...at this many studs/s (slowing down as it goes)
-	speedMax: number,
-	widthMin: number, -- studs: a finger's width
-	widthMax: number,
+	rays: number, -- rays checking the ground all around it (High quality)
+	visible: number, -- its full size: this × the radius it is given
 	tail: number, -- seconds it keeps moving after the last feed
 }
 
 -- A finisher's big pool (a torn limb, a burst head, a body cut in two).
--- What it costs, at most (High quality, with the pictures): its middle (a
--- part, 3 decals, a wet film) + 10 tongues (a part and a decal each) + 3
--- tongues' wet films + 6 finger pieces (a part and a decal) = 40 instances,
--- all made once and then only moved / grown, updated 10 times a second.
-local BIG: Spec = {
-	tongues = FINISHER_POOLS.TONGUES,
-	fingers = FINISHER_POOLS.FINGERS,
-	parts = 6,
-	glossy = 3,
-	fMin = 0.8,
-	fMax = 1.22,
-	lagMin = 0.6,
-	lagMax = 2.4,
-	wideMin = 1.15,
-	wideMax = 1.6,
-	core = 0.78,
-	visible = 1,
-	fingerStart = 0.6,
-	extraMin = 0.2,
-	extraMax = 0.45,
-	speedMin = 0.2,
-	speedMax = 0.45,
-	widthMin = 0.3,
-	widthMax = 0.75,
-	tail = 2,
-}
+-- What it costs: one picture (with its clotting ring and serum ring), maybe
+-- one run downhill: 2-3 instances. Its rays are only
+-- raycasts, a few per update while it grows, 10 updates a second.
+local BIG: Spec = { rays = 12, visible = 1, tail = 2 }
 
 -- A bleeder's pool (a fighter bleeding where he stands, a spurt landing).
-local SMALL: Spec = {
-	tongues = 4,
-	fingers = 1,
-	parts = 1,
-	glossy = 0,
-	fMin = 0.85,
-	fMax = 1.2,
-	lagMin = 0.5,
-	lagMax = 1.3,
-	wideMin = 1.2,
-	wideMax = 1.6,
-	core = 0.8,
-	visible = 0.65,
-	fingerStart = 0.5,
-	extraMin = 0.25,
-	extraMax = 0.5,
-	speedMin = 0.2,
-	speedMax = 0.35,
-	widthMin = 0.15,
-	widthMax = 0.3,
-	tail = 3,
+local SMALL: Spec = { rays = 8, visible = 0.65, tail = 3 }
+
+-- A ray from the pool's middle checking the ground ahead of its edge.
+type Ray = {
+	dir: Vector3,
+	probed: number, -- the ground checked up to here
+	lastH: number, -- (the ground's height there, off the pool's plane)
+	stop: number?, -- something stops it there
+	stopKind: string?, -- "wall", "step", "drop", "uneven"
+	ran: boolean, -- (blood ran over its ledge)
 }
 
--- One straight piece of a finger (a picture stretched from `base` along
--- `dir`). The first piece of a tongue's finger starts at its tongue's tip
--- (`attached`: it moves out with it); a finger that turns or goes down a
--- step starts a new piece where it was.
-type Part = {
+-- The short run of blood leaving a pool downhill (a stretched pool_lobe
+-- picture, joined to the pool: it starts under it).
+type Run = {
+	ray: Ray,
 	record: BloodAge.Record?,
 	l0: number, -- (its picture's size when made: rescaled from there)
 	w0: number,
-	layer: number,
-	attached: boolean,
-	base: Vector3, -- (not attached: where it starts, on its ground)
-	normal: Vector3,
-	dir: Vector3,
-	tip: number, -- attached: distance of its tip from the pool's middle; else its length
-	probed: number, -- (not attached: ground checked up to here)
-	lastH: number,
-	nextGutter: number,
+	length: number, -- studs beyond the pool's edge
+	reach: number, -- (at most)
 	drawn: number,
-}
-
-type Finger = {
-	parent: Tongue?,
-	parts: { Part },
-	extra: number, -- studs it runs in all
-	speed: number,
-	width: number,
-	side: number, -- (±1: which way it turns first)
-	grown: number,
-	done: boolean,
-}
-
--- One tongue of blood pushing out of the pool, `dir` from its middle.
-type Tongue = {
-	dir: Vector3,
-	f: number,
-	lag: number,
-	wide: number,
-	layer: number,
-	glossy: boolean,
-	reach: number, -- its tip, studs from the pool's middle
-	probed: number, -- the ground checked up to here
-	lastH: number, -- (the ground's height there, off the pool's plane)
-	slope: number,
-	stop: number?, -- something stops it there
-	stopKind: string?, -- "wall", "step", "drop", "uneven", "merged"
-	low: RaycastResult?, -- (a drop: the ground below)
-	spilled: boolean,
-	ran: boolean, -- (it ran over its ledge)
-	natural: number,
-	boost: number,
-	record: BloodAge.Record?,
-	l0: number,
-	w0: number,
-	drawn: number,
-	finger: Finger?,
 }
 
 type Pool = {
 	key: any,
-	center: Vector3,
+	center: Vector3, -- where its blood landed (its rays start here)
 	normal: Vector3,
-	forward: Vector3, -- (the middle picture's direction)
-	downhill: Vector3, -- (down the slope, its length the slope: 0 flat)
-	radius: number, -- the middle's radius (drops splash into it)
-	front: number, -- the front's mean radius (feet get wet in it)
-	full: number, -- the front's full size (radius)
-	area: number,
+	forward: Vector3, -- (its picture's direction when made)
+	twist: number, -- (radians: its picture turns this much as it grows - an uneven spread)
+	slopeDir: Vector3, -- (down the slope, a unit vector; zero if flat)
+	slope: number, -- 0 flat → 1 a real slope (SLOPE_FULL)
+	stretch: number, -- (its length / its width², down the slope)
+	radius: number, -- its edge (area-equivalent radius, studs) as drawn now
+	target: number, -- (where its edge is going)
+	full: number, -- its full size (radius)
+	area: number, -- studs² poured into it
 	fedArea: number, -- (the area when last drawn: more since = fed, wet again)
 	maxRadius: number,
 	rate: number,
@@ -259,13 +186,14 @@ type Pool = {
 	cover: number,
 	shift: number,
 	extent: number,
-	coreOffset: Vector3, -- (the middle pushed away from a wall / a ledge close by)
-	coreAt: Vector3, -- (its offset when last drawn)
-	core0: number, -- (the middle picture's size when made)
-	coreDrawn: number,
-	tongues: { Tongue },
-	fingers: { Finger },
-	partsLeft: number,
+	offset: Vector3, -- (its middle: slid downhill, pushed away from a wall close by)
+	drawnR: number, -- (as drawn last: redrawn only when it changed)
+	drawnAt: Vector3,
+	core0: number, -- (its picture's size when made)
+	rays: { Ray },
+	run: Run?,
+	into: Pool?, -- (taken in by this bigger pool: it shrinks under it, then goes)
+	layer: number,
 	random: Random,
 	lastAbsorb: number,
 	drips: number, -- drops fallen into it
@@ -274,7 +202,6 @@ type Pool = {
 	priority: number,
 	life: number?, -- (a finisher's: its own lifetime, s)
 	spec: Spec,
-	look: number, -- (from its seed: its pictures' looks, its tongues' heights)
 }
 
 local pools: { Pool } = {}
@@ -291,12 +218,6 @@ local function groundUnder(position: Vector3): RaycastResult?
 	return workspace:Raycast(position + UP * 1, Vector3.new(0, -14, 0), BloodStain.ground())
 end
 
--- `dir` turned by `angle` (radians) around `normal`.
-local function turned(dir: Vector3, normal: Vector3, angle: number): Vector3
-	return CFrame.fromAxisAngle(normal, angle):VectorToWorldSpace(dir)
-end
-
--- The ground's height at `point`, off the plane through `origin` (nil: none).
 -- A ray for the pool's checks: it goes through loose things (unanchored: a
 -- torn arm, a dropped organ, a body part, debris) - blood runs under them -
 -- but not through the map (walls, curbs, floors are anchored).
@@ -323,6 +244,7 @@ local function cast(from: Vector3, direction: Vector3): RaycastResult?
 	return nil
 end
 
+-- The ground's height at `point`, off the plane through `origin` (nil: none).
 local function heightAt(origin: Vector3, normal: Vector3, point: Vector3): number?
 	local hit = cast(point + normal * 0.6, -normal * 1.2)
 	if hit == nil then
@@ -336,8 +258,7 @@ end
 --   "flat" (yes: the ground's height at `to`),
 --   "wall" (something stands in the way), "step" (a curb, a step up),
 --   "uneven" (the ground leaves the pool's plane: rises, or falls away
---   little by little - a bump, a curved floor), or "drop" (a ledge: the
---   ground below, if any, within SPILL_HEIGHT),
+--   little by little - a bump, a curved floor), or "drop" (a ledge),
 -- and the distance where it stops. A crack between two floor parts is not
 -- a drop (the ground goes on just after it).
 local function probe(
@@ -347,89 +268,99 @@ local function probe(
 	from: number,
 	to: number,
 	lastH: number
-): (string, number, number, RaycastResult?)
+): (string, number, number)
 	local start = origin + dir * from + normal * (lastH + WALL_HEIGHT)
 	local wall = cast(start, dir * (to - from + 0.05))
 	if wall and math.abs(wall.Normal:Dot(normal)) < 0.5 then
 		-- (it goes a hair under the wall: no gap at its foot)
-		return "wall", from + (wall.Position - start):Dot(dir) + 0.05, lastH, nil
+		return "wall", from + (wall.Position - start):Dot(dir) + 0.05, lastH
 	end
 	local point = origin + dir * to
 	local h = heightAt(origin, normal, point)
 	if h then
 		if h - lastH > STEP_HEIGHT then
-			return "step", to, lastH, nil
+			return "step", to, lastH
 		elseif lastH - h <= STEP_HEIGHT then
 			if h > UNEVEN or h < -DIP then
-				return "uneven", from, lastH, nil
+				return "uneven", from, lastH
 			end
-			return "flat", to, h, nil
+			return "flat", to, h
 		end
 	end
 	-- no ground there, or lower: a crack? (the ground goes on just after)
 	for _, gap in { 0.2, 0.4 } do
 		local after = heightAt(origin, normal, point + dir * gap)
 		if after and math.abs(after - lastH) <= STEP_HEIGHT then
-			return "flat", to, lastH, nil
+			return "flat", to, lastH
 		end
 	end
-	-- a real ledge: the ground below it (blood can run on down there)
-	local low = cast(point + dir * 0.2 + normal * (lastH + 0.3), -normal * (SPILL_HEIGHT + 0.5))
-	return "drop", from, lastH, low
+	return "drop", from, lastH
 end
 
--- The pool (other than `pool`) whose middle `point` is in, if any: one at
--- least as big, not one lying under this one's own middle (a fighter bled
--- there before his finisher: the big pool just covers it).
-local function poolUnder(pool: Pool, point: Vector3): Pool?
-	for _, other in pools do
-		local record = other.record
-		if
-			other ~= pool
-			and record
-			and not record.dead
-			and other.priority >= pool.priority
-			and (other.center - pool.center).Magnitude > pool.full * 0.5 + other.radius
-		then
-			local gap = point - other.center
-			local up = gap:Dot(other.normal)
-			if math.abs(up) < 0.6 and (gap - other.normal * up).Magnitude < other.radius * 0.9 then
-				return other
-			end
+-- A ray checks the ground ahead, a step at a time, up to `upTo` studs from
+-- the pool's middle.
+local function probeRay(pool: Pool, ray: Ray, upTo: number)
+	while ray.stop == nil and ray.probed < upTo do
+		local to = ray.probed + PROBE_STEP
+		local kind, at, h = probe(pool.center, pool.normal, ray.dir, ray.probed, to, ray.lastH)
+		if kind == "flat" then
+			ray.probed, ray.lastH = to, h
+		else
+			ray.stop, ray.stopKind = math.max(at, 0), kind
 		end
 	end
-	return nil
 end
 
--- How many tongues / fingers / finger pieces / glossy tongues this pool
--- gets: fewer at a lower quality, without the pictures (plain shapes cost
--- more), and when several big pools are spreading at once.
-local function budget(spec: Spec, big: boolean): (number, number, number, number)
+local function newRay(dir: Vector3): Ray
+	return { dir = dir, probed = 0, lastH = 0, stop = nil, stopKind = nil, ran = false }
+end
+
+-- How far the pool's blob reaches going `dir` from its middle, its radius
+-- being `r` (its longest side all around, stretched down a slope).
+local function reachIn(pool: Pool, dir: Vector3, r: number): number
+	local k = 1
+	if pool.stretch > 1 then
+		local along = math.sqrt(pool.stretch)
+		local c = dir:Dot(pool.slopeDir)
+		local s2 = math.max(0, 1 - c * c)
+		k = 1 / math.sqrt(c * c / (along * along) + s2 * along * along)
+	end
+	return r * pool.extent * k
+end
+
+-- How many rays check the ground around it: fewer at a lower quality.
+local function rayCount(spec: Spec): number
 	local scale = BloodAge.scale()
 	local k = if scale >= 1 then 1 elseif scale >= 0.7 then 0.8 else 0.6
-	local tongues = math.max(3, math.floor(spec.tongues * k + 0.5))
-	local fingers = if scale >= 1 then spec.fingers else math.floor(spec.fingers * k)
-	local parts = math.floor(spec.parts * k + 0.5)
-	local glossy = if scale >= 0.7 then math.floor(spec.glossy * k) else 0
-	if not LOBE_PICTURE then
-		tongues = math.min(tongues, 7)
-		parts = math.min(parts, 3)
-	end
-	if big then
-		local spreading = 0
-		local now = os.clock()
+	return math.max(6, math.floor(spec.rays * k + 0.5))
+end
+
+-- The height (0-11 above the ground) of a new pool's picture: below the
+-- pools of its kind already close by (one taken in by another hides UNDER
+-- it; two at the same height would flicker where they overlap).
+local function layerFor(position: Vector3, radius: number, big: boolean, look: number): number
+	-- (a finisher's pool: 9-11; a bleeder's: 5-7, under a finisher's)
+	local layer = if big then 11 else 7 - look % 2
+	for _ = 1, 3 do
+		local taken = false
 		for _, pool in pools do
-			if pool.priority >= 2 and now < pool.born + pool.spreadTime then
-				spreading += 1
+			local record = pool.record
+			if
+				record
+				and not record.dead
+				and pool.layer == layer
+				and (pool.center - position).Magnitude < (pool.full + radius) * 1.3
+			then
+				taken = true
+				break
 			end
 		end
-		if spreading >= 3 then
-			tongues = math.max(5, math.floor(tongues * 0.6))
-			fingers = math.max(0, fingers - 1)
-			parts = math.floor(parts / 2)
+		if not taken then
+			break
 		end
+		layer -= 1
 	end
-	return tongues, math.min(fingers, tongues), parts, glossy
+	return layer
 end
 
 local function makePool(
@@ -457,6 +388,7 @@ local function makePool(
 			if
 				pool.priority <= rank
 				and not pouring
+				and pool.into == nil
 				and (oldest == nil or pool.priority < pools[oldest].priority)
 			then
 				oldest = index
@@ -469,44 +401,76 @@ local function makePool(
 		table.remove(pools, oldest)
 	end
 	local normal = hit.Normal
-	local along = Vector3.new(random:NextNumber(-1, 1), 0, random:NextNumber(-1, 1))
-	local forward = along - normal * along:Dot(normal)
-	forward = if forward.Magnitude > 1e-3
-		then forward.Unit
-		else normal:Cross(Vector3.new(1, 0, 0)).Unit
-	local aspect = random:NextNumber(0.85, 1)
+	-- down the slope (its length: the sine of the slope's angle; 0 flat)
+	local downhill = DOWN - normal * DOWN:Dot(normal)
+	local slope = math.clamp(downhill.Magnitude / SLOPE_FULL, 0, 1)
+	local slopeDir = if downhill.Magnitude > 0.01 then downhill.Unit else Vector3.zero
+	local forward: Vector3
+	if slope > 0.15 then
+		-- (on a slope: its picture's long side down the slope)
+		forward = slopeDir
+	else
+		local along = Vector3.new(random:NextNumber(-1, 1), 0, random:NextNumber(-1, 1))
+		forward = along - normal * along:Dot(normal)
+		forward = if forward.Magnitude > 1e-3
+			then forward.Unit
+			else normal:Cross(Vector3.new(1, 0, 0)).Unit
+	end
+	local twist = if slope > 0.15 then 0 else random:NextNumber(-0.3, 0.3)
+	local aspect = random:NextNumber(0.88, 1)
 	local index = random:NextInteger(1, #POOL_COVER)
+	local look = random:NextInteger(0, 9999)
 	local picture = BloodStain.image("pool", nil, index) ~= 0
 	local cover = if picture then POOL_COVER[index] else 1
 	local size0 = START_RADIUS * 2 / cover
+	local layer = layerFor(hit.Position, maxRadius * spec.visible, big, look)
 	local record = BloodStain.place("pool", hit.Position, normal, forward, size0 * aspect, size0, {
 		random = random,
 		profile = "pool",
 		start = PALETTE.VENOUS,
-		-- (the wet film: over the blob only, not over the empty picture around it)
-		gloss = cover * 0.75,
+		-- (the wet film, a small pool only: over the thick middle of the blob -
+		-- not over the empty picture around it, and well inside its edge)
+		gloss = if big then nil else cover * GLOSS_SIZE,
 		pinned = true,
 		noEdge = true,
 		material = hit.Material,
 		priority = 3,
 		life = life,
 		index = index,
-		layer = CORE_LAYER,
+		layer = layer,
 	})
 	if record == nil then
 		return nil
 	end
-	local downhill = DOWN - normal * DOWN:Dot(normal)
+	-- (a faint film: the pool reads as ONE puddle, the film only a wet sheen on it)
+	if record.gloss then
+		record.glossAlpha = GLOSS_ALPHA
+		BloodAge.paint(record)
+	end
+	-- (its wet film over the blob's middle, not the picture's: the blob is
+	-- not in the middle of its picture - else the film would stick out of it)
+	local shape = BloodStain.shapeOf(record)
+	local shift = if picture then POOL_SHIFT[index] else 0
+	if shape then
+		for _, piece in shape.pieces do
+			if piece.inst == record.gloss then
+				piece.cx = shift * size0
+			end
+		end
+	end
 	local pool: Pool = {
 		key = key,
 		center = hit.Position,
 		normal = normal,
 		forward = forward,
-		downhill = downhill,
+		twist = twist,
+		slopeDir = slopeDir,
+		slope = slope,
+		stretch = 1 + SLOPE_STRETCH * slope,
 		radius = START_RADIUS,
-		front = START_RADIUS,
+		target = START_RADIUS,
 		full = maxRadius * spec.visible,
-		area = math.pi * START_RADIUS * START_RADIUS,
+		area = 0,
 		fedArea = 0,
 		maxRadius = maxRadius,
 		rate = 0,
@@ -516,15 +480,16 @@ local function makePool(
 		sources = { [key] = true },
 		record = record,
 		cover = cover,
-		shift = if picture then POOL_SHIFT[index] else 0,
+		shift = shift,
 		extent = if picture then POOL_EXTENT[index] else 1.06,
-		coreOffset = Vector3.zero,
-		coreAt = Vector3.zero,
+		offset = Vector3.zero,
+		drawnR = START_RADIUS,
+		drawnAt = Vector3.zero,
 		core0 = size0,
-		coreDrawn = START_RADIUS,
-		tongues = {},
-		fingers = {},
-		partsLeft = 0,
+		rays = {},
+		run = nil,
+		into = nil,
+		layer = layer,
 		random = random,
 		lastAbsorb = 0,
 		drips = 0,
@@ -532,95 +497,35 @@ local function makePool(
 		priority = rank,
 		life = life,
 		spec = spec,
-		look = 0,
 	}
-	-- its tongues, all picked now from its seed (the same on every client)
-	local count, fingers, parts, glossy = budget(spec, big)
-	pool.partsLeft = parts
+	-- its rays all around (evenly spaced, turned by its seed)
+	local count = rayCount(spec)
 	local turn = random:NextNumber(0, math.pi * 2)
 	for i = 1, count do
-		local angle = turn + (i - 1 + random:NextNumber(-0.35, 0.35)) / count * math.pi * 2
+		local angle = turn + (i - 1) / count * math.pi * 2
 		local flat = Vector3.new(math.cos(angle), 0, math.sin(angle))
 		local dir = flat - normal * flat:Dot(normal)
-		dir = if dir.Magnitude > 1e-3 then dir.Unit else forward
-		table.insert(pool.tongues, {
-			dir = dir,
-			f = random:NextNumber(spec.fMin, spec.fMax),
-			lag = random:NextNumber(spec.lagMin, spec.lagMax),
-			wide = random:NextNumber(spec.wideMin, spec.wideMax),
-			layer = (i - 1) % 10,
-			-- (every few tongues one with its own wet sheen, `glossy` at most)
-			glossy = glossy > 0 and (i - 1) % math.max(1, math.floor(count / glossy)) == 0,
-			reach = 0,
-			probed = 0,
-			lastH = 0,
-			slope = 0,
-			stop = nil,
-			stopKind = nil,
-			low = nil,
-			spilled = false,
-			ran = false,
-			natural = 0,
-			boost = 0,
+		table.insert(pool.rays, newRay(if dir.Magnitude > 1e-3 then dir.Unit else forward))
+	end
+	-- a finisher's pool on a real slope: its run downhill
+	if big and slope >= RUN_FROM then
+		pool.run = {
+			ray = newRay(slopeDir),
 			record = nil,
 			l0 = 1,
 			w0 = 1,
+			length = 0,
+			reach = maxRadius * RUN_REACH * slope,
 			drawn = 0,
-			finger = nil,
-		})
-	end
-	local glossLeft = glossy
-	for _, tongue in pool.tongues do
-		if tongue.glossy then
-			tongue.glossy = glossLeft > 0
-			glossLeft -= 1
-		end
-	end
-	-- its fingers: on a slope the tongues going down it, else any
-	if fingers > 0 and (big or maxRadius >= 1.5) then
-		local order: { Tongue } = table.clone(pool.tongues)
-		if downhill.Magnitude > 0.03 then
-			table.sort(order, function(a, b)
-				return a.dir:Dot(downhill) > b.dir:Dot(downhill)
-			end)
-		else
-			for i = #order, 2, -1 do
-				local j = random:NextInteger(1, i)
-				order[i], order[j] = order[j], order[i]
-			end
-		end
-		local scale = math.clamp(maxRadius * 2 / 8, 0.5, 1.2)
-		for i = 1, fingers do
-			local finger: Finger = {
-				parent = order[i],
-				parts = {},
-				extra = math.min(
-					maxRadius * 2 * random:NextNumber(spec.extraMin, spec.extraMax),
-					FINISHER_POOLS.FINGER_REACH
-				),
-				speed = random:NextNumber(spec.speedMin, spec.speedMax) * scale,
-				width = random:NextNumber(spec.widthMin, spec.widthMax) * math.clamp(scale, 0.6, 1),
-				side = if random:NextNumber() < 0.5 then -1 else 1,
-				grown = 0,
-				done = false,
-			}
-			order[i].finger = finger
-			table.insert(pool.fingers, finger)
-		end
-	end
-	-- (its own looks and heights: two pools that overlap don't draw the same
-	-- tongue pictures at the same heights - no copies, no flicker)
-	pool.look = random:NextInteger(0, 9999)
-	for i, tongue in pool.tongues do
-		tongue.layer = (i - 1 + pool.look) % 10
+		}
 	end
 	table.insert(pools, pool)
 	return pool
 end
 
--- The pool that takes blood landing at `hit`: one already close by (its own,
--- `key`, first: two pools that meet become one), else a new one. A big
--- (finisher) pour only joins a big pool.
+-- The pool that takes blood landing at `hit`: the one of `key` close by
+-- first, else one already close by (two pools that meet become one), else a
+-- new one. A big (finisher) pour only joins a big pool.
 local function poolAt(
 	key: any,
 	hit: RaycastResult,
@@ -632,12 +537,21 @@ local function poolAt(
 	local target: Pool? = nil
 	for _, pool in pools do
 		local record = pool.record
-		if record and not record.dead and (pool.priority >= rank or pool.key == key) then
-			local gap = hit.Position - pool.center
-			if math.abs(gap:Dot(pool.normal)) < 0.6 then
-				local reach = pool.front * 0.7 + 0.3
-				if gap.Magnitude < reach and (target == nil or pool.key == key) then
-					target = pool
+		if record and not record.dead and pool.into == nil then
+			local mine = pool.sources[key] == true
+			if pool.priority >= rank or mine then
+				-- (its own wound's blood: anywhere in it, even off its middle; a
+				-- pool that took another one in slides to its new middle)
+				local gap = hit.Position - (pool.center + pool.offset)
+				local toMiddle = hit.Position - pool.center
+				if mine and toMiddle.Magnitude < gap.Magnitude then
+					gap = toMiddle
+				end
+				if math.abs(gap:Dot(pool.normal)) < 0.6 then
+					local reach = if mine then pool.radius + 0.3 else pool.radius * 0.7 + 0.3
+					if gap.Magnitude < reach and (target == nil or mine) then
+						target = pool
+					end
 				end
 			end
 		end
@@ -679,6 +593,7 @@ function BloodPool.feed(
 	end
 	local target = poolAt(key, hit, maxRadius or 1.8)
 	if target then
+		target.sources[key] = true
 		target.rate = math.max(target.rate, area)
 		target.feedUntil = math.max(target.feedUntil, os.clock() + seconds)
 		target.maxRadius = math.max(target.maxRadius, maxRadius or 1.8)
@@ -714,11 +629,11 @@ function BloodPool.claim(seed: number): boolean
 end
 
 -- `area` studs² of blood poured now on the ground `hit` (a finisher's stump,
--- BloodGush.stump, calls it a few times a second: pulsing, then oozing,
--- then slowing). A big pool whose front spreads to about `maxRadius` studs
--- (when all its blood is out) and keeps creeping until `spreadTime` seconds
--- after its first blood; the same shape on every client (`seed`); kept
--- before the bleeders' pools.
+-- BloodGush.stump, calls it 10 times a second: pulsing, then oozing, then
+-- slowing). A big pool whose edge gets to `maxRadius` studs (when all its
+-- blood is out) and keeps creeping until `spreadTime` seconds after its
+-- first blood; the same shape on every client (`seed`); kept before the
+-- bleeders' pools.
 function BloodPool.pour(
 	key: any,
 	hit: RaycastResult,
@@ -744,9 +659,9 @@ function BloodPool.pour(
 		target.spreadTime = spread
 	elseif not target.sources[key] then
 		-- (a second wound pouring into it: it spreads for longer)
-		target.sources[key] = true
 		target.spreadTime = math.max(target.spreadTime, now - target.born + spread)
 	end
+	target.sources[key] = true
 	return target
 end
 
@@ -754,384 +669,208 @@ end
 -- Spreading
 ------------------------------------------------------------------------------
 
--- A tongue checks the ground ahead of it, a step at a time, up to `upTo`
--- studs from the pool's middle (its own tip, or its finger's).
-local function probeTongue(pool: Pool, tongue: Tongue, upTo: number)
-	while tongue.stop == nil and tongue.probed < upTo do
-		local to = tongue.probed + PROBE_STEP
-		local kind, at, h, low =
-			probe(pool.center, pool.normal, tongue.dir, tongue.probed, to, tongue.lastH)
-		if kind == "flat" then
-			local point = pool.center + tongue.dir * to
-			local other = poolUnder(pool, point)
-			if other and other.record then
-				-- it ran into another pool: they are one now
-				tongue.stop, tongue.stopKind = to, "merged"
-				BloodAge.touch(other.record)
-				break
-			end
-			tongue.probed, tongue.lastH = to, h
-			-- (the ground going down ahead of it: a tiny slope it follows)
-			tongue.slope = math.clamp(-h / math.max(to, 1), -0.2, 0.2)
-		else
-			tongue.stop, tongue.stopKind = math.max(at, 0), kind
-			if kind == "drop" then
-				tongue.low = low
-			end
-		end
+-- Where its edge is going now: where the blood poured so far reaches
+-- (its area, spread thinner and thinner).
+local function goal(pool: Pool, now: number): number
+	local plain = math.sqrt(pool.area / math.pi)
+	if pool.priority >= 2 then
+		-- a finisher's: a little behind while it pours, catching up as it
+		-- creeps on, all there at `spreadTime` (an ease-out: slower and slower)
+		local c = math.clamp((now - pool.born) / math.max(pool.spreadTime, 1), 0, 1)
+		local creep = 1 - CREEP_SHARE * (1 - c) * (1 - c)
+		return math.max(math.min(plain, pool.maxRadius * 1.15) * creep, START_RADIUS)
 	end
+	-- (a bleeder's: up to its maxRadius, fast at first, slower after)
+	local R = pool.maxRadius
+	return math.max(R * (1 - math.exp(-plain / R)) * pool.spec.visible, START_RADIUS)
 end
 
--- How much a slope helps (> 1, downhill) or holds back (< 1) going `dir`.
-local function slopeFactor(
-	pool: Pool,
-	dir: Vector3,
-	slope: number,
-	low: number,
-	high: number
-): number
-	return math.clamp(1 + SLOPE_GAIN * (dir:Dot(pool.downhill) + slope), low, high)
-end
-
--- A new straight piece of `finger`, from `base` (on the ground `normal`)
--- going `dir`.
-local function newPart(pool: Pool, finger: Finger, base: Vector3, normal: Vector3, dir: Vector3)
-	pool.partsLeft -= 1
-	local parent = finger.parent
-	table.insert(finger.parts, {
-		record = nil,
-		l0 = 1,
-		w0 = 1,
-		layer = if parent then (parent.layer + 5) % 10 else 10,
-		attached = false,
-		base = base,
-		normal = normal,
-		dir = dir,
-		tip = 0,
-		probed = 0,
-		lastH = 0,
-		nextGutter = GUTTER_EVERY,
-		drawn = 0,
-	})
-end
-
--- A finger stopped at `tip` (on the plane through `origin`, `normal`): it
--- runs down the step (`kind` "drop", the ground `low` below), or turns to
--- whichever side is free (the lower one first), or ends.
-local function goOn(
-	pool: Pool,
-	finger: Finger,
-	tip: Vector3,
-	origin: Vector3,
-	normal: Vector3,
-	dir: Vector3,
-	kind: string?,
-	low: RaycastResult?
-)
-	if pool.partsLeft <= 0 or #finger.parts >= MAX_FINGER_PARTS or kind == "merged" then
-		finger.done = true
-		return
+-- Its middle and its size where it fits: slid downhill, pushed away from a
+-- wall or a ledge close by (it spreads on its free side), smaller if it still
+-- doesn't fit. Returns the offset of its middle and the radius drawn.
+local function fit(pool: Pool, r: number): (Vector3, number)
+	local drift = pool.slopeDir * r * SLOPE_DRIFT * pool.slope
+	for _, ray in pool.rays do
+		probeRay(pool, ray, drift:Dot(ray.dir) + reachIn(pool, ray.dir, r) + 0.3)
 	end
-	if kind == "drop" then
-		if low then
-			-- down the step, and on along the lower ground
-			newPart(pool, finger, low.Position + dir * 0.1, low.Normal, dir)
-		else
-			finger.done = true
-		end
-		return
-	end
-	if kind == "uneven" then
-		-- the ground falls away from its plane little by little (a gentle
-		-- slope, a hump): a new straight piece laid on the ground just ahead,
-		-- going on the same way (it follows the ground down instead of
-		-- floating over it; it never climbs)
-		local ahead = cast(tip + dir * 0.15 + normal * 0.6, -normal * 1.2)
-		if ahead and ahead.Normal.Y > 0.7 and (ahead.Position - tip):Dot(normal) < 0 then
-			local flat = dir - ahead.Normal * dir:Dot(ahead.Normal)
-			if flat.Magnitude > 1e-3 then
-				newPart(pool, finger, ahead.Position, ahead.Normal, flat.Unit)
-				return
+	local offset = drift
+	local limit = math.max(r * 0.6, drift.Magnitude)
+	for _ = 1, 3 do
+		for _, ray in pool.rays do
+			local stop = ray.stop
+			if stop then
+				local over = offset:Dot(ray.dir) + reachIn(pool, ray.dir, r) - stop
+				if over > 0 then
+					offset -= ray.dir * over
+				end
 			end
 		end
-		finger.done = true
-		return
-	end
-	local h0 = (tip - origin):Dot(normal)
-	local best: Vector3? = nil
-	local bestH = math.huge
-	for _, side in { finger.side, -finger.side } do
-		local d = turned(dir, normal, side * FINGER_TURN)
-		local result, _, h = probe(tip - normal * h0, normal, d, 0, 0.45, h0)
-		if result == "flat" and h < bestH - 0.01 then
-			best, bestH = d, h
+		if offset.Magnitude > limit then
+			offset = offset.Unit * limit
 		end
 	end
-	if best then
-		newPart(pool, finger, tip, normal, best)
-	else
-		finger.done = true
+	local k = 1
+	for _, ray in pool.rays do
+		local stop = ray.stop
+		if stop then
+			local room = math.max(stop - offset:Dot(ray.dir), 0)
+			k = math.min(k, room / reachIn(pool, ray.dir, r))
+		end
 	end
+	return offset, math.max(r * k, math.min(START_RADIUS, r))
 end
 
--- Is the ground lower a little to one side ahead (a gutter, a slope)? The
--- direction to go then.
-local function lowerSide(origin: Vector3, normal: Vector3, at: Vector3, dir: Vector3): Vector3?
-	local ahead = heightAt(origin, normal, at + dir * 0.6)
-	if ahead == nil then
-		return nil
-	end
-	local best: Vector3? = nil
-	local bestH = ahead - 0.03
-	for _, side in { 1, -1 } do
-		local d = turned(dir, normal, side * GUTTER_TURN)
-		local h = heightAt(origin, normal, at + d * 0.6)
-		if h and h < bestH then
-			best, bestH = d, h
-		end
-	end
-	return best
-end
-
--- A finger running on, `grow` studs more.
-local function growFinger(pool: Pool, finger: Finger, grow: number)
-	if #finger.parts == 0 then
-		local parent = finger.parent
-		if parent == nil then
-			finger.done = true
-			return
-		end
-		-- its first piece: out of its tongue's tip
-		pool.partsLeft -= 1
-		table.insert(finger.parts, {
-			record = nil,
-			l0 = 1,
-			w0 = 1,
-			layer = (parent.layer + 5) % 10,
-			attached = true,
-			base = pool.center,
-			normal = pool.normal,
-			dir = parent.dir,
-			tip = parent.reach,
-			probed = 0,
-			lastH = 0,
-			nextGutter = parent.reach + GUTTER_EVERY,
-			drawn = 0,
-		})
-	end
-	local part = finger.parts[#finger.parts]
-	local parent = finger.parent
-	finger.grown += grow
-	if part.attached and parent then
-		-- (it goes on straight out of its tongue, along the same line)
-		local tip = math.max(part.tip, parent.reach) + grow
-		probeTongue(pool, parent, tip)
-		local stop = parent.stop
-		if stop and tip >= stop - 0.01 then
-			part.tip = math.max(stop - 0.05, parent.reach)
-			local at = pool.center + parent.dir * part.tip + pool.normal * parent.lastH
-			if parent.stopKind == "drop" and not parent.ran then
-				-- (the finger got to the ledge before its tongue: it runs over)
-				parent.ran = true
-				BloodStain.overLedge(at, parent.dir, math.min(0.12, finger.width * 0.4))
+-- Blood reaching a ledge runs down its side (once per ray).
+local function runOver(pool: Pool)
+	for _, ray in pool.rays do
+		local stop = ray.stop
+		if stop and ray.stopKind == "drop" and not ray.ran then
+			local edge = pool.offset:Dot(ray.dir) + reachIn(pool, ray.dir, pool.radius)
+			if edge >= stop - 0.15 then
+				ray.ran = true
+				local at = pool.center + ray.dir * stop + pool.normal * ray.lastH
+				BloodStain.overLedge(at, ray.dir, math.min(0.16, pool.radius * 0.25))
 			end
-			goOn(
-				pool,
-				finger,
-				at,
-				pool.center,
-				pool.normal,
-				parent.dir,
-				parent.stopKind,
-				parent.low
-			)
-			return
 		end
-		part.tip = tip
-		if tip >= part.nextGutter then
-			part.nextGutter = tip + GUTTER_EVERY
-			local at = pool.center + parent.dir * tip + pool.normal * parent.lastH
-			local side = lowerSide(pool.center, pool.normal, at, parent.dir)
-			if side and pool.partsLeft > 0 and #finger.parts < MAX_FINGER_PARTS then
-				newPart(pool, finger, at, pool.normal, side)
+	end
+end
+
+-- One step of a pool spreading (`dt` seconds; `instant`: straight to where
+-- it is going - a pool laid already spread).
+local function step(pool: Pool, dt: number, now: number, instant: boolean?)
+	local into = pool.into
+	if into then
+		-- taken in by a bigger pool: it shrinks under it (only the part the
+		-- other doesn't cover yet), and goes once it is hidden
+		local gap = (pool.center + pool.offset) - (into.center + into.offset)
+		local hidden = math.max(0, into.radius * COVERED - gap.Magnitude) / pool.extent
+		local record, intoRecord = pool.record, into.record
+		if record and intoRecord then
+			record.born = intoRecord.born -- (the same blood: it ages with it)
+		end
+		local r = pool.radius + (hidden - pool.radius) * (1 - math.exp(-dt / 1.2))
+		pool.radius = math.min(pool.radius, r)
+		if instant or pool.radius <= hidden + 0.02 or pool.radius < 0.15 then
+			if record and not record.dead then
+				BloodAge.remove(record)
+			end
+			local run = pool.run
+			if run and run.record and not run.record.dead then
+				BloodAge.remove(run.record)
 			end
 		end
 		return
 	end
-	-- a piece of its own: it checks the ground ahead itself
-	local target = part.tip + grow
-	while part.probed < target do
-		local to = part.probed + FINGER_STEP
-		local kind, at, h, low =
-			probe(part.base, part.normal, part.dir, part.probed, to, part.lastH)
-		if kind == "flat" and poolUnder(pool, part.base + part.dir * to) then
-			kind = "merged"
-		end
-		if kind ~= "flat" then
-			part.tip = math.max(math.min(at, target), part.tip)
-			local point = part.base + part.dir * part.tip + part.normal * part.lastH
-			if kind == "drop" then
-				BloodStain.overLedge(point, part.dir, math.min(0.12, finger.width * 0.4))
-			end
-			goOn(pool, finger, point, part.base, part.normal, part.dir, kind, low)
-			return
-		end
-		part.probed, part.lastH = to, h
-		if to >= part.nextGutter then
-			part.nextGutter = to + GUTTER_EVERY
-			local point = part.base + part.dir * to + part.normal * h
-			local side = lowerSide(part.base, part.normal, point, part.dir)
-			if side and pool.partsLeft > 0 and #finger.parts < MAX_FINGER_PARTS then
-				part.tip = to
-				newPart(pool, finger, point, part.normal, side)
-				return
-			end
-		end
-	end
-	part.tip = target
-end
-
--- One step of a pool spreading (`dt` seconds).
-local function step(pool: Pool, dt: number, now: number)
-	local spec = pool.spec
-	local big = pool.priority >= 2
 	if now < pool.feedUntil and pool.rate > 0 then
 		pool.area += pool.rate * dt
 	end
-	-- the front: where the blood poured so far gets to...
-	local plain = math.sqrt(pool.area / math.pi)
-	local front: number
-	if big then
-		-- ...thinner and thinner as it goes on spreading (its edge slows
-		-- down, it never jumps), until `spreadTime`
-		local age = now - pool.born
-		local creep = math.min(1, ((age + 1) / (pool.spreadTime + 1)) ^ CREEP_POWER)
-		front = math.min(plain, pool.maxRadius * 1.3) * creep
-	else
-		-- (a bleeder's: up to its maxRadius, fast at first, slower after)
-		local R = pool.maxRadius
-		front = R * (1 - math.exp(-plain / R)) * spec.visible
+	pool.target = goal(pool, now)
+	-- its edge eases toward it (never jumps, never shrinks)
+	local r = pool.target
+	if not instant then
+		local move = (pool.target - pool.radius) * (1 - math.exp(-dt / GROW_TIME))
+		r = pool.radius + math.min(move, MAX_SPEED * dt)
 	end
-	pool.front = math.max(pool.front, front, START_RADIUS)
-	-- the middle: never past a wall or a ledge (through a thin wall, floating
-	-- in the air). The tongues check the ground a little beyond it first;
-	-- the ones stopped close by push it the other way (a pool against a
-	-- wall spreads on its free side), and it shrinks if it still doesn't fit.
-	local core = pool.front * spec.core
-	local reachOut = core * pool.extent
-	for _, tongue in pool.tongues do
-		probeTongue(pool, tongue, math.max(tongue.reach, reachOut + 0.3))
+	local offset, fitted = fit(pool, math.max(r, pool.radius))
+	pool.offset = if instant then offset else pool.offset:Lerp(offset, math.min(1, dt * 2))
+	pool.radius = math.max(pool.radius, math.min(r, fitted))
+	if fitted < pool.radius then
+		pool.radius = fitted -- (against a wall: it stays as big as fits)
 	end
-	local offset = Vector3.zero
-	for _ = 1, 3 do
-		for _, tongue in pool.tongues do
-			local stop = tongue.stop
-			if stop then
-				local over = offset:Dot(tongue.dir) + reachOut - stop
-				if over > 0 then
-					offset -= tongue.dir * over
-				end
-			end
-		end
-		if offset.Magnitude > core * 0.6 then
-			offset = offset.Unit * core * 0.6
-		end
-	end
-	-- (it only ever moves a little at a time: no jump)
-	pool.coreOffset = pool.coreOffset:Lerp(offset, math.min(1, dt * 2))
-	for _, tongue in pool.tongues do
-		local stop = tongue.stop
+	runOver(pool)
+	-- its run downhill: once the pool is big enough, a little further each
+	-- step (faster down a steeper slope), never past what stops it
+	local run = pool.run
+	if run and pool.radius >= pool.full * RUN_START then
+		local grow = RUN_SPEED * (0.5 + pool.slope) * dt
+		run.length = if instant then run.reach else math.min(run.length + grow, run.reach)
+		local ray = run.ray
+		local edge = pool.offset:Dot(ray.dir) + reachIn(pool, ray.dir, pool.radius)
+		probeRay(pool, ray, edge + run.length + 0.1)
+		local stop = ray.stop
 		if stop then
-			reachOut = math.min(reachOut, math.max(stop - pool.coreOffset:Dot(tongue.dir), 0))
+			run.length = math.max(0, math.min(run.length, stop - edge - 0.05))
 		end
 	end
-	pool.radius = math.max(reachOut / pool.extent, math.min(START_RADIUS, pool.front))
-	-- each tongue: how far it would go (slopes), and the blood that can't go
-	-- where a tongue is stopped goes to the ones beside it (along a wall)
-	local tongues = pool.tongues
-	local count = #tongues
-	for _, tongue in tongues do
-		tongue.natural = pool.front
-			* tongue.f
-			* slopeFactor(pool, tongue.dir, tongue.slope, 0.4, 2.2)
-		tongue.boost = 0
-	end
-	for i, tongue in tongues do
-		local stop = tongue.stop
-		if stop and tongue.natural > stop then
-			local lost = (tongue.natural - stop) * 0.5
-			for _, pair in { { 1, 0.35 }, { -1, 0.35 }, { 2, 0.15 }, { -2, 0.15 } } do
-				local other = tongues[((i - 1 + pair[1]) % count) + 1]
-				if other ~= tongue and other.stop == nil then
-					other.boost += lost * pair[2]
-				end
-			end
+end
+
+-- Two pools that meet become one: `pool` takes `other` in (its blood, its
+-- wounds); its middle moves toward the middle of both (it slides there, no
+-- jump) and it grows to hold both, `other` shrinks under it.
+local function merge(pool: Pool, other: Pool, now: number)
+	local a, b = math.max(pool.area, 1e-3), math.max(other.area, 1e-3)
+	local was = pool.center + pool.offset
+	local between = (pool.center * a + other.center * b) / (a + b)
+	local hit = groundUnder(between)
+	if hit and math.abs((hit.Position - pool.center):Dot(pool.normal)) < 0.3 then
+		-- (its rays start again from its new middle; drawn where it was)
+		pool.center = hit.Position
+		pool.offset = was - pool.center
+		for _, ray in pool.rays do
+			ray.probed, ray.lastH, ray.stop, ray.stopKind = 0, 0, nil, nil
+		end
+		local run = pool.run
+		if run then
+			local ray = run.ray
+			ray.probed, ray.lastH, ray.stop, ray.stopKind = 0, 0, nil, nil
 		end
 	end
-	for _, tongue in tongues do
-		local target = tongue.natural + math.min(tongue.boost, pool.front * 0.8)
-		if tongue.stop then
-			target = math.min(target, tongue.stop :: number)
-		end
-		if target > tongue.reach then
-			local move = (target - tongue.reach) * (1 - math.exp(-dt / tongue.lag))
-			tongue.reach += math.min(move, MAX_SPEED * dt)
-		end
-		probeTongue(pool, tongue, tongue.reach)
-		if tongue.stop then
-			tongue.reach = math.min(tongue.reach, tongue.stop :: number)
-		end
-		if
-			tongue.stopKind == "drop"
-			and not tongue.ran
-			and tongue.reach >= (tongue.stop :: number) - 0.1
-		then
-			-- at the edge: it runs over, down the side
-			tongue.ran = true
-			local edge = pool.center + tongue.dir * tongue.reach + pool.normal * tongue.lastH
-			BloodStain.overLedge(edge, tongue.dir, math.min(0.16, pool.front * 0.25))
-		end
-		-- a big pool reaching a step down goes on below it
-		if
-			big
-			and tongue.stopKind == "drop"
-			and not tongue.spilled
-			and tongue.finger == nil
-			and tongue.low
-			and pool.partsLeft > 0
-			and tongue.reach >= (tongue.stop :: number) - 0.05
-		then
-			tongue.spilled = true
-			local low = tongue.low :: RaycastResult
-			local finger: Finger = {
-				parent = nil,
-				parts = {},
-				extra = math.min(pool.full * 0.4, FINISHER_POOLS.FINGER_REACH * 0.5),
-				speed = 0.25,
-				width = math.clamp(pool.full * 0.12, 0.3, 0.7),
-				side = if tongue.layer % 2 == 0 then 1 else -1,
-				grown = 0,
-				done = false,
-			}
-			newPart(pool, finger, low.Position + tongue.dir * 0.1, low.Normal, tongue.dir)
-			table.insert(pool.fingers, finger)
-		end
+	pool.area += other.area
+	pool.maxRadius = math.sqrt(pool.maxRadius ^ 2 + other.maxRadius ^ 2)
+	pool.full = math.sqrt(pool.full ^ 2 + other.full ^ 2)
+	pool.rate = math.max(pool.rate, other.rate)
+	pool.feedUntil = math.max(pool.feedUntil, other.feedUntil)
+	if other.spreadTime > 0 then
+		pool.spreadTime = math.max(pool.spreadTime, other.born + other.spreadTime - pool.born)
 	end
-	-- the fingers: once the pool is big enough, a few tongues run on
-	if pool.front >= spec.fingerStart * pool.full then
-		for _, finger in pool.fingers do
-			if not finger.done then
-				local dir = if #finger.parts > 0
-					then finger.parts[#finger.parts].dir
-					else (finger.parent :: Tongue).dir
-				local downhill = slopeFactor(pool, dir, 0, 0.3, 2.5)
-				local grow = finger.speed
-					* dt
-					* downhill
-					* math.max(0.35, 1 - finger.grown / finger.extra)
-				growFinger(pool, finger, grow)
-				if finger.grown >= finger.extra then
-					finger.done = true
+	for key in other.sources do
+		pool.sources[key] = true
+	end
+	for _, extra in other.extras do
+		table.insert(pool.extras, extra)
+	end
+	table.clear(other.extras)
+	other.into = pool
+	other.rate = 0
+	other.feedUntil = 0
+	-- (the same blood now: the same age, the same colour)
+	local record, otherRecord = pool.record, other.record
+	if record and otherRecord then
+		local born = math.max(record.born, otherRecord.born)
+		record.born, otherRecord.born = born, born
+		BloodAge.touch(record)
+		BloodAge.touch(otherRecord)
+	end
+	pool.born = math.min(pool.born, now)
+end
+
+-- Pools of the same kind overlapping a lot: one takes the other in (the one
+-- drawn on top - the older, bigger one - takes the one under it).
+local function mergeAll(now: number, only: Pool?)
+	for i, pool in pools do
+		for j = i + 1, #pools do
+			local other = pools[j]
+			if
+				(only == nil or pool == only or other == only)
+				and pool.into == nil
+				and other.into == nil
+				and pool.priority == other.priority
+				and pool.record
+				and other.record
+				and not (pool.record :: BloodAge.Record).dead
+				and not (other.record :: BloodAge.Record).dead
+				and math.abs((other.center - pool.center):Dot(pool.normal)) < 0.5
+				and pool.normal:Dot(other.normal) > 0.95
+			then
+				local gap = (pool.center + pool.offset) - (other.center + other.offset)
+				if gap.Magnitude < (pool.radius + other.radius) * MERGE_OVERLAP then
+					local first = pool.layer > other.layer
+						or (pool.layer == other.layer and pool.area >= other.area)
+					if first then
+						merge(pool, other, now)
+					else
+						merge(other, pool, now)
+					end
 				end
 			end
 		end
@@ -1142,48 +881,41 @@ end
 -- Drawing
 ------------------------------------------------------------------------------
 
--- A stretched tongue picture covering from `a` to `b` studs along `dir` from
--- `origin`, `width` studs wide. Made the first time, moved and grown after.
-local function drawLobe(
-	pool: Pool,
-	record: BloodAge.Record?,
-	l0: number,
-	w0: number,
-	origin: Vector3,
-	normal: Vector3,
-	dir: Vector3,
-	a: number,
-	b: number,
-	width: number,
-	layer: number,
-	glossy: boolean,
-	drying: number
-): (BloodAge.Record?, number, number)
+-- A stretched pool_lobe picture covering from `a` to `b` studs along `dir`
+-- from `origin`, `width` studs wide. Made the first time, moved and grown after.
+local function drawRun(pool: Pool, run: Run, origin: Vector3, a: number, b: number, width: number)
+	local dir = run.ray.dir
 	local length = if LOBE_PICTURE then (b - a) / (LOBE_TO - LOBE_FROM) else b - a
 	local wide = if LOBE_PICTURE then width / LOBE_WIDE else width
 	local middle = if LOBE_PICTURE then a - LOBE_FROM * length else (a + b) / 2
 	local at = origin + dir * middle
+	local record = run.record
 	if record == nil then
-		-- (its look picked from the pool's seed and where it is in the pool)
-		local made = BloodStain.place("poolLobe", at, normal, dir, wide, length, {
-			random = Random.new(pool.look * 131 + layer * 7919 + #pool.tongues),
+		local main = pool.record
+		local made = BloodStain.place("poolLobe", at, pool.normal, dir, wide, length, {
+			random = Random.new(pool.layer * 131 + 7919),
 			profile = "pool",
-			start = PALETTE.ARTERIAL, -- (the moving front: fresh, brighter)
-			gloss = if glossy then (if LOBE_PICTURE then 0.3 else 0.6) else nil,
+			start = PALETTE.VENOUS, -- (the same blood as the pool: the same colour)
 			pinned = true,
 			noEdge = true,
 			priority = 3,
 			life = pool.life,
-			layer = layer,
+			-- (under the pool: its start hides under it, no seam)
+			layer = pool.layer - 1,
 		})
 		if made then
-			-- (a tongue is the thin edge of a pool: it dries first)
-			made.speed *= drying
+			if main then
+				made.born, made.speed, made.soakIn = main.born, main.speed, main.soakIn
+			end
+			for _, layer in made.layers do
+				layer.gel = 0.1 -- (it clots as dark as the pool)
+			end
+			BloodAge.paint(made)
 		end
-		return made, length, wide
+		run.record, run.l0, run.w0 = made, length, wide
+		return
 	end
-	BloodStain.fit(record, at, dir, length / l0, wide / w0)
-	return record, l0, w0
+	BloodStain.fit(record, at, dir, length / run.l0, wide / run.w0)
 end
 
 local function draw(pool: Pool, fresh: boolean)
@@ -1191,111 +923,69 @@ local function draw(pool: Pool, fresh: boolean)
 	if record == nil or record.dead then
 		return
 	end
-	-- the middle
-	local offset = pool.coreOffset
-	if math.abs(pool.radius - pool.coreDrawn) > 0.01 or (offset - pool.coreAt).Magnitude > 0.01 then
-		pool.coreDrawn = pool.radius
-		pool.coreAt = offset
+	local offset = pool.offset
+	local changed = math.abs(pool.radius - pool.drawnR) > 0.01
+		or (offset - pool.drawnAt).Magnitude > 0.01
+	if changed then
+		pool.drawnR = pool.radius
+		pool.drawnAt = offset
+		-- (it turns a little as it grows: it spreads more one way than another)
+		local grown = math.clamp(pool.radius / math.max(pool.full, 0.1), 0, 1)
+		local forward = CFrame.fromAxisAngle(pool.normal, pool.twist * grown)
+			:VectorToWorldSpace(pool.forward)
 		local size = pool.radius * 2 / pool.cover
 		local k = size / pool.core0
-		BloodStain.fit(record, pool.center + offset - pool.forward * pool.shift * size, nil, k, k)
+		-- (stretched down a slope: longer that way, narrower across)
+		local along, across = k, k
+		if pool.stretch > 1 then
+			local s = math.sqrt(pool.stretch)
+			local c = math.abs(forward:Dot(pool.slopeDir))
+			along *= 1 + (s - 1) * c
+			across /= 1 + (s - 1) * c
+		end
+		local at = pool.center + offset - forward * pool.shift * size * (along / k)
+		BloodStain.fit(record, at, forward, along, across)
+	end
+	local run = pool.run
+	if run and run.length > 0.05 and pool.into == nil then
+		local dir = run.ray.dir
+		local edge = reachIn(pool, dir, pool.radius)
+		local b = edge + run.length
+		if changed or b - run.drawn > 0.01 then
+			run.drawn = b
+			drawRun(pool, run, pool.center + offset, edge * 0.4, b, pool.radius * 0.5)
+		end
 	end
 	if fresh then
 		BloodAge.touch(record)
-	end
-	local count = #pool.tongues
-	local spread = math.sin(math.pi / math.max(count, 3)) * 2
-	for _, tongue in pool.tongues do
-		local a = pool.radius * 0.55
-		local b = tongue.reach
-		if b - a > 0.12 and b - tongue.drawn > 0.01 then
-			local moved = b - tongue.drawn > 0.02
-			tongue.drawn = b
-			local width = math.min(b * spread * tongue.wide, b * 1.1)
-			tongue.record, tongue.l0, tongue.w0 = drawLobe(
-				pool,
-				tongue.record,
-				tongue.l0,
-				tongue.w0,
-				pool.center,
-				pool.normal,
-				tongue.dir,
-				a,
-				b,
-				width,
-				tongue.layer,
-				tongue.glossy,
-				LOBE_DRYING
-			)
-			local made = tongue.record
-			if made and moved and not made.dead then
-				BloodAge.touch(made) -- (its moving front: wet and bright)
-			end
-		end
-	end
-	for _, finger in pool.fingers do
-		local parent = finger.parent
-		for _, part in finger.parts do
-			local origin, a, b
-			if part.attached and parent then
-				origin = pool.center
-				a = math.max(parent.reach - 0.4, 0)
-				b = math.max(part.tip, parent.reach)
-			else
-				origin = part.base
-				a = -0.15
-				b = part.tip
-			end
-			if b - a > 0.2 and b - part.drawn > 0.01 then
-				local moved = b - part.drawn > 0.02
-				part.drawn = b
-				local width = finger.width * (0.6 + 0.4 * math.min(1, (b - a) / 1.5))
-				part.record, part.l0, part.w0 = drawLobe(
-					pool,
-					part.record,
-					part.l0,
-					part.w0,
-					origin,
-					part.normal,
-					part.dir,
-					a,
-					b,
-					width,
-					part.layer,
-					false,
-					FINGER_DRYING
-				)
-				local made = part.record
-				if made and moved and not made.dead then
-					BloodAge.touch(made)
-				end
-			end
+		local runRecord = if run then run.record else nil
+		if runRecord and not runRecord.dead then
+			BloodAge.touch(runRecord)
 		end
 	end
 end
 
 -- Is it still spreading?
 local function moving(pool: Pool, now: number): boolean
+	if pool.into then
+		return true
+	end
 	if now < pool.feedUntil + pool.spec.tail then
 		return true
 	end
 	if pool.priority >= 2 and now < pool.born + pool.spreadTime + 2 then
 		return true
 	end
-	-- (fingers still creeping, a little longer at most)
-	if now < pool.born + pool.spreadTime + 20 then
-		for _, finger in pool.fingers do
-			if not finger.done then
-				return true
-			end
-		end
+	if pool.target - pool.radius > 0.01 then
+		return true
 	end
-	return false
+	local run = pool.run
+	return run ~= nil and run.length < run.reach - 0.01 and now < pool.born + pool.spreadTime + 20
 end
 
 -- A finisher's pool already there (a body we only see after it happened):
--- `size` studs across, fully spread at once (its tongues and fingers run
--- their whole course now, the same as the live one). Once per `seed`
+-- `size` studs across, fully spread at once (the same shape as the live
+-- one: it merges with one already there just the same). Once per `seed`
 -- (BloodPool.claim).
 function BloodPool.lay(position: Vector3, size: number, seed: number)
 	if not Config.Blood.ENABLED or not FINISHER_POOLS.ENABLED or not BloodPool.claim(seed) then
@@ -1314,39 +1004,28 @@ function BloodPool.lay(position: Vector3, size: number, seed: number)
 		-- still spreading live: that one just gets bigger, as it goes)
 		return
 	end
-	-- (as if it had been spreading all this time: run it to its end now,
-	-- half a second at a time, and draw it once)
+	-- (as if it had been spreading all this time: straight to its end)
 	local now = os.clock()
 	pool.born = math.min(pool.born, now - spreadTime - 1)
 	pool.feedUntil = 0
-	for _ = 1, 160 do
-		step(pool, 0.5, now)
-		if not moving(pool, now) then
-			break
-		end
-		local still = true
-		for _, tongue in pool.tongues do
-			local target = tongue.natural + tongue.boost
-			if tongue.stop == nil and target - tongue.reach > 0.02 then
-				still = false
-				break
-			end
-		end
-		if still then
-			local fingersDone = true
-			for _, finger in pool.fingers do
-				fingersDone = fingersDone and finger.done
-			end
-			if fingersDone then
-				break
-			end
+	for _ = 1, 4 do
+		step(pool, 0.5, now, true)
+	end
+	-- (another finisher pool laid here already, overlapping: one pool)
+	mergeAll(now, pool)
+	for _, other in pools do
+		if other.into and (other == pool or other.into == pool) then
+			step(other, 0.5, now, true)
 		end
 	end
-	for _, finger in pool.fingers do
-		finger.done = true
+	local into = pool.into
+	local final = if into then into else pool
+	for _ = 1, 4 do
+		step(final, 0.5, now, true)
 	end
 	pool.fedArea = pool.area
-	draw(pool, false)
+	final.fedArea = final.area
+	draw(final, false)
 end
 
 ------------------------------------------------------------------------------
@@ -1359,9 +1038,12 @@ function BloodPool.wetAt(position: Vector3): number
 	for _, pool in pools do
 		local record = pool.record
 		if record and not record.dead then
-			local gap = position - pool.center
+			local gap = position - (pool.center + pool.offset)
 			local flat = gap - pool.normal * gap:Dot(pool.normal)
-			if math.abs(gap:Dot(pool.normal)) < 1 and flat.Magnitude < pool.front * 1.05 + 0.15 then
+			if
+				math.abs(gap:Dot(pool.normal)) < 1
+				and flat.Magnitude < pool.radius * 1.05 + 0.15
+			then
 				best = math.max(best, BloodAge.wetness(record))
 			end
 		end
@@ -1436,8 +1118,8 @@ function BloodPool.absorb(position: Vector3, random: Random?, height: number?): 
 	local now = os.clock()
 	for _, pool in pools do
 		local record = pool.record
-		if record and not record.dead then
-			local gap = position - pool.center
+		if record and not record.dead and pool.into == nil then
+			local gap = position - (pool.center + pool.offset)
 			local flat = gap - pool.normal * gap:Dot(pool.normal)
 			if math.abs(gap:Dot(pool.normal)) < 0.4 and flat.Magnitude < pool.radius * 0.85 then
 				if BloodAge.wetness(record) < 0.3 then
@@ -1459,7 +1141,8 @@ function BloodPool.absorb(position: Vector3, random: Random?, height: number?): 
 	return false, false
 end
 
--- A pool gone (aged out, evicted): its starbursts go with it.
+-- A pool gone (aged out, evicted, taken in by another): its starbursts and
+-- its run go with it.
 local function dropExtras(pool: Pool)
 	for _, extra in pool.extras do
 		if not extra.dead then
@@ -1467,6 +1150,10 @@ local function dropExtras(pool: Pool)
 		end
 	end
 	table.clear(pool.extras)
+	local run = pool.run
+	if run and run.record and not run.record.dead then
+		BloodAge.remove(run.record)
+	end
 end
 
 local accumulated = 0
@@ -1490,13 +1177,14 @@ RunService.Heartbeat:Connect(function(dt: number)
 		end
 		if moving(pool, now) then
 			step(pool, stepTime, now)
-			-- (blood came in since last time: its middle is wet and red again)
+			-- (blood came in since last time: it is wet and red again)
 			local fed = pool.area > pool.fedArea + 1e-4
 			pool.fedArea = pool.area
 			draw(pool, fed)
 		end
 		index += 1
 	end
+	mergeAll(now)
 	debug.profileend()
 end)
 

@@ -637,12 +637,12 @@ end
 -- The finishers' big pools
 ------------------------------------------------------------------------------
 
--- How big the pool of `wound` gets once it has spread: studs across, the
--- front's radius then, and the area (studs²) to pour for it (BloodPool
--- spreads that area: its front gets there CREEP seconds after the wound
--- stops, its fingers run on beyond it).
+-- How big the pool of `wound` gets once it has spread: studs across, its
+-- radius then, and the area (studs²) to pour for it (BloodPool spreads that
+-- area: its edge gets there CREEP seconds after the wound stops).
 local function poolSize(wound: Wound): (number, number, number)
-	local size = FINISHER_POOLS.SIZE_PER_LITRE * math.sqrt(math.max(wound.LITRES, 0))
+	local size = FINISHER_POOLS.SIZE_PER_LITRE
+		* math.max(wound.LITRES, 0) ^ FINISHER_POOLS.SIZE_POWER
 	local radius = size / 2
 	return size, radius, math.pi * radius * radius
 end
@@ -735,7 +735,7 @@ function BloodGush.stump(
 			task.wait(opts.delay)
 		end
 		local params = floorParams(opts.ignore or {})
-		local paramsAt = os.clock()
+		local paramsAt = BloodStain.groundStamp()
 		local start = os.clock()
 		local last = os.clock()
 		local done = 0 -- (ticks poured so far)
@@ -747,9 +747,11 @@ function BloodGush.stump(
 		while done < #amounts do
 			task.wait(STUMP_TICK)
 			local now = os.clock()
-			if now - paramsAt > 1 then
-				-- (new fighters joined: the ray goes through them too)
-				paramsAt = now
+			local stamp = BloodStain.groundStamp()
+			if stamp ~= paramsAt then
+				-- (new fighters joined, or the body was swapped for its frozen
+				-- copy: the ray goes through them too - never a pool on a body)
+				paramsAt = stamp
 				params = floorParams(opts.ignore or {})
 			end
 			-- where the wound is now (its body gone: where it was)

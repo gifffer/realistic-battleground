@@ -246,6 +246,21 @@ local function ground(): RaycastParams
 	return groundParams
 end
 BloodStain.ground = ground
+-- A new fighter or a new frozen body (a finisher's body swapped for its
+-- copy): the list above is made again at once, not up to a second later -
+-- else for that second blood would land ON the new body, or a pool's ray
+-- would take it for a wall.
+for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do
+	CollectionService:GetInstanceAddedSignal(tag):Connect(function()
+		paramsAt = 0
+	end)
+end
+-- When the list was last made (os.clock): a copy of it is out of date if this
+-- changed since.
+function BloodStain.groundStamp(): number
+	ground()
+	return paramsAt
+end
 
 -- Rough ground: blood soaks in (dries faster, lets the ground show through).
 local POROUS: { [Enum.Material]: boolean } = {
