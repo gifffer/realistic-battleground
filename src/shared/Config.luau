@@ -671,18 +671,18 @@ return table.freeze({
 		-- Its size once it is done spreading: SIZE_PER_LITRE studs across for
 		-- 1 litre, × the litres to the power SIZE_POWER (a bit more than the
 		-- square root: a small wound makes a small pool):
-		--   the torso cut in two 3.8 L ≈ 9.5 studs, the neck 3.4 L ≈ 8.9,
-		--   the shoulder 3 L ≈ 8.2, the liver hole / the Bull's legs 2.6 L ≈ 7.5,
-		--   the portal's legs 2.4 L ≈ 7.1, the torn arm 0.6 L ≈ 3,
-		--   the liver itself 0.3 L ≈ 1.9.
+		--   the torso cut in two 3.8 L ≈ 8.1 studs, the neck 3.4 L ≈ 7.6,
+		--   the shoulder 3 L ≈ 7, the liver hole / the Bull's legs 2.6 L ≈ 6.4,
+		--   the portal's legs 2.4 L ≈ 6, the torn arm 0.6 L ≈ 2.6,
+		--   the liver itself 0.3 L ≈ 1.6.
 		-- (For scale: a body is ~5 studs long. In real life 1.5 L on a hard
 		-- floor is a pool ~1 m across, ~2 mm thick; these are about twice
 		-- that, like games and films show them - a body lying in a big dark
 		-- lake. Change SIZE_PER_LITRE to make them all bigger or smaller, in
-		-- proportion: 2.4 was the old, smaller look.)
+		-- proportion: 2.4 was the old, smaller look; 4.1 a bit too big.)
 		FINISHER_POOLS = table.freeze({
 			ENABLED = true, -- false: no big finisher pools (the spurts still land)
-			SIZE_PER_LITRE = 4.1, -- studs across for 1 litre...
+			SIZE_PER_LITRE = 3.5, -- studs across for 1 litre...
 			SIZE_POWER = 0.63, -- ...× litres ^ this (0.5 = the square root)
 			-- seconds the pool keeps spreading after its wound stops pouring
 			-- (slower and slower: you see it keep growing ~30-40 s in all)

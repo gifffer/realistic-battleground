@@ -55,8 +55,10 @@ local BLOOD_WET = PALETTE.ARTERIAL -- fresh, arterial (brighter)
 local GRAVITY = 60 -- studs/s², what the particles use too (they look heavier)
 local FINISHER_POOLS = Config.Blood.FINISHER_POOLS
 local STUMP_TICK = 0.1 -- seconds between two pours of a stump
--- (where the neck pours, in the torso's space: the top, where the head was)
+-- (where the neck pours, in the torso's space: the top of the stump...)
 BloodGush.NECK_POINT = Vector3.new(0, 1.1, 0)
+-- (...and where its pool is: under where the head was, its middle)
+BloodGush.NECK_POOL = Vector3.new(0, 1.5, 0)
 
 -- One wound of Config.Blood.FINISHER_POOLS (NECK, SHOULDER...).
 export type Wound = {
@@ -70,10 +72,9 @@ export type StumpOptions = {
 	ignore: { Instance }?, -- (what the floor ray goes through: the body, an organ)
 	delay: number?, -- seconds before it starts
 	drag: boolean?, -- false: no smear while it slides (its module draws one)
-	-- false: the pool stays centred on the wound instead of flowing toward
-	-- the middle of the body part (the neck: the pool is where the head was,
-	-- it must not slide down toward the legs as it grows)
-	under: boolean?,
+	-- where its pool is (in the part's space) when not right under the
+	-- wound (the neck: under where the head was)
+	at: Vector3?,
 	-- true: once the first blood reaches the floor, the pool stays THERE
 	-- even if the body slides or rolls afterwards (the head burst: the pool
 	-- grows where the skull broke, not where the body ends up)
@@ -606,7 +607,7 @@ function BloodGush.neck(model: Model, seed: number)
 		BloodGush.NECK_POINT,
 		FINISHER_POOLS.NECK,
 		seed + 101,
-		{ ignore = { model :: Instance }, under = false, pin = true }
+		{ ignore = { model :: Instance }, at = BloodGush.NECK_POOL, pin = true }
 	)
 end
 
@@ -749,6 +750,9 @@ function BloodGush.stump(
 		local done = 0 -- (ticks poured so far)
 		local carried = 0 -- (blood held back while it moved)
 		local source = part.CFrame * localPoint
+		-- (where its pool is: under the wound, or opts.at)
+		local poolPoint = opts.at or localPoint
+		local spot = part.CFrame * poolPoint
 		local nextDrip = 0
 		local drags = 0
 		local dragFrom: Vector3? = nil
@@ -767,6 +771,7 @@ function BloodGush.stump(
 			local previous = source
 			if part.Parent then
 				source = part.CFrame * localPoint
+				spot = part.CFrame * poolPoint
 			end
 			local dt = math.max(now - last, 1e-3)
 			last = now
@@ -779,7 +784,7 @@ function BloodGush.stump(
 				amount += amounts[done]
 			end
 			local hit =
-				workspace:Raycast(source + Vector3.new(0, 0.3, 0), Vector3.new(0, -14, 0), params)
+				workspace:Raycast(spot + Vector3.new(0, 0.3, 0), Vector3.new(0, -14, 0), params)
 			local height = if hit then source.Y - hit.Position.Y else math.huge
 			if
 				pinned == nil
@@ -839,12 +844,8 @@ function BloodGush.stump(
 			if floor.Material == Enum.Material.Water then
 				continue -- (washed away)
 			end
-			-- (its pool flows a little toward the body part, under it: the
-			-- middle of the part, seen from the wound)
-			local toward = if opts.under == false
-				then nil
-				else (if part.Parent then part.Position else source) - source
-			BloodPool.pour(key, floor, amount + carried, R, seed, spreadTime, toward)
+			-- (its pool never moves: it grows where this blood first landed)
+			BloodPool.pour(key, floor, amount + carried, R, seed, spreadTime)
 			carried = 0
 			-- oozing (after the spurts): drops falling off the wound into it
 			local t = now - start
@@ -864,20 +865,13 @@ function BloodGush.stump(
 end
 
 -- The pool of a finisher's wound already there (a body we only see after
--- the finisher, or its frozen copy): its full size at once, under
--- `localPoint` (in `part`'s space). Once per `seed`: the live one (stump)
--- with the same seed, or an earlier look at this body, wins.
-function BloodGush.lay(
-	part: BasePart,
-	localPoint: Vector3,
-	wound: Wound,
-	seed: number,
-	under: boolean?
-)
+-- the finisher, or its frozen copy): its full size at once, centred under
+-- `localPoint` (in `part`'s space: where the live one is, StumpOptions.at
+-- for the neck). Once per `seed`: the live one (stump) with the same seed,
+-- or an earlier look at this body, wins.
+function BloodGush.lay(part: BasePart, localPoint: Vector3, wound: Wound, seed: number)
 	local size = poolSize(wound)
-	local at = part.CFrame * localPoint
-	-- (under = false: centred on the wound, see StumpOptions.under)
-	BloodPool.lay(at, size, seed, if under == false then nil else part.Position - at)
+	BloodPool.lay(part.CFrame * localPoint, size, seed)
 end
 
 return table.freeze(BloodGush)
