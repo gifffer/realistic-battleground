@@ -2,17 +2,20 @@
 -- MenuController: the top bar buttons and their panels (everything that
 -- isn't fighting).
 --
--- Top bar: a row of dark round buttons right next to Roblox's own (menu,
--- chat...), the same height and look: an icon, a short word on some
--- ("Kits"), a small white count when there is something to look at.
+-- Top bar: copies Roblox's own bar (docs/UI_ROBLOX_STYLE.md), right of
+-- its buttons: 44 px black pills at 0.3 transparency, white 22 px line
+-- icons. A section with a word ("Kits") gets its own pill; the icon-only
+-- sections share ONE pill, like Roblox's menu / chat / mic pill. Under the
+-- mouse a faint round light shows behind the icon; an open section keeps a
+-- pale round mark. A small white count = something to look at.
 -- One button per section. A button opens its OWN panel; the same button,
 -- Escape, or a click / tap outside the panel closes it. One panel at a
 -- time (opening another one swaps them). The menu key (M) opens the last
 -- panel seen and closes the open one (not while typing in the chat).
 --
--- Panel: one black see-through plate (no border) under the top bar,
--- centred: optional small tabs above it on the left, a bold centred title
--- (and a grey line under it), then the section's content.
+-- Panel: one near-black plate with 12 px corners (Roblox's dark menus)
+-- under the top bar, centred: optional small tabs above it on the left, a
+-- bold centred title, a faint divider, then the section's content.
 --
 -- Each feature ADDS ITS OWN section from its controller:
 --
@@ -60,11 +63,15 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local player = Players.LocalPlayer
 local C = Theme.Colors
 
--- Top bar buttons (like Roblox's own: 44 px round plates).
+-- Top bar (Roblox's own sizes: 44 px pills, 22 px icons, 36 px hover light).
 local PILL = 44
-local PILL_GAP = 8
+local PILL_GAP = 8 -- between pills
+local PILL_TRANSPARENCY = 0.3 -- black at 0.3, like Roblox's
+local SLOT = 42 -- one icon's room in the shared pill
+local SLOT_EDGE = 2 -- the shared pill's padding at both ends
+local SPOT = 36 -- the round light behind an icon
 local ICON = 22
-local LABEL_SIZE = 17
+local LABEL_SIZE = 16
 -- Panels.
 local PAD = 16 -- inside the plate
 local TITLE_H = 30
@@ -95,8 +102,8 @@ export type MenuEntry = {
 
 type EntryUi = {
 	entry: MenuEntry,
-	baseWidth: number, -- the button's width at the full 44 px height
 	button: TextButton,
+	spot: Frame, -- the light behind the icon (hover / open)
 	icon: Frame,
 	text: TextLabel?,
 	badge: Frame,
@@ -111,7 +118,9 @@ type EntryUi = {
 local MenuController = {}
 
 local gui: ScreenGui
-local bar: ScrollingFrame -- the row of buttons
+local bar: Frame -- the row of pills
+local barScale: UIScale -- follows Roblox's bar height (36 px on the old one)
+local group: Frame -- the shared pill of the icon-only buttons
 local tooltip: TextLabel
 local panelLayer: Frame
 local entries: { [string]: EntryUi } = {}
@@ -125,109 +134,180 @@ local hiddenReasons: { [string]: boolean } = {}
 -- Top bar
 ------------------------------------------------------------------------------
 
+-- Smallest free part of Roblox's bar we accept to sit in (else: under it).
+local MIN_BAR_HEIGHT = 24
+-- Height assumed for Roblox's bar when nothing says how tall it is (the
+-- new style, the tallest: our row then never ends up under its buttons).
+local FALLBACK_LEFT = 216
+local FALLBACK_TOP = 10
+
 -- Where Roblox leaves room for us: (left x, top y, height, right x) in screen pixels.
+-- In Roblox's bar, right of its buttons, when TopbarInset gives a usable
+-- free area. Otherwise (not reported yet, hidden, too small, odd values):
+-- our own row top left, UNDER Roblox's bar, never behind its buttons
+-- (CoreGui is always drawn above every PlayerGui).
 local function barArea(viewport: Vector2): (number, number, number, number)
 	local inset = GuiService.TopbarInset
-	if inset.Height <= 0 then
-		-- No Roblox bar reported (hidden, old client): our own row top left.
-		return 12, 12, PILL, viewport.X - 12
+	local usable = inset.Height >= MIN_BAR_HEIGHT
+		and inset.Max.Y <= viewport.Y * 0.5
+		and inset.Min.X >= 0
+		and inset.Max.X <= viewport.X + 1
+		and inset.Max.X - inset.Min.X >= PILL + 12
+	if usable then
+		local height = math.min(PILL, inset.Height - 4)
+		local top = math.max(0, inset.Min.Y + inset.Height - height - 2)
+		return inset.Min.X + 4, top, height, inset.Max.X - 8
 	end
-	local height = math.min(PILL, inset.Height - 4)
-	local top = math.max(0, inset.Height - height - 2)
-	return inset.Min.X + 4, top, height, inset.Max.X - 8
+	-- (Roblox doesn't say where its bar is: right of its usual buttons, on
+	-- the same line - its logo and menu pills end about 210 px in)
+	return FALLBACK_LEFT, FALLBACK_TOP, PILL, viewport.X - 12
 end
 
+-- Roblox's states: hover = white at 0.9 behind the icon; open = the pale
+-- spot at 0.85 (TopbarPlus "Selected"; 0.8 under the mouse). The icon
+-- stays white.
 local function paintButton(ui: EntryUi, hovered: boolean)
 	local open = openId == ui.entry.id
-	ui.button.BackgroundColor3 = if open then C.InkHi else C.Pill
-	ui.button.BackgroundTransparency = if open then 0.05 elseif hovered then 0.12 else 0.3
-	local ink = if open then C.Scrim else C.InkHi
-	Icons.paint(ui.icon, ink)
-	local text = ui.text
-	if text then
-		text.TextColor3 = ink
-	end
+	ui.spot.BackgroundColor3 = if open then C.Spot else C.InkHi
+	local transparency = if open then (if hovered then 0.8 else 0.85) elseif hovered then 0.9 else 1
+	Theme.tween(ui.spot, Theme.FAST, { BackgroundTransparency = transparency })
 end
 
 local function layoutBar()
-	local camera = workspace.CurrentCamera
-	if camera == nil then
+	local left, top, height = barArea(Theme.viewport())
+	-- A shorter Roblox bar (old style, 36 px): our pills shrink to match.
+	barScale.Scale = height / PILL
+	-- (6 px of room above for the badges, which stick out)
+	bar.Position = UDim2.fromOffset(left, top - 6 * barScale.Scale)
+	-- The shared pill sits where its first section would.
+	local first: number? = nil
+	for _, ui in entries do
+		if ui.entry.buttonText == nil and (first == nil or ui.entry.order < first) then
+			first = ui.entry.order
+		end
+	end
+	group.LayoutOrder = first or 0
+	group.Visible = first ~= nil
+end
+
+-- One look, a few seconds in: a bar with no size, outside the screen or
+-- with no buttons says so in Output (it used to vanish silently).
+local function checkBarOnce()
+	if next(hiddenReasons) ~= nil then
 		return
 	end
-	local viewport = camera.ViewportSize
-	local left, top, height, right = barArea(viewport)
-	-- A shorter Roblox bar (old style, 36 px): our buttons shrink to match.
-	local scale = height / PILL
-	local width = 0
+	local viewport = Theme.viewport()
+	local position = bar.AbsolutePosition
+	local size = bar.AbsoluteSize
+	local problem: string? = nil
 	local count = 0
-	for _, ui in entries do
-		local holder = ui.button.Parent :: Frame
-		holder.Size = UDim2.fromOffset(math.floor(ui.baseWidth * scale + 0.5), height)
-		width += holder.Size.X.Offset
+	for _ in entries do
 		count += 1
 	end
-	width += math.max(count - 1, 0) * PILL_GAP
-	local room = math.max(height, right - left)
-	-- (6 px of room above and right for the badges, which stick out)
-	bar.Position = UDim2.fromOffset(left, top - 6)
-	bar.Size = UDim2.fromOffset(math.min(width + 12, room), height + 12)
-	bar.CanvasSize = UDim2.new(0, width + 12, 1, 0)
-	bar.ScrollingEnabled = width + 12 > room
+	if count == 0 then
+		problem = "no button registered"
+	elseif size.X < 1 or size.Y < 1 then
+		problem = "zero size"
+	elseif
+		position.X + size.X <= 0
+		or position.Y + size.Y <= 0
+		or position.X >= viewport.X
+		or position.Y >= viewport.Y
+	then
+		problem = "off screen"
+	elseif not gui.Enabled or gui.Parent == nil or not bar.Visible then
+		problem = "hidden"
+	end
+	if problem then
+		warn(
+			`[Menu] top bar not visible ({problem}): position {position}, size {size}, `
+				.. `viewport {viewport}, TopbarInset {GuiService.TopbarInset}, `
+				.. `GuiInset {GuiService:GetGuiInset()}, buttons {count}`
+		)
+	end
+end
+
+-- The round light behind an icon (Roblox's hover / open mark).
+local function makeSpot(parent: Instance, size: UDim2): Frame
+	return Theme.make("Frame", {
+		Name = "Spot",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = size,
+		BackgroundColor3 = C.InkHi,
+		BackgroundTransparency = 1,
+		Parent = parent,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+	}) :: Frame
 end
 
 local function buildButton(entry: MenuEntry): EntryUi
 	local word = entry.buttonText
-	local wordWidth = if word
-		then TextService:GetTextSize(
-			word,
-			LABEL_SIZE,
-			Enum.Font.BuilderSansMedium,
-			Vector2.new(1000, 100)
-		).X + 2
-		else 0
-	local width = if word then 14 + ICON + 8 + wordWidth + 16 else PILL
-	local holder = Theme.make("Frame", {
-		Name = entry.id,
-		LayoutOrder = entry.order,
-		Size = UDim2.fromOffset(width, PILL),
-		BackgroundTransparency = 1,
-		Parent = bar,
-	}) :: Frame
-	local button = Theme.make("TextButton", {
-		Name = "Button",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = C.Pill,
-		BackgroundTransparency = 0.3,
-		AutoButtonColor = false,
-		Text = "",
-		Parent = holder,
-	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
-	}) :: TextButton
-	local icon = Icons.draw(entry.icon, button, ICON)
-	icon.AnchorPoint = Vector2.new(if word then 0 else 0.5, 0.5)
-	icon.Position = if word then UDim2.new(0, 14, 0.5, 0) else UDim2.fromScale(0.5, 0.5)
+	local button: TextButton
+	local spot: Frame
+	local icon: Frame
 	local text: TextLabel? = nil
 	if word then
+		-- Its own pill: icon, then the word (like Roblox's labelled pills).
+		local wordWidth = TextService:GetTextSize(
+			word,
+			LABEL_SIZE,
+			Enum.Font.BuilderSansBold,
+			Vector2.new(1000, 100)
+		).X + 1
+		button = Theme.make("TextButton", {
+			Name = entry.id,
+			LayoutOrder = entry.order,
+			Size = UDim2.fromOffset(12 + ICON + 6 + wordWidth + 16, PILL),
+			BackgroundColor3 = C.Pill,
+			BackgroundTransparency = PILL_TRANSPARENCY,
+			AutoButtonColor = false,
+			Text = "",
+			Parent = bar,
+		}, {
+			Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		}) :: TextButton
+		spot = makeSpot(button, UDim2.new(1, -8, 1, -8))
+		icon = Icons.draw(entry.icon, button, ICON)
+		icon.AnchorPoint = Vector2.new(0, 0.5)
+		icon.Position = UDim2.new(0, 12, 0.5, 0)
 		text = Theme.text({
 			Name = "Word",
 			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, 14 + ICON + 8, 0.5, 0),
+			Position = UDim2.new(0, 12 + ICON + 6, 0.5, 0),
 			Size = UDim2.fromOffset(wordWidth, 20),
-			FontFace = Theme.Fonts.Label,
+			FontFace = Theme.Fonts.Display,
 			TextSize = LABEL_SIZE,
 			TextColor3 = C.InkHi,
 			TextStrokeTransparency = 1,
 			Text = word,
 			Parent = button,
 		}) :: TextLabel
+	else
+		-- A slot in the shared pill.
+		button = Theme.make("TextButton", {
+			Name = entry.id,
+			LayoutOrder = entry.order,
+			Size = UDim2.fromOffset(SLOT, PILL),
+			BackgroundTransparency = 1,
+			AutoButtonColor = false,
+			Text = "",
+			Parent = group,
+		}) :: TextButton
+		spot = makeSpot(button, UDim2.fromOffset(SPOT, SPOT))
+		icon = Icons.draw(entry.icon, button, ICON)
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
 	end
-	local badge, count = Panel.badge(button, UDim2.new(1, -4, 0, 4), 20)
+	-- Top right of the icon, a little over the pill's edge (like Roblox's).
+	local badgeAt = if word then UDim2.new(1, -8, 0, 9) else UDim2.new(0.5, 13, 0, 9)
+	local badge, count = Panel.badge(button, badgeAt, 20)
 
 	local ui: EntryUi = {
 		entry = entry,
-		baseWidth = width,
 		button = button,
+		spot = spot,
 		icon = icon,
 		text = text,
 		badge = badge,
@@ -239,8 +319,13 @@ local function buildButton(entry: MenuEntry): EntryUi
 		host = nil,
 	}
 	button.MouseEnter:Connect(function()
+		-- No hover on touch: a finger fires MouseEnter but often no
+		-- MouseLeave, so the light would stay stuck.
+		if Theme.isTouch() then
+			return
+		end
 		paintButton(ui, true)
-		if word == nil and not Theme.isTouch() then
+		if word == nil then
 			tooltip.Text = entry.hint or entry.label
 			local position = button.AbsolutePosition
 			local size = button.AbsoluteSize
@@ -294,10 +379,12 @@ local function createPanel(ui: EntryUi)
 		Name = "Plate",
 		Position = UDim2.fromOffset(0, tabsH),
 		Size = UDim2.new(1, 0, 1, -tabsH),
-		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
+		BackgroundColor3 = C.Surface,
+		BackgroundTransparency = Theme.SURFACE_TRANSPARENCY,
 		Active = true, -- (clicks on the plate don't reach the game)
 		Parent = panel,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS_LARGE) }),
 	}) :: Frame
 	-- The inner frame: the header on top (sections put their wallet there).
 	local inner = Theme.make("Frame", {
@@ -312,7 +399,7 @@ local function createPanel(ui: EntryUi)
 		Name = "Title",
 		Size = UDim2.new(1, 0, 0, TITLE_H),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 24,
+		TextSize = 22,
 		TextColor3 = C.InkHi,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -326,13 +413,22 @@ local function createPanel(ui: EntryUi)
 			Size = UDim2.new(1, 0, 0, SUBTITLE_H),
 			FontFace = Theme.Fonts.Label,
 			TextSize = 13,
-			TextColor3 = C.Ink2,
+			TextColor3 = C.Muted,
 			TextStrokeTransparency = 1,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Text = entry.subtitle,
 			Parent = inner,
 		})
 	end
+	-- A faint divider between the title and the content.
+	Theme.make("Frame", {
+		Name = "Divider",
+		Position = UDim2.fromOffset(0, header - 5),
+		Size = UDim2.new(1, 0, 0, 1),
+		BackgroundColor3 = C.InkHi,
+		BackgroundTransparency = Theme.DIVIDER_TRANSPARENCY,
+		Parent = inner,
+	})
 	-- The content scrolls when the screen is too short for it (layoutPanel).
 	local view = Theme.make("ScrollingFrame", {
 		Name = "View",
@@ -370,11 +466,7 @@ local function layoutPanel(ui: EntryUi)
 	if panel == nil or view == nil or scale == nil then
 		return
 	end
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local viewport = camera.ViewportSize
+	local viewport = Theme.viewport()
 	local entry = ui.entry
 	local _, barTop, barHeight = barArea(viewport)
 	local top = barTop + barHeight + SCREEN_GAP
@@ -535,8 +627,7 @@ end
 -- Screen pixels just under the bar's left end (DuelController puts its
 -- "Searching" line there).
 function MenuController.underBar(): Vector2
-	local camera = workspace.CurrentCamera
-	local viewport = if camera then camera.ViewportSize else Vector2.new(1920, 1080)
+	local viewport = Theme.viewport()
 	local left, top, height = barArea(viewport)
 	return Vector2.new(left + 4, top + height + 8)
 end
@@ -563,18 +654,16 @@ function MenuController.init()
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		DisplayOrder = 10,
+		DisplayOrder = 50,
 		Parent = player:WaitForChild("PlayerGui"),
 	})
-	bar = Theme.make("ScrollingFrame", {
+	-- (a plain row that grows with its pills: nothing clips them)
+	bar = Theme.make("Frame", {
 		Name = "TopBar",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollingDirection = Enum.ScrollingDirection.X,
-		ScrollingEnabled = false,
-		ScrollBarThickness = 0,
-		CanvasSize = UDim2.new(),
-		ElasticBehavior = Enum.ElasticBehavior.Never,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.new(),
 		Parent = gui,
 	}, {
 		Theme.make("UIListLayout", {
@@ -588,16 +677,37 @@ function MenuController.init()
 			PaddingTop = UDim.new(0, 6),
 			PaddingBottom = UDim.new(0, 6),
 		}),
-	}) :: ScrollingFrame
+	}) :: Frame
+	barScale = Theme.make("UIScale", { Parent = bar }) :: UIScale
+	group = Theme.make("Frame", {
+		Name = "Group",
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, PILL),
+		BackgroundColor3 = C.Pill,
+		BackgroundTransparency = PILL_TRANSPARENCY,
+		Visible = false,
+		Parent = bar,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		Theme.make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+		}),
+		Theme.make("UIPadding", {
+			PaddingLeft = UDim.new(0, SLOT_EDGE),
+			PaddingRight = UDim.new(0, SLOT_EDGE),
+		}),
+	}) :: Frame
 	tooltip = Theme.text({
 		Name = "Tooltip",
 		AnchorPoint = Vector2.new(0.5, 0),
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 22),
-		BackgroundColor3 = C.Pill,
-		BackgroundTransparency = 0.2,
+		Size = UDim2.fromOffset(0, 26),
+		BackgroundColor3 = C.Surface,
+		BackgroundTransparency = Theme.SURFACE_TRANSPARENCY,
 		FontFace = Theme.Fonts.Label,
-		TextSize = 13,
+		TextSize = 14,
 		TextColor3 = C.InkHi,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Center,
@@ -605,10 +715,10 @@ function MenuController.init()
 		ZIndex = 10,
 		Parent = gui,
 	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, 6) }),
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 		Theme.make("UIPadding", {
-			PaddingLeft = UDim.new(0, 8),
-			PaddingRight = UDim.new(0, 8),
+			PaddingLeft = UDim.new(0, 10),
+			PaddingRight = UDim.new(0, 10),
 		}),
 	}) :: TextLabel
 	panelLayer = Theme.make("Frame", {
@@ -625,6 +735,16 @@ function MenuController.init()
 		if ui then
 			layoutPanel(ui)
 		end
+	end)
+
+	-- Roblox can report its bar late (TopbarInset still empty at init): lay
+	-- out again once everything has registered and once CoreGui settled,
+	-- in case the change signal came before us or never comes.
+	task.defer(layoutBar)
+	task.delay(1, layoutBar)
+	task.delay(3, function()
+		layoutBar()
+		task.defer(checkBarOnce)
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)

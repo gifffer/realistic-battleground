@@ -1,0 +1,84 @@
+# Reference video 17: the movement to copy (walk, side-hop, backpedal, turns, run)
+
+The player sent this video to show **how the characters must move**. Every frame was analysed at 30 fps.
+- 0–9.4 s and 13.1–17 s: the reference game.
+- 9.5–13.1 s: OUR game at that time (the "FINISHER DEMO (Studio only)" label). It was used to list what was wrong with ours.
+
+The fire on the head and its long trail are the player's avatar accessory (seen in both games). It is not an effect to copy. It is a useful check, though: it draws the path of the head, and in the reference that path is always made of smooth curves. Any pop, restart or instant turn in an animation shows as a kink in it.
+
+Contact sheets (15 fps, the time is printed on each frame):
+- `video17_00s.jpg`: the forward walk.
+- `video17_02s.jpg`: the side-hop and the walk.
+- `video17_07s.jpg`: the backpedal with the arms up, then standing.
+- `video17_14s.jpg`: turns, the run and a stop, seen from above.
+
+The system is `src/client/Animation/Locomotion.luau`. Its clips were first made from this video, then replaced (the player's choice) by the Unreal ALS animations he sent, retargeted onto R6 (`ALSClips`, `tools/anim/als_retarget.py`). The rules below still apply.
+
+## What the reference does (measured)
+
+**One rhythm for everything.**
+- A cycle of two steps lasts 16 frames at 30 fps (0.53 s) in every direction; the run is about 0.50 s.
+- Every move (forward, back, sideways, run) keeps that cadence, so changing direction never breaks the rhythm.
+
+**Forward walk: a punchy "heel-flick" power-walk.**
+- Each leg flicks BACK hard (about −70..−75°) and a little outward (15–20°).
+- The arm on the same side punches forward and across the chest (about +80°). The other arm swings back, about −60°, crossing behind the back.
+- Torso twist ±10°. The head stays level.
+- The bob is highest at the flick and lowest when the foot plants.
+
+**Timing inside a step (what makes it fluid):**
+- 2 frames to rise to an extreme.
+- A short dwell of 2–3 frames that keeps drifting about 5°. It never freezes.
+- A return that slows down into the passing.
+- The arm LEADS the leg by about 1 frame on the way up and LAGS it by about 1 frame on the way down (overlap).
+- The arms travel on arcs: out at mid-swing, crossed in at the extremes.
+- At the passing, the arms keep moving: never both arms hanging still at once.
+
+**Side-hop (strafe).**
+- The lead leg kicks out sideways to hip height (about 85°) on every hop, two hops per cycle.
+- The arms take turns: one crosses behind the back while the other is flung out, and they loop rather than ping-pong.
+- The torso leans away from the kick.
+
+**Backpedal.**
+- Both arms are locked up and out in front (horizontal, about 45° out).
+- The legs scissor, with the front knee lifted at its forward extreme.
+- The body rocks side to side (±6°).
+
+**Run.** The walk's shape, bigger:
+- arms about ±70°;
+- the trailing leg nearly horizontal behind;
+- the torso pitched forward 10–15°;
+- a strong bob.
+
+**Starts, stops, direction changes.**
+- **Start:** the arm winds up first, and the first step follows about 0.13 s after the input.
+- **Stop:** the current swing finishes, then the body eases to standing in about 5 frames. No reverse swing, no overshoot.
+- **Reversal (left → right, forward → back):** the body passes through a short neutral (about 0.25 s), then the new direction starts on a wind-up.
+- **Turns:** the body turns smoothly, about 540°/s on average with ease in and ease out, and banks slightly into the turn (≤ 5°). The cycle never breaks in a turn.
+
+## What was wrong with ours (9.5–13 s)
+
+- **Extremes:** they froze for 3–7 frames, then the limbs whipped 70–90° in ONE frame through an idle-looking pose with both arms down. That is the "moving in blocks" look.
+- **Loop seam:** the joint speed jumped once per cycle at the loop seam, because of a tangent bug in `R6Pose` (one side jerked, the other did not).
+- **Restarts:** the cycle restarted from frame 0 on every start, stop and clip change. Walk → run crossfaded two different rhythms.
+- **Reversals:** they flipped the clip in one frame.
+- **Turns:** the body turned about 180° in 2 frames (AutoRotate / the shoulder camera), with no lean.
+- **Roblox's default walk and idle:** they showed through during fades, and the idle didn't match our walk.
+- **Uneven steps:** the playback rate came from the raw speed, so the steps were uneven.
+
+## Rules for every animation in this game
+
+Not just the walk:
+1. **Never freeze, never snap.** Extremes dwell with a little drift. Moves come in and out with eased curves or springs, not linear fades.
+2. **Overlap:** arms lag or lead legs by a frame or two. The head lags the torso and stays level.
+3. **Arcs:** limbs swing out between extremes, not on one straight line.
+4. **One rhythm:** loops that blend must share a phase and have their contacts at the same moments.
+5. **Transitions keep momentum:** switching animation starts the new pose at once and lets the difference melt away with a spring (inertialization). Never a half-mix of two poses.
+6. **Turns and leans come from physics:** lean into acceleration, bank into turns, through springs (no instant tilt).
+7. **Effects land on contacts:** a footstep effect fires on the frame the foot plants, from the animation's contact markers, not from a timer.
+
+## Footstep effects (our version, realistic)
+
+- **Plain steps:** a low puff of dust in the floor's own colour, on loose ground only (sand, dirt, mud, snow, gravel). Nothing on clean floors.
+- **Scuffs:** hard stops, sharp turns at speed. A flat spray of grit along the floor on rough floors.
+- **Bloody footprints:** already handled by `BloodTracks` after stepping in a pool.

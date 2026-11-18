@@ -13,6 +13,7 @@
 --       and is wiped at once in the park or a duel. Never much in the middle of the screen.
 --       Needs the pictures uploaded (Config.Weather.SCREEN_RAIN_IMAGES): until then, none.
 --     • RIPPLES in the puddles near you (tagged CityPuddle): small rings that open and fade.
+--     (the falling rain, the splashes and the ripples on the street: RainController)
 --     • SPLASHES on your own head and shoulders while you stand in the rain.
 --     (the drips under the roof edges, CityDrip, are switched on by the server: Ambience)
 --   FOG
@@ -57,8 +58,10 @@ local random = Random.new()
 -- Built-in Roblox textures (always there, nothing to upload).
 local SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local SPARKS = "rbxasset://textures/particles/sparkles_main.dds"
--- The ring of the default Explosion: a perfect ripple.
+-- The ring of the default Explosion: a perfect ripple (until our ripple flipbook,
+-- Config.Weather.RAIN_IMAGES.ripple, is uploaded).
 local RING = "rbxasset://textures/particles/explosion01_shockwave_main.dds"
+local RIPPLE_ID: number = W.RAIN_IMAGES.ripple
 
 ------------------------------------------------------------------------------
 -- Tuning
@@ -163,21 +166,34 @@ local function rippleEmitterFor(puddle: BasePart): ParticleEmitter
 	end
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Name = "RainRipples"
-	emitter.Texture = RING
 	emitter.Shape = Enum.ParticleEmitterShape.Box
 	emitter.EmissionDirection = Enum.NormalId.Top
 	-- moving (very slowly) straight up and drawn PERPENDICULAR to that: lying flat on the water
 	emitter.Orientation = Enum.ParticleOrientation.VelocityPerpendicular
 	emitter.Speed = NumberRange.new(0.02)
-	emitter.Lifetime = NumberRange.new(0.5, 0.85)
-	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.1),
-		NumberSequenceKeypoint.new(1, 1.3),
-	})
-	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.35),
-		NumberSequenceKeypoint.new(1, 1),
-	})
+	if RIPPLE_ID > 0 then
+		-- the ripple flipbook (assets/rain/rain_ripple.png): the ring grows and fades by itself
+		emitter.Texture = "rbxassetid://" .. tostring(RIPPLE_ID)
+		emitter.FlipbookLayout = Enum.ParticleFlipbookLayout.Grid4x4
+		emitter.FlipbookMode = Enum.ParticleFlipbookMode.OneShot
+		emitter.Lifetime = NumberRange.new(0.6, 0.8)
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1.5, 0.4),
+			NumberSequenceKeypoint.new(1, 1.5, 0.4),
+		})
+		emitter.Transparency = NumberSequence.new(0.25)
+	else
+		emitter.Texture = RING
+		emitter.Lifetime = NumberRange.new(0.5, 0.85)
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(1, 1.3),
+		})
+		emitter.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.35),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+	end
 	emitter.Color = ColorSequence.new(Color3.fromRGB(200, 210, 220))
 	emitter.LightInfluence = 1
 	emitter.ZOffset = 0.05

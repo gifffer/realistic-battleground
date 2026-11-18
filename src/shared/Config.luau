@@ -812,12 +812,37 @@ return table.freeze({
 		-- Speed of the restore wave, in studs per second.
 		POWER_WAVE_SPEED = 66,
 
-		-- Client: the rain around the camera.
-		RAIN_RATE = 900, -- drops per second (halved on low graphics quality)
-		RAIN_AREA = 90, -- side of the square area it falls on, in studs
-		RAIN_HEIGHT = 45, -- the drops start this high above the camera
-		RAIN_LEAD = 0.4, -- the area moves ahead of a moving camera (× its speed)
-		SPLASH_RATE = 220, -- little splashes on the ground around you
+		-- Client: the rain in the world (Client/Controllers/RainController, guide: docs/RAIN_FR.md).
+		-- Three depth layers: NEAR (big, long streaks in cells around the camera), MID (finer
+		-- streaks in a ring of bigger cells, up to ~105 studs) and FAR (rain curtains around the
+		-- camera at ~150 studs, plus the server's haze). Rates are at full rain, top quality; low
+		-- and medium graphics quality draw less (TIERS in RainController).
+		RAIN = table.freeze({
+			FALL_SPEED = 150, -- studs/s (real rain: about 9 m/s; 90-200 reads right on screen)
+			TOP = 70, -- the drops are born this high above the camera
+			NEAR_CELL = 14, -- side of a near cell (3 x 3 of them around the camera)
+			MID_CELL = 42, -- side of a mid cell (5 x 5 of them, the middle one is the near cells)
+			NEAR_RATE = 75, -- drops per second per near cell (at most 400 with a storm)
+			MID_RATE = 150, -- drops per second per mid cell (at most 400 with a storm)
+			NEAR_SIZE = NumberRange.new(0.2, 0.32), -- width of a near drop before the stretch
+			MID_SIZE = NumberRange.new(0.11, 0.16),
+			STRETCH = -3, -- ParticleEmitter.Squash (-3 = the longest streak along the fall)
+			SPLASHES = 70, -- splashes per second on the ground around you
+			SPLASH_RADIUS = 38, -- ...this far from the camera at most
+			CURTAINS = 10, -- far rain curtains (needs RAIN_IMAGES.sheet)
+			CURTAIN_RADIUS = 150, -- studs from the camera
+			CURTAIN_SPEED = 1.6, -- how fast the curtain's texture falls (flip the sign if it rises)
+		}),
+		-- Pictures of the world rain, made by tools/rain/make_rain_textures.py into assets/rain/.
+		-- Upload them (docs/RAIN_FR.md) and paste the IMAGE ids. 0 = not uploaded: the drop and
+		-- the splash fall back to a built-in Roblox sparkle, the ripple to the built-in ring, and
+		-- the far curtains are not drawn.
+		RAIN_IMAGES = table.freeze({
+			drop = 89305118963824, -- rain_drop.png (64 x 64)
+			splash = 93651150767117, -- rain_splash.png (4 x 4 flipbook)
+			ripple = 114893236357354, -- rain_ripple.png (4 x 4 flipbook)
+			sheet = 134093860801729, -- rain_sheet.png (1024 x 256, the far curtains)
+		}),
 		-- The one-line notice top-left ("RAIN", "POWER CUT").
 		NOTICE_TIME = 3,
 
@@ -843,6 +868,60 @@ return table.freeze({
 		-- You can also force one: in the Studio command bar (server), type
 		-- workspace:SetAttribute("WeatherForce", "Rain")   ("Rain", "Storm", "Fog", "PowerCut").
 		STUDIO_FAST = true,
+	}),
+
+	-- The city's window glass (Server/Systems/CityGlass sets the material for everyone,
+	-- Client/Controllers/GlassController adds the dirt, the rain on the glass and the
+	-- low-quality fallback). Look taken from docs/references/video14.md: a clear face with a
+	-- mirror sheen, darker edges, one highlight, light that goes through (no shadow).
+	Glass = table.freeze({
+		-- See-through panes (shop fronts, glass doors, transoms, phone box, skylight): the
+		-- engine's Glass material, a very light green-grey (float glass), no shadow.
+		CLEAR_COLOR = Color3.fromRGB(200, 214, 210),
+		CLEAR_TRANSPARENCY = 0.62,
+		CLEAR_REFLECTANCE = 0.18,
+		-- The same panes on low graphics quality (Glass nearly vanishes there) and seen from
+		-- inside a building (Roblox hides rain, beams and signs behind Glass on high quality).
+		PLAIN_COLOR = Color3.fromRGB(56, 66, 70),
+		PLAIN_TRANSPARENCY = 0.55,
+		PLAIN_REFLECTANCE = 0.14,
+		-- Panes with a wall right behind them (upper-floor windows, tower strips): opaque
+		-- dark glass that mirrors the sky. Each pane's tint varies a little (old glass).
+		DARK_REFLECTANCE = 0.32,
+		DARK_TINT_SPREAD = 0.12,
+
+		-- Pictures made by tools/glass/make_glass_textures.py, in assets/glass/. Upload them
+		-- (guide: docs/GLASS_FR.md) and paste the IMAGE ids here. 0 = not uploaded: that
+		-- layer is simply not drawn (the glass material itself still works).
+		IMAGES = table.freeze({
+			dirtWide = 134459334470369, -- glass_dirt_wide.png (shop fronts, transoms, strips)
+			dirtTall = 106840351675381, -- glass_dirt_tall.png (windows, doors, phone box)
+			rainBeads = 127340739642896, -- glass_rain_beads.png (drops sitting on the glass)
+			rainRuns = 104057695886112, -- glass_rain_runs.png (drops running down)
+		}),
+		-- How see-through the dirt layer is (1 = invisible).
+		DIRT_TRANSPARENCY = 0.3,
+		-- Size of one tile of the rain pictures on the glass, in studs.
+		BEADS_TILE = 3,
+		RUNS_TILE = Vector2.new(4, 14),
+		-- The running drops slide down this fast (studs/s); a thunderstorm × STORM_RUN.
+		RUN_SPEED = 0.4,
+		STORM_RUN = 1.6,
+		-- 1 or -1: flip it if, in Studio, the running drops climb UP the glass.
+		RUN_DIRECTION = 1,
+		-- Seconds for a pane to get fully wet once it rains, and to dry once it stops.
+		WET_TIME = 20,
+		DRY_TIME = 25,
+		-- Graphics tiers (Settings > Graphics quality 1-3 low, 4-7 / Automatic medium, 8-10
+		-- high; phones and tablets capped at medium): panes that get rain on them (the nearest ones), within this many studs.
+		RAIN_PANES = table.freeze({ low = 8, medium = 18, high = 32 }),
+		RAIN_RANGE = table.freeze({ low = 30, medium = 50, high = 70 }),
+		-- Panes that get the dirt layer, within this many studs (0 = none).
+		DIRT_RANGE = table.freeze({ low = 0, medium = 90, high = 160 }),
+		-- Broken glass (Server/Systems/Destruction → Client KitVFX): shards per broken piece,
+		-- and how long they stay on the ground (s).
+		SHARDS_PER_PIECE = 7,
+		SHARD_LIFE = NumberRange.new(16, 22),
 	}),
 
 	-- The freight train that crosses the railway viaduct (Server/Systems/Train decides when,

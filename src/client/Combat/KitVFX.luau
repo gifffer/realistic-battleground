@@ -2393,15 +2393,151 @@ local MAX_CHUNKS = 90 -- debris pieces per smash, at most
 
 type BrokenPiece = { cframe: CFrame, size: Vector3, color: Color3, material: Enum.Material }
 
+local GLASS_MAX = 60 -- glass shards per smash, at most
+local GLASS_LIVE_MAX = 120 -- glass shards on the ground at once, all smashes together
+local GLASS_GLINT = Color3.fromRGB(214, 232, 236)
+
+-- Shards still on the ground, oldest first.
+local liveShards: { BasePart } = {}
+
+local function dropShard(shard: BasePart)
+	local index = table.find(liveShards, shard)
+	if index then
+		table.remove(liveShards, index)
+	end
+end
+
+-- Room for one more shard: the oldest fades out fast when the cap is reached.
+local function makeShardRoom()
+	while #liveShards >= GLASS_LIVE_MAX do
+		local oldest = table.remove(liveShards, 1) :: BasePart
+		if oldest.Parent then
+			tween(oldest, 0.3, { Transparency = 1 })
+			Debris:AddItem(oldest, 0.35)
+		end
+	end
+end
+
+-- A shard that has come to rest is anchored: its long stay on the ground costs no physics.
+local function anchorAtRest(shard: BasePart)
+	task.spawn(function()
+		for _ = 1, 4 do
+			task.wait(2)
+			if shard.Parent == nil or shard.Anchored then
+				return
+			end
+			if shard.AssemblyLinearVelocity.Magnitude < 0.5 then
+				shard.Anchored = true
+				return
+			end
+		end
+	end)
+end
+
+-- A broken window pane: thin flat triangles of glass that keep the pane's thickness (the
+-- glass video: the thick edges are what reads as glass), see-through, no shadow; they stay
+-- on the ground a good while (gore rule: what breaks stays). Returns the shards made.
+local function glassShards(piece: BrokenPiece, point: Vector3, push: Vector3, count: number): number
+	local size = piece.size
+	local thin = math.min(size.X, size.Y, size.Z)
+	local span =
+		math.clamp(math.sqrt(size.X * size.Y * size.Z / math.max(thin, 0.01)) / 4, 0.5, 1.4)
+	for _ = 1, count do
+		makeShardRoom()
+		local edge = random:NextNumber(0.25, 1.1) * span
+		local shard = Instance.new("WedgePart")
+		shard.Size = Vector3.new(
+			math.max(thin * random:NextNumber(0.5, 1), 0.05),
+			edge,
+			edge * random:NextNumber(0.5, 1.3)
+		)
+		shard.Color = piece.color
+		shard.Material = Enum.Material.Glass
+		shard.Transparency = 0.45
+		shard.Reflectance = 0.25
+		shard.CastShadow = false
+		shard.CanQuery = false
+		shard.CanTouch = false
+		shard.CanCollide = true
+		shard.CustomPhysicalProperties = PhysicalProperties.new(2.4, 0.4, 0.1)
+		shard.CollisionGroup = DEBRIS_GROUP
+		local offset = Vector3.new(
+			random:NextNumber(-0.5, 0.5) * size.X,
+			random:NextNumber(-0.5, 0.5) * size.Y,
+			random:NextNumber(-0.5, 0.5) * size.Z
+		)
+		shard.CFrame = CFrame.new(piece.cframe.Position + offset)
+			* CFrame.Angles(
+				random:NextNumber(0, math.pi * 2),
+				random:NextNumber(0, math.pi * 2),
+				random:NextNumber(0, math.pi * 2)
+			)
+		local away = shard.Position - point
+		away = if away.Magnitude > 0.1 then away.Unit else random:NextUnitVector()
+		shard.AssemblyLinearVelocity = away * random:NextNumber(8, 24)
+			+ push * random:NextNumber(0.3, 0.9)
+			+ Vector3.new(0, random:NextNumber(2, 10), 0)
+		shard.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 25)
+		shard.Parent = fx
+		table.insert(liveShards, shard)
+		anchorAtRest(shard)
+		local life = random:NextNumber(Config.Glass.SHARD_LIFE.Min, Config.Glass.SHARD_LIFE.Max)
+		task.delay(life - 1.5, function()
+			if shard.Parent then
+				tween(shard, 1.5, { Transparency = 1 })
+			end
+		end)
+		task.delay(life, function()
+			dropShard(shard)
+			shard:Destroy()
+		end)
+	end
+	-- glitter: tiny flecks catching the light, falling fast
+	emit(piece.cframe.Position, {
+		texture = TEX.sparkle,
+		color = WHITE,
+		color2 = GLASS_GLINT,
+		size = { 0.16, 0.1, 0 },
+		transparency = { 0, 0.3, 1 },
+		speed = NumberRange.new(6, 18),
+		lifetime = NumberRange.new(0.3, 0.8),
+		spread = 70,
+		direction = if push.Magnitude > 0 then push.Unit else nil,
+		acceleration = Vector3.new(0, -40, 0),
+		drag = 3,
+		glow = 0.3,
+		count = 8,
+	})
+	return count
+end
+
 -- Every broken piece bursts into chunks of itself (its colour, material),
--- thrown away from `point` and along `push`; dust where it stood.
+-- thrown away from `point` and along `push`; dust where it stood. Glass
+-- bursts into thin shards instead, with a glint and the sound of it.
 local function wallDebris(pieces: { BrokenPiece }, point: Vector3, push: Vector3)
 	if #pieces == 0 then
 		return
 	end
+	local glassMade = 0
+	local glassCentre: Vector3? = nil
+	for _, piece in pieces do
+		if piece.material == Enum.Material.Glass and glassMade < GLASS_MAX then
+			local count = math.min(Config.Glass.SHARDS_PER_PIECE, GLASS_MAX - glassMade)
+			glassMade += glassShards(piece, point, push, count)
+			glassCentre = glassCentre or piece.cframe.Position
+		end
+	end
+	if glassCentre then
+		-- one cold glint (1-2 frames) and the crash
+		light(glassCentre, GLASS_GLINT, 4, 8, 0.08)
+		SoundController.playAt("BottleBreak", glassCentre, 90)
+	end
 	local budget = math.max(1, math.floor(MAX_CHUNKS / #pieces))
 	local made = 0
 	for index, piece in pieces do
+		if piece.material == Enum.Material.Glass then
+			continue
+		end
 		local size = piece.size
 		local nx = math.clamp(math.ceil(size.X / 1.8), 1, 3)
 		local ny = math.clamp(math.ceil(size.Y / 1.8), 1, 3)
