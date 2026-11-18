@@ -139,15 +139,10 @@ local HIT_SOUNDS: { [string]: string } = {
 	ThunderClap = "HeavyHit",
 	Skyfall = "HeavyHit",
 	Haymaker = "HeavyHit",
-	-- The Pyromaniac (his fire makes its own sounds: Combat/PyroFx)
-	ZippoFlare = "",
-	Molotov = "",
-	Firebomb = "",
-	FireBreath = "",
-	InfernoBreath = "",
-	Douse = "",
-	BurningFist = "HeavyHit",
-	BurningRush = "Tackle",
+	GoreCharge = "Tackle",
+	HornHook = "HeavyHit",
+	Stampede = "KickLow",
+	BullToss = "Tackle",
 	Shove = "BodyShot",
 	HammerFist = "HeavyHit",
 	DoubleHammer = "HeavyHit",
@@ -170,6 +165,15 @@ local HIT_SOUNDS: { [string]: string } = {
 	GravityGlove = "HeavyHit", -- (the blast itself: from the move start, RiftFx)
 	GravitySlam = "GloveBlast",
 	RiftSwarm = "Hit",
+	-- The Pyromaniac (his fire makes its own sounds: Combat/PyroFx)
+	ZippoFlare = "",
+	Molotov = "",
+	Firebomb = "",
+	FireBreath = "",
+	InfernoBreath = "",
+	Douse = "",
+	BurningFist = "HeavyHit",
+	BurningRush = "Tackle",
 }
 -- Sound when the move STARTS (the swing; "" = none).
 local START_SOUNDS: { [string]: string } = {

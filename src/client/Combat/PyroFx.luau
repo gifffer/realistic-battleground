@@ -1045,6 +1045,12 @@ local function endPool(pool: FirePool, early: boolean)
 			Debris:AddItem(cell.part, 1.5)
 		end
 	end
+	-- (out of the flicker first, or it keeps the light up over the tween)
+	for index = #flickers, 1, -1 do
+		if flickers[index].light == pool.light then
+			table.remove(flickers, index)
+		end
+	end
 	TweenService:Create(pool.light, TweenInfo.new(1.2), { Brightness = 0 }):Play()
 	Debris:AddItem(pool.centre, 8)
 	-- The black mark stays a while, then fades.

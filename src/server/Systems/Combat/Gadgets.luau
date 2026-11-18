@@ -465,14 +465,15 @@ local function throwFlask(
 					local direct: CombatState? = nil
 					if other and body and target(state, other) then
 						direct = other
-						if flask.kind == "Molotov" then
-							douse(other, 4) -- (the bottle broke on them)
-						end
-						c.resolveHit(
+						local landed = c.resolveHit(
 							state,
 							other,
 							specOf(flask.hit, PART_ZONES[part.Name], move.id, a)
 						)
+						-- (the bottle broke on them: only if it really landed)
+						if landed and flask.kind == "Molotov" and other.owner == nil then
+							douse(other, 4)
+						end
 					end
 					burst(state, move, flask, id, hit.Position, direct)
 					return true
@@ -872,10 +873,12 @@ local function cone(state: CombatState, move: Kits.MoveDef, def: Kits.ConeDef, t
 					local inside = distance < 2.5
 						or (distance <= def.range and flat.Unit:Dot(look) >= cosine)
 					if inside and math.abs(offset.Y) < 6 and inSight(mouth, other.model) then
-						if def.douse then
+						local landed =
+							c.resolveHit(state, other, specOf(def.hit, "Torso", move.id, mouth))
+						-- (soaked only if the spray landed: not blocked, dodged, protected)
+						if landed and def.douse and other.owner == nil then
 							douse(other, def.douse)
 						end
-						c.resolveHit(state, other, specOf(def.hit, "Torso", move.id, mouth))
 					end
 				end
 			end

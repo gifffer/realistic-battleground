@@ -51,6 +51,8 @@ function Immolate.run(
 			task.delay(event.time, function()
 				if going() and target.Parent then
 					onIgnite()
+					-- (its own burn slot is cleared: cut short, the flames go out too)
+					before["Burning"] = false
 					set(target, "Burning", "Fire", before)
 				end
 			end)

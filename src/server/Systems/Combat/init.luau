@@ -2187,8 +2187,8 @@ local function startCinematic(
 			elseif cinematic.id == "Immolate" then
 				Immolate.killed(target) -- (the body burns on)
 			end
-		elseif cinematic.id == "KnockoutCombo" then
-			-- (it didn't die after all: no hole left in a living body)
+		elseif cinematic.id == "KnockoutCombo" or cinematic.id == "Immolate" then
+			-- (it didn't die after all: no hole, no fire left on a living body)
 			for attribute, previous in woundsBefore do
 				setAttribute(target, attribute, if previous == false then nil else previous)
 			end
