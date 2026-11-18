@@ -1,13 +1,13 @@
 --!strict
 -- Pickups: things lying in the street that anyone can pick up and throw
--- (Shared/Weapons: the iron bar, the bottle, the plank). Like the bone
+-- (Shared/Weapons: the iron bar, the plank). Like the bone
 -- pulled out of a torn arm, but they come back.
 --
 -- Where they lie: invisible marker parts tagged "WeaponSpawn" (put by the city
 -- builders, at the edges of the map and in the alleys; markers added later
 -- count too). Each marker gives:
 --   CFrame position = the floor point it lies on, LookVector = along its length;
---   attribute Weapon = "IronBar" | "Bottle" | "Plank", or "Random" (one of
+--   attribute Weapon = "IronBar" | "Plank", or "Random" (one of
 --   the three, picked again each time it comes back).
 --
 -- On each marker the server lays the thing on the floor (plain parts built by
@@ -39,7 +39,6 @@ local HOLD_DURATION = 0.5
 -- What the prompt says it is (its ObjectText).
 local OBJECT_TEXT: { [string]: string } = {
 	IronBar = "Rusty pipe",
-	Bottle = "Empty bottle",
 	Plank = "Old board",
 }
 

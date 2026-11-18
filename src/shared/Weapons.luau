@@ -10,11 +10,9 @@
 --   "IronBar"  a length of rusty pipe lying in an alley. Heavy: hits hard,
 --              knocks back further. Doesn't break: it clangs off and lies
 --              there a few seconds.
---   "Bottle"   an empty glass bottle. Bursts on what it hits: glass in the
---              skin (the bottle's "Lac" cut), a small cut that bleeds.
 --   "Plank"    a worn board with a bent nail through one end. Cracks in two.
 --
--- The three from the street lie at the edges of the map and in the alleys
+-- The two from the street lie at the edges of the map and in the alleys
 -- (Server/Systems/Pickups, "WeaponSpawn" markers); the bone only comes from
 -- a torn arm (Server/Combat).
 --
@@ -69,16 +67,12 @@ local RUST = Color3.fromRGB(92, 50, 32)
 local RUST_DARK = Color3.fromRGB(62, 38, 28)
 local RUST_ORANGE = Color3.fromRGB(128, 66, 34)
 local STEEL_DIRTY = Color3.fromRGB(70, 66, 62)
-local GLASS = Color3.fromRGB(38, 58, 30) -- dark green beer-bottle glass
-local GLASS_THICK = Color3.fromRGB(56, 44, 24) -- browner where it is thick
-local LABEL = Color3.fromRGB(120, 104, 78) -- a faded, damp paper label
 local WOOD = Color3.fromRGB(108, 92, 72) -- weathered grey-brown pine
 local WOOD_DARK = Color3.fromRGB(74, 60, 46) -- dirt, rot at the ends
 local WOOD_FRESH = Color3.fromRGB(176, 146, 104) -- the inside, where it cracks
 local NAIL = Color3.fromRGB(64, 52, 44)
 
 local BAR_LENGTH = 3.2 -- about a metre of 1-inch pipe
-local BOTTLE_LENGTH = 1.25
 local PLANK_LENGTH = 3.2 -- about a metre of 2x4
 
 local ALONG_Y = CFrame.Angles(0, 0, math.rad(90)) -- (a cylinder's axis is its X)
@@ -177,57 +171,6 @@ local function buildIronBar(_piece: Piece): BasePart
 	end
 	local cut = pipe("Cut", 0.05, 0.004, STEEL_DIRTY, -BAR_LENGTH / 2 + 0.02)
 	cut.Material = Enum.Material.Metal
-	return root
-end
-
--- An empty bottle: the neck (where it is held, -Y), the shoulder, the body
--- with what is left of its label. Broken: only "A" is left, the neck and a
--- jagged ring of glass.
-local function buildBottle(piece: Piece): BasePart
-	local root = newRoot("Bottle")
-	local bottom = -BOTTLE_LENGTH / 2
-	local function glass(name: string, length: number, diameter: number, y: number, color: Color3?)
-		local part = newPart(
-			name,
-			Vector3.new(length, diameter, diameter),
-			color or GLASS,
-			Enum.Material.Glass,
-			Enum.PartType.Cylinder
-		)
-		part.Transparency = 0.3
-		part.CastShadow = false
-		attach(root, part, CFrame.new(0, y, 0) * ALONG_Y)
-		return part
-	end
-	glass("Lip", 0.06, 0.19, bottom + 0.03, GLASS_THICK)
-	glass("Neck", 0.45, 0.15, bottom + 0.26)
-	glass("Shoulder", 0.18, 0.25, bottom + 0.55)
-	if piece == "Whole" then
-		glass("Body", 0.62, 0.36, bottom + 0.95)
-		glass("Base", 0.04, 0.33, -bottom - 0.02, GLASS_THICK)
-		local label = glass("Label", 0.28, 0.365, bottom + 0.92)
-		label.Material = Enum.Material.Fabric
-		label.Color = LABEL
-		label.Transparency = 0
-	else
-		-- Jagged edge: a few thin shards round the broken shoulder.
-		for index = 0, 4 do
-			local shard = newWedge(
-				"Shard",
-				Vector3.new(0.04, 0.2 + (index % 2) * 0.14, 0.12),
-				GLASS,
-				Enum.Material.Glass
-			)
-			shard.Transparency = 0.25
-			attach(
-				root,
-				shard,
-				CFrame.new(0, bottom + 0.72, 0)
-					* CFrame.Angles(0, index * (math.pi * 2 / 5), 0)
-					* CFrame.new(0, 0, 0.11)
-			)
-		end
-	end
 	return root
 end
 
@@ -349,30 +292,7 @@ local registry: { [string]: WeaponDef } = {
 		bloodChance = { Head = 0.7, Torso = 0.2, Legs = 0.1 },
 		build = buildIronBar,
 	},
-	Bottle = {
-		id = "Bottle",
-		name = "BOTTLE",
-		damage = 12,
-		stun = 0.6,
-		knockback = 8,
-		speed = 100,
-		lift = 6,
-		gravity = 60,
-		release = 0.22,
-		recovery = 0.6,
-		lifetime = 3,
-		clip = "Bone_Throw",
-		moveId = "BottleThrow",
-		breaks = true,
-		cuts = "Lac",
-		bleed = { perSecond = 2, duration = 4 },
-		hitSound = "Hit",
-		breakSound = "BottleBreak",
-		length = BOTTLE_LENGTH,
-		grip = BOTTLE_LENGTH / 2 - 0.25,
-		bloodChance = { Head = 0.9, Torso = 0.5, Legs = 0.3 },
-		build = buildBottle,
-	},
+
 	Plank = {
 		id = "Plank",
 		name = "PLANK",
@@ -398,7 +318,7 @@ local registry: { [string]: WeaponDef } = {
 }
 
 -- What a "Random" street spawn picks from.
-Weapons.STREET = table.freeze({ "IronBar", "Bottle", "Plank" })
+Weapons.STREET = table.freeze({ "IronBar", "Plank" })
 
 local byMove: { [string]: WeaponDef } = {}
 for _, weapon in registry do
