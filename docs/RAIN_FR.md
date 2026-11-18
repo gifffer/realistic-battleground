@@ -62,7 +62,7 @@ Pendant l'événement météo **Rain** (et l'orage, sa version forte), la pluie 
 
 Les gouttes tombent à ≈ 150 studs/s, un peu penchées par le vent (beaucoup en orage, plus fort pendant une rafale). Elles sont posées sur une **grille fixe dans le monde** : quand tu marches, tu traverses la pluie, elle ne te suit pas.
 
-**Pas de pluie dedans** : le jeu connaît la hauteur du premier toit sous chaque morceau de ciel (quelques rayons vers le bas, gardés en mémoire) ; les gouttes s'arrêtent sur les toits, les auvents, le viaduc. Près de toi il prend le toit le plus haut (aucune goutte sous un auvent).
+**Pas de pluie dedans** : le jeu connaît la hauteur du premier toit sous chaque morceau de ciel (quelques rayons vers le bas, gardés en mémoire ~15 s puis relancés, et oubliés quand tu réapparais ou que tu es téléporté : un bâtiment qui arrive en streaming ou un toit cassé est vu) ; les gouttes s'arrêtent sur les toits, les auvents, le viaduc. Près de toi il prend le toit le plus haut, par carrés de 7 studs (aucune goutte sous un auvent, mais il pleut quand même dans la rue juste à côté d'un mur).
 
 Au sol : **petites couronnes d'éclaboussures** sur le sol dur (pas sur l'herbe), **petits cercles** sur le sol mouillé et dans les flaques, et une **brume** très légère au ras du sol. Le son de la pluie devient **sourd** sous un toit et à l'intérieur.
 

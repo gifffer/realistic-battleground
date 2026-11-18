@@ -522,6 +522,7 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | P7 | Settings Roblox → Graphics quality **1-3**, puis **8-10** | En bas : nettement moins de gouttes au loin, pas de petits cercles ni de brume, peu de rideaux ; en haut : tout. Les FPS ne doivent pas chuter (Shift+F5 : compare avec / sans pluie). En **Automatic**, la qualité de la pluie baisse toute seule si le jeu passe sous ~42 FPS. |
 | P8 | Entrer dans le parc, ou lancer un duel, pendant la pluie | Plus de pluie du tout (parc toujours ensoleillé, duel = arène). |
 | P9 | Brouillard / coupure juste après une pluie | Aucun reste de pluie, rien ne se mélange. |
+| P10 | Pendant la pluie : marcher le long d'un mur dans la rue, puis mourir / réapparaître ailleurs | Il pleut **juste à côté de toi** même collé à un bâtiment (pas de bande sèche autour de toi, pas d'éclaboussures sans gouttes). Après la réapparition, **aucune goutte** dans les bâtiments autour (même s'ils arrivent quelques secondes après). Sur un toit ou sur le pont, la pluie dans la rue en dessous reste fluide (pas de chute de FPS). Les rideaux au loin **ne sautent pas** quand tu cours. |
 
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
 

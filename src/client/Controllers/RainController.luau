@@ -8,10 +8,12 @@
 -- and the slanted fall of the drops (wind + gusts). This controller only draws, on THIS
 -- screen, and owns nothing but its own instances (in the camera):
 --
---   NEAR  3 x 3 cells of 14 studs around the camera: few, wide, long streaks (a drop is a
---         clear bead with a bright glint, stretched along its fall like motion blur).
+--   NEAR  3 x 3 cells of 14 studs around the camera, each split in 2 x 2 emitters of 7 studs
+--         (finer roofs): few, wide, long streaks (a drop is a clear bead with a bright glint,
+--         stretched along its fall like motion blur).
 --   MID   a ring of 24 cells of 42 studs, out to ~105 studs: thinner, denser, fainter streaks.
---   FAR   rain curtains at ~150 studs (Beams with a falling sheet of streaks), plus the haze
+--   FAR   rain curtains at ~150 studs (Beams with a falling sheet of streaks, a fixed ring that
+--         follows the camera smoothly), plus the haze
 --         the server adds to the sky: the distance turns grey, so it never looks like a filter
 --         stuck on the screen.
 --   GROUND splashes (a small crown of droplets) on hard ground around you, tiny ripple rings
@@ -21,9 +23,10 @@
 -- already falling stay where they are, nothing slides with the camera.
 --
 -- No rain inside: each cell knows how high the first roof below it is (a few rays straight
--- down, cached: the city does not move) and its drops die right there. Near cells take the
--- highest roof they cover (never a drop under an awning); mid cells take the middle value
--- (rain over the roofs of a block, on the street beside it).
+-- down, cached for a few seconds, then cast again: streamed-in or broken buildings are seen)
+-- and its drops die right there. Near cells take the highest roof they cover (never a drop
+-- under an awning); mid cells take the middle value (rain over the roofs of a block, on the
+-- street beside it).
 --
 -- Quality (Settings → Graphics quality): low (1-3), medium (4-7), high (8-10). "Automatic"
 -- cannot be read by a game: it starts medium and steps down / up with the frame rate. Phones
@@ -98,8 +101,21 @@ local RAYS_PER_FRAME = 48
 local SKY_Y = 320 -- rays start here (above the tallest roof)
 local RAY_LENGTH = 420
 local MAX_CACHED = 30000
+-- A known point is cast again after this (a building streamed in, a roof broken); "nothing
+-- here" is kept a shorter time.
+local SURFACE_TTL = 15
+local EMPTY_TTL = 3
+-- The camera moved this far in one frame (respawn, teleport): forget the whole map.
+local CAMERA_JUMP = 200
 -- Parts narrower than this (both ways) are not roofs: the rays go through them.
 local SMALL_PROP = 4
+-- See-through parts (invisible boxes, small props) a ray may pass before it gives up.
+local MAX_PASSES = 6
+-- Cells check their roofs again this often (seconds; cached points cost no ray).
+local REMEASURE_EVERY = 2
+-- The fall a drop is tuned for (camera on the street): a longer fall (camera on a roof) gets
+-- a lower rate, so the drops alive stay within the budget.
+local BASE_FALL = R.TOP + 5
 -- A near cell stops its rain at the highest surface at least this far above its lowest one (a
 -- car roof does not count, an awning or a ceiling does).
 local ROOF_ABOVE = 7
@@ -145,12 +161,18 @@ type Surface = {
 	y: number,
 	soft: boolean,
 	flat: boolean,
+	time: number, -- os.clock() of the ray
+	empty: boolean, -- nothing below (off the map, not streamed in)
 }
 
 type Curtain = {
 	beam: Beam,
 	top: Attachment,
 	bottom: Attachment,
+	jitter: number, -- fixed angle and distance offsets (no jump when the ring moves)
+	spread: number,
+	groundY: number?,
+	targetY: number?,
 }
 
 local folder: Folder
@@ -170,6 +192,8 @@ local curtainCenter: Vector3? = nil
 local curtainLevel = -1 -- the transparency step last applied to the curtains
 local curtainShown = 0 -- how many curtains were placed
 local nextPlace = 0
+local nextRemeasure = 0
+local lastCamera: Vector3? = nil
 local splashBudget = 0
 local active = false
 
@@ -180,8 +204,6 @@ local raysLeft = 0
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
--- Invisible parts the rays go through (zone boxes, invisible walls), found as we go.
-local skipped: { Instance } = {}
 local nextFilterRefresh = 0
 
 -- Quality.
@@ -245,6 +267,8 @@ end
 -- Height map (where the rain lands)
 ------------------------------------------------------------------------------
 
+-- Only our own instances and the characters: a short list (see-through parts are not
+-- listed, the rays restart just under them).
 local function refreshFilter()
 	local list: { Instance } = { folder }
 	local camera = workspace.CurrentCamera
@@ -256,9 +280,6 @@ local function refreshFilter()
 			table.insert(list, other.Character)
 		end
 	end
-	for _, part in skipped do
-		table.insert(list, part)
-	end
 	rayParams.FilterDescendantsInstances = list
 end
 
@@ -266,54 +287,86 @@ local function surfaceKey(x: number, z: number): number
 	return (x + 8192) * 16384 + (z + 8192)
 end
 
+local function remember(key: number, surface: Surface)
+	if surfaces[key] == nil then
+		if surfaceCount >= MAX_CACHED then
+			table.clear(surfaces)
+			surfaceCount = 0
+		end
+		surfaceCount += 1
+	end
+	surfaces[key] = surface
+end
+
 -- The first surface the rain meets at whole-stud point (x, z), or nil when it is not known
--- (out of rays this frame, nothing there, or not streamed in yet).
+-- (out of rays this frame, nothing there, or not streamed in yet). Old points are cast again;
+-- while out of rays, the old value is used.
 local function surfaceAt(x: number, z: number): Surface?
 	local key = surfaceKey(x, z)
 	local known = surfaces[key]
+	local now = os.clock()
 	if known then
-		return known
+		local ttl = if known.empty then EMPTY_TTL else SURFACE_TTL
+		if now - known.time < ttl or raysLeft <= 0 then
+			return if known.empty then nil else known
+		end
 	end
-	for _ = 1, 4 do
-		if raysLeft <= 0 then
-			return nil
+	local fallback = if known and not known.empty then known else nil
+	local fromY = SKY_Y
+	local bottomY = SKY_Y - RAY_LENGTH
+	for _ = 1, MAX_PASSES do
+		if raysLeft <= 0 or fromY <= bottomY then
+			return fallback
 		end
 		raysLeft -= 1
-		local hit =
-			workspace:Raycast(Vector3.new(x, SKY_Y, z), Vector3.new(0, -RAY_LENGTH, 0), rayParams)
+		local hit = workspace:Raycast(
+			Vector3.new(x, fromY, z),
+			Vector3.new(0, bottomY - fromY, 0),
+			rayParams
+		)
 		if hit == nil then
+			remember(key, { y = 0, soft = false, flat = false, time = now, empty = true })
 			return nil
 		end
 		local part = hit.Instance
-		-- an invisible box, or a small prop (a lamp head, a sign, a bin): look through it, for
-		-- good (a cell would otherwise stop its rain at a lamp's height)
+		-- an invisible box, or a small prop (a lamp head, a sign, a bin): look through it (a
+		-- cell would otherwise stop its rain at a lamp's height). The next ray starts just
+		-- under the hit, so it does not see that part again: nothing is added to the filter.
 		local puddle = part:HasTag("CityPuddle")
 		local invisible = part:IsA("BasePart") and part.Transparency > 0.95
 		local small = part:IsA("BasePart") and part.Size.X < SMALL_PROP and part.Size.Z < SMALL_PROP
 		if (invisible or small) and not puddle and not part:IsA("Terrain") then
-			table.insert(skipped, part)
-			rayParams:AddToFilter(part)
+			fromY = hit.Position.Y - 0.02
 			continue
 		end
 		local surface: Surface = {
 			y = hit.Position.Y,
 			soft = SOFT[hit.Material] == true,
 			flat = hit.Normal.Y > 0.7,
+			time = now,
+			empty = false,
 		}
 		-- a character (an NPC) is not part of the city: used, not kept
 		local model = part:FindFirstAncestorWhichIsA("Model")
 		if model and model:FindFirstChildOfClass("Humanoid") then
 			return surface
 		end
-		if surfaceCount >= MAX_CACHED then
-			table.clear(surfaces)
-			surfaceCount = 0
-		end
-		surfaces[key] = surface
-		surfaceCount += 1
+		remember(key, surface)
 		return surface
 	end
-	return nil
+	return fallback
+end
+
+-- Forgets every known point (respawn, teleport, a new rain event).
+local function forgetMap()
+	table.clear(surfaces)
+	surfaceCount = 0
+	for _, cell in cells do
+		cell.dirty = true
+	end
+	for _, curtain in curtains do
+		curtain.targetY = nil
+	end
 end
 
 ------------------------------------------------------------------------------
@@ -355,8 +408,7 @@ local function dropFade(base: number): NumberSequence
 	})
 end
 
-local function makeCell(near: boolean, offsetX: number, offsetZ: number): Cell
-	local size = if near then R.NEAR_CELL else R.MID_CELL
+local function makeCell(near: boolean, offsetX: number, offsetZ: number, size: number): Cell
 	local part = hostPart(if near then "NearRain" else "MidRain", Vector3.new(size, 0.2, size))
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Name = "Drops"
@@ -389,10 +441,18 @@ local function makeCell(near: boolean, offsetX: number, offsetZ: number): Cell
 end
 
 local function buildCells()
-	-- near first: they get their roofs before the mid ones
+	-- near first: they get their roofs before the mid ones. Each near cell is 2 x 2 emitters
+	-- (a roof edge only dries half a cell, never the street right around you).
+	local half = R.NEAR_CELL / 2
 	for i = -1, 1 do
 		for j = -1, 1 do
-			table.insert(cells, makeCell(true, i * R.NEAR_CELL, j * R.NEAR_CELL))
+			for _, a in { -0.5, 0.5 } do
+				for _, b in { -0.5, 0.5 } do
+					local x = i * R.NEAR_CELL + a * half
+					local z = j * R.NEAR_CELL + b * half
+					table.insert(cells, makeCell(true, x, z, half))
+				end
+			end
 		end
 	end
 	-- the mid ring is centred on the middle near cell (its middle cell IS the near cells)
@@ -400,7 +460,7 @@ local function buildCells()
 	for i = -2, 2 do
 		for j = -2, 2 do
 			if i ~= 0 or j ~= 0 then
-				table.insert(cells, makeCell(false, i * step, j * step))
+				table.insert(cells, makeCell(false, i * step, j * step, step))
 			end
 		end
 	end
@@ -532,7 +592,15 @@ local function buildCurtains()
 		beam.Transparency = NumberSequence.new(1)
 		beam.Enabled = false
 		beam.Parent = curtainHost
-		table.insert(curtains, { beam = beam, top = top, bottom = bottom })
+		table.insert(curtains, {
+			beam = beam,
+			top = top,
+			bottom = bottom,
+			jitter = random:NextNumber(-0.04, 0.04),
+			spread = random:NextNumber(0.85, 1.15),
+			groundY = nil,
+			targetY = nil,
+		})
 	end
 end
 
@@ -549,20 +617,22 @@ local function measureCell(cell: Cell, centerX: number, centerZ: number): boolea
 			local x = math.round(centerX + i * third)
 			local z = math.round(centerZ + j * third)
 			local surface = surfaceAt(x, z)
-			if surface == nil then
-				if raysLeft <= 0 then
-					return false
-				end
-				-- (nothing below at all: off the map)
-				table.insert(heights, -math.huge)
-			else
+			if surface then
 				table.insert(heights, surface.y)
+			elseif raysLeft <= 0 then
+				return false
 			end
+			-- (nil with rays left: nothing below, off the map; not counted)
 		end
+	end
+	cell.dirty = false
+	if #heights == 0 then
+		cell.stopY = nil
+		return true
 	end
 	table.sort(heights)
 	-- near: the highest roof (no drop under an awning); mid: the middle value
-	local stop = heights[5]
+	local stop = heights[(#heights + 1) // 2]
 	if cell.near then
 		stop = heights[1]
 		for _, height in heights do
@@ -571,8 +641,7 @@ local function measureCell(cell: Cell, centerX: number, centerZ: number): boolea
 			end
 		end
 	end
-	cell.stopY = if stop == -math.huge then nil else stop
-	cell.dirty = false
+	cell.stopY = stop
 	return true
 end
 
@@ -584,6 +653,7 @@ local function placeCells(cameraPosition: Vector3, intensity: number, heavy: num
 		anchorX, anchorZ = ax, az
 		for _, cell in cells do
 			cell.dirty = true
+			cell.stopY = nil -- (its old roof was somewhere else)
 		end
 	end
 	local fall = WeatherController.fallDirection()
@@ -594,7 +664,8 @@ local function placeCells(cameraPosition: Vector3, intensity: number, heavy: num
 	local topY = cameraPosition.Y + R.TOP
 	for _, cell in cells do
 		local centerX, centerZ = ax + cell.offsetX, az + cell.offsetZ
-		if cell.dirty and not measureCell(cell, centerX, centerZ) then
+		-- (a re-check out of rays keeps the roof it had)
+		if cell.dirty and not measureCell(cell, centerX, centerZ) and cell.stopY == nil then
 			cell.emitter.Rate = 0 -- (its roofs are not known yet: no new drops this frame)
 			continue
 		end
@@ -612,12 +683,16 @@ local function placeCells(cameraPosition: Vector3, intensity: number, heavy: num
 		if math.abs(cell.emitter.Lifetime.Min - lifetime) > 0.01 then
 			cell.emitter.Lifetime = NumberRange.new(lifetime)
 		end
-		local rate = if cell.near then R.NEAR_RATE * tier.near else R.MID_RATE * tier.mid
+		local rate = if cell.near then R.NEAR_RATE / 4 * tier.near else R.MID_RATE * tier.mid
+		-- a longer fall keeps drops alive longer: fewer of them, the same count on screen
+		rate *= math.min(1, BASE_FALL / height)
 		cell.emitter.Rate = math.min(MAX_RATE, rate * intensity * heavy)
 	end
 end
 
--- The far curtains: around the camera, leaning with the wind, fading with the rain.
+-- The far curtains: a fixed ring around the camera that follows it smoothly (each curtain
+-- keeps its own angle and distance), leaning with the wind, fading with the rain. Their
+-- ground is looked up again when the camera moved a little, and eased in (no jump).
 local function placeCurtains(cameraPosition: Vector3, intensity: number, heavy: number, tier: Tier)
 	if #curtains == 0 then
 		return
@@ -635,18 +710,26 @@ local function placeCurtains(cameraPosition: Vector3, intensity: number, heavy: 
 	local fallY = math.max(-fall.Y, 0.2)
 	local lean = Vector3.new(fall.X, 0, fall.Z) / fallY * CURTAIN_HEIGHT
 	for index, curtain in curtains do
-		curtain.beam.Enabled = index <= shown
-		if moved and index <= shown then
-			local angle = (index / shown + random:NextNumber(-0.04, 0.04)) * math.pi * 2
-			local distance = R.CURTAIN_RADIUS * random:NextNumber(0.85, 1.15)
-			local base = cameraPosition
-				+ Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
-			local surface = surfaceAt(math.round(base.X), math.round(base.Z))
-			local groundY = if surface
-				then math.min(surface.y, cameraPosition.Y)
-				else cameraPosition.Y - 10
-			curtain.bottom.WorldPosition = Vector3.new(base.X, groundY - 2, base.Z)
+		local on = index <= shown
+		curtain.beam.Enabled = on
+		if not on then
+			continue
 		end
+		local angle = (index / shown + curtain.jitter) * math.pi * 2
+		local distance = R.CURTAIN_RADIUS * curtain.spread
+		local x = cameraPosition.X + math.cos(angle) * distance
+		local z = cameraPosition.Z + math.sin(angle) * distance
+		if moved or curtain.targetY == nil then
+			local surface = surfaceAt(math.round(x), math.round(z))
+			curtain.targetY = if surface
+				then math.min(surface.y, cameraPosition.Y)
+				else curtain.targetY or cameraPosition.Y - 10
+		end
+		local target = curtain.targetY or cameraPosition.Y - 10
+		local previous = curtain.groundY
+		local groundY: number = if previous then previous + (target - previous) * 0.1 else target
+		curtain.groundY = groundY
+		curtain.bottom.WorldPosition = Vector3.new(x, groundY - 2, z)
 		curtain.top.WorldPosition = curtain.bottom.WorldPosition
 			+ Vector3.new(0, CURTAIN_HEIGHT, 0)
 			- lean
@@ -709,6 +792,8 @@ local function stopAll()
 	mistEmitter.Rate = 0
 	for _, curtain in curtains do
 		curtain.beam.Enabled = false
+		curtain.groundY = nil
+		curtain.targetY = nil
 	end
 	curtainCenter = nil
 	curtainLevel = -1
@@ -749,6 +834,18 @@ local function update(dt: number)
 	local tier = currentTier()
 	local heavy = if storm then W.STORM_RAIN_MULT else 1
 	local position = camera.CFrame.Position
+	-- a respawn or a teleport: what we knew may be from before the buildings streamed in
+	local last = lastCamera
+	if last and (position - last).Magnitude > CAMERA_JUMP then
+		forgetMap()
+	end
+	lastCamera = position
+	if now >= nextRemeasure then
+		nextRemeasure = now + REMEASURE_EVERY
+		for _, cell in cells do
+			cell.dirty = true -- (keeps its roof until the new one is known)
+		end
+	end
 	if now >= nextPlace then
 		nextPlace = now + PLACE_EVERY
 		placeCells(position, intensity, heavy, tier)
@@ -783,11 +880,14 @@ function RainController.start()
 	-- a new rain event: forget the old height map (doors, props may have moved)
 	workspace:GetAttributeChangedSignal("Weather"):Connect(function()
 		if workspace:GetAttribute("Weather") == "Rain" then
-			table.clear(surfaces)
-			surfaceCount = 0
-			table.clear(skipped)
+			forgetMap()
 			refreshFilter()
 		end
+	end)
+	-- a respawn: the city around the new spot may only now be streaming in
+	player.CharacterAdded:Connect(function()
+		forgetMap()
+		refreshFilter()
 	end)
 	RunService.Heartbeat:Connect(update)
 end
