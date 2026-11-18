@@ -1808,6 +1808,7 @@ def main():
         render_preview(shapes)
         render_gore_preview(gore_slots)
         render_break_preview(shapes)
+        render_autopsy_preview(gore_slots)
 
 
 def render_preview(shapes):
@@ -2015,6 +2016,110 @@ def render_gore_preview(slots):
             mesh = ob.data
             bpy.data.objects.remove(ob)
             bpy.data.meshes.remove(mesh)
+
+
+# The autopsy pieces' pictures (preview_Autopsy_<stage>.png): all of them in
+# one opened torso (its front's skin cut open, the muscle under it), the
+# organs taken out stage by stage; then every piece on its own, side by side.
+AUTOPSY_STAGES = {
+    "1": set(),
+    "2": {"AutChest", "AutOmentum"},
+    "3": {"AutChest", "AutOmentum", "AutHeart", "AutLungR", "AutLungL", "AutGut", "AutColon"},
+    "4": {"AutChest", "AutOmentum", "AutHeart", "AutLungR", "AutLungL", "AutGut", "AutColon", "AutLiver",
+          "AutStomach", "AutSpleen", "AutPancreas", "AutDiaphragm"},
+}
+AUTOPSY_AT = Vector((0, 60, 0))  # (kit space: away from everything)
+AUTOPSY_HOLE = (0.74, -0.92, 0.9)  # the opening: half width, bottom, top
+
+
+def autopsy_torso():
+    """The torso round the organs: its box without the front, the front's skin
+    with the opening, the muscle and fat round the opening's edge."""
+    hx, bottom, top = AUTOPSY_HOLE
+    box = bmesh.new()
+    bmesh.ops.create_cube(box, size=1.0)
+    bmesh.ops.scale(box, vec=(2, 2, 1), verts=box.verts)
+    bmesh.ops.delete(box, geom=[f for f in box.faces if f.normal.z < -0.9], context="FACES")
+    skin = bmesh.new()
+    for x0, x1, y0, y1 in ((-1, -hx, -1, 1), (hx, 1, -1, 1), (-hx, hx, -1, bottom), (-hx, hx, top, 1)):
+        skin.faces.new([skin.verts.new((x, y, -0.5)) for x, y in ((x0, y0), (x0, y1), (x1, y1), (x1, y0))])
+    rims = {}
+    for layer, z0, z1, inset in (("Fat", -0.5, -0.46, 0.0), ("Muscle", -0.46, -0.4, 0.02)):
+        bm = bmesh.new()
+        corners = [(-hx - inset, bottom - inset), (hx + inset, bottom - inset), (hx + inset, top + inset),
+                   (-hx - inset, top + inset)]
+        for k in range(4):
+            (ax, ay), (bx, by) = corners[k], corners[(k + 1) % 4]
+            bm.faces.new([bm.verts.new(p) for p in ((ax, ay, z0), (bx, by, z0), (bx, by, z1), (ax, ay, z1))])
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        for face in bm.faces:  # (facing the opening's middle)
+            if face.normal.dot(face.calc_center_median()) > 0:
+                face.normal_flip()
+        rims[layer] = bm
+    return {"Skin": gore.bm_join_all([box, skin]), **rims}
+
+
+def render_autopsy_preview(slots):
+    """Pictures of the autopsy pieces (after render_preview: its lights)."""
+    scene = bpy.context.scene
+    cam = scene.camera
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.exposure = -0.6
+    size = scene.render.resolution_x, scene.render.resolution_y
+    scene.render.resolution_x, scene.render.resolution_y = 800, 640
+    names = [n for n in slots if n.startswith("Aut")]
+    sources = [ob for ob in list(scene.collection.objects) if ob.name.startswith("Gore_Aut")]
+
+    def shoot(name, eye, target, width):
+        cam.location = target + eye
+        back = eye.normalized()
+        right = Vector((0, 1, 0)).cross(back).normalized()
+        cam.rotation_euler = Matrix((right, back.cross(right), back)).transposed().to_euler()
+        cam.data.ortho_scale = width
+        fill = scene.objects.get("fill")
+        if fill:
+            fill.hide_render = False
+            fill.rotation_euler = cam.rotation_euler
+        scene.render.filepath = f"{OUT}/preview_Autopsy_{name}.png"
+        bpy.ops.render.render(write_still=True)
+
+    def copies(where):
+        """Copies of the pieces' objects, each piece's torso space at where[piece]."""
+        made = []
+        for ob in sources:
+            piece = ob.name.split("_")[1]
+            if piece in where:
+                copy = bpy.data.objects.new(f"pv_{ob.name}", ob.data)
+                copy.location = where[piece] - slots[piece]
+                scene.collection.objects.link(copy)
+                made.append(copy)
+        return made
+
+    torso = [add_object(f"pv_torso_{layer}", bm, AUTOPSY_AT, layer) for layer, bm in autopsy_torso().items()]
+    for stage, gone in AUTOPSY_STAGES.items():
+        made = copies({n: AUTOPSY_AT for n in names if n not in gone})
+        shoot(stage, Vector((0.9, 1.1, -3.2)), AUTOPSY_AT, 2.5)
+        for ob in made:
+            bpy.data.objects.remove(ob)
+    for ob in torso:
+        mesh = ob.data
+        bpy.data.objects.remove(ob)
+        bpy.data.meshes.remove(mesh)
+    # every piece on its own, four to a row (seen from the front and a little above)
+    # (each piece's own middle in the middle of its cell)
+    middles = {}
+    for n in names:
+        corners = [ob.matrix_world @ Vector(c) for ob in sources if ob.name.split("_")[1] == n for c in ob.bound_box]
+        lo = Vector([min(c[k] for c in corners) for k in range(3)])
+        hi = Vector([max(c[k] for c in corners) for k in range(3)])
+        middles[n] = (lo + hi) / 2 - slots[n]
+    where = {n: AUTOPSY_AT + Vector(((i % 4) * 2.2, -(i // 4) * 2.2, 0)) - middles[n] for i, n in enumerate(names)}
+    made = copies(where)
+    rows = (len(names) + 3) // 4
+    shoot("pieces", Vector((0.8, 1.0, -3.6)), AUTOPSY_AT + Vector((3.3, 0.4 - (rows - 1) * 1.1, 0)), 9.8)
+    for ob in made:
+        bpy.data.objects.remove(ob)
+    scene.render.resolution_x, scene.render.resolution_y = size
 
 
 if __name__ == "__main__":

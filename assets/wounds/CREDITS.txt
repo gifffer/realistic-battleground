@@ -21,4 +21,7 @@ BreakArm* inserts), the tibia and fibula, the leg's muscles, vessels and
 nerves (BreakLeg*), the thigh's muscles, femur, femoral vessels and sciatic
 nerve, hip bone and the muscles round the hip joint (Gore_LegEnd*_*,
 Gore_Hip*_*), the arms torn off (Gore_ArmEndR_*, Gore_ShoulderR_*, *L: the
-Bouncer's anatomy). What was taken and how: tools/wounds/anatomy/README.md.
+Bouncer's anatomy); the autopsy video's organs - heart, lungs, liver,
+gallbladder, stomach, spleen, pancreas, duodenum, kidneys, small intestine,
+colon, omentum, diaphragm, sternum, ribs and their cartilage, spine, psoas,
+aorta, vena cava, trachea, oesophagus (Gore_Aut*_*). What was taken and how: tools/wounds/anatomy/README.md.

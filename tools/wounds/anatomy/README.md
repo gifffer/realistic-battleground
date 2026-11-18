@@ -76,3 +76,17 @@ heavy hits' gore:
 
 The arms torn off by the heavy hits (`Gore_ArmEndR_*`, `Gore_ShoulderR_*`, `*L`) use `arm.npz`, as the
 Bouncer's. The derived pieces are shared alike under the same licence, with this credit.
+
+`autopsy.npz` holds the organs of the chest and the belly, also from **Z-Anatomy** (CC BY-SA 4.0), taken from
+Z-Anatomy's `Startup.blend` by `tools/wounds/extract_autopsy.py`, decimated and moved into the R6 torso's
+space (flatter than `torso.npz`: all of it behind the front's skin and muscle), for the autopsy video
+(`Gore_Aut*_*` in `WoundKit.fbx`): the **right and left ventricles** and **atria**, the **ascending aorta**,
+**pulmonary trunk** and **superior vena cava**; the **lobes of both lungs** and the **main bronchi**; the
+**liver** and **gallbladder**; the **stomach**, **spleen**, **pancreas** and **duodenum**; both **kidneys**
+and their **renal arteries and veins**; the **jejunum** (a curve object: its evaluated mesh); the
+**ascending, transverse and descending colon**; the **greater omentum**; the **diaphragm**; the **body and
+manubrium of the sternum**, the **costal cartilages** of the first ten ribs and **all twelve ribs** on each
+side (cut by `gore.py` into the chest plate and the back); the **T1 to L5 vertebrae** and their **discs**; the
+**psoas major** and **quadratus lumborum** muscles; the **thoracic and abdominal aorta**, the **inferior
+vena cava**, the **trachea** and the **oesophagus**. The derived pieces are shared alike under the same
+licence, with this credit.
