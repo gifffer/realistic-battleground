@@ -700,6 +700,7 @@ local function playEvent(
 			end
 		end
 		KitEffects.showBat(attacker, away - event.time, grip)
+	elseif kind == "Draw" then
 		SoundController.play("BatDraw", attacker)
 	elseif kind == "Plea" then
 		SoundController.play("VictimPlea", victim)
@@ -874,7 +875,7 @@ local function onStarted(
 	end
 
 	for _, event in cinematic.events do
-		task.delay(event.time, function()
+		local function fire()
 			-- (squeezing / throwing the liver, the arm down needs only him there)
 			local victimThere = victim.Parent ~= nil
 				or event.kind == "Squeeze"
@@ -883,7 +884,13 @@ local function onStarted(
 			if not run.cancelled and attacker.Parent and victimThere then
 				playEvent(cinematic, event, attacker, victim, anchor)
 			end
-		end)
+		end
+		-- (at 0: now, on the clip's first frame, not one frame later - the bat)
+		if event.time <= 0 then
+			fire()
+		else
+			task.delay(event.time, fire)
+		end
 	end
 	task.delay(cinematic.duration, function()
 		if runs[attacker] == run then

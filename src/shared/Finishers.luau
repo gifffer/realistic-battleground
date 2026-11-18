@@ -47,7 +47,8 @@ local Finishers = {}
 
 export type Event = {
 	time: number,
-	-- "Prop" (the bat appears), "PropAway", "Plea" (the victim speaks),
+	-- "Prop" (the bat appears), "Draw" (its whoosh as he brings it
+	-- round), "PropAway", "Plea" (the victim speaks),
 	-- "Tap" (the bat tapped on the face), "Taunt" (he mocks them),
 	-- "Swing" (whoosh), "Body" / "Face" (a punch lands), "Kill" (the
 	-- killing blow), "Wind" (he coils for the last blow), "Gut" / "Dig" /
@@ -254,7 +255,10 @@ local cinematics: { [string]: Cinematic } = {
 		placement = "head",
 		victimAnimation = "Brawler_FinisherBatVictim",
 		events = {
-			{ time = 0.35, kind = "Prop" },
+			-- (in his hands from the first frame: the clip starts on the
+			-- grip, then takes it behind his back and brings it round)
+			{ time = 0, kind = "Prop" },
+			{ time = 0.35, kind = "Draw" }, -- (the whoosh as it comes round)
 			{ time = 0.55, kind = "Plea" },
 			-- the taunt: the barrel tapped on their face, three times
 			{ time = 0.62, kind = "Tap" },
