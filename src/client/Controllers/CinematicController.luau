@@ -10,9 +10,11 @@
 --     ground, close on the impact, wide), the camera shaking and pushing in
 --     on each blow (the hardest ones freeze it a beat - a hit-stop, the
 --     clips hold the same beat - and flash the screen; shots can follow a
---     moving target: the victim's head, the Boxer's fist). The player can't
---     move during it (the server holds both characters); the normal camera
---     comes back at the end.
+--     moving target: the victim's head, the Boxer's fist). On the bat
+--     through the head the held frame is longer, the picture hit pale and
+--     harsh, and the push-in eases back slowly: the blow feels slowed down.
+--     The player can't move during it (the server holds both characters);
+--     the normal camera comes back at the end.
 --   • a cinematic with `ownCamera` (the Boxer's) takes no camera: the two
 --     fighters keep their own, third or first person as they had it, only
 --     shaken (lighter) on the blows and held still through each hit-stop;
@@ -30,6 +32,7 @@ local TweenService = game:GetService("TweenService")
 
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local ArmRip = require(script.Parent.Parent.Combat.ArmRip)
@@ -55,8 +58,20 @@ local BAR_TIME = 0.35
 -- field of view). `stop`: a hit-stop, seconds the camera freezes on the
 -- blow (the shot's motion and the shake held, the push-in kept) before it
 -- dies out. `flash`: how hard the screen flinches (brighter, harder, a red
--- cast; 1 = the most).
-type Shake = { at: number, strength: number, punch: number, stop: number?, flash: number? }
+-- cast; 1 = the most). `decay`: how fast the push-in dies out after it
+-- (DEFAULT_DECAY, as the shake; lower = a slow return, the shot drifting
+-- back out). `grade`: the picture hit pale and harsh (desaturated,
+-- contrasted), coming back over GRADE_TIME (the bat's held frame).
+type Shake = {
+	at: number,
+	strength: number,
+	punch: number,
+	stop: number?,
+	flash: number?,
+	decay: number?,
+	grade: boolean?,
+}
+local DEFAULT_DECAY = 7
 local SHAKES: { [string]: Shake } = {
 	Body = { at = 0, strength = 1.2, punch = 2 },
 	Face = { at = 0, strength = 2, punch = 3 },
@@ -85,6 +100,13 @@ local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
 -- (event names other finishers use too, shaken differently in these;
 -- a negative push-in widens the view: the Bull's charge)
 local KIT_SHAKES: { [string]: { [string]: Shake } } = {
+	-- (the Street Brawler's: the taps, the bat coming down widening the view,
+	-- then the held frame on the head bursting, a slow way back)
+	Bat = {
+		Tap = { at = 0, strength = 0.5, punch = 1.2 },
+		Swing = { at = 0, strength = 0.6, punch = -3 },
+		Kill = { at = 0, strength = 6, punch = 13, stop = 0.16, decay = 2.8, grade = true },
+	},
 	Incinerate = {
 		Grab = { at = 0, strength = 1, punch = 1 },
 		Beam = { at = 0, strength = 2, punch = 4 }, -- point blank into the chest
@@ -131,6 +153,14 @@ local OWN_SHAKE = 0.45
 local OWN_PUNCH = 0.4
 -- (in first person: shown during it)
 local ARMS = { "Left Arm", "Right Arm" }
+
+-- The held frame's colour hit (Shake.grade): pale and a little warm, like
+-- an overexposed frame, harsh; it comes back over GRADE_TIME.
+local GRADE_TINT = Color3.fromRGB(255, 222, 214)
+local GRADE_BRIGHTNESS = 0.22
+local GRADE_CONTRAST = 0.45
+local GRADE_SATURATION = -0.6
+local GRADE_TIME = 1.4
 
 local bars: { top: Frame, bottom: Frame }? = nil
 
@@ -218,7 +248,8 @@ end
 
 -- The blows `t` seconds in: the camera's kick (degrees), its push-in (field
 -- of view), the screen's flash (0 to 1), and whether a hit-stop holds now.
--- Each dies out fast, held full through its hit-stop.
+-- Each dies out fast (the push-in at its own `decay`), held full through
+-- its hit-stop.
 local function shakeAt(shakes: { Shake }, t: number): (number, number, number, boolean)
 	local kick, punch, flash, holding = 0, 0, 0, false
 	for _, shake in shakes do
@@ -227,11 +258,17 @@ local function shakeAt(shakes: { Shake }, t: number): (number, number, number, b
 		if age >= 0 and age < hold then
 			holding = true
 		end
-		if age >= 0 and age < hold + 0.6 then
-			local fade = if age < hold then 1 else math.exp(-(age - hold) * 7)
-			kick += shake.strength * fade
-			punch += shake.punch * fade
-			flash += (shake.flash or 0) * fade
+		if age >= 0 then
+			local after = math.max(age - hold, 0)
+			if after < 0.6 then
+				local fade = math.exp(-after * DEFAULT_DECAY)
+				kick += shake.strength * fade
+				flash += (shake.flash or 0) * fade
+			end
+			local decay = shake.decay or DEFAULT_DECAY
+			if after < 4.2 / decay then
+				punch += shake.punch * math.exp(-after * decay)
+			end
 		end
 	end
 	return kick, punch, math.min(flash, 1), holding
@@ -273,6 +310,42 @@ local function showFlash(grade: ColorCorrectionEffect?, flash: number, last: num
 	return amount
 end
 
+-- The held frames' colour hits (Shake.grade), each at its blow's time: one
+-- grade, made on the first, faded back. Returns what removes it.
+local function playGrades(shakes: { Shake }): () -> ()
+	local stopped = false
+	local effect: ColorCorrectionEffect? = nil
+	for _, shake in shakes do
+		if shake.grade then
+			task.delay(shake.at, function()
+				if stopped then
+					return
+				end
+				local grade = effect or Instance.new("ColorCorrectionEffect")
+				grade.Name = "FinisherGrade"
+				grade.Brightness = GRADE_BRIGHTNESS
+				grade.Contrast = GRADE_CONTRAST
+				grade.Saturation = GRADE_SATURATION
+				grade.TintColor = GRADE_TINT
+				grade.Parent = Lighting
+				effect = grade
+				TweenService:Create(
+					grade,
+					TweenInfo.new(GRADE_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{ Brightness = 0, Contrast = 0, Saturation = 0, TintColor = WHITE }
+				):Play()
+			end)
+		end
+	end
+	return function()
+		stopped = true
+		if effect then
+			effect:Destroy()
+			effect = nil
+		end
+	end
+end
+
 -- The camera of the cutscene, for the two fighters. Returns what stops it
 -- (and gives the normal camera back).
 local function playCamera(
@@ -298,6 +371,7 @@ local function playCamera(
 	local wobble = CFrame.identity
 	local wasHolding = false
 	local grade = makeGrade(shakes)
+	local stopGrades = playGrades(shakes)
 	local lastFlash = 0
 
 	RunService:BindToRenderStep(
@@ -397,6 +471,7 @@ local function playCamera(
 		if grade then
 			grade:Destroy()
 		end
+		stopGrades()
 		RunService:UnbindFromRenderStep("FinisherCamera")
 		showBars(false)
 		camera.FieldOfView = normalFov()
@@ -406,6 +481,18 @@ local function playCamera(
 	currentStop = stop
 	task.delay(cinematic.duration, stop)
 	return stop
+end
+
+-- The clip a kit's attacker plays for cinematic `id` (its finisher's
+-- animation), or nil.
+local function finisherClip(id: string): string?
+	for _, kit in Kits.list() do
+		local finisher = kit.finisher
+		if finisher and finisher.cinematic == id then
+			return finisher.animation
+		end
+	end
+	return nil
 end
 
 -- In first person (his whole body hidden), his arms shown: the punches, the
@@ -474,6 +561,7 @@ local function playOwnCamera(
 	local pushed = false -- (our push-in on the field of view)
 	local armsShown = false
 	local grade = makeGrade(shakes)
+	local stopGrades = playGrades(shakes)
 	local lastFlash = 0
 
 	local function takeOff()
@@ -530,6 +618,7 @@ local function playOwnCamera(
 		if grade then
 			grade:Destroy()
 		end
+		stopGrades()
 		if body and armsShown then
 			hideArms(body)
 		end
@@ -599,10 +688,25 @@ local function playEvent(
 				away = other.time
 			end
 		end
-		KitEffects.showBat(attacker, away - event.time)
+		-- (the bat turns in his fist with his finisher clip's "Grip": the
+		-- wrists cocking and releasing through the swing; read by name, not
+		-- from his last action, which another clip can take over)
+		local clip = finisherClip(cinematic.id)
+		local grip: (() -> CFrame?)? = nil
+		if clip then
+			local name: string = clip
+			grip = function(): CFrame?
+				return CharacterAnimationController.getActionPose(attacker, name, "Grip")
+			end
+		end
+		KitEffects.showBat(attacker, away - event.time, grip)
 		SoundController.play("BatDraw", attacker)
 	elseif kind == "Plea" then
 		SoundController.play("VictimPlea", victim)
+	elseif kind == "Tap" then
+		SoundController.play("BatTap", victim)
+	elseif kind == "Taunt" then
+		SoundController.play("BrawlerTaunt", attacker)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
 	elseif kind == "Body" or kind == "Stomp" then
@@ -633,8 +737,14 @@ local function playEvent(
 	elseif kind == "Kill" then
 		-- (the burst itself: HeadBlast, from the server's "HeadBlown")
 		SoundController.play("BatCrush", victim)
-		-- it goes all over him (and his bat)
-		BloodGush.splatter(attacker, victim:GetPivot().Position, 14, math.floor(event.time * 1000))
+		SoundController.play("BatImpact", victim)
+		-- it goes all over him, his face too, and the bat comes out red
+		local head = victim:FindFirstChild("Head")
+		local from = if head and head:IsA("BasePart")
+			then head.Position
+			else victim:GetPivot().Position
+		BloodGush.splatter(attacker, from, 26, math.floor(event.time * 1000))
+		KitEffects.bloodyBat(attacker)
 	elseif kind == "Gut" then
 		SoundController.play("KnockoutPunch", victim)
 		impact(attacker, victim, "Torso", 2)
@@ -720,6 +830,8 @@ local function onStarted(
 				strength = shake.strength,
 				punch = shake.punch,
 				stop = shake.stop,
+				decay = shake.decay,
+				grade = shake.grade,
 				flash = shake.flash,
 			})
 		end

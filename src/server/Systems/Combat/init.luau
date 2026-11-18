@@ -1127,7 +1127,10 @@ end
 
 -- The bat finisher: the head bursts. Every client shows it (and the neck
 -- left open) from this attribute, its value = the seed of the pieces.
-local function blowHead(victim: Model)
+-- `sweep`: the way the bat went through it (world space): the pieces and
+-- the spray fly on that way (set first: the clients read it with the seed).
+local function blowHead(victim: Model, sweep: Vector3)
+	setAttribute(victim, Finishers.BAT_SWEEP_ATTRIBUTE, sweep)
 	setAttribute(victim, "HeadBlown", random:NextInteger(1, 2 ^ 30))
 end
 
@@ -1798,7 +1801,7 @@ local function startCinematic(
 				return false
 			end
 			look = look.Unit
-			local bodyAt = stand + look * 5.75 + Vector3.new(0, -2.4, 0)
+			local bodyAt = stand + look * (Finishers.HEAD_DISTANCE + 1.95) + Vector3.new(0, -2.4, 0)
 			if
 				#workspace:GetPartBoundsInBox(
 					CFrame.lookAt(bodyAt, bodyAt + look),
@@ -1810,7 +1813,7 @@ local function startCinematic(
 			end
 			return floorAt(stand, stand.Y)
 				and floorAt(stand + look * Finishers.HEAD_DISTANCE, stand.Y)
-				and floorAt(stand + look * 7.6, stand.Y)
+				and floorAt(stand + look * (Finishers.HEAD_DISTANCE + 3.8), stand.Y)
 		end
 		local stand: Vector3? = nil
 		for _, direction in candidates do
@@ -2109,7 +2112,8 @@ local function startCinematic(
 		local victimHumanoid = target:FindFirstChildOfClass("Humanoid")
 		if victimHumanoid and victimHumanoid.Health <= 0 then -- (a body that really died)
 			if cinematic.id == "Bat" then
-				blowHead(target)
+				-- (low across the head, from his right to his left)
+				blowHead(target, anchor:VectorToWorldSpace(Finishers.BAT_SWEEP))
 			elseif cinematic.id == "KnockoutCombo" then
 				if liverAttribute == nil then
 					liverAttribute = tearLiverOut(target, woundsBefore)
