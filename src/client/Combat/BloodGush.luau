@@ -699,19 +699,6 @@ local function schedule(wound: Wound, area: number): { number }
 	return amounts
 end
 
--- The floor under a wound, through bodies, blood and `ignore`.
-local function floorParams(ignore: { Instance }): RaycastParams
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.IgnoreWater = false
-	local skip: { Instance } = table.clone(BloodStain.ground().FilterDescendantsInstances)
-	for _, item in ignore do
-		table.insert(skip, item)
-	end
-	params.FilterDescendantsInstances = skip
-	return params
-end
-
 -- The big pool of a finisher's wound: the blood pours out of `localPoint`
 -- (in `part`'s space) onto the floor under it, the way `wound` says
 -- (Config.Blood.FINISHER_POOLS), the same pool on every client (`seed`):
@@ -743,8 +730,6 @@ function BloodGush.stump(
 		if opts.delay and opts.delay > 0 then
 			task.wait(opts.delay)
 		end
-		local params = floorParams(opts.ignore or {})
-		local paramsAt = BloodStain.groundStamp()
 		local start = os.clock()
 		local last = os.clock()
 		local done = 0 -- (ticks poured so far)
@@ -760,13 +745,6 @@ function BloodGush.stump(
 		while done < #amounts do
 			task.wait(STUMP_TICK)
 			local now = os.clock()
-			local stamp = BloodStain.groundStamp()
-			if stamp ~= paramsAt then
-				-- (new fighters joined, or the body was swapped for its frozen
-				-- copy: the ray goes through them too - never a pool on a body)
-				paramsAt = stamp
-				params = floorParams(opts.ignore or {})
-			end
 			-- where the wound is now (its body gone: where it was)
 			local previous = source
 			if part.Parent then
@@ -783,8 +761,8 @@ function BloodGush.stump(
 				done += 1
 				amount += amounts[done]
 			end
-			local hit =
-				workspace:Raycast(spot + Vector3.new(0, 0.3, 0), Vector3.new(0, -14, 0), params)
+			-- (through gore bits, loose things, bodies: BloodPool.floorBelow)
+			local hit = BloodPool.floorBelow(spot + Vector3.new(0, 0.3, 0))
 			local height = if hit then source.Y - hit.Position.Y else math.huge
 			if
 				pinned == nil
