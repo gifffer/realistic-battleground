@@ -111,7 +111,7 @@ type EntryUi = {
 local MenuController = {}
 
 local gui: ScreenGui
-local bar: ScrollingFrame -- the row of buttons
+local bar: Frame -- the row of buttons
 local tooltip: TextLabel
 local panelLayer: Frame
 local entries: { [string]: EntryUi } = {}
@@ -129,7 +129,8 @@ local hiddenReasons: { [string]: boolean } = {}
 local MIN_BAR_HEIGHT = 24
 -- Height assumed for Roblox's bar when nothing says how tall it is (the
 -- new style, the tallest: our row then never ends up under its buttons).
-local FALLBACK_TOPBAR = 58
+local FALLBACK_LEFT = 216
+local FALLBACK_TOP = 10
 
 -- Where Roblox leaves room for us: (left x, top y, height, right x) in screen pixels.
 -- In Roblox's bar, right of its buttons, when TopbarInset gives a usable
@@ -148,11 +149,9 @@ local function barArea(viewport: Vector2): (number, number, number, number)
 		local top = math.max(0, inset.Min.Y + inset.Height - height - 2)
 		return inset.Min.X + 4, top, height, inset.Max.X - 8
 	end
-	local robloxBar = GuiService:GetGuiInset().Y
-	if robloxBar <= 0 then
-		robloxBar = FALLBACK_TOPBAR
-	end
-	return 12, robloxBar + 12, PILL, viewport.X - 12
+	-- (Roblox doesn't say where its bar is: right of its usual buttons, on
+	-- the same line - its logo and menu pills end about 210 px in)
+	return FALLBACK_LEFT, FALLBACK_TOP, PILL, viewport.X - 12
 end
 
 local function paintButton(ui: EntryUi, hovered: boolean)
@@ -168,25 +167,15 @@ local function paintButton(ui: EntryUi, hovered: boolean)
 end
 
 local function layoutBar()
-	local viewport = Theme.viewport()
-	local left, top, height, right = barArea(viewport)
+	local left, top, height = barArea(Theme.viewport())
 	-- A shorter Roblox bar (old style, 36 px): our buttons shrink to match.
 	local scale = height / PILL
-	local width = 0
-	local count = 0
 	for _, ui in entries do
 		local holder = ui.button.Parent :: Frame
 		holder.Size = UDim2.fromOffset(math.floor(ui.baseWidth * scale + 0.5), height)
-		width += holder.Size.X.Offset
-		count += 1
 	end
-	width += math.max(count - 1, 0) * PILL_GAP
-	local room = math.max(height, right - left)
-	-- (6 px of room above and right for the badges, which stick out)
+	-- (6 px of room above for the badges, which stick out)
 	bar.Position = UDim2.fromOffset(left, top - 6)
-	bar.Size = UDim2.fromOffset(math.min(width + 12, room), height + 12)
-	bar.CanvasSize = UDim2.new(0, width + 12, 1, 0)
-	bar.ScrollingEnabled = width + 12 > room
 end
 
 -- One look, a few seconds in: a bar with no size, outside the screen or
@@ -605,18 +594,16 @@ function MenuController.init()
 		ResetOnSpawn = false,
 		IgnoreGuiInset = true,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-		DisplayOrder = 10,
+		DisplayOrder = 50,
 		Parent = player:WaitForChild("PlayerGui"),
 	})
-	bar = Theme.make("ScrollingFrame", {
+	-- (a plain row that grows with its buttons: nothing clips them)
+	bar = Theme.make("Frame", {
 		Name = "TopBar",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollingDirection = Enum.ScrollingDirection.X,
-		ScrollingEnabled = false,
-		ScrollBarThickness = 0,
-		CanvasSize = UDim2.new(),
-		ElasticBehavior = Enum.ElasticBehavior.Never,
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Size = UDim2.new(),
 		Parent = gui,
 	}, {
 		Theme.make("UIListLayout", {
@@ -630,7 +617,7 @@ function MenuController.init()
 			PaddingTop = UDim.new(0, 6),
 			PaddingBottom = UDim.new(0, 6),
 		}),
-	}) :: ScrollingFrame
+	}) :: Frame
 	tooltip = Theme.text({
 		Name = "Tooltip",
 		AnchorPoint = Vector2.new(0.5, 0),
