@@ -825,10 +825,10 @@ return table.freeze({
 		-- the splash fall back to a built-in Roblox sparkle, the ripple to the built-in ring, and
 		-- the far curtains are not drawn.
 		RAIN_IMAGES = table.freeze({
-			drop = 0, -- rain_drop.png (64 x 64)
-			splash = 0, -- rain_splash.png (4 x 4 flipbook)
-			ripple = 0, -- rain_ripple.png (4 x 4 flipbook)
-			sheet = 0, -- rain_sheet.png (1024 x 256, the far curtains)
+			drop = 89305118963824, -- rain_drop.png (64 x 64)
+			splash = 93651150767117, -- rain_splash.png (4 x 4 flipbook)
+			ripple = 114893236357354, -- rain_ripple.png (4 x 4 flipbook)
+			sheet = 134093860801729, -- rain_sheet.png (1024 x 256, the far curtains)
 		}),
 		-- The one-line notice top-left ("RAIN", "POWER CUT").
 		NOTICE_TIME = 3,
