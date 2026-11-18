@@ -40,10 +40,13 @@ export type HitDef = {
 -- Acid or fire eating the skin (Dr. Rift): `perSecond` damage for
 -- `duration` seconds. One burn at a time: a stronger one replaces a weaker
 -- one, any new one refreshes the time. Separate from bleeding.
+-- `spot`: a focused burn (a laser / ray): a deep spot where it lands,
+-- little around it, flames that hardly spread (Server Combat/Burns).
 export type BurnDef = {
 	kind: "Acid" | "Fire",
 	perSecond: number,
 	duration: number,
+	spot: boolean?,
 }
 
 -- A grab (Bouncer): the hands close `at` seconds into the move on the first

@@ -77,6 +77,7 @@ local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
 local Clones = require(script.Clones)
 local Gadgets = require(script.Gadgets)
+local Burns = require(script.Burns)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
 local Rewind = require(script.Rewind)
@@ -310,7 +311,8 @@ local function startBurning(
 	end
 	victim.burnSource = attacker.model
 	victim.burnKind = kind
-	-- (clients: smoke, bubbling skin, the burn marks; Client/Combat/RiftFx)
+	-- (the body's burns, the flames: Combat/Burns, Client/Combat/Burns)
+	Burns.ignite(victim.model, kind, victim.burnPerSecond, duration)
 	setAttribute(victim.model, "Burning", kind)
 end
 
@@ -536,6 +538,7 @@ end
 -- cooked muscle under it). The beam staying on the same spot makes that
 -- burn grow (S, M, L); a part full of wounds: the nearest burn grows.
 local BURN_MERGE = 0.35 -- studs
+local HEAT_BEAM_BURN: Kits.BurnDef = { kind = "Fire", perSecond = 2, duration = 0, spot = true }
 local function addBurn(victim: Model, partName: string, world: Vector3): (string?, any)
 	if not INJ.SKIN_TEAR then
 		return nil, nil
@@ -615,6 +618,8 @@ local function addBurn(victim: Model, partName: string, world: Vector3): (string
 	end
 	local previous = victim:GetAttribute(attribute)
 	setAttribute(victim, attribute, Gash.encode(data))
+	-- (cooked skin round the hole: a laser spot, no flames)
+	Burns.expose(victim, HEAT_BEAM_BURN, if partName == "Head" then "Head" else "Torso", world, true)
 	return attribute, previous
 end
 
@@ -667,6 +672,9 @@ local function healInjuries(state: CombatState)
 		end
 	end
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
+	-- Burns: a new skin (and the fire out, as the bleeding).
+	state.burnUntil = 0
+	Burns.clear(state.model)
 end
 
 -- Knocked to the ground (tackle, launch): the body goes limp for `duration`
@@ -988,6 +996,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 	local burn = spec.burn
 	if burn then
+		Burns.expose(victim.model, burn, zone, from) -- (where it burns)
 		startBurning(victim, credit, burn.kind, burn.perSecond, burn.duration)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
@@ -1119,6 +1128,7 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
 	model:SetAttribute("LimpLeg", nil)
+	Burns.watch(model) -- ("Burning" set by a finisher: on fire all over)
 	-- A player fights with the kit saved in their profile.
 	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
@@ -2531,6 +2541,7 @@ function Combat.resetForRound(model: Model)
 	state.burnUntil = 0
 	state.burnKind = nil
 	setAttribute(model, "Burning", nil)
+	Burns.extinguish(model)
 	healInjuries(state)
 	state.fury = 0
 	setAttribute(model, "Fury", 0)
@@ -2713,6 +2724,7 @@ local function update(dt: number)
 				state.burnSource = nil
 				state.burnKind = nil
 				setAttribute(model, "Burning", nil)
+				Burns.extinguish(model) -- (a burning body: a few seconds more)
 			elseif
 				time >= state.nextBurnTick
 				and time >= state.cinematicUntil
@@ -3034,6 +3046,7 @@ local function onGetUp(model: Model)
 end
 
 function Combat.start()
+	Burns.start()
 	-- Kit moves get the tools they need from here (see Combat/Moves.luau).
 	Rewind.start()
 	Moves.bind({
@@ -3073,6 +3086,7 @@ function Combat.start()
 			then
 				return
 			end
+			Burns.expose(victim.model, burn, nil, nil) -- (standing in it: the feet)
 			startBurning(victim, attacker, burn.kind, burn.perSecond, burn.duration)
 		end,
 		specFor = Moves.specFor,

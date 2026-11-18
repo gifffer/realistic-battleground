@@ -350,11 +350,22 @@ return table.freeze({
 			rim = 0, -- bruise_rim.png
 			petechiae = 0, -- bruise_petechiae.png
 		}),
-		-- Burn pictures (Dr. Rift's acid and fire): assets/burns/*.png uploaded
-		-- to Roblox, their image ids here (docs/WOUNDS_FR.md). With them a burn
-		-- is realistic pictures spreading over the burnt limbs (raw eroded
-		-- flesh running down for acid, mottled char for fire); without (0),
-		-- simpler patches.
+		-- Burn textures (every burn: Dr. Rift's ray, acid and flasks, the
+		-- Pyromaniac's fire...): assets/burns/*.png uploaded to Roblox, their
+		-- image ids here (docs/BURNS_FR.md). Tiled on the burnt faces, one
+		-- per stage (1 redness, 2 blisters, 3 eschar, 4 char). 0 = not
+		-- uploaded: the old BURN_IMAGES below stand in, then plain colour.
+		BURNS = table.freeze({
+			skin = table.freeze({ 0, 0, 0, 0 }), -- skin_1..4.png (bare skin)
+			cloth = table.freeze({ 0, 0, 0, 0 }), -- cloth_1..4.png (over a shirt / pants)
+			acid = table.freeze({ 0, 0, 0 }), -- acid_1..3.png
+			spot = 0, -- spot.png (a laser / ray burn)
+			flame = 0, -- flame.png (4 x 4 flipbook)
+			smoke = 0, -- smoke.png
+			ember = 0, -- ember.png
+		}),
+		-- The first burn pictures (assets/burns/legacy), still used while
+		-- BURNS above is 0: acid 1..3 for acid, fire 1..3 for stages 2..4.
 		BURN_IMAGES = table.freeze({
 			acid = table.freeze({ 131778333760722, 126361621625485, 94024882070515 }), -- acid_1..3.png
 			fire = table.freeze({ 126783746008106, 105061454734886, 79962622099236 }), -- fire_1..3.png
