@@ -826,10 +826,9 @@ end
 
 local built = false
 
-local function build(content: Frame)
-	-- Header (the panel around the content): the wallet top right.
-	local panel = content.Parent :: Instance
-	local newWallet = ProfileMenuController.createWallet(panel)
+local function build(content: Frame, host: MenuController.Host)
+	-- The wallet sits on the title row (top right), outside the scrolling content.
+	local newWallet = ProfileMenuController.createWallet(host.header)
 	newWallet.set(playerCoins(), false)
 	wallet = newWallet
 

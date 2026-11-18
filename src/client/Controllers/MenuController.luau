@@ -29,6 +29,7 @@
 --       build = function(content: Frame, host: Host) ... end, -- fills it, once
 --   })
 --   host.tabs: the tabs (UI/Panel.tabs), when `tabs` was given.
+--   host.header: the title row, outside the scrolling content (put the wallet there).
 --   MenuController.setBadge("Rewards", 2)  -- the white count on the button (0 hides it)
 --
 -- While a panel is open the mouse cursor is free
@@ -75,6 +76,8 @@ local OPEN_TIME = 0.18
 
 export type Host = {
 	tabs: Panel.Tabs?,
+	-- The title row's frame, outside the scrolling content (the wallet goes here).
+	header: Frame,
 }
 
 export type MenuEntry = {
@@ -283,9 +286,9 @@ local function createPanel(ui: EntryUi)
 		Parent = panelLayer,
 	}) :: Frame
 	local scale = Theme.make("UIScale", { Parent = panel }) :: UIScale
-	local host: Host = {}
+	local tabs: Panel.Tabs? = nil
 	if entry.tabs then
-		host.tabs = Panel.tabs(panel, entry.tabs)
+		tabs = Panel.tabs(panel, entry.tabs)
 	end
 	local plate = Theme.make("Frame", {
 		Name = "Plate",
@@ -304,6 +307,7 @@ local function createPanel(ui: EntryUi)
 		BackgroundTransparency = 1,
 		Parent = plate,
 	}) :: Frame
+	local host: Host = { tabs = tabs, header = inner }
 	Theme.text({
 		Name = "Title",
 		Size = UDim2.new(1, 0, 0, TITLE_H),
@@ -517,7 +521,11 @@ end
 -- Hides the bar (and closes the panel) while any reason is set:
 -- MenuController.setBarHidden("duelResult", true).
 function MenuController.setBarHidden(reason: string, hidden: boolean)
-	hiddenReasons[reason] = if hidden then true else nil
+	if hidden then
+		hiddenReasons[reason] = true
+	else
+		hiddenReasons[reason] = nil
+	end
 	if hidden then
 		MenuController.close()
 	end

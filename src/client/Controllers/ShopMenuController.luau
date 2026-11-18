@@ -560,7 +560,7 @@ end
 
 local function buildCatalog(content: Frame, host: MenuController.Host, categories: { CategoryInfo })
 	-- Header (the panel around the content): the wallet top right.
-	local wallet = ProfileMenuController.createWallet(content.Parent :: Instance)
+	local wallet = ProfileMenuController.createWallet(host.header)
 	walletCoins = playerCoins()
 	wallet.set(walletCoins, false)
 

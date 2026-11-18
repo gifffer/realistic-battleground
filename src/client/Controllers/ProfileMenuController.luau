@@ -694,9 +694,9 @@ local function playEnter()
 	end
 end
 
-local function build(content: Frame)
-	-- The wallet sits in the panel's header (top right), above the content.
-	wallet = ProfileMenuController.createWallet(content.Parent :: Instance)
+local function build(content: Frame, host: MenuController.Host)
+	-- The wallet sits on the title row (top right), outside the scrolling content.
+	wallet = ProfileMenuController.createWallet(host.header)
 	body = Theme.make("CanvasGroup", {
 		Name = "Body",
 		Size = UDim2.new(1, 0, 0, 392),

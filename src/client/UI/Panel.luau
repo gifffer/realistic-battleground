@@ -475,7 +475,7 @@ end
 
 local function buildFigure(model: Model, options: FigureOptions)
 	model:ClearAllChildren()
-	local pose = options.pose or {}
+	local pose: Pose = options.pose or {}
 	local top = options.top or SILHOUETTE
 	local bottom = options.bottom or SILHOUETTE
 	local skin = options.skin or SILHOUETTE
