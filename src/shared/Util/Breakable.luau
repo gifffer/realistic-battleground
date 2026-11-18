@@ -62,6 +62,11 @@ end
 
 local function decorated(part: BasePart): boolean
 	for _, child in part:GetChildren() do
+		-- (the dirt / rain a client lays on a window, GlassController, doesn't count:
+		-- the server never sees it, and both sides must agree)
+		if child:HasTag("GlassOverlay") then
+			continue
+		end
 		if child:IsA("Decal") or child:IsA("SurfaceGui") then
 			return true -- (Texture is a Decal)
 		end

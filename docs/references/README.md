@@ -19,7 +19,7 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 | 11 | A first-person execution of a downed R6 body (gore), close and slow | The pause before the payoff, gore building up shot by shot, everything staying, a 2 s held aftermath; NOT the see-through pink mist |
 | 12 | Blender tutorial: realistic water droplets | How to model and light convincing liquid drops (for blood drops, wet wounds, pools) |
 | 13 | Blender tutorial: rain ripples | Ripple rings on a liquid surface (drops landing in blood pools) |
-| 14 | Blender tutorial: realistic glass | Glass material and shape (bottles, flasks, shards) |
+| 14 | Blender tutorial: realistic glass | Glass material and shape (bottles, flasks, shards); **the city windows** (implemented: `CityGlass` + `GlassController`, see `docs/GLASS_FR.md`) |
 | 15 | A custom R6 movement system | **The game's walk** (implemented: `MovementClips.Walk`): a quick power-march, high knees, arms pumping across the body, strong torso twist |
 
 ## The rules that come out of them
