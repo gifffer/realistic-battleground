@@ -538,7 +538,6 @@ end
 -- cooked muscle under it). The beam staying on the same spot makes that
 -- burn grow (S, M, L); a part full of wounds: the nearest burn grows.
 local BURN_MERGE = 0.35 -- studs
-local HEAT_BEAM_BURN: Kits.BurnDef = { kind = "Fire", perSecond = 2, duration = 0, spot = true }
 local function addBurn(victim: Model, partName: string, world: Vector3): (string?, any)
 	if not INJ.SKIN_TEAR then
 		return nil, nil
@@ -618,8 +617,6 @@ local function addBurn(victim: Model, partName: string, world: Vector3): (string
 	end
 	local previous = victim:GetAttribute(attribute)
 	setAttribute(victim, attribute, Gash.encode(data))
-	-- (cooked skin round the hole: a laser spot, no flames)
-	Burns.expose(victim, HEAT_BEAM_BURN, if partName == "Head" then "Head" else "Torso", world, true)
 	return attribute, previous
 end
 

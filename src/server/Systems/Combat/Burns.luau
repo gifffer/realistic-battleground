@@ -56,13 +56,20 @@ local WRITE_EVERY = 0.2
 
 -- Which parts touch which (to spread), and which way it is from there.
 local NEXT: { [string]: { { string } } } = {
-	Torso = { { "Head", "up" }, { "Right Arm", "side" }, { "Left Arm", "side" }, { "Right Leg", "down" }, { "Left Leg", "down" } },
+	Torso = {
+		{ "Head", "up" },
+		{ "Right Arm", "side" },
+		{ "Left Arm", "side" },
+		{ "Right Leg", "down" },
+		{ "Left Leg", "down" },
+	},
 	Head = { { "Torso", "down" } },
 	["Right Arm"] = { { "Torso", "up" } },
 	["Left Arm"] = { { "Torso", "up" } },
 	["Right Leg"] = { { "Torso", "up" }, { "Left Leg", "side" } },
 	["Left Leg"] = { { "Torso", "up" }, { "Right Leg", "side" } },
 }
+local NO_LINKS: { { string } } = {}
 -- Acid runs down: a share of it reaches the part below.
 local BELOW: { [string]: string } = {
 	Head = "Torso",
@@ -92,10 +99,11 @@ type Entry = {
 	endsAt: number?, -- burns out by itself at this time (after death, corpse copy)
 	nextWrite: number,
 	litWritten: string?,
-	watched: boolean,
 }
 
 local entries: { [Model]: Entry } = {}
+-- Fighters (Burns.watch): Combat owns their "Burning" attribute.
+local watched: { [Model]: boolean } = setmetatable({}, { __mode = "k" }) :: any
 local random = Random.new()
 local heartbeat: RBXScriptConnection? = nil
 
@@ -115,7 +123,6 @@ local function entryOf(model: Model): Entry
 			endsAt = nil,
 			nextWrite = 0,
 			litWritten = nil,
-			watched = false,
 		}
 		entry = created
 		entries[model] = created
@@ -207,7 +214,10 @@ local function write(entry: Entry, force: boolean)
 			model:SetAttribute(attribute, text)
 		end
 		if state.lit > 0 then
-			lit[BurnCode.CODE_OF[partName]] = if state.lit > 0.7 then 3 elseif state.lit > 0.35 then 2 else 1
+			lit[BurnCode.CODE_OF[partName]] = if state.lit > 0.7
+				then 3
+				elseif state.lit > 0.35 then 2
+				else 1
 		end
 	end
 	local litText = BurnCode.encodeLit(lit)
@@ -246,7 +256,7 @@ local function step(dt: number)
 				end
 				-- Spread to the parts next to it.
 				if time - state.litSince >= SPREAD_AFTER then
-					for _, link in NEXT[partName] or {} do
+					for _, link in NEXT[partName] or NO_LINKS do
 						local other = entry.parts[link[1]]
 						if other and other.lit > 0 then
 							continue
@@ -258,11 +268,20 @@ local function step(dt: number)
 						if state.spot then
 							chance *= SPOT_SPREAD
 						end
-						if random:NextNumber() < chance * state.lit * dt and bodyPart(model, link[1]) then
+						if
+							random:NextNumber() < chance * state.lit * dt
+							and bodyPart(model, link[1])
+						then
 							local caught = partState(entry, link[1], "Fire")
 							light(caught, 0.25, false)
 							-- (it catches at the side touching the fire)
-							dose(caught, if link[2] == "up" then 4 elseif link[2] == "down" then 3 else 6, 0.4, 0.2, 0.05)
+							dose(
+								caught,
+								if link[2] == "up" then 4 elseif link[2] == "down" then 3 else 6,
+								0.4,
+								0.2,
+								0.05
+							)
 						end
 					end
 				end
@@ -345,7 +364,13 @@ local function zoneParts(model: Model, zone: string?, from: Vector3?): { string 
 	return { "Right Leg", "Left Leg" } -- (a floor on fire / an acid puddle: the feet)
 end
 
-function Burns.expose(model: Model, burn: Kits.BurnDef, zone: string?, from: Vector3?, noFlame: boolean?)
+function Burns.expose(
+	model: Model,
+	burn: Kits.BurnDef,
+	zone: string?,
+	from: Vector3?,
+	noFlame: boolean?
+)
 	local entry = entryOf(model)
 	local kind: Kind = if burn.kind == "Acid" then "Acid" else "Fire"
 	local focused = burn.spot == true and kind == "Fire"
@@ -381,7 +406,10 @@ function Burns.expose(model: Model, burn: Kits.BurnDef, zone: string?, from: Vec
 					if #state.spots >= BurnCode.MAX_SPOTS then
 						table.remove(state.spots, 1)
 					end
-					table.insert(state.spots, { face = face, u = u, v = v, degree = 2.6 * strength })
+					table.insert(
+						state.spots,
+						{ face = face, u = u, v = v, degree = 2.6 * strength }
+					)
 				end
 				dose(state, face, 0.7, 0.2, 0)
 			elseif kind == "Fire" then
@@ -482,23 +510,26 @@ function putOut(entry: Entry)
 	entry.active = false
 	entry.kind = nil
 	entry.endsAt = nil
-	if not entry.watched then
+	if not watched[entry.model] then
 		entry.model:SetAttribute("Burning", nil) -- (a corpse copy: nobody else will)
 	end
 	if fire then
-		entry.model:SetAttribute(BurnCode.SMOKE, serverNow() + (if deep then SMOKE_AFTER else SMOKE_LIGHT))
+		entry.model:SetAttribute(
+			BurnCode.SMOKE,
+			serverNow() + (if deep then SMOKE_AFTER else SMOKE_LIGHT)
+		)
 	end
 	write(entry, true)
 end
 
 function Burns.extinguish(model: Model)
 	local entry = entries[model]
-	if entry == nil or (not entry.active and entry.endsAt == nil) then
-		return
+	if entry == nil or not entry.active then
+		return -- (out already, or a dead body burning out by itself)
 	end
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	local dead = humanoid ~= nil and humanoid.Health <= 0
-	if dead and entry.active and entry.kind == "Fire" and entry.endsAt == nil then
+	if dead and entry.kind == "Fire" then
 		-- (a burning body doesn't go out when it dies: a few seconds more)
 		entry.active = false
 		entry.endsAt = serverNow() + AFTER_DEATH
@@ -529,11 +560,10 @@ end
 -- A fighter: "Burning" set by something else than startBurning (a
 -- finisher sets it itself) puts them on fire all over; cleared, it's out.
 function Burns.watch(model: Model)
-	local entry = entryOf(model)
-	if entry.watched then
+	if watched[model] then
 		return
 	end
-	entry.watched = true
+	watched[model] = true
 	model:GetAttributeChangedSignal("Burning"):Connect(function()
 		local value = model:GetAttribute("Burning")
 		local current = entries[model]

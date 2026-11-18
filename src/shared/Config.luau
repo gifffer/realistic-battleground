@@ -354,7 +354,8 @@ return table.freeze({
 		-- Pyromaniac's fire...): assets/burns/*.png uploaded to Roblox, their
 		-- image ids here (docs/BURNS_FR.md). Tiled on the burnt faces, one
 		-- per stage (1 redness, 2 blisters, 3 eschar, 4 char). 0 = not
-		-- uploaded: the old BURN_IMAGES below stand in, then plain colour.
+		-- uploaded: the old BURN_IMAGES below stand in (Roblox's own
+		-- particles for the flame / smoke / ember).
 		BURNS = table.freeze({
 			skin = table.freeze({ 0, 0, 0, 0 }), -- skin_1..4.png (bare skin)
 			cloth = table.freeze({ 0, 0, 0, 0 }), -- cloth_1..4.png (over a shirt / pants)

@@ -74,30 +74,45 @@ end
 
 -- The picture for a stage of a set (the new one, else the old one).
 local function lookFor(set: Set, stage: number): Look?
-	local ids: { number } = if set == "acid" then IMAGES.acid elseif set == "cloth" then IMAGES.cloth else IMAGES.skin
+	local ids: { number } = if set == "acid"
+		then IMAGES.acid
+		elseif set == "cloth" then IMAGES.cloth
+		else IMAGES.skin
 	local id = ids[stage]
 	if id and id ~= 0 then
 		return { image = asset(id), opacity = 1, tile = TILE, tint = nil }
 	end
 	if set == "acid" then
 		local old = LEGACY.acid[stage]
-		return if old and old ~= 0 then { image = asset(old), opacity = 0.9, tile = 2.4, tint = nil } else nil
+		return if old and old ~= 0
+			then { image = asset(old), opacity = 0.9, tile = 2.4, tint = nil }
+			else nil
 	end
 	if stage == 1 then
 		-- (a soft red blush from the old halo)
 		return if LEGACY.halo ~= 0
-			then { image = asset(LEGACY.halo), opacity = 0.45, tile = 1.4, tint = Color3.fromRGB(196, 72, 60) }
+			then {
+				image = asset(LEGACY.halo),
+				opacity = 0.45,
+				tile = 1.4,
+				tint = Color3.fromRGB(196, 72, 60),
+			}
 			else nil
 	end
 	local old = LEGACY.fire[stage - 1]
-	return if old and old ~= 0 then { image = asset(old), opacity = 0.95, tile = 2.4, tint = nil } else nil
+	return if old and old ~= 0
+		then { image = asset(old), opacity = 0.95, tile = 2.4, tint = nil }
+		else nil
 end
 
-local function spotImage(): string?
+-- The spot's picture and tile size (its burn fills the middle 40 % of a
+-- tile bigger than the face: one spot shows). Not uploaded: no spot, the
+-- face's own burn shows where it went in (the old pictures are tiles).
+local function spotImage(): (string?, number)
 	if IMAGES.spot ~= 0 then
-		return asset(IMAGES.spot)
+		return asset(IMAGES.spot), SPOT_TILE
 	end
-	return nil
+	return nil, SPOT_TILE
 end
 
 ------------------------------------------------------------------------------
@@ -139,6 +154,7 @@ type Session = {
 	parts: { [string]: PartLook },
 	lit: { [string]: number },
 	smokeUntil: number,
+	smoking: boolean, -- (its smoke still on: one more pass turns it off)
 	light: PointLight?,
 	seed: number,
 	animating: boolean,
@@ -260,11 +276,13 @@ local function setLayer(
 		end
 		return
 	end
-	if texture == nil then
+	if not texture then
 		texture = newTexture(look.part, face, stage)
 		faceLook.layers[stage] = texture
 	end
-	assert(texture)
+	if not texture then
+		return
+	end
 	if texture.Texture ~= info.image then
 		texture.Texture = info.image
 		texture.StudsPerTileU = info.tile
@@ -279,32 +297,48 @@ local function setLayer(
 	texture.Transparency = 1 - amount * info.opacity
 end
 
-local function setSpot(look: PartLook, faceLook: FaceLook, face: number, index: number, spot: BurnCode.Spot?, amount: number)
+local function setSpot(
+	look: PartLook,
+	faceLook: FaceLook,
+	face: number,
+	index: number,
+	spot: BurnCode.Spot?,
+	amount: number
+)
 	local texture = faceLook.spots[index]
-	local image = spotImage()
+	local image, tile = spotImage()
 	if spot == nil or image == nil or amount <= 0.001 then
 		if texture then
 			texture.Transparency = 1
 		end
 		return
 	end
-	if texture == nil then
+	if not texture then
 		texture = newTexture(look.part, face, 8 + index)
 		faceLook.spots[index] = texture
 	end
-	assert(texture)
+	if not texture then
+		return
+	end
 	texture.Texture = image
-	texture.StudsPerTileU = SPOT_TILE
-	texture.StudsPerTileV = SPOT_TILE
+	texture.StudsPerTileU = tile
+	texture.StudsPerTileV = tile
 	-- (the tile's middle on the spot)
-	texture.OffsetStudsU = spot.u * faceWidth(look.part, face) - SPOT_TILE / 2
-	texture.OffsetStudsV = spot.v * faceHeight(look.part, face) - SPOT_TILE / 2
+	texture.OffsetStudsU = spot.u * faceWidth(look.part, face) - tile / 2
+	texture.OffsetStudsV = spot.v * faceHeight(look.part, face) - tile / 2
 	texture.Transparency = 1 - amount
+end
+
+-- Gone (a burst head): nothing drawn, no flames. A part replaced by its
+-- cut copy (Gashes: the real part invisible, a "Gashes" folder in it) still
+-- burns: its flames go on (its burn textures can't show on the copy).
+local function isGone(part: BasePart): boolean
+	return part.Transparency > 0.9 and part:FindFirstChild("Gashes") == nil
 end
 
 local function drawPart(session: Session, look: PartLook)
 	local burn = look.burn
-	local hidden = look.part.Transparency > 0.9
+	local hidden = isGone(look.part)
 	look.hidden = hidden
 	local set: Set = if burn and burn.kind == "Acid"
 		then "acid"
@@ -595,7 +629,7 @@ local function maxDegree(look: PartLook): number
 end
 
 -- The emitters of one part from what burns there now.
-local function driveFx(session: Session, look: PartLook, smouldering: boolean, firstPerson: boolean)
+local function driveFx(look: PartLook, smouldering: boolean, firstPerson: boolean)
 	local level = if look.hidden then 0 else look.level
 	local quality = 1
 	local fire = level > 0 and not look.acid
@@ -634,7 +668,6 @@ local function driveFx(session: Session, look: PartLook, smouldering: boolean, f
 		setRate(look.fx.vapour, 0)
 		setRate(look.fx.drips, 0)
 	end
-	_ = session
 end
 
 ------------------------------------------------------------------------------
@@ -712,7 +745,8 @@ local function readLit(session: Session)
 	for _, partName in BurnCode.PARTS do
 		local code = BurnCode.CODE_OF[partName]
 		local level = lit[code] or 0
-		local look = session.parts[partName] or (if level > 0 then lookOf(session, partName) else nil)
+		local look = session.parts[partName]
+			or (if level > 0 then lookOf(session, partName) else nil)
 		if look then
 			look.level = level
 			look.acid = look.burn ~= nil and (look.burn :: BurnCode.PartBurn).kind == "Acid"
@@ -750,7 +784,9 @@ local function readLit(session: Session)
 	-- Catching fire: the sound, a cry (a living body, not too often).
 	if session.burning and not wasBurning then
 		local humanoid = model:FindFirstChildOfClass("Humanoid")
-		local alive = humanoid ~= nil and humanoid.Health > 0 and not model:HasTag(Config.Combat.CORPSE_TAG)
+		local alive = humanoid ~= nil
+			and humanoid.Health > 0
+			and not model:HasTag(Config.Combat.CORPSE_TAG)
 		if alive then
 			SoundController.play(if anyFire then "Burn" else "AcidSizzle", model)
 			local now = os.clock()
@@ -790,8 +826,11 @@ local function wipe(session: Session)
 				texture:Destroy()
 			end
 		end
-		for _, emitter in look.fx do
-			emitter:Destroy()
+		local fx = look.fx
+		for _, emitter in { fx.flame, fx.smoke, fx.embers, fx.fizz, fx.vapour, fx.drips } do
+			if emitter then
+				emitter:Destroy()
+			end
 		end
 	end
 	if session.light then
@@ -819,7 +858,7 @@ function Burns._step(dt: number)
 	local any = false
 	for model, session in sessions do
 		local smouldering = now < session.smokeUntil
-		local busy = session.burning or smouldering or session.animating
+		local busy = session.burning or smouldering or session.smoking or session.animating
 		if not busy then
 			continue
 		end
@@ -827,7 +866,8 @@ function Burns._step(dt: number)
 		-- The light flickers (smooth noise, two speeds), every frame.
 		local light = session.light
 		if light and light.Enabled then
-			local n = math.noise(now * 7.3, session.seed) * 0.6 + math.noise(now * 19.1, session.seed + 3) * 0.4
+			local n = math.noise(now * 7.3, session.seed) * 0.6
+				+ math.noise(now * 19.1, session.seed + 3) * 0.4
 			local total = 0
 			for _, level in session.lit do
 				total += level
@@ -849,7 +889,7 @@ function Burns._step(dt: number)
 				continue
 			end
 			local burn = look.burn
-			local changed = (look.part.Transparency > 0.9) ~= look.hidden
+			local changed = isGone(look.part) ~= look.hidden
 			for face = 1, 6 do
 				local goal = if burn then burn.faces[face] else 0
 				local value = look.shown[face]
@@ -871,9 +911,10 @@ function Burns._step(dt: number)
 				moving = true
 				drawPart(session, look)
 			end
-			driveFx(session, look, smouldering, firstPerson)
+			driveFx(look, smouldering, firstPerson)
 		end
 		session.animating = moving
+		session.smoking = smouldering
 	end
 	if not any and heartbeat then
 		heartbeat:Disconnect()
@@ -905,6 +946,7 @@ function Burns.watch(model: Model)
 		parts = {},
 		lit = {},
 		smokeUntil = 0,
+		smoking = false,
 		light = nil,
 		seed = hash(model.Name) % 997,
 		animating = false,

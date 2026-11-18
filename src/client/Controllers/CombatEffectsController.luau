@@ -53,6 +53,7 @@ local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local RiftFx = require(script.Parent.Parent.Combat.RiftFx)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
+local Burns = require(script.Parent.Parent.Combat.Burns)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
@@ -246,6 +247,7 @@ local function onCorpseAdded(instance: Instance)
 	end
 	corpses[instance] = true
 	Wounds.watch(instance)
+	Burns.watch(instance) -- (its burns, and a body still alight burning on)
 end
 
 local function onCombatantRemoved(instance: Instance)

@@ -1061,3 +1061,20 @@ Pour forcer la pluie (barre de commande, côté **Server**) : `workspace:SetAttr
 | V7 | Attendre la **fin de la pluie** | L'eau arrête de couler, puis les vitres sèchent en ~25 s. Plus rien sur les vitres. Saleté légère toujours là près de toi (bas de vitre un peu plus poussiéreux, bord un peu plus sombre). |
 | V8 | Casser une vitrine avec un coup lourd (charge du **Bull**, atterrissage du **Sentinel**) | Éclats de verre **fins et transparents** qui volent puis restent au sol 16-22 s, un flash froid très court, des paillettes, le **bruit de verre brisé**. Pas de gros cubes de verre. La vitrine revient ~25 s après, en verre (et avec la pluie si il pleut). |
 | V9 | *Test → Clients and Servers → 2 Players*, regarder les vitres | Même verre et mêmes teintes chez les deux joueurs. Les gouttes ne sont dessinées que chez chacun, près de lui. |
+
+## Brûlures v2 (`feature/burns-v2`)
+
+Détails et import des images : `docs/BURNS_FR.md`. Tout marche **sans les nouvelles images** (anciennes images + particules Roblox) ; la tache du laser (B3) a besoin de `spot.png`. Prendre le kit **Rift** contre un mannequin ou un 2e joueur (*Test → Clients and Servers → 2 Players*).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Toucher avec la **fiole explosive** (feu) | Le membre touché rougit, puis la peau part (rouge mouillé, peau blanche qui pèle), puis escarre beige, puis noir carbonisé si ça dure. Les flammes **montent** vers le torse et la tête ; vraies langues de feu, fumée noire, braises, lumière orange qui vacille. |
+| B2 | Laisser le feu s'éteindre | Les flammes partent, le corps **fume** gris quelques secondes (braises sur le noir), puis plus rien. Les brûlures **restent**. Pas d'erreur dans l'Output. |
+| B3 | **Rayon** (pistolet laser) sur le torse, puis au même endroit | Une **tache** profonde (cratère noir, anneau blanc, peau rouge pelée autour) là où il touche, qui s'aggrave au même endroit ; à peine de flammes, presque pas de propagation. |
+| B4 | **Acide** (fiole acide, puis rester dans la flaque) | Tache jaune-brun, puis peau rongée jaune-brun / chair à vif, puis escarre brun-noir, avec des **coulures vers le bas** ; mousse, vapeur pâle, gouttes. Dans la flaque : les **pieds / jambes** d'abord. Jamais de flammes. |
+| B5 | Un personnage **avec T-shirt / pantalon** brûlé | Le tissu roussit, se carbonise, des **trous brûlés** montrent la peau brûlée ; au degré 4 le tissu est fondu dans la peau noire. |
+| B6 | Tuer quelqu'un **pendant** qu'il brûle (finisher) | Le corps brûle encore ~4 s puis fume. Après la réapparition, la **copie du cadavre** a les mêmes brûlures (et brûle encore un peu si elle était en feu). |
+| B7 | 2e joueur : regarder la même victime | Mêmes brûlures aux mêmes endroits, mêmes membres en feu. Un joueur qui rejoint après voit aussi les brûlures. |
+| B8 | Kill (la vie remonte) / nouvelle manche / réapparition | Les brûlures et les flammes partent. |
+| B9 | Brûlé en vue à la 1re personne | Pas de flammes ni de fumée devant la caméra (celles de la tête sont cachées), le reste du corps brûle normalement. |
+| B10 | Vision thermique du **Sentinel** | Le trou dans la peau comme avant ; pas de flammes. |
