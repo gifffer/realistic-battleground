@@ -215,17 +215,19 @@ function R6Pose.toTransform(motor: Motor6D, localCFrame: CFrame): CFrame
 	return axes:Inverse() * localCFrame * axes
 end
 
--- The 6 Motor6D of an R6 character, or nil if one is missing (not R6,
--- still loading, or broken by a ragdoll).
+-- The Motor6D of an R6 character, or nil without its Root and Neck (not
+-- R6, still loading). A limb's may be missing (torn off, HeavyGore): the
+-- others still move, that one isn't in the table.
 function R6Pose.findMotors(character: Model): { [string]: Motor6D }?
 	local motors: { [string]: Motor6D } = {}
 	for joint, path in JOINTS do
 		local part = character:FindFirstChild(path[1])
 		local motor = part and part:FindFirstChild(path[2])
-		if motor == nil or not motor:IsA("Motor6D") then
+		if motor and motor:IsA("Motor6D") then
+			motors[joint] = motor
+		elseif joint == "Root" or joint == "Neck" then
 			return nil
 		end
-		motors[joint] = motor
 	end
 	return motors
 end
