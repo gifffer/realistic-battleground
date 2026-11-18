@@ -49,6 +49,11 @@ Rojo synchronise, *Play*.
 | `Slide` | Début d'une glissade |
 | `Vault` | Passage par-dessus un obstacle bas |
 | `Mantle` | Attraper un rebord |
+| `FootConcrete` | Un pas sur béton, bitume, brique, pierre, plastique (le son par défaut) |
+| `FootDirt` | Un pas sur terre, sable, boue, gravier, neige (et tapis, plus bas) |
+| `FootWood` | Un pas sur du bois ou des planches |
+| `FootMetal` | Un pas sur du métal (plaques, grilles, métal rouillé) |
+| `FootGrass` | Un pas sur l'herbe |
 | `BloodDrip` | Une goutte de sang qui tombe d'un blessé (doux, discret) |
 | `BloodSplat` | Une giclée de sang sur un coup lourd qui saigne |
 | `ArterialSpurt` | Chaque jet d'une artère coupée (finishers) |
@@ -59,3 +64,12 @@ Ils sont tous téléchargés au lancement du jeu, pour que le premier coup ne so
 
 > Si un son ne joue pas : ouvre l'Output dans Studio. Un message `Failed to load sound` veut dire
 > que le son est privé ou supprimé — il faut qu'il soit public ou qu'il appartienne à ton compte.
+
+## Les bruits de pas
+
+Chaque fois qu'un pied touche le sol (le moment exact vient de l'animation de marche),
+le jeu regarde la matière du sol sous ce pied et joue un son `Foot...` au hasard dans sa
+liste, depuis la jambe, en 3D. Plus fort en courant, plus doux en marchant. On l'entend
+jusqu'à 45 studs. Le bruit de pas de Roblox (le son « Running ») est coupé, sinon on
+entendrait les deux. Quelle matière donne quel son : `STEP_SOUND` en haut de
+`src/client/Combat/Footsteps.luau`. Accroupi ou en boitant, pas de bruit de pas.
