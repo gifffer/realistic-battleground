@@ -1,7 +1,9 @@
 --!strict
 -- Icons: the top bar's and the cards' icons, drawn with frames (no image
--- assets to upload). Every part is placed in scale (0-1) inside its holder,
--- so one icon reads at any size.
+-- assets to upload). Line icons like Roblox's own (menu, chat, mic): one
+-- stroke width for every line, round ends, drawn on a 22 × 22 grid and
+-- scaled to the size asked for, so every icon has the same weight. Rings are
+-- at least 6 grid units wide so their holes stay open at 22 px.
 --
 --   local icon = Icons.draw("kits", parent, 22)       -- a 22 × 22 icon
 --   Icons.paint(icon, Color3.new(0, 0, 0))           -- recolour it
@@ -24,49 +26,130 @@ export type IconName =
 local Icons = {}
 
 local WHITE = Color3.new(1, 1, 1)
+local GRID = 22 -- every icon is drawn on this grid
+local STROKE = 2 -- line width on the grid (2 px at 22 px)
 
--- A filled part: centre (x, y), size (w, h), all in scale; `round` 0-1.
-local function part(
+type Pen = {
 	holder: Frame,
-	x: number,
-	y: number,
-	w: number,
-	h: number,
-	rotation: number?,
-	round: number?
-): Frame
+	unit: number, -- pixels per grid step
+	stroke: number, -- line width in pixels (whole pixels: crisp)
+}
+
+-- Grid position → offset pixels.
+local function at(pen: Pen, value: number): number
+	return value * pen.unit
+end
+
+-- A straight line from (x1, y1) to (x2, y2), round ends.
+local function line(pen: Pen, x1: number, y1: number, x2: number, y2: number)
+	local dx = at(pen, x2 - x1)
+	local dy = at(pen, y2 - y1)
+	local length = math.sqrt(dx * dx + dy * dy) + pen.stroke
 	local frame = Theme.make("Frame", {
 		Name = "Part",
 		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(x, y),
-		Size = UDim2.fromScale(w, h),
-		Rotation = rotation or 0,
+		Position = UDim2.fromOffset(at(pen, (x1 + x2) / 2), at(pen, (y1 + y2) / 2)),
+		Size = UDim2.fromOffset(length, pen.stroke),
+		Rotation = math.deg(math.atan2(dy, dx)),
 		BackgroundColor3 = WHITE,
-		Parent = holder,
-	}) :: Frame
-	if round and round > 0 then
-		Theme.make("UICorner", { CornerRadius = UDim.new(round, 0), Parent = frame })
-	end
-	return frame
+		Parent = pen.holder,
+	})
+	Theme.make("UICorner", { CornerRadius = UDim.new(1, 0), Parent = frame })
 end
 
--- An outlined circle: centre (x, y), diameter `d` (scale), line `thick` (scale).
-local function ring(holder: Frame, x: number, y: number, d: number, thick: number, size: number)
+-- An outlined box from (x1, y1) to (x2, y2) (the line's middle), corner `round` (grid).
+local function box(
+	pen: Pen,
+	x1: number,
+	y1: number,
+	x2: number,
+	y2: number,
+	round: number,
+	parent: Instance?
+)
+	local s = pen.stroke
 	Theme.make("Frame", {
-		Name = "Ring",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(x, y),
-		Size = UDim2.fromScale(d, d),
+		Name = "Box",
+		Position = UDim2.fromOffset(at(pen, x1) + s / 2, at(pen, y1) + s / 2),
+		Size = UDim2.fromOffset(at(pen, x2 - x1) - s, at(pen, y2 - y1) - s),
 		BackgroundTransparency = 1,
-		Parent = holder,
+		Parent = parent or pen.holder,
 	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, at(pen, round)) }),
 		Theme.make("UIStroke", {
-			Thickness = math.max(1, thick * size),
+			Thickness = s,
 			Color = WHITE,
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}),
 	})
+end
+
+-- An outlined circle: centre (x, y), diameter `d` (grid, the line's middle).
+local function ring(pen: Pen, x: number, y: number, d: number, parent: Instance?)
+	local s = pen.stroke
+	Theme.make("Frame", {
+		Name = "Ring",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(at(pen, x), at(pen, y)),
+		Size = UDim2.fromOffset(at(pen, d) - s, at(pen, d) - s),
+		BackgroundTransparency = 1,
+		Parent = parent or pen.holder,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+		Theme.make("UIStroke", {
+			Thickness = s,
+			Color = WHITE,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+	})
+end
+
+-- A filled dot: centre (x, y), diameter `d` (grid).
+local function dot(pen: Pen, x: number, y: number, d: number)
+	local frame = Theme.make("Frame", {
+		Name = "Part",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(at(pen, x), at(pen, y)),
+		Size = UDim2.fromOffset(at(pen, d), at(pen, d)),
+		BackgroundColor3 = WHITE,
+		Parent = pen.holder,
+	})
+	Theme.make("UICorner", { CornerRadius = UDim.new(1, 0), Parent = frame })
+end
+
+-- A filled block centred on (x, y): `length` along its axis, `width` across,
+-- turned `angle` degrees (0 = the length points up). For gear teeth.
+local function slab(pen: Pen, x: number, y: number, length: number, width: number, angle: number)
+	Theme.make("Frame", {
+		Name = "Part",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(at(pen, x), at(pen, y)),
+		Size = UDim2.fromOffset(at(pen, width), at(pen, length)),
+		Rotation = angle,
+		BorderSizePixel = 0,
+		BackgroundColor3 = WHITE,
+		Parent = pen.holder,
+	})
+end
+
+-- A frame where only rows y1 to y2 of the icon show (for an arc). Shapes
+-- drawn in it keep the icon's own grid positions.
+local function clip(pen: Pen, y1: number, y2: number): Frame
+	local window = Theme.make("Frame", {
+		Name = "Clip",
+		Position = UDim2.fromOffset(0, at(pen, y1)),
+		Size = UDim2.fromOffset(at(pen, GRID), at(pen, y2 - y1)),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		Parent = pen.holder,
+	})
+	return Theme.make("Frame", {
+		Name = "Grid",
+		Position = UDim2.fromOffset(0, -at(pen, y1)),
+		Size = UDim2.fromOffset(at(pen, GRID), at(pen, GRID)),
+		BackgroundTransparency = 1,
+		Parent = window,
+	}) :: Frame
 end
 
 function Icons.draw(name: IconName, parent: Instance, size: number): Frame
@@ -76,68 +159,73 @@ function Icons.draw(name: IconName, parent: Instance, size: number): Frame
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}) :: Frame
+	local pen: Pen = {
+		holder = holder,
+		unit = size / GRID,
+		stroke = math.max(1, math.floor(STROKE * size / GRID + 0.5)),
+	}
 	if name == "kits" then
-		-- A fighter: head and shoulders.
-		part(holder, 0.5, 0.27, 0.38, 0.38, 0, 1)
-		part(holder, 0.5, 0.8, 0.78, 0.42, 0, 0.45)
+		-- A fighter: head, and shoulders closed by a base line.
+		ring(pen, 11, 7, 8)
+		ring(pen, 11, 20, 14, clip(pen, 12, 20))
+		line(pen, 4, 19, 18, 19)
 	elseif name == "duel" then
-		-- Two crossed blades with their guards.
-		part(holder, 0.5, 0.5, 0.12, 1.02, 45, 0)
-		part(holder, 0.5, 0.5, 0.12, 1.02, -45, 0)
-		part(holder, 0.27, 0.73, 0.36, 0.11, 45, 0)
-		part(holder, 0.73, 0.73, 0.36, 0.11, -45, 0)
+		-- Two crossed swords, hilts in the bottom corners: blade, a guard
+		-- square to the blade, and a short grip.
+		line(pen, 18, 3, 6, 16)
+		line(pen, 8.2, 18.03, 3.8, 13.97)
+		line(pen, 6, 16, 3.5, 19)
+		line(pen, 4, 3, 16, 16)
+		line(pen, 18.2, 13.97, 13.8, 18.03)
+		line(pen, 16, 16, 18.5, 19)
 	elseif name == "rewards" then
-		-- A gift: two halves of the box and of the lid (the gap is the ribbon), a bow.
-		part(holder, 0.3, 0.7, 0.34, 0.46, 0, 0)
-		part(holder, 0.7, 0.7, 0.34, 0.46, 0, 0)
-		part(holder, 0.27, 0.38, 0.4, 0.16, 0, 0)
-		part(holder, 0.73, 0.38, 0.4, 0.16, 0, 0)
-		part(holder, 0.38, 0.18, 0.22, 0.22, 45, 0.3)
-		part(holder, 0.62, 0.18, 0.22, 0.22, 45, 0.3)
+		-- A gift: lid, box, ribbon and a two-loop bow.
+		box(pen, 3, 8, 19, 12, 1.5)
+		box(pen, 4.5, 12, 17.5, 20, 1.5)
+		line(pen, 11, 8, 11, 20)
+		ring(pen, 8, 5, 6)
+		ring(pen, 14, 5, 6)
 	elseif name == "emotes" then
-		-- A figure cheering: arms up, legs apart.
-		part(holder, 0.5, 0.14, 0.24, 0.24, 0, 1)
-		part(holder, 0.5, 0.47, 0.16, 0.36, 0, 0.3)
-		part(holder, 0.3, 0.32, 0.12, 0.38, -35, 1)
-		part(holder, 0.7, 0.32, 0.12, 0.38, 35, 1)
-		part(holder, 0.38, 0.8, 0.13, 0.4, 18, 1)
-		part(holder, 0.62, 0.8, 0.13, 0.4, -18, 1)
+		-- A smiley face, like Roblox's emote button: eyes and a smile.
+		ring(pen, 11, 11, 18)
+		dot(pen, 8, 9, 2.5)
+		dot(pen, 14, 9, 2.5)
+		ring(pen, 11, 10.5, 10, clip(pen, 13.5, 17))
 	elseif name == "shop" then
-		-- A hat: crown and brim.
-		part(holder, 0.5, 0.45, 0.56, 0.44, 0, 0.35)
-		part(holder, 0.5, 0.7, 1, 0.14, 0, 1)
-		part(holder, 0.5, 0.59, 0.56, 0.06, 0, 0)
+		-- A hat: a tapered crown with a band, on a wide brim.
+		line(pen, 7, 16, 8, 5)
+		line(pen, 8, 5, 14, 5)
+		line(pen, 14, 5, 15, 16)
+		line(pen, 7.4, 12, 14.6, 12)
+		line(pen, 2.5, 16, 19.5, 16)
 	elseif name == "profile" then
-		-- A chart: three bars on a line.
-		part(holder, 0.22, 0.66, 0.2, 0.44, 0, 0)
-		part(holder, 0.5, 0.5, 0.2, 0.76, 0, 0)
-		part(holder, 0.78, 0.58, 0.2, 0.6, 0, 0)
-		part(holder, 0.5, 0.95, 1, 0.08, 0, 0)
+		-- A chart: three bars on a base line.
+		line(pen, 6, 11, 6, 16)
+		line(pen, 11, 5, 11, 16)
+		line(pen, 16, 8, 16, 16)
+		line(pen, 3, 19.5, 19, 19.5)
 	elseif name == "settings" then
-		-- A gear: a ring with eight teeth.
+		-- A gear: a ring with eight solid teeth on it, and an open hub.
+		ring(pen, 11, 11, 12)
+		ring(pen, 11, 11, 6)
 		for index = 0, 7 do
 			local angle = math.rad(index * 45)
-			part(
-				holder,
-				0.5 + math.sin(angle) * 0.38,
-				0.5 - math.cos(angle) * 0.38,
-				0.2,
-				0.2,
-				index * 45,
-				0.2
-			)
+			slab(pen, 11 + math.sin(angle) * 7.5, 11 - math.cos(angle) * 7.5, 4, 3.5, index * 45)
 		end
-		ring(holder, 0.5, 0.5, 0.62, 0.16, size)
 	elseif name == "effect" then
-		-- A burst: four crossed rays and a core.
-		for index = 0, 3 do
-			part(holder, 0.5, 0.5, 0.09, if index % 2 == 0 then 1 else 0.7, index * 45, 1)
+		-- A burst: eight rays around a dot, the long ones on the axes.
+		for index = 0, 7 do
+			local angle = math.rad(index * 45)
+			local reach = if index % 2 == 0 then 9.5 else 7
+			local sin, cos = math.sin(angle), math.cos(angle)
+			line(pen, 11 + sin * 4.5, 11 - cos * 4.5, 11 + sin * reach, 11 - cos * reach)
 		end
-		part(holder, 0.5, 0.5, 0.34, 0.34, 0, 1)
+		dot(pen, 11, 11, 4)
 	elseif name == "title" then
 		-- A name tag: a plate with two lines.
-		part(holder, 0.5, 0.36, 0.9, 0.12, 0, 0)
-		part(holder, 0.42, 0.6, 0.74, 0.12, 0, 0)
+		box(pen, 2, 5, 20, 17, 2.5)
+		line(pen, 6, 9.5, 16, 9.5)
+		line(pen, 6, 12.5, 12, 12.5)
 	end
 	return holder
 end
