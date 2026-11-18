@@ -407,6 +407,40 @@ local sounds: { [string]: SoundInfo } = {
 	Slide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
 	Vault = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 },
 	Mantle = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.1 }, -- grabbing a ledge
+	-- Footsteps: one sound each time a foot lands, chosen by the floor's material
+	-- (Combat/Footsteps decides which material uses which slot). `volume` is a
+	-- normal walk: running plays louder, a light step quieter. These replace
+	-- Roblox's default footstep loop (muted by DeathSoundController).
+	FootConcrete = { -- concrete, asphalt, brick, stone, plastic (the default)
+		ids = { 129317472269932, 135085025171496, 116023211662573 },
+		volume = 0.35,
+		pitch = 1,
+		pitchVariation = 0.08,
+	},
+	FootDirt = { -- dirt, sand, mud, gravel, snow
+		ids = { 138750508569819, 140165597842270 },
+		volume = 0.35,
+		pitch = 1,
+		pitchVariation = 0.1,
+	},
+	FootWood = { -- wooden floors and planks
+		ids = { 139561410113584, 139575423158758, 103047430053521 },
+		volume = 0.35,
+		pitch = 1,
+		pitchVariation = 0.08,
+	},
+	FootMetal = { -- metal plates, grates, rusty metal
+		ids = { 136452594795744, 98915841855850, 118543527545797 },
+		volume = 0.3,
+		pitch = 1,
+		pitchVariation = 0.08,
+	},
+	FootGrass = { -- grass and leafy grass
+		ids = { 127407887796066, 137782073700276, 138157417086550 },
+		volume = 0.35,
+		pitch = 1,
+		pitchVariation = 0.1,
+	},
 
 	-- Weather (played by Client/Controllers/CityAudioController and WeatherController) --------
 	-- Not in 3D: heard by you wherever you are. Empty = silent, the game still works.

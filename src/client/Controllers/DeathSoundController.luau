@@ -1,5 +1,6 @@
 --!strict
--- DeathSoundController: no Roblox "oof" when someone dies.
+-- DeathSoundController: no Roblox "oof" when someone dies, and no Roblox
+-- footstep loop (our own footsteps: Combat/Footsteps).
 --
 -- Roblox adds its own LocalScript to every player (RbxCharacterSounds, in
 -- StarterPlayerScripts). It creates the default character sounds (footsteps, jump, landing...)
@@ -9,18 +10,21 @@
 --
 -- What this does: for EVERY character on this screen (yours and the others'), as soon as a
 -- Sound named "Died" appears in it (normally in its HumanoidRootPart), it is muted for good (no file, volume 0,
--- and stopped at once if something still plays it). The other default sounds (footsteps...)
--- are not touched. The sound is muted rather than deleted: the Roblox script keeps a reference
+-- and stopped at once if something still plays it). The same is done to "Running", Roblox's
+-- looping footstep sound: our own footsteps (Combat/Footsteps) play one sound per real foot
+-- contact, picked by the floor's material, so the default loop would double them. The other
+-- default sounds (jump, landing...) are not touched. The sound is muted rather than deleted: the Roblox script keeps a reference
 -- to it, and a muted sound is the safest thing to leave it.
 --
--- Our own sounds are never named "Died" (they are named after their Shared/Sounds slot), so
--- the train's scream and crash still play.
+-- Our own sounds are never named "Died" or "Running" (they are named after their Shared/Sounds
+-- slot), so the train's scream and crash and our footsteps still play.
 
 local Players = game:GetService("Players")
 
 local DeathSoundController = {}
 
-local DEFAULT_DEATH_SOUND = "Died"
+-- The default sounds muted: the death "oof" and the footstep loop.
+local MUTED_NAMES: { [string]: boolean } = { Died = true, Running = true }
 
 -- The sounds already muted (so a sound moved inside the character is not hooked twice).
 -- Weak keys: a destroyed character's sounds are forgotten by themselves.
@@ -51,14 +55,15 @@ local function mute(sound: Sound)
 end
 
 local function onDescendant(descendant: Instance)
-	if descendant.Name == DEFAULT_DEATH_SOUND and descendant:IsA("Sound") then
+	if MUTED_NAMES[descendant.Name] and descendant:IsA("Sound") then
 		mute(descendant)
 	end
 end
 
 -- Watches the WHOLE character, not only its HumanoidRootPart: older versions of the Roblox
 -- script put the sounds in the Head, and with streaming a part can leave and come back (its
--- sounds are then made again). Our own sounds are never named "Died", so nothing else is hit.
+-- sounds are then made again). Our own sounds are never named "Died" or "Running", so nothing
+-- else is hit.
 local function watchCharacter(character: Model)
 	for _, descendant in character:GetDescendants() do
 		onDescendant(descendant)

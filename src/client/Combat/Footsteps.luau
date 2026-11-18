@@ -8,12 +8,18 @@
 --   • SCUFF (a hard stop, a sharp turn at speed, the side-hop's push): the
 --     sole drags, a flat spray of grit along the floor on any rough floor
 --     (concrete, asphalt, brick, wood, metal...).
+--   • SOUND: every landing plays a footstep sound picked by the floor's
+--     material (concrete / dirt / wood / metal / grass: Shared/Sounds
+--     Foot*), from the leg, louder when running. Within 45 studs. Roblox's
+--     own footstep loop is muted (DeathSoundController).
 -- Only within 70 studs of the camera. One pooled emitter, particles only
 -- (Emit): nothing is created per step.
 --
 --   Footsteps.step(model, foot, strength, scuff)
 
 local Workspace = game:GetService("Workspace")
+
+local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local Footsteps = {}
 
@@ -52,6 +58,61 @@ local ROUGH: { [Enum.Material]: number } = {
 	[Enum.Material.SmoothPlastic] = 0.15,
 }
 local DOWN = Vector3.new(0, -3, 0)
+
+-- SOUND of a step: which Shared/Sounds slot each floor material uses. A
+-- material not listed (Plastic, SmoothPlastic, Glass, Neon, Ice...) sounds
+-- like a hard floor: FootConcrete. Fabric (rugs, carpets) is muffled: the
+-- dirt sound, quieter (FABRIC_VOLUME).
+local STEP_SOUND: { [Enum.Material]: string } = {
+	[Enum.Material.Ground] = "FootDirt",
+	[Enum.Material.Sand] = "FootDirt",
+	[Enum.Material.Mud] = "FootDirt",
+	[Enum.Material.Snow] = "FootDirt",
+	[Enum.Material.Salt] = "FootDirt",
+	[Enum.Material.Pebble] = "FootDirt",
+	[Enum.Material.Fabric] = "FootDirt",
+	[Enum.Material.Grass] = "FootGrass",
+	[Enum.Material.LeafyGrass] = "FootGrass",
+	[Enum.Material.Wood] = "FootWood",
+	[Enum.Material.WoodPlanks] = "FootWood",
+	[Enum.Material.Cardboard] = "FootWood",
+	[Enum.Material.Metal] = "FootMetal",
+	[Enum.Material.CorrodedMetal] = "FootMetal",
+	[Enum.Material.DiamondPlate] = "FootMetal",
+	[Enum.Material.Foil] = "FootMetal",
+}
+local DEFAULT_STEP_SOUND = "FootConcrete"
+local FABRIC_VOLUME = 0.45
+-- Steps are quiet: beyond this (studs) they can't be heard.
+local STEP_HEARING = 45
+-- Never two step sounds from the same leg closer than this (seconds): a scuff
+-- and a landing reported in the same instant make one sound, not two.
+local STEP_GAP = 0.12
+local lastStep: { [BasePart]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Plays the step sound from the leg that landed (3D: it follows the leg).
+-- `strength` (about 0.3 a light step → 1.6 a hard sprint stride) sets the volume.
+local function playStep(leg: BasePart, material: Enum.Material, strength: number, now: number)
+	local last = lastStep[leg]
+	if last and now - last < STEP_GAP then
+		return
+	end
+	lastStep[leg] = now
+	local sound = SoundController.playAt(
+		STEP_SOUND[material] or DEFAULT_STEP_SOUND,
+		leg.Position,
+		STEP_HEARING,
+		leg
+	)
+	if sound then
+		local scale = math.clamp(0.55 + 0.45 * strength, 0.6, 1.3)
+		if material == Enum.Material.Fabric then
+			scale *= FABRIC_VOLUME
+		end
+		sound.Volume *= scale
+		sound.RollOffMinDistance = 6
+	end
+end
 
 -- A few emitter sets, reused: a set is taken by one burst and stays busy
 -- until its particles are gone (an emitter's colour can't change under live
@@ -173,12 +234,16 @@ function Footsteps.step(model: Model, foot: string, strength: number, scuff: boo
 	if result == nil then
 		return
 	end
+	local now = os.clock()
+	-- The sound first (every floor makes one), within hearing range only.
+	if (sole - camera.CFrame.Position).Magnitude <= STEP_HEARING then
+		playStep(leg, result.Material, strength, now)
+	end
 	local loose = LOOSE[result.Material]
 	local amount = if scuff then loose or ROUGH[result.Material] else loose
 	if amount == nil then
 		return
 	end
-	local now = os.clock()
 	local velocity = root.AssemblyLinearVelocity
 	local flat = Vector3.new(velocity.X, 0, velocity.Z)
 	-- (thrown back from the foot, against the way it goes)
