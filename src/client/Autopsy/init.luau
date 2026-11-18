@@ -83,6 +83,7 @@ local statusLabel: TextLabel? = nil
 local hum: Sound? = nil
 local grade: ColorCorrectionEffect? = nil
 local queryHooks: { RBXScriptConnection } = {}
+local pixelTurn = 0 -- (counts the setPixel calls: a slow start can be overtaken)
 local madeQueryable: { BasePart } = {}
 local statusUntil = 0
 
@@ -252,6 +253,8 @@ local function queryable(item: Instance)
 end
 
 local function setPixel(on: boolean)
+	pixelTurn += 1
+	local turn = pixelTurn
 	if on then
 		local ok = PixelScreen.start({
 			include = { root, BloodStain.folder },
@@ -263,6 +266,15 @@ local function setPixel(on: boolean)
 			pixelWanted = false
 			status("Pixel screen unavailable (allow Mesh / Image APIs in Game Settings > Security)")
 			return
+		end
+		-- (the first start waits for its workers: the player may have left,
+		-- or pressed P, meanwhile)
+		if not operating or not pixelWanted then
+			PixelScreen.stop()
+			return
+		end
+		if turn ~= pixelTurn then
+			return -- (a newer call turned it on and hooked everything)
 		end
 		for _, folder in { BloodStain.folder, root } :: { Instance } do
 			for _, item in folder:GetDescendants() do
@@ -754,7 +766,8 @@ local function enterRoom()
 	Sfx.play("Plastic", hrp)
 end
 
-local function leaveRoom(to: CFrame)
+-- Out of the room's mood (light, grade, hum), without moving the body.
+local function restoreRoom()
 	if not inRoom then
 		return
 	end
@@ -771,6 +784,13 @@ local function leaveRoom(to: CFrame)
 		hum:Destroy()
 		hum = nil
 	end
+end
+
+local function leaveRoom(to: CFrame)
+	if not inRoom then
+		return
+	end
+	restoreRoom()
 	local _, hrp = character()
 	if hrp then
 		hrp.CFrame = to
@@ -830,6 +850,22 @@ function Autopsy.start()
 	prompt(room.exitPlate, "Leave", "Kill room", Enum.KeyCode.E).Triggered:Connect(function()
 		leaveRoom(back)
 	end)
+
+	-- dead or reset in the room: everything back to normal (the new body
+	-- spawns down at the spawn)
+	local function watch(model: Model)
+		local humanoid = model:WaitForChild("Humanoid", 10)
+		if humanoid and humanoid:IsA("Humanoid") then
+			humanoid.Died:Once(restoreRoom)
+		end
+	end
+	player.CharacterAdded:Connect(function(model)
+		restoreRoom()
+		watch(model)
+	end)
+	if player.Character then
+		task.spawn(watch, player.Character)
+	end
 
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
 		if input.KeyCode == Enum.KeyCode.F8 and not processed then

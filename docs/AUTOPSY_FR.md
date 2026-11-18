@@ -21,6 +21,7 @@ Si l'écran pixel ne s'affiche pas (message dans l'Output) : *Game Settings > Se
 - La salle flotte 300 studs au-dessus du spawn. Elle n'existe que chez toi : personne d'autre ne la voit.
 - Près de la table, appuie sur **E** (« Operate ») pour commencer l'opération.
 - Pour ressortir : la porte en métal (**E**, « Leave »), ou **F8**.
+- Si ton perso meurt ou reset dans la salle, tout revient à la normale (caméra, HUD, lumière) et tu réapparais au spawn.
 
 ## Commandes pendant l'opération
 
@@ -60,6 +61,7 @@ Ordre conseillé :
   - L'image va dans une EditableImage, affichée en plein écran en mode *Pixelated*, donc avec des pixels nets.
   - Le rendu utilise une palette limitée prise sur l'image de référence (bleu nuit, sarcelle, rouges, jaune pâle), un tramage Bayer 4×4 et des contours sombres.
   - Le plastique est dessiné comme une trame.
+  - Les rayons ne voient que des pièces : les particules (brume, jet de l'artère) et les Beams sont invisibles en mode pixel. Quand une artère se déchire en mode pixel, le jet est donc aussi dessiné avec des filets de sang (des pièces), sur les mêmes battements.
   - Pour des pixels plus gros, baisse `PIXEL_HEIGHT` dans `PixelScreen.luau` (par exemple 90).
 - **Sons** : tous des sons publics du Creator Store, vérifiés. Ils sont dans `Sfx.luau`. En mode pixel, ils sont un peu plus graves et plus étouffés.
 
@@ -87,3 +89,4 @@ Les pièces `Gore_Aut*` du `WoundKit` sont optionnelles : on peut les laisser, r
 - [ ] P : bascule entre l'écran pixel et la vue normale. H : cache l'aide. R : nouveau corps.
 - [ ] F : on sort. La caméra, le HUD et la souris reviennent normaux. Clic gauche = coup de poing de nouveau.
 - [ ] Porte « Leave » ou F8 : retour à côté du spawn, la lumière normale revient.
+- [ ] Reset pendant l'opération : caméra, HUD, souris et lumière normales au respawn, pas d'écran pixel.

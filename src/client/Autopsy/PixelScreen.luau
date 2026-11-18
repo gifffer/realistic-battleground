@@ -67,10 +67,14 @@ local function makeActors()
 	for index = 1, BANDS do
 		local actor = Instance.new("Actor")
 		actor.Name = `AutopsyPixels{index}`
-		if template then
-			template:Clone().Parent = actor
+		local worker = if template and template:IsA("LocalScript") then template:Clone() else nil
+		if worker then
+			worker.Parent = actor
 		end
 		actor.Parent = scripts
+		if worker then
+			worker.Enabled = true -- (the template is disabled: only clones run)
+		end
 		actors[index] = actor
 		busy[index] = 0
 	end

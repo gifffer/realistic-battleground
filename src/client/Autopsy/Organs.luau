@@ -23,6 +23,7 @@ local GoreKit = require(script.Parent.Parent.Combat.GoreKit)
 local Squish = require(script.Parent.Parent.Combat.Squish)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local Make = require(script.Parent.Make)
+local PixelScreen = require(script.Parent.PixelScreen)
 local Sfx = require(script.Parent.Sfx)
 
 local Organs = {}
@@ -369,6 +370,35 @@ function Organs.grab(set: Set, organ: Organ, at: Vector3): string?
 	return nil
 end
 
+-- The pixel screen only sees parts, not the artery's particles and beam:
+-- there the jet is drawn with strands too, on the same beats.
+local function pixelJet(
+	set: Set,
+	from: Vector3,
+	direction: Vector3,
+	seconds: number,
+	firstBeat: number
+)
+	task.spawn(function()
+		local start = os.clock()
+		local beat = firstBeat
+		while set.anchor.Parent and PixelScreen.isOn() and os.clock() - start < seconds do
+			local left = 1 - (os.clock() - start) / seconds
+			local strength = left * left * 0.8 + left * 0.2
+			for _ = 1, 1 + math.floor(2 * strength) do
+				local spread = Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 0.6
+				Blood.strand(
+					from,
+					(direction + spread) * (5 * (0.35 + 0.65 * strength)) + UP * 1.5,
+					0.05 + 0.03 * strength
+				)
+			end
+			task.wait(beat)
+			beat = math.min(beat * 1.06, 1.1)
+		end
+	end)
+end
+
 -- The organ comes free: a gush, a tear, the cavity fills a little more.
 local function tear(set: Set, organ: Organ)
 	organ.torn = true
@@ -400,6 +430,15 @@ local function tear(set: Set, organ: Organ)
 			seed = math.random(1, 2 ^ 20),
 			ignore = ignore,
 		})
+		if PixelScreen.isOn() then
+			pixelJet(
+				set,
+				at,
+				set.anchor.CFrame:VectorToWorldSpace(Vector3.new(0, 0, -1)),
+				3.5,
+				0.55
+			)
+		end
 	end
 	set.level = math.min(set.level + 0.05, 0.62)
 	set.pool.CFrame = set.torso * CFrame.new(0, 0, 0.4 - set.level)

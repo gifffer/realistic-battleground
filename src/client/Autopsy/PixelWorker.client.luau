@@ -5,7 +5,8 @@
 -- from a limited palette (ramps from dark navy to pale yellow, like the
 -- old-school pixel art reference 35.png), with a 4x4 Bayer dither, see-
 -- through plastic as a dither pattern and dark outlines round objects.
--- The original (not in an Actor) does nothing.
+-- The original is a DISABLED template (PixelWorker.meta.json): it never
+-- runs; PixelScreen enables each clone. (Not in an Actor: it does nothing.)
 
 local actor = script:GetActor()
 if actor == nil then
