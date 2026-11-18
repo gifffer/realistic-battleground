@@ -452,6 +452,50 @@ local function useTools(dt: number)
 	end
 end
 
+-- The hand wipes blood away: every stain, drop and bead near where it
+-- presses (the table, the plastic, the skin, inside the body).
+local WIPE_RADIUS = 1.1
+local lastWipe = 0 -- (the last squelch)
+local nextWipe = 0 -- (held down: a wipe this often)
+local function wipe(ray: Ray)
+	local hit = workspace:Raycast(ray.Origin, ray.Direction * 60)
+	if hit == nil then
+		return
+	end
+	local at = hit.Position
+	local wiped = 0
+	for _, folder in { BloodStain.folder, root } :: { Instance } do
+		for _, item in folder:GetDescendants() do
+			local isBlood = item:IsA("BasePart")
+				and (
+					folder == BloodStain.folder
+					or item.Name == "Bead"
+					or item.Name == "BloodRipple"
+				)
+			if isBlood then
+				local part = item :: BasePart
+				if (part.Position - at).Magnitude < WIPE_RADIUS + part.Size.Magnitude * 0.5 then
+					wiped += 1
+					part.Name = "Wiped"
+					TweenService:Create(part, TweenInfo.new(0.15), { Transparency = 1 }):Play()
+					for _, decal in part:GetDescendants() do
+						if decal:IsA("Decal") or decal:IsA("Texture") then
+							decal.Transparency = 1
+						end
+					end
+					task.delay(0.16, function()
+						part:Destroy()
+					end)
+				end
+			end
+		end
+	end
+	if wiped > 0 and os.clock() - lastWipe > 0.25 then
+		lastWipe = os.clock()
+		Sfx.play("Squelch", at)
+	end
+end
+
 local function press()
 	local ray = mouseRay()
 	if ray == nil then
@@ -477,6 +521,7 @@ local function press()
 			end
 			return
 		end
+		wipe(ray)
 		local front = frontPoint(ray)
 		if front and Skin.nearCut(patient.skin, front, 3) then
 			spreading = front
@@ -955,6 +1000,14 @@ function Autopsy.start()
 	RunService.Heartbeat:Connect(function(dt)
 		if operating then
 			useTools(dt)
+			-- (holding the button with the hand: it keeps wiping)
+			if tool == "Hands" and leftDown and os.clock() > nextWipe then
+				nextWipe = os.clock() + 0.08
+				local ray = mouseRay()
+				if ray then
+					wipe(ray)
+				end
+			end
 		end
 	end)
 	-- (quiet drips now and then, in the room)
