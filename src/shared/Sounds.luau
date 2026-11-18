@@ -139,19 +139,6 @@ local sounds: { [string]: SoundInfo } = {
 		pitchVariation = 0.04,
 		fallback = "HeavySwing",
 	},
-	BatTap = { -- the barrel tapped on a face (the taunt): light, wooden
-		ids = {},
-		volume = 0.4,
-		pitch = 1.45,
-		pitchVariation = 0.06,
-		fallback = "Hit",
-	},
-	BrawlerTaunt = { -- him mocking the one on the ground (a laugh, "fore!")
-		ids = {}, -- (no voice for now)
-		volume = 0.9,
-		pitch = 1,
-		pitchVariation = 0.03,
-	},
 	BatImpact = { -- a deep boom under the crush (the beat the camera holds)
 		ids = {},
 		volume = 0.85,

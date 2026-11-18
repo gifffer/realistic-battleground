@@ -100,10 +100,9 @@ local KIT_CINEMATICS = table.freeze({ Incinerate = true, Gore = true })
 -- (event names other finishers use too, shaken differently in these;
 -- a negative push-in widens the view: the Bull's charge)
 local KIT_SHAKES: { [string]: { [string]: Shake } } = {
-	-- (the Street Brawler's: the taps, the bat coming down widening the view,
-	-- then the held frame on the head bursting, a slow way back)
+	-- (the Street Brawler's: the bat coming down widening the view, then the
+	-- held frame on the head bursting, a slow way back)
 	Bat = {
-		Tap = { at = 0, strength = 0.5, punch = 1.2 },
 		Swing = { at = 0, strength = 0.6, punch = -3 },
 		Kill = { at = 0, strength = 6, punch = 13, stop = 0.16, decay = 2.8, grade = true },
 	},
@@ -700,13 +699,10 @@ local function playEvent(
 			end
 		end
 		KitEffects.showBat(attacker, away - event.time, grip)
+	elseif kind == "Draw" then
 		SoundController.play("BatDraw", attacker)
 	elseif kind == "Plea" then
 		SoundController.play("VictimPlea", victim)
-	elseif kind == "Tap" then
-		SoundController.play("BatTap", victim)
-	elseif kind == "Taunt" then
-		SoundController.play("BrawlerTaunt", attacker)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
 	elseif kind == "Body" or kind == "Stomp" then
@@ -874,7 +870,7 @@ local function onStarted(
 	end
 
 	for _, event in cinematic.events do
-		task.delay(event.time, function()
+		local function fire()
 			-- (squeezing / throwing the liver, the arm down needs only him there)
 			local victimThere = victim.Parent ~= nil
 				or event.kind == "Squeeze"
@@ -883,7 +879,13 @@ local function onStarted(
 			if not run.cancelled and attacker.Parent and victimThere then
 				playEvent(cinematic, event, attacker, victim, anchor)
 			end
-		end)
+		end
+		-- (at 0: now, on the clip's first frame, not one frame later - the bat)
+		if event.time <= 0 then
+			fire()
+		else
+			task.delay(event.time, fire)
+		end
 	end
 	task.delay(cinematic.duration, function()
 		if runs[attacker] == run then
