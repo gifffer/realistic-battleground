@@ -12,6 +12,12 @@
 --   • one-shot actions (punches, dashes, hit reactions) that controllers
 --     start with CharacterAnimationController.playAction().
 --
+-- Walking is directional: four clips (MovementClips Walk / WalkBack /
+-- WalkLeft / WalkRight) blended by the direction the body really moves,
+-- relative to where it faces (a strafe or a backpedal plays its own clip
+-- instead of "moonwalking" the forward one), on one shared cycle; and the
+-- whole body leans a little into where it goes (forward, back, sideways).
+--
 -- Three channels, blended in this order (later ones win on the joints they use):
 --   1. movement  crouch, slide, climb...      (+ the sprint lean, added on top)
 --   2. stance    guard, block, stunned        (loops, upper body)
@@ -128,6 +134,14 @@ local LIMP_CLIPS: { [string]: boolean } = table.freeze({
 })
 -- The limp walk is authored for this speed (studs/s): walking, slowed by the limp.
 local LIMP_WALK_SPEED = Config.Character.WALK_SPEED * Config.Injuries.LIMP_SPEED
+-- Directional walk (see the header): the four clips, the time it takes the
+-- blend to follow a change of direction, weights below which a clip is
+-- dropped (a near-straight walk stays clean), and the lean into the move.
+local WALK_DIRECTIONS = { "Walk", "WalkBack", "WalkLeft", "WalkRight" }
+local WALK_DIRECTION_SMOOTH = 0.07 -- seconds (time constant)
+local WALK_MIN_WEIGHT = 0.1
+local WALK_LEAN = 9 -- degrees at full walking speed
+local WALK_LEAN_RATE = 10 -- how fast the lean follows (per second)
 -- Characters farther than this from the camera aren't animated by us
 -- (too far to see the difference, saves work with 16 players).
 local MAX_DISTANCE = 200
@@ -157,6 +171,11 @@ type Tracked = {
 	stance: Channel,
 	action: Channel,
 	sprintWeight: number,
+	-- Directional walk: where the body moves, relative to where it faces
+	-- (X = to its right, Y = forward), smoothed; and its lean (the same axes,
+	-- 0 to 1 of WALK_LEAN).
+	walkDirection: Vector2,
+	walkLean: Vector2,
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
@@ -339,7 +358,12 @@ local function playbackRate(entry: Tracked, name: string): number
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
 	elseif name == "Walk" then
 		-- Faster walk = faster steps (about 3 steps per second at full walking speed).
-		return math.clamp(horizontalSpeed(entry.root) / Config.Character.WALK_SPEED * 1.5, 0.7, 1.6)
+		-- (the clips' 0.8 s cycle: 0.533 s at full speed, slower when slower)
+		return math.clamp(
+			horizontalSpeed(entry.root) / Config.Character.WALK_SPEED * 1.5,
+			0.45,
+			1.6
+		)
 	elseif name == "Run" then
 		-- About 4.5 steps per second at full sprint.
 		return math.clamp(
@@ -409,10 +433,105 @@ end
 -- Writing the joints
 ------------------------------------------------------------------------------
 
-local function sampleChannel(channel: Channel)
-	for _, layer in channel do
-		R6Pose.sample(layer.clip, layer.time, layer.pose)
+-- Reused every frame: each directional clip's pose, and the weights.
+local walkPoses: { [string]: { [string]: CFrame } } = {}
+for _, name in WALK_DIRECTIONS do
+	walkPoses[name] = {}
+end
+local walkWeights: { [string]: number } = {}
+
+-- Where the body moves relative to where it faces, followed smoothly, and
+-- the lean that goes with it (every frame, for every character).
+local function updateWalkDirection(entry: Tracked, dt: number)
+	local v = entry.root.AssemblyLinearVelocity
+	local flat = Vector3.new(v.X, 0, v.Z)
+	local speed = flat.Magnitude
+	local alpha = 1 - math.exp(-dt / WALK_DIRECTION_SMOOTH)
+	local target = Vector2.zero
+	if speed > 0.5 then
+		local rel = entry.root.CFrame:VectorToObjectSpace(flat)
+		local direction = Vector2.new(rel.X, -rel.Z) / speed
+		-- (near a stop the direction is noise: keep the last one)
+		entry.walkDirection = entry.walkDirection:Lerp(direction, alpha)
+		target = direction * math.min(speed / Config.Character.WALK_SPEED, 1)
 	end
+	entry.walkLean = entry.walkLean:Lerp(target, 1 - math.exp(-WALK_LEAN_RATE * dt))
+end
+
+-- The four directional clips' weights for this character: each counts as
+-- the 4th power of its share of the direction (never forward with back or
+-- left with right; the main direction wins fast, as in the reference where a
+-- strafe only plays when the move is mostly sideways), normalised, tiny ones
+-- dropped.
+local function walkBlendWeights(entry: Tracked)
+	local direction = entry.walkDirection
+	if direction.Magnitude < 1e-3 then
+		direction = Vector2.new(0, 1)
+	end
+	direction = direction.Unit
+	local forward, right = direction.Y, direction.X
+	walkWeights.Walk = math.max(forward, 0) ^ 4
+	walkWeights.WalkBack = math.max(-forward, 0) ^ 4
+	walkWeights.WalkRight = math.max(right, 0) ^ 4
+	walkWeights.WalkLeft = math.max(-right, 0) ^ 4
+	local total = 0
+	for _, name in WALK_DIRECTIONS do
+		-- (a soft cut: a clip fades in from zero instead of popping in)
+		walkWeights[name] = math.max(walkWeights[name] - WALK_MIN_WEIGHT, 0)
+		total += walkWeights[name]
+	end
+	if total <= 0 then
+		walkWeights.Walk = 1
+		total = 1
+	end
+	for _, name in WALK_DIRECTIONS do
+		walkWeights[name] /= total
+	end
+end
+
+-- The "Walk" layer's pose: the directional clips at the same time in their
+-- (shared) cycle, mixed by weight.
+local function sampleWalk(entry: Tracked, layer: Layer)
+	walkBlendWeights(entry)
+	local out = layer.pose
+	table.clear(out)
+	local sum = 0
+	for _, name in WALK_DIRECTIONS do
+		local weight = walkWeights[name]
+		local clip = (MovementClips :: any)[name] :: R6Pose.Clip?
+		if weight > 0 and clip then
+			local pose = walkPoses[name]
+			R6Pose.sample(clip, layer.time, pose)
+			sum += weight
+			for joint, cframe in pose do
+				local before = out[joint]
+				-- (a running weighted average: this clip's share of what's
+				-- been mixed so far)
+				out[joint] = if before then before:Lerp(cframe, weight / sum) else cframe
+			end
+		end
+	end
+end
+
+local function sampleChannel(entry: Tracked, channel: Channel)
+	for _, layer in channel do
+		if layer.name == "Walk" then
+			sampleWalk(entry, layer)
+		else
+			R6Pose.sample(layer.clip, layer.time, layer.pose)
+		end
+	end
+end
+
+-- How much the walk is showing (its layer's weight), for the lean.
+local function walkWeight(entry: Tracked): number
+	local weight = 0
+	for _, layer in entry.movement do
+		if layer.name == "Walk" then
+			weight = math.max(weight, layer.weight)
+		end
+	end
+	return weight
 end
 
 local function blendChannel(
@@ -470,9 +589,10 @@ local function flinchRotation(flinch: Vector3, share: number): CFrame
 end
 
 local function compose(entry: Tracked)
-	sampleChannel(entry.movement)
-	sampleChannel(entry.stance)
-	sampleChannel(entry.action)
+	sampleChannel(entry, entry.movement)
+	sampleChannel(entry, entry.stance)
+	sampleChannel(entry, entry.action)
+	local walking = walkWeight(entry)
 	local sprint = entry.sprintWeight
 	if sprint > 0 then
 		R6Pose.sample(MovementClips.SprintLean, 0, sprintPose)
@@ -510,6 +630,15 @@ local function compose(entry: Tracked)
 		if not (joint == "Root" and isLimping(entry)) then
 			result, touched = blendChannel(entry.stance, motor, joint, result, keepHeight)
 			any = any or touched
+		end
+		-- Walking: the body leans into where it goes (forward, back, to the
+		-- side), on top of the clip and of the guard
+		-- (so it still shows while guarding).
+		if joint == "Root" and walking > 0 and entry.walkLean.Magnitude > 0.01 then
+			local lean = entry.walkLean * (WALK_LEAN * walking)
+			local tilt = CFrame.Angles(math.rad(-lean.Y), 0, math.rad(-lean.X))
+			result = result * R6Pose.toTransform(motor, tilt)
+			any = true
 		end
 		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched
@@ -667,6 +796,7 @@ local function onPreSimulation(dt: number)
 		end
 		setChannelClip(entry.movement, movementClip(entry, state))
 		setChannelClip(entry.stance, stanceClip(entry, state))
+		updateWalkDirection(entry, dt)
 		advanceChannel(entry, entry.movement, dt, false)
 		advanceChannel(entry, entry.stance, dt, false)
 		advanceChannel(entry, entry.action, dt, true)
@@ -875,6 +1005,8 @@ local function track(model: Model, owner: Player?)
 		stance = {},
 		action = {},
 		sprintWeight = 0,
+		walkDirection = Vector2.new(0, 1),
+		walkLean = Vector2.zero,
 		combatUntil = 0,
 		freezeUntil = 0,
 		lastAction = nil,
