@@ -21,7 +21,7 @@ Reference videos the player sends: extract them at about 15 fps and look at ever
 - **Blender works headless in Python**: `python3 -m venv venv && venv/bin/pip install bpy numpy scipy matplotlib pillow`, then `venv/bin/python -I script.py`. `venv/` is not committed.
   - Gore pieces: `tools/wounds/` (build with `venv/bin/python -I tools/wounds/build_wound_kit.py assets/wounds`).
   - Dr. Rift's gear: `tools/rift/`.
-  - Locomotion (stand / walk / run clips): `tools/anim/locomotion_clips.py --write` regenerates them in `MovementClips`; `lune run tools/anim/locomotion_sim.luau` runs the real `Animation/Locomotion` code through a test course and prints the largest joint motion per frame (keep it under ~20° at 60 fps).
+  - Locomotion: the player's Unreal ALS animations (UE5 mannequin) retargeted onto R6. `tools/anim/als_dump.py` (Blender) dumps the FBX files, `tools/anim/als_retarget.py <dump dir> --write` regenerates `src/client/Animation/ALSClips.luau`; `lune run tools/anim/locomotion_sim.luau` runs the real `Animation/Locomotion` code through a test course and prints the largest joint motion per frame (keep it under ~20° at 60 fps).
   - Render previews (Cycles CPU) and LOOK at them before calling something done.
 - **Any change to an FBX asset:** give the player a zip of its folder (e.g. `assets/wounds/`) so he can re-import it in Studio.
 - **Checks before every push:** `stylua --check src` and `selene src`. Both are run by CI, and a Selene error fails it. Also run luau-lsp if you have it.

@@ -22,7 +22,7 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 | 14 | Blender tutorial: realistic glass | Glass material and shape (bottles, flasks, shards) |
 | 15 | A custom R6 movement system | The first walk reference (same movement as 17, seen from behind) |
 | 16 | A recording of our own game | (not a reference: used to find what was wrong with our walk) |
-| 17 | The same movement system, plus our game for comparison | **The game's locomotion** (implemented: `Animation/Locomotion` + the generated `MovementClips`): heel-flick power-walk, side-hop, guard backpedal, run, smooth turns, starts and stops. Read `video17.md` before touching ANY animation: its rules (no freeze, no snap, overlap, arcs, one rhythm, inertialized transitions) apply everywhere |
+| 17 | The same movement system, plus our game for comparison | The movement feel. Its CLIPS were later replaced by the player's Unreal ALS animations (`ALSClips`, retargeted by `tools/anim/als_retarget.py`), but the system built for it stays (`Animation/Locomotion`). Read `video17.md` before touching ANY animation: its rules (no freeze, no snap, overlap, arcs, one rhythm, inertialized transitions) apply everywhere |
 
 ## The rules that come out of them
 
@@ -115,7 +115,7 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 - **Transitions keep momentum:** the new pose starts at once and the difference melts away with a spring (inertialization). Never cross-fade two different rhythms.
 - **Physics feel:** lean into acceleration, bank into turns, and turn the body with a spring (about 540°/s). All of it goes through springs.
 - **Effects on contacts:** footstep dust, scuffs and prints fire on the frame a foot plants.
-- Tools: `tools/anim/locomotion_clips.py` generates the clips (feet planted by forward kinematics). To check fluidity, sample the composed pose at 60 fps: nothing should move more than about 20° per frame except a deliberate snap.
+- Tools: the locomotion clips are the player's Unreal ALS animations retargeted onto R6 (`tools/anim/als_dump.py`, `tools/anim/als_retarget.py`; feet planted by forward kinematics). To check fluidity, `lune run tools/anim/locomotion_sim.luau` samples the real locomotion at 60 fps: nothing should move more than about 20° per frame except a deliberate snap.
 
 ## Techniques (Blender tutorials 12-14)
 Videos 12-14 are Blender tutorials. Their `videoN.md` files give the technique step by step (the settings read on screen) and what carries over to Roblox. Roblox has no custom shaders, so what carries over is:

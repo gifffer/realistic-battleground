@@ -54,6 +54,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
+local ALSClips = require(script.Parent.Parent.Animation.ALSClips)
 local CombatClips = require(script.Parent.Parent.Animation.CombatClips)
 local Locomotion = require(script.Parent.Parent.Animation.Locomotion)
 local MovementClips = require(script.Parent.Parent.Animation.MovementClips)
@@ -142,6 +143,17 @@ local RUN_START_SPEED = 14
 local RUN_STOP_SPEED = 12
 local CROUCH_WALK_START = 1.5
 local CROUCH_WALK_STOP = 0.5
+-- In the air: falling faster than this (studs/s, down) flails (FallFast),
+-- back to the plain fall loop above FALL_FAST_STOP.
+local FALL_FAST_START = -55
+local FALL_FAST_STOP = -45
+-- Landing (ALSClips): from a fall faster than these (studs/s, down), a light
+-- / heavy landing plays, only when landing (nearly) on the spot (moving on,
+-- the steps just carry on).
+local LAND_LIGHT_SPEED = -30
+local LAND_HEAVY_SPEED = -60
+local LAND_MAX_RUN = 6
+local LANDINGS = table.freeze({ LandLight = true, LandHeavy = true })
 -- Limp clips, by the hurt leg (the "LimpLeg" attribute; written for the
 -- right one, mirrored for the left).
 local LIMP_WALK: { [string]: string } = table.freeze({ Right = "LimpWalk", Left = "LimpWalkLeft" })
@@ -210,6 +222,7 @@ type Tracked = {
 	pendingInertia: number?,
 	lastDt: number,
 	freefallSince: number?, -- os.clock() when its current free fall began
+	fallSpeed: number, -- fastest downward speed of the current time in the air (studs/s, < 0)
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
@@ -248,7 +261,7 @@ local function isLocal(entry: Tracked): boolean
 end
 
 local function findClip(name: string): R6Pose.Clip?
-	return (MovementClips :: any)[name] or (CombatClips :: any)[name]
+	return (MovementClips :: any)[name] or (CombatClips :: any)[name] or (ALSClips :: any)[name]
 end
 
 local function newLayer(name: string, clip: R6Pose.Clip, fadeIn: number, fadeOut: number): Layer
@@ -326,12 +339,35 @@ local function movementState(entry: Tracked): string?
 	return if typeof(state) == "string" then state else nil
 end
 
--- Movement clip for this state ("Crouch" splits into idle / walk), nil = none.
--- A limping fighter (legs injured) walks and stands on its good leg.
-local function movementClip(entry: Tracked, state: string?): string?
-	-- (Only on the ground: jumping, falling, swimming, climbing a ladder or
-	-- sitting keep Roblox's own animations.)
+-- Moves that use the arms (and during which nobody can fight): no stance
+-- on top of them, or the guard would keep the fists up while climbing.
+local ARM_MOVES = table.freeze({ Slide = true, Climb = true, Vault = true })
+
+-- Movement clip for this state, nil = none (the locomotion shows: standing,
+-- walking, running, crouching). A limping fighter (legs injured) walks and
+-- stands on its good leg. In the air: the ALS jump / fall loops.
+local function movementClip(entry: Tracked, state: string?, feet: boolean): string?
+	-- (swimming, climbing a ladder or sitting keep Roblox's own animations)
 	local humanoidState = entry.humanoid:GetState()
+	if
+		not feet
+		and not (state and ARM_MOVES[state])
+		and (
+			humanoidState == Enum.HumanoidStateType.Jumping
+			or humanoidState == Enum.HumanoidStateType.Freefall
+		)
+	then
+		local current = entry.movement[#entry.movement]
+		local fall = entry.root.AssemblyLinearVelocity.Y
+		if humanoidState == Enum.HumanoidStateType.Jumping or fall > 0 then
+			return "JumpLoop"
+		end
+		-- (falling fast: the flailing loop, with a gap so it doesn't flicker)
+		local fast = current ~= nil and current.name == "FallFast"
+		return if fall < (if fast then FALL_FAST_STOP else FALL_FAST_START)
+			then "FallFast"
+			else "FallLoop"
+	end
 	local onGround = humanoidState == Enum.HumanoidStateType.Running
 		or humanoidState == Enum.HumanoidStateType.RunningNoPhysics
 	if
@@ -347,10 +383,7 @@ local function movementClip(entry: Tracked, state: string?): string?
 		return if horizontalSpeed(entry.root) > threshold then walkClip else LIMP_IDLE[side]
 	end
 	if state == "Crouch" then
-		local current = entry.movement[#entry.movement]
-		local walking = current ~= nil and current.target == 1 and current.name == "CrouchWalk"
-		local threshold = if walking then CROUCH_WALK_STOP else CROUCH_WALK_START
-		return if horizontalSpeed(entry.root) > threshold then "CrouchWalk" else "CrouchIdle"
+		return nil -- (the locomotion crouches)
 	elseif state == "Slide" or state == "Climb" or state == "Vault" then
 		return state
 	elseif state == nil or state == "Walk" or state == "Sprint" then
@@ -371,10 +404,6 @@ local function movementClip(entry: Tracked, state: string?): string?
 	end
 	return nil
 end
-
--- Moves that use the arms (and during which nobody can fight): no stance
--- on top of them, or the guard would keep the fists up while climbing.
-local ARM_MOVES = table.freeze({ Slide = true, Climb = true, Vault = true })
 
 -- Stance clip from the fighter's attributes. Stunned wins over blocking.
 local function stanceClip(entry: Tracked, state: string?): string?
@@ -811,6 +840,24 @@ local function snapLooseLimbs(model: Model)
 	end
 end
 
+-- Back on its feet after a fall: a landing to match how hard it was (only
+-- landing about on the spot; never over a move already playing).
+local function landed(entry: Tracked)
+	local fall = entry.fallSpeed
+	entry.fallSpeed = 0
+	if #entry.action > 0 or horizontalSpeed(entry.root) > LAND_MAX_RUN then
+		return
+	end
+	local name = if fall < LAND_HEAVY_SPEED
+		then "LandHeavy"
+		elseif fall < LAND_LIGHT_SPEED then "LandLight"
+		else nil
+	local clip = if name then findClip(name) else nil
+	if name and clip then
+		table.insert(entry.action, newLayer(name, clip, ACTION_FADE_IN, ACTION_FADE_OUT))
+	end
+end
+
 -- Humanoid states in which the body is NOT standing on its feet (Roblox's
 -- jump / fall / swim / climb / sit animations, or physics, play then).
 local NOT_ON_FEET: { [Enum.HumanoidStateType]: boolean } = {
@@ -905,6 +952,7 @@ local function onPreSimulation(dt: number)
 			table.clear(entry.prevOut)
 			table.clear(entry.prevPrevOut)
 			entry.pendingInertia = nil
+			entry.fallSpeed = 0
 			continue
 		end
 		if (entry.root.Position - cameraPosition).Magnitude > MAX_DISTANCE then
@@ -928,21 +976,31 @@ local function onPreSimulation(dt: number)
 				layer.target = 0
 			end
 		end
-		setMovementClip(entry, movementClip(entry, state))
-		setChannelClip(entry.stance, stanceClip(entry, state))
 		-- On its feet or not (the locomotion shows): a switch is inertialized.
 		local feet = onItsFeet(entry, state)
 		if feet ~= entry.locoActive then
 			entry.locoActive = feet
 			requestInertia(entry, FEET_INERTIA)
+			if feet then
+				landed(entry)
+			end
 		end
+		if not feet then
+			entry.fallSpeed = math.min(entry.fallSpeed, entry.root.AssemblyLinearVelocity.Y)
+		end
+		setMovementClip(entry, movementClip(entry, state, feet))
+		setChannelClip(entry.stance, stanceClip(entry, state))
 		local acting = false
 		for _, layer in entry.action do
+			-- (a landing gives way as soon as it walks off: no sliding feet)
+			if LANDINGS[layer.name] and horizontalSpeed(entry.root) > LAND_MAX_RUN then
+				layer.target = 0
+			end
 			if layer.target == 1 then
 				acting = true
 			end
 		end
-		Locomotion.update(entry.loco, entry.root, feet, acting, dt)
+		Locomotion.update(entry.loco, entry.root, feet, acting, state == "Crouch", dt)
 		-- Footsteps exactly when a foot lands (only when the locomotion is
 		-- what the legs do: a crouch / limp clip has its own rhythm).
 		if feet and #entry.movement == 0 then
@@ -1165,6 +1223,7 @@ local function track(model: Model, owner: Player?)
 		pendingInertia = nil,
 		lastDt = 1 / 60,
 		freefallSince = nil,
+		fallSpeed = 0,
 		combatUntil = 0,
 		freezeUntil = 0,
 		lastAction = nil,

@@ -38,7 +38,11 @@ local SEG = {
 	{ 10.8, "W->S reversal", -10, 0, nil },
 	{ 11.6, "stop", 0, 0, nil },
 	{ 12.4, "turn 180 standing (camera)", 0, 0, 90 },
-	{ 13.4, "end", 0, 0, nil },
+	{ 13.4, "slow walk (blocking)", 4, 0, nil },
+	{ 14.6, "crouch walk", 8, 0, nil, true },
+	{ 15.8, "crouch strafe left", 0, -8, nil, true },
+	{ 16.8, "crouch stop", 0, 0, nil, true },
+	{ 17.6, "end", 0, 0, nil },
 }
 local out = {}
 local prev = {}
@@ -47,7 +51,7 @@ local pose = {}
 local seg = 1
 local lines = { "t,seg,amp,phase,speed,sprint,angle,lag,pitch,roll,step,maxdeg" }
 local t = 0
-while t < 13.4 do
+while t < 17.6 do
 	while SEG[seg + 1] and t >= SEG[seg + 1][1] do
 		seg += 1
 		local s = SEG[seg]
@@ -72,7 +76,7 @@ while t < 13.4 do
 	local pos = root.CFrame.Position + vel * dt
 	root.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 	root.AssemblyLinearVelocity = vel
-	Locomotion.update(state, root, true, false, dt)
+	Locomotion.update(state, root, true, false, s[6] == true, dt)
 	Locomotion.sample(state, pose)
 	-- lag on the root, like the controller
 	pose.Root = CFrame.Angles(0, yaw + state.lag, 0) * pose.Root

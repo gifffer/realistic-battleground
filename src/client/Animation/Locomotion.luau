@@ -1,36 +1,39 @@
 --!strict
--- Locomotion: how a fighter stands, walks and runs (every character, on
--- this client), after the movement the player chose (reference video 17:
--- docs/references/video17.md). What makes it fluid instead of "moving in
--- blocks":
+-- Locomotion: how a fighter stands, walks, jogs, sprints and crouch-walks
+-- (every character, on this client). The animations are the player's Unreal
+-- ALS ones (Animation/ALSClips, retargeted onto R6 by tools/anim/als_retarget.py).
+-- What makes it fluid instead of "moving in blocks" (see also
+-- docs/references/video17.md, the rules of the movement feel):
 --
 --   • ONE phase per character, advanced by the distance walked, never
---     restarted. Every locomotion clip (MovementClips Walk / WalkBack /
---     WalkLeft / WalkRight / Run) is written on that phase with its foot
---     contacts at the same moments, so they blend into each other (turning,
---     strafing, walk ↔ run) without the legs scissoring or the cycle jumping.
+--     restarted. Every cycle (Walk / Jog / Sprint / CrouchWalk, in 4
+--     directions) is cut so its left foot plants at the same phase (7/16)
+--     and the right one half a cycle later, so they all blend into each
+--     other (turning, strafing, walk → jog → sprint, standing ↔ crouching)
+--     without the legs scissoring or the cycle jumping.
+--   • Speed picks the gait: walk (slow: blocking, injured...), jog (normal
+--     speed), sprint; the cadence follows the speed (part of it: the rest is
+--     longer strides).
 --   • An AMPLITUDE instead of an on / off switch: slowing down makes the
---     steps smaller until they fade into the standing pose (Idle). Starting
---     begins on the arm's wind-up; stopping lets the current swing finish,
---     then settles (no reverse swing, no pop).
+--     steps smaller until they fade into the standing pose (ALS stance, with
+--     breathing). Stopping lets the current swing finish, then settles.
 --   • Direction: the move direction relative to where the body FACES (seen,
 --     below), followed as an angle (never through zero). Going the other way
 --     at once (W → S) dips through a short neutral instead of flipping.
---   • Springs, not lerps (Spring.luau): speed, amplitude, run blend, lean and
---     turn all follow critically damped springs: smooth, no overshoot, no
---     jump in speed.
---   • The body leans into its acceleration and banks into turns (S-curve
---     response); the head stays level (the neck takes back part of it).
+--   • Springs, not lerps (Spring.luau): speed, amplitude, gait, crouch, lean
+--     and turn all follow critically damped springs.
+--   • The body leans into its acceleration and banks into turns; the head
+--     stays level (the neck takes back part of it).
 --   • Turning: the root part can snap round (Roblox's AutoRotate, the
 --     shoulder camera); the VISIBLE body follows it with a spring instead
---     (a yaw offset on the root joint, at most ~0.3 s behind; very fast
---     while a move plays, so punches still go where they aim). Visual only:
---     hitboxes and the server keep the root part's facing.
+--     (a yaw offset on the root joint; very fast while a move plays, so
+--     punches still go where they aim). Visual only: hitboxes and the server
+--     keep the root part's facing.
 --   • Foot contacts are reported (steps) so footstep effects land exactly
 --     when a foot hits the floor.
 --
 --   Locomotion.new() → State
---   Locomotion.update(state, root, active, busy, dt)   once per frame
+--   Locomotion.update(state, root, active, busy, crouched, dt)   once per frame
 --   Locomotion.sample(state, out)                      the pose (joint → CFrame)
 --   state.lag (radians, root joint yaw), state.pitch / state.roll (degrees),
 --   state.steps (this frame's foot contacts)
@@ -38,35 +41,46 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
-local MovementClips = require(script.Parent.MovementClips)
+local ALSClips = require(script.Parent.ALSClips)
 local R6Pose = require(script.Parent.R6Pose)
 local Spring = require(script.Parent.Spring)
 
 local WALK_SPEED = Config.Character.WALK_SPEED
-local SPRINT_SPEED = Config.Character.SPRINT_SPEED
 
--- Cycle (two steps) at full walking / sprinting speed, seconds (reference:
--- 16 frames at 30 fps).
-local WALK_CYCLE = 0.533
-local RUN_CYCLE = 0.5
--- Slower than the nominal speed: longer AND smaller steps (cadence follows
--- the square root of the speed, the rest is stride), within these limits.
--- (above the nominal speed, e.g. sprinting sideways or back, the steps get
--- quicker instead of sliding)
-local CADENCE_MIN, CADENCE_MAX = 0.62, 1.6
+-- The gaits: their natural cycle (two steps, seconds) and speed (studs/s:
+-- the stride measured on the animation / its cycle), from als_retarget.py.
+local WALK_CYCLE, WALK_NATURAL = 1.167, 3.1
+local JOG_CYCLE, JOG_NATURAL = 0.833, 7.5
+local SPRINT_CYCLE, SPRINT_NATURAL = 0.633, 11
+local CROUCH_CYCLE, CROUCH_NATURAL = 1.167, 3
+-- Gait by speed (studs/s): walk → jog between JOG_FROM and JOG_TO, jog →
+-- sprint between SPRINT_FROM and SPRINT_TO (forward only: sprinting back or
+-- sideways keeps the jog, with quicker steps).
+local JOG_FROM, JOG_TO = 3.5, 7.5
+local SPRINT_FROM, SPRINT_TO = 13, 19
+-- Away from a gait's natural speed the cadence follows (speed ratio)^CADENCE,
+-- the rest is a longer / shorter stride; within these limits.
+local CADENCE = 0.6
+local CADENCE_MIN, CADENCE_MAX = 0.6, 1.8
 -- Moving above / below these raw speeds (studs/s): a gap, so a speed hovering
 -- around one value doesn't flicker.
 local MOVE_START = 1
 local MOVE_STOP = 0.5
--- Amplitude of the steps by speed / nominal speed: none below the first,
--- full from the second (smoothstep between).
-local AMP_FROM, AMP_TO = 0.1, 0.55
--- Running blends in between these speeds (studs/s).
-local RUN_FROM, RUN_TO = 11, 18
+-- Amplitude of the steps by speed (studs/s): none below the first, full from
+-- the second (smoothstep between).
+local AMP_FROM, AMP_TO = 0.3, 2.2
+-- The foot contacts and the passings (feet side by side) in the cycle.
+local LEFT_CONTACT, RIGHT_CONTACT = 7 / 16, 15 / 16
+local PASSING = 3 / 16 -- (and half a cycle later)
+-- Breathing while standing: period (s), torso rise (studs), shoulders (deg).
+local BREATH_PERIOD = 3.6
+local BREATH_RISE = 0.012
+local BREATH_SHOULDERS = 1.2
 -- Half-lives (seconds) of the springs.
 local SPEED_HALFLIFE = 0.1
 local AMP_HALFLIFE = 0.06
-local RUN_HALFLIFE = 0.12
+local GAIT_HALFLIFE = 0.12
+local CROUCH_HALFLIFE = 0.1
 local DIRECTION_HALFLIFE = 0.08
 local VELOCITY_HALFLIFE = 0.08
 local LEAN_HALFLIFE = 0.07
@@ -87,13 +101,13 @@ local SWING_HALFLIFE = 0.07
 -- (the swing is over this close to the new direction: the rest is followed
 -- as usual while the steps grow back)
 local SWING_DONE = math.rad(30)
--- Starting: the phase starts here, just before the passing, so the first
--- thing that moves is the arm winding up into the first step.
-local START_PHASE = 0.94
+-- Starting: the phase starts here, just before a passing, so the first step
+-- swings through.
+local START_PHASE = PASSING - 0.06
 -- Stopping: the current swing finishes (until the next passing, at most
 -- this long), the steps only fade once it is on its way back.
 local STOP_MAX = 0.27
-local RETURN_FROM = 5 / 16 -- (of a half cycle)
+local RETURN_FROM = 5 / 16 -- (of a half cycle, from a passing)
 -- Lean (degrees): forward per stud/s of speed, per stud/s² of acceleration,
 -- bank per degree/s of turning; and their limits.
 local LEAN_PER_SPEED = 0.25
@@ -126,7 +140,16 @@ local SCUFF_COOLDOWN = 0.3
 local STEP_AMP = 0.3
 local STEP_SPEED = 3
 
-local DIRECTIONS = { "Walk", "WalkBack", "WalkLeft", "WalkRight" }
+local DIRECTIONS = { "Forward", "Back", "Left", "Right" }
+-- Each gait's clip per direction (ALSClips).
+local WALK = { Forward = "Walk", Back = "WalkBack", Left = "WalkLeft", Right = "WalkRight" }
+local JOG = { Forward = "Jog", Back = "JogBack", Left = "JogLeft", Right = "JogRight" }
+local CROUCH = {
+	Forward = "CrouchWalk",
+	Back = "CrouchWalkBack",
+	Left = "CrouchWalkLeft",
+	Right = "CrouchWalkRight",
+}
 
 export type Foot = "Left" | "Right"
 export type Step = {
@@ -142,8 +165,12 @@ export type State = {
 	speedV: number,
 	amp: number, -- 0 = standing (Idle), 1 = full steps
 	ampV: number,
-	sprint: number, -- 0 = walk, 1 = run
+	jog: number, -- 0 = walk, 1 = jog (or sprint)
+	jogV: number,
+	sprint: number, -- 0 = jog, 1 = sprint
 	sprintV: number,
+	crouch: number, -- 0 = standing, 1 = crouched
+	crouchV: number,
 	angle: number, -- move direction relative to the visible facing (radians, 0 = forward, + = right)
 	swinging: number, -- seconds into a direction swing's dip (0 = none)
 	swingAmp: number, -- that dip's amplitude
@@ -198,8 +225,12 @@ function Locomotion.new(): State
 		speedV = 0,
 		amp = 0,
 		ampV = 0,
+		jog = 0,
+		jogV = 0,
 		sprint = 0,
 		sprintV = 0,
+		crouch = 0,
+		crouchV = 0,
 		angle = 0,
 		swinging = 0,
 		swingAmp = 1,
@@ -227,7 +258,7 @@ function Locomotion.new(): State
 		roll = 0,
 		rollV = 0,
 		scuffCooldown = 0,
-		weights = { Walk = 1, WalkBack = 0, WalkLeft = 0, WalkRight = 0 },
+		weights = { Forward = 1, Back = 0, Left = 0, Right = 0 },
 		steps = {},
 	}
 end
@@ -237,11 +268,11 @@ local function updateWeights(state: State)
 	local weights = state.weights
 	-- (4th power: the main direction wins fast; a diagonal is mostly the
 	-- forward / back clip, as in the reference)
-	weights.Walk = math.max(c, 0) ^ 4
-	weights.WalkBack = math.max(-c, 0) ^ 4
-	weights.WalkRight = math.max(s, 0) ^ 4
-	weights.WalkLeft = math.max(-s, 0) ^ 4
-	local total = weights.Walk + weights.WalkBack + weights.WalkRight + weights.WalkLeft
+	weights.Forward = math.max(c, 0) ^ 4
+	weights.Back = math.max(-c, 0) ^ 4
+	weights.Right = math.max(s, 0) ^ 4
+	weights.Left = math.max(-s, 0) ^ 4
+	local total = weights.Forward + weights.Back + weights.Right + weights.Left
 	for _, name in DIRECTIONS do
 		weights[name] /= total
 	end
@@ -253,8 +284,15 @@ end
 
 -- Advances everything by `dt`. `active`: the character is on its feet and
 -- our locomotion shows (not in the air, climbing, ragdolled...). `busy`: a
--- move (punch, dash, reaction) is playing.
-function Locomotion.update(state: State, root: BasePart, active: boolean, busy: boolean, dt: number)
+-- move (punch, dash, reaction) is playing. `crouched`: crouching.
+function Locomotion.update(
+	state: State,
+	root: BasePart,
+	active: boolean,
+	busy: boolean,
+	crouched: boolean,
+	dt: number
+)
 	local hitch = dt > 0.1
 	dt = math.clamp(dt, 1e-4, 0.1)
 	table.clear(state.steps)
@@ -311,22 +349,29 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 		end
 	elseif not moving and state.moving and state.speed > SCUFF_SPEED then
 		-- (a hard stop: the feet drag)
-		addStep(state, if state.phase < 0.5 then "Right" else "Left", 1, true)
+		addStep(state, if (state.phase - PASSING) % 1 < 0.5 then "Right" else "Left", 1, true)
 	end
 	state.moving = moving
+	-- Gait (walk / jog / sprint) and crouch, by speed.
+	state.jog, state.jogV = Spring.step(
+		state.jog,
+		state.jogV,
+		smoothstep(JOG_FROM, JOG_TO, state.speed),
+		GAIT_HALFLIFE,
+		dt
+	)
+	state.jog = math.clamp(state.jog, 0, 1)
 	state.sprint, state.sprintV = Spring.step(
 		state.sprint,
 		state.sprintV,
-		smoothstep(RUN_FROM, RUN_TO, state.speed),
-		RUN_HALFLIFE,
+		smoothstep(SPRINT_FROM, SPRINT_TO, state.speed),
+		GAIT_HALFLIFE,
 		dt
 	)
 	state.sprint = math.clamp(state.sprint, 0, 1)
-	-- (only going forward runs: sprinting back or sideways keeps the walk's
-	-- clips, with quicker steps)
-	local runShare = state.sprint * state.weights.Walk
-	local nominal = WALK_SPEED + (SPRINT_SPEED - WALK_SPEED) * runShare
-	local ratio = state.speed / nominal
+	state.crouch, state.crouchV =
+		Spring.step(state.crouch, state.crouchV, if crouched then 1 else 0, CROUCH_HALFLIFE, dt)
+	state.crouch = math.clamp(state.crouch, 0, 1)
 
 	-- Direction, relative to where the body is SEEN facing.
 	if raw > 1.5 then
@@ -363,7 +408,7 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 	updateWeights(state)
 
 	-- Amplitude and phase (with the start / stop rules in the header).
-	local ampTarget = if moving then smoothstep(AMP_FROM, AMP_TO, ratio) else 0
+	local ampTarget = if moving then smoothstep(AMP_FROM, AMP_TO, state.speed) else 0
 	if state.swinging > 0 then
 		ampTarget = math.min(ampTarget, state.swingAmp)
 	end
@@ -380,8 +425,19 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 		end
 		updateWeights(state)
 	end
-	local cycle = (WALK_CYCLE + (RUN_CYCLE - WALK_CYCLE) * runShare)
-		/ math.clamp(math.sqrt(math.max(ratio, 0)), CADENCE_MIN, CADENCE_MAX)
+	-- (the natural cycle and speed of the gaits showing, blended; sprinting
+	-- only forward)
+	local sprintShare = state.sprint * state.weights.Forward
+	local walkW, jogW = 1 - state.jog, state.jog * (1 - sprintShare)
+	local sprintW = state.jog * sprintShare
+	local standing = 1 - state.crouch
+	local natural = standing
+			* (walkW * WALK_NATURAL + jogW * JOG_NATURAL + sprintW * SPRINT_NATURAL)
+		+ state.crouch * CROUCH_NATURAL
+	local naturalCycle = standing * (walkW * WALK_CYCLE + jogW * JOG_CYCLE + sprintW * SPRINT_CYCLE)
+		+ state.crouch * CROUCH_CYCLE
+	local cycle = naturalCycle
+		/ math.clamp((math.max(state.speed, 0.1) / natural) ^ CADENCE, CADENCE_MIN, CADENCE_MAX)
 	local advance = 0
 	if moving then
 		state.cycle = cycle
@@ -394,7 +450,8 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 		state.settled = false
 		advance = dt / WALK_CYCLE
 	elseif state.amp > 0.01 and not state.settled then
-		local before = state.phase
+		-- (phases counted from a passing)
+		local before = (state.phase - PASSING) % 1
 		if state.stopTime == 0 then
 			-- (only a swing already under way finishes, never the next one)
 			local into = before % 0.5
@@ -413,27 +470,13 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 		end
 	end
 	if advance > 0 and state.amp > STEP_AMP and state.speed > STEP_SPEED then
-		local weights = state.weights
-		local strength = state.amp * (1 + 0.6 * state.sprint)
+		local strength = state.amp * (1 + 0.6 * state.sprint) * (1 - 0.4 * state.crouch)
 		local before, after = state.phase, state.phase + advance
-		if weights.WalkBack > 0.5 then
-			-- (backpedal: the back foot plants at the passings)
-			if crossed(before, after, 0) then
-				addStep(state, "Right", strength, false)
-			end
-			if crossed(before, after, 0.5) then
-				addStep(state, "Left", strength, false)
-			end
-		else
-			-- (side-hop: the lead leg lands both times)
-			local first: Foot = if weights.WalkRight > 0.5 then "Right" else "Left"
-			local second: Foot = if weights.WalkLeft > 0.5 then "Left" else "Right"
-			if crossed(before, after, 7 / 16) then
-				addStep(state, first, strength, false)
-			end
-			if crossed(before, after, 15 / 16) then
-				addStep(state, second, strength, false)
-			end
+		if crossed(before, after, LEFT_CONTACT) then
+			addStep(state, "Left", strength, false)
+		end
+		if crossed(before, after, RIGHT_CONTACT) then
+			addStep(state, "Right", strength, false)
 		end
 	end
 	state.phase = (state.phase + advance) % 1
@@ -479,58 +522,92 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 end
 
 -- Reused every frame (no table created per frame).
-local clipPoses: { [string]: { [string]: CFrame } } = {
-	Walk = {},
-	WalkBack = {},
-	WalkLeft = {},
-	WalkRight = {},
-	Run = {},
-	Idle = {},
-}
+local poses: { [string]: { [string]: CFrame } } = {}
+local function scratch(name: string): { [string]: CFrame }
+	local pose = poses[name]
+	if pose == nil then
+		pose = {}
+		poses[name] = pose
+	end
+	return pose
+end
 local mix: { [string]: CFrame } = {}
+local mixSum = 0
+
+-- Adds one clip at the shared phase to the running weighted average.
+local function addClip(name: string, weight: number, phase: number)
+	if weight <= 0.005 then
+		return
+	end
+	local pose = scratch(name)
+	R6Pose.sample((ALSClips :: any)[name] :: R6Pose.Clip, phase, pose)
+	mixSum += weight
+	for joint, cframe in pose do
+		local before = mix[joint]
+		-- (this clip's share of what's been mixed so far)
+		mix[joint] = if before then before:Lerp(cframe, weight / mixSum) else cframe
+	end
+end
 
 -- This frame's pose (joint → CFrame in parent space, as R6Pose.sample)
--- written into `out`: the directional clips at the shared phase mixed by
--- direction (and walk → run), scaled from the standing pose by the amplitude.
+-- written into `out`: the gaits' clips at the shared phase mixed by
+-- direction, gait and crouch, scaled from the standing pose by the amplitude.
 function Locomotion.sample(state: State, out: { [string]: CFrame })
 	table.clear(out)
-	local idle = clipPoses.Idle
-	R6Pose.sample(MovementClips.Idle, state.idleTime, idle)
+	-- Standing (or crouched), breathing.
+	local stand = scratch("Stand")
+	R6Pose.sample(ALSClips.Stand, 0, stand)
+	local crouch = state.crouch
+	if crouch > 0.005 then
+		local low = scratch("Crouch")
+		R6Pose.sample(ALSClips.Crouch, 0, low)
+		for joint, cframe in stand do
+			local crouched = low[joint]
+			if crouched then
+				stand[joint] = cframe:Lerp(crouched, crouch)
+			end
+		end
+	end
+	local breath = (1 - math.cos(state.idleTime * 2 * math.pi / BREATH_PERIOD)) / 2
+	local rise = CFrame.new(0, breath * BREATH_RISE, 0)
+	local open = math.rad(breath * BREATH_SHOULDERS)
+	if stand.Root then
+		stand.Root = rise * stand.Root
+	end
+	if stand.RightShoulder then
+		stand.RightShoulder = CFrame.Angles(0, 0, open) * stand.RightShoulder
+	end
+	if stand.LeftShoulder then
+		stand.LeftShoulder = CFrame.Angles(0, 0, -open) * stand.LeftShoulder
+	end
 	local amp = state.amp
 	if amp <= 1e-3 then
-		for joint, cframe in idle do
+		for joint, cframe in stand do
 			out[joint] = cframe
 		end
 		return
 	end
 	table.clear(mix)
-	local sum = 0
-	for _, name in DIRECTIONS do
-		local weight = state.weights[name]
+	mixSum = 0
+	local phase = state.phase
+	local standing = 1 - crouch
+	local sprintShare = state.sprint * state.weights.Forward
+	for _, direction in DIRECTIONS do
+		local weight = state.weights[direction]
 		if weight > 0.005 then
-			local pose = clipPoses[name]
-			R6Pose.sample((MovementClips :: any)[name] :: R6Pose.Clip, state.phase, pose)
-			if name == "Walk" and state.sprint > 0.005 then
-				local run = clipPoses.Run
-				R6Pose.sample(MovementClips.Run, state.phase, run)
-				for joint, cframe in pose do
-					local running = run[joint]
-					if running then
-						pose[joint] = cframe:Lerp(running, state.sprint)
-					end
-				end
+			addClip(WALK[direction], weight * standing * (1 - state.jog), phase)
+			-- (sprinting only forward: the other directions keep the jog)
+			local jogShare = if direction == "Forward" then 1 - sprintShare else 1
+			addClip(JOG[direction], weight * standing * state.jog * jogShare, phase)
+			if direction == "Forward" then
+				addClip("Sprint", weight * standing * state.jog * sprintShare, phase)
 			end
-			sum += weight
-			for joint, cframe in pose do
-				local before = mix[joint]
-				-- (a running weighted average: this clip's share so far)
-				mix[joint] = if before then before:Lerp(cframe, weight / sum) else cframe
-			end
+			addClip(CROUCH[direction], weight * crouch, phase)
 		end
 	end
-	for joint, standing in idle do
+	for joint, still in stand do
 		local moving = mix[joint]
-		out[joint] = if moving then standing:Lerp(moving, amp) else standing
+		out[joint] = if moving then still:Lerp(moving, amp) else still
 	end
 end
 
