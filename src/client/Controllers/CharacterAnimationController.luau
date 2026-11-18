@@ -476,9 +476,8 @@ local function walkBlendWeights(entry: Tracked)
 	walkWeights.WalkLeft = math.max(-right, 0) ^ 4
 	local total = 0
 	for _, name in WALK_DIRECTIONS do
-		if walkWeights[name] < WALK_MIN_WEIGHT then
-			walkWeights[name] = 0
-		end
+		-- (a soft cut: a clip fades in from zero instead of popping in)
+		walkWeights[name] = math.max(walkWeights[name] - WALK_MIN_WEIGHT, 0)
 		total += walkWeights[name]
 	end
 	if total <= 0 then
@@ -619,14 +618,6 @@ local function compose(entry: Tracked)
 		end
 		result, touched = blendChannel(entry.movement, motor, joint, result)
 		any = any or touched
-		-- Walking: the body leans into where it goes (forward, back, to the
-		-- side), on top of the clip.
-		if joint == "Root" and walking > 0 and entry.walkLean.Magnitude > 0.01 then
-			local lean = entry.walkLean * (WALK_LEAN * walking)
-			local tilt = CFrame.Angles(math.rad(-lean.Y), 0, math.rad(-lean.X))
-			result = result * R6Pose.toTransform(motor, tilt)
-			any = true
-		end
 		if sprint > 0 and sprintPose[joint] then
 			local lean = R6Pose.toTransform(motor, sprintPose[joint])
 			-- Partial lean: blend from "no rotation" (CFrame.new()) to the full lean.
@@ -639,6 +630,15 @@ local function compose(entry: Tracked)
 		if not (joint == "Root" and isLimping(entry)) then
 			result, touched = blendChannel(entry.stance, motor, joint, result, keepHeight)
 			any = any or touched
+		end
+		-- Walking: the body leans into where it goes (forward, back, to the
+		-- side), on top of the clip and of the guard
+		-- (so it still shows while guarding).
+		if joint == "Root" and walking > 0 and entry.walkLean.Magnitude > 0.01 then
+			local lean = entry.walkLean * (WALK_LEAN * walking)
+			local tilt = CFrame.Angles(math.rad(-lean.Y), 0, math.rad(-lean.X))
+			result = result * R6Pose.toTransform(motor, tilt)
+			any = true
 		end
 		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched

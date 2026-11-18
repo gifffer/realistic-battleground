@@ -271,15 +271,18 @@ local clips: { [string]: R6Pose.Clip } = {
 	-- relative to where the body faces, blended by CharacterAnimationController
 	-- from the direction the body really moves (so a strafe or a backpedal
 	-- doesn't "moonwalk"), all on the same 8-key cycle (0.8 s, played x1.5 at
-	-- full walking speed: 0.533 s, a key every 0.067 s) with the right foot
-	-- contact at the same moment, so they blend without the legs scissoring:
+	-- full walking speed: 0.533 s, a key every 0.067 s) and the same key
+	-- times. Their foot contacts are not at the same moment, but every blend
+	-- measured keeps a foot on the floor (no float, no scissoring):
 	--   Walk       forward: a punchy power-walk. Each leg flicks BACK hard
 	--              (heel to the buttock, about 80°) and swings back under the
 	--              body; the same-side arm punches forward (about 85°, across
 	--              the chest), the other swings back; a strong torso twist,
 	--              two bobs per cycle.
 	--   WalkBack   backpedal: both arms held up and out in front (a guard /
-	--              balance), legs reaching back like a reversed pendulum.
+	--              balance), legs reaching back like a reversed pendulum: a
+	--              foot lifts while its leg goes back and is planted while it
+	--              comes forward, so the body slides back over it.
 	--   WalkLeft   side-skip to the left: the left leg kicks out sideways to
 	--              hip height twice per cycle, the other closes under the
 	--              body; one arm sweeps behind the back, the other flings out,
@@ -399,12 +402,12 @@ local clips: { [string]: R6Pose.Clip } = {
 			{
 				time = 0,
 				pose = {
-					Root = { rot = Vector3.new(5, 0, 0), pos = Vector3.new(0, -0.018, 0) },
+					Root = { rot = Vector3.new(5, 0, 0), pos = Vector3.new(0, -0.079, 0) },
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(65, 0, 35) },
 					LeftShoulder = { rot = Vector3.new(65, 0, -35) },
-					RightHip = { rot = Vector3.new(0, 0, 3), pos = Vector3.new(0, 0.1, 0) },
-					LeftHip = { rot = Vector3.new(0, 0, -3) },
+					RightHip = { rot = Vector3.new(38, 0, 3) },
+					LeftHip = { rot = Vector3.new(-35, 0, -3), pos = Vector3.new(0, 0.1, 0) },
 				},
 			},
 			{
@@ -414,85 +417,85 @@ local clips: { [string]: R6Pose.Clip } = {
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(78, 0, 28) },
 					LeftShoulder = { rot = Vector3.new(52, 0, -40) },
-					RightHip = { rot = Vector3.new(25, 0, 3), pos = Vector3.new(0, 0.2, 0) },
+					RightHip = { rot = Vector3.new(22, 0, 3), pos = Vector3.new(0, 0.2, 0) },
 					LeftHip = { rot = Vector3.new(-25, 0, -3) },
 				},
 			},
 			{
 				time = 0.2,
 				pose = {
-					Root = { rot = Vector3.new(6, -6, 1), pos = Vector3.new(0, 0.11, 0) },
+					Root = { rot = Vector3.new(6, -6, 1), pos = Vector3.new(0, 0.166, 0) },
 					Neck = { rot = Vector3.new(-3, 0, 0) },
 					RightShoulder = { rot = Vector3.new(85, 0, 25) },
 					LeftShoulder = { rot = Vector3.new(45, 0, -45) },
-					RightHip = { rot = Vector3.new(38, 0, 3), pos = Vector3.new(0, 0.3, 0) },
-					LeftHip = { rot = Vector3.new(-35, 0, -3) },
+					RightHip = { rot = Vector3.new(0, 0, 3), pos = Vector3.new(0, 0.3, 0) },
+					LeftHip = { rot = Vector3.new(0, 0, -3) },
 				},
 			},
 			{
 				time = 0.3,
 				pose = {
-					Root = { rot = Vector3.new(6, -4, 0), pos = Vector3.new(0, 0.094, 0) },
+					Root = { rot = Vector3.new(6, -4, 0), pos = Vector3.new(0, 0.008, 0) },
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(75, 0, 30) },
 					LeftShoulder = { rot = Vector3.new(55, 0, -40) },
-					RightHip = { rot = Vector3.new(22, 0, 3), pos = Vector3.new(0, 0.1, 0) },
-					LeftHip = { rot = Vector3.new(-25, 0, -3) },
+					RightHip = { rot = Vector3.new(-25, 0, 3), pos = Vector3.new(0, 0.1, 0) },
+					LeftHip = { rot = Vector3.new(25, 0, -3) },
 				},
 			},
 			{
 				time = 0.4,
 				pose = {
-					Root = { rot = Vector3.new(5, 0, 0), pos = Vector3.new(0, -0.018, 0) },
+					Root = { rot = Vector3.new(5, 0, 0), pos = Vector3.new(0, -0.079, 0) },
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(65, 0, 35) },
 					LeftShoulder = { rot = Vector3.new(65, 0, -35) },
-					RightHip = { rot = Vector3.new(0, 0, 3), pos = Vector3.new(0, 0.1, 0) },
-					LeftHip = { rot = Vector3.new(0, 0, -3) },
+					RightHip = { rot = Vector3.new(-35, 0, 3), pos = Vector3.new(0, 0.1, 0) },
+					LeftHip = { rot = Vector3.new(38, 0, -3) },
 				},
 			},
 			{
 				time = 0.5,
 				pose = {
-					Root = { rot = Vector3.new(6, 4, 0), pos = Vector3.new(0, 0.094, 0) },
+					Root = { rot = Vector3.new(6, 4, 0), pos = Vector3.new(0, 0.102, 0) },
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(52, 0, 40) },
 					LeftShoulder = { rot = Vector3.new(78, 0, -28) },
-					RightHip = { rot = Vector3.new(-25, 0, 3) },
-					LeftHip = { rot = Vector3.new(25, 0, -3), pos = Vector3.new(0, 0.2, 0) },
+					RightHip = { rot = Vector3.new(-22, 0, 3) },
+					LeftHip = { rot = Vector3.new(22, 0, -3), pos = Vector3.new(0, 0.2, 0) },
 				},
 			},
 			{
 				time = 0.6,
 				pose = {
-					Root = { rot = Vector3.new(6, 6, -1), pos = Vector3.new(0, 0.11, 0) },
+					Root = { rot = Vector3.new(6, 6, -1), pos = Vector3.new(0, 0.166, 0) },
 					Neck = { rot = Vector3.new(-3, 0, 0) },
 					RightShoulder = { rot = Vector3.new(45, 0, 45) },
 					LeftShoulder = { rot = Vector3.new(85, 0, -25) },
-					RightHip = { rot = Vector3.new(-35, 0, 3) },
-					LeftHip = { rot = Vector3.new(38, 0, -3), pos = Vector3.new(0, 0.3, 0) },
+					RightHip = { rot = Vector3.new(0, 0, 3) },
+					LeftHip = { rot = Vector3.new(0, 0, -3), pos = Vector3.new(0, 0.3, 0) },
 				},
 			},
 			{
 				time = 0.7,
 				pose = {
-					Root = { rot = Vector3.new(5, 4, 0), pos = Vector3.new(0, 0.102, 0) },
+					Root = { rot = Vector3.new(5, 4, 0), pos = Vector3.new(0, 0.021, 0) },
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(55, 0, 40) },
 					LeftShoulder = { rot = Vector3.new(75, 0, -30) },
-					RightHip = { rot = Vector3.new(-22, 0, 3) },
-					LeftHip = { rot = Vector3.new(22, 0, -3), pos = Vector3.new(0, 0.1, 0) },
+					RightHip = { rot = Vector3.new(25, 0, 3) },
+					LeftHip = { rot = Vector3.new(-25, 0, -3), pos = Vector3.new(0, 0.1, 0) },
 				},
 			},
 			{
 				time = 0.8,
 				pose = {
-					Root = { rot = Vector3.new(5, 0, 0), pos = Vector3.new(0, -0.018, 0) },
+					Root = { rot = Vector3.new(5, 0, 0), pos = Vector3.new(0, -0.079, 0) },
 					Neck = { rot = Vector3.new(-2, 0, 0) },
 					RightShoulder = { rot = Vector3.new(65, 0, 35) },
 					LeftShoulder = { rot = Vector3.new(65, 0, -35) },
-					RightHip = { rot = Vector3.new(0, 0, 3), pos = Vector3.new(0, 0.1, 0) },
-					LeftHip = { rot = Vector3.new(0, 0, -3) },
+					RightHip = { rot = Vector3.new(38, 0, 3) },
+					LeftHip = { rot = Vector3.new(-35, 0, -3), pos = Vector3.new(0, 0.1, 0) },
 				},
 			},
 		},
