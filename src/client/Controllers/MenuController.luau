@@ -125,16 +125,34 @@ local hiddenReasons: { [string]: boolean } = {}
 -- Top bar
 ------------------------------------------------------------------------------
 
+-- Smallest free part of Roblox's bar we accept to sit in (else: under it).
+local MIN_BAR_HEIGHT = 24
+-- Height assumed for Roblox's bar when nothing says how tall it is (the
+-- new style, the tallest: our row then never ends up under its buttons).
+local FALLBACK_TOPBAR = 58
+
 -- Where Roblox leaves room for us: (left x, top y, height, right x) in screen pixels.
+-- In Roblox's bar, right of its buttons, when TopbarInset gives a usable
+-- free area. Otherwise (not reported yet, hidden, too small, odd values):
+-- our own row top left, UNDER Roblox's bar, never behind its buttons
+-- (CoreGui is always drawn above every PlayerGui).
 local function barArea(viewport: Vector2): (number, number, number, number)
 	local inset = GuiService.TopbarInset
-	if inset.Height <= 0 then
-		-- No Roblox bar reported (hidden, old client): our own row top left.
-		return 12, 12, PILL, viewport.X - 12
+	local usable = inset.Height >= MIN_BAR_HEIGHT
+		and inset.Max.Y <= viewport.Y * 0.5
+		and inset.Min.X >= 0
+		and inset.Max.X <= viewport.X + 1
+		and inset.Max.X - inset.Min.X >= PILL + 12
+	if usable then
+		local height = math.min(PILL, inset.Height - 4)
+		local top = math.max(0, inset.Min.Y + inset.Height - height - 2)
+		return inset.Min.X + 4, top, height, inset.Max.X - 8
 	end
-	local height = math.min(PILL, inset.Height - 4)
-	local top = math.max(0, inset.Height - height - 2)
-	return inset.Min.X + 4, top, height, inset.Max.X - 8
+	local robloxBar = GuiService:GetGuiInset().Y
+	if robloxBar <= 0 then
+		robloxBar = FALLBACK_TOPBAR
+	end
+	return 12, robloxBar + 12, PILL, viewport.X - 12
 end
 
 local function paintButton(ui: EntryUi, hovered: boolean)
@@ -173,6 +191,43 @@ local function layoutBar()
 	bar.Size = UDim2.fromOffset(math.min(width + 12, room), height + 12)
 	bar.CanvasSize = UDim2.new(0, width + 12, 1, 0)
 	bar.ScrollingEnabled = width + 12 > room
+end
+
+-- One look, a few seconds in: a bar with no size, outside the screen or
+-- with no buttons says so in Output (it used to vanish silently).
+local function checkBarOnce()
+	if next(hiddenReasons) ~= nil then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local viewport = camera.ViewportSize
+	local position = bar.AbsolutePosition
+	local size = bar.AbsoluteSize
+	local problem: string? = nil
+	if next(entries) == nil then
+		problem = "no button registered"
+	elseif size.X < 1 or size.Y < 1 then
+		problem = "zero size"
+	elseif
+		position.X + size.X <= 0
+		or position.Y + size.Y <= 0
+		or position.X >= viewport.X
+		or position.Y >= viewport.Y
+	then
+		problem = "off screen"
+	elseif not gui.Enabled or gui.Parent == nil or not bar.Visible then
+		problem = "hidden"
+	end
+	if problem then
+		warn(
+			`[Menu] top bar not visible ({problem}): position {position}, size {size}, `
+				.. `viewport {viewport}, TopbarInset {GuiService.TopbarInset}, `
+				.. `GuiInset {GuiService:GetGuiInset()}, buttons {#bar:GetChildren() - 2}`
+		)
+	end
 end
 
 local function buildButton(entry: MenuEntry): EntryUi
@@ -625,6 +680,16 @@ function MenuController.init()
 		if ui then
 			layoutPanel(ui)
 		end
+	end)
+
+	-- Roblox can report its bar late (TopbarInset still empty at init): lay
+	-- out again once everything has registered and once CoreGui settled,
+	-- in case the change signal came before us or never comes.
+	task.defer(layoutBar)
+	task.delay(1, layoutBar)
+	task.delay(3, function()
+		layoutBar()
+		task.defer(checkBarOnce)
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
