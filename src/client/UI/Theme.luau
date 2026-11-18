@@ -1,24 +1,24 @@
 --!strict
 -- The look of the whole interface, in one place.
 --
--- Direction "editorial / film" (think Sifu, The Last of Us), with BOLD,
--- tight type (heavy condensed caps, bold titles): almost no
--- boxes. Off-white type and 1–2 px hairlines on soft dark gradients, SQUARE
--- corners everywhere, one desaturated blood red used ONLY for danger.
--- Text shown to players is in English (game rule).
+-- Direction "fighting game menu" (Tekken / Street Fighter 6 select
+-- screens): RAW and minimalist. Near-monochrome (deep black, off-white,
+-- flat greys), hard square edges, heavy condensed caps, and ONE aggressive
+-- blood-red accent. Text shown to players is in English (game rule).
 --
--- Rules that keep it from looking like a template:
---   • text and HUD stay square and boxless: hairlines, no drop shadows;
---   • but anything you can click or tap is a REAL button (UI/Button):
---     a filled plate with rounded corners and an outline, that lights up
---     under the mouse and sinks when pressed. Players must never wonder
---     whether something is clickable;
---   • one warm amber accent (Accent) for the main action of a screen
---     (EQUIP, BUY, FIND MATCH...) and for what is selected / equipped;
---   • no Gotham fonts, nothing above 40 px, no exclamation marks;
---   • blood red means "danger / you are hurt", nothing else;
---   • nothing centred that doesn't need to be: the middle of the screen
---     belongs to the fight.
+-- Rules:
+--   • black / white / grey everywhere. No rainbow, no pastel, no glow;
+--   • the red accent (Accent) is ONLY for what is selected / active and
+--     for the main action of a screen (EQUIP, BUY, FIND MATCH...). If
+--     something is red, it is the thing you picked or the thing to press;
+--   • square corners (RADIUS = 0), flat fills, few hairlines;
+--   • selection must be unmistakable: the selected tab / card is filled
+--     red with a white slash, everything else is flat grey. Hover = white
+--     outline, pressed = a quick punch (shrinks), locked = dimmed + lock;
+--   • anything you can click is a REAL button (UI/Button), never hand-made;
+--   • blood red (Blood*) still means danger / you are hurt on the HUD;
+--   • nothing above 40 px, no exclamation marks;
+--   • the middle of the screen belongs to the fight.
 --
 -- Helpers:
 --   Theme.make(className, props, children)   build an instance from a table
@@ -26,6 +26,7 @@
 --   Theme.track("HEALTH", "three")           wide letter-spacing (see below)
 --   Theme.gradient(rotation, { {0, 0.4}, {1, 1} })   a transparency gradient
 --   Theme.keyCap("M1")                       an outlined key ("M1", "ESC"...)
+--   Theme.slash(props)                       a slanted accent stroke
 --   Theme.tween(instance, seconds, props, style?, direction?)
 --   (buttons: UI/Button.new / Button.badge, never hand-made)
 --
@@ -43,22 +44,27 @@ local UserInputService = game:GetService("UserInputService")
 local Theme = {}
 
 Theme.Colors = table.freeze({
-	Ink = Color3.fromHex("#ECE8E1"), -- main text, bars, hairlines (warm off-white)
-	InkHi = Color3.fromHex("#FFFFFF"), -- the local player's own name only
-	Ink2 = Color3.fromHex("#A9A49B"), -- secondary labels, stamina
-	InkVerb = Color3.fromHex("#C9C4BA"), -- kill feed verbs
-	Ink3 = Color3.fromHex("#6E6A64"), -- tertiary labels (on dark only), disabled
-	Scrim = Color3.fromHex("#0B0B0C"), -- every dark gradient, bars, key caps
+	Ink = Color3.fromHex("#EDEDED"), -- main text, bars, hairlines (off-white)
+	InkHi = Color3.fromHex("#FFFFFF"), -- the local player's own name, text on red
+	Ink2 = Color3.fromHex("#9C9C9C"), -- secondary labels, stamina
+	InkVerb = Color3.fromHex("#C6C6C6"), -- kill feed verbs
+	Ink3 = Color3.fromHex("#5C5C5C"), -- tertiary labels (on dark only), disabled
+	Scrim = Color3.fromHex("#080808"), -- every dark backdrop, bars, key caps
+	Plate = Color3.fromHex("#1A1A1A"), -- a flat grey button / card (unselected)
+	PlateHi = Color3.fromHex("#2C2C2C"), -- that plate under the mouse
 	Blood = Color3.fromHex("#9E2B25"), -- danger fills (exhausted stamina)
-	BloodHi = Color3.fromHex("#B8423A"), -- danger text / lines (low HP, damage, head aim)
+	BloodHi = Color3.fromHex("#C23A31"), -- danger text / lines (low HP, damage, head aim)
 	BloodDeep = Color3.fromHex("#6E1814"), -- knock-out edge vignette
-	Accent = Color3.fromHex("#E2A13B"), -- main actions, selected / equipped
-	AccentHi = Color3.fromHex("#F2BC5E"), -- accent under the mouse
-	AccentDeep = Color3.fromHex("#B87C22"), -- accent while pressed
+	Accent = Color3.fromHex("#E01E1E"), -- THE accent: selected / active, main actions
+	AccentHi = Color3.fromHex("#FF3B30"), -- accent under the mouse
+	AccentDeep = Color3.fromHex("#9A1212"), -- accent while pressed
 })
 
--- Corner radius of buttons and cards (pixels).
-Theme.RADIUS = 6
+-- Corner radius of buttons and cards (pixels): none, hard edges.
+Theme.RADIUS = 0
+
+-- Angle of the fighting-game slashes (selected marker, title strokes).
+Theme.SLASH_ANGLE = 18
 
 local FAMILY = {
 	Condensed = "rbxasset://fonts/families/RobotoCondensed.json",
@@ -67,17 +73,17 @@ local FAMILY = {
 	Roboto = "rbxasset://fonts/families/Roboto.json",
 }
 
--- Weights: between the first thin look (too serious) and full bold (not
--- serious enough): semi-bold labels, medium titles, a little spacing. The names stay the same so every screen follows: e.g.
--- "NumberLight" is now a bold number too.
+-- Heavy and condensed: bold caps everywhere, Oswald Bold (a tall,
+-- narrow display face) for titles and button words. The names stay the
+-- same so every screen follows (e.g. "NumberLight" is a bold number too).
 Theme.Fonts = table.freeze({
-	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.SemiBold), -- caps labels, names
-	LabelBold = Font.new(FAMILY.Condensed, Enum.FontWeight.Bold), -- feedback words
+	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.Bold), -- caps labels, names
+	LabelBold = Font.new(FAMILY.Oswald, Enum.FontWeight.Bold), -- buttons, feedback words
 	LabelRegular = Font.new(FAMILY.Condensed, Enum.FontWeight.Medium), -- kill feed verbs
-	Number = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- tabular numbers
-	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- the big HP number
-	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.SemiBold), -- key caps
-	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Medium), -- titles
+	Number = Font.new(FAMILY.Mono, Enum.FontWeight.SemiBold), -- tabular numbers
+	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Bold), -- the big HP number
+	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.Bold), -- key caps
+	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Bold), -- titles
 	Body = Font.new(FAMILY.Roboto, Enum.FontWeight.Regular), -- sentences
 })
 
@@ -234,6 +240,22 @@ function Theme.padding(pixels: number): Instance
 		PaddingLeft = offset,
 		PaddingRight = offset,
 	})
+end
+
+-- A slanted stroke (fighting-game style): a thin bar leaning by
+-- SLASH_ANGLE. Accent red by default; any property can be overridden.
+function Theme.slash(props: { [string]: any }): any
+	local base: { [string]: any } = {
+		Name = "Slash",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(4, 22),
+		Rotation = Theme.SLASH_ANGLE,
+		BackgroundColor3 = Theme.Colors.Accent,
+	}
+	for key, value in props do
+		base[key] = value
+	end
+	return Theme.make("Frame", base)
 end
 
 -- Plays a tween and returns it. Default easing: Quad Out.

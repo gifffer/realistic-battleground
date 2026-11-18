@@ -21,7 +21,7 @@
 --   nothing happens for a while (like the health block).
 -- • Screen size: the block follows it (Theme.autoScale). On a phone the
 --   slots and "AWAKEN" are the buttons (a tap uses the move): each slot
---   gets a dark rounded plate so it reads as a button, and the block sits
+--   gets a dark square plate so it reads as a button, and the block sits
 --   higher, clear of Roblox's jump button.
 -- • "[G] AWAKEN" sits on an accent plate (it is the one thing to press).
 --
@@ -170,7 +170,7 @@ local function buildSlot(index: number, holder: GuiObject): Slot
 		Name = `Slot{index}`,
 		Position = UDim2.fromOffset(2, 2 + (index - 1) * SLOT_HEIGHT),
 		Size = UDim2.new(1, -4, 0, if touch then SLOT_HEIGHT - 2 else SLOT_HEIGHT),
-		-- (a phone: a dark rounded plate, so each move reads as a button)
+		-- (a phone: a dark square plate, so each move reads as a button)
 		BackgroundColor3 = C.Scrim,
 		BackgroundTransparency = if touch then 0.55 else 1,
 		AutoButtonColor = false,
@@ -178,7 +178,6 @@ local function buildSlot(index: number, holder: GuiObject): Slot
 		Parent = holder,
 	}) :: TextButton
 	if touch then
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, 4), Parent = button })
 		Theme.make("UIStroke", {
 			Thickness = 1,
 			Color = C.Ink,
@@ -408,15 +407,14 @@ local function build()
 		Size = UDim2.fromOffset(0, 26),
 		AutomaticSize = Enum.AutomaticSize.X,
 		BackgroundColor3 = C.Accent,
-		BackgroundTransparency = 0.82,
+		BackgroundTransparency = 0,
 		Visible = false,
 		Parent = furyGroup,
 	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 		Theme.make("UIStroke", {
-			Thickness = 1.5,
-			Color = C.Accent,
-			Transparency = 0.1,
+			Thickness = 2,
+			Color = C.InkHi,
+			Transparency = 0.6,
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}),
 		Theme.make("UIPadding", {
@@ -459,7 +457,7 @@ local function build()
 		Size = UDim2.fromOffset(0, 18),
 		FontFace = Theme.Fonts.LabelBold,
 		TextSize = 13,
-		TextColor3 = C.AccentHi,
+		TextColor3 = C.InkHi,
 		Text = Theme.track("AWAKEN", "three"),
 		Parent = furyGo,
 	})

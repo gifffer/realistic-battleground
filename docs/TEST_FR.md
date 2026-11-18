@@ -758,3 +758,31 @@ Seulement **en combat**, **jamais par un finisher**, et rare exprès. Le serveur
 | H14 | **Rareté** : un combat normal (plusieurs gros combos) | La plupart des combats : **rien**. Un gros combo = **un seul** tirage (20 % fracture, 5 % bras) ; le coup lourd suivant du **même** combo ne retire pas. Une jambe ne fait jamais de fracture « en plus » (jamais plus que `FRACTURE_CHANCE`). |
 | H15 | Tenir un **os** (arme) dans la main droite, puis se faire **arracher le bras droit** (H3) | L'os **tombe et se casse** tout de suite (il ne reste pas collé au bras qui vole) ; plus d'arme en main ; **impossible de lancer** quoi que ce soit sans bras droit. |
 | H16 | Rejoindre la partie / se faire arracher un bras **pendant que le `WoundKit` charge encore** | D'abord une forme simple possible, puis dès que le kit est là, l'**épaule ouverte** et le **bout du bras** sont redessinés avec les vraies pièces (sans se reconnecter). |
+
+## Interface style « jeu de combat » : brut, minimaliste, sélection évidente (`feature/ui-fighting-style`)
+
+Toute l'interface passe par le thème (`src/client/UI/Theme.luau`) et le bouton commun
+(`src/client/UI/Button.luau`) : **noir / blanc cassé / gris**, **plus d'ambre**, **un seul rouge
+sang vif** réservé à **ce qui est choisi / actif** et aux **actions principales** (EQUIP, BUY,
+FIND MATCH, CHALLENGE, ACCEPT, ON). **Coins carrés** partout, plaques **plates** (pas de dégradé
+sur les boutons), texte **gras condensé en majuscules** (Oswald Bold pour les titres et les mots
+des boutons). Le rouge « danger » du HUD (PV bas, dégâts) ne change pas. Ce qui remplace les tests
+V4–V12 de `feature/ui-overhaul` (« ambre » → rouge, voir ci-dessous) ; le reste de V1–V20 est
+inchangé (même fonctionnement, mêmes vérifications serveur, mêmes tailles sur téléphone).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | Ouvrir le menu (**M** ou MENU) | Fond **noir dur** à gauche (coupé net, pas un long fondu). Aucune couleur à part le **rouge** : pas d'ambre, pas de coins arrondis. Titre de la section en **gros caps gras condensés**, avec un **trait rouge épais** sur la ligne sous le titre. |
+| F2 | Liste des sections (01 KITS, 02 DUEL…) | Les sections non choisies : **plaques grises plates**, texte gris. La section ouverte : **pleine rouge**, texte et numéro **blancs**, **deux barres obliques blanches « // »** à gauche, et un peu **plus grande** que les autres. On la repère en une fraction de seconde. |
+| F3 | Survoler une section / un bouton (PC) | **Contour blanc épais** + plaque un peu plus claire (+ un peu plus grand). Sur la section déjà choisie : elle reste rouge, avec le contour blanc. |
+| F4 | Cliquer un bouton | **« Coup de poing »** : le bouton se **rétrécit d'un coup** (vite, sec) puis revient. Les zones de clic n'ont pas changé de taille (rien ne bouge dans les listes). |
+| F5 | **KITS** → ROSTER | Carte du kit regardé : **pleine rouge**, nom et ligne d'état en **blanc**. Les autres : gris. Le kit équipé (pas regardé) : ligne **EQUIPPED en rouge**. Un kit **verrouillé** (niveau trop bas) : carte **assombrie**, texte gris foncé, **cadenas** à droite ; on peut quand même cliquer dessus pour voir le détail. |
+| F6 | KITS → EQUIP / BUY | **EQUIP** / **BUY · 500** = bouton **rouge plein** texte blanc. Après EQUIP : badge **✓ EQUIPPED** = fond noir, **contour rouge épais**, coche rouge, texte blanc (pas un bouton). Bouton gris « NEED … MORE » / « UNLOCKS AT LV 10 » (cadenas) inchangés. Achat refusé : contour rouge épais ~0,35 s. |
+| F7 | **SHOP** | Catégories comme les kits (choisie = rouge plein). Dans la liste : l'article **porté** a son nom en **blanc** et une **barre rouge verticale** à sa gauche, et le bouton **EQUIPPED** est **rouge plein** (survol PC : TAKE OFF). Article verrouillé : nom plus sombre. |
+| F8 | **SETTINGS** OFF / ON | Le côté choisi est **rouge plein** (ON comme OFF), l'autre est une plaque grise ; survol = contour blanc. |
+| F9 | **DUEL** / défi reçu | FIND MATCH, CHALLENGE, ACCEPT = **rouge plein**. CANCEL, DECLINE = **gris plat**. |
+| F10 | Bouton **MENU** (menu fermé) | Plaque grise **carrée** avec un **contour rouge** et l'icône ☰ rouge ; l'anneau qui pulse (avant la 1ʳᵉ ouverture) est rouge et carré. |
+| F11 | **TAB** (scoreboard) | Ta ligne a une **petite barre rouge** à gauche (en plus de ton nom en blanc gras). |
+| F12 | Jauge Street Fury pleine | **[G] AWAKEN** sur une plaque **rouge pleine** (texte blanc), cliquable / touchable. |
+| F13 | *Test → Device* : **iPhone** paysage | Mêmes couleurs ; les moves du kit sont sur des plaques sombres **carrées** ; tous les boutons gardent leur hauteur (≥ ~44 px à l'écran). |
+| F14 | Kill feed, écran de mort, HUD (PV / stamina) | Restent en noir / blanc / gris (le rouge sang du HUD = danger, comme avant). Aucun ambre nulle part. |

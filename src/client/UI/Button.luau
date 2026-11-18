@@ -14,14 +14,17 @@
 --       onActivated = function() ... end,
 --   })
 --   equip.setEnabled(false)  -- flat and grey, no hover, presses ignored
---   equip.setSelected(true)  -- tabs: accent outline + a bar on the left
+--   equip.setSelected(true)  -- red fill + a white slash + a little bigger
+--   equip.setLocked(true)    -- dimmed with a lock on the right (still clickable)
 --   equip.setText("CONFIRM")
 --   equip.reset()            -- no hover / press (call when its parent hides it)
 --
--- States: idle -> hover (brighter, slightly bigger) -> pressed (darker,
--- slightly smaller). Gamepad selection counts as hover.
+-- Fighting-game look: square, flat. Unselected = flat grey plate,
+-- selected = accent red fill (unmistakable), hover = white outline and a
+-- brighter plate, pressed = a quick punch (shrinks, then snaps back).
+-- Gamepad selection counts as hover.
 -- Button.badge() draws the non-clickable twin ("✓ EQUIPPED"): same shape,
--- accent outline, no fill, so it never reads as something to press.
+-- black with a thick accent outline, so it never reads as something to press.
 --
 -- The TextButton is the hit area and never changes size (lists don't
 -- move); the visible plate inside it grows and shrinks around its centre.
@@ -71,6 +74,7 @@ export type Button = {
 	setSubtext: (text: string, color: Color3?) -> (),
 	setEnabled: (enabled: boolean) -> (),
 	setSelected: (selected: boolean) -> (),
+	setLocked: (locked: boolean) -> (),
 	setVariant: (variant: Variant) -> (),
 	isEnabled: () -> boolean,
 	reset: () -> (), -- drops hover / press at once (its menu was just hidden)
@@ -106,9 +110,10 @@ local ICON = 14 -- icon box (pixels)
 local GAP = 7 -- between icon, label and key cap
 
 local HOVER_SCALE = 1.04
-local PRESS_SCALE = 0.95
-local TAB_HOVER_SCALE = 1.015
-local TAB_PRESS_SCALE = 0.98
+local PRESS_SCALE = 0.9 -- the punch
+local TAB_HOVER_SCALE = 1.02
+local TAB_PRESS_SCALE = 0.95
+local TAB_SELECTED_SCALE = 1.04 -- the picked tab / card stands out
 local FLASH_SECONDS = 0.35 -- the red outline of flash()
 
 type Look = {
@@ -116,42 +121,184 @@ type Look = {
 	bgT: number,
 	stroke: Color3,
 	strokeT: number,
+	strokeW: number,
 	text: Color3,
 }
 type Mode = "idle" | "hover" | "pressed" | "disabled" | "selected"
 
-local HOVER_DARK = Color3.fromHex("#2B2926")
-
+-- Flat and square. Red = selected / main action, grey = the rest, a white
+-- outline = under the mouse.
 local LOOKS: { [Variant]: { [Mode]: Look } } = {
 	primary = {
-		idle = { bg = C.Accent, bgT = 0, stroke = C.AccentHi, strokeT = 0.2, text = C.Scrim },
-		hover = { bg = C.AccentHi, bgT = 0, stroke = C.InkHi, strokeT = 0.3, text = C.Scrim },
-		pressed = { bg = C.AccentDeep, bgT = 0, stroke = C.AccentDeep, strokeT = 0, text = C.Scrim },
-		selected = { bg = C.AccentHi, bgT = 0, stroke = C.InkHi, strokeT = 0.3, text = C.Scrim },
-		disabled = { bg = C.Ink3, bgT = 0.6, stroke = C.Ink3, strokeT = 0.6, text = C.Ink2 },
+		idle = {
+			bg = C.Accent,
+			bgT = 0,
+			stroke = C.Accent,
+			strokeT = 1,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		hover = {
+			bg = C.AccentHi,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		pressed = {
+			bg = C.AccentDeep,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0.2,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		selected = {
+			bg = C.AccentHi,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		disabled = {
+			bg = C.Plate,
+			bgT = 0.3,
+			stroke = C.Ink3,
+			strokeT = 0.7,
+			strokeW = 1,
+			text = C.Ink3,
+		},
 	},
 	secondary = {
-		idle = { bg = C.Scrim, bgT = 0.2, stroke = C.Ink, strokeT = 0.5, text = C.Ink },
-		hover = { bg = HOVER_DARK, bgT = 0.05, stroke = C.Ink, strokeT = 0.1, text = C.InkHi },
-		pressed = { bg = C.Scrim, bgT = 0, stroke = C.Ink, strokeT = 0.35, text = C.Ink2 },
-		selected = { bg = HOVER_DARK, bgT = 0.05, stroke = C.Accent, strokeT = 0, text = C.InkHi },
-		disabled = { bg = C.Scrim, bgT = 0.5, stroke = C.Ink3, strokeT = 0.6, text = C.Ink3 },
+		idle = {
+			bg = C.Plate,
+			bgT = 0.08,
+			stroke = C.Ink,
+			strokeT = 0.82,
+			strokeW = 1,
+			text = C.Ink,
+		},
+		hover = {
+			bg = C.PlateHi,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		pressed = {
+			bg = C.Scrim,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0.2,
+			strokeW = 2,
+			text = C.Ink,
+		},
+		selected = {
+			bg = C.Accent,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0.6,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		disabled = {
+			bg = C.Plate,
+			bgT = 0.5,
+			stroke = C.Ink3,
+			strokeT = 0.8,
+			strokeW = 1,
+			text = C.Ink3,
+		},
 	},
 	danger = {
-		idle = { bg = C.Blood, bgT = 0, stroke = C.BloodHi, strokeT = 0.2, text = C.Ink },
-		hover = { bg = C.BloodHi, bgT = 0, stroke = C.Ink, strokeT = 0.4, text = C.InkHi },
-		pressed = { bg = C.BloodDeep, bgT = 0, stroke = C.BloodDeep, strokeT = 0, text = C.Ink2 },
-		selected = { bg = C.BloodHi, bgT = 0, stroke = C.Ink, strokeT = 0.4, text = C.InkHi },
-		disabled = { bg = C.Scrim, bgT = 0.5, stroke = C.Ink3, strokeT = 0.6, text = C.Ink3 },
+		idle = {
+			bg = C.Scrim,
+			bgT = 0.1,
+			stroke = C.BloodHi,
+			strokeT = 0,
+			strokeW = 2,
+			text = C.BloodHi,
+		},
+		hover = {
+			bg = C.Blood,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		pressed = {
+			bg = C.BloodDeep,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0.2,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		selected = {
+			bg = C.Blood,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0.4,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		disabled = {
+			bg = C.Plate,
+			bgT = 0.5,
+			stroke = C.Ink3,
+			strokeT = 0.8,
+			strokeW = 1,
+			text = C.Ink3,
+		},
 	},
 	tab = {
-		idle = { bg = C.Ink, bgT = 0.94, stroke = C.Ink, strokeT = 0.84, text = C.Ink2 },
-		hover = { bg = C.Ink, bgT = 0.87, stroke = C.Ink, strokeT = 0.55, text = C.InkHi },
-		pressed = { bg = C.Ink, bgT = 0.82, stroke = C.Ink, strokeT = 0.5, text = C.Ink },
-		selected = { bg = C.Ink, bgT = 0.86, stroke = C.Accent, strokeT = 0.05, text = C.InkHi },
-		disabled = { bg = C.Ink, bgT = 0.97, stroke = C.Ink, strokeT = 0.92, text = C.Ink3 },
+		idle = { bg = C.Plate, bgT = 0.15, stroke = C.Ink, strokeT = 1, strokeW = 1, text = C.Ink2 },
+		hover = {
+			bg = C.PlateHi,
+			bgT = 0.05,
+			stroke = C.InkHi,
+			strokeT = 0,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		pressed = {
+			bg = C.Scrim,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 0.2,
+			strokeW = 2,
+			text = C.Ink,
+		},
+		selected = {
+			bg = C.Accent,
+			bgT = 0,
+			stroke = C.InkHi,
+			strokeT = 1,
+			strokeW = 2,
+			text = C.InkHi,
+		},
+		disabled = {
+			bg = C.Plate,
+			bgT = 0.6,
+			stroke = C.Ink,
+			strokeT = 1,
+			strokeW = 1,
+			text = C.Ink3,
+		},
 	},
 }
+
+-- Square by default (Theme.RADIUS = 0): no UICorner at all then.
+local function corner(parent: Instance, extra: number)
+	local radius = Theme.RADIUS + (if Theme.RADIUS > 0 then extra else 0)
+	if radius > 0 then
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, radius), Parent = parent })
+	end
+end
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -168,8 +315,8 @@ local function scaledTextSize(size: number): number
 	return math.floor(size * Theme.TEXT_SCALE + 0.5)
 end
 
--- Width of `text` once drawn (the house font is a bit wider than the
--- measuring font, hence the margin).
+-- Width of `text` once drawn (the house fonts are bold, a bit wider than
+-- the measuring font, hence the margin).
 local function measure(text: string, textSize: number): number
 	local bounds = TextService:GetTextSize(
 		text,
@@ -177,7 +324,7 @@ local function measure(text: string, textSize: number): number
 		Enum.Font.RobotoCondensed,
 		Vector2.new(4096, 4096)
 	)
-	return math.ceil(bounds.X * 1.12) + 2
+	return math.ceil(bounds.X * 1.18) + 2
 end
 
 -- Small icons drawn with frames (no image assets to upload). Returns the
@@ -191,8 +338,6 @@ local function bar(parent: Instance, x: number, y: number, w: number, h: number,
 		Rotation = rotation,
 		BackgroundColor3 = C.Ink,
 		Parent = parent,
-	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, 1) }),
 	})
 end
 
@@ -296,7 +441,6 @@ local function keyCap(text: string, parent: Instance, order: number): (Frame, Te
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, 3) }),
 		Theme.make("UIPadding", {
 			PaddingLeft = UDim.new(0, 5),
 			PaddingRight = UDim.new(0, 5),
@@ -339,6 +483,8 @@ function Button.new(options: Options): Button
 	local showKey = options.keyHint ~= nil and not touch
 	local text = options.text
 	local accent = options.accent == true
+	-- List tabs: room on the left for the "//" slashes of the selected one.
+	local lead = if isTab and align == "left" then 14 else 0
 
 	local instance = Theme.make("TextButton", {
 		Name = options.name or "Button",
@@ -366,7 +512,6 @@ function Button.new(options: Options): Button
 		Visible = false,
 		Parent = instance,
 	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS + 2) }),
 		Theme.make("UIStroke", {
 			Thickness = 2,
 			Color = C.Accent,
@@ -374,6 +519,7 @@ function Button.new(options: Options): Button
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}),
 	}) :: Frame
+	corner(glow, 2)
 	local glowScale = Theme.make("UIScale", { Parent = glow }) :: UIScale
 
 	local plate = Theme.make("Frame", {
@@ -381,34 +527,39 @@ function Button.new(options: Options): Button
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = C.Scrim,
+		BackgroundColor3 = C.Plate,
 		Parent = instance,
-	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 	}) :: Frame
+	corner(plate, 0)
 	local stroke = Theme.make("UIStroke", {
-		Thickness = 1.5,
+		Thickness = 1,
 		Color = C.Ink,
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		Parent = plate,
 	}) :: UIStroke
 	local scale = Theme.make("UIScale", { Parent = plate }) :: UIScale
 
-	-- Tabs: an accent bar on the left when selected.
-	local selectBar: Frame? = nil
-	if isTab then
-		selectBar = Theme.make("Frame", {
-			Name = "SelectBar",
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, 4, 0.5, 0),
-			Size = UDim2.new(0, 3, 1, -14),
-			BackgroundColor3 = C.Accent,
-			BackgroundTransparency = 1,
-			Parent = plate,
-		}, {
-			Theme.make("UICorner", { CornerRadius = UDim.new(0, 2) }),
-		})
+	-- Tabs: two white slashes "//" on the left of the selected one (on its
+	-- red fill), the fighting-game select mark.
+	local slashes: { Frame } = {}
+	if lead > 0 then
+		for i, width in { 3, 2 } do
+			table.insert(
+				slashes,
+				Theme.slash({
+					Name = `Slash{i}`,
+					Position = UDim2.new(0, 3 + i * 5, 0.5, 0),
+					Size = UDim2.new(0, width, 1, -14),
+					BackgroundColor3 = C.InkHi,
+					BackgroundTransparency = 1,
+					Parent = plate,
+				})
+			)
+		end
 	end
+
+	-- Locked (setLocked): a lock on the right, the text dimmed.
+	local lockIcon: Frame? = nil
 
 	local content = Theme.make("Frame", {
 		Name = "Content",
@@ -417,7 +568,7 @@ function Button.new(options: Options): Button
 		Parent = plate,
 	}, {
 		Theme.make("UIPadding", {
-			PaddingLeft = UDim.new(0, if isTab then pad + 2 else pad),
+			PaddingLeft = UDim.new(0, pad + lead),
 			PaddingRight = UDim.new(0, pad),
 		}),
 		Theme.make("UIListLayout", {
@@ -430,6 +581,7 @@ function Button.new(options: Options): Button
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 	}) :: Frame
+	local contentPadding = content:FindFirstChildOfClass("UIPadding") :: UIPadding
 
 	local icon: Frame? = if options.icon then drawIcon(options.icon, content, 1) else nil
 
@@ -465,6 +617,7 @@ function Button.new(options: Options): Button
 			Name = "Label",
 			Position = UDim2.new(0, 0, 0.5, -15),
 			Size = UDim2.new(1, 0, 0, 16),
+			FontFace = Theme.Fonts.LabelBold,
 			TextSize = textSize + 1,
 			TextStrokeTransparency = 1,
 			TextTruncate = Enum.TextTruncate.AtEnd,
@@ -488,7 +641,7 @@ function Button.new(options: Options): Button
 			LayoutOrder = 3,
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, height),
-			FontFace = if isTab then Theme.Fonts.Label else Theme.Fonts.LabelBold,
+			FontFace = Theme.Fonts.LabelBold,
 			TextSize = textSize,
 			TextStrokeTransparency = 1,
 			TextXAlignment = if align == "left"
@@ -512,7 +665,7 @@ function Button.new(options: Options): Button
 		if options.width or options.fillWidth then
 			return
 		end
-		local width = 2 * pad + measure(Theme.track(text, "four"), textSize)
+		local width = 2 * pad + lead + measure(Theme.track(text, "four"), textSize)
 		if icon then
 			width += ICON + GAP
 		end
@@ -528,8 +681,10 @@ function Button.new(options: Options): Button
 
 	local enabled = true
 	local selected = false
+	local locked = false
 	local hovered = false
 	local pressed = false
+	local subColor = C.Ink3 -- the second line's own colour (setSubtext)
 
 	local function mode(): Mode
 		if not enabled then
@@ -556,26 +711,39 @@ function Button.new(options: Options): Button
 		local current: Mode = mode()
 		local looks = LOOKS[variant]
 		local wanted = looks[current]
-		-- A selected tab under the mouse keeps its look, a touch brighter.
+		-- A selected one under the mouse keeps its red, with the white outline.
 		if current == "selected" and hovered then
 			wanted = table.clone(wanted)
-			wanted.bgT = math.max(wanted.bgT - 0.04, 0)
+			wanted.stroke = C.InkHi
+			wanted.strokeT = 0
+		end
+		-- Locked (not picked): one step quieter, text dimmed.
+		if locked and (current == "idle" or current == "hover") then
+			wanted = table.clone(wanted)
+			wanted.bgT = math.min(wanted.bgT + 0.35, 1)
+			wanted.text = if current == "hover" then C.Ink2 else C.Ink3
 		end
 		-- Accent: the outline (and the icon) stay in the accent colour.
 		local iconColor = wanted.text
 		if accent and (current == "idle" or current == "hover") then
 			wanted = table.clone(wanted)
-			wanted.stroke = C.Accent
-			wanted.strokeT = if current == "hover" then 0 else 0.15
+			wanted.stroke = if current == "hover" then C.InkHi else C.Accent
+			wanted.strokeT = 0
+			wanted.strokeW = 2
 			iconColor = C.Accent
 		end
 		local strokeFree = os.clock() >= flashUntil
 		local targetScale = 1
 		if current == "pressed" then
 			targetScale = if isTab then TAB_PRESS_SCALE else PRESS_SCALE
+		elseif isTab and selected and enabled then
+			targetScale = TAB_SELECTED_SCALE
 		elseif hovered and enabled then
 			targetScale = if isTab then TAB_HOVER_SCALE else HOVER_SCALE
 		end
+		-- On a red fill every small text turns white, or it would vanish.
+		local onRed = current == "selected" or (variant == "primary" and enabled)
+		local quietColor = if onRed then C.InkHi else C.Ink3
 		for _, tween in paintTweens do
 			tween:Cancel()
 		end
@@ -590,6 +758,7 @@ function Button.new(options: Options): Button
 			if strokeFree then
 				stroke.Color = wanted.stroke
 				stroke.Transparency = wanted.strokeT
+				stroke.Thickness = wanted.strokeW
 			end
 			label.TextColor3 = wanted.text
 			scale.Scale = targetScale
@@ -602,6 +771,7 @@ function Button.new(options: Options): Button
 				})
 			)
 			if strokeFree then
+				stroke.Thickness = wanted.strokeW
 				strokeTween = Theme.tween(
 					stroke,
 					seconds,
@@ -609,9 +779,15 @@ function Button.new(options: Options): Button
 				)
 			end
 			table.insert(paintTweens, Theme.tween(label, seconds, { TextColor3 = wanted.text }))
+			-- Pressed: a hard, fast punch in; anything else snaps back out.
 			table.insert(
 				paintTweens,
-				Theme.tween(scale, seconds, { Scale = targetScale }, Enum.EasingStyle.Back)
+				Theme.tween(
+					scale,
+					seconds,
+					{ Scale = targetScale },
+					if current == "pressed" then Enum.EasingStyle.Quart else Enum.EasingStyle.Back
+				)
 			)
 		end
 		paintIcon(icon, iconColor, seconds, paintTweens)
@@ -621,9 +797,20 @@ function Button.new(options: Options): Button
 		if keyStroke then
 			keyStroke.Color = wanted.text
 		end
-		local barFrame = selectBar
-		if barFrame then
-			barFrame.BackgroundTransparency = if selected then 0 else 1
+		for i, slash in slashes do
+			slash.BackgroundTransparency = if selected then (if i == 1 then 0 else 0.35) else 1
+		end
+		local indexText = indexLabel
+		if indexText then
+			indexText.TextColor3 = if current == "selected" then C.InkHi else quietColor
+		end
+		local subText = sub
+		if subText then
+			subText.TextColor3 = if current == "selected" then C.InkHi else subColor
+		end
+		local lockFrame = lockIcon
+		if lockFrame then
+			paintIcon(lockFrame, if current == "selected" then C.InkHi else C.Ink2, 0)
 		end
 	end
 	paint(0)
@@ -719,9 +906,30 @@ function Button.new(options: Options): Button
 			if subLabel then
 				subLabel.Text = Theme.track(newText, "three")
 				if color then
-					subLabel.TextColor3 = color
+					subColor = color
 				end
+				subLabel.TextColor3 = if selected and enabled then C.InkHi else subColor
 			end
+		end,
+		setLocked = function(value: boolean)
+			if value == locked then
+				return
+			end
+			locked = value
+			if value and lockIcon == nil then
+				local holder = drawIcon("lock", plate, 0)
+				holder.Name = "Lock"
+				holder.AnchorPoint = Vector2.new(1, 0.5)
+				holder.Position = UDim2.new(1, -pad + 4, 0.5, 0)
+				lockIcon = holder
+			end
+			local lockFrame = lockIcon
+			if lockFrame then
+				lockFrame.Visible = value
+			end
+			-- (the text stops before the lock)
+			contentPadding.PaddingRight = UDim.new(0, if value then pad + ICON + 2 else pad)
+			paint(Theme.FAST)
 		end,
 		setEnabled = function(value: boolean)
 			if value == enabled then
@@ -763,6 +971,7 @@ function Button.new(options: Options): Button
 				strokeTween = nil
 			end
 			stroke.Color = C.BloodHi
+			stroke.Thickness = 2
 			stroke.Transparency = 0
 			local untilTime = os.clock() + FLASH_SECONDS
 			flashUntil = untilTime
@@ -812,7 +1021,7 @@ end
 -- Badge (not clickable)
 ------------------------------------------------------------------------------
 
--- "✓ EQUIPPED": a button's shape with an accent outline and no fill, so it
+-- "✓ EQUIPPED": a button's shape on black with a thick accent outline, so it
 -- reads as a state, not an action. Returns the frame.
 function Button.badge(options: BadgeOptions): Frame
 	local size: Size = options.size or "medium"
@@ -829,14 +1038,13 @@ function Button.badge(options: BadgeOptions): Frame
 		Position = options.position or UDim2.new(),
 		Size = UDim2.fromOffset(width, height),
 		LayoutOrder = options.layoutOrder or 0,
-		BackgroundColor3 = C.Accent,
-		BackgroundTransparency = 0.88,
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = 0.2,
 	}, {
-		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 		Theme.make("UIStroke", {
-			Thickness = 1.5,
+			Thickness = 2,
 			Color = C.Accent,
-			Transparency = 0.1,
+			Transparency = 0,
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}),
 	}) :: Frame
@@ -864,7 +1072,7 @@ function Button.badge(options: BadgeOptions): Frame
 		Size = UDim2.fromOffset(0, height),
 		FontFace = Theme.Fonts.LabelBold,
 		TextSize = textSize,
-		TextColor3 = C.Accent,
+		TextColor3 = C.InkHi,
 		TextStrokeTransparency = 1,
 		Text = Theme.track(options.text, "four"),
 		Parent = content,

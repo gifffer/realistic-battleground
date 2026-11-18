@@ -26,7 +26,7 @@
 --   Buyable    enough coins         [coin] BUY · 250       accent (two presses: CONFIRM)
 --   Short      not enough coins     [coin] NEED 120 MORE   greyed, not clickable
 --   Owned      bought (or free)     EQUIP                  accent
---   Equipped   the one you wear     [check] EQUIPPED       accent outline. On a title,
+--   Equipped   the one you wear     [check] EQUIPPED       red fill. On a title,
 --              an outfit or a kill effect it takes the item off: on a PC
 --              the mouse over it reads TAKE OFF; on a phone the first tap
 --              asks TAKE OFF? and the second one does it. Emotes: a badge.
@@ -486,7 +486,7 @@ local function equippedMark(parent: Instance, item: Cosmetics.Item, clickable: b
 			requestEquip(item.category, "")
 		end,
 	})
-	button.setSelected(true) -- accent outline: it is the one you wear
+	button.setSelected(true) -- red fill: it is the one you wear
 	button.instance.MouseEnter:Connect(function()
 		if button.isEnabled() and not Theme.isTouch() then
 			button.setText("TAKE OFF")
@@ -534,8 +534,25 @@ local function fillAction(row: Row, fade: boolean)
 		group.GroupTransparency = 1
 		Theme.tween(group, 0.15, { GroupTransparency = 0 })
 	end
-	-- A locked item is one step quieter (like a locked kit).
-	row.name.TextColor3 = if state == "Locked" then C.Ink2 else C.Ink
+	-- A locked item is one step quieter (like a locked kit); the one you
+	-- wear is white with a red mark on its left (the one accent).
+	row.name.TextColor3 = if state == "Locked"
+		then C.Ink3
+		elseif state == "Equipped" then C.InkHi
+		else C.Ink
+	local mark = row.frame:FindFirstChild("EquippedMark")
+	if state == "Equipped" and mark == nil then
+		Theme.make("Frame", {
+			Name = "EquippedMark",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.fromOffset(-6, 8),
+			Size = UDim2.new(0, 3, 1, -16),
+			BackgroundColor3 = C.Accent,
+			Parent = row.frame,
+		})
+	elseif state ~= "Equipped" and mark then
+		mark:Destroy()
+	end
 	local hint = row.hint
 	if hint then
 		hint.TextColor3 = if state == "Equipped" then C.Accent else C.Ink3

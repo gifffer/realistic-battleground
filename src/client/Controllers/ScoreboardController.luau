@@ -221,6 +221,17 @@ local function buildRow(owner: Player): Row
 		BackgroundTransparency = 0.93,
 		Parent = frame,
 	})
+	if mine then
+		-- Your own row: a red mark on the left (the one accent).
+		Theme.make("Frame", {
+			Name = "Mine",
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(0, -6, 0.5, 0),
+			Size = UDim2.new(0, 3, 1, -8),
+			BackgroundColor3 = C.Accent,
+			Parent = frame,
+		})
+	end
 	local rank = Theme.text({
 		Name = "Rank",
 		Size = UDim2.new(0, 18, 1, 0),

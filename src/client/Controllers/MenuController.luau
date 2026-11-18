@@ -166,6 +166,13 @@ local function createPanel(entry: MenuEntry): Frame
 			BackgroundColor3 = C.Ink,
 			BackgroundTransparency = 0.78,
 		}),
+		-- A short, thick red stroke on the rule: the open section.
+		Theme.make("Frame", {
+			Name = "RuleMark",
+			Position = UDim2.fromOffset(0, 88),
+			Size = UDim2.fromOffset(56, 4),
+			BackgroundColor3 = C.Accent,
+		}),
 		Theme.make("Frame", {
 			Name = "Content",
 			Position = UDim2.fromOffset(0, 116),
@@ -194,12 +201,9 @@ local function renumber()
 	end
 end
 
+-- (the button paints its own number: white on the red fill)
 local function setItemActive(ui: EntryUi, active: boolean)
 	ui.button.setSelected(active)
-	local index = ui.button.index
-	if index then
-		Theme.tween(index, Theme.FAST, { TextColor3 = if active then C.Accent else C.Ink3 })
-	end
 end
 
 -- Height of one section button in the list.
@@ -498,12 +502,12 @@ function MenuController.init()
 		Visible = false,
 		Parent = gui,
 	}, {
-		-- Dark from the left, fading into the (blurred) world.
+		-- A hard black slab from the left, cut short into the (blurred) world.
 		Theme.make("Frame", {
 			Name = "Scrim",
 			Size = UDim2.new(0, 900, 1, 0),
 			BackgroundColor3 = C.Scrim,
-		}, { Theme.gradient(0, { { 0, 0.1 }, { 0.38, 0.18 }, { 0.66, 0.55 }, { 1, 1 } }) }),
+		}, { Theme.gradient(0, { { 0, 0.08 }, { 0.6, 0.14 }, { 0.78, 0.5 }, { 1, 1 } }) }),
 		Theme.make("Frame", {
 			Name = "Divider",
 			Position = UDim2.fromOffset(268, 176),

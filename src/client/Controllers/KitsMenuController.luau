@@ -760,6 +760,7 @@ end
 refreshRoster = function(animate: boolean?)
 	for _, item in rosterItems do
 		item.button.setSelected(item.kit.id == selectedId)
+		item.button.setLocked(kitState(item.kit) == "Locked")
 		local sub = item.button.sub
 		local text = Theme.track(statusText(item.kit), "three")
 		local changed = sub ~= nil and sub.Text ~= text

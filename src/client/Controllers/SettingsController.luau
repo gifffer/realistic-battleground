@@ -59,7 +59,7 @@ local function keyLabel(key: Enum.KeyCode): string
 end
 
 -- [ OFF ][ ON ]: two real buttons side by side. The chosen one is filled
--- (ON in the accent colour, OFF dark with an accent outline), the other is
+-- with the accent red (ON or OFF), the other is
 -- a faint plate that lights up under the mouse. `onSet(value)` runs when
 -- the player picks the side that isn't chosen yet.
 local function createToggle(parent: Instance, onSet: (value: boolean) -> ()): Toggle
