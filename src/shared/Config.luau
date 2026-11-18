@@ -857,6 +857,60 @@ return table.freeze({
 		STUDIO_FAST = true,
 	}),
 
+	-- The city's window glass (Server/Systems/CityGlass sets the material for everyone,
+	-- Client/Controllers/GlassController adds the dirt, the rain on the glass and the
+	-- low-quality fallback). Look taken from docs/references/video14.md: a clear face with a
+	-- mirror sheen, darker edges, one highlight, light that goes through (no shadow).
+	Glass = table.freeze({
+		-- See-through panes (shop fronts, glass doors, transoms, phone box, skylight): the
+		-- engine's Glass material, a very light green-grey (float glass), no shadow.
+		CLEAR_COLOR = Color3.fromRGB(200, 214, 210),
+		CLEAR_TRANSPARENCY = 0.62,
+		CLEAR_REFLECTANCE = 0.18,
+		-- The same panes on low graphics quality (Glass nearly vanishes there) and seen from
+		-- inside a building (Roblox hides rain, beams and signs behind Glass on high quality).
+		PLAIN_COLOR = Color3.fromRGB(56, 66, 70),
+		PLAIN_TRANSPARENCY = 0.55,
+		PLAIN_REFLECTANCE = 0.14,
+		-- Panes with a wall right behind them (upper-floor windows, tower strips): opaque
+		-- dark glass that mirrors the sky. Each pane's tint varies a little (old glass).
+		DARK_REFLECTANCE = 0.32,
+		DARK_TINT_SPREAD = 0.12,
+
+		-- Pictures made by tools/glass/make_glass_textures.py, in assets/glass/. Upload them
+		-- (guide: docs/GLASS_FR.md) and paste the IMAGE ids here. 0 = not uploaded: that
+		-- layer is simply not drawn (the glass material itself still works).
+		IMAGES = table.freeze({
+			dirtWide = 134459334470369, -- glass_dirt_wide.png (shop fronts, transoms, strips)
+			dirtTall = 106840351675381, -- glass_dirt_tall.png (windows, doors, phone box)
+			rainBeads = 127340739642896, -- glass_rain_beads.png (drops sitting on the glass)
+			rainRuns = 104057695886112, -- glass_rain_runs.png (drops running down)
+		}),
+		-- How see-through the dirt layer is (1 = invisible).
+		DIRT_TRANSPARENCY = 0.3,
+		-- Size of one tile of the rain pictures on the glass, in studs.
+		BEADS_TILE = 3,
+		RUNS_TILE = Vector2.new(4, 14),
+		-- The running drops slide down this fast (studs/s); a thunderstorm × STORM_RUN.
+		RUN_SPEED = 0.4,
+		STORM_RUN = 1.6,
+		-- 1 or -1: flip it if, in Studio, the running drops climb UP the glass.
+		RUN_DIRECTION = 1,
+		-- Seconds for a pane to get fully wet once it rains, and to dry once it stops.
+		WET_TIME = 20,
+		DRY_TIME = 25,
+		-- Graphics tiers (Settings > Graphics quality 1-3 low, 4-7 / Automatic medium, 8-10
+		-- high; phones and tablets capped at medium): panes that get rain on them (the nearest ones), within this many studs.
+		RAIN_PANES = table.freeze({ low = 8, medium = 18, high = 32 }),
+		RAIN_RANGE = table.freeze({ low = 30, medium = 50, high = 70 }),
+		-- Panes that get the dirt layer, within this many studs (0 = none).
+		DIRT_RANGE = table.freeze({ low = 0, medium = 90, high = 160 }),
+		-- Broken glass (Server/Systems/Destruction → Client KitVFX): shards per broken piece,
+		-- and how long they stay on the ground (s).
+		SHARDS_PER_PIECE = 7,
+		SHARD_LIFE = NumberRange.new(16, 22),
+	}),
+
 	-- The freight train that crosses the railway viaduct (Server/Systems/Train decides when,
 	-- every client draws its own copy: Client/Controllers/TrainController). It comes out of a
 	-- tunnel portal at one end of the viaduct and goes into the other one.

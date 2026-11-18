@@ -1045,3 +1045,19 @@ dans T1, T2 (bouton blanc), T7 (trait blanc sous l'onglet) et T17 (l'écran de m
 | R9 | Regarder les icônes de près | Settings = un **engrenage** (dents pleines collées à l'anneau, moyeu ouvert), différent de l'étincelle des effets ; Shop = un **chapeau** (haut évasé, bande, large bord) ; Duel = **deux épées croisées** (garde en travers près de la poignée, poignées dans les coins du bas) ; Emotes = un **smiley**. Tous les petits ronds ont un trou bien visible. |
 | R10 | Acheter dans Shop ou Kits | Pendant « BUYING… » (et après EQUIP), le bouton reste **blanc grisé** avec le texte sombre **bien lisible** (il ne disparaît plus). |
 | R11 | Téléphone : toucher une icône puis fermer le panneau | Aucun rond clair ne **reste collé** derrière une icône ; pareil pour les onglets et les cartes des panneaux (pas d'effet de survol au doigt). Panneau ouvert : rond pâle léger derrière son icône. |
+## Vitres réalistes (`feature/realistic-glass`)
+
+Détails, réglages et import des 4 images : `docs/GLASS_FR.md`. Les tests V1 à V5 et V8 marchent **même sans les images** ; V6 et V7 ont besoin des images importées.
+Pour forcer la pluie (barre de commande, côté **Server**) : `workspace:SetAttribute("WeatherForce", "Rain")` (ou `"Storm"`).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| V1 | Play, attendre que la ville soit construite, regarder une **vitrine** de boutique (B1, B5, B12) depuis le trottoir, *Graphics quality* 8 ou plus | Verre clair légèrement vert-gris : on voit la pièce sombre derrière, avec le **reflet** de la rue et du ciel par-dessus, plus fort quand on la regarde de biais. Pas d'ombre noire de la vitre au sol. Output : aucune ligne rouge. |
+| V2 | Regarder les **fenêtres des étages** | Verre sombre qui reflète le ciel, chaque fenêtre un peu différente (plus verte, plus bleue, plus claire). La nuit, certaines s'allument comme avant ; éteintes, elles redeviennent en verre. |
+| V3 | Les **portes vitrées** (s'ouvrent quand on approche), la cabine téléphonique | Même verre clair que les vitrines ; les portes s'ouvrent et se ferment comme avant. |
+| V4 | *Graphics quality* **1 à 3** | Les vitrines passent en plastique gris transparent (elles ne disparaissent pas). Remettre 8 : redeviennent du verre en ~5 s. |
+| V5 | Entrer dans le **bar** (Duffy's) ou une boutique, regarder dehors par la vitrine sous la pluie | Depuis l'intérieur la vitrine est en plastique transparent : **on voit la pluie** dehors. Ressortir : redevient du verre. |
+| V6 | Forcer **Rain**, rester près des vitrines / fenêtres | En ~20 s des **gouttes** apparaissent sur les vitres exposées (petits points avec reflet blanc), des gouttes **coulent lentement vers le bas** avec une traînée. Plus rapide pendant un orage. Vitres sous un **auvent** (B7, B11) : sèches. Depuis l'intérieur, les gouttes se voient aussi sur la vitrine. **Si elles remontent** : `RUN_DIRECTION = -1` dans `Config.Glass`. |
+| V7 | Attendre la **fin de la pluie** | L'eau arrête de couler, puis les vitres sèchent en ~25 s. Plus rien sur les vitres. Saleté légère toujours là près de toi (bas de vitre un peu plus poussiéreux, bord un peu plus sombre). |
+| V8 | Casser une vitrine avec un coup lourd (charge du **Bull**, atterrissage du **Sentinel**) | Éclats de verre **fins et transparents** qui volent puis restent au sol 16-22 s, un flash froid très court, des paillettes, le **bruit de verre brisé**. Pas de gros cubes de verre. La vitrine revient ~25 s après, en verre (et avec la pluie si il pleut). |
+| V9 | *Test → Clients and Servers → 2 Players*, regarder les vitres | Même verre et mêmes teintes chez les deux joueurs. Les gouttes ne sont dessinées que chez chacun, près de lui. |
