@@ -1,39 +1,33 @@
 --!strict
--- KitsMenuController: the KITS section of the menu (first, above SETTINGS).
+-- KitsMenuController: the KITS panel (the "Kits" button, first in the top bar).
 --
---   | STREET BRAWLER    STREET BRAWLER                     ✓ EQUIPPED
---     Equipped          Fights dirty and close. Hits hard...
---   BOXER               Moves                  Stamina   Cooldown
---   Owned               1  BOTTLE SMASH             15        8 s
---                          Breaks a bottle...       — BROKEN BOTTLE
---                       ...
---                       Awakening                           Lasts
---                       G  STREET FURY                       10 s
---                       Finisher                          On a KO
---                       M1 HOME RUN
---                          A baseball bat from behind his back...
+--   [ fighter ][ fighter ]   STREET BRAWLER                   [ EQUIP ]
+--   STREET BRAWLER  BOXER    Fights dirty and close. Hits hard...
+--    EQUIPPED       OWNED    Moves                  Stamina   Cooldown
+--   [ fighter ][ fighter ]   1  BOTTLE SMASH             15        8 s
+--   ...                      ...  Awakening, Finisher
 --
--- Left: every kit (Shared/Kits). Right: the selected kit's moves, read
--- from its data (so the numbers are always the real ones), each with its
--- Street Fury version under the cooldown (the red dash = "fury version"),
--- then its Awakening and its finisher (M1 on a knocked-out fighter; the
--- kill feed and the death screen name it too).
+-- Left: one card per kit (Shared/Kits): a posed R6 silhouette, the kit's
+-- name, where it stands (small caps). The kit you wear has a thin gold
+-- outline, the one you look at a lighter card with a white outline.
+-- Right: the selected kit's moves, read from its data (so the numbers are
+-- always the real ones), each with its Street Fury version under the
+-- cooldown (the red dash = "fury version"), then its Awakening and its
+-- finisher (M1 on a knocked-out fighter; the kill feed and the death
+-- screen name it too). The action top right is a real button.
 -- EQUIP asks the server (Remotes.EquipKit); the saved profile says which
 -- one is equipped (PlayerDataController).
---
--- The roster is a plain list (UI/Button "tab"): the selected kit is white
--- with a thin red bar, the others grey; the line under each name says
--- where it stands. The action top right of the detail is a real button.
 -- Kits you have to earn (KitDef.unlockLevel / price) go through these
 -- states, worked out from the save (level from its total XP, coins, owned
 -- kits) — the server checks everything again when you buy:
---   Locked     level too low       line "Locked, level 10"      detail [lock] UNLOCKS AT LV 10 (greyed)
---   Buyable    enough coins        line "500 coins"             detail [coin] BUY · 500 (main)
---   Short      not enough coins    line "Need 160 more coins"   detail [coin] NEED 160 MORE (greyed)
---   Owned      bought              line "Owned"                 detail EQUIP (main)
---   Equipped                       line "Equipped" (white)      detail [check] EQUIPPED badge (not a button)
+--   Locked     level too low       card "Level 10"           detail [lock] UNLOCKS AT LV 10 (greyed)
+--   Buyable    enough coins        card "500 coins"          detail [coin] BUY · 500 (main)
+--   Short      not enough coins    card "Need 160 more"      detail [coin] NEED 160 MORE (greyed)
+--   Owned      bought              card "Owned"              detail EQUIP (main)
+--   Equipped                       card "Equipped" (gold)    detail [check] EQUIPPED badge (not a button)
 -- BUY takes two presses (the button turns to CONFIRM for 3 s) and then asks
 -- the server (Remotes.BuyKit). The coin count (the wallet) sits top right.
+-- The top bar button shows how many kits you can buy right now.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,6 +37,7 @@ local ProgressionCurve = require(ReplicatedStorage.Shared.Progression)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Panel = require(script.Parent.Parent.UI.Panel)
 local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
 local ProfileMenuController = require(script.Parent.ProfileMenuController)
@@ -51,20 +46,63 @@ local player = Players.LocalPlayer
 local formatNumber = ProfileMenuController.formatNumber
 
 local C = Theme.Colors
--- The detail column starts at x 200 of the content. Its canvas starts a bit
--- before (16 px left for the red rail, 8 px up for the kit name), with the
--- content inset by the same amount, so nothing gets cut.
+-- The cards on the left, two per row.
+local CARD = Vector2.new(112, 120)
+local CARD_GAP = 8
+local GRID_WIDTH = 2 * CARD.X + CARD_GAP + 4
+-- The detail column starts right of the cards. Its canvas starts a bit
+-- before (16 px left, 8 px up for the kit name), with the content inset by
+-- the same amount, so nothing gets cut.
 local DETAIL_INSET = Vector2.new(16, 8)
-local DETAIL_X = 176 - DETAIL_INSET.X
+local DETAIL_X = GRID_WIDTH + 16 - DETAIL_INSET.X
 local DETAIL_Y = -DETAIL_INSET.Y
 -- On a touch screen the action button's hit area is taller: everything
 -- under the kit's name moves down by the difference.
 local TOP_SHIFT = Button.height("small") - 24
 local DETAIL_HEIGHT = 386 + TOP_SHIFT -- moves, awakening, finisher
 local MOVE_ROW = 34
-local CARD_HEIGHT = if Theme.isTouch() then 52 else 38
-local CARD_GAP = 0
-local ROSTER_WIDTH = 140
+local DETAIL_WIDTH = 360
+
+-- Each kit's pose on its card (UI/Panel figure: arms and legs swing
+-- forward / out, in degrees).
+local POSES: { [string]: Panel.Pose } = {
+	StreetBrawler = {
+		rightArm = Vector2.new(150, 10),
+		leftArm = Vector2.new(35, 10),
+		leftLeg = Vector2.new(-10, 6),
+		rightLeg = Vector2.new(12, 6),
+	},
+	Boxer = {
+		leftArm = Vector2.new(95, -28),
+		rightArm = Vector2.new(80, -22),
+		leftLeg = Vector2.new(-12, 8),
+		rightLeg = Vector2.new(10, 8),
+	},
+	Sentinel = {
+		rightArm = Vector2.new(170, 0),
+		leftArm = Vector2.new(0, 14),
+		leftLeg = Vector2.new(0, 4),
+		rightLeg = Vector2.new(0, 4),
+	},
+	Bouncer = {
+		leftArm = Vector2.new(80, -55),
+		rightArm = Vector2.new(70, -55),
+		leftLeg = Vector2.new(0, 10),
+		rightLeg = Vector2.new(0, 10),
+	},
+	Rift = {
+		rightArm = Vector2.new(90, 5),
+		leftArm = Vector2.new(25, 12),
+		leftLeg = Vector2.new(-8, 5),
+		rightLeg = Vector2.new(8, 5),
+	},
+}
+local DEFAULT_POSE: Panel.Pose = {
+	leftArm = Vector2.new(10, 10),
+	rightArm = Vector2.new(10, 10),
+	leftLeg = Vector2.new(0, 5),
+	rightLeg = Vector2.new(0, 5),
+}
 
 -- Second press on BUY must come within this many seconds of the first.
 local CONFIRM_SECONDS = 3
@@ -85,7 +123,7 @@ local wallet: ProfileMenuController.Wallet? = nil
 
 type RosterItem = {
 	kit: Kits.KitDef,
-	button: Button.Button,
+	card: Panel.Card,
 }
 
 local rosterItems: { RosterItem } = {}
@@ -137,21 +175,32 @@ local function kitState(kit: Kits.KitDef): KitState
 	return "Short"
 end
 
--- The small line under a kit's name in the roster.
+-- The small line under a kit's name on its card.
 local function statusText(kit: Kits.KitDef): string
 	local state = kitState(kit)
 	if state == "Unavailable" then
-		return "Not available yet"
+		return "Coming soon"
 	elseif state == "Equipped" then
 		return "Equipped"
 	elseif state == "Owned" then
 		return "Owned"
 	elseif state == "Locked" then
-		return `Locked, level {kit.unlockLevel or 1}`
+		return `Level {kit.unlockLevel or 1}`
 	elseif state == "Buyable" then
 		return `{formatNumber(kit.price or 0)} coins`
 	end
-	return `Need {formatNumber((kit.price or 0) - playerCoins())} more coins`
+	return `Need {formatNumber((kit.price or 0) - playerCoins())} more`
+end
+
+-- How many kits can be bought right now (the count on the top bar button).
+local function buyableCount(): number
+	local count = 0
+	for _, kit in Kits.list() do
+		if kitState(kit) == "Buyable" then
+			count += 1
+		end
+	end
+	return count
 end
 
 ------------------------------------------------------------------------------
@@ -741,33 +790,29 @@ end
 -- Roster (left column)
 ------------------------------------------------------------------------------
 
--- The colour of a kit's status line: the equipped kit in white, what you
+-- The colour of a kit's card line: the equipped kit in gold, what you
 -- can't use yet a step darker.
 local function statusColor(kit: Kits.KitDef): Color3
 	local state = kitState(kit)
 	if state == "Equipped" then
-		return C.Ink
+		return C.Gold
 	elseif state == "Owned" or state == "Buyable" then
 		return C.Ink2
 	end
 	return C.Ink3
 end
 
--- Updates every card (selected outline, status line). `animate`: a status
--- line whose text changed fades in again.
-refreshRoster = function(animate: boolean?)
+-- Updates every card (selected, equipped, status line).
+refreshRoster = function(_animate: boolean?)
 	for _, item in rosterItems do
-		item.button.setSelected(item.kit.id == selectedId)
-		item.button.setLocked(kitState(item.kit) == "Locked")
-		local sub = item.button.sub
-		local text = statusText(item.kit)
-		local changed = sub ~= nil and sub.Text ~= text
-		item.button.setSubtext(statusText(item.kit), statusColor(item.kit))
-		if animate and changed and sub then
-			sub.TextTransparency = 1
-			Theme.tween(sub, 0.15, { TextTransparency = 0 })
-		end
+		local state = kitState(item.kit)
+		item.card.setSelected(item.kit.id == selectedId)
+		item.card.setEquipped(state == "Equipped")
+		item.card.setDim(state == "Locked" or state == "Short" or state == "Unavailable")
+		item.card.setSub(statusText(item.kit), statusColor(item.kit))
+		item.card.setTag(if state == "Locked" then "LOCKED" else "")
 	end
+	MenuController.setBadge("Kits", buyableCount())
 end
 
 local function selectKit(kitId: string)
@@ -788,59 +833,38 @@ local function build(content: Frame)
 	newWallet.set(playerCoins(), false)
 	wallet = newWallet
 
-	local roster = Theme.make("Frame", {
-		Name = "Roster",
-		Size = UDim2.fromOffset(ROSTER_WIDTH, #Kits.list() * (CARD_HEIGHT + CARD_GAP)),
-		BackgroundTransparency = 1,
-		Parent = content,
-	})
-	local items = Theme.make("Frame", {
-		Name = "Items",
-		Size = UDim2.fromScale(1, 1),
-		BackgroundTransparency = 1,
-		Parent = roster,
-	}, {
-		Theme.make("UIListLayout", {
-			SortOrder = Enum.SortOrder.LayoutOrder,
-			Padding = UDim.new(0, CARD_GAP),
-		}),
-	})
+	local grid = Panel.grid(
+		content,
+		CARD,
+		CARD_GAP,
+		UDim2.fromOffset(0, 0),
+		UDim2.fromOffset(GRID_WIDTH, DETAIL_HEIGHT - 4)
+	)
 	for order, kit in Kits.list() do
-		local button = Button.new({
-			name = kit.id,
-			text = kit.name,
-			subtext = statusText(kit),
-			variant = "tab",
-			height = CARD_HEIGHT,
-			fillWidth = true,
+		local card = Panel.card({
+			parent = grid,
+			name = kit.name,
+			sub = statusText(kit),
 			layoutOrder = order,
-			parent = items,
 			onActivated = function()
 				selectKit(kit.id)
 			end,
 		})
-		table.insert(rosterItems, { kit = kit, button = button })
+		Panel.figure(card.art, { pose = KitsMenuController.poseOf(kit.id) })
+		table.insert(rosterItems, { kit = kit, card = card })
 	end
 
-	Theme.make("Frame", {
-		Name = "Divider2",
-		Position = UDim2.fromOffset(ROSTER_WIDTH + 12, 0),
-		Size = UDim2.fromOffset(1, DETAIL_HEIGHT - 8),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.92,
-		Parent = content,
-	})
 	detail = Theme.make("CanvasGroup", {
 		Name = "Detail",
 		Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y),
-		Size = UDim2.fromOffset(360 + DETAIL_INSET.X + 2, DETAIL_HEIGHT + DETAIL_INSET.Y),
+		Size = UDim2.fromOffset(DETAIL_WIDTH + DETAIL_INSET.X + 2, DETAIL_HEIGHT + DETAIL_INSET.Y),
 		BackgroundTransparency = 1,
 		Parent = content,
 	})
 	body = Theme.make("Frame", {
 		Name = "Body",
 		Position = UDim2.fromOffset(DETAIL_INSET.X, DETAIL_INSET.Y),
-		Size = UDim2.fromOffset(360, DETAIL_HEIGHT),
+		Size = UDim2.fromOffset(DETAIL_WIDTH, DETAIL_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = detail,
 	})
@@ -871,13 +895,32 @@ end
 -- Lifecycle
 ------------------------------------------------------------------------------
 
+-- The pose a kit's figure takes on its card (the REWARDS track uses it too).
+function KitsMenuController.poseOf(kitId: string): Panel.Pose
+	return POSES[kitId] or DEFAULT_POSE
+end
+
+-- Opens the KITS panel on `kitId` (the REWARDS track's cards).
+function KitsMenuController.show(kitId: string)
+	if Kits.get(kitId) == nil then
+		MenuController.open("Kits")
+	elseif built then
+		MenuController.open("Kits")
+		selectKit(kitId)
+	else
+		selectedId = kitId -- (the first build shows it)
+		MenuController.open("Kits")
+	end
+end
+
 function KitsMenuController.start()
 	MenuController.register({
 		id = "Kits",
 		label = "KITS",
-		order = 10, -- first in the list, above PROFILE and SETTINGS
-		size = Vector2.new(536, 486 + TOP_SHIFT), -- (taller: the finisher row)
-		scrimWidth = 1100,
+		icon = "kits",
+		buttonText = "Kits",
+		order = 10, -- first in the bar
+		size = Vector2.new(DETAIL_X + DETAIL_INSET.X + DETAIL_WIDTH, DETAIL_HEIGHT),
 		build = build,
 	})
 	-- The saved profile says which kit is equipped, which kits are owned,
@@ -888,6 +931,9 @@ function KitsMenuController.start()
 			equippedId = id
 		end
 		onDataChanged()
+		if not built then
+			MenuController.setBadge("Kits", buyableCount())
+		end
 	end)
 	-- The level can also arrive as the "Level" attribute (before the save).
 	player:GetAttributeChangedSignal("Level"):Connect(onDataChanged)

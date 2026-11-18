@@ -14,14 +14,14 @@
 --       onActivated = function() ... end,
 --   })
 --   equip.setEnabled(false)  -- grey, no hover, presses ignored
---   equip.setSelected(true)  -- white text + the thin red bar
+--   equip.setSelected(true)  -- white text + a thin white bar (tabs)
 --   equip.setLocked(true)    -- dimmed with a lock on the right (still clickable)
 --   equip.setText("CONFIRM")
 --   equip.reset()            -- no hover / press (call when its parent hides it)
 --
 -- Minimal look, no big fills:
 --   tab        a word in a list. Dim grey; under the mouse it turns white
---              with a faint bar; picked = white + a thin red bar on its left
+--              with a faint bar; picked = white + a thin white bar on its left
 --              (or under it when centred). No plate.
 --   primary    the main action (EQUIP, BUY). A small white outline with a
 --              short red mark on its left; under the mouse it fills white.
@@ -36,7 +36,6 @@
 -- room): the visible part stays small, centred in it.
 
 local TextService = game:GetService("TextService")
-local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Theme)
 
@@ -66,7 +65,6 @@ export type Options = {
 	layoutOrder: number?,
 	zIndex: number?,
 	visible: boolean?,
-	accent: boolean?, -- a permanent accent outline and icon (the HUD's MENU)
 	parent: Instance?,
 	onActivated: (() -> ())?,
 }
@@ -86,7 +84,6 @@ export type Button = {
 	reset: () -> (), -- drops hover / press at once (its menu was just hidden)
 	flash: () -> (), -- a short red outline, on black for a red plate (a refused request)
 	press: () -> (), -- plays the press animation (a keyboard shortcut was used)
-	pulse: (on: boolean) -> (), -- an accent ring that keeps growing out
 }
 
 export type BadgeOptions = {
@@ -179,7 +176,7 @@ local LOOKS: { [Variant]: { [Mode]: Look } } = {
 		idle = look(C.InkHi, 1, C.Ink, 1, C.Ink2, C.Ink, 1),
 		hover = look(C.InkHi, 0.96, C.Ink, 1, C.InkHi, C.Ink, 0.6),
 		pressed = look(C.InkHi, 0.93, C.Ink, 1, C.Ink, C.Ink, 0.4),
-		selected = look(C.InkHi, 1, C.Ink, 1, C.InkHi, C.Accent, 0),
+		selected = look(C.InkHi, 1, C.Ink, 1, C.InkHi, C.InkHi, 0),
 		disabled = look(C.InkHi, 1, C.Ink, 1, C.Ink3, C.Ink, 1),
 	},
 }
@@ -374,10 +371,9 @@ function Button.new(options: Options): Button
 	local touch = Theme.isTouch()
 	local showKey = options.keyHint ~= nil and not touch
 	local text = options.text
-	local accent = options.accent == true
 	-- The bar sits left of the text (lists, the main button) or under it
 	-- (centred tabs). A left bar needs a little room before the text.
-	local sideBar = align == "left" or variant == "primary" or accent
+	local sideBar = align == "left" or variant == "primary"
 	local lead = if sideBar and isTab then 4 else 0
 	-- What is drawn: the PC height, even where the hit area is taller.
 	local drawn = if options.height then height else math.min(height, HEIGHTS[size].pc)
@@ -397,26 +393,6 @@ function Button.new(options: Options): Button
 		Selectable = true,
 		Text = "",
 	}) :: TextButton
-
-	-- Glow ring for pulse() (behind the plate).
-	local glow = Theme.make("Frame", {
-		Name = "Glow",
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.fromScale(0.5, 0.5),
-		Size = UDim2.new(1, 0, 0, drawn),
-		BackgroundTransparency = 1,
-		Visible = false,
-		Parent = instance,
-	}, {
-		Theme.make("UIStroke", {
-			Thickness = 1,
-			Color = C.Ink,
-			Transparency = 1,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		}),
-	}) :: Frame
-	corner(glow, 2)
-	local glowScale = Theme.make("UIScale", { Parent = glow }) :: UIScale
 
 	local plate = Theme.make("Frame", {
 		Name = "Plate",
@@ -605,7 +581,7 @@ function Button.new(options: Options): Button
 		local looks = LOOKS[variant]
 		local wanted = looks[current]
 		local strokeFree = os.clock() >= flashUntil
-		-- A selected tab under the mouse: the faint hover plate, red bar kept.
+		-- A selected tab under the mouse: the faint hover plate, bar kept.
 		if current == "selected" and hovered and isTab then
 			wanted = table.clone(wanted)
 			local hoverMode: Mode = "hover"
@@ -615,12 +591,6 @@ function Button.new(options: Options): Button
 		if locked and (current == "idle" or current == "hover") then
 			wanted = table.clone(wanted)
 			wanted.text = if current == "hover" then C.Ink2 else C.Ink3
-		end
-		-- Accent (the HUD's MENU): the short red mark stays on its left.
-		if accent and (current == "idle" or current == "hover" or current == "pressed") then
-			wanted = table.clone(wanted)
-			wanted.bar = C.Accent
-			wanted.barT = 0
 		end
 		local iconColor = wanted.text
 		local targetScale = if current == "pressed" then PRESS_SCALE else 1
@@ -757,16 +727,6 @@ function Button.new(options: Options): Button
 		end
 	end)
 
-	local pulseTweens: { Tween } = {}
-	local function stopPulse()
-		for _, tween in pulseTweens do
-			tween:Cancel()
-		end
-		table.clear(pulseTweens)
-		glow.Visible = false
-	end
-	instance.Destroying:Connect(stopPulse)
-
 	local api: Button = {
 		instance = instance,
 		label = label,
@@ -875,22 +835,6 @@ function Button.new(options: Options): Button
 				end
 			end)
 		end,
-		pulse = function(on: boolean)
-			stopPulse()
-			if not on then
-				return
-			end
-			glow.Visible = true
-			local ring = glow:FindFirstChildOfClass("UIStroke") :: UIStroke
-			ring.Transparency = 0.4
-			glowScale.Scale = 1
-			local info = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, -1)
-			local grow = TweenService:Create(glowScale, info, { Scale = 1.12 })
-			local fade = TweenService:Create(ring, info, { Transparency = 1 })
-			grow:Play()
-			fade:Play()
-			pulseTweens = { grow, fade }
-		end,
 	}
 	instance.Parent = options.parent
 	return api
@@ -900,7 +844,7 @@ end
 -- Badge (not clickable)
 ------------------------------------------------------------------------------
 
--- "✓ EQUIPPED": a check in the accent colour and a word, nothing around
+-- "✓ EQUIPPED": a check in gold (what you wear) and a word, nothing around
 -- them, so it reads as a state, not an action. Returns the frame.
 function Button.badge(options: BadgeOptions): Frame
 	local size: Size = options.size or "medium"
@@ -934,7 +878,7 @@ function Button.badge(options: BadgeOptions): Frame
 		}),
 	})
 	if options.icon then
-		paintIcon(drawIcon(options.icon, content, 1), C.Accent, 0)
+		paintIcon(drawIcon(options.icon, content, 1), C.Gold, 0)
 	end
 	Theme.text({
 		Name = "Label",

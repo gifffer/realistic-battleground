@@ -1,5 +1,5 @@
 --!strict
--- SettingsController: the "SETTINGS" section of the menu.
+-- SettingsController: the SETTINGS panel (the gear, last in the top bar).
 --
 --   CAMERA   first-person / third-person camera
 --   DUELS    block duel requests (nobody can challenge you; ranked search
@@ -312,8 +312,10 @@ function SettingsController.start()
 	MenuController.register({
 		id = "Settings",
 		label = "SETTINGS",
-		order = 100, -- last button; Kits/Duel/Quests/Shop will come before it
-		size = Vector2.new(440, 420), -- taller than the default for the DUELS row
+		icon = "settings",
+		hint = "Settings",
+		order = 100, -- last button of the top bar
+		size = Vector2.new(440, 304),
 		build = buildWindow,
 	})
 	PlayerDataController.onChanged(onProfileChanged)

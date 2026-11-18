@@ -17,6 +17,10 @@
 --   • thin lines only (1 px), few of them; see-through backdrops so the
 --     game still shows;
 --   • anything you can click is a REAL button (UI/Button), never hand-made;
+--   • the top bar panels (Controllers/MenuController, UI/Panel): one
+--     black see-through plate (PANEL_TRANSPARENCY), no border, bold white
+--     titles, grids of slightly lighter cards (Card / CardHi); what you
+--     wear = thin gold outline (Gold), what you picked = white outline;
 --   • blood red (Blood*) still means danger / you are hurt on the HUD;
 --   • the middle of the screen belongs to the fight.
 --
@@ -58,7 +62,16 @@ Theme.Colors = table.freeze({
 	Accent = Color3.fromHex("#D8423A"), -- THE accent (small: selection bar, main button mark)
 	AccentHi = Color3.fromHex("#EE5A50"), -- accent under the mouse
 	AccentDeep = Color3.fromHex("#A3302A"), -- accent while pressed
+	-- Panels (top bar windows): see-through black plates, slightly lighter cards.
+	Card = Color3.fromHex("#1E1E1E"), -- a card in a grid
+	CardHi = Color3.fromHex("#343434"), -- the selected card / a card under the mouse
+	Gold = Color3.fromHex("#E2B84E"), -- what you wear / have equipped (thin outline, small text)
+	Progress = Color3.fromHex("#8CC79A"), -- XP and quest bars
+	Pill = Color3.fromHex("#121215"), -- the top bar buttons (like Roblox's own)
 })
+
+-- How see-through the panels' black plate is (0 = solid).
+Theme.PANEL_TRANSPARENCY = 0.35
 
 -- Corner radius of buttons and cards (pixels): none, hard edges.
 Theme.RADIUS = 0

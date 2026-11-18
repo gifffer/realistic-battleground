@@ -1,6 +1,6 @@
 --!strict
--- ProfileMenuController: the PROFILE section of the menu (between DUEL
--- and SETTINGS).
+-- ProfileMenuController: the PROFILE panel (the chart in the top bar,
+-- before SETTINGS).
 --
 --   PROFILE                                            820 coins
 --   Gifffer
@@ -719,10 +719,11 @@ function ProfileMenuController.start()
 	MenuController.register({
 		id = SECTION_ID,
 		label = "PROFILE",
+		icon = "profile",
+		hint = "Profile",
 		subtitle = player.DisplayName,
-		order = 50, -- between DUEL (30) and SETTINGS (100)
-		size = Vector2.new(480, 492), -- 12 px taller for the RANKED row
-		scrimWidth = 1100,
+		order = 70, -- after SHOP (60), before SETTINGS (100)
+		size = Vector2.new(480, 376),
 		build = build,
 	})
 	MenuController.onOpenChanged(function(id)

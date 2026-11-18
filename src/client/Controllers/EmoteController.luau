@@ -1,12 +1,12 @@
 --!strict
 -- EmoteController: the emote key (B, Config.Controls.EMOTE). Plays the
--- emote equipped in the SHOP. The server checks you can (not mid-fight,
--- you own it) and tells everyone to play it (Remotes.CombatAction), so
--- there's nothing to predict here.
+-- emote equipped in the EMOTES panel. The server checks you can (not
+-- mid-fight, you own it) and tells everyone to play it
+-- (Remotes.CombatAction), so there's nothing to predict here.
 --
--- Touch screens have no B key: an EMOTE button sits just above the MENU
--- button while an emote is equipped. It shows and hides with the MENU
--- button (menu open, duel result...).
+-- Touch screens have no B key: an EMOTE button sits on the left edge while
+-- an emote is equipped, hidden while a panel is open or the top bar is
+-- hidden (duel result...).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,7 +27,7 @@ local EmoteController = {}
 local function buildTouchButton()
 	local playerGui = player:WaitForChild("PlayerGui")
 	local menuGui = playerGui:WaitForChild("Menu", 10)
-	local menuButton = if menuGui then menuGui:FindFirstChild("MenuButton") else nil
+	local topBar = if menuGui then menuGui:FindFirstChild("TopBar") else nil
 	local gui = Theme.make("ScreenGui", {
 		Name = "EmoteButton",
 		ResetOnSpawn = false,
@@ -39,8 +39,7 @@ local function buildTouchButton()
 		name = "Emote",
 		text = "EMOTE",
 		anchorPoint = Vector2.new(0, 0.5),
-		-- (just above the MENU button: its centre minus its height and a gap)
-		position = UDim2.new(0, 16, 0.5, MenuController.BUTTON_Y - Button.height("large") - 4),
+		position = UDim2.new(0, 16, 0.5, -60),
 		visible = false,
 		parent = gui,
 		onActivated = function()
@@ -53,15 +52,13 @@ local function buildTouchButton()
 		local profile = PlayerDataController.get()
 		local emote = if profile then profile.equipped.Emote else nil
 		local equipped = typeof(emote) == "string" and emote ~= ""
-		local menuShown = if menuButton and menuButton:IsA("GuiObject")
-			then menuButton.Visible
-			else MenuController.getOpen() == nil
-		button.instance.Visible = equipped and menuShown
+		local barShown = if topBar and topBar:IsA("GuiObject") then topBar.Visible else true
+		button.instance.Visible = equipped and barShown and MenuController.getOpen() == nil
 	end
 	PlayerDataController.onChanged(refresh)
 	MenuController.onOpenChanged(refresh)
-	if menuButton then
-		menuButton:GetPropertyChangedSignal("Visible"):Connect(refresh)
+	if topBar then
+		topBar:GetPropertyChangedSignal("Visible"):Connect(refresh)
 	end
 	refresh()
 end

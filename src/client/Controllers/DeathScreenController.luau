@@ -14,6 +14,7 @@
 -- • A finisher's cutscene plays first: the screen waits for its end
 --   (CinematicController.watchingUntil), then shows the time left.
 -- • The world loses its colour a little; everything goes on respawn.
+-- • It sits on one dark see-through plate (like the top bar panels).
 --
 -- Comes from the same server message as the kill feed (Remotes.KillFeed,
 -- details.victimId = our UserId). Duels have their own result screen (the
@@ -36,6 +37,7 @@ local C = Theme.Colors
 local RESPAWN_TIME = Config.Knockout.RESPAWN_TIME
 
 local WIDTH = 320
+local PLATE_PAD = 16 -- inside the dark plate
 -- Less than this left before the respawn: not worth showing.
 local MIN_SHOWN = 0.6
 
@@ -87,10 +89,14 @@ local function build()
 		Name = "Content",
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -72),
-		Size = UDim2.fromOffset(WIDTH, 112),
-		BackgroundTransparency = 1,
+		-- One dark see-through plate, like the top bar panels.
+		Size = UDim2.fromOffset(WIDTH + 2 * PLATE_PAD, 112 + 2 * PLATE_PAD - 6),
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		GroupTransparency = 1,
 		Parent = gui,
+	}, {
+		Theme.padding(PLATE_PAD),
 	}) :: CanvasGroup
 	Theme.autoScale(group, 0.75)
 

@@ -1,6 +1,6 @@
 --!strict
--- DuelMenuController: the DUEL section of the menu (between KITS and
--- PROFILE).
+-- DuelMenuController: the DUEL panel (the crossed blades in the top bar,
+-- after KITS).
 --
 --   DUEL
 --   Ranked                                                         ELO
@@ -1246,9 +1246,10 @@ function DuelMenuController.start()
 	MenuController.register({
 		id = SECTION_ID,
 		label = "DUEL",
-		order = 30, -- between KITS (10) and PROFILE (50)
-		size = Vector2.new(480, 480 + PLAYERS_Y - 158),
-		scrimWidth = 1100,
+		icon = "duel",
+		hint = "Duel",
+		order = 30, -- after KITS (10)
+		size = Vector2.new(480, 364 + PLAYERS_Y - 158),
 		build = build,
 	})
 	MenuController.onOpenChanged(function(id)

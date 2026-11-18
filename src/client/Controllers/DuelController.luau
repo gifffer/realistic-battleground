@@ -4,7 +4,7 @@
 -- state from here, see "Public API" below.)
 --
 --   DUEL REQUEST · BEST OF 3                   the challenge prompt: left
---   7  Rook_77 challenges you to a duel        edge, under the MENU button.
+--   7  Rook_77 challenges you to a duel        edge, middle of the screen.
 --   [Y] ACCEPT    [N] DECLINE                  Y / N (or a click). The
 --   ────────────────────────  12               hairline is the 15 s left.
 --
@@ -19,7 +19,7 @@
 --                                              ELO, rank up, then back
 --
 -- Also: "Vex declined" (the challenger's notice, same slot as the prompt)
--- and, menu closed, a status line under MENU while you search a ranked
+-- and, panels closed, a status line under the top bar while you search a ranked
 -- match ("RANKED · SEARCHING 0:23") or wait for a free arena.
 --
 -- Nothing here decides anything: the server (Server/Systems/Duels) runs the
@@ -79,7 +79,7 @@ local IN_OUT = Enum.EasingDirection.InOut
 -- Above the menu (10): the prompt stays visible and clickable with it open.
 local DISPLAY_ORDER = 11
 
--- Challenge prompt (left edge, under MENU).
+-- Challenge prompt (left edge).
 local PROMPT_X = 48
 local PROMPT_Y = 24 -- from the middle of the screen
 local TIMER_WIDTH = 240 -- the width of the vitals
@@ -164,7 +164,6 @@ local tokens: { [string]: number } =
 ------------------------------------------------------------------------------
 
 local gui: ScreenGui
-local menuButton: GuiObject? = nil
 
 -- Prompt
 local promptHolder: Frame
@@ -615,11 +614,11 @@ local function buildPrompt()
 	}) :: TextLabel
 end
 
--- "RANKED · SEARCHING 0:23" under the MENU button, while the menu is closed.
+-- "RANKED · SEARCHING 0:23" under the top bar, while no panel is open.
 local function buildStatus()
 	statusGroup = hRow("CanvasGroup", {
 		Name = "DuelStatus",
-		Position = UDim2.new(0, 20, 0.5, MenuController.BUTTON_Y + 40),
+		Position = UDim2.fromOffset(20, 64), -- (moved under the top bar when shown)
 		Size = UDim2.fromOffset(300, 13),
 		GroupTransparency = 1,
 		Visible = false,
@@ -1311,6 +1310,8 @@ local function refreshStatus()
 	statusShown = want
 	bump("status")
 	if want then
+		local under = MenuController.underBar()
+		statusGroup.Position = UDim2.fromOffset(under.X, under.Y)
 		statusGroup.Visible = true
 		Theme.tween(statusGroup, 0.15, { GroupTransparency = 0 })
 	else
@@ -1614,9 +1615,10 @@ end
 ------------------------------------------------------------------------------
 
 -- The vitals hide through HudController.setHidden. The kit block, the feed,
--- the crosshair and the MENU button decide their own visibility (knocked
--- out, menu open) and have no such switch: during the result we turn their
--- ScreenGuis off just before each frame is drawn, so we have the last word.
+-- the crosshair decide their own visibility (knocked out, panel open) and
+-- have no such switch: during the result we turn their ScreenGuis off just
+-- before each frame is drawn, so we have the last word. The top bar hides
+-- through MenuController.setBarHidden.
 local function enforceHudHidden()
 	if not hudHidden then
 		return
@@ -1631,9 +1633,7 @@ local function enforceHudHidden()
 			hud.Enabled = false
 		end
 	end
-	if menuButton then
-		menuButton.Visible = false
-	end
+	MenuController.setBarHidden("duel", true)
 end
 
 -- Puts them back the way their own rules want them (they correct
@@ -1658,9 +1658,7 @@ local function restoreHud()
 			hud.Enabled = enabled
 		end
 	end
-	if menuButton then
-		menuButton.Visible = menuClosed
-	end
+	MenuController.setBarHidden("duel", false)
 end
 
 ------------------------------------------------------------------------------
@@ -2347,16 +2345,11 @@ function DuelController.start()
 		end
 	end)
 
-	-- While the status line shows (searching / waiting, menu closed), MENU
-	-- and the M key open the DUEL section.
+	-- While the status line shows (searching / waiting, panels closed), the
+	-- M key opens the DUEL panel.
 	MenuController.setDefaultOverride(function(): string?
 		return if state == "Searching" or state == "Waiting" then "Duel" else nil
 	end)
-	local menuGui = player:WaitForChild("PlayerGui"):WaitForChild("Menu", 10)
-	local found = if menuGui then menuGui:FindFirstChild("MenuButton") else nil
-	if found and found:IsA("GuiButton") then
-		menuButton = found
-	end
 
 	MenuController.onOpenChanged(function()
 		refreshStatus()

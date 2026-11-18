@@ -58,7 +58,7 @@ return table.freeze({
 		CAMERA_TOGGLE = Enum.KeyCode.Z,
 		-- Play the equipped emote (Shop). Not while fighting.
 		EMOTE = Enum.KeyCode.B,
-		-- Open / close the menu (the MENU button on the left does the same).
+		-- Opens the last top bar panel seen / closes the open one.
 		MENU = Enum.KeyCode.M,
 	}),
 

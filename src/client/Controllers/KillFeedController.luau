@@ -13,7 +13,8 @@
 --   ("8 gifffer"). It is the level at the moment of the event (sent by the
 --   server with the line) and never changes afterwards. No level for a
 --   training dummy (it isn't a player).
--- • YOUR name is bold white, and your lines get a thin tick on the right.
+-- • Names are bold white (YOURS heavier), and your lines get a thin tick
+--   on the right.
 -- • Each line sits on a dark band that fades out to the left, so it stays
 --   readable on a bright scene and almost invisible on a dark one.
 -- • Older lines (third and beyond) are dimmer; each line fades out after
@@ -101,12 +102,13 @@ local function piece(text: string, kind: PartKind, layout: number): TextLabel
 		LayoutOrder = layout,
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, ROW_HEIGHT),
+		-- Names bold white (yours heavier), verbs lighter: like the panels.
 		FontFace = if kind == "you"
-			then Theme.Fonts.LabelBold
+			then Theme.Fonts.Display
 			elseif kind == "verb" then Theme.Fonts.LabelRegular
-			else Theme.Fonts.Label,
+			else Theme.Fonts.LabelBold,
 		TextSize = 12,
-		TextColor3 = if kind == "you" then C.InkHi elseif kind == "verb" then C.InkVerb else C.Ink,
+		TextColor3 = if kind == "verb" then C.InkVerb else C.InkHi,
 		TextTransparency = 1,
 		Text = text,
 	})
@@ -309,7 +311,7 @@ local function addLine(
 		BackgroundColor3 = C.Scrim,
 		ZIndex = 0,
 		Parent = frame,
-	}, { Theme.gradient(0, { { 0, 1 }, { 0.55, 0.75 }, { 1, 0.6 } }) })
+	}, { Theme.gradient(0, { { 0, 1 }, { 0.45, 0.6 }, { 1, 0.4 } }) })
 	local content = Theme.make("Frame", {
 		Name = "Content",
 		Position = UDim2.fromOffset(12, 0), -- slides in from the right
