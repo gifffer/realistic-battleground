@@ -78,7 +78,7 @@ export type Button = {
 	setVariant: (variant: Variant) -> (),
 	isEnabled: () -> boolean,
 	reset: () -> (), -- drops hover / press at once (its menu was just hidden)
-	flash: () -> (), -- a short red outline (a refused request)
+	flash: () -> (), -- a short red outline, on black for a red plate (a refused request)
 	press: () -> (), -- plays the press animation (a keyboard shortcut was used)
 	pulse: (on: boolean) -> (), -- an accent ring that keeps growing out
 }
@@ -706,11 +706,15 @@ function Button.new(options: Options): Button
 	local paintTweens: { Tween } = {}
 	local strokeTween: Tween? = nil
 	local flashUntil = 0
+	-- flash() on a red plate: the plate goes black for the flash, or the red
+	-- outline would vanish on the red fill.
+	local flashBlack = false
 
 	local function paint(seconds: number)
 		local current: Mode = mode()
 		local looks = LOOKS[variant]
 		local wanted = looks[current]
+		local strokeFree = os.clock() >= flashUntil
 		-- A selected one under the mouse keeps its red, with the white outline.
 		if current == "selected" and hovered then
 			wanted = table.clone(wanted)
@@ -732,7 +736,14 @@ function Button.new(options: Options): Button
 			wanted.strokeW = 2
 			iconColor = C.Accent
 		end
-		local strokeFree = os.clock() >= flashUntil
+		-- A refused request on a red plate: black plate, white text.
+		if not strokeFree and flashBlack then
+			wanted = table.clone(wanted)
+			wanted.bg = C.Scrim
+			wanted.bgT = 0
+			wanted.text = C.InkHi
+			iconColor = C.InkHi
+		end
 		local targetScale = 1
 		if current == "pressed" then
 			targetScale = if isTab then TAB_PRESS_SCALE else PRESS_SCALE
@@ -970,17 +981,25 @@ function Button.new(options: Options): Button
 				running:Cancel()
 				strokeTween = nil
 			end
-			stroke.Color = C.BloodHi
-			stroke.Thickness = 2
-			stroke.Transparency = 0
+			-- On a red plate (primary or selected) the plate goes black so
+			-- the red outline still shows.
+			local current = mode()
+			flashBlack = current == "selected" or (variant == "primary" and enabled)
 			local untilTime = os.clock() + FLASH_SECONDS
 			flashUntil = untilTime
+			if flashBlack then
+				paint(0)
+			end
+			stroke.Color = C.BloodHi
+			stroke.Thickness = if flashBlack then 3 else 2
+			stroke.Transparency = 0
 			task.delay(FLASH_SECONDS, function()
 				-- (a newer flash keeps the red for its own time)
 				if flashUntil ~= untilTime then
 					return
 				end
 				flashUntil = 0
+				flashBlack = false
 				if instance.Parent ~= nil then
 					paint(0.3)
 				end

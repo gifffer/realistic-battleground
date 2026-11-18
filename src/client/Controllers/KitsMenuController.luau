@@ -743,12 +743,12 @@ end
 -- Roster (left column)
 ------------------------------------------------------------------------------
 
--- The colour of a card's status line: the equipped kit in the accent
--- colour, what you can't use yet a step darker.
+-- The colour of a card's status line: the equipped kit in white (red
+-- stays on the selected card only), what you can't use yet a step darker.
 local function statusColor(kit: Kits.KitDef): Color3
 	local state = kitState(kit)
 	if state == "Equipped" then
-		return C.Accent
+		return C.Ink
 	elseif state == "Owned" or state == "Buyable" then
 		return C.Ink2
 	end

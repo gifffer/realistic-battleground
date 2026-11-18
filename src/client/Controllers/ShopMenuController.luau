@@ -25,7 +25,7 @@
 --   Locked     level too low        [lock] LEVEL 10        greyed, not clickable
 --   Buyable    enough coins         [coin] BUY · 250       accent (two presses: CONFIRM)
 --   Short      not enough coins     [coin] NEED 120 MORE   greyed, not clickable
---   Owned      bought (or free)     EQUIP                  accent
+--   Owned      bought (or free)     EQUIP                  grey (only the worn one is red)
 --   Equipped   the one you wear     [check] EQUIPPED       red fill. On a title,
 --              an outfit or a kill effect it takes the item off: on a PC
 --              the mouse over it reads TAKE OFF; on a phone the first tap
@@ -422,13 +422,13 @@ local function requestEquip(category: Cosmetics.Category, itemId: string)
 	task.delay(EQUIP_SETTLE + 0.05, refreshAll, true)
 end
 
--- EQUIP (accent).
+-- EQUIP: a grey plate, so the worn item (red EQUIPPED) is the only red one.
 local function equipButton(parent: Instance, item: Cosmetics.Item)
 	local button: Button.Button
 	button = Button.new({
 		name = "EquipButton",
 		text = "EQUIP",
-		variant = "primary",
+		variant = "secondary",
 		size = "small",
 		minWidth = 90,
 		anchorPoint = ACTION_ANCHOR,
@@ -738,7 +738,8 @@ local function refreshRoster(animate: boolean)
 		local status = rosterStatus(entry.info)
 		local changed = sub ~= nil and sub.Text ~= Theme.track(status, "three")
 		local wearing = status ~= "NONE EQUIPPED"
-		entry.button.setSubtext(status, if wearing then C.Accent else C.Ink3)
+		-- White, not red: red stays on the selected card only.
+		entry.button.setSubtext(status, if wearing then C.Ink else C.Ink3)
 		if animate and changed and sub then
 			sub.TextTransparency = 1
 			Theme.tween(sub, 0.15, { TextTransparency = 0 })
