@@ -5,10 +5,11 @@
 -- lamps and the puddles for everyone. This controller adds what only makes sense on each
 -- screen, following the attributes the server sets on Workspace (Weather, Storm,
 -- WeatherStartedAt, WeatherEndsAt, ThunderAt):
---   • RAIN: streaks falling all around the camera (an invisible box that follows it, with a
---     ParticleEmitter), small splashes on the ground around you, a soft cold "wet" grade on
---     the screen. It all grows and fades with the rain. (The rain SOUND is mixed with the
---     music by CityAudioController, which reads WeatherController.rainState().)
+--   • RAIN: the rain's state (how strong, storm or not, a roof above you, the wind and its
+--     gusts) and a soft cold "wet" grade on the screen. It all grows and fades with the rain.
+--     The falling drops, splashes and ripples are drawn by RainController (it reads
+--     rainState() and fallDirection()); the rain SOUND is mixed with the music by
+--     CityAudioController.
 --   • THUNDERSTORM (Storm = true): heavier rain (more drops, slanted by the wind) and
 --     lightning: a jagged bolt in the sky + a double white flash of the screen at the exact
 --     moment the server chose (the same for every player), then the rumble 1 to 4 s later.
@@ -17,8 +18,8 @@
 --     in five is CLOSE: brighter, a short burst of light on the street where it falls, the
 --     camera shakes a little, and the thunder comes almost at once (a loud crack).
 --   • WIND GUSTS (rain and thunderstorm): every few seconds a gust leans the rain harder for
---     1 to 3 s, then it settles back. The rain area is TILTED towards the wind (the drops
---     really fall slanted), much more in a thunderstorm.
+--     1 to 3 s, then it settles back. fallDirection() is the slanted fall (much more in a
+--     thunderstorm).
 --   • THE PARK (ParkZone, see ParkAtmosphereController) is always sunny: no rain, no
 --     splashes, no wet grade and no lightning in there.
 --   • A one-line notice top-left for 3 s: "RAIN", "THUNDERSTORM", "FOG", "POWER CUT".
@@ -26,7 +27,6 @@
 --     character's HumanoidRootPart (16 at most), only on this screen. Away from the lamps a
 --     fighter in dark clothes would melt into the blue night; this keeps everyone readable.
 --
--- No images are used: the drops are plain squares stretched along their fall.
 -- Sounds come from Shared/Sounds.luau (Thunder): while its ids are empty, nothing plays and
 -- everything else still works.
 
@@ -62,10 +62,6 @@ local WET_TINT = Color3.fromRGB(226, 234, 242)
 local WET_SATURATION = -0.08
 local WET_CONTRAST = 0.04
 
-local rainBox: Part
-local rainEmitter: ParticleEmitter
-local splashBox: Part
-local splashEmitter: ParticleEmitter
 local grade: ColorCorrectionEffect
 local noticeGui: ScreenGui
 local noticeText: TextLabel
@@ -73,11 +69,7 @@ local noticeLine: Frame
 
 -- Extra screen brightness of the thunder flash (0 = none).
 local flash = 0
--- Smoothed camera speed (the rain box moves ahead of a moving camera).
-local cameraVelocity = Vector3.zero
-local lastCameraPosition: Vector3? = nil
--- Ground height under you (for the splashes) and whether a roof is over the camera.
-local floorY = 0
+-- Whether a roof is over the camera.
 local covered = false
 -- A low ceiling right above the camera (inside a shop, the bar): no rain at all in there.
 local indoors = false
@@ -85,18 +77,17 @@ local indoors = false
 -- 9 above a standing camera; the viaduct deck is about 20 above the street).
 local INDOOR_CEILING = 14
 local nextProbe = 0
--- Low graphics quality: half the drops.
-local lowQuality = false
 -- Counts the notices, so an old one doesn't hide a newer one.
 local noticeId = 0
 -- The rain right now (0 → 1, the park not counted) and whether it is a thunderstorm: read by
 -- CityAudioController for the rain sound.
 local currentIntensity = 0
 local currentStorm = false
+-- The way the drops fall right now (a unit vector, slanted by the wind and the gusts).
+local currentFall = Vector3.new(0, -1, 0)
 
--- THUNDERSTORM: how much heavier than a plain rain (Config.Weather.STORM_RAIN_MULT /
--- STORM_WIND): more drops, blown sideways.
-local STORM_RATE: number = W.STORM_RAIN_MULT
+-- THUNDERSTORM: the rain is blown sideways (Config.Weather.STORM_WIND; how much denser it
+-- is, STORM_RAIN_MULT, is used by RainController).
 local STORM_WIND: Vector3 = W.STORM_WIND
 local CALM_WIND = Vector3.new(6, 0, 2)
 -- The lightning bolt: segments of neon in the sky, far from you.
@@ -176,59 +167,7 @@ end
 -- Building the effects
 ------------------------------------------------------------------------------
 
--- An invisible, anchored box that nothing touches or hits (it lives in the camera, so only
--- this player has it).
-local function makeBox(name: string, size: Vector3): Part
-	local box = Instance.new("Part")
-	box.Name = name
-	box.Size = size
-	box.Transparency = 1
-	box.Anchored = true
-	box.CanCollide = false
-	box.CanQuery = false
-	box.CanTouch = false
-	box.CastShadow = false
-	box.Parent = workspace.CurrentCamera
-	return box
-end
-
-local function buildRain()
-	-- The drops: born on the box's bottom face, falling fast, stretched along their fall.
-	rainBox = makeBox("WeatherRain", Vector3.new(W.RAIN_AREA, 1, W.RAIN_AREA))
-	rainEmitter = Instance.new("ParticleEmitter")
-	rainEmitter.Name = "Drops"
-	rainEmitter.Texture = "" -- no image: a plain square, stretched into a streak by Squash
-	rainEmitter.Shape = Enum.ParticleEmitterShape.Box
-	rainEmitter.EmissionDirection = Enum.NormalId.Bottom
-	rainEmitter.Orientation = Enum.ParticleOrientation.VelocityParallel
-	rainEmitter.Rate = 0
-	rainEmitter.Lifetime = NumberRange.new(0.55, 0.75)
-	rainEmitter.Speed = NumberRange.new(110, 130)
-	rainEmitter.Size = NumberSequence.new(0.3)
-	rainEmitter.Squash = NumberSequence.new(3) -- thin and long
-	rainEmitter.Color = ColorSequence.new(Color3.fromRGB(170, 180, 190))
-	rainEmitter.Transparency = NumberSequence.new(0.6)
-	rainEmitter.LightInfluence = 0.7 -- the lamps light the drops a little
-	rainEmitter.Acceleration = Vector3.new(6, 0, 2) -- a light wind
-	rainEmitter.Parent = rainBox
-
-	-- The splashes: tiny specks jumping off the ground around you.
-	splashBox = makeBox("WeatherSplash", Vector3.new(40, 0.2, 40))
-	splashEmitter = Instance.new("ParticleEmitter")
-	splashEmitter.Name = "Splashes"
-	splashEmitter.Texture = ""
-	splashEmitter.Shape = Enum.ParticleEmitterShape.Box
-	splashEmitter.EmissionDirection = Enum.NormalId.Top
-	splashEmitter.Rate = 0
-	splashEmitter.Lifetime = NumberRange.new(0.12, 0.18)
-	splashEmitter.Speed = NumberRange.new(2, 4)
-	splashEmitter.SpreadAngle = Vector2.new(80, 80)
-	splashEmitter.Size = NumberSequence.new(0.25, 0)
-	splashEmitter.Color = ColorSequence.new(Color3.fromRGB(180, 188, 196))
-	splashEmitter.Transparency = NumberSequence.new(0.4)
-	splashEmitter.LightInfluence = 0.7
-	splashEmitter.Parent = splashBox
-
+local function buildGrade()
 	-- Our own colour correction (made on the client: only this player has it).
 	grade = Instance.new("ColorCorrectionEffect")
 	grade.Name = "WeatherGrade"
@@ -451,7 +390,7 @@ end
 -- Every frame
 ------------------------------------------------------------------------------
 
--- Every 0.25 s: the ground height under you, and whether a roof is above the camera.
+-- Every 0.25 s: whether a roof is above the camera.
 local function probe(cameraPosition: Vector3)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -460,17 +399,12 @@ local function probe(cameraPosition: Vector3)
 		table.insert(ignore, player.Character)
 	end
 	params.FilterDescendantsInstances = ignore
-	local character = player.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	local from = if root and root:IsA("BasePart") then root.Position else cameraPosition
-	local down = workspace:Raycast(from, Vector3.new(0, -60, 0), params)
-	floorY = if down then down.Position.Y else from.Y - 3
 	local up = workspace:Raycast(cameraPosition, Vector3.new(0, 40, 0), params)
 	covered = up ~= nil
 	indoors = up ~= nil and (up :: RaycastResult).Distance < INDOOR_CEILING
 end
 
-local function update(deltaTime: number)
+local function update()
 	local camera = workspace.CurrentCamera
 	if camera == nil then
 		return
@@ -481,11 +415,6 @@ local function update(deltaTime: number)
 	-- No rain at all in the park (always sunny there): faded with the park's light.
 	local intensity = currentIntensity * (1 - ParkAtmosphereController.blend())
 	local cameraPosition = camera.CFrame.Position
-	-- The camera can be replaced (rare): move our boxes into the new one.
-	if rainBox.Parent ~= camera then
-		rainBox.Parent = camera
-		splashBox.Parent = camera
-	end
 
 	-- Screen grade: wet look + thunder flash (a cold blue-white while it lasts).
 	grade.Brightness = flash
@@ -494,21 +423,9 @@ local function update(deltaTime: number)
 	grade.Contrast = WET_CONTRAST * intensity
 
 	if intensity <= 0 then
-		rainEmitter.Rate = 0
-		splashEmitter.Rate = 0
-		lastCameraPosition = nil
 		return
 	end
 
-	-- The camera's speed, smoothed (and capped, so a respawn doesn't throw the rain away).
-	if lastCameraPosition and deltaTime > 0 then
-		local velocity = (cameraPosition - lastCameraPosition) / deltaTime
-		if velocity.Magnitude > 80 then
-			velocity = Vector3.zero
-		end
-		cameraVelocity = cameraVelocity:Lerp(velocity, math.min(1, deltaTime * 4))
-	end
-	lastCameraPosition = cameraPosition
 	if os.clock() >= nextProbe then
 		nextProbe = os.clock() + 0.25
 		probe(cameraPosition)
@@ -523,28 +440,13 @@ local function update(deltaTime: number)
 	end
 	local gustAlpha = math.clamp((clock - gustStart) / math.max(gustLength, 0.01), 0, 1)
 	gustLevel = math.sin(gustAlpha * math.pi)
-	-- The rain leans with the wind: the box is turned so that its bottom face (where the
-	-- drops leave) points along the slanted fall, and moved upwind so the rain still lands
-	-- around you.
+	-- The rain leans with the wind (and harder in a gust): RainController turns its rain
+	-- cells along this slanted fall.
 	local wind = if currentStorm then STORM_WIND else CALM_WIND
 	local windFlat = Vector3.new(wind.X, 0, wind.Z)
 	windFlat = if windFlat.Magnitude > 0 then windFlat.Unit else Vector3.xAxis
 	local lean = (if currentStorm then STORM_LEAN else RAIN_LEAN) + GUST_LEAN * gustLevel
-	local fall = (Vector3.new(0, -1, 0) + windFlat * lean).Unit
-	local up = -fall
-	local zAxis = Vector3.new(0, 0, 1)
-	local right = zAxis:Cross(up).Unit
-	local ahead = cameraVelocity * W.RAIN_LEAD
-	local origin = cameraPosition + ahead + up * W.RAIN_HEIGHT
-	rainBox.CFrame = CFrame.fromMatrix(origin, right, up)
-	-- A thunderstorm: more drops, slanted by the wind.
-	local heavy = if currentStorm then STORM_RATE else 1
-	rainEmitter.Rate = if indoors
-		then 0
-		else W.RAIN_RATE * intensity * heavy * (if lowQuality then 0.5 else 1)
-	rainEmitter.Acceleration = wind * (1 + gustLevel)
-	splashBox.CFrame = CFrame.new(cameraPosition.X, floorY + 0.2, cameraPosition.Z)
-	splashEmitter.Rate = if covered then 0 else W.SPLASH_RATE * intensity * heavy
+	currentFall = (Vector3.new(0, -1, 0) + windFlat * lean).Unit
 end
 
 ------------------------------------------------------------------------------
@@ -602,6 +504,12 @@ function WeatherController.fogIntensity(): number
 	return fogIntensity(workspace:GetServerTimeNow())
 end
 
+-- The way the drops fall right now: a unit vector, slanted by the wind and the gusts.
+-- Read by RainController.
+function WeatherController.fallDirection(): Vector3
+	return currentFall
+end
+
 -- The current gust (0 = calm → 1 = the peak of a gust).
 function WeatherController.gust(): number
 	return gustLevel
@@ -628,24 +536,9 @@ end
 -- Lifecycle
 ------------------------------------------------------------------------------
 
-local function readQuality()
-	local ok, level = pcall(function()
-		return UserSettings():GetService("UserGameSettings").SavedQualityLevel
-	end)
-	-- "Automatic" counts as high; levels 1 to 3 are low.
-	lowQuality = ok and level.Value >= 1 and level.Value <= 3
-end
-
 function WeatherController.start()
-	buildRain()
+	buildGrade()
 	buildNotice()
-	readQuality()
-	task.spawn(function()
-		while true do
-			task.wait(5)
-			readQuality()
-		end
-	end)
 	workspace:GetAttributeChangedSignal("Weather"):Connect(onWeatherChanged)
 	workspace:GetAttributeChangedSignal("ThunderAt"):Connect(onThunderAt)
 	RunService.RenderStepped:Connect(update)

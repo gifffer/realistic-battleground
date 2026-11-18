@@ -2,8 +2,8 @@
 -- Panel: the pieces the top bar windows are made of.
 --
 --   Panel.tabs(parent, { "REWARDS", "CHALLENGES" })
---       small dark tab plates in a row; the open one has white text and a
---       white line under it. Returns { set(index), get(), setBadge(index, n),
+--       small rounded dark tabs in a row; the open one is lighter grey
+--       with white text (like Roblox's own tabs). Returns { set(index), get(), setBadge(index, n),
 --       bind(callback) } (callback(index) on every change).
 --   Panel.card({ parent, size, name, sub, tag, number, onActivated })
 --       a square card: art in the middle (card.art), the name in bold
@@ -16,10 +16,10 @@
 --   Panel.bar(parent, props)
 --       a thin progress bar: returns (track, fill).
 --
--- Look (the reference the players liked): one black see-through plate,
--- no borders, cards a little lighter, white bold names, grey small caps.
--- What you wear: a thin gold outline. What you picked: a lighter card with
--- a thin white outline. Never a big red block.
+-- Look: Roblox's dark theme (docs/UI_ROBLOX_STYLE.md). One near-black
+-- plate, no borders, rounded dark grey cards, white bold names, grey small
+-- caps. What you wear: a thin gold outline. What you picked: a lighter card
+-- with a thin white outline. Never a big red block.
 
 local TextService = game:GetService("TextService")
 
@@ -41,10 +41,11 @@ export type Tabs = {
 	bind: (callback: (index: number) -> ()) -> (),
 }
 
-local TAB_HEIGHT = 26
+local TAB_HEIGHT = 28
 Panel.TAB_HEIGHT = TAB_HEIGHT
 
--- A white circle with a dark number (a count to look at). Hidden at 0.
+-- A white circle with a dark number (a count to look at), like Roblox's
+-- own notification badge. Hidden at 0.
 function Panel.badge(parent: Instance, position: UDim2, size: number): (Frame, TextLabel)
 	local circle = Theme.make("Frame", {
 		Name = "Badge",
@@ -68,8 +69,8 @@ function Panel.badge(parent: Instance, position: UDim2, size: number): (Frame, T
 		Size = UDim2.new(1, 0, 1, 0),
 		AutomaticSize = Enum.AutomaticSize.X,
 		FontFace = Theme.Fonts.Display,
-		TextSize = math.floor(size * 0.62),
-		TextColor3 = C.Scrim,
+		TextSize = math.floor(size * 0.65),
+		TextColor3 = C.CardHi,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		ZIndex = 6,
@@ -98,54 +99,50 @@ function Panel.tabs(parent: Instance, labels: { string }): Tabs
 		}),
 	}) :: Frame
 	local current = 1
-	type Tab = { button: TextButton, label: TextLabel, line: Frame, badge: Frame, count: TextLabel }
+	type Tab = { button: TextButton, label: TextLabel, badge: Frame, count: TextLabel }
 	local tabs: { Tab } = {}
 	local function paint()
 		for index, tab in tabs do
 			local open = index == current
-			tab.label.TextColor3 = if open then C.InkHi else C.Ink2
-			tab.line.Visible = open
-			tab.button.BackgroundTransparency = if open then 0.25 else 0.4
+			tab.label.TextColor3 = if open then C.InkHi else C.Muted
+			tab.button.BackgroundColor3 = if open then C.CardHi else C.Surface
+			tab.button.BackgroundTransparency = if open then 0 else Theme.SURFACE_TRANSPARENCY
 		end
 	end
 	for index, text in labels do
 		local width =
-			TextService:GetTextSize(text, 12, Enum.Font.BuilderSansBold, Vector2.new(1000, 100)).X
+			TextService:GetTextSize(text, 13, Enum.Font.BuilderSansBold, Vector2.new(1000, 100)).X
 		local button = Theme.make("TextButton", {
 			Name = `Tab{index}`,
 			LayoutOrder = index,
 			Size = UDim2.fromOffset(math.max(120, width + 48), TAB_HEIGHT),
-			BackgroundColor3 = C.Scrim,
-			BackgroundTransparency = 0.4,
+			BackgroundColor3 = C.Surface,
+			BackgroundTransparency = Theme.SURFACE_TRANSPARENCY,
 			AutoButtonColor = false,
 			Text = "",
 			Parent = frame,
+		}, {
+			Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 		}) :: TextButton
 		local label = Theme.text({
 			Name = "Label",
 			Size = UDim2.fromScale(1, 1),
-			FontFace = Theme.Fonts.Display,
-			TextSize = 12,
+			FontFace = Theme.Fonts.LabelBold,
+			TextSize = 13,
 			TextStrokeTransparency = 1,
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Text = text,
 			Parent = button,
 		}) :: TextLabel
-		local line = Theme.make("Frame", {
-			Name = "Line",
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.fromScale(0.5, 1),
-			Size = UDim2.new(1, -8, 0, 2),
-			BackgroundColor3 = C.InkHi,
-			Parent = button,
-		}) :: Frame
 		local badge, count = Panel.badge(button, UDim2.new(1, -2, 0, 2), 18)
-		local tab: Tab =
-			{ button = button, label = label, line = line, badge = badge, count = count }
+		local tab: Tab = { button = button, label = label, badge = badge, count = count }
 		table.insert(tabs, tab)
 		button.MouseEnter:Connect(function()
-			if index ~= current then
-				label.TextColor3 = C.Ink
+			-- (no hover on touch: MouseLeave often never comes)
+			if index ~= current and not Theme.isTouch() then
+				label.TextColor3 = C.InkHi
+				button.BackgroundColor3 = C.Card
+				button.BackgroundTransparency = 0
 			end
 		end)
 		button.MouseLeave:Connect(paint)
@@ -223,11 +220,12 @@ function Panel.card(options: CardOptions): Card
 		Size = UDim2.fromOffset(size.X, size.Y),
 		LayoutOrder = options.layoutOrder or 0,
 		BackgroundColor3 = C.Card,
-		BackgroundTransparency = 0.3,
 		AutoButtonColor = false,
 		ClipsDescendants = true,
 		Text = "",
 		Parent = options.parent,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 	}) :: TextButton
 	local stroke = Theme.make("UIStroke", {
 		Thickness = 1,
@@ -305,7 +303,6 @@ function Panel.card(options: CardOptions): Card
 	local hovered = false
 	local function paint()
 		instance.BackgroundColor3 = if selected or hovered then C.CardHi else C.Card
-		instance.BackgroundTransparency = if selected then 0.15 elseif hovered then 0.25 else 0.3
 		if selected then
 			stroke.Color = C.InkHi
 			stroke.Transparency = 0.2
@@ -317,6 +314,9 @@ function Panel.card(options: CardOptions): Card
 		end
 	end
 	instance.MouseEnter:Connect(function()
+		if Theme.isTouch() then
+			return -- (MouseLeave often never comes on touch)
+		end
 		hovered = true
 		paint()
 	end)
@@ -413,19 +413,22 @@ end
 function Panel.bar(parent: Instance, props: { [string]: any }): (Frame, Frame)
 	local base: { [string]: any } = {
 		Name = "Bar",
-		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = 0.3,
+		BackgroundColor3 = C.CardHi,
 		Parent = parent,
 	}
 	for key, value in props do
 		base[key] = value
 	end
-	local track = Theme.make("Frame", base) :: Frame
+	local track = Theme.make("Frame", base, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
+	}) :: Frame
 	local fill = Theme.make("Frame", {
 		Name = "Fill",
 		Size = UDim2.fromScale(0, 1),
 		BackgroundColor3 = C.Progress,
 		Parent = track,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(1, 0) }),
 	}) :: Frame
 	return track, fill
 end

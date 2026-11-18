@@ -224,9 +224,10 @@ local function buildRewards(page: Frame)
 	local box = Theme.make("Frame", {
 		Name = "LevelBox",
 		Size = UDim2.fromOffset(LEVEL_BOX, LEVEL_BOX),
-		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = 0.2,
+		BackgroundColor3 = C.Card,
 		Parent = page,
+	}, {
+		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS) }),
 	})
 	Theme.text({
 		Name = "Caption",

@@ -507,6 +507,23 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | L8 | Coupure de courant (nuit, `"PowerCut"`) | Pendant les ~3,5 s de clignotement : un **grésillement électrique** ; il se coupe net quand le **transformateur saute** (bang + crépitement, en 3D depuis la sous-station, plus faible si tu es loin). |
 | L9 | Nuit, se tenir près d'un lampadaire qui grésille (il se coupe une fraction de seconde de temps en temps) | Un petit **crépitement** très discret à chaque coupure (pas plus d'un toutes les 2,5 s), rien si tu es à plus de ~25 studs. |
 
+#### v9 : vraie pluie dans la ville (`feature/realistic-rain`)
+
+(R4 ci-dessus reste valable. Les images de `assets/rain/` peuvent être importées avant ou après, voir `docs/RAIN_FR.md` : sans elles, la pluie marche avec des textures Roblox de secours et sans rideaux lointains.)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| P1 | `WeatherForce = "Rain"`, rester dans la rue et regarder autour | La pluie **monte doucement** (~25 s). Près de toi : des traits **longs et nets** qui tombent vite ; plus loin (jusqu'à ~100 studs) des traits **fins et serrés** ; au fond, la ville devient **grise et voilée**. Les gouttes ne **glissent pas** avec la caméra : en marchant, tu traverses la pluie. |
+| P2 | Regarder le sol de la rue | Des **petites couronnes d'éclaboussures** (quelques gouttelettes qui sautent et retombent) et de **petits cercles** qui s'ouvrent sur le sol mouillé, surtout devant toi. Rien sur l'herbe. Une **brume** très légère au ras du sol. |
+| P3 | Se mettre sous un auvent, sous le viaduc, entrer dans le bar / une boutique | **Aucune goutte** ne tombe sous le toit ; dehors, à côté, il pleut toujours (on le voit par la vitrine). Le son de la pluie devient **plus sourd** (on l'entend « tambouriner » sur le toit). |
+| P4 | Monter sur un toit | Les gouttes **s'arrêtent sur les toits** (pas à travers), et il pleut dans la rue en dessous. |
+| P5 | Orage (`"Storm"`) | Pluie **beaucoup plus dense**, **penchée** par le vent, les rafales la penchent encore plus ; plus d'éclaboussures. |
+| P6 | Attendre la fin de l'événement | La pluie **diminue doucement** puis s'arrête net au moment où le ciel redevient clair : plus aucune goutte, éclaboussure ou brume. Aucun objet ne reste (Explorer : `Camera > RainField` existe toujours mais ne fait plus rien). |
+| P7 | Settings Roblox → Graphics quality **1-3**, puis **8-10** | En bas : nettement moins de gouttes au loin, pas de petits cercles ni de brume, peu de rideaux ; en haut : tout. Les FPS ne doivent pas chuter (Shift+F5 : compare avec / sans pluie). En **Automatic**, la qualité de la pluie baisse toute seule si le jeu passe sous ~42 FPS. |
+| P8 | Entrer dans le parc, ou lancer un duel, pendant la pluie | Plus de pluie du tout (parc toujours ensoleillé, duel = arène). |
+| P9 | Brouillard / coupure juste après une pluie | Aucun reste de pluie, rien ne se mélange. |
+| P10 | Pendant la pluie : marcher le long d'un mur dans la rue, puis mourir / réapparaître ailleurs | Il pleut **juste à côté de toi** même collé à un bâtiment (pas de bande sèche autour de toi, pas d'éclaboussures sans gouttes). Après la réapparition, **aucune goutte** dans les bâtiments autour (même s'ils arrivent quelques secondes après). Sur un toit ou sur le pont, la pluie dans la rue en dessous reste fluide (pas de chute de FPS). Les rideaux au loin **ne sautent pas** quand tu cours. |
+
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
 
 ## Kits Sentinel et Bull (`feature/kits-sentinel-bull`)
@@ -1006,9 +1023,28 @@ Ces tests **remplacent M1, M2, M5, M7, M9, M12, M18 et M19** ; les autres M rest
 | T14 | Fin de duel (écran VICTORY / DEFEAT) | La barre du haut **disparaît** (et le panneau ouvert se ferme), puis revient au retour dans l'arène. |
 | T15 | *Test → Device* : **iPhone** paysage | Les boutons sont dans la barre Roblox ; s'ils ne tiennent pas tous, la rangée **défile du doigt** sur le côté. Un panneau tient sous la barre (réduit, jamais sous ×0,75) ; s'il est trop haut il **défile**. Toucher hors du panneau le ferme. Bouton **EMOTE** (émote équipée) à gauche au milieu de l'écran, caché quand un panneau est ouvert. |
 | T16 | Fenêtre Studio petite (~830 × 515) puis plein écran | Panneaux réduits pour tenir, recalés au redimensionnement ; sur un grand écran (1440p) un peu plus grands. |
-| T17 | Kill feed + écran de mort | Kill feed : **noms en gras blanc** (le tien plus épais), bande sombre un peu plus marquée. Écran de mort : sur **une plaque noire transparente** (comme les panneaux). |
+| T17 | Kill feed + écran de mort | Kill feed : **noms en gras blanc** (le tien plus épais), bande sombre un peu plus marquée. Écran de mort : sur **une plaque noire transparente**, carrée (plus transparente que les panneaux, qui sont maintenant presque noirs et arrondis, voir R3). |
 | T18 | **Shop**, **Kits**, **Profile** : regarder « 820 coins » | Les coins sont **sur la ligne du titre**, en haut à droite, **hors du contenu** : ils ne cachent ni le type ni le haut des cartes (Shop), ni le nom du kit (Kits), ni les stats (Profile), et **ne défilent pas** quand le contenu défile (petite fenêtre). |
 
+## Barre du haut et panneaux au style Roblox (`fix/topbar-visible-2`)
+
+Même fonctionnement qu'avant ; seul l'aspect change, copié sur la barre et les menus sombres de
+Roblox (valeurs et sources : `docs/UI_ROBLOX_STYLE.md`). Ces tests remplacent l'aspect décrit
+dans T1, T2 (bouton blanc), T7 (trait blanc sous l'onglet) et T17 (l'écran de mort ne ressemble plus aux panneaux) ; le reste de T1–T18 reste valable.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| R1 | Arriver en jeu (PC) | Après les boutons Roblox : une pastille **Kits** (icône + mot), puis **une seule pastille** qui regroupe les icônes Duel, Rewards, Emotes, Shop, Profile, Settings, comme la pastille menu / chat / micro de Roblox. Même hauteur (44 px), même noir transparent, mêmes bords arrondis que les pastilles Roblox. Icônes blanches **en traits fins**, toutes du même poids et de la même taille. |
+| R2 | Survoler une icône | Un léger rond clair apparaît derrière l'icône (comme sur Roblox) ; son nom s'affiche dessous dans une petite bulle sombre arrondie. |
+| R3 | Ouvrir un panneau (clic sur une icône ou sur Kits) | L'icône garde un **rond pâle** derrière elle tant que le panneau est ouvert (plus de bouton tout blanc). Le panneau : plaque **presque noire** aux **coins arrondis**, titre gras centré, **fine ligne grise** sous le titre. |
+| R4 | Onglets (Rewards, Shop) | Petits onglets arrondis : l'ouvert est **gris plus clair** avec texte blanc, les autres sombres avec texte gris (plus de trait blanc dessous). |
+| R5 | Cartes (Kits, Shop, Rewards) | Cartes **gris foncé arrondies**, plus claires au survol ; choisie = contour blanc ; portée = contour doré (comme avant). Barres de progression arrondies. |
+| R6 | Boutons **EQUIP** / **BUY** / **FIND MATCH** | Bouton principal **blanc, texte sombre** (comme les boutons Roblox), un peu gris au survol. Les autres boutons : sombres, contour discret, coins arrondis. Plus de petite marque rouge. |
+| R7 | Pastille de nombre (finir un défi) | Petit rond **blanc** avec un nombre sombre en haut à droite de l'icône **Rewards**, dans la pastille groupée. |
+| R8 | iPhone paysage / ancienne barre Roblox (36 px) | Les pastilles rapetissent pour avoir la hauteur de la barre Roblox ; tout reste cliquable. |
+| R9 | Regarder les icônes de près | Settings = un **engrenage** (dents pleines collées à l'anneau, moyeu ouvert), différent de l'étincelle des effets ; Shop = un **chapeau** (haut évasé, bande, large bord) ; Duel = **deux épées croisées** (garde en travers près de la poignée, poignées dans les coins du bas) ; Emotes = un **smiley**. Tous les petits ronds ont un trou bien visible. |
+| R10 | Acheter dans Shop ou Kits | Pendant « BUYING… » (et après EQUIP), le bouton reste **blanc grisé** avec le texte sombre **bien lisible** (il ne disparaît plus). |
+| R11 | Téléphone : toucher une icône puis fermer le panneau | Aucun rond clair ne **reste collé** derrière une icône ; pareil pour les onglets et les cartes des panneaux (pas d'effet de survol au doigt). Panneau ouvert : rond pâle léger derrière son icône. |
 ## Vitres réalistes (`feature/realistic-glass`)
 
 Détails, réglages et import des 4 images : `docs/GLASS_FR.md`. Les tests V1 à V5 et V8 marchent **même sans les images** ; V6 et V7 ont besoin des images importées.

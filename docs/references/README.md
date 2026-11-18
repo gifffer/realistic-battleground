@@ -17,8 +17,8 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 | 9 | A long custom moveset showcase (battlegrounds, no gore) | Heavy impacts: flash + thin speed lines, floor slabs and dust that stay on slams, sparks of metal on stone, light hits stagger and heavy ones ragdoll, finisher beats of 0.3-0.8 s |
 | 10 | An ultimate-ability showcase (anime, no gore) | A quiet lull before each big hit, a smear frame to hide a camera cut, impact = spark + speed lines + ring on the same frame, the aftermath held 0.5-1 s |
 | 11 | A first-person execution of a downed R6 body (gore), close and slow | The pause before the payoff, gore building up shot by shot, everything staying, a 2 s held aftermath; NOT the see-through pink mist |
-| 12 | Blender tutorial: realistic water droplets | How to model and light convincing liquid drops (for blood drops, wet wounds, pools) |
-| 13 | Blender tutorial: rain ripples | Ripple rings on a liquid surface (drops landing in blood pools) |
+| 12 | Blender tutorial: realistic water droplets | How to model and light convincing liquid drops (for blood drops, wet wounds, pools). Also the look of a falling rain drop (clear bead, bright glint, dark refracting rim): `assets/rain/rain_drop.png` |
+| 13 | Blender tutorial: rain ripples | Ripple rings on a liquid surface (drops landing in blood pools). Also the rain ripples on puddles and wet streets: `assets/rain/rain_ripple.png` |
 | 14 | Blender tutorial: realistic glass | Glass material and shape (bottles, flasks, shards); **the city windows** (implemented: `CityGlass` + `GlassController`, see `docs/GLASS_FR.md`) |
 | 15 | A custom R6 movement system | **The game's walk** (implemented: `MovementClips.Walk`): a quick power-march, high knees, arms pumping across the body, strong torso twist |
 
