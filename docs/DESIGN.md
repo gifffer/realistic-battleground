@@ -67,9 +67,10 @@ Règle : **les touches servent seulement au combat**. Tout le reste passe par de
 l'écran** qui ouvrent une fenêtre (GUI). Une seule fenêtre ouverte à la fois, fermeture avec ✕
 ou en cliquant le même bouton. Raccourci en plus du bouton : **M** ouvre / ferme le menu (la touche
 est écrite sur le bouton **MENU** sur PC). Tout ce qui se clique a l'air d'un **vrai bouton**
-(plaque plate et carrée, réagit au survol et à l'appui ; voir `src/client/UI/Button.luau`).
-Style « menu de jeu de combat » : noir / blanc / gris, **un seul rouge** réservé à ce qui est
-choisi / actif et aux actions principales (voir `src/client/UI/Theme.luau`).
+(réagit au survol et à l'appui ; voir `src/client/UI/Button.luau`).
+Style **minimaliste et discret** : petit, noir / blanc / gris, une seule police, des listes de mots
+(choisi = blanc + fine barre rouge), bouton principal = petit contour blanc avec une marque rouge ;
+pas de gros blocs de couleur, le jeu reste visible derrière (voir `src/client/UI/Theme.luau`).
 
 **Menu latéral** (boutons-icônes à gauche de l'écran, avec le nom au survol) :
 | Bouton | Fenêtre |

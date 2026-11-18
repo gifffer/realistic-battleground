@@ -759,30 +759,44 @@ Seulement **en combat**, **jamais par un finisher**, et rare exprès. Le serveur
 | H15 | Tenir un **os** (arme) dans la main droite, puis se faire **arracher le bras droit** (H3) | L'os **tombe et se casse** tout de suite (il ne reste pas collé au bras qui vole) ; plus d'arme en main ; **impossible de lancer** quoi que ce soit sans bras droit. |
 | H16 | Rejoindre la partie / se faire arracher un bras **pendant que le `WoundKit` charge encore** | D'abord une forme simple possible, puis dès que le kit est là, l'**épaule ouverte** et le **bout du bras** sont redessinés avec les vraies pièces (sans se reconnecter). |
 
-## Interface style « jeu de combat » : brut, minimaliste, sélection évidente (`feature/ui-fighting-style`)
+## Interface minimaliste : petite, discrète, pas « faite par un bot » (`feature/ui-fighting-style`)
 
-Toute l'interface passe par le thème (`src/client/UI/Theme.luau`) et le bouton commun
-(`src/client/UI/Button.luau`) : **noir / blanc cassé / gris**, **plus d'ambre**, **un seul rouge
-sang vif** réservé à **ce qui est choisi / actif** et aux **actions principales** (EQUIP, BUY,
-FIND MATCH, CHALLENGE, ACCEPT, ON). **Coins carrés** partout, plaques **plates** (pas de dégradé
-sur les boutons), texte **gras condensé en majuscules** (Oswald Bold pour les titres et les mots
-des boutons). Le rouge « danger » du HUD (PV bas, dégâts) ne change pas. Ce qui remplace les tests
-V4–V12 de `feature/ui-overhaul` (« ambre » → rouge, voir ci-dessous) ; le reste de V1–V20 est
-inchangé (même fonctionnement, mêmes vérifications serveur, mêmes tailles sur téléphone).
+Retour du joueur : « encore trop grand, il faut vraiment très minimaliste, pas de couleurs flashy,
+pas de trucs qui font IA ». Toute l'interface passe par le thème (`src/client/UI/Theme.luau`) et
+le bouton commun (`src/client/UI/Button.luau`) :
+- **plus petit** : sur PC le menu entier est dessiné à **×0,9**, l'en-tête des sections passe de
+  116 px à 52 px, titres à 20 px (au lieu de 40), boutons 24–32 px de haut ;
+- **une seule police** (Builder Sans) en **3 tailles** (20 titres, 13 texte, 11 petit),
+  **espacement normal** des lettres (plus d'espaces entre les lettres) ;
+- **plus de gros blocs rouges** : une liste = des **mots** (gris = pas choisi, **blanc + fine barre
+  rouge** = choisi, blanc = sous la souris). Bouton principal (EQUIP, BUY, FIND MATCH…) = **petit
+  contour blanc** avec une **courte marque rouge** à gauche, il se **remplit de blanc** au survol ;
+- **retirés** : les « // », les numéros « 01 02 03 », les micro-titres en majuscules espacées
+  (« FIGHTING STYLES · 5 OF 5 AVAILABLE », « ROSTER », « MENU », « CATEGORY », « TODAY »…), le
+  trait rouge sous le titre, les contours épais ; les petits textes sont en **phrases normales**
+  (« Equipped », « Locked, level 10 », « New quests in 05:12:33 ») ;
+- **fond transparent** : l'ombre derrière le menu est légère, le flou et la perte de couleur du
+  monde sont plus faibles : **on voit le jeu derrière**.
+Tout fonctionne comme avant (mêmes boutons, mêmes vérifications serveur). Ces tests **remplacent
+F1–F14** de la version précédente de cette branche.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| F1 | Ouvrir le menu (**M** ou MENU) | Fond **noir dur** à gauche (coupé net, pas un long fondu). Aucune couleur à part le **rouge** : pas d'ambre, pas de coins arrondis. Titre de la section en **gros caps gras condensés**, avec un **trait rouge épais** sur la ligne sous le titre. |
-| F2 | Liste des sections (01 KITS, 02 DUEL…) | Les sections non choisies : **plaques grises plates**, texte gris. La section ouverte : **pleine rouge**, texte et numéro **blancs**, **deux barres obliques blanches « // »** à gauche, et un peu **plus grande** que les autres. On la repère en une fraction de seconde. |
-| F3 | Survoler une section / un bouton (PC) | **Contour blanc épais** + plaque un peu plus claire (+ un peu plus grand). Sur la section déjà choisie : elle reste rouge, avec le contour blanc. |
-| F4 | Cliquer un bouton | **« Coup de poing »** : le bouton se **rétrécit d'un coup** (vite, sec) puis revient. Les zones de clic n'ont pas changé de taille (rien ne bouge dans les listes). |
-| F5 | **KITS** → ROSTER | Carte du kit regardé : **pleine rouge**, nom et ligne d'état en **blanc**. Les autres : gris. Le kit équipé (pas regardé) : ligne **EQUIPPED en blanc** (le rouge ne sert qu'à la carte regardée). Un kit **verrouillé** (niveau trop bas) : carte **assombrie**, texte gris foncé, **cadenas** à droite ; on peut quand même cliquer dessus pour voir le détail. |
-| F6 | KITS → EQUIP / BUY | **EQUIP** / **BUY · 500** = bouton **rouge plein** texte blanc. Après EQUIP : badge **✓ EQUIPPED** = fond noir, **contour rouge épais**, coche rouge, texte blanc (pas un bouton). Bouton gris « NEED … MORE » / « UNLOCKS AT LV 10 » (cadenas) inchangés. Achat refusé (pas assez de pièces côté serveur) : le bouton rouge devient **noir avec un contour rouge épais** pendant ~0,35 s, puis redevient rouge. |
-| F7 | **SHOP** | Catégories comme les kits (choisie = rouge plein) ; la ligne « ce que tu portes » sous une catégorie non choisie est **blanche**, pas rouge : **une seule** carte rouge à gauche. Dans la liste : les articles possédés non portés ont un bouton **EQUIP gris** (survol = contour blanc) ; seul l'article porté est rouge. l'article **porté** a son nom en **blanc** et une **barre rouge verticale** à sa gauche, et le bouton **EQUIPPED** est **rouge plein** (survol PC : TAKE OFF). Article verrouillé : nom plus sombre. Achat refusé : le bouton BUY devient **noir à contour rouge** ~0,35 s. |
-| F8 | **SETTINGS** OFF / ON | Le côté choisi est **rouge plein** (ON comme OFF), l'autre est une plaque grise ; survol = contour blanc. |
-| F9 | **DUEL** / défi reçu | FIND MATCH, CHALLENGE, ACCEPT = **rouge plein**. CANCEL, DECLINE = **gris plat**. |
-| F10 | Bouton **MENU** (menu fermé) | Plaque grise **carrée** avec un **contour rouge** et l'icône ☰ rouge ; l'anneau qui pulse (avant la 1ʳᵉ ouverture) est rouge et carré. |
-| F11 | **TAB** (scoreboard) | Ta ligne a une **petite barre rouge** à gauche (en plus de ton nom en blanc gras). |
-| F12 | Jauge Street Fury pleine | **[G] AWAKEN** sur une plaque **rouge pleine** (texte blanc), cliquable / touchable. |
-| F13 | *Test → Device* : **iPhone** paysage | Mêmes couleurs ; les moves du kit sont sur des plaques sombres **carrées** ; tous les boutons gardent leur hauteur (≥ ~44 px à l'écran). |
-| F14 | Kill feed, écran de mort, HUD (PV / stamina) | Restent en noir / blanc / gris (le rouge sang du HUD = danger, comme avant). Aucun ambre nulle part. |
+| M1 | Ouvrir le menu (**M** ou MENU) sur PC en 1920 × 1080 | Le menu prend **nettement moins de place** qu'avant : liste de sections étroite à gauche, panneau plus petit, **le jeu reste bien visible** à droite et derrière (ombre légère, peu de flou). Titre de section **petit** (« KITS »), **pas** de trait rouge ni de ligne sous le titre, **pas** de mot « MENU » au-dessus de la liste. |
+| M2 | Liste des sections | De simples **mots** (KITS, DUEL, QUESTS…) **sans numéro** et **sans plaque**. Non choisis : **gris**. Section ouverte : **blanche** avec une **fine barre rouge verticale** à gauche. Aucun « // ». |
+| M3 | Survoler une section / un bouton (PC) | Le texte devient **blanc** (+ une barre grise très légère et un fond à peine visible pour une section). Les boutons à contour : contour plus net ; le bouton principal se **remplit de blanc** (texte noir). Rien ne grossit. |
+| M4 | Cliquer un bouton | Petit **rétrécissement rapide** (×0,96) puis retour. Les listes ne bougent pas. |
+| M5 | **KITS** | Pas de sous-titre « FIGHTING STYLES · … », pas de « ROSTER ». À gauche : noms des kits, avec en dessous une **petite ligne normale** (« Equipped », « Owned », « Locked, level 10 », « 500 coins », « Need 160 more coins »). Kit regardé : blanc + barre rouge ; kit verrouillé : plus sombre + **cadenas**. À droite : nom du kit **petit**, description grise, titres « Moves / Stamina / Cooldown », « Awakening / Lasts », « Finisher / On a KO » en **minuscules normales**, pas de barre rouge devant l'Awakening. En haut à droite : « **820 coins** » sur une ligne. |
+| M6 | KITS → EQUIP / BUY | **EQUIP** / **BUY · 500** = **petit bouton à contour blanc** avec une **marque rouge** à gauche (pas de bloc rouge). Après EQUIP : « **✓ EQUIPPED** » = coche rouge + mot, **sans cadre** (pas un bouton). « NEED … MORE » / « UNLOCKS AT LV 10 » = bouton grisé. BUY → CONFIRM → achat refusé : **contour rouge** ~0,35 s puis retour à BUY. |
+| M7 | **SHOP** | Même liste que les kits à gauche (catégories, ligne « ce que tu portes » / « None equipped »). Pas de sous-titre « COSMETICS · … », pas de « CATEGORY ». Article porté : nom blanc + **fine barre rouge** à gauche, bouton **EQUIPPED** à contour avec un **trait rouge dessous** (survol PC : TAKE OFF ; téléphone : TAKE OFF? puis 2ᵉ tap). EQUIP = contour discret. Indice des emotes : « Press B ». |
+| M8 | **DUEL** | Titres « Ranked », « On this server », colonnes « Rank », « 5 players » en texte normal. Rang (SILVER) et ELO **petits**. Ligne « 188 to Gold · 15 wins · 9 losses ». FIND MATCH / CHALLENGE = bouton principal (contour + marque rouge), CANCEL = contour discret. Recherche : « Searching · 0:23 », « Matching within ±200 ELO ». |
+| M9 | **QUESTS** | Plus de « TODAY / REWARD » ni de sous-titre : directement les 3 quêtes (texte 13 px, ligne de progression fine), « Done » quand finie, et en bas « New quests in 05:12:33 » qui décompte. |
+| M10 | **PROFILE** | Sous-titre = **ton nom** seulement. « Level 8 of 100 » plus petit, « 64 XP to level 9 », « 1 382 XP total », titres « Record », « Ranked », « Next unlock » en texte normal, chiffres plus petits. |
+| M11 | **SETTINGS** | OFF / ON = deux **mots** : le choisi est **blanc avec un trait rouge dessous**, l'autre gris ; cliquer l'autre change bien le réglage (caméra 1ʳᵉ personne, bloquer les duels) et c'est sauvegardé. |
+| M12 | Bouton **MENU** (menu fermé) + **CLOSE** | MENU : petit bouton à contour fin, **marque rouge** à gauche, touche « M » ; avant la 1ʳᵉ ouverture un **anneau fin gris** pulse doucement. CLOSE : petit bouton discret avec « M ». |
+| M13 | HUD (PV / stamina / niveau) | Bloc plus petit : chiffre des PV **22 px** (au lieu de 30), « Health », « Stamina », « Lv » en texte normal ; « Winded », « Guard », « Limping », « Bleeding » selon l'état. Récompenses : « Kill +50 XP · +10 coins ». |
+| M14 | Jauge Street Fury pleine | **[G] AWAKEN** = petit bouton à **contour** avec une **marque rouge** (plus de plaque rouge pleine), cliquable / touchable ; « Low stamina » sur un move sans assez d'endurance. |
+| M15 | Kill feed + écran de mort | Kill feed : texte un peu plus petit, bande sombre plus légère. Écran de mort : « Eliminated by » / « Finished by » / « You died » en texte normal, nom du tueur **22 px**, « Lv 17 », « Respawn » + compte à rebours. |
+| M16 | **TAB** (scoreboard) | Titre « PLAYERS » petit, « This session », colonnes « Lv / Player / Kills / Deaths », ta ligne marquée d'une **fine barre rouge**, « Release to close ». |
+| M17 | Duel (compte à rebours, fin de manche, résultat) / KO / niveau supérieur | Les gros mots (FIGHT, VICTORY, KNOCKED OUT, LEVEL 10…) sont **plus petits** qu'avant (28 px max au lieu de 40) et sans lettres espacées. |
+| M18 | *Test → Device* : **iPhone** paysage | Le menu n'est **pas** réduit à ×0,9 (doigts) ; les boutons sont dessinés petits mais leur **zone de tap** reste haute (≥ ~44 px à l'écran) : taper un mot de la liste ou EQUIP marche du premier coup. |

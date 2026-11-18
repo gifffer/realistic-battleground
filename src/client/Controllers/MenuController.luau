@@ -1,15 +1,16 @@
 --!strict
 -- MenuController: the game menu (everything that isn't fighting).
 --
--- Closed: a real MENU button on the left edge of the screen (an icon, the
--- word and, on a PC, its key "M"), always outlined in the accent colour.
--- Until the menu is opened once it also sends out a soft accent ring, so
--- new players see it.
--- Open: the world blurs and loses its colour, a numbered list of sections
--- on the left (tab buttons "01 KITS"...; the open one is outlined in the
--- accent colour with a bar), the open section's panel next to it (big
--- light title, a subtitle, a hairline, then its content). CLOSE (or the M
--- key) closes it. The M key also opens it (not while typing in the chat).
+-- Closed: a small MENU button on the left edge of the screen (an icon, the
+-- word and, on a PC, its key "M"), with a short red mark on its left.
+-- Until the menu is opened once it also sends out a faint ring, so new
+-- players see it.
+-- Open: the world blurs a little, a plain list of section names on the
+-- left (grey words; the open one white with a thin red bar), the open
+-- section's panel next to it (a small title, an optional one-line
+-- subtitle, then its content). A see-through backdrop keeps the game
+-- visible. CLOSE (or the M key) closes it. The M key also opens it (not
+-- while typing in the chat).
 --
 -- Design rule: keys are for fighting; everything else is in this menu.
 -- Each feature ADDS ITS OWN section from its controller:
@@ -17,10 +18,12 @@
 --   MenuController.register({
 --       id = "Settings",              -- unique name
 --       label = "SETTINGS",           -- name in the list (English, caps)
---       subtitle = "CAMERA · CONTROLS",
+--       subtitle = "Camera and controls", -- optional, one plain line
 --       order = 100,                  -- position in the list (small = top)
 --       build = function(content: Frame) ... end, -- fills the panel, once
 --       size = Vector2.new(560, 480), -- optional: a bigger panel (default 440 × 280)
+--                                     -- (sizes count the old 116 px header;
+--                                     -- the header is now HEADER px high)
 --       scrimWidth = 1100,            -- optional: a wider dark backdrop (default 900)
 --   })
 --
@@ -55,15 +58,23 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local player = Players.LocalPlayer
 local C = Theme.Colors
 
-local ITEM_GAP = 6 -- between two section buttons
-local NAV_TOP = 176 -- the list's header (stage pixels)
-local ITEMS_TOP = 34 -- the first section button, under the header
+local ITEM_GAP = 0 -- between two section buttons
+local NAV_TOP = 160 -- the list's top, level with the title (stage pixels)
+local ITEMS_TOP = 0 -- the first section button (no header above the list)
 -- The list's scrolling window reaches this far past each side, so a button
 -- that grows a little under the mouse isn't cut.
 local ITEMS_BLEED = 4
 local DEFAULT_SIZE = Vector2.new(440, 280)
 local DEFAULT_SCRIM_WIDTH = 900
-local PANEL_TOP = 168
+local PANEL_TOP = 160
+-- The panel's header (title, subtitle) is this high. Sections give their
+-- size with the old, taller header (OLD_HEADER): the difference is taken
+-- off so their content keeps its room.
+local HEADER = 52
+local OLD_HEADER = 116
+-- Drawn smaller than the sections' own pixels on a PC (the menu stays a
+-- quiet overlay). A touch screen keeps x1: a finger needs the room.
+local PC_SCALE = 0.9
 local OPEN_TIME = 0.25
 local CLOSE_TIME = 0.15
 -- What the stage must show: from just above the list (y 160) to under the
@@ -84,9 +95,9 @@ type Layout = {
 	panelX: number,
 	right: number, -- room kept right of the panel
 }
-local REGULAR: Layout = { navX = 64, navWidth = 180, dividerX = 268, panelX = 300, right = 40 }
+local REGULAR: Layout = { navX = 56, navWidth = 128, dividerX = 204, panelX = 232, right = 40 }
 -- Short or narrow screen (a phone held sideways): a narrower left column.
-local COMPACT: Layout = { navX = 20, navWidth = 156, dividerX = 188, panelX = 208, right = 16 }
+local COMPACT: Layout = { navX = 16, navWidth = 116, dividerX = 140, panelX = 156, right = 16 }
 local COMPACT_BELOW = Vector2.new(1000, 540)
 
 export type MenuEntry = {
@@ -135,6 +146,7 @@ local defaultOverride: (() -> string?)? = nil
 ------------------------------------------------------------------------------
 
 local function createPanel(entry: MenuEntry): Frame
+	local subtitle = entry.subtitle or ""
 	local panel = Theme.make("Frame", {
 		Name = `{entry.id}Panel`,
 		Size = UDim2.fromScale(1, 1),
@@ -144,39 +156,26 @@ local function createPanel(entry: MenuEntry): Frame
 	}, {
 		Theme.text({
 			Name = "Title",
-			Size = UDim2.new(1, 0, 0, 44),
+			Size = UDim2.new(1, 0, 0, 24),
 			FontFace = Theme.Fonts.Display,
-			TextSize = 40,
+			TextSize = Theme.TITLE,
 			TextStrokeTransparency = 1,
-			Text = Theme.track(entry.label, "thin"),
+			Text = entry.label,
 		}),
 		Theme.text({
 			Name = "Subtitle",
-			Position = UDim2.fromOffset(0, 52),
-			Size = UDim2.new(1, 0, 0, 12),
-			TextSize = 10,
-			TextColor3 = C.Ink3,
+			Position = UDim2.fromOffset(0, 26),
+			Size = UDim2.new(1, 0, 0, 16),
+			FontFace = Theme.Fonts.Body,
+			TextSize = Theme.SMALL + 1,
+			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
-			Text = Theme.track(entry.subtitle or "", "three"),
-		}),
-		Theme.make("Frame", {
-			Name = "Rule",
-			Position = UDim2.fromOffset(0, 90),
-			Size = UDim2.new(1, 0, 0, 1),
-			BackgroundColor3 = C.Ink,
-			BackgroundTransparency = 0.78,
-		}),
-		-- A short, thick red stroke on the rule: the open section.
-		Theme.make("Frame", {
-			Name = "RuleMark",
-			Position = UDim2.fromOffset(0, 88),
-			Size = UDim2.fromOffset(56, 4),
-			BackgroundColor3 = C.Accent,
+			Text = subtitle,
 		}),
 		Theme.make("Frame", {
 			Name = "Content",
-			Position = UDim2.fromOffset(0, 116),
-			Size = UDim2.new(1, 0, 1, -116),
+			Position = UDim2.fromOffset(0, HEADER),
+			Size = UDim2.new(1, 0, 1, -HEADER),
 			BackgroundTransparency = 1,
 		}),
 	}) :: Frame
@@ -184,31 +183,20 @@ local function createPanel(entry: MenuEntry): Frame
 	return panel
 end
 
--- Renumbers the list (01, 02...) in display order.
-local function renumber()
-	local list = {}
-	for _, ui in entries do
-		table.insert(list, ui)
-	end
-	table.sort(list, function(a, b)
-		return a.entry.order < b.entry.order
-	end)
-	for position, ui in list do
-		local index = ui.button.index
-		if index then
-			index.Text = string.format("%02d", position)
-		end
-	end
-end
-
--- (the button paints its own number: white on the red fill)
+-- (the button paints its own look: white text and the red bar)
 local function setItemActive(ui: EntryUi, active: boolean)
 	ui.button.setSelected(active)
 end
 
 -- Height of one section button in the list.
 local function navItemHeight(): number
-	return Button.height("medium") + 4
+	return Button.height("medium")
+end
+
+-- The stage's scale before fitting: as drawn (x1 under 1080p, a little
+-- bigger above), times PC_SCALE on a PC.
+local function drawnScale(viewport: Vector2): number
+	return Theme.scaleFor(viewport, 1) * (if Theme.isTouch() then 1 else PC_SCALE)
 end
 
 -- Fits the stage to the screen for a panel of `size` (see the top).
@@ -236,8 +224,7 @@ local function layoutStage(size: Vector2)
 	local width = layout.panelX + size.X + layout.right
 	-- (scaleFor with a floor of 1: never smaller than drawn by itself, only
 	-- when the section does not fit; bigger on a large screen)
-	local scale =
-		math.min(Theme.scaleFor(viewport, 1), freeHeight / (around + size.Y), freeWidth / width)
+	local scale = math.min(drawnScale(viewport), freeHeight / (around + size.Y), freeWidth / width)
 	-- Readable first: the panel scrolls rather than going under ×0.8 (the
 	-- width must still fit: only a tiny screen goes under it).
 	scale = math.max(scale, math.min(MIN_TEXT_SCALE, freeWidth / width), 0.4)
@@ -273,18 +260,24 @@ local function layoutStage(size: Vector2)
 	scrimFrame.Size = UDim2.new(0, scrimWidthNow * scale, 1, 0)
 end
 
+-- A section's panel size, with the shorter header.
+local function sizeOf(entry: MenuEntry?): Vector2
+	local size = if entry and entry.size then entry.size else DEFAULT_SIZE
+	return Vector2.new(size.X, size.Y - (OLD_HEADER - HEADER))
+end
+
 local function currentSize(): Vector2
 	local ui = if openId then entries[openId] else nil
-	return if ui and ui.entry.size then ui.entry.size else DEFAULT_SIZE
+	return sizeOf(if ui then ui.entry else nil)
 end
 
 -- Blur + desaturation of the world behind the menu.
 local function setWorldDimmed(dimmed: boolean)
 	local time = if dimmed then OPEN_TIME else CLOSE_TIME
-	Theme.tween(blur, time, { Size = if dimmed then 10 else 0 })
+	Theme.tween(blur, time, { Size = if dimmed then 6 else 0 })
 	Theme.tween(grade, time, {
-		Saturation = if dimmed then -0.5 else 0,
-		Brightness = if dimmed then -0.08 else 0,
+		Saturation = if dimmed then -0.25 else 0,
+		Brightness = if dimmed then -0.04 else 0,
 	})
 end
 
@@ -323,7 +316,6 @@ function MenuController.register(entry: MenuEntry)
 		name = entry.id,
 		text = entry.label,
 		variant = "tab",
-		index = "00",
 		layoutOrder = entry.order,
 		height = navItemHeight(),
 		fillWidth = true, -- as wide as the list
@@ -338,7 +330,6 @@ function MenuController.register(entry: MenuEntry)
 		button = button,
 		panel = nil,
 	}
-	renumber()
 	if openId then
 		layoutStage(currentSize()) -- (one more button in the list)
 	end
@@ -366,7 +357,7 @@ function MenuController.open(id: string)
 
 	-- This section's size: the panel, the backdrop and the CLOSE button
 	-- follow (layoutStage), from the top of the section.
-	local size = ui.entry.size or DEFAULT_SIZE
+	local size = sizeOf(ui.entry)
 	scrimWidthNow = ui.entry.scrimWidth or DEFAULT_SCRIM_WIDTH
 	layoutStage(size) -- (sets the backdrop's width at once)
 	panelsView.CanvasPosition = Vector2.zero
@@ -485,8 +476,7 @@ function MenuController.init()
 		text = "MENU",
 		icon = "menu",
 		keyHint = Config.Controls.MENU.Name,
-		size = "large",
-		accent = true, -- (stays easy to spot after the first open)
+		accent = true, -- (the short red mark: stays easy to spot)
 		anchorPoint = Vector2.new(0, 0.5),
 		position = UDim2.new(0, 16, 0.5, MenuController.BUTTON_Y),
 		parent = gui,
@@ -502,18 +492,18 @@ function MenuController.init()
 		Visible = false,
 		Parent = gui,
 	}, {
-		-- A hard black slab from the left, cut short into the (blurred) world.
+		-- A see-through shade from the left, fading into the world.
 		Theme.make("Frame", {
 			Name = "Scrim",
 			Size = UDim2.new(0, 900, 1, 0),
 			BackgroundColor3 = C.Scrim,
-		}, { Theme.gradient(0, { { 0, 0.08 }, { 0.6, 0.14 }, { 0.78, 0.5 }, { 1, 1 } }) }),
+		}, { Theme.gradient(0, { { 0, 0.3 }, { 0.55, 0.42 }, { 0.8, 0.75 }, { 1, 1 } }) }),
 		Theme.make("Frame", {
 			Name = "Divider",
-			Position = UDim2.fromOffset(268, 176),
+			Position = UDim2.fromOffset(REGULAR.dividerX, NAV_TOP),
 			Size = UDim2.fromOffset(1, 196),
 			BackgroundColor3 = C.Ink,
-			BackgroundTransparency = 0.86,
+			BackgroundTransparency = 0.9,
 		}),
 	})
 
@@ -534,15 +524,6 @@ function MenuController.init()
 		Size = UDim2.fromOffset(REGULAR.navWidth, 300),
 		BackgroundTransparency = 1,
 		Parent = stage,
-	}, {
-		Theme.text({
-			Name = "Header",
-			Size = UDim2.new(1, 0, 0, 12),
-			TextSize = 10,
-			TextColor3 = C.Ink3,
-			TextStrokeTransparency = 1,
-			Text = Theme.track("MENU", "three"),
-		}),
 	})
 	-- (sized by layoutStage; scrolls only when the list can't fit)
 	navItems = Theme.make("ScrollingFrame", {
@@ -594,8 +575,8 @@ function MenuController.init()
 		name = "Close",
 		text = "CLOSE",
 		icon = "close",
+		size = "small",
 		keyHint = Config.Controls.MENU.Name,
-		minWidth = 120,
 		position = UDim2.fromOffset(300, PANEL_TOP + DEFAULT_SIZE.Y + 12),
 		parent = stage,
 		onActivated = MenuController.close,

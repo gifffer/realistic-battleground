@@ -6,9 +6,9 @@
 --             17 Rook_77  eliminated  12 Mara    0:26
 --
 -- • A finisher kill names the finisher after the victim ("— LIVER RIP",
---   a short red dash, small caps), sent by the server with the line.
--- • Names in condensed type, verbs lighter and lower-case, the age of the
---   line in small monospaced numbers.
+--   a short red dash, small), sent by the server with the line.
+-- • Names in the house font, verbs lighter and lower-case, the age of the
+--   line in small numbers.
 -- • Each player's name has their level just before it, small and grey
 --   ("8 gifffer"). It is the level at the moment of the event (sent by the
 --   server with the line) and never changes afterwards. No level for a
@@ -87,11 +87,11 @@ local function piece(text: string, kind: PartKind, layout: number): TextLabel
 			LayoutOrder = layout,
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, ROW_HEIGHT),
-			FontFace = Theme.Fonts.LabelBold,
+			FontFace = Theme.Fonts.Label,
 			TextSize = 11,
 			TextColor3 = C.Ink2,
 			TextTransparency = 1,
-			Text = Theme.track(text, "three"),
+			Text = text,
 		}, {
 			-- 1 px lower: small caps on the names' baseline.
 			Theme.make("UIPadding", { PaddingTop = UDim.new(0, 1) }),
@@ -105,7 +105,7 @@ local function piece(text: string, kind: PartKind, layout: number): TextLabel
 			then Theme.Fonts.LabelBold
 			elseif kind == "verb" then Theme.Fonts.LabelRegular
 			else Theme.Fonts.Label,
-		TextSize = 13,
+		TextSize = 12,
 		TextColor3 = if kind == "you" then C.InkHi elseif kind == "verb" then C.InkVerb else C.Ink,
 		TextTransparency = 1,
 		Text = text,
@@ -309,7 +309,7 @@ local function addLine(
 		BackgroundColor3 = C.Scrim,
 		ZIndex = 0,
 		Parent = frame,
-	}, { Theme.gradient(0, { { 0, 1 }, { 0.55, 0.62 }, { 1, 0.45 } }) })
+	}, { Theme.gradient(0, { { 0, 1 }, { 0.55, 0.75 }, { 1, 0.6 } }) })
 	local content = Theme.make("Frame", {
 		Name = "Content",
 		Position = UDim2.fromOffset(12, 0), -- slides in from the right

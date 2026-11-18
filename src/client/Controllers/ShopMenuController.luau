@@ -3,35 +3,34 @@
 -- SETTINGS). Cosmetics bought with coins (step 10): nothing here changes a
 -- fight.
 --
---   SHOP                                                       820
---   COSMETICS · 4 OF 17 OWNED                                COINS
---   ──────────────────────────────────────────────────────────────
---   CATEGORY            TITLES
---   ┌──────────────┐    Shown under your name, on your name tag.
---   │TITLES        │    CATALOG
---   │ROOKIE        │    ROOKIE                       [✓ EQUIPPED]
---   └──────────────┘    Everybody starts somewhere.
---   ┌──────────────┐    BARE KNUCKLE                    [ EQUIP ]
---   │OUTFITS       │    No gloves, no rules.
---   │NONE EQUIPPED │    BACK ALLEY                  [o BUY · 250]
---   └──────────────┘    Grew up fighting behind the bar.
---   ...                 HEAVY HANDS                  [# LEVEL 10]
+--   SHOP                                                820 coins
+--   | TITLES            TITLES
+--     Rookie            Shown under your name, on your name tag.
+--   OUTFITS             Catalog
+--   None equipped     | ROOKIE                         ✓ EQUIPPED
+--   ...                 Everybody starts somewhere.
+--                       BARE KNUCKLE                    [ EQUIP ]
+--                       No gloves, no rules.
+--                       BACK ALLEY                  [o BUY · 250]
+--                       Grew up fighting behind the bar.
+--                       HEAVY HANDS                  [# LEVEL 10]
 --                       One clean shot is enough.
 --
--- Left: the 4 categories as cards (like the KITS roster: the selected one
--- outlined in the accent colour, the equipped item's name under each).
+-- Left: the 4 categories as a plain list (like the KITS roster: the
+-- selected one white with a thin red bar, the equipped item's name under
+-- each).
 -- Right: every item of the category (Shared/Cosmetics), one row each, with
 -- a real button (UI/Button) on the right for its state:
 --   Locked     level too low        [lock] LEVEL 10        greyed, not clickable
---   Buyable    enough coins         [coin] BUY · 250       accent (two presses: CONFIRM)
+--   Buyable    enough coins         [coin] BUY · 250       main button (two presses: CONFIRM)
 --   Short      not enough coins     [coin] NEED 120 MORE   greyed, not clickable
---   Owned      bought (or free)     EQUIP                  grey (only the worn one is red)
---   Equipped   the one you wear     [check] EQUIPPED       red fill. On a title,
+--   Owned      bought (or free)     EQUIP                  quiet outline
+--   Equipped   the one you wear     [check] EQUIPPED       red underline. On a title,
 --              an outfit or a kill effect it takes the item off: on a PC
 --              the mouse over it reads TAKE OFF; on a phone the first tap
 --              asks TAKE OFF? and the second one does it. Emotes: a badge.
 -- Outfit rows show two small colour squares (top above, trousers below).
--- Emote rows add a hint under the text ("PRESS B", or the EMOTE button on
+-- Emote rows add a hint under the text ("Press B", or the EMOTE button on
 -- a phone).
 --
 -- Everything is worked out from the save (PlayerDataController: coins, XP →
@@ -58,21 +57,22 @@ local formatNumber = ProfileMenuController.formatNumber
 
 local C = Theme.Colors
 
--- Same columns as the KITS section: the detail starts at x 200 of the
+-- Same columns as the KITS section: the detail starts at x 176 of the
 -- content; its canvas starts a bit before (and the content is inset by the
 -- same amount) so nothing sticking out gets cut.
 local DETAIL_INSET = Vector2.new(16, 8)
-local DETAIL_X = 200 - DETAIL_INSET.X
+local DETAIL_X = 176 - DETAIL_INSET.X
 local DETAIL_Y = -DETAIL_INSET.Y
 -- One item: 50 px, taller on touch so its button fits (the text moves down
 -- by half the difference to stay centred on it).
 local ROW_HEIGHT = math.max(50, Button.height("small") + 8)
 local ROW_TEXT_Y = (ROW_HEIGHT - 50) // 2
-local ROWS_TOP = 99 -- first row, under the CATALOG head
+local ROWS_TOP = 99 -- first row, under the Catalog head
 local MAX_ROWS = 5 -- the biggest category
 local DETAIL_SIZE = Vector2.new(360, ROWS_TOP + MAX_ROWS * ROW_HEIGHT + 8)
-local CARD_HEIGHT = if Theme.isTouch() then 58 else 52
-local CARD_GAP = 6
+local CARD_HEIGHT = if Theme.isTouch() then 52 else 38
+local CARD_GAP = 0
+local ROSTER_WIDTH = 140
 local OUTFIT_INDENT = 26 -- outfit rows: room for the two colour squares
 
 -- Second press on BUY must come within this many seconds of the first.
@@ -86,7 +86,7 @@ local EQUIP_SETTLE = 2
 -- The emote key, written as on the keyboard ("B").
 local EMOTE_KEY: string = Config.Controls.EMOTE.Name
 -- How to play an emote on this device.
-local EMOTE_HINT = if Theme.isTouch() then "TAP EMOTE ON THE SCREEN" else `PRESS {EMOTE_KEY}`
+local EMOTE_HINT = if Theme.isTouch() then "Tap EMOTE on the screen" else `Press {EMOTE_KEY}`
 
 -- Where an item stands for this player (see the table at the top).
 type ItemState = "Locked" | "Buyable" | "Short" | "Owned" | "Equipped"
@@ -134,7 +134,7 @@ type Row = {
 	item: Cosmetics.Item,
 	frame: Frame,
 	name: TextLabel,
-	hint: TextLabel?, -- "PRESS B" / "TAP EMOTE..." (emotes only)
+	hint: TextLabel?, -- "Press B" / "Tap EMOTE..." (emotes only)
 	action: CanvasGroup?, -- the state on the right (fades on a change)
 	key: string, -- the state the action was drawn for (see stateKey)
 	token: number, -- cancels an action swap that is no longer wanted
@@ -153,7 +153,6 @@ local detail: CanvasGroup -- fades / slides as one when switching category
 local body: Frame -- its content (inset: the canvas cuts what sticks out)
 local wallet: ProfileMenuController.Wallet? = nil
 local walletCoins = 0 -- what the wallet shows (so it only counts on a change)
-local subtitleLabel: TextLabel? = nil
 local built = false
 local refreshAll: (animate: boolean) -> () -- (defined further down)
 
@@ -258,18 +257,7 @@ local function rosterStatus(info: CategoryInfo): string
 	if item and item.category == info.id and owns(item) then
 		return item.name
 	end
-	return "NONE EQUIPPED"
-end
-
--- "COSMETICS · 4 OF 17 OWNED".
-local function subtitle(): string
-	local owned = 0
-	for _, item in Cosmetics.ITEMS do
-		if owns(item) then
-			owned += 1
-		end
-	end
-	return `COSMETICS · {owned} OF {#Cosmetics.ITEMS} OWNED`
+	return "None equipped"
 end
 
 ------------------------------------------------------------------------------
@@ -278,10 +266,11 @@ end
 
 local function caption(text: string, props: { [string]: any }): TextLabel
 	local base: { [string]: any } = {
-		TextSize = 10,
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink3,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 	}
 	for key, value in props do
 		base[key] = value
@@ -309,8 +298,14 @@ local function sectionHead(parent: Instance, y: number, title: string)
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
-	caption(title, { Size = UDim2.new(1, 0, 0, 12), Parent = head })
-	hairline(head, UDim.new(1, 0), 0.9)
+	caption(title, {
+		Size = UDim2.new(1, 0, 0, 14),
+		FontFace = Theme.Fonts.Label,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
+		Parent = head,
+	})
+	hairline(head, UDim.new(1, 0), 0.92)
 end
 
 -- A small square of colour (outfit rows), with a faint outline so a black
@@ -369,7 +364,7 @@ local function buyButton(parent: Instance, item: Cosmetics.Item)
 		variant = "primary",
 		icon = "coin",
 		size = "small",
-		minWidth = 110,
+		minWidth = 96,
 		anchorPoint = ACTION_ANCHOR,
 		position = ACTION_POSITION,
 		parent = parent,
@@ -422,7 +417,7 @@ local function requestEquip(category: Cosmetics.Category, itemId: string)
 	task.delay(EQUIP_SETTLE + 0.05, refreshAll, true)
 end
 
--- EQUIP: a grey plate, so the worn item (red EQUIPPED) is the only red one.
+-- EQUIP: a quiet outline, so the worn item (EQUIPPED, red underline) stands out.
 local function equipButton(parent: Instance, item: Cosmetics.Item)
 	local button: Button.Button
 	button = Button.new({
@@ -430,7 +425,7 @@ local function equipButton(parent: Instance, item: Cosmetics.Item)
 		text = "EQUIP",
 		variant = "secondary",
 		size = "small",
-		minWidth = 90,
+		minWidth = 72,
 		anchorPoint = ACTION_ANCHOR,
 		position = ACTION_POSITION,
 		parent = parent,
@@ -464,7 +459,7 @@ local function equippedMark(parent: Instance, item: Cosmetics.Item, clickable: b
 		size = "small",
 		-- A fixed width: "TAKE OFF" is narrower than "EQUIPPED", and a
 		-- button that shrank under the mouse would flicker.
-		width = 120,
+		width = 104,
 		anchorPoint = ACTION_ANCHOR,
 		position = ACTION_POSITION,
 		parent = parent,
@@ -486,7 +481,7 @@ local function equippedMark(parent: Instance, item: Cosmetics.Item, clickable: b
 			requestEquip(item.category, "")
 		end,
 	})
-	button.setSelected(true) -- red fill: it is the one you wear
+	button.setSelected(true) -- red underline: it is the one you wear
 	button.instance.MouseEnter:Connect(function()
 		if button.isEnabled() and not Theme.isTouch() then
 			button.setText("TAKE OFF")
@@ -545,8 +540,8 @@ local function fillAction(row: Row, fade: boolean)
 		Theme.make("Frame", {
 			Name = "EquippedMark",
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.fromOffset(-6, 8),
-			Size = UDim2.new(0, 3, 1, -16),
+			Position = UDim2.fromOffset(-6, 10),
+			Size = UDim2.new(0, 2, 1, -20),
 			BackgroundColor3 = C.Accent,
 			Parent = row.frame,
 		})
@@ -555,7 +550,7 @@ local function fillAction(row: Row, fade: boolean)
 	end
 	local hint = row.hint
 	if hint then
-		hint.TextColor3 = if state == "Equipped" then C.Accent else C.Ink3
+		hint.TextColor3 = if state == "Equipped" then C.Ink2 else C.Ink3
 	end
 end
 
@@ -608,8 +603,9 @@ local function itemRow(parent: Instance, order: number, item: Cosmetics.Item): R
 			ROW_TEXT_Y + (if item.category == "Emote" then 3 else 8)
 		),
 		Size = UDim2.fromOffset(200, 13),
+		TextSize = 12,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(item.name, "four"),
+		Text = item.name,
 		Parent = frame,
 	}) :: TextLabel
 	Theme.text({
@@ -635,7 +631,7 @@ local function itemRow(parent: Instance, order: number, item: Cosmetics.Item): R
 			Name = "Hint",
 			Position = UDim2.fromOffset(indent, 36 + ROW_TEXT_Y),
 			Size = UDim2.new(1, -indent - 154, 0, 11),
-			TextSize = 9,
+			TextSize = 10,
 			Parent = frame,
 		})
 	end
@@ -659,12 +655,12 @@ local function fillDetail(info: CategoryInfo)
 	table.clear(rows)
 	Theme.text({
 		Name = "CategoryName",
-		Position = UDim2.fromOffset(0, -4),
-		Size = UDim2.fromOffset(280, 30),
+		Position = UDim2.fromOffset(0, -2),
+		Size = UDim2.fromOffset(240, 26),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 26,
+		TextSize = 17,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(info.label, "thin"),
+		Text = info.label,
 		Parent = body,
 	})
 	Theme.text({
@@ -672,14 +668,15 @@ local function fillDetail(info: CategoryInfo)
 		Position = UDim2.fromOffset(0, 36),
 		Size = UDim2.new(1, 0, 0, 40),
 		FontFace = Theme.Fonts.Body,
-		TextSize = 15,
+		TextSize = Theme.TEXT,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
 		TextWrapped = true,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = info.description,
 		Parent = body,
 	})
-	sectionHead(body, 80, "CATALOG")
+	sectionHead(body, 80, "Catalog")
 	local items = itemsOf(info.id)
 	local list = Theme.make("Frame", {
 		Name = "Items",
@@ -736,9 +733,8 @@ local function refreshRoster(animate: boolean)
 		entry.button.setSelected(entry.info == selected)
 		local sub = entry.button.sub
 		local status = rosterStatus(entry.info)
-		local changed = sub ~= nil and sub.Text ~= Theme.track(status, "three")
-		local wearing = status ~= "NONE EQUIPPED"
-		-- White, not red: red stays on the selected card only.
+		local changed = sub ~= nil and sub.Text ~= status
+		local wearing = status ~= "None equipped"
 		entry.button.setSubtext(status, if wearing then C.Ink else C.Ink3)
 		if animate and changed and sub then
 			sub.TextTransparency = 1
@@ -761,30 +757,22 @@ end
 ------------------------------------------------------------------------------
 
 local function build(content: Frame)
-	-- Header (the panel around the content): the wallet top right, and the
-	-- subtitle we keep up to date ("4 OF 17 OWNED").
+	-- Header (the panel around the content): the wallet top right.
 	local panel = content.Parent :: Instance
 	local newWallet = ProfileMenuController.createWallet(panel)
 	walletCoins = playerCoins()
 	newWallet.set(walletCoins, false)
 	wallet = newWallet
-	local label = panel:FindFirstChild("Subtitle")
-	if label and label:IsA("TextLabel") then
-		subtitleLabel = label
-		label.Text = Theme.track(subtitle(), "three")
-	end
 
 	local roster = Theme.make("Frame", {
 		Name = "Roster",
-		Size = UDim2.fromOffset(156, 20 + #CATEGORIES * (CARD_HEIGHT + CARD_GAP)),
+		Size = UDim2.fromOffset(ROSTER_WIDTH, #CATEGORIES * (CARD_HEIGHT + CARD_GAP)),
 		BackgroundTransparency = 1,
 		Parent = content,
 	})
-	caption("CATEGORY", { Size = UDim2.new(1, 0, 0, 12), Parent = roster })
 	local list = Theme.make("Frame", {
 		Name = "Items",
-		Position = UDim2.fromOffset(0, 20),
-		Size = UDim2.new(1, 0, 1, -20),
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		Parent = roster,
 	}, {
@@ -812,10 +800,10 @@ local function build(content: Frame)
 
 	Theme.make("Frame", {
 		Name = "Divider2",
-		Position = UDim2.fromOffset(170, 0),
+		Position = UDim2.fromOffset(ROSTER_WIDTH + 12, 0),
 		Size = UDim2.fromOffset(1, DETAIL_SIZE.Y - 8),
 		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.88,
+		BackgroundTransparency = 0.92,
 		Parent = content,
 	})
 	detail = Theme.make("CanvasGroup", {
@@ -838,7 +826,7 @@ local function build(content: Frame)
 end
 
 -- A new save arrived (coins, XP, an item bought or equipped...), or the
--- level changed: update the wallet, the subtitle, the roster lines and
+-- level changed: update the wallet, the roster lines and
 -- every row whose state changed.
 refreshAll = function(animate: boolean)
 	if not built then
@@ -849,10 +837,6 @@ refreshAll = function(animate: boolean)
 	if currentWallet and coins ~= walletCoins then
 		currentWallet.set(coins, animate)
 		walletCoins = coins
-	end
-	local label = subtitleLabel
-	if label then
-		label.Text = Theme.track(subtitle(), "three")
 	end
 	refreshRoster(animate)
 	for _, row in rows do
@@ -875,9 +859,8 @@ function ShopMenuController.start()
 	MenuController.register({
 		id = "Shop",
 		label = "SHOP",
-		subtitle = subtitle(),
 		order = 60, -- between PROFILE (50) and SETTINGS (100)
-		size = Vector2.new(560, 116 + DETAIL_SIZE.Y),
+		size = Vector2.new(536, 116 + DETAIL_SIZE.Y),
 		scrimWidth = 1100,
 		build = build,
 	})

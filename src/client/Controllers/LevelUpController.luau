@@ -106,7 +106,7 @@ local function build()
 		Position = UDim2.fromOffset(0, TITLE_Y),
 		Size = UDim2.new(1, 0, 0, 40),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 34,
+		TextSize = 24,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextTransparency = 1,
 		ZIndex = 3,

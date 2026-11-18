@@ -717,7 +717,7 @@ local function buildTop()
 	local function numeral(order: number, color: Color3, text: string): TextLabel
 		return piece(scoreRow, order, {
 			FontFace = F.NumberLight,
-			TextSize = 22,
+			TextSize = 17,
 			TextColor3 = color,
 			Size = UDim2.fromOffset(0, 26),
 			Text = text,
@@ -829,7 +829,7 @@ local function buildRoundBeats()
 				Position = UDim2.fromOffset(0, NUM_Y),
 				Size = UDim2.new(1, 0, 0, 48),
 				FontFace = F.Display,
-				TextSize = 40,
+				TextSize = 28,
 				TextXAlignment = Enum.TextXAlignment.Center,
 				TextTransparency = 1,
 				Parent = countParts,
@@ -868,7 +868,7 @@ local function buildRoundBeats()
 	local function display(order: number, color: Color3, text: string): TextLabel
 		local label = piece(endTitle, order, {
 			FontFace = F.Display,
-			TextSize = 34,
+			TextSize = 24,
 			TextColor3 = color,
 			Size = UDim2.fromOffset(0, 40),
 			Text = text,
@@ -1005,7 +1005,7 @@ local function buildResult()
 		Position = UDim2.fromOffset(0, 20),
 		Size = UDim2.new(1, 0, 0, 40),
 		FontFace = F.Display,
-		TextSize = 34,
+		TextSize = 24,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextTransparency = 1,
 		Parent = block,
@@ -1033,7 +1033,7 @@ local function buildResult()
 	local function numeral(order: number, color: Color3, text: string): TextLabel
 		return piece(resScore, order, {
 			FontFace = F.NumberLight,
-			TextSize = 30,
+			TextSize = 17,
 			TextColor3 = color,
 			Size = UDim2.fromOffset(0, 34),
 			Text = text,
@@ -1079,7 +1079,7 @@ local function buildResult()
 		Position = UDim2.fromOffset(0, 250),
 		Size = UDim2.new(1, 0, 0, 30),
 		FontFace = F.Display,
-		TextSize = 26,
+		TextSize = 18,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextTransparency = 1,
 		Parent = block,

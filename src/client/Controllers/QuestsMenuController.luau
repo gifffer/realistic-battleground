@@ -3,14 +3,12 @@
 -- PROFILE): today's 3 daily quests.
 --
 --   QUESTS
---   3 A DAY · NEW QUESTS IN 05:12:33
---   ──────────────────────────────────────────────────────────
---   TODAY                                          REWARD
 --   Get 5 kills                                  +110 XP · +55
 --   3 / 5  ━━━━━━━━━━━━━━━━━━━━━━━━━━────────────────────────
---   Win 2 duels                                         DONE
+--   Win 2 duels                                         Done
 --   2 / 2  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 --   ...
+--   New quests in 05:12:33
 --
 -- Everything comes from the save (data.quests, PlayerDataController): the
 -- server draws the quests, counts the progress and gives the rewards
@@ -27,7 +25,7 @@ local PlayerDataController = require(script.Parent.PlayerDataController)
 local C = Theme.Colors
 
 local SECTION_ID = "Quests"
-local ROW_HEIGHT = 64
+local ROW_HEIGHT = 52
 
 local QuestsMenuController = {}
 
@@ -49,10 +47,11 @@ local emptyLabel: TextLabel? = nil
 
 local function caption(text: string, props: { [string]: any }): TextLabel
 	local base: { [string]: any } = {
-		TextSize = 10,
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink3,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 	}
 	for key, value in props do
 		base[key] = value
@@ -63,24 +62,24 @@ end
 local function buildRow(parent: Instance, index: number): Row
 	local frame = Theme.make("Frame", {
 		Name = `Quest{index}`,
-		Position = UDim2.fromOffset(0, 26 + (index - 1) * ROW_HEIGHT),
+		Position = UDim2.fromOffset(0, (index - 1) * ROW_HEIGHT),
 		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}) :: Frame
 	local text = Theme.text({
 		Name = "Text",
-		Position = UDim2.fromOffset(0, 10),
-		Size = UDim2.new(1, -160, 0, 18),
+		Position = UDim2.fromOffset(0, 8),
+		Size = UDim2.new(1, -160, 0, 16),
 		FontFace = Theme.Fonts.Body,
-		TextSize = 15,
+		TextSize = Theme.TEXT,
 		TextStrokeTransparency = 1,
 		Parent = frame,
 	}) :: TextLabel
 	local reward = Theme.text({
 		Name = "Reward",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 12),
+		Position = UDim2.new(1, 0, 0, 9),
 		Size = UDim2.fromOffset(150, 14),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 11,
@@ -91,7 +90,7 @@ local function buildRow(parent: Instance, index: number): Row
 	}) :: TextLabel
 	local count = Theme.text({
 		Name = "Count",
-		Position = UDim2.fromOffset(0, 34),
+		Position = UDim2.fromOffset(0, 28),
 		Size = UDim2.fromOffset(70, 14),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 11,
@@ -100,10 +99,10 @@ local function buildRow(parent: Instance, index: number): Row
 	}) :: TextLabel
 	local track = Theme.make("Frame", {
 		Name = "Track",
-		Position = UDim2.fromOffset(80, 40),
-		Size = UDim2.new(1, -80, 0, 2),
+		Position = UDim2.fromOffset(64, 34),
+		Size = UDim2.new(1, -64, 0, 1),
 		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.82,
+		BackgroundTransparency = 0.85,
 		Parent = frame,
 	})
 	local fill = Theme.make("Frame", {
@@ -124,39 +123,17 @@ local function buildRow(parent: Instance, index: number): Row
 end
 
 local function build(content: Frame)
-	local head = Theme.make("Frame", {
-		Name = "TodayHead",
-		Size = UDim2.new(1, 0, 0, 18),
-		BackgroundTransparency = 1,
-		Parent = content,
-	})
-	caption("TODAY", { Size = UDim2.new(1, 0, 0, 12), Parent = head })
-	caption("REWARD", {
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 1),
-		Size = UDim2.fromOffset(120, 11),
-		TextSize = 9,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Parent = head,
-	})
-	Theme.make("Frame", {
-		Position = UDim2.new(0, 0, 1, 0),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.9,
-		Parent = head,
-	})
 	for index = 1, QuestDefs.PER_DAY do
 		table.insert(rows, buildRow(content, index))
 	end
-	emptyLabel = caption("YOUR QUESTS ARRIVE WHEN YOUR SAVE IS LOADED", {
-		Position = UDim2.fromOffset(0, 36),
+	emptyLabel = caption("Your quests arrive when your save is loaded.", {
+		Position = UDim2.fromOffset(0, 8),
 		Size = UDim2.new(1, 0, 0, 12),
 		Visible = false,
 		Parent = content,
 	})
 	resetLabel = caption("", {
-		Position = UDim2.fromOffset(0, 26 + QuestDefs.PER_DAY * ROW_HEIGHT + 14),
+		Position = UDim2.fromOffset(0, QuestDefs.PER_DAY * ROW_HEIGHT + 12),
 		Size = UDim2.new(1, 0, 0, 12),
 		Parent = content,
 	})
@@ -186,9 +163,7 @@ local function refresh(animate: boolean)
 			row.text.Text = QuestDefs.describe(quest, state.goal)
 			row.text.TextColor3 = if state.done then C.Ink2 else C.Ink
 			local xp, coins = QuestDefs.reward(quest, state.goal)
-			row.reward.Text = if state.done
-				then Theme.track("DONE", "three")
-				else `+{xp} XP · +{coins}`
+			row.reward.Text = if state.done then "Done" else `+{xp} XP · +{coins}`
 			row.reward.TextColor3 = if state.done then C.Ink else C.Ink2
 			row.count.Text = `{state.progress} / {state.goal}`
 			local ratio = if state.goal > 0
@@ -208,7 +183,7 @@ local function refresh(animate: boolean)
 	end
 end
 
--- "NEW QUESTS IN 05:12:33" (midnight UTC), updated every second while open.
+-- "New quests in 05:12:33" (midnight UTC), updated every second while open.
 local lastShown = -1
 local function updateCountdown()
 	local label = resetLabel
@@ -222,14 +197,11 @@ local function updateCountdown()
 		return
 	end
 	lastShown = left
-	label.Text = Theme.track(
-		string.format(
-			"NEW QUESTS IN %02d:%02d:%02d",
-			math.floor(left / 3600),
-			math.floor((left % 3600) / 60),
-			left % 60
-		),
-		"three"
+	label.Text = string.format(
+		"New quests in %02d:%02d:%02d",
+		math.floor(left / 3600),
+		math.floor((left % 3600) / 60),
+		left % 60
 	)
 end
 
@@ -237,7 +209,6 @@ function QuestsMenuController.start()
 	MenuController.register({
 		id = SECTION_ID,
 		label = "QUESTS",
-		subtitle = "3 A DAY · NEW EVERY DAY AT MIDNIGHT UTC",
 		order = 40, -- between DUEL (30) and PROFILE (50)
 		size = Vector2.new(560, 400),
 		scrimWidth = 1100,

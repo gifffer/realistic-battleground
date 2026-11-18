@@ -151,7 +151,7 @@ local function buildScreen()
 		Position = UDim2.fromOffset(0, 26),
 		Size = UDim2.new(1, 0, 0, 40),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 34,
+		TextSize = 24,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = Theme.track("KNOCKED OUT", "en"),
 		Parent = block,
