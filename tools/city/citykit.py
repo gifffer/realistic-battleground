@@ -196,7 +196,7 @@ def mat(rgb, name, tr):
     if key in mats: return mats[key]
     m = bpy.data.materials.new(str(len(mats))); m.use_nodes = True
     p = m.node_tree.nodes["Principled BSDF"]
-    c = tuple(v / 255 for v in rgb) + (1,)
+    c = tuple((v / 255) ** 2.2 for v in rgb) + (1,)  # (Roblox colours are sRGB)
     p.inputs["Base Color"].default_value = c
     p.inputs["Roughness"].default_value = ROUGH.get(name, 0.85)
     if name in ("Metal", "DiamondPlate", "CorrodedMetal"): p.inputs["Metallic"].default_value = 0.6
@@ -232,14 +232,16 @@ for r in data["parts"]:
     m4 = Matrix(((Mb[0][0],Mb[0][1],Mb[0][2],r[1]),(Mb[1][0],Mb[1][1],Mb[1][2],-r[3]),(Mb[2][0],Mb[2][1],Mb[2][2],r[2]),(0,0,0,1)))
     if shape == 2:
         # (our wedge mesh is built in Roblox local axes: convert)
-        m4 = m4 @ Matrix(((1,0,0,0),(0,0,1,0),(0,-1,0,0),(0,0,0,1)))
+        m4 = m4 @ Matrix(((1,0,0,0),(0,0,-1,0),(0,1,0,0),(0,0,0,1)))
     ob.matrix_world = m4
     ob.data.materials.append(mat(data["colors"][r[10]-1], data["materials"][r[11]-1], r[12]))
+    ob.visible_shadow = bool(r[14] & 4) or r[12] < 0.2 and (r[7] > 0.3 and r[8] > 0.3 and r[9] > 0.3)
     ex = data["extras"][r[18]-1] if r[18] else None
     if night and ex and ex.get("l"):
         l = ex["l"]
         ld = bpy.data.lights.new("l", "POINT" if l["type"] == "Point" else "SPOT")
         ld.color = tuple(v / 255 for v in l["color"]); ld.energy = l["brightness"] * l["range"] ** 2 * 1.2
+        ld.use_shadow = bool(l.get("shadows", True)) or True
         ld.shadow_soft_size = 0.2
         lo = bpy.data.objects.new("l", ld); lo.location = (r[1], -r[3], r[2]); sc.collection.objects.link(lo)
         if l["type"] == "Spot":

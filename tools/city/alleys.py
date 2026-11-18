@@ -83,47 +83,15 @@ RED_NEON = (210, 40, 52)
 WHITE = (180, 180, 170)
 
 
-class Data:
-    def __init__(self):
-        self.colors, self.materials, self.folders, self.names = [], [], [], []
-        self.parts, self.extras, self.remove = [], [], []
-        self._index = {"c": {}, "m": {}, "f": {}, "n": {}}
+import sys
 
-    def _idx(self, kind, table, value):
-        key = json.dumps(value)
-        found = self._index[kind].get(key)
-        if found is None:
-            table.append(list(value) if isinstance(value, tuple) else value)
-            found = len(table)
-            self._index[kind][key] = found
-        return found
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import citykit  # noqa: E402
+import props_ground as PG  # noqa: E402
+import props_objects as PO  # noqa: E402
+import props_walls as PW  # noqa: E402
 
-    def part(self, folder, name, center, size, color, material, flags=SOLID, rot=(0, 0, 0), shape=1,
-             transparency=0.0, reflectance=0.0, extra=None, parent=0):
-        row = [
-            shape,
-            round(center[0], 3), round(center[1], 3), round(center[2], 3),
-            rot[0], rot[1], rot[2],
-            round(size[0], 3), round(size[1], 3), round(size[2], 3),
-            self._idx("c", self.colors, tuple(color)),
-            self._idx("m", self.materials, material),
-            transparency, reflectance, flags,
-            self._idx("f", self.folders, folder),
-            self._idx("n", self.names, name),
-            parent,
-            0,
-        ]
-        if extra:
-            self.extras.append(extra)
-            row[18] = len(self.extras)
-        self.parts.append(row)
-        return len(self.parts)
-
-    def box(self, folder, name, x0, x1, y0, y1, z0, z1, color, material, **kw):
-        """An axis-aligned block from its bounds."""
-        return self.part(folder, name, ((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2),
-                         (x1 - x0, y1 - y0, z1 - z0), color, material, **kw)
-
+Data = citykit.Data
 
 D = Data()
 rng = random.Random(7)
@@ -193,8 +161,7 @@ def free_spot(x, z, radius=1.6, height=4.0):
             if b[2] < FLOOR + height and b[3] > FLOOR + 0.3:
                 return False
     for row in D.parts:
-        sx, sy, sz = row[7], row[8], row[9]
-        b = (row[1] - sx / 2, row[1] + sx / 2, row[2] - sy / 2, row[2] + sy / 2, row[3] - sz / 2, row[3] + sz / 2)
+        b = aabb(row)
         if not (row[14] & COLLIDE):
             continue
         if b[0] < x + radius and b[1] > x - radius and b[4] < z + radius and b[5] > z - radius:
@@ -346,148 +313,6 @@ D.box(B, "InvisibleWall", 147, 209, -8.8, 221.2, 106, 107, BLACK, "SmoothPlastic
 D.box(B, "InvisibleWall", 208, 209, -8.8, 221.2, 51, 107, BLACK, "SmoothPlastic", flags=GHOST, transparency=1)
 
 # =========================================================================================
-# 3. Dressing: lights, pipes, posters, graffiti, rubbish, puddles, drips, steam
-# =========================================================================================
-
-P = "Alleys/Props"
-L = "Alleys/Lights"
-
-
-def wall_light(x, y, z, out, dead=False, flicker=False):
-    """A caged bulkhead light on a wall (tag CityBulkhead: Ambience drives it)."""
-    attrs = {}
-    if dead:
-        attrs["Dead"] = True
-    if flicker:
-        attrs["Flicker"] = True
-    D.part(L, "WallLight", (x, y, z), (0.6, 0.8, 0.5), (70, 70, 64), "SmoothPlastic", flags=DECOR)
-    D.part(L, "Bulb", (x + out[0] * 0.35, y - 0.05, z + out[1] * 0.35), (0.45, 0.45, 0.45), WARM, "Neon",
-           flags=DECOR,
-           shape=4, extra={"t": ["CityLamp" if (dead or flicker) else "CityBulkhead"], "a": attrs or None,
-                           "l": {"type": "Point", "color": list(WARM), "range": 18, "brightness": 0.9,
-                                 "name": "Light", "shadows": False}})
-
-
-def sodium_lamp(x, y, z, facing):
-    """A sodium yard lamp on a bracket (orange, casting down)."""
-    dx, dz = facing
-    D.part(L, "Bracket", (x + dx * 0.9, y + 0.4, z + dz * 0.9), (abs(dx) * 1.8 + 0.2, 0.2, abs(dz) * 1.8 + 0.2),
-           METAL_DARK, "Metal", flags=DECOR)
-    D.part(L, "LampHead", (x + dx * 1.8, y, z + dz * 1.8), (1.2, 0.5, 0.8), (40, 40, 42), "Metal", flags=DECOR,
-           extra={"t": ["CityLamp"],
-                  "l": {"type": "Spot", "color": list(SODIUM), "range": 30, "brightness": 1.6, "angle": 110,
-                        "face": "Bottom", "shadows": True, "name": "Light"}})
-
-
-wall_light(150, 10, 58.25, (0, 1))  # alley A, on its north wall, by the gap
-wall_light(160, 9, 58.25, (0, 1), flicker=True)
-wall_light(152, 10, 97.75, (0, -1))  # alley B, on its south wall
-wall_light(164, 9, 97.75, (0, -1), dead=True)
-wall_light(204.75, 11, 80, (-1, 0))  # courtyard, east wall (facing west), in the fenced passage
-# Above the two gaps, on the ring's inner face (seen from the Yard and from under the viaduct)
-wall_light(130.75, 15, 62, (-1, 0))
-wall_light(130.75, 15, 94, (-1, 0), flicker=True)
-sodium_lamp(204.6, 16, 96, (-1, 0))
-sodium_lamp(171, 18, 56.2, (0, 1))
-
-# Pipes running along the walls
-for (x0, x1, y, z) in ((147, 169, 21.5, 58.3), (147, 169, 7.5, 97.7), (169, 205, 24.5, 56.3)):
-    D.box(P, "Pipe", x0, x1, y - 0.25, y + 0.25, z - 0.25, z + 0.25, RUST, "CorrodedMetal", flags=DECOR)
-for (x, z0, z1) in ((157.5, 58.0, 58.6), (166.5, 97.4, 98.0)):
-    D.box(P, "Downpipe", x - 0.3, x + 0.3, FINISH, WALL_TOP, z0, z1, METAL_DARK, "Metal", flags=DECOR)
-
-
-def graffiti(x, y, z, w, h, text, face, color=WHITE, rot=0):
-    D.part(P, "Graffiti", (x, y, z), (w, h, 0.05), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
-           rot=(0, rot, 0),
-           extra={"g": {"text": text, "font": "PermanentMarker", "color": list(color), "face": face,
-                        "lit": False, "bg": None, "bg_tr": 1.0, "rot": 0, "align": "Center"}})
-
-
-graffiti(158, 12.5, 58.08, 10, 3, "NO COPS. NO NAMES.", "Back")
-graffiti(130.95, 7, 54, 7, 2.6, "ARCHES >", "Front", (190, 180, 120), rot=90)
-graffiti(155, 7, 97.92, 9, 3, "MARROW EATS ITS OWN", "Front", (170, 60, 50))
-graffiti(190, 20, 56.08, 14, 4, "ARCHES", "Back", (150, 150, 140))
-graffiti(178, 16.5, 71.9, 9, 2.4, "ASK FOR VIC", "Front", (190, 180, 120))
-graffiti(196, 5.5, 101.92, 8, 2.5, "SLEEP LIGHT", "Front", (150, 150, 150))
-
-# Posters peeling on the walls (a few, sun-faded)
-for (x, y, z, w, h, c) in ((152, 6, 58.07, 2.4, 3.2, (150, 140, 120)), (166, 5.5, 97.93, 2.2, 3, (120, 110, 100)),
-                           (199, 6, 56.07, 2.6, 3.4, (140, 120, 100))):
-    D.part(P, "Poster", (x, y, z), (w, h, 0.08), c, "SmoothPlastic", flags=DECOR)
-
-# Rubbish: trash bags, cans, newspapers, a burnt-out tyre...
-def trash_bag(x, z, s=2.2):
-    D.part(P, "TrashBag", (x, FINISH + s * 0.32, z), (s, s * 0.8, s * 0.9), TRASH, "Plastic", flags=PROP, shape=4)
-
-
-for (x, z) in ((150.5, 64.6), (151.8, 64.2), (168, 92), (145, 96.6), (171, 60), (172.4, 59), (203, 99.5),
-               (202, 100.4), (133, 59.4)):
-    trash_bag(x, z, rng.uniform(1.8, 2.4))
-for (x, z, r) in ((156, 60, 20), (160, 64, 75), (174, 66, 140), (190, 98, 60), (150, 92.5, 10), (198, 63, 110)):
-    D.part(P, "Newspaper", (x, FINISH + 0.02, z), (1.6, 0.04, 1.1), (150, 146, 136), "SmoothPlastic", flags=DECOR,
-           rot=(0, r, 0))
-for (x, z) in ((165, 60), (180, 96), (188, 70), (170, 95)):
-    D.part(P, "Can", (x, FINISH + 0.2, z), (0.4, 0.6, 0.4), (120, 40, 36), "Metal", flags=DECOR, shape=3,
-           rot=(0, rng.uniform(0, 180), 90))
-D.part(P, "Tyre", (167, FINISH + 0.4, 64.5), (0.75, 3, 3), (24, 24, 24), "Rubber", flags=PROP, shape=3, rot=(0, 0, 90))
-D.part(P, "Tyre", (167, FINISH + 1.1, 64.6), (0.75, 3, 3), (24, 24, 24), "Rubber", flags=PROP, shape=3, rot=(0, 0, 90))
-
-# Puddles (shown when it rains), drips from the tunnel, steam from a vent in alley A
-for (x, z, s) in ((140, 62, 3.5), (156, 64.6, 2.6), (161, 94, 3.5), (182, 68, 4.0), (199, 97, 3.0), (190, 68, 2.5)):
-    D.part(P, "Puddle", (x, FINISH + 0.02, z), (0.25, s, s), (72, 78, 90), "SmoothPlastic", flags=DECOR, shape=3,
-           transparency=1, rot=(0, 0, 90), extra={"t": ["CityPuddle"], "a": {"RainOnly": False}})
-for (x, y, z) in ((177.5, 12.6, 73.0), (185.0, 12.6, 78.5), (183.0, 12.6, 90.7), (190.5, 12.6, 85.5)):
-    D.part(P, "Drip", (x, y, z), (0.4, 0.2, 0.4), (52, 50, 48), "Metal", flags=DECOR, transparency=1,
-           extra={"t": ["CityDrip"], "fx": "drip"})
-D.part(P, "SteamVent", (147.5, FINISH + 0.1, 64.8), (3, 0.2, 2.2), (50, 50, 50), "DiamondPlate", flags=DECOR,
-       extra={"t": ["CitySteam"], "a": {"BaseRate": 4}, "fx": "steam_small"})
-
-# =========================================================================================
-# 4. Dumpsters and a container (cover, things to climb, to be slammed against)
-# =========================================================================================
-
-C_ = "Alleys/Cover"
-
-
-def dumpster(x, z, ry, color=DUMPSTER, lid=DUMPSTER_LID, open_lid=False):
-    """A wheeled dumpster (6.4 x 3.2 x 4), solid, its lid shut or flipped open."""
-    rad = math.radians(ry)
-    D.part(C_, "Dumpster", (x, FINISH + 0.45 + 1.6, z), (6.4, 3.2, 4), color, "Metal", flags=SOLID, rot=(0, ry, 0))
-    if open_lid:
-        # (lid flipped back against the wall behind)
-        bx, bz = x - math.sin(rad) * 2.2, z - math.cos(rad) * 2.2
-        D.part(C_, "Lid", (bx, FINISH + 0.45 + 3.2 + 1.9, bz), (6.6, 0.2, 4.2), lid, "Plastic", flags=PROP,
-               rot=(-80, ry, 0))
-    else:
-        D.part(C_, "Lid", (x, FINISH + 0.45 + 3.3, z), (6.6, 0.2, 4.2), lid, "Plastic", flags=PROP, rot=(4, ry, 0))
-    for (u, v) in ((-2.7, -1.6), (2.7, -1.6), (-2.7, 1.6), (2.7, 1.6)):
-        wx = x + u * math.cos(rad) + v * math.sin(rad)
-        wz = z - u * math.sin(rad) + v * math.cos(rad)
-        D.part(C_, "Wheel", (wx, FINISH + 0.3, wz), (0.3, 0.6, 0.6), (20, 20, 20), "Rubber", flags=DECOR, shape=3)
-
-
-dumpster(157, 61.3, 0, open_lid=True)
-dumpster(150.5, 95.6, 0, color=(70, 52, 38), lid=(50, 38, 28))
-dumpster(178.5, 98.8, 0)
-
-# A rusted shipping container in the north yard, doors ajar, to climb on and hide behind
-CX0, CX1, CZ0, CZ1 = 186, 204, 57, 65.2
-D.box(C_, "Container", CX0, CX1, FINISH, FINISH + 8.6, CZ0, CZ1, CONTAINER, "CorrodedMetal", extra={"a": UNBREAKABLE})
-for i in range(int(CX0) + 1, int(CX1), 2):
-    D.box(C_, "Rib", i - 0.15, i + 0.15, FINISH + 0.2, FINISH + 8.4, CZ1, CZ1 + 0.12, CONTAINER_DARK,
-          "CorrodedMetal", flags=DECOR)
-D.box(C_, "Door", CX0 - 0.12, CX0, FINISH + 0.2, FINISH + 8.4, CZ0 + 0.2, CZ1 - 0.2, CONTAINER_DARK, "CorrodedMetal",
-      flags=DECOR)
-D.box(C_, "Rust", CX0 + 2, CX0 + 9, FINISH + 0.5, FINISH + 3.5, CZ1 + 0.13, CZ1 + 0.15, RUST_DARK, "Slate",
-      flags=DECOR, transparency=0.3)
-# Pallets to climb on to the container
-for k in range(3):
-    D.box(C_, "Pallet", 182.2, 186, FINISH + k * 0.75, FINISH + 0.7 + k * 0.75, 58, 62, WOOD_OLD, "WoodPlanks",
-          flags=SOLID)
-D.box(C_, "Crate", 182.5, 185.5, FINISH + 2.25, FINISH + 5.25, 58.5, 61.5, WOOD, "WoodPlanks", flags=SOLID)
-
-# =========================================================================================
 # 5. Breakable fences and walls (a body thrown into them goes through: Combat / Destruction)
 # =========================================================================================
 
@@ -512,7 +337,7 @@ for z in (71.6, 92.4):
 # A crumbling low brick wall in the north yard (cover; breaks if someone is slammed through)
 for i in range(3):
     x0 = 170.5 + i * 2.6
-    breakable("LowWall", x0, x0 + 2.5, FINISH, FINISH + 4.2 - (0.6 if i == 2 else 0), 66.6, 67.6, BRICK[i % 4],
+    breakable("LowWall", x0, x0 + 2.5, FINISH, FINISH + 4.2 - (0.6 if i == 2 else 0), 60.6, 61.6, BRICK[i % 4],
               "Brick", 120, "Brick")
 # Corrugated metal sheets propped across the end of alley B's niche
 for i in range(2):
@@ -533,130 +358,308 @@ for i in range(2):
 # (the BackWall of alley A must not cover the doorway: it is rebuilt around it below)
 
 # =========================================================================================
-# 6. The black market (north arch) and the squat (south arch)
+# 6. Dressing: every place tells what happened there (prop libraries props_*.py)
 # =========================================================================================
+#   Alley A   the back of the "Golden Dragon", a Chinese restaurant gone bust: kitchen door,
+#             extractor, overflowing dumpster, recycling, staff smoking corner, a fire escape.
+#   Alley B   a demolition job stopped half-way: scaffolding, rubble, cinder blocks, cement
+#             bags, rebar, cones, a warning barrier; dark (one dying lamp).
+#   Yard N    Vic's black market: a canopy stall in front of the north arch, stock inside.
+#   Yard S    the squat: Old Ray's arch, a tent, a cardboard shelter, a lean-to on the wall,
+#             a fire drum with an armchair, a loaded shopping cart.
+#   Behind    the backs of tall buildings beyond the walls (lit windows), so the alleys sit
+#             in a city and not in a box.
+# Lights are few and failing ("Faulty", FaultyLightController): some corners stay dark.
 
+P = "Alleys/Props"
+L = "Alleys/Lights"
+F = "Alleys/Facades"
 MK = "Alleys/Market"
 SQ = "Alleys/Squat"
 N_ = "Alleys/Npcs"
+Z_ = "Alleys/Zones"
+R = random.Random(1717)
 
-# -- Market: a blue tarp on poles in front of the arch, tables of stolen goods, crates, a
-# flickering broken neon, string lights under the arch.
-mx0, mx1 = MARKET
-D.part(MK, "Tarp", ((mx0 + mx1) / 2, 10.6, 68.6), (14, 0.12, 7.4), TARP_BLUE, "Fabric", flags=PROP, rot=(-12, 0, 0))
-for px in (mx0 - 0.4, mx1 + 0.4):
-    D.box(MK, "Pole", px - 0.15, px + 0.15, FINISH, 10.0, 65.2, 65.5, METAL, "Metal", flags=PROP)
-    D.box(MK, "Rope", px - 0.03, px + 0.03, 10.0, 11.6, 65.3, 65.4, (120, 110, 90), "Fabric", flags=DECOR)
-# folding tables
-for (x0, x1, z0, z1) in ((176.5, 181.5, 69.2, 71.6), (182.5, 186.5, 69.6, 71.6)):
-    D.box(MK, "Table", x0, x1, FINISH + 2.6, FINISH + 2.8, z0, z1, (88, 84, 78), "Plastic", flags=PROP)
-    for (lx, lz) in ((x0 + 0.2, z0 + 0.2), (x1 - 0.2, z0 + 0.2), (x0 + 0.2, z1 - 0.2), (x1 - 0.2, z1 - 0.2)):
-        D.box(MK, "Leg", lx - 0.06, lx + 0.06, FINISH, FINISH + 2.6, lz - 0.06, lz + 0.06, METAL, "Metal", flags=DECOR)
-# goods on the tables: phones, watches, a car stereo, boxed sneakers, a laptop, bottles
-TOP = FINISH + 2.8
-goods = [
-    ((177.2, 70.0), (0.35, 0.05, 0.7), (20, 20, 22), "Glass"),
-    ((177.8, 70.2), (0.35, 0.05, 0.7), (30, 30, 34), "Glass"),
-    ((178.4, 69.9), (0.35, 0.05, 0.7), (24, 24, 26), "Glass"),
-    ((179.6, 70.6), (1.8, 0.6, 1.0), (40, 40, 44), "Plastic"),
-    ((180.9, 70.0), (0.9, 0.12, 0.7), (160, 150, 130), "Metal"),
-    ((183.4, 70.4), (1.6, 0.9, 1.0), (180, 170, 160), "SmoothPlastic"),
-    ((185.3, 70.5), (1.6, 0.9, 1.0), (60, 60, 64), "SmoothPlastic"),
-    ((184.4, 70.6), (1.4, 0.08, 1.0), (30, 30, 34), "Metal"),
-]
-for (gx, gz), size, color, mat in goods:
-    D.part(MK, "Goods", (gx, TOP + size[1] / 2, gz), size, color, mat, flags=DECOR, rot=(0, rng.uniform(-12, 12), 0))
-for k, (gx, gz) in enumerate(((181.8, 69.8), (182.1, 70.4), (186.0, 69.9))):
-    D.part(MK, "Bottle", (gx, TOP + 0.45, gz), (0.3, 0.9, 0.3), GLASS_GREEN if k % 2 else GLASS_BROWN, "Glass",
-           flags=DECOR, shape=3, rot=(0, 0, 90), transparency=0.2)
-# crates stacked inside the arch, a TV on top, a rack of jackets
-for (x, y, z) in ((176.6, 0, 76), (176.6, 3, 76.2), (179.8, 0, 77.4), (184.6, 0, 77.6), (184.4, 3, 77.4)):
-    D.box(MK, "Crate", x - 1.5, x + 1.5, FINISH + y, FINISH + y + 3, z - 1.5, z + 1.5, WOOD, "WoodPlanks", flags=SOLID)
-D.part(MK, "TV", (176.6, FINISH + 6 + 1.0, 76.2), (2.4, 2.0, 1.6), (34, 34, 36), "SmoothPlastic", flags=PROP)
-D.part(MK, "Screen", (176.6, FINISH + 7.05, 75.39), (2.0, 1.6, 0.04), (40, 60, 70), "Glass", flags=DECOR)
-D.box(MK, "Rack", 180.4, 183.6, FINISH + 4.6, FINISH + 4.75, 78.6, 78.75, METAL, "Metal", flags=DECOR)
-for k in range(4):
-    D.part(MK, "Jacket", (180.9 + k * 0.8, FINISH + 3.4, 78.7), (0.7, 2.2, 0.35),
-           [(40, 36, 32), (60, 54, 46), (30, 34, 40), (70, 30, 30)][k], "Fabric", flags=DECOR)
-# a broken neon in the arch: "BUY · SELL", the S dead, flickering
-D.part(MK, "NeonSign", ((mx0 + mx1) / 2, 11.1, 72.3), (6.8, 1.2, 0.1), BLACK, "SmoothPlastic", flags=DECOR,
-       extra={"t": ["CityNeon"], "a": {"Color": "red", "Flicker": "random"},
+OUT_N, OUT_S, OUT_W, OUT_E = 180, 0, 90, -90  # ry for a wall whose face points +Z / -Z / -X / +X
+
+
+def faulty_since(start, value, extra_attrs=None):
+    """Lights created since extras index `start` get Faulty = value (and other attributes)."""
+    for ex in D.extras[start:]:
+        if ex.get("l"):
+            attrs = dict(ex.get("a") or {})
+            attrs.pop("Flicker", None)
+            if value is not None:
+                attrs["Faulty"] = value
+            if extra_attrs:
+                attrs.update(extra_attrs)
+            ex["a"] = attrs
+
+
+def zone_folder(x, z):
+    """Which folder a floor prop goes in, by where it stands."""
+    if 169 <= x <= 205 and 56 <= z <= 80:
+        return MK
+    if 169 <= x <= 205 and 84 <= z <= 102:
+        return SQ
+    return P
+
+
+def place(fn, x, z, ry=0.0, folder=None, floor_y=FINISH, faulty=None, **kw):
+    start = len(D.extras)
+    fn(D, folder or zone_folder(x, z), (x, floor_y, z), ry, R, **kw)
+    if faulty is not None:
+        faulty_since(start, faulty)
+
+
+def wall(fn, x, z, ry, faulty=None, folder=P, **kw):
+    """A wall prop: (x, z) on the wall's face at floor level, ry turns -Z out of the wall."""
+    place(fn, x, z, ry, folder=folder, floor_y=FLOOR, faulty=faulty, **kw)
+
+
+# -- the old lights, rebuilt: a few bulkheads (failing), the rest is dark --------------------
+def wall_light(x, y, z, out, dead=False, faulty=None):
+    """A caged bulkhead on a wall: CityBulkhead (dead ones CityLamp + Dead)."""
+    attrs = {}
+    if dead:
+        attrs["Dead"] = True
+    if faulty is not None:
+        attrs["Faulty"] = faulty
+    D.part(L, "WallLight", (x, y, z), (0.6, 0.8, 0.5), (60, 60, 56), "Metal", flags=DECOR)
+    D.part(L, "Bulb", (x + out[0] * 0.35, y - 0.05, z + out[1] * 0.35), (0.45, 0.45, 0.45), WARM, "Neon",
+           flags=DECOR, shape=4,
+           extra={"t": ["CityLamp" if dead else "CityBulkhead"], "a": attrs or None,
+                  "l": {"type": "Point", "color": list(WARM), "range": 18, "brightness": 0.9, "name": "Light",
+                        "shadows": True}})
+
+
+# Above the two gaps, seen from the Yard and from under the viaduct (what draws you in)
+wall_light(130.75, 15, 62, (-1, 0), faulty=0.3)
+wall_light(130.75, 15, 94, (-1, 0), faulty=0.85)
+
+# -- the walls ---------------------------------------------------------------------------------
+# Alley A, north side (z 58): the restaurant's back. Kitchen door, extractor, AC, meter box,
+# windows above (one lit, one barred, the rest boarded), a fire escape, a gutter, posters.
+wall(PW.wall_grime, 158, 58, OUT_N, width=22, height=5)
+wall(PW.back_door, 151.5, 58, OUT_N, faulty=0.55, variant="closed", stencil="KITCHEN - NO ENTRY")
+wall(PW.vent_hood, 155.5, 58, OUT_N, y=8.5, grease=True)
+wall(PW.pipe_run, 156, 58, OUT_N, length=9, y=11.2, drop="down")
+wall(PW.ac_unit, 159.5, 58, OUT_N, y=12.5)
+wall(PW.meter_box, 148.4, 58, OUT_N, y=3.4)
+wall(PW.window, 152, 58, OUT_N, y=12.5, variant="barred")
+wall(PW.window, 160.5, 58, OUT_N, y=21.5, variant="lit", kind="tv")
+wall(PW.window, 152, 58, OUT_N, y=21.5, variant="boarded")
+wall(PW.window, 166, 58, OUT_N, y=21.5, variant="broken")
+wall(PW.fire_escape, 162.5, 58, OUT_N, width=8, floors=2, floor_h=10)
+wall(PW.downpipe, 168.2, 58, OUT_N, height=28.5, gutter=5)
+wall(PW.torn_posters, 161.2, 58, OUT_N, y=4.2, width=2.8, height=3.6)
+wall(PW.graffiti_tag, 155.2, 58, OUT_N, y=4.5, width=4.6, text="NO COPS. NO NAMES.")
+wall(PW.plaster_patch, 165, 58, OUT_N, y=10.8, width=4, height=3)
+wall(PW.building_top, 158, 58, OUT_N, width=22, top=WALL_TOP, clutter="tank")
+# Alley A, south side (z 66): the viaduct's granite embankment and the ring's end
+wall(PW.wall_grime, 158, 66, OUT_S, width=22, height=4, soot=True)
+wall(PW.efflorescence, 152, 66, OUT_S, width=5)
+wall(PW.rust_streak, 150, 66, OUT_S, y=24, length=7)
+wall(PW.rust_streak, 163.5, 66, OUT_S, y=24, length=9, bolt=False)
+wall(PW.graffiti_tag, 158, 66, OUT_S, y=5, width=6, text="MARROW EATS ITS OWN", color=(170, 60, 50))
+wall(PW.crack, 166, 66, OUT_S, length=6, y=8)
+wall(PW.wall_grime, 139, 66, OUT_S, width=16, height=4)
+wall(PW.wall_grime, 139, 58, OUT_N, width=16, height=4)
+wall(PW.graffiti_tag, 139, 58, OUT_N, y=3.6, width=5, text="ARCHES >", color=(190, 180, 120))
+wall(PW.cable_sag, 153, 58, OUT_N, span=8, y=17, y_end=19, cables=3)
+wall(PW.cable_sag, 166.5, 58, OUT_N, span=8, y=15, y_end=17, cables=2, shoes=True)
+
+# Alley B, south side (z 98): the back of the demolition contractor's yard: a roller
+# shutter, a faded painted sign, boarded windows, a dead AC, a dying lamp.
+wall(PW.wall_grime, 158, 98, OUT_S, width=22, height=5)
+wall(PW.roller_shutter, 158.5, 98, OUT_S, width=7, height=7)
+wall(PW.painted_sign, 158, 98, OUT_S, y=17, width=14, text="KESSLER BROS · DEMOLITION & SALVAGE")
+wall(PW.window, 151, 98, OUT_S, y=12.5, variant="boarded")
+wall(PW.window, 165.5, 98, OUT_S, y=12.5, variant="barred")
+wall(PW.window, 151, 98, OUT_S, y=22, variant="dirty")
+wall(PW.ac_unit, 165.5, 98, OUT_S, y=20)
+wall(PW.gooseneck_lamp, 163, 98, OUT_S, faulty=0.9, y=11, reach=2.4, color=(255, 196, 140), range_=22,
+     brightness=1.0)
+wall(PW.downpipe, 148.2, 98, OUT_S, height=28.5)
+wall(PW.torn_posters, 153.8, 98, OUT_S, y=4, width=3, height=3.8)
+wall(PW.building_top, 158, 98, OUT_S, width=22, top=WALL_TOP, clutter="antenna")
+# Alley B, north side (z 90): the embankment
+wall(PW.wall_grime, 158, 90, OUT_N, width=22, height=4)
+wall(PW.graffiti_tag, 163.5, 90, OUT_N, y=4.5, width=5, text="SLEEP LIGHT")
+wall(PW.rust_streak, 152, 90, OUT_N, y=24, length=8)
+wall(PW.wall_grime, 139, 90, OUT_N, width=16, height=4)
+wall(PW.wall_grime, 139, 98, OUT_S, width=16, height=4)
+
+# The yard's walls: the backs of three buildings, 34 high
+wall(PW.wall_grime, 187, 56, OUT_N, width=36, height=5)
+wall(PW.back_door, 173, 56, OUT_N, faulty=0.35, variant="chained", dead_light=False)
+wall(PW.window, 178, 56, OUT_N, y=13, variant="boarded")
+wall(PW.window, 184, 56, OUT_N, y=13, variant="dirty")
+wall(PW.window, 196, 56, OUT_N, y=13, variant="lit", kind="warm")
+wall(PW.window, 178, 56, OUT_N, y=23, variant="dirty")
+wall(PW.window, 190, 56, OUT_N, y=23, variant="broken")
+wall(PW.window, 202, 56, OUT_N, y=23, variant="lit", kind="tv")
+wall(PW.satellite_dish, 193, 56, OUT_N, y=19)
+wall(PW.downpipe, 171, 56, OUT_N, height=32.5)
+wall(PW.building_top, 187, 56, OUT_N, width=36, top=COURT_TOP, clutter="tank")
+wall(PW.wall_grime, 205, 79, OUT_W, width=46, height=5)
+wall(PW.fire_escape, 205, 66, OUT_W, width=10, floors=3, floor_h=10)
+wall(PW.window, 205, 84, OUT_W, y=13, variant="barred")
+wall(PW.window, 205, 98, OUT_W, y=13, variant="boarded")
+wall(PW.window, 205, 84, OUT_W, y=23, variant="lit", kind="warm")
+wall(PW.window, 205, 98, OUT_W, y=23, variant="dirty")
+wall(PW.meter_box, 205, 88, OUT_W, y=3.4)
+wall(PW.gooseneck_lamp, 205, 95, OUT_W, faulty=0.45, y=15, reach=2.6, color=(255, 150, 70), range_=30,
+     brightness=1.4)
+wall(PW.ac_unit, 205, 76, OUT_W, y=8)
+wall(PW.building_top, 205, 79, OUT_W, width=46, top=COURT_TOP, clutter="antenna")
+wall(PW.wall_grime, 187, 102, OUT_S, width=36, height=5)
+wall(PW.window, 175, 102, OUT_S, y=13, variant="boarded")
+wall(PW.window, 199, 102, OUT_S, y=13, variant="broken")
+wall(PW.window, 187, 102, OUT_S, y=23, variant="dirty")
+wall(PW.torn_posters, 192.5, 102, OUT_S, y=4, width=3.4, height=4)
+wall(PW.graffiti_tag, 184, 102, OUT_S, y=6.5, width=6, text="GOD SEES ALL", color=(150, 150, 150))
+wall(PW.downpipe, 203, 102, OUT_S, height=32.5)
+wall(PW.building_top, 187, 102, OUT_S, width=36, top=COURT_TOP, clutter="tank")
+wall(PW.cable_sag, 186, 102, OUT_S, span=10, y=16, y_end=14, cables=2)
+# The arch block's faces (brick, sooty, posters and tags)
+wall(PW.wall_grime, 184, 72, OUT_S, width=30, height=4)
+wall(PW.torn_posters, 171.8, 72, OUT_S, y=4, width=2.6, height=3.4)
+wall(PW.graffiti_tag, 192.5, 72, OUT_S, y=6, width=5, text="ASK FOR VIC", color=(190, 180, 120))
+wall(PW.rust_streak, 172, 72, OUT_S, y=26, length=10, bolt=False)
+wall(PW.rust_streak, 196, 72, OUT_S, y=26, length=8, bolt=False)
+wall(PW.wall_grime, 184, 92, OUT_N, width=30, height=4)
+wall(PW.rust_streak, 175, 92, OUT_N, y=26, length=9, bolt=False)
+wall(PW.efflorescence, 196, 92, OUT_N, width=4)
+
+# Beyond the walls: the backs of tall buildings, some windows lit (depth at night)
+wall(PW.background_facade, 211, 80, OUT_W, folder=F, width=56, height=72, depth=12, lit_share=0.18)
+wall(PW.background_facade, 188, 44, OUT_N, folder=F, width=48, height=62, depth=12, lit_share=0.2)
+wall(PW.background_facade, 188, 114, OUT_S, folder=F, width=48, height=58, depth=12, lit_share=0.15)
+
+# -- the floor: alley A (kitchen back) ----------------------------------------------------------
+place(PO.dumpster, 156.6, 60.2, OUT_N, lid="open", full=True)
+place(PG.trash_heap, 151.6, 60.4, OUT_N, count=5)
+place(PO.recycling_bin, 166.2, 60.2, OUT_N, kind="paper", lid="closed")
+place(PG.cardboard_flat, 161.4, 60.0, OUT_N + 10, wet=True, torn=True)
+place(PG.cardboard_box, 160.6, 61.0, 25, state="crushed")
+place(PG.milk_crate, 149.6, 61.0, 15, state="upside")
+place(PG.cigarette_butts, 149.8, 62.4, 0, count=9, radius=1.1)
+place(PG.oil_stain, 155.8, 63.4, 30, size=3)
+place(PG.damp_stain, 158.4, 63.2, 0, size=4, run=True)
+place(PG.crack, 144.5, 61.5, 70, length=7)
+place(PG.crack, 163.8, 64.2, -20, length=5)
+place(PG.wall_base_grime, 158, 65.8, OUT_S, length=20)
+place(PG.weeds, 151, 65.6, OUT_S, kind="wall", length=5)
+place(PG.leaves_drift, 167.8, 64.9, OUT_S, corner=True)
+place(PG.litter_scatter, 164.5, 63.0, 0, radius=2.5, density=0.8)
+place(PG.tyre, 136.5, 64.6, 10, state="stack")
+place(PG.paper_sheet, 140.5, 60.2, 35, kind="newspaper", wet=True)
+place(PG.wrapper, 146.0, 63.3, 0, kind="takeaway")
+
+# -- the floor: alley B (demolition job) --------------------------------------------------------
+place(PO.scaffolding, 150.5, 96.2, OUT_S, bays=1, levels=2, netting=True)
+place(PO.construction_barrier, 134.5, 93.4, -80, kind="aframe", banner=True)
+place(PG.cinder_block, 158.0, 96.9, 0, state="stack")
+place(PG.cement_bag, 160.8, 97.0, 10, torn=True)
+place(PG.plank_stack, 165.5, 96.6, OUT_S, count=6)
+place(PG.rubble_pile, 160.5, 92.6, 0, radius=2.2)
+place(PG.rebar, 156.8, 93.6, 75, bends=1, length=4)
+place(PG.loose_bricks, 163.6, 94.2, 20, count=6)
+place(PO.traffic_cone, 140.2, 96.8, 0, state="standing")
+place(PO.traffic_cone, 143.4, 92.6, 120, state="fallen")
+place(PG.wood_scraps, 146.2, 94.6, 40, kind="planks")
+place(PG.concrete_chunk, 167.2, 92.2, 10, size=1.6, rebar=True)
+place(PG.paint_marks, 154.8, 94.2, 0)
+place(PG.pothole, 141.8, 94.0, 0, radius=2)
+place(PG.asphalt_patch, 158.2, 94.2, 5)
+place(PG.wall_base_grime, 158, 90.2, OUT_N, length=20)
+place(PG.leaves_drift, 168.0, 97.0, OUT_S, corner=True)
+
+# -- the yard, north: Vic's black market ---------------------------------------------------------
+start = len(D.extras)
+place(PO.market_stall, 181.0, 68.2, 0, goods="electronics", light=True)
+faulty_since(start, 0.25)
+place(PO.wooden_crates, 176.6, 76.4, 0, count=3)
+place(PO.wooden_crates, 185.0, 77.6, 180, count=2)
+place(PO.clothes_rack, 181.0, 78.6, 0, count=5)
+place(PO.tv, 176.6, 76.4, 10, floor_y=FINISH + 4.4, kind="crt", state="ok")
+place(PO.plastic_crates, 188.6, 69.6, 90, count=4)
+place(PO.shoe_boxes, 172.6, 70.6, 90, count=5)
+place(PO.radio, 184.4, 75.2, 180)
+# the neon in the arch (the S dead), flickering like a failing tube
+D.part(MK, "NeonSign", ((MARKET[0] + MARKET[1]) / 2, 11.1, 72.3), (6.8, 1.2, 0.1), BLACK, "SmoothPlastic",
+       flags=DECOR,
+       extra={"t": ["CityNeon"], "a": {"Color": "red", "Faulty": 0.6},
               "l": {"type": "Point", "color": list(RED_NEON), "range": 14, "brightness": 1.2, "name": "Light",
                     "shadows": False},
               "g": {"text": "BUY · ELL", "font": "Oswald", "color": list(RED_NEON), "face": "Front", "lit": True,
                     "bg": None, "bg_tr": 1.0, "rot": 0, "align": "Center"}})
-# string lights under the arch
-for k in range(6):
-    x = mx0 + 1 + k * 2
-    D.part(MK, "Bulb", (x, ARCH_TOP - 1.4 - (0.5 if k % 2 else 0.2), 74.5), (0.35, 0.35, 0.35), WARM, "Neon",
-           flags=DECOR, shape=4,
-           extra={"t": ["CityBulkhead"],
-                  "l": {"type": "Point", "color": list(WARM), "range": 10, "brightness": 0.8, "name": "Light",
-                        "shadows": False}})
-# a caged work lamp hanging under the tarp, lighting the tables
-D.box(MK, "Cord", 180.97, 181.03, 8.6, 10.6, 69.47, 69.53, BLACK, "SmoothPlastic", flags=DECOR)
-D.part(MK, "WorkLamp", (181, 8.4, 69.5), (0.8, 0.6, 0.8), (60, 60, 56), "Metal", flags=DECOR,
-       extra={"t": ["CityBulkhead"],
-              "l": {"type": "Spot", "color": [255, 196, 140], "range": 20, "brightness": 1.5, "angle": 120,
-                    "face": "Bottom", "shadows": True, "name": "Light"}})
-D.box(MK, "Wire", mx0 + 0.6, mx1 - 0.6, ARCH_TOP - 1.25, ARCH_TOP - 1.2, 74.47, 74.53, BLACK, "SmoothPlastic",
-      flags=DECOR)
-# the dealer, standing by his tables, facing the yard (north)
 D.part(N_, "NpcSpot", (181.5, FINISH, 72.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        extra={"a": {"NpcRole": "Dealer", "NpcName": "Vic", "NpcPose": "ArmsCrossed", "NpcSeed": 31}})
+# the container you can climb (pallets and a crate as steps), its corner of rubbish
+place(PO.shipping_container, 195.0, 61.1, 0, length=18, doors="ajar")
+place(PG.pallet_stack, 183.6, 59.9, 90, count=4)
+place(PO.wooden_crates, 183.6, 59.9, 90, floor_y=FINISH + 2.25, count=1)
+place(PO.recycling_bin, 173.0, 58.4, OUT_N, kind="general", lid="open")
+place(PG.trash_bag, 176.3, 58.0, 30, size=2.2)
+place(PG.trash_bag, 177.4, 59.0, 120, size=1.9, torn=True)
+place(PG.manhole, 179.0, 63.6, 0)
+place(PG.crack, 186.0, 66.8, -35, length=6)
+place(PG.oil_stain, 191.2, 67.8, 0, size=2.5)
+place(PG.leaves_drift, 169.8, 57.4, OUT_N, corner=True)
+place(PG.litter_scatter, 174.5, 66.0, 0, radius=2.2, density=0.7)
+place(PG.cigarette_butts, 186.8, 66.6, 0, count=7)
+# behind the fences (east passage): what nobody comes to see
+place(PO.office_chair, 202.0, 75.5, 40, state="tipped")
+place(PO.mattress, 204.0, 87.0, OUT_W, state="leaning", torn=True)
+place(PO.wheelie_bin, 201.0, 90.4, 160, state="tipped")
+place(PG.litter_scatter, 202.2, 79.0, 0, radius=1.6, density=0.6)
 
-# -- Squat: mattresses, cardboard, blankets, a shopping cart, empties, a burn barrel outside.
-sx0, sx1 = SQUAT
-D.box(SQ, "Mattress", 185.6, 189.4, FINISH, FINISH + 0.7, 86.2, 91.0, MATTRESS, "Fabric", flags=PROP)
-D.box(SQ, "Stain", 186.4, 188.4, FINISH + 0.7, FINISH + 0.72, 87.2, 89.7, MATTRESS_STAIN, "Fabric", flags=DECOR)
-D.part(SQ, "Blanket", (187.5, FINISH + 0.85, 89.0), (3.6, 0.25, 3.2), BLANKET, "Fabric", flags=DECOR, rot=(0, 8, 2))
-D.box(SQ, "Mattress", 189.4, 192.8, FINISH, FINISH + 0.6, 85.0, 89.8, (130, 122, 104), "Fabric", flags=PROP)
-D.part(SQ, "Blanket", (191.1, FINISH + 0.75, 86.4), (3.0, 0.2, 2.6), BLANKET2, "Fabric", flags=DECOR, rot=(0, -10, 0))
-for (x, z, r, w, d) in ((182.4, 88.6, 5, 2.2, 3.0), (188.6, 89.4, -20, 2.0, 2.6), (192.0, 91.2, 30, 2.6, 2.0)):
-    D.part(SQ, "Cardboard", (x, FINISH + 0.03, z), (w, 0.06, d), CARDBOARD_DARK, "SmoothPlastic", flags=DECOR,
-           rot=(0, r, 0))
-# a cardboard wall leaning in the arch's mouth, boxes as a table
-D.part(SQ, "Cardboard", (181.6, FINISH + 2.0, 90.8), (0.08, 4.0, 3.2), CARDBOARD, "SmoothPlastic", flags=PROP,
-       rot=(0, 0, -10))
-D.box(SQ, "Box", 187.8, 189.2, FINISH, FINISH + 1.4, 84.4, 86.0, CARDBOARD, "SmoothPlastic", flags=PROP)
-D.part(SQ, "Candle", (188.5, FINISH + 1.55, 85.2), (0.2, 0.3, 0.2), (220, 210, 180), "SmoothPlastic", flags=DECOR,
-       shape=3, rot=(0, 0, 90),
-       extra={"l": {"type": "Point", "color": [255, 170, 90], "range": 7, "brightness": 0.6, "name": "Light",
-                    "shadows": False}})
-for k, (x, z) in enumerate(((183.2, 91.5), (183.7, 91.7), (191.6, 84.6), (184.6, 91.4))):
-    D.part(SQ, "Bottle", (x, FINISH + 0.15, z), (0.3, 0.9, 0.3), GLASS_GREEN if k % 2 else GLASS_BROWN, "Glass",
-           flags=DECOR, shape=3, rot=(rng.uniform(-20, 20), rng.uniform(0, 180), 0 if k == 1 else 90),
-           transparency=0.2)
-# a shopping cart full of junk
-CART = (195.6, 96.5)
-cx, cz = CART
-D.box(SQ, "CartBasket", cx - 1.6, cx + 1.6, FINISH + 1.4, FINISH + 3.4, cz - 1.0, cz + 1.0, (150, 150, 150), "Metal",
-      flags=PROP, transparency=0.55)
-D.box(SQ, "CartJunk", cx - 1.4, cx + 1.4, FINISH + 1.6, FINISH + 3.8, cz - 0.8, cz + 0.8, (60, 52, 46), "Fabric",
-      flags=DECOR)
-D.box(SQ, "CartHandle", cx + 1.6, cx + 1.8, FINISH + 3.4, FINISH + 3.6, cz - 1.0, cz + 1.0, (40, 40, 40), "Metal",
-      flags=DECOR)
-for (u, v) in ((-1.4, -0.8), (1.4, -0.8), (-1.4, 0.8), (1.4, 0.8)):
-    D.part(SQ, "Wheel", (cx + u, FINISH + 0.3, cz + v), (0.25, 0.6, 0.6), (20, 20, 20), "Rubber", flags=DECOR, shape=3)
-    D.box(SQ, "CartLeg", cx + u - 0.04, cx + u + 0.04, FINISH + 0.6, FINISH + 1.4, cz + v - 0.04, cz + v + 0.04,
-          (150, 150, 150), "Metal", flags=DECOR)
-# the burn barrel, outside the arch (the city's: CityFire + CityFireEmbers with its light and fire)
-BX, BZ = 187.6, 96.0
-D.part(SQ, "BurnBarrel", (BX, FINISH + 1.6, BZ), (3.2, 2.4, 2.4), (64, 40, 30), "CorrodedMetal", flags=PROP, shape=3,
-       rot=(0, 0, 90), extra={"t": ["CityFire"]})
-D.part(SQ, "Embers", (BX, FINISH + 3.28, BZ), (0.15, 2, 2), (255, 120, 40), "Neon", flags=DECOR, shape=3,
-       rot=(0, 0, 90),
-       extra={"t": ["CityFireEmbers"],
-              "l": {"type": "Point", "color": [255, 130, 50], "range": 18, "brightness": 1.6, "name": "Light",
-                    "shadows": False},
-              "fx": "fire"})
-# milk crates as seats around it
-for (x, z) in ((185.0, 96.4), (190.2, 95.4)):
-    D.box(SQ, "MilkCrate", x - 0.7, x + 0.7, FINISH, FINISH + 1.3, z - 0.7, z + 0.7, (40, 70, 120), "Plastic", flags=PROP)
-# the vagrant, sitting on the ground against the arch's back wall, facing out (south)
+# -- the yard, south: the squat ---------------------------------------------------------------------
+place(PO.mattress, 189.8, 87.4, 0, state="flat", torn=True)
+place(PO.sleeping_bag, 189.8, 87.6, 0, floor_y=FINISH + 0.7, state="bunched")
+place(PO.blankets, 186.6, 89.8, 15, kind="crumpled")
+place(PO.camp_stove, 186.8, 85.6, 0, lit=True, pot=True, light=True)
+place(PO.backpack, 192.2, 85.0, -20, state="standing")
+place(PO.tent, 174.2, 97.0, 90, kind="ridge", open=True)
+place(PO.cardboard_shelter, 180.6, 98.6, 0, blanket=True)
+place(PO.lean_to, 198.0, 99.7, 0, closed_side=True)
+place(PO.shopping_cart, 192.0, 99.6, 30, full=True, state="upright")
+start = len(D.extras)
+place(PO.oil_drum, 187.6, 96.0, 0, state="fire", light=True)
+place(PO.armchair, 184.2, 97.6, -60, state="worn", blanket=True)
+place(PO.camp_stool, 190.6, 95.0, 20)
+place(PG.milk_crate, 186.0, 94.2, 40, state="upright")
+place(PG.cardboard_flat, 174.2, 93.4, 5, wet=True)
+place(PG.wrapper, 177.5, 94.0, 0, kind="foil")
+place(PG.wrapper, 183.0, 94.4, 0, kind="cup")
+place(PG.cigarette_butts, 185.4, 95.6, 0, count=6)
+place(PG.litter_scatter, 196.0, 95.0, 0, radius=2.0, density=0.7)
+place(PG.wall_base_grime, 187, 101.8, OUT_S, length=30)
+place(PG.weeds, 202.0, 101.6, OUT_S, kind="wall", length=4)
+place(PG.leaves_drift, 204.0, 100.8, OUT_S, corner=True)
+place(PG.damp_stain, 195.0, 94.6, 90, size=3)
 D.part(N_, "NpcSpot", (183.3, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        rot=(0, 180, 0),
        extra={"a": {"NpcRole": "Vagrant", "NpcName": "Old Ray", "NpcPose": "SitGround", "NpcSeed": 47}})
+
+# -- weather and smell: puddles that show in the rain, drips under the vaults, kitchen steam --
+for (x, z, s) in ((140, 62, 3.5), (161, 94, 3.5), (182, 66.8, 3.0), (199, 96.2, 2.6), (152.5, 63.6, 2.4)):
+    D.part(P, "Puddle", (x, FINISH + 0.02, z), (0.25, s, s), (72, 78, 90), "SmoothPlastic", flags=DECOR, shape=3,
+           transparency=1, rot=(0, 0, 90), extra={"t": ["CityPuddle"], "a": {"RainOnly": False}})
+for (x, y, z) in ((177.5, 12.6, 73.0), (185.0, 12.6, 78.5), (183.0, 12.6, 90.7), (190.5, 12.6, 85.5)):
+    D.part(P, "Drip", (x, y, z), (0.4, 0.2, 0.4), (52, 50, 48), "Metal", flags=DECOR, transparency=1,
+           extra={"t": ["CityDrip"], "fx": "drip"})
+D.part(P, "SteamVent", (147.6, FINISH + 0.1, 64.6), (3, 0.2, 2.2), (50, 50, 50), "DiamondPlate", flags=DECOR,
+       extra={"t": ["CitySteam"], "a": {"BaseRate": 4}, "fx": "steam_small"})
+D.part(P, "SteamVent", (155.5, 9.4, 58.9), (1.4, 0.2, 1.0), (50, 50, 50), "Metal", flags=DECOR, transparency=1,
+       extra={"t": ["CitySteam"], "a": {"BaseRate": 2}, "fx": "steam_small"})
+
+# -- the mood zones (AlleyAtmosphereController: darker, hazier inside) ---------------------------
+for (x0, x1, z0, z1) in ((131, 169, 57, 67), (131, 169, 89, 99), (169, 205, 55, 103)):
+    D.box(Z_, "AlleyZone", x0, x1, FLOOR, FLOOR + 26, z0, z1, (0, 0, 0), "SmoothPlastic", flags=DECOR,
+          transparency=1, extra={"t": ["AlleyZone"]})
 
 # =========================================================================================
 # 7. Improvised weapons: spawn markers at the edges of the whole map and in the alleys
@@ -664,21 +667,27 @@ D.part(N_, "NpcSpot", (183.3, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", 
 
 WS_ALLEY = "Alleys/WeaponSpawns"
 WS_CITY = "Extras/WeaponSpawns"
-KINDS = ["IronBar", "Bottle", "Plank"]
+KINDS = ["IronBar", "Plank"]
 
 
-LENGTH = {"IronBar": 3.2, "Plank": 3.2, "Bottle": 1.0, "Random": 3.2}
+LENGTH = {"IronBar": 3.2, "Plank": 3.2, "Random": 3.2}
+
+
+def aabb(row):
+    """World bounds of a part row (its rotation included)."""
+    m = citykit.yxz_matrix(row[4], row[5], row[6])
+    half = abs(m) @ [row[7] / 2, row[8] / 2, row[9] / 2]
+    return (row[1] - half[0], row[1] + half[0], row[2] - half[1], row[2] + half[1], row[3] - half[2], row[3] + half[2])
 
 
 def boxes_all():
     for row, b in city_parts():
         if row[12] < 1:
-            yield b
+            yield aabb(row) if (row[4] or row[5] or row[6]) else b
     for row in D.parts:
         if row[12] >= 1:
             continue
-        sx, sy, sz = row[7], row[8], row[9]
-        yield (row[1] - sx / 2, row[1] + sx / 2, row[2] - sy / 2, row[2] + sy / 2, row[3] - sz / 2, row[3] + sz / 2)
+        yield aabb(row)
 
 
 def item_clear(x, z, ry, length, width=0.4):
@@ -691,7 +700,7 @@ def item_clear(x, z, ry, length, width=0.4):
         px, pz = x + dx * t * (length + 0.3), z + dz * t * (length + 0.3)
         for b in boxes:
             if b[0] < px + width and b[1] > px - width and b[4] < pz + width and b[5] > pz - width:
-                if b[2] < base + 3.0 and b[3] > base + 0.15:
+                if b[2] < base + 3.0 and b[3] > base + 0.3:
                     return False
     return True
 
@@ -706,7 +715,9 @@ def weapon_ry(x, z, kind, ry=None):
 def weapon_spawn(folder, x, z, kind, ry=None):
     # (the given turn first, then any; nudged a little if the spot is taken)
     found = None
-    for (dx, dz) in ((0, 0), (0.8, 0), (-0.8, 0), (0, 0.8), (0, -0.8), (1.6, 0), (-1.6, 0), (0, 1.6), (0, -1.6)):
+    ring = [(0.0, 0.0)] + [(r * math.cos(a), r * math.sin(a)) for r in (0.8, 1.6, 2.4, 3.2) for a in
+                         [i * math.pi / 4 for i in range(8)]]
+    for (dx, dz) in ring:
         r = weapon_ry(x + dx, z + dz, kind, ry)
         if r is None and ry is not None:
             r = weapon_ry(x + dx, z + dz, kind)
@@ -723,9 +734,9 @@ def weapon_spawn(folder, x, z, kind, ry=None):
 
 # in the alleys and the courtyard
 weapon_spawn(WS_ALLEY, 144, 64.6, "IronBar", 90)
-weapon_spawn(WS_ALLEY, 166, 92.0, "Bottle")
-weapon_spawn(WS_ALLEY, 171.5, 64.0, "Plank", 15)
-weapon_spawn(WS_ALLEY, 197.5, 99.0, "Bottle")
+weapon_spawn(WS_ALLEY, 166, 92.0, "Plank")
+weapon_spawn(WS_ALLEY, 172.0, 64.0, "Plank", 15)
+weapon_spawn(WS_ALLEY, 197.5, 97.0, "IronBar")
 weapon_spawn(WS_ALLEY, 201.5, 68.0, "IronBar", 0)
 weapon_spawn(WS_ALLEY, 202.0, 82.0, "Random", 0)  # (behind the fences: break in to get it)
 
@@ -773,7 +784,7 @@ while len(picked) < WANT and candidates:
     picked.append(best)
 placed = 0
 for k, (x, z) in enumerate(picked):
-    weapon_spawn(WS_CITY, x, z, KINDS[k % 3])
+    weapon_spawn(WS_CITY, x, z, KINDS[k % len(KINDS)])
     placed += 1
 print("weapon spots on the edges:", [(round(x), round(z)) for x, z in picked])
 
@@ -802,9 +813,18 @@ def main():
         "-- squat) and the improvised-weapon spawn markers. Same format as CityData (one JSON\n"
         "-- text); City/init.luau merges it into the city's data before building.\n"
     )
-    with open(OUT, "w") as f:
-        f.write(header + "return [==[" + text + "]==]\n")
-    print(f"wrote {os.path.normpath(OUT)}: {len(D.parts)} parts, {len(D.remove)} city parts replaced, "
+    # Split in pieces of at most CHUNK characters (Studio's script size limit), like CityData:
+    # AlleyData1, AlleyData2... City/init joins them in order.
+    CHUNK = 150000
+    for old in os.listdir(CITY_DIR):
+        if re.fullmatch(r"AlleyData\d*\.luau", old):
+            os.remove(os.path.join(CITY_DIR, old))
+    pieces = [text[i : i + CHUNK] for i in range(0, len(text), CHUNK)]
+    for n, piece in enumerate(pieces, start=1):
+        assert "]==]" not in piece
+        with open(os.path.join(CITY_DIR, f"AlleyData{n}.luau"), "w") as f:
+            f.write(header + f"-- (piece {n} of {len(pieces)})\n" + "return [==[" + piece + "]==]\n")
+    print(f"wrote {len(pieces)} AlleyData pieces: {len(D.parts)} parts, {len(D.remove)} city parts replaced, "
           f"{placed} weapon spots on the city's edges, {len(text) // 1024} KB")
 
 
