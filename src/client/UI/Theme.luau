@@ -1,29 +1,34 @@
 --!strict
 -- The look of the whole interface, in one place.
 --
--- Direction "editorial / film" (think Sifu, The Last of Us), with BOLD,
--- tight type (heavy condensed caps, bold titles): almost no
--- boxes. Off-white type and 1–2 px hairlines on soft dark gradients, SQUARE
--- corners everywhere, one desaturated blood red used ONLY for danger.
--- Text shown to players is in English (game rule).
+-- Direction: quiet and minimal, like a shipped game menu (a plain list
+-- of words, no boxes). The fight is the show; the interface stays small
+-- and out of the way.
 --
--- Rules that keep it from looking like a template:
---   • text and HUD stay square and boxless: hairlines, no drop shadows;
---   • but anything you can click or tap is a REAL button (UI/Button):
---     a filled plate with rounded corners and an outline, that lights up
---     under the mouse and sinks when pressed. Players must never wonder
---     whether something is clickable;
---   • one warm amber accent (Accent) for the main action of a screen
---     (EQUIP, BUY, FIND MATCH...) and for what is selected / equipped;
---   • no Gotham fonts, nothing above 40 px, no exclamation marks;
---   • blood red means "danger / you are hurt", nothing else;
---   • nothing centred that doesn't need to be: the middle of the screen
---     belongs to the fight.
+-- Rules:
+--   • black / white / grey. One red (Accent), used SMALL: a thin bar
+--     next to the selected item, a short mark on the main button. Never a
+--     big red block;
+--   • lists are plain text: dim grey = not picked, white + red bar =
+--     picked, white = under the mouse. No plates, no numbers, no slashes;
+--   • buttons are small: outlined (main action) or text only;
+--   • one font (Builder Sans) in 3 sizes: 20 titles, 13 text, 11 small.
+--     Normal letter spacing. Captions only where a column needs a name;
+--   • thin lines only (1 px), few of them; see-through backdrops so the
+--     game still shows;
+--   • anything you can click is a REAL button (UI/Button), never hand-made;
+--   • the top bar panels (Controllers/MenuController, UI/Panel): one
+--     black see-through plate (PANEL_TRANSPARENCY), no border, bold white
+--     titles, grids of slightly lighter cards (Card / CardHi); what you
+--     wear = thin gold outline (Gold), what you picked = white outline;
+--   • blood red (Blood*) still means danger / you are hurt on the HUD;
+--   • the middle of the screen belongs to the fight.
 --
 -- Helpers:
 --   Theme.make(className, props, children)   build an instance from a table
 --   Theme.text(props)                        a TextLabel with the defaults
---   Theme.track("HEALTH", "three")           wide letter-spacing (see below)
+--   Theme.track(text, kind)                  kept for old calls: returns text as is
+--   Theme.sentence("IN A DUEL")              "In a duel"
 --   Theme.gradient(rotation, { {0, 0.4}, {1, 1} })   a transparency gradient
 --   Theme.keyCap("M1")                       an outlined key ("M1", "ESC"...)
 --   Theme.tween(instance, seconds, props, style?, direction?)
@@ -43,47 +48,56 @@ local UserInputService = game:GetService("UserInputService")
 local Theme = {}
 
 Theme.Colors = table.freeze({
-	Ink = Color3.fromHex("#ECE8E1"), -- main text, bars, hairlines (warm off-white)
-	InkHi = Color3.fromHex("#FFFFFF"), -- the local player's own name only
-	Ink2 = Color3.fromHex("#A9A49B"), -- secondary labels, stamina
-	InkVerb = Color3.fromHex("#C9C4BA"), -- kill feed verbs
-	Ink3 = Color3.fromHex("#6E6A64"), -- tertiary labels (on dark only), disabled
-	Scrim = Color3.fromHex("#0B0B0C"), -- every dark gradient, bars, key caps
+	Ink = Color3.fromHex("#E6E6E6"), -- main text, bars, hairlines (off-white)
+	InkHi = Color3.fromHex("#FFFFFF"), -- selected / hovered text, own name
+	Ink2 = Color3.fromHex("#9A9A9A"), -- secondary text, unselected list items
+	InkVerb = Color3.fromHex("#BDBDBD"), -- kill feed verbs
+	Ink3 = Color3.fromHex("#646464"), -- tertiary labels (on dark only), disabled
+	Scrim = Color3.fromHex("#0A0A0A"), -- every dark backdrop, bars, key caps
+	Plate = Color3.fromHex("#1A1A1A"), -- rare flat fills (bars' empty part)
+	PlateHi = Color3.fromHex("#2C2C2C"), -- that fill under the mouse
 	Blood = Color3.fromHex("#9E2B25"), -- danger fills (exhausted stamina)
-	BloodHi = Color3.fromHex("#B8423A"), -- danger text / lines (low HP, damage, head aim)
+	BloodHi = Color3.fromHex("#C23A31"), -- danger text / lines (low HP, damage, head aim)
 	BloodDeep = Color3.fromHex("#6E1814"), -- knock-out edge vignette
-	Accent = Color3.fromHex("#E2A13B"), -- main actions, selected / equipped
-	AccentHi = Color3.fromHex("#F2BC5E"), -- accent under the mouse
-	AccentDeep = Color3.fromHex("#B87C22"), -- accent while pressed
+	Accent = Color3.fromHex("#D8423A"), -- THE accent (small: selection bar, main button mark)
+	AccentHi = Color3.fromHex("#EE5A50"), -- accent under the mouse
+	AccentDeep = Color3.fromHex("#A3302A"), -- accent while pressed
+	-- Panels (top bar windows): see-through black plates, slightly lighter cards.
+	Card = Color3.fromHex("#1E1E1E"), -- a card in a grid
+	CardHi = Color3.fromHex("#343434"), -- the selected card / a card under the mouse
+	Gold = Color3.fromHex("#E2B84E"), -- what you wear / have equipped (thin outline, small text)
+	Progress = Color3.fromHex("#8CC79A"), -- XP and quest bars
+	Pill = Color3.fromHex("#121215"), -- the top bar buttons (like Roblox's own)
 })
 
--- Corner radius of buttons and cards (pixels).
-Theme.RADIUS = 6
+-- How see-through the panels' black plate is (0 = solid).
+Theme.PANEL_TRANSPARENCY = 0.35
 
-local FAMILY = {
-	Condensed = "rbxasset://fonts/families/RobotoCondensed.json",
-	Mono = "rbxasset://fonts/families/RobotoMono.json",
-	Oswald = "rbxasset://fonts/families/Oswald.json",
-	Roboto = "rbxasset://fonts/families/Roboto.json",
-}
+-- Corner radius of buttons and cards (pixels): none, hard edges.
+Theme.RADIUS = 0
 
--- Weights: between the first thin look (too serious) and full bold (not
--- serious enough): semi-bold labels, medium titles, a little spacing. The names stay the same so every screen follows: e.g.
--- "NumberLight" is now a bold number too.
+-- One family, three weights. The names stay the same so every screen
+-- follows (they used to be different faces).
+local FAMILY = "rbxasset://fonts/families/BuilderSans.json"
+
 Theme.Fonts = table.freeze({
-	Label = Font.new(FAMILY.Condensed, Enum.FontWeight.SemiBold), -- caps labels, names
-	LabelBold = Font.new(FAMILY.Condensed, Enum.FontWeight.Bold), -- feedback words
-	LabelRegular = Font.new(FAMILY.Condensed, Enum.FontWeight.Medium), -- kill feed verbs
-	Number = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- tabular numbers
-	NumberLight = Font.new(FAMILY.Mono, Enum.FontWeight.Medium), -- the big HP number
-	NumberMedium = Font.new(FAMILY.Mono, Enum.FontWeight.SemiBold), -- key caps
-	Display = Font.new(FAMILY.Oswald, Enum.FontWeight.Medium), -- titles
-	Body = Font.new(FAMILY.Roboto, Enum.FontWeight.Regular), -- sentences
+	Label = Font.new(FAMILY, Enum.FontWeight.Medium), -- labels, names
+	LabelBold = Font.new(FAMILY, Enum.FontWeight.SemiBold), -- buttons, feedback words
+	LabelRegular = Font.new(FAMILY, Enum.FontWeight.Regular), -- kill feed verbs
+	Number = Font.new(FAMILY, Enum.FontWeight.Medium), -- numbers
+	NumberLight = Font.new(FAMILY, Enum.FontWeight.SemiBold), -- the big HP number
+	NumberMedium = Font.new(FAMILY, Enum.FontWeight.Medium), -- key caps
+	Display = Font.new(FAMILY, Enum.FontWeight.Bold), -- titles
+	Body = Font.new(FAMILY, Enum.FontWeight.Regular), -- sentences
 })
 
--- Every text a bit bigger than its layout asks (bold, tight text reads
--- better slightly larger). Applied by Theme.text and Theme.keyCap.
-Theme.TEXT_SCALE = 1.06
+-- The three text sizes of the menus (titles, text, small).
+Theme.TITLE = 20
+Theme.TEXT = 13
+Theme.SMALL = 11
+
+-- Multiplier on every text size (kept at 1: the sizes are what they say).
+Theme.TEXT_SCALE = 1
 
 -- Soft shadow behind text drawn over the 3D world (never a hard outline).
 Theme.STROKE_TRANSPARENCY = 0.8
@@ -147,32 +161,17 @@ function Theme.text(props: { [string]: any }, children: { Instance }?): any
 	return Theme.make(className, defaults, children)
 end
 
--- Letter-spacing. Roblox has no letter-spacing property, so we put a
--- narrow Unicode space between every letter. The look is now TIGHT and
--- punchy: only a hair space for small caps labels, nothing for titles.
---   "three" / "four" = small labels (a hair apart)
---   "thin" / "en"    = titles (letters as drawn)
-local TRACK_SPACES: { [string]: string } = {
-	thin = "\u{200A}",
-	four = "\u{2009}",
-	three = "\u{2009}",
-	en = "\u{200A}",
-}
+-- Letter-spacing used to go here (spaces between letters). The look now
+-- uses normal spacing everywhere, so this returns the text as it is; the
+-- old calls stay valid.
+function Theme.track(text: string, _kind: string): string
+	return text
+end
 
-function Theme.track(text: string, kind: string): string
-	local space = TRACK_SPACES[kind]
-	if space == nil then
-		space = TRACK_SPACES.three
-	end
-	if space == "" then
-		return text
-	end
-	local out = {}
-	for _, code in utf8.codes(text) do
-		local char = utf8.char(code)
-		table.insert(out, if char == " " then " " else char)
-	end
-	return table.concat(out, space)
+-- "IN A DUEL" → "In a duel": status words written in caps, shown as a
+-- plain sentence (only the first letter stays a capital).
+function Theme.sentence(text: string): string
+	return string.upper(string.sub(text, 1, 1)) .. string.lower(string.sub(text, 2))
 end
 
 -- A UIGradient that only changes transparency. `points` = { {time, transparency}, ... }
@@ -193,9 +192,9 @@ function Theme.keyCap(text: string, props: { [string]: any }?): any
 	local base: { [string]: any } = {
 		Name = "KeyCap",
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 20),
+		Size = UDim2.fromOffset(0, 18),
 		BackgroundColor3 = Theme.Colors.Scrim,
-		BackgroundTransparency = 0.65,
+		BackgroundTransparency = 0.75,
 		FontFace = Theme.Fonts.NumberMedium,
 		TextSize = 10,
 		TextColor3 = Theme.Colors.Ink,
@@ -212,14 +211,14 @@ function Theme.keyCap(text: string, props: { [string]: any }?): any
 	base.TextSize = math.floor(base.TextSize * Theme.TEXT_SCALE + 0.5)
 	return Theme.make("TextLabel", base, {
 		Theme.make("UIPadding", {
-			PaddingLeft = UDim.new(0, 7),
-			PaddingRight = UDim.new(0, 7),
+			PaddingLeft = UDim.new(0, 6),
+			PaddingRight = UDim.new(0, 6),
 		}),
 		Theme.make("UIStroke", {
 			Name = "Outline",
 			Thickness = 1,
 			Color = Theme.Colors.Ink,
-			Transparency = 0.25,
+			Transparency = 0.6,
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 		}),
 	})

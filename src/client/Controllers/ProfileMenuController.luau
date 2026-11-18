@@ -1,24 +1,23 @@
 --!strict
--- ProfileMenuController: the PROFILE section of the menu (03 PROFILE,
--- between DUEL and SETTINGS).
+-- ProfileMenuController: the PROFILE panel (the chart in the top bar,
+-- before SETTINGS).
 --
---   PROFILE                                              820
---   GIFFFER · LIFETIME RECORD                          COINS
---   ──────────────────────────────────────────────────────────
---   LEVEL                                                 XP
---   8  OF 100                                      193 / 257
+--   PROFILE                                            820 coins
+--   Gifffer
+--   Level                                                    XP
+--   8  of 100                                       193 / 257
 --   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━──────────────────────
---   64 XP TO LEVEL 9                          TOTAL 1 382 XP
+--   64 XP to level 9                             1 382 XP total
 --
---   RECORD
---   KILLS        | DEATHS      | K/D         | DUEL WINS
+--   Record
+--   Kills        | Deaths      | K/D         | Duel wins
 --   64           | 41          | 1.56        | 24
 --
---   RANKED                               ELO     WINS     LOSSES
+--   Ranked                               ELO     Wins     Losses
 --   SILVER                              1112       15          9
 --   188 ELO to Gold
 --
---   NEXT UNLOCK                                LEVEL   COINS
+--   Next unlock                                Level    Coins
 --   MMA FIGHTER                                   10     500
 --   Clean strikes, then takes it to the ground.
 --
@@ -29,7 +28,7 @@
 -- The client never computes rewards: it only shows what the server saved.
 --
 -- Other controllers can use (the KITS header shows the same wallet):
---   ProfileMenuController.createWallet(panel)   "820 / COINS" top-right of a menu panel
+--   ProfileMenuController.createWallet(panel)   "820 coins" top-right of a menu panel
 --   ProfileMenuController.formatNumber(1382)    "1 382" (thin space, never a comma)
 --   ProfileMenuController.countTo(label, from, to, seconds, format)
 
@@ -126,13 +125,14 @@ local countTo = ProfileMenuController.countTo
 -- The wallet: a big coin count with "COINS" under it, top-right of a menu
 -- panel (on the same lines as the panel's title and subtitle).
 function ProfileMenuController.createWallet(panel: Instance): Wallet
+	-- One quiet line on the title's row: "820 coins".
 	local number = Theme.text({
 		Name = "WalletNum",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 14),
-		Size = UDim2.fromOffset(160, 28),
-		FontFace = Theme.Fonts.NumberLight,
-		TextSize = 22,
+		Position = UDim2.new(1, -38, 0, 4),
+		Size = UDim2.fromOffset(120, 18),
+		FontFace = Theme.Fonts.Number,
+		TextSize = Theme.TEXT,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Text = "0",
@@ -141,13 +141,14 @@ function ProfileMenuController.createWallet(panel: Instance): Wallet
 	Theme.text({
 		Name = "WalletLabel",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 52),
-		Size = UDim2.fromOffset(160, 12),
-		TextSize = 10,
-		TextColor3 = C.Ink2, -- it captions a number (like the HEALTH label)
+		Position = UDim2.new(1, 0, 0, 4),
+		Size = UDim2.fromOffset(34, 18),
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.TEXT,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Right,
-		Text = Theme.track("COINS", "three"),
+		Text = "coins",
 		Parent = panel,
 	})
 	local shown = 0
@@ -266,13 +267,14 @@ local nextSentence: TextLabel
 local nextLevel: TextLabel
 local nextPrice: TextLabel
 
--- Small caps text: "LEVEL", "KILLS", "64 XP TO LEVEL 9"...
+-- Small grey text: "Kills", "64 XP to level 9"...
 local function caption(text: string, props: { [string]: any }): TextLabel
 	local base: { [string]: any } = {
-		TextSize = 10,
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink3,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 	}
 	for key, value in props do
 		base[key] = value
@@ -291,7 +293,7 @@ local function hairline(parent: Instance, y: UDim, transparency: number, name: s
 	})
 end
 
--- A section head: "RECORD" on the left, small column heads on the right,
+-- A section head: "Record" on the left, small column heads on the right,
 -- a faint hairline under it. `columns` = { {text, right edge, width} }.
 local function sectionHead(parent: Instance, y: number, title: string, columns: { { any } }): Frame
 	local head = Theme.make("Frame", {
@@ -301,19 +303,26 @@ local function sectionHead(parent: Instance, y: number, title: string, columns: 
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}) :: Frame
-	caption(title, { Name = "Label", Size = UDim2.new(1, 0, 0, 12), Parent = head })
+	caption(title, {
+		Name = "Label",
+		Size = UDim2.new(1, 0, 0, 14),
+		FontFace = Theme.Fonts.Label,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
+		Parent = head,
+	})
 	for _, column in columns do
 		caption(column[1], {
 			Name = "Column",
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, column[2], 0, 1),
 			Size = UDim2.fromOffset(column[3], 11),
-			TextSize = 9,
+			TextSize = 10,
 			TextXAlignment = Enum.TextXAlignment.Right,
 			Parent = head,
 		})
 	end
-	hairline(head, UDim.new(1, 0), 0.9)
+	hairline(head, UDim.new(1, 0), 0.92)
 	return head
 end
 
@@ -322,30 +331,30 @@ local function formatRatio(value: number): string
 end
 
 local function buildLevel()
-	sectionHead(body, 0, "LEVEL", { { "XP", 0, 82 } })
+	sectionHead(body, 0, "Level", { { "XP", 0, 82 } })
 	levelNum = Theme.text({
 		Name = "LevelNum",
-		Position = UDim2.fromOffset(0, 28),
-		Size = UDim2.fromOffset(72, 34),
+		Position = UDim2.fromOffset(0, 32),
+		Size = UDim2.fromOffset(72, 26),
 		FontFace = Theme.Fonts.NumberLight,
-		TextSize = 30,
+		TextSize = 22,
 		TextStrokeTransparency = 1,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = "1",
 		Parent = body,
 	}) :: TextLabel
-	levelOf = caption("OF 100", {
+	levelOf = caption("of 100", {
 		Name = "LevelOf",
-		Position = UDim2.fromOffset(56, 46),
+		Position = UDim2.fromOffset(40, 44),
 		Size = UDim2.fromOffset(120, 12),
 		TextColor3 = C.Ink2,
 		Parent = body,
 	})
-	-- "OF 100" follows the numeral (a fixed spot left a hole after "8").
+	-- "of 100" follows the numeral (a fixed spot left a hole after "8").
 	local function followNumeral()
 		local width = Theme.unscaled(levelNum, levelNum.TextBounds.X)
 		if width > 0 then -- 0 = not measured yet (keep the 56 px fallback)
-			levelOf.Position = UDim2.fromOffset(width + 14, 46)
+			levelOf.Position = UDim2.fromOffset(width + 8, 44)
 		end
 	end
 	levelNum:GetPropertyChangedSignal("TextBounds"):Connect(followNumeral)
@@ -354,7 +363,7 @@ local function buildLevel()
 	xpNums = Theme.make("Frame", {
 		Name = "XpNums",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 46),
+		Position = UDim2.new(1, 0, 0, 44),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 12),
 		BackgroundTransparency = 1,
@@ -386,7 +395,7 @@ local function buildLevel()
 	-- The XP bar: the HP bar's look (2 px, faint track, full ink fill).
 	local bar = Theme.make("Frame", {
 		Name = "XpBar",
-		Position = UDim2.fromOffset(0, 68),
+		Position = UDim2.fromOffset(0, 64),
 		Size = UDim2.new(1, 0, 0, 2),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.78,
@@ -400,25 +409,23 @@ local function buildLevel()
 	}) :: Frame
 	toGo = caption("", {
 		Name = "ToGo",
-		Position = UDim2.fromOffset(0, 76),
-		Size = UDim2.fromOffset(300, 11),
-		TextSize = 9,
+		Position = UDim2.fromOffset(0, 74),
+		Size = UDim2.fromOffset(230, 12),
 		TextColor3 = C.Ink2,
 		Parent = body,
 	})
 	total = caption("", {
 		Name = "Total",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 76),
-		Size = UDim2.fromOffset(240, 11),
-		TextSize = 9,
+		Position = UDim2.new(1, 0, 0, 74),
+		Size = UDim2.fromOffset(240, 12),
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = body,
 	})
 end
 
 local function buildRecord()
-	sectionHead(body, 118, "RECORD", {})
+	sectionHead(body, 118, "Record", {})
 	local row = Theme.make("Frame", {
 		Name = "Cells",
 		Position = UDim2.fromOffset(0, 150),
@@ -433,14 +440,14 @@ local function buildRecord()
 	})
 	local definitions: { { any } } = {
 		{
-			"KILLS",
+			"Kills",
 			function(view: View): number
 				return view.kills
 			end,
 			formatNumber,
 		},
 		{
-			"DEATHS",
+			"Deaths",
 			function(view: View): number
 				return view.deaths
 			end,
@@ -454,7 +461,7 @@ local function buildRecord()
 			formatRatio,
 		},
 		{
-			"DUEL WINS", -- stats.wins: only duels add to it
+			"Duel wins", -- stats.wins: only duels add to it
 			function(view: View): number
 				return view.wins
 			end,
@@ -466,7 +473,7 @@ local function buildRecord()
 		local cell = Theme.make("Frame", {
 			Name = definition[1],
 			LayoutOrder = order,
-			Size = UDim2.new(0, 140, 1, 0),
+			Size = UDim2.new(0.25, 0, 1, 0),
 			BackgroundTransparency = 1,
 			Parent = row,
 		})
@@ -482,16 +489,15 @@ local function buildRecord()
 		caption(definition[1], {
 			Name = "Label",
 			Position = UDim2.fromOffset(x, 0),
-			Size = UDim2.new(1, -x, 0, 11),
-			TextSize = 9,
+			Size = UDim2.new(1, -x, 0, 12),
 			Parent = cell,
 		})
 		local value = Theme.text({
 			Name = "Value",
 			Position = UDim2.fromOffset(x, 18),
-			Size = UDim2.new(1, -x, 0, 28),
+			Size = UDim2.new(1, -x, 0, 24),
 			FontFace = Theme.Fonts.NumberLight,
-			TextSize = 22,
+			TextSize = 18,
 			TextStrokeTransparency = 1,
 			Text = "0",
 			Parent = cell,
@@ -523,10 +529,10 @@ end
 -- RANKED: your rank, how far the next one is, ELO and ranked record.
 -- Same row pattern as NEXT UNLOCK (name, sentence, numbers on the right).
 local function buildRanked()
-	sectionHead(body, 230, "RANKED", {
+	sectionHead(body, 230, "Ranked", {
 		{ "ELO", -146, 64 },
-		{ "WINS", -82, 64 },
-		{ "LOSSES", 0, 82 },
+		{ "Wins", -82, 64 },
+		{ "Losses", 0, 82 },
 	})
 	local row = Theme.make("Frame", {
 		Name = "RankedRow",
@@ -538,14 +544,14 @@ local function buildRanked()
 	rankedName = Theme.text({
 		Name = "Name",
 		Position = UDim2.fromOffset(0, 6),
-		Size = UDim2.fromOffset(300, 13),
+		Size = UDim2.new(1, -220, 0, 13),
 		TextStrokeTransparency = 1,
 		Parent = row,
 	}) :: TextLabel
 	rankedSentence = Theme.text({
 		Name = "Sentence",
 		Position = UDim2.fromOffset(0, 22),
-		Size = UDim2.fromOffset(300, 14),
+		Size = UDim2.new(1, -220, 0, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
@@ -577,7 +583,7 @@ local function rankedSentenceFor(view: View): string
 end
 
 local function buildNextUnlock()
-	nextHead = sectionHead(body, 315, "NEXT UNLOCK", { { "LEVEL", -82, 64 }, { "COINS", 0, 82 } })
+	nextHead = sectionHead(body, 315, "Next unlock", { { "Level", -82, 64 }, { "Coins", 0, 82 } })
 	nextRow = Theme.make("Frame", {
 		Name = "NextRow",
 		Position = UDim2.fromOffset(0, 334),
@@ -588,19 +594,19 @@ local function buildNextUnlock()
 	nextName = Theme.text({
 		Name = "Name",
 		Position = UDim2.fromOffset(0, 6),
-		Size = UDim2.fromOffset(300, 13),
+		Size = UDim2.new(1, -156, 0, 13),
 		TextStrokeTransparency = 1,
 		Parent = nextRow,
 	}) :: TextLabel
 	nextSentence = Theme.text({
 		Name = "Sentence",
 		Position = UDim2.fromOffset(0, 22),
-		Size = UDim2.fromOffset(380, 14),
+		Size = UDim2.new(1, -156, 0, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
-		-- Ends with "…" rather than running into the LEVEL column (≈ 414 px in).
+		-- Ends with "…" rather than running into the LEVEL column.
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = nextRow,
 	}) :: TextLabel
@@ -619,14 +625,13 @@ local function refresh(animate: boolean)
 
 	local atMax = view.level >= MAX_LEVEL
 	levelNum.Text = tostring(view.level)
-	levelOf.Text = Theme.track(if atMax then "MAX LEVEL" else `OF {MAX_LEVEL}`, "three")
+	levelOf.Text = if atMax then "max level" else `of {MAX_LEVEL}`
 	xpNums.Visible = not atMax
 	toGo.Visible = not atMax
 	xpNow.Text = formatNumber(view.xp)
 	xpNeed.Text = " / " .. formatNumber(view.needed)
-	toGo.Text =
-		Theme.track(`{formatNumber(view.needed - view.xp)} XP TO LEVEL {view.level + 1}`, "three")
-	total.Text = Theme.track(`TOTAL {formatNumber(view.totalXp)} XP`, "three")
+	toGo.Text = `{formatNumber(view.needed - view.xp)} XP to level {view.level + 1}`
+	total.Text = `{formatNumber(view.totalXp)} XP total`
 	fillRatio = if atMax then 1 else math.clamp(view.xp / math.max(view.needed, 1), 0, 1)
 	if animate then
 		Theme.tween(xpFill, 0.3, { Size = UDim2.fromScale(fillRatio, 1) }, Enum.EasingStyle.Quart)
@@ -644,7 +649,7 @@ local function refresh(animate: boolean)
 	end
 
 	-- RANKED. ELO is written without a thousands separator ("1136").
-	rankedName.Text = Theme.track(DuelRanks.rankOf(view.elo), "four")
+	rankedName.Text = DuelRanks.rankOf(view.elo)
 	rankedSentence.Text = rankedSentenceFor(view)
 	rankedElo.Text = tostring(math.floor(view.elo))
 	rankedWins.Text = formatNumber(view.rankedWins)
@@ -655,7 +660,7 @@ local function refresh(animate: boolean)
 	nextHead.Visible = kit ~= nil
 	nextRow.Visible = kit ~= nil
 	if kit then
-		nextName.Text = Theme.track(kit.name, "four")
+		nextName.Text = kit.name
 		nextSentence.Text = kit.description
 		nextLevel.Text = tostring(kit.unlockLevel or 1)
 		nextPrice.Text = formatNumber(kit.price or 0)
@@ -689,9 +694,9 @@ local function playEnter()
 	end
 end
 
-local function build(content: Frame)
-	-- The wallet sits in the panel's header (top right), above the content.
-	wallet = ProfileMenuController.createWallet(content.Parent :: Instance)
+local function build(content: Frame, host: MenuController.Host)
+	-- The wallet sits on the title row (top right), outside the scrolling content.
+	wallet = ProfileMenuController.createWallet(host.header)
 	body = Theme.make("CanvasGroup", {
 		Name = "Body",
 		Size = UDim2.new(1, 0, 0, 392),
@@ -714,10 +719,11 @@ function ProfileMenuController.start()
 	MenuController.register({
 		id = SECTION_ID,
 		label = "PROFILE",
-		subtitle = string.upper(player.DisplayName) .. " · LIFETIME RECORD",
-		order = 50, -- between DUEL (30) and SETTINGS (100)
-		size = Vector2.new(560, 492), -- 12 px taller for the RANKED row
-		scrimWidth = 1100,
+		icon = "profile",
+		hint = "Profile",
+		subtitle = player.DisplayName,
+		order = 70, -- after SHOP (60), before SETTINGS (100)
+		size = Vector2.new(480, 376),
 		build = build,
 	})
 	MenuController.onOpenChanged(function(id)
