@@ -2,14 +2,13 @@
 -- Finishers: the cinematic kills of the kits (a KO'd opponent + M1).
 --
 --   "Bat"            Street Brawler: pulls a baseball bat from behind his
---                    back and sets it down by the head of the opponent
---                    lying on the ground, like a golf club; taps it on their
---                    face three times, rests it there; then a real golf
---                    swing (address, slow coil up over his right shoulder,
---                    explosive downswing) low across the head from his
---                    right to his left: the head bursts at full speed (the
---                    camera holds a beat on it), high finish, the bat red,
---                    dripping.
+--                    back and lines it up by the head of the opponent
+--                    lying on the ground, like a golf club; then one big
+--                    swing (a short address, coil up over his right
+--                    shoulder, explosive downswing) low across the head
+--                    from his right to his left: the head bursts at full
+--                    speed (the camera holds a beat on it), high finish,
+--                    the bat red, dripping.
 --   "Incinerate"     Sentinel: lifted by the throat, his heat vision point
 --                    blank into the heart: a deep hole burnt in the chest
 --                    (no blood: cauterized), smoking; thrown down.
@@ -49,7 +48,6 @@ export type Event = {
 	time: number,
 	-- "Prop" (the bat appears), "Draw" (its whoosh as he brings it
 	-- round), "PropAway", "Plea" (the victim speaks),
-	-- "Tap" (the bat tapped on the face), "Taunt" (he mocks them),
 	-- "Swing" (whoosh), "Body" / "Face" (a punch lands), "Kill" (the
 	-- killing blow), "Wind" (he coils for the last blow), "Gut" / "Dig" /
 	-- "Wrench" / "Rip" / "Squeeze" / "Drop" (the liver: the hand goes in,
@@ -250,8 +248,8 @@ end
 local cinematics: { [string]: Cinematic } = {
 	Bat = {
 		id = "Bat",
-		duration = 4.5,
-		kill = 2.62,
+		duration = 3.8,
+		kill = 1.92,
 		placement = "head",
 		victimAnimation = "Brawler_FinisherBatVictim",
 		events = {
@@ -259,17 +257,12 @@ local cinematics: { [string]: Cinematic } = {
 			-- grip, then takes it behind his back and brings it round)
 			{ time = 0, kind = "Prop" },
 			{ time = 0.35, kind = "Draw" }, -- (the whoosh as it comes round)
-			{ time = 0.55, kind = "Plea" },
-			-- the taunt: the barrel tapped on their face, three times
-			{ time = 0.62, kind = "Tap" },
-			{ time = 0.9, kind = "Tap" },
-			{ time = 1.16, kind = "Tap" },
-			{ time = 1.25, kind = "Taunt" }, -- (resting there: he mocks them)
-			-- the golf swing: address 1.52, top 2.29 (the hips already turning
-			-- back), the bat turns over at 2.35; the whoosh as it speeds up
-			{ time = 2.46, kind = "Swing" },
-			{ time = 2.62, kind = "Kill" }, -- (the barrel through the head, full speed)
-			{ time = 4.25, kind = "PropAway" },
+			{ time = 0.5, kind = "Plea" },
+			-- one big swing: address 0.82, top 1.59 (the hips already turning
+			-- back), the bat turns over at 1.65; the whoosh as it speeds up
+			{ time = 1.76, kind = "Swing" },
+			{ time = 1.92, kind = "Kill" }, -- (the barrel through the head, full speed)
+			{ time = 3.55, kind = "PropAway" },
 		},
 		-- (the server lays the victim out along -Z, face up: its head at
 		-- (0, -2.45, -HEAD_DISTANCE), its body beyond, its feet near
@@ -285,27 +278,18 @@ local cinematics: { [string]: Cinematic } = {
 			},
 			-- Close on the face of the one on the ground (they plead): from its
 			-- left, its raised right hand reaching out in the back of the shot;
-			-- the barrel comes down on the face, tap, tap.
+			-- the barrel comes round over the face.
 			{
-				time = 0.5,
+				time = 0.48,
 				from = Vector3.new(-1.9, -1.1, -4.0),
 				to = Vector3.new(-1.6, -1.3, -3.7),
 				look = "victim",
 				fov = 50,
 			},
-			-- From his right, past his arm: the bat resting on the face,
-			-- lining up the shot.
-			{
-				time = 1.08,
-				from = Vector3.new(3.4, 0.2, -0.2),
-				to = Vector3.new(3.1, -0.1, -0.6),
-				look = Vector3.new(0, -1.9, -2.1),
-				fov = 46,
-			},
 			-- From the ground beside the head: the address, then he coils up
 			-- over it.
 			{
-				time = 1.46,
+				time = 0.76,
 				from = Vector3.new(-3.0, -2.3, -3.0),
 				to = Vector3.new(-2.7, -2.4, -2.6),
 				look = Vector3.new(0, 0.4, 0.2),
@@ -316,7 +300,7 @@ local cinematics: { [string]: Cinematic } = {
 			-- bursts (the camera holds still a beat, pushed in); held a while
 			-- to see it (the spray, the pieces, the neck).
 			{
-				time = 2.28,
+				time = 1.58,
 				from = Vector3.new(-5.6, -1.0, -0.9),
 				to = Vector3.new(-5.0, -1.3, -1.4),
 				look = Vector3.new(0, -1.1, -1.2),
@@ -326,7 +310,7 @@ local cinematics: { [string]: Cinematic } = {
 			-- body and above it): him in his high finish over it, the bat red
 			-- and dripping behind his head.
 			{
-				time = 3.15,
+				time = 2.45,
 				from = Vector3.new(2.4, -1.6, -6.4),
 				to = Vector3.new(2.0, -1.45, -5.8),
 				look = Vector3.new(0.2, 0.1, -0.7),
@@ -334,7 +318,7 @@ local cinematics: { [string]: Cinematic } = {
 			},
 			-- Wide, rising and slowly turning: what's left, him with the red bat.
 			{
-				time = 3.8,
+				time = 3.1,
 				from = Vector3.new(5.0, 0.4, -5.6),
 				to = Vector3.new(5.8, 2.4, -1.4),
 				look = Vector3.new(0, -1.6, -2.4),
