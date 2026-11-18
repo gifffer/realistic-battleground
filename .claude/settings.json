@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "roblox-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "afrxo/roblox-agent-skills"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "roblox-agent-skills@roblox-agent-skills": true
+  }
+}
