@@ -34,6 +34,8 @@ from scipy.interpolate import CubicSpline
 from scipy.optimize import least_squares
 
 N_KEYS = 32
+# Arms at rest: degrees out from hanging straight down along the body.
+ARM_REST = 2.5
 CONTACT_PHASE = 7 / 16
 JOINTS = ("Root", "Neck", "RightShoulder", "LeftShoulder", "RightHip", "LeftHip")
 
@@ -102,6 +104,16 @@ class Rest:
         self.head = np.array(frame["head"]["rot"])
         self.ankle = frame["foot_l"]["head"][2]  # ankle height above the sole
         self.hip_x = abs(frame["thigh_l"]["head"][0])
+        # The mannequin's arms hang about 16 degrees out (wide shoulders, a
+        # round chest). An R6 arm pivots on the torso's edge, so the same angle
+        # opens a gap under the arm: every frame's sideways angle is shifted
+        # so that, at rest, the arms hang ARM_REST degrees out, close along
+        # the body and the hips (the swings and gestures are kept as they are).
+        self.arm_shift = {}
+        for side, arm in (("l", "LeftShoulder"), ("r", "RightShoulder")):
+            d = conv(np.array(frame["hand_" + side]["head"]) - np.array(frame["upperarm_" + side]["head"]))
+            c0 = math.asin(max(-1.0, min(1.0, d[0] / np.linalg.norm(d))))
+            self.arm_shift[arm] = c0 - math.copysign(math.radians(ARM_REST), c0)
 
 
 def to_floor(rest, p):
@@ -149,7 +161,7 @@ def retarget_frame(rest, fr, prev=None):
     for side, arm in (("l", "LeftShoulder"), ("r", "RightShoulder")):
         d = conv(np.array(fr["hand_" + side]["head"]) - np.array(fr["upperarm_" + side]["head"]))
         d = torso_rot.T @ (d / np.linalg.norm(d))
-        c = math.asin(max(-1.0, min(1.0, d[0])))
+        c = math.asin(max(-1.0, min(1.0, d[0]))) - rest.arm_shift[arm]
         a = math.atan2(-d[2], -d[1])
         if prev:
             # (arm out sideways: the swing angle is ill-defined there and can
