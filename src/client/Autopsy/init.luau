@@ -153,7 +153,7 @@ local function bead(at: Vector2)
 		{ Size = Vector3.new(size, size, size) }
 	):Play()
 	task.delay(0.8, function()
-		if math.random() > 0.3 or drop.Parent == nil then
+		if math.random() > 0.85 or drop.Parent == nil then
 			return
 		end
 		-- it overflows toward the nearer side of the torso and drips off
@@ -186,15 +186,17 @@ local function bleedCells(cells: { Vector2 })
 	for _, at in cells do
 		strokeDeepest = math.max(strokeDeepest, Skin.depthAt(patient.skin, at))
 		cutTravel += 0.0625
-		if cutTravel >= 0.15 then
+		if cutTravel >= 0.07 then
 			cutTravel = 0
 			bead(at)
 		end
 	end
 	local now = os.clock()
-	if #cells > 0 and now - lastDrop > 0.5 then
+	if #cells > 0 and now - lastDrop > 0.15 then
 		lastDrop = now
 		local at = cells[#cells]
+		-- (the knife opens small vessels: it spits as it goes)
+		Blood.spray(Skin.toWorld(patient.skin, at, -0.52), UP, 0.9)
 		Blood.drop(
 			Skin.toWorld(patient.skin, at, -0.52),
 			UP * 0.6,

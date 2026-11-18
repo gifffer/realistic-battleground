@@ -407,26 +407,28 @@ local function tear(set: Set, organ: Organ)
 	if organ.name == "AutGut" or organ.name == "AutColon" then
 		Sfx.play("Guts", at)
 	end
-	Blood.spray(at, UP, 2.5)
-	for _ = 1, 3 do
+	Blood.spray(at, UP, 5)
+	Blood.spray(at, UP * 0.4 + Vector3.new(math.random() - 0.5, 0, math.random() - 0.5), 3)
+	for _ = 1, 8 do
 		Blood.strand(
 			at,
 			UP * math.random(3, 6) + Vector3.new(math.random() - 0.5, 0, math.random() - 0.5) * 3,
 			0.06
 		)
 	end
-	if organ.big then
+	do
+		local big = organ.big == true
 		local localAt = set.anchor.CFrame:PointToObjectSpace(at)
 		local ignore: { Instance } = { set.folder }
 		if set.anchor.Parent then
 			table.insert(ignore, set.anchor.Parent)
 		end
 		BloodGush.artery(set.anchor, CFrame.lookAt(localAt, localAt + Vector3.new(0, 0, -1)), {
-			seconds = 3.5,
-			beat = 0.55,
-			speed = 5,
-			size = 0.08,
-			pool = 1.4,
+			seconds = if big then 7 else 3,
+			beat = 0.5,
+			speed = if big then 7.5 else 4.5,
+			size = if big then 0.12 else 0.08,
+			pool = if big then 2.8 else 1.6,
 			seed = math.random(1, 2 ^ 20),
 			ignore = ignore,
 		})
@@ -481,13 +483,13 @@ function Organs.drag(set: Set, target: Vector3, dt: number)
 		align.Position = target
 	end
 	-- it drips while held
-	if now - set.lastDrip > 0.08 + math.random() * 0.12 then
+	if now - set.lastDrip > 0.03 + math.random() * 0.05 then
 		set.lastDrip = now
 		local root = organ.root
 		Blood.drop(
 			root.Position - Vector3.new(0, root.Size.Y * 0.3, 0),
 			Vector3.new(math.random() - 0.5, -0.5, math.random() - 0.5) * 0.6,
-			0.05 + math.random() * 0.04,
+			0.07 + math.random() * 0.06,
 			nil,
 			Blood.passiveScale(),
 			{ passive = true }
@@ -553,7 +555,7 @@ function Organs.crack(organ: Organ)
 	organ.locked = false
 	local at = organ.root.Position
 	Sfx.play("Crack", at)
-	Blood.spray(at, UP, 1.5)
+	Blood.spray(at, UP, 3.5)
 end
 
 function Organs.destroy(set: Set)
