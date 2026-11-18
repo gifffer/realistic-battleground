@@ -56,6 +56,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local AimRule = require(ReplicatedStorage.Shared.Util.AimRule)
+local Breakable = require(ReplicatedStorage.Shared.Util.Breakable)
 local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local HitSide = require(ReplicatedStorage.Shared.Util.HitSide)
@@ -70,6 +71,7 @@ local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
 local RateLimiter = require(script.Parent.Parent.Util.RateLimiter)
 local Corpses = require(script.Parent.Corpses)
+local Destruction = require(script.Parent.Destruction)
 local Knockout = require(script.Parent.Knockout)
 local Movement = require(script.Parent.Movement)
 local PlayerData = require(script.Parent.PlayerData)
@@ -669,9 +671,122 @@ local function healInjuries(state: CombatState)
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
 end
 
+-- Thrown through a wall: a body sent flying fast (a knockdown or a strong
+-- knockback) is watched for a moment; a cast ahead of its torso, along its
+-- flight, finds the wall before the body touches it. A wall tagged
+-- "Breakable" (Destruction.bodyBreakable: never a floor, the ring, or
+-- anything "Unbreakable") breaks if the body is fast enough for it (its
+-- "Health" attribute), and the body keeps going, into the room behind.
+-- `pushed`: the body is moved by a Push (its client simulates it: the
+-- server only knows the push's speed); else it's a ragdoll the server owns.
+local throwTokens: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+local throughParams = RaycastParams.new()
+throughParams.FilterType = Enum.RaycastFilterType.Exclude
+throughParams.RespectCanCollide = true
+
+local function onlyTagged(part: BasePart): boolean
+	return Breakable.tagged(part)
+end
+
+local function neededSpeed(wall: BasePart): number
+	local health = wall:GetAttribute("Health")
+	if typeof(health) ~= "number" then
+		local node = wall.Parent -- (the attribute may be on its model)
+		health = if node then node:GetAttribute("Health") else nil
+	end
+	local extra = if typeof(health) == "number"
+		then math.max(0, health - 50) * C.THROUGH_WALL_PER_HEALTH
+		else 0
+	return C.THROUGH_WALL_SPEED + extra
+end
+
+local function throwThroughWalls(
+	victim: CombatState,
+	attacker: Model?,
+	velocity: Vector3,
+	pushed: boolean
+)
+	if Vector3.new(velocity.X, 0, velocity.Z).Magnitude < C.THROUGH_WALL_SPEED then
+		return
+	end
+	local model = victim.model
+	local token = (throwTokens[model] or 0) + 1
+	throwTokens[model] = token
+	-- (the floor it flew from: what's level with it is never broken)
+	local feetY = victim.root.Position.Y - 3
+	local started = now()
+	-- (a push only lasts KNOCKBACK_TIME; its body reaches the server a ping late)
+	local watch = if pushed
+		then math.min(C.THROUGH_WALL_WATCH, C.KNOCKBACK_TIME + 0.25)
+		else C.THROUGH_WALL_WATCH
+	local broke = 0
+	local connection: RBXScriptConnection
+	connection = RunService.Heartbeat:Connect(function(dt)
+		local torso = model:FindFirstChild("Torso")
+		local body = if torso and torso:IsA("BasePart") then torso else victim.root
+		if
+			throwTokens[model] ~= token
+			or broke >= C.THROUGH_WALL_MAX
+			or now() - started > watch
+			or body.Parent == nil
+			or model.Parent == nil
+		then
+			connection:Disconnect()
+			return
+		end
+		local moving = if pushed then velocity else victim.root.AssemblyLinearVelocity
+		local flat = Vector3.new(moving.X, 0, moving.Z)
+		local speed = flat.Magnitude
+		if speed < C.THROUGH_WALL_SPEED then
+			return -- (slowed down, or stopped by a wall it couldn't break)
+		end
+		local direction = flat.Unit
+		local exclude = CollectionService:GetTagged(C.TAG)
+		for _, corpse in CollectionService:GetTagged(C.CORPSE_TAG) do
+			table.insert(exclude, corpse)
+		end
+		throughParams.FilterDescendantsInstances = exclude
+		-- (from a little behind the torso's centre, so a wall it already
+		-- touches is found too: this frame's travel plus the body's half width)
+		local reach = math.max(speed * dt, 0.5) + 2.5
+		local hit =
+			workspace:Spherecast(body.Position - direction, 0.5, direction * reach, throughParams)
+		if hit == nil or math.abs(hit.Normal.Y) > 0.6 then
+			return -- (nothing, or a floor / a roof)
+		end
+		local part = hit.Instance
+		if not part:IsA("BasePart") then
+			return
+		end
+		local wall = Destruction.bodyBreakable(part, feetY)
+		if wall == nil or speed < neededSpeed(wall) then
+			return
+		end
+		local through = flat + Vector3.new(0, if pushed then 0 else moving.Y, 0)
+		local smashed = Destruction.blast(
+			hit.Position + direction * 0.5,
+			C.THROUGH_WALL_RADIUS,
+			through * C.THROUGH_WALL_PUSH,
+			attacker,
+			{ feetY = feetY, only = onlyTagged }
+		)
+		if not smashed then
+			return
+		end
+		broke += 1
+		-- Most of its speed kept: it goes through.
+		if pushed then
+			Push.apply(victim.root, flat * C.THROUGH_WALL_KEEP, C.KNOCKBACK_TIME)
+		else
+			victim.root.AssemblyLinearVelocity = through * C.THROUGH_WALL_KEEP
+		end
+	end)
+end
+
 -- Knocked to the ground (tackle, launch): the body goes limp for `duration`
 -- seconds, then gets back up. A KO meanwhile takes over (Knockout).
-local function knockDown(victim: CombatState, duration: number, velocity: Vector3)
+-- `attacker`: who threw it (nil: the world, e.g. the train).
+local function knockDown(victim: CombatState, duration: number, velocity: Vector3, attacker: Model?)
 	if Knockout.isKnockedOut(victim.model) then
 		return
 	end
@@ -681,8 +796,9 @@ local function knockDown(victim: CombatState, duration: number, velocity: Vector
 	victim.knockedDownUntil = time + duration
 	stun(victim, duration + KC.KNOCKDOWN_GETUP_STUN)
 	Ragdoll.enable(victim.model)
-	-- The server owns the limp body now: throw it.
+	-- The server owns the limp body now: throw it (through a fence, a wall).
 	victim.root.AssemblyLinearVelocity = velocity
+	throwThroughWalls(victim, attacker, velocity, false)
 	task.delay(duration, function()
 		if
 			victim.knockdownToken ~= token
@@ -1026,12 +1142,13 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		-- Thrown to the ground (and away, upward if it's a launch).
 		local speed = knockback or 0
 		local up = spec.launch or (if speed >= 40 then KC.LAUNCH_UP_SPEED else 4)
-		knockDown(victim, knockdown, away * speed + Vector3.new(0, up, 0))
+		knockDown(victim, knockdown, away * speed + Vector3.new(0, up, 0), attacker.model)
 	else
 		stun(victim, spec.stun + extraStun)
 		if knockback then
 			Push.apply(victim.root, away * knockback, C.KNOCKBACK_TIME)
 			victim.knockbackUntil = time + C.KNOCKBACK_TIME
+			throwThroughWalls(victim, attacker.model, away * knockback, true)
 		elseif pull then
 			-- Grabbed: dragged toward the attacker (stops at arm's length).
 			Push.apply(victim.root, -away * pull, C.HIT_PUSH_TIME)

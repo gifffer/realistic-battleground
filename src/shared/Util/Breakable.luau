@@ -12,7 +12,12 @@
 --   • A plain block wall is cut into pieces (only the ones hit go); any other
 --     part (mesh, union, decorated) breaks whole if small enough.
 --
+--   • A body THROWN into a wall only breaks it if it (or a parent) has the
+--     CollectionService tag "Breakable" (fences, shop fronts, the city's
+--     ground-floor panels with their dark room behind): Breakable.tagged.
+--
 --   Breakable.check(part, feetY) → "pieces" | "whole" | nil
+--   Breakable.tagged(part) → true if it or a parent is tagged "Breakable"
 --   Breakable.ground(cframe, size, feetY) → true if level with the feet
 --   Breakable.support(root, exclude) → the part the attacker stands on
 --       (never broken: he'd fall through)
@@ -54,6 +59,17 @@ local function protected(part: Instance): boolean
 		end
 		if node:IsA("Model") and node:FindFirstChildOfClass("Humanoid") then
 			return true -- a fighter (or anything alive)
+		end
+		node = node.Parent
+	end
+	return false
+end
+
+function Breakable.tagged(part: Instance): boolean
+	local node: Instance? = part
+	while node and node ~= workspace do
+		if node:HasTag("Breakable") then
+			return true
 		end
 		node = node.Parent
 	end
