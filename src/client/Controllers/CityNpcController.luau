@@ -12,14 +12,20 @@
 --        SitStool     sitting on a stool (attributes SeatHeight, SeatBack)
 --        ArmsCrossed  standing, arms crossed, weight on one leg
 --        Phone        looking down at a phone held in front of the face
+--        SitGround    sitting on the floor, back against a wall, legs stretched out, hands on
+--                     the knees (or one hand on a bottle in a paper bag), breathing slowly,
+--                     on a flattened cardboard box (the vagrant of the alleys)
+--     (an unknown pose name gets Idle);
 --   • turns the HEAD towards the closest player within HEAD_RANGE studs (smoothly, never
 --     further than HEAD_MAX_YAW), and now and then looks around when nobody is there;
---   • says ONE line in a chat bubble when you walk up to a clerk or the bartender (and
---     sometimes a patron), then not again for a while.
+--   • says ONE line in a chat bubble when you walk up to a clerk, the bartender, the dealer
+--     or the vagrant of the alleys (and sometimes a patron), then not again for a while.
+--     The dealer keeps glancing around, more often than the others.
 -- Only the NPCs near your camera are animated (ANIMATE_RANGE): the others freeze where they
 -- are. Nothing here is sent to the server.
 --
--- The rag and the phone are small parts created here, on your screen only.
+-- The rag, the phone, the bottle and the cardboard are small parts created here, on your
+-- screen only.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -53,6 +59,24 @@ local LINES: { [string]: { string } } = {
 	},
 	Clerk = { "Looking for something?" },
 	Patron = { "...", "You lost, pal?", "Mind your business.", "Seen a train come through yet?" },
+	-- the black market's fence (stolen goods)
+	Dealer = {
+		"Not here. Over there.",
+		"Cash only.",
+		"You didn't see me.",
+		"Buying or looking? Looking costs.",
+		"Fell off a truck. Don't ask.",
+		"Keep your voice down.",
+	},
+	-- the man of the squat
+	Vagrant = {
+		"Spare some change...?",
+		"Got a smoke, pal?",
+		"Anything helps... anything.",
+		"...cold one tonight...",
+		"Don't touch my stuff.",
+		"Trains don't stop here no more...",
+	},
 }
 
 local player = Players.LocalPlayer
@@ -237,6 +261,71 @@ local CLIPS: { [string]: R6Pose.Clip } = {
 		},
 	},
 
+	-- On the floor, back against the wall (Root.pos is set per NPC: see groundOffset).
+	-- The torso leans back 10°, the hips swing the legs 80° more: 90° from the vertical in
+	-- all, the legs lie flat, stretched forward (a little apart). Slow, heavy breathing: the
+	-- chest leans back on the in-breath and the hips / shoulders give the same angle back,
+	-- so the legs stay on the floor and the hands on the knees (the head droops forward).
+	SitGround = {
+		length = 5.6,
+		looped = true,
+		keyframes = {
+			{
+				time = 0,
+				pose = {
+					Root = { rot = v(10, 0, 0) },
+					Neck = { rot = v(-14, 0, 0) },
+					RightShoulder = { rot = v(40, 0, -30) },
+					LeftShoulder = { rot = v(40, 0, 30) },
+					RightHip = { rot = v(80, 0, 5) },
+					LeftHip = { rot = v(78, 0, -6) },
+				},
+			},
+			{
+				time = 2.6,
+				pose = {
+					Root = { rot = v(11.2, 0, 0.4) },
+					Neck = { rot = v(-15.4, 0, 1) },
+					RightShoulder = { rot = v(38.8, 0, -30) },
+					LeftShoulder = { rot = v(38.8, 0, 30.5) },
+					RightHip = { rot = v(78.8, 0, 5) },
+					LeftHip = { rot = v(76.8, 0, -6) },
+				},
+			},
+		},
+	},
+
+	-- The same, the right hand down by the hip holding a bottle in a paper bag by its neck
+	-- (the bag stands on the floor: see addBottle).
+	SitGroundBottle = {
+		length = 5.6,
+		looped = true,
+		keyframes = {
+			{
+				time = 0,
+				pose = {
+					Root = { rot = v(10, 0, 0) },
+					Neck = { rot = v(-14, 0, 0) },
+					RightShoulder = { rot = v(35, 0, 4) },
+					LeftShoulder = { rot = v(40, 0, 30) },
+					RightHip = { rot = v(80, 0, 5) },
+					LeftHip = { rot = v(78, 0, -6) },
+				},
+			},
+			{
+				time = 2.6,
+				pose = {
+					Root = { rot = v(11.2, 0, 0.4) },
+					Neck = { rot = v(-15.4, 0, 1) },
+					RightShoulder = { rot = v(33.8, 0, 4) },
+					LeftShoulder = { rot = v(38.8, 0, 30.5) },
+					RightHip = { rot = v(78.8, 0, 5) },
+					LeftHip = { rot = v(76.8, 0, -6) },
+				},
+			},
+		},
+	},
+
 	Phone = {
 		length = 3.6,
 		looped = true,
@@ -292,17 +381,24 @@ local npcs: { [Model]: Npc } = {}
 local pose: { [string]: CFrame } = {} -- reused every frame
 local random = Random.new()
 
--- A small prop held in a hand (the rag, the phone), on this screen only.
-local function holdProp(model: Model, size: Vector3, color: Color3, offset: CFrame, name: string)
+-- A small prop held in a hand (the rag, the phone, the bottle), on this screen only.
+local function holdProp(
+	model: Model,
+	size: Vector3,
+	color: Color3,
+	offset: CFrame,
+	name: string,
+	material: Enum.Material?
+): BasePart?
 	local arm = model:FindFirstChild("Right Arm")
 	if arm == nil or not arm:IsA("BasePart") then
-		return
+		return nil
 	end
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Size = size
 	part.Color = color
-	part.Material = Enum.Material.SmoothPlastic
+	part.Material = material or Enum.Material.SmoothPlastic
 	part.CanCollide = false
 	part.CanQuery = false
 	part.CanTouch = false
@@ -314,6 +410,7 @@ local function holdProp(model: Model, size: Vector3, color: Color3, offset: CFra
 	weld.C0 = offset
 	weld.Parent = part
 	part.Parent = model
+	return part
 end
 
 -- The whole body's shift for a sitting pose (in the HumanoidRootPart's space: Y up,
@@ -325,6 +422,74 @@ local function sitOffset(model: Model): CFrame
 	local seatHeight = if typeof(seat) == "number" then seat else 1.8
 	local seatBack = if typeof(back) == "number" then back else 1
 	return CFrame.new(0, seatHeight + 1.5 - 3, seatBack)
+end
+
+-- Sitting on the floor (SitGround). The hips are the R6 hip joints, at the bottom of the
+-- torso: with the legs flat (90°), the legs' centre line is at the joints' height, so they
+-- would float half a leg (0.5) above what he sits on. We put the joints 0.25 above it
+-- instead: the legs sink a quarter of their thickness (the thighs squashed on the ground,
+-- the bottom of the torso 0.2 off it, hidden by the coat and the wall). The torso leans back
+-- 10°: its hip joints are cos(10°) = 0.985 under its centre. So: torso centre = seat + 1.235.
+-- SeatHeight = what he sits on above the floor (default 0: the floor; the cardboard adds
+-- GROUND_PAD), SeatBack = how far behind the spot his hips are (default 0).
+local GROUND_PAD = 0.08 -- the flattened cardboard box under him
+local function groundOffset(model: Model): CFrame
+	local seat = model:GetAttribute("SeatHeight")
+	local back = model:GetAttribute("SeatBack")
+	local seatHeight = (if typeof(seat) == "number" then seat else 0) + GROUND_PAD
+	local seatBack = if typeof(back) == "number" then back else 0
+	return CFrame.new(0, seatHeight + 0.25 + math.cos(math.rad(10)) - 3, seatBack)
+end
+
+-- A flattened cardboard box on the floor under someone sitting there: from just behind the
+-- hips to near the heels (the legs reach 2.2 in front of them), a little crooked.
+local function addCardboard(model: Model, root: BasePart)
+	local seat = model:GetAttribute("SeatHeight")
+	local back = model:GetAttribute("SeatBack")
+	local floor = -3 + (if typeof(seat) == "number" then seat else 0)
+	local seatBack = if typeof(back) == "number" then back else 0
+	local part = Instance.new("Part")
+	part.Name = "Cardboard"
+	part.Size = Vector3.new(2.5, GROUND_PAD, 2.7)
+	part.Color = Color3.fromRGB(122, 96, 66)
+	part.Material = Enum.Material.Cardboard
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CFrame = root.CFrame
+		* CFrame.new(0.05, floor + GROUND_PAD / 2, seatBack - 0.75)
+		* CFrame.Angles(0, math.rad(4), 0)
+	part.Parent = model
+end
+
+-- The bottle of SitGroundBottle: a brown paper bag standing upright on the floor by the right
+-- hip, the green glass neck sticking out of it in the fist. The props are welded to the arm,
+-- which is tilted by the torso and the shoulder: the opposite tilt (from the clip's first
+-- key) keeps them upright.
+local function addBottle(model: Model)
+	local first = CLIPS.SitGroundBottle.keyframes[1].pose
+	local function angles(rot: Vector3): CFrame
+		return CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
+	end
+	local upright = (angles(first.Root.rot) * angles(first.RightShoulder.rot)):Inverse()
+	local grip = CFrame.new(0, -0.8, 0) * upright -- in the fist, upright
+	holdProp(
+		model,
+		Vector3.new(0.16, 0.34, 0.16),
+		Color3.fromRGB(46, 70, 42),
+		grip,
+		"BottleNeck",
+		Enum.Material.Glass
+	)
+	holdProp(
+		model,
+		Vector3.new(0.44, 0.72, 0.4),
+		Color3.fromRGB(138, 108, 74),
+		grip * CFrame.new(0, -0.17 - 0.36, 0) * CFrame.Angles(0, math.rad(12), 0),
+		"PaperBag",
+		Enum.Material.Cardboard
+	)
 end
 
 local function linesFor(model: Model, role: string): { string }
@@ -362,11 +527,18 @@ local function addNpc(instance: Instance)
 		return
 	end
 	local poseName = model:GetAttribute("NpcPose")
-	local clip = CLIPS[if typeof(poseName) == "string" then poseName else "Idle"] or CLIPS.Idle
 	local role = model:GetAttribute("NpcRole")
 	local roleText = if typeof(role) == "string" then role else "Patron"
 	local seed = model:GetAttribute("NpcSeed")
 	local seedNumber = if typeof(seed) == "number" then seed else 0
+	local poseText = if typeof(poseName) == "string" then poseName else "Idle"
+	-- (SitGroundBottle is a variant of SitGround, picked by the seed: two out of three hold
+	-- a bottle)
+	if poseText == "SitGround" and seedNumber % 3 ~= 0 then
+		poseText = "SitGroundBottle"
+	end
+	local clip = CLIPS[poseText] or CLIPS.Idle
+	local onGround = clip == CLIPS.SitGround or clip == CLIPS.SitGroundBottle
 
 	if clip == CLIPS.WipeCounter then
 		-- an off-white rag under the right hand
@@ -386,6 +558,11 @@ local function addNpc(instance: Instance)
 			CFrame.new(0, -1.15, -0.3) * CFrame.Angles(math.rad(-70), 0, 0),
 			"Phone"
 		)
+	elseif clip == CLIPS.SitGroundBottle then
+		addBottle(model)
+	end
+	if onGround then
+		addCardboard(model, root)
 	end
 
 	npcs[model] = {
@@ -395,7 +572,10 @@ local function addNpc(instance: Instance)
 		motors = motors,
 		clip = clip,
 		timeOffset = (seedNumber * 0.618) % clip.length,
-		rootOffset = if clip == CLIPS.SitStool then sitOffset(model) else nil,
+		rootOffset = if clip == CLIPS.SitStool
+			then sitOffset(model)
+			elseif onGround then groundOffset(model)
+			else nil,
 		role = roleText,
 		lines = linesFor(model, roleText),
 		headYaw = 0,
@@ -481,8 +661,12 @@ local function wantedYaw(npc: Npc, now: number): number
 		end
 	end
 	if now >= npc.nextGlanceAt then
-		npc.glanceYaw = if npc.glanceYaw ~= 0 then 0 else random:NextNumber(-35, 35)
-		npc.nextGlanceAt = now + random:NextNumber(2.5, 7)
+		-- (the dealer keeps an eye on both ends of the alley: quicker, wider glances)
+		local wary = npc.role == "Dealer"
+		local span = if wary then 50 else 35
+		npc.glanceYaw = if npc.glanceYaw ~= 0 then 0 else random:NextNumber(-span, span)
+		npc.nextGlanceAt = now
+			+ if wary then random:NextNumber(1.2, 3.5) else random:NextNumber(2.5, 7)
 	end
 	return npc.glanceYaw
 end
