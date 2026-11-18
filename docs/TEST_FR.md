@@ -507,6 +507,23 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | L8 | Coupure de courant (nuit, `"PowerCut"`) | Pendant les ~3,5 s de clignotement : un **grésillement électrique** ; il se coupe net quand le **transformateur saute** (bang + crépitement, en 3D depuis la sous-station, plus faible si tu es loin). |
 | L9 | Nuit, se tenir près d'un lampadaire qui grésille (il se coupe une fraction de seconde de temps en temps) | Un petit **crépitement** très discret à chaque coupure (pas plus d'un toutes les 2,5 s), rien si tu es à plus de ~25 studs. |
 
+#### v9 : vraie pluie dans la ville (`feature/realistic-rain`)
+
+(R4 ci-dessus reste valable. Les images de `assets/rain/` peuvent être importées avant ou après, voir `docs/RAIN_FR.md` : sans elles, la pluie marche avec des textures Roblox de secours et sans rideaux lointains.)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| P1 | `WeatherForce = "Rain"`, rester dans la rue et regarder autour | La pluie **monte doucement** (~25 s). Près de toi : des traits **longs et nets** qui tombent vite ; plus loin (jusqu'à ~100 studs) des traits **fins et serrés** ; au fond, la ville devient **grise et voilée**. Les gouttes ne **glissent pas** avec la caméra : en marchant, tu traverses la pluie. |
+| P2 | Regarder le sol de la rue | Des **petites couronnes d'éclaboussures** (quelques gouttelettes qui sautent et retombent) et de **petits cercles** qui s'ouvrent sur le sol mouillé, surtout devant toi. Rien sur l'herbe. Une **brume** très légère au ras du sol. |
+| P3 | Se mettre sous un auvent, sous le viaduc, entrer dans le bar / une boutique | **Aucune goutte** ne tombe sous le toit ; dehors, à côté, il pleut toujours (on le voit par la vitrine). Le son de la pluie devient **plus sourd** (on l'entend « tambouriner » sur le toit). |
+| P4 | Monter sur un toit | Les gouttes **s'arrêtent sur les toits** (pas à travers), et il pleut dans la rue en dessous. |
+| P5 | Orage (`"Storm"`) | Pluie **beaucoup plus dense**, **penchée** par le vent, les rafales la penchent encore plus ; plus d'éclaboussures. |
+| P6 | Attendre la fin de l'événement | La pluie **diminue doucement** puis s'arrête net au moment où le ciel redevient clair : plus aucune goutte, éclaboussure ou brume. Aucun objet ne reste (Explorer : `Camera > RainField` existe toujours mais ne fait plus rien). |
+| P7 | Settings Roblox → Graphics quality **1-3**, puis **8-10** | En bas : nettement moins de gouttes au loin, pas de petits cercles ni de brume, peu de rideaux ; en haut : tout. Les FPS ne doivent pas chuter (Shift+F5 : compare avec / sans pluie). En **Automatic**, la qualité de la pluie baisse toute seule si le jeu passe sous ~42 FPS. |
+| P8 | Entrer dans le parc, ou lancer un duel, pendant la pluie | Plus de pluie du tout (parc toujours ensoleillé, duel = arène). |
+| P9 | Brouillard / coupure juste après une pluie | Aucun reste de pluie, rien ne se mélange. |
+| P10 | Pendant la pluie : marcher le long d'un mur dans la rue, puis mourir / réapparaître ailleurs | Il pleut **juste à côté de toi** même collé à un bâtiment (pas de bande sèche autour de toi, pas d'éclaboussures sans gouttes). Après la réapparition, **aucune goutte** dans les bâtiments autour (même s'ils arrivent quelques secondes après). Sur un toit ou sur le pont, la pluie dans la rue en dessous reste fluide (pas de chute de FPS). Les rideaux au loin **ne sautent pas** quand tu cours. |
+
 Si tu construis ta propre map plus tard : mets un dossier **City** dans Workspace et le code ne construit plus rien.
 
 ## Kits Sentinel et Bull (`feature/kits-sentinel-bull`)

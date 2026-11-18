@@ -12,7 +12,8 @@
 --   2. THE RAIN (2D), MIXED ON TOP of the outdoor bed, never instead of it: Rain, or the
 --      louder Storm loop in a thunderstorm. Its volume follows the rain as WeatherController
 --      sees it (fades in / out with the event), lower under a roof and inside, silent in the
---      park (always sunny there).
+--      park (always sunny there). Under a roof and inside it is also MUFFLED (an equalizer
+--      cuts the hiss: you hear the rain drumming on the roof, not falling around you).
 --
 --   3. THE PLACES' MUSIC (3D): every part tagged "Speaker" (the speaker boxes on the walls of
 --      Duffy's bar, THREADBARE, REWIND, and in the hidden park) gets a Sound. All the speakers
@@ -84,6 +85,13 @@ local INDOOR_BED = 0.3
 local INDOOR_RAIN = 0.3
 -- Rain under a roof outside (an awning, the viaduct).
 local COVERED_RAIN = 0.6
+-- Rain heard through a roof or a wall loses its hiss first (a dull drumming): equalizer
+-- gains (dB) inside; under an awning it gets SHELTER_COVERED of that.
+local SHELTER_HIGH = -20
+local SHELTER_MID = -7
+local SHELTER_COVERED = 0.35
+-- The shelter muffling of the rain right now (0 = in the open → 1 = inside).
+local rainMuffle = 0
 
 -- Fog: equalizer gains (dB) at full fog on the outdoor bed and the rain.
 local FOG_HIGH = -12
@@ -465,6 +473,24 @@ local function update(deltaTime: number)
 			rain.SoundId = rainUrl
 		end
 		rain.PlaybackSpeed = rainSlot.pitch
+		local muffleTarget = if inside or underCeiling
+			then 1
+			elseif covered then SHELTER_COVERED
+			else 0
+		rainMuffle = approach(rainMuffle, math.max(muffleTarget, indoorLevel), deltaTime)
+		local shelterEq = rain:FindFirstChild("Shelter")
+		if shelterEq == nil then
+			local eq = Instance.new("EqualizerSoundEffect")
+			eq.Name = "Shelter"
+			eq.LowGain = 0
+			eq.Priority = 1
+			eq.Parent = rain
+			shelterEq = eq
+		end
+		if shelterEq and shelterEq:IsA("EqualizerSoundEffect") then
+			shelterEq.HighGain = SHELTER_HIGH * rainMuffle
+			shelterEq.MidGain = SHELTER_MID * rainMuffle
+		end
 		setBedVolume(
 			rain,
 			rainSlot.volume * intensity * shelter * (1 - park) * (if inDuel then 0 else 1)
