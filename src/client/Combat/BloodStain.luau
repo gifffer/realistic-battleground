@@ -197,6 +197,20 @@ function BloodStain.image(kind: string, random: Random?, index: number?): number
 	return uploaded[pick]
 end
 
+-- A pool picture's "clean" twin (same outline, no drops drawn around it),
+-- if it is uploaded: pool -> poolClean, poolRim -> poolRimClean, serumHalo ->
+-- serumHaloClean, matched by number. Otherwise the picture itself.
+local function clean(kind: string, id: number): number
+	local list = (IMAGES :: any)[kind]
+	local twins = (IMAGES :: any)[kind .. "Clean"]
+	if id == 0 or typeof(list) ~= "table" or typeof(twins) ~= "table" then
+		return id
+	end
+	local index = table.find(list, id)
+	local twin = if index then twins[index] else nil
+	return if typeof(twin) == "number" and twin ~= 0 then twin else id
+end
+
 -- Does this exact kind have its own uploaded picture? (no stand-in)
 function BloodStain.hasImage(kind: string): boolean
 	return BloodStain.image(kind, nil) ~= 0
@@ -936,7 +950,7 @@ function BloodStain.place(
 	if image ~= 0 then
 		local carrier = newCarrier()
 		local decal = carrier:FindFirstChild("Main") :: Decal
-		decal.Texture = "rbxassetid://" .. image
+		decal.Texture = "rbxassetid://" .. clean(kind, image)
 		decal.ZIndex = 1
 		local piece: Piece = {
 			inst = carrier,
@@ -964,7 +978,7 @@ function BloodStain.place(
 				local rim = Instance.new("Decal")
 				rim.Name = "Rim"
 				rim.Face = Enum.NormalId.Top
-				rim.Texture = "rbxassetid://" .. rimId
+				rim.Texture = "rbxassetid://" .. clean("poolRim", rimId)
 				rim.ZIndex = 2
 				rim.Parent = carrier
 				table.insert(layers, BloodAge.layer(rim, 0.3, 0, true))
@@ -977,7 +991,7 @@ function BloodStain.place(
 				local serum = Instance.new("Decal")
 				serum.Name = "Serum"
 				serum.Face = Enum.NormalId.Top
-				serum.Texture = "rbxassetid://" .. serumId
+				serum.Texture = "rbxassetid://" .. clean("serumHalo", serumId)
 				serum.ZIndex = 0 -- (under the pool: it only shows outside its edge)
 				serum.Parent = carrier
 				local layer = BloodAge.layer(serum, 0, 0.45)

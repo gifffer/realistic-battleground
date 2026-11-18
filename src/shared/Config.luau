@@ -634,6 +634,12 @@ return table.freeze({
 			rippleRing = table.freeze({ 85645245730750 }), -- ripple_ring_1 (else: no ripple)
 			starburst = table.freeze({ 111666805106796, 93606236237598 }), -- starburst_1..2 (else "satellites")
 			serumHalo = table.freeze({ 90985594653033, 108670503849941, 130952450009466 }), -- serum_halo_1..3, in pairs with pool_1..3
+			-- The same pools WITHOUT the drops drawn around them (same outline,
+			-- same number): used instead of pool / pool_rim / serum_halo once
+			-- uploaded, so a big pool's drawn drops don't grow with it.
+			poolClean = table.freeze({ 0, 0, 0 }), -- cleanpool_1..3
+			poolRimClean = table.freeze({ 0, 0, 0 }), -- cleanrim_1..3
+			serumHaloClean = table.freeze({ 0, 0, 0 }), -- cleanserum_1..3
 			drag = table.freeze({ 123680049539259, 126526466461890 }), -- drag_1..2 (else "smear")
 			shoeRunL = table.freeze({ 72765684284944 }), -- shoe_run_L_1 (else "footL")
 			shoeRunR = table.freeze({ 84666117785445 }), -- shoe_run_R_1 (else "footR")
