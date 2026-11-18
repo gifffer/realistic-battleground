@@ -209,6 +209,7 @@ type Tracked = {
 	prevPrevOut: { [Motor6D]: CFrame },
 	pendingInertia: number?,
 	lastDt: number,
+	freefallSince: number?, -- os.clock() when its current free fall began
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
@@ -825,12 +826,35 @@ local NOT_ON_FEET: { [Enum.HumanoidStateType]: boolean } = {
 	[Enum.HumanoidStateType.Dead] = true,
 }
 
+-- A step down (stairs, a curb) is a few frames of free fall: still drawn on
+-- its feet for this long, unless it falls faster than this (studs/s).
+local FREEFALL_GRACE = 0.15
+local FREEFALL_FAST = -12
+
 -- The locomotion shows: standing on its feet, not climbing / sliding /
 -- vaulting (ParkourController steers the body then).
 local function onItsFeet(entry: Tracked, state: string?): boolean
 	local humanoid = entry.humanoid
-	if humanoid.Sit or humanoid.PlatformStand or NOT_ON_FEET[humanoid:GetState()] then
+	if humanoid.Sit or humanoid.PlatformStand then
 		return false
+	end
+	local humanoidState = humanoid:GetState()
+	if humanoidState == Enum.HumanoidStateType.Freefall then
+		local now = os.clock()
+		local since = entry.freefallSince or now
+		entry.freefallSince = since
+		if
+			not entry.locoActive -- (already off its feet: a jump's fall...)
+			or now - since > FREEFALL_GRACE
+			or entry.root.AssemblyLinearVelocity.Y < FREEFALL_FAST
+		then
+			return false
+		end
+	else
+		entry.freefallSince = nil
+		if NOT_ON_FEET[humanoidState] then
+			return false
+		end
 	end
 	return not (state and ARM_MOVES[state])
 end
@@ -884,9 +908,16 @@ local function onPreSimulation(dt: number)
 			continue
 		end
 		if (entry.root.Position - cameraPosition).Magnitude > MAX_DISTANCE then
-			-- (what it showed is out of date by the time it comes back)
+			-- (what it showed and how it faced are out of date by the time it
+			-- comes back: nothing to melt or to follow then)
 			table.clear(entry.prevOut)
 			table.clear(entry.prevPrevOut)
+			table.clear(entry.inertia)
+			entry.pendingInertia = nil
+			entry.loco.lastYaw = nil
+			entry.loco.lastPosition = nil
+			entry.loco.lag = 0
+			entry.loco.lagV = 0
 			continue
 		end
 		local state = movementState(entry)
@@ -1133,6 +1164,7 @@ local function track(model: Model, owner: Player?)
 		prevPrevOut = {},
 		pendingInertia = nil,
 		lastDt = 1 / 60,
+		freefallSince = nil,
 		combatUntil = 0,
 		freezeUntil = 0,
 		lastAction = nil,

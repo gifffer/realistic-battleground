@@ -53,15 +53,21 @@ local ROUGH: { [Enum.Material]: number } = {
 }
 local DOWN = Vector3.new(0, -3, 0)
 
-local holder: Attachment? = nil
-local dust: ParticleEmitter? = nil
-local grit: ParticleEmitter? = nil
+-- A few emitter sets, reused: a set is taken by one burst and stays busy
+-- until its particles are gone (an emitter's colour can't change under live
+-- particles, and a burst is placed where its attachment is at the end of the
+-- frame). All busy: that step makes no dust (never noticeable).
+type FxSet = {
+	attachment: Attachment,
+	dust: ParticleEmitter,
+	grit: ParticleEmitter,
+	busyUntil: number,
+}
+local POOL_MAX = 12
+local DUST_LIFE = 0.75 -- (seconds: the longest a particle lives, plus a margin)
+local pool: { FxSet } = {}
 
-local function emitters(): (Attachment, ParticleEmitter, ParticleEmitter)
-	local existing, existingDust, existingGrit = holder, dust, grit
-	if existing and existing.Parent and existingDust and existingGrit then
-		return existing, existingDust, existingGrit
-	end
+local function newSet(): FxSet
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "FootstepFx"
 	-- Dust: a low, slow puff that hangs a moment and settles.
@@ -110,9 +116,28 @@ local function emitters(): (Attachment, ParticleEmitter, ParticleEmitter)
 	})
 	spray.Parent = attachment
 	attachment.Parent = Workspace.Terrain
-	holder, dust, grit = attachment, puff, spray
-	return attachment, puff, spray
+	return { attachment = attachment, dust = puff, grit = spray, busyUntil = 0 }
 end
+
+-- A set free for a burst now (busy until its particles are gone), or nil.
+local function takeSet(now: number): FxSet?
+	for _, set in pool do
+		if now >= set.busyUntil and set.attachment.Parent then
+			set.busyUntil = now + DUST_LIFE
+			return set
+		end
+	end
+	if #pool >= POOL_MAX then
+		return nil
+	end
+	local set = newSet()
+	set.busyUntil = now + DUST_LIFE
+	table.insert(pool, set)
+	return set
+end
+
+local params = RaycastParams.new()
+params.FilterType = Enum.RaycastFilterType.Exclude
 
 -- The floor's colour, a bit darker and greyer (dust is never saturated).
 local function dustColor(result: RaycastResult): Color3
@@ -143,8 +168,6 @@ function Footsteps.step(model: Model, foot: string, strength: number, scuff: boo
 	if (sole - camera.CFrame.Position).Magnitude > RANGE then
 		return
 	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { model }
 	local result = Workspace:Raycast(sole + Vector3.new(0, 1, 0), DOWN, params)
 	if result == nil then
@@ -155,7 +178,7 @@ function Footsteps.step(model: Model, foot: string, strength: number, scuff: boo
 	if amount == nil then
 		return
 	end
-	local attachment, puff, spray = emitters()
+	local now = os.clock()
 	local velocity = root.AssemblyLinearVelocity
 	local flat = Vector3.new(velocity.X, 0, velocity.Z)
 	-- (thrown back from the foot, against the way it goes)
@@ -164,24 +187,26 @@ function Footsteps.step(model: Model, foot: string, strength: number, scuff: boo
 	local color = ColorSequence.new(dustColor(result))
 	if scuff then
 		-- Grit sprayed low along the floor, the way the body was going.
-		local along = if flat.Magnitude > 0.5 then flat.Unit else root.CFrame.LookVector
-		attachment.WorldCFrame = CFrame.lookAt(result.Position, result.Position + along)
-			* CFrame.Angles(-math.rad(80), 0, 0)
-		spray.Color = color
-		spray:Emit(math.max(1, math.round(10 * amount * strength)))
-		puff.Color = color
-		attachment.WorldCFrame = CFrame.lookAt(
-			result.Position,
-			result.Position + normal + back * 0.6
-		) * CFrame.Angles(-math.rad(90), 0, 0)
-		puff:Emit(math.max(1, math.round(4 * amount * strength)))
-		return
+		local set = takeSet(now)
+		if set then
+			local along = if flat.Magnitude > 0.5 then flat.Unit else root.CFrame.LookVector
+			set.attachment.WorldCFrame = CFrame.lookAt(result.Position, result.Position + along)
+				* CFrame.Angles(-math.rad(80), 0, 0)
+			set.grit.Color = color
+			set.grit:Emit(math.max(1, math.round(10 * amount * strength)))
+		end
 	end
 	-- Dust: up from the floor, leaning back from the foot.
-	attachment.WorldCFrame = CFrame.lookAt(result.Position, result.Position + normal + back * 0.8)
-		* CFrame.Angles(-math.rad(90), 0, 0)
-	puff.Color = color
-	puff:Emit(math.max(1, math.round(4 * amount * strength)))
+	local set = takeSet(now)
+	if set == nil then
+		return
+	end
+	set.attachment.WorldCFrame = CFrame.lookAt(
+		result.Position,
+		result.Position + normal + back * 0.8
+	) * CFrame.Angles(-math.rad(90), 0, 0)
+	set.dust.Color = color
+	set.dust:Emit(math.max(1, math.round(4 * amount * strength)))
 end
 
 return Footsteps

@@ -115,8 +115,8 @@ def walk():
     )
     c.set_rot(
         "LeftHip",
-        xs=[0, -5, -35, -70, -75, -70, -40, -10, 0, 6, 10, 12, 10, 6, 3, 0],
-        zs=[-4, -5, -12, -18, -20, -18, -12, -6, -4, -4, -4, -4, -4, -4, -4, -4],
+        xs=[0, -5, -35, -70, -75, -70, -40, -4, 0, 6, 10, 12, 10, 6, 3, 0],
+        zs=[0, -2, -10, -16, -18, -16, -10, -3, 0, 0, 0, 0, 0, 0, 0, 0],
     )
     c.set_posy("LeftHip", [0, 0, 0.05, 0.10, 0.10, 0.10, 0.05, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     c.mirror_limbs()
@@ -145,9 +145,8 @@ def walk_back():
     c.set_rot(
         "LeftHip",
         xs=[50, 48, 45, 33, 20, 0, -25, -37, -45, -44, -42, -30, -15, 0, 20, 35],
-        zs=[-5] * N,
     )
-    c.set_posy("LeftHip", [0.35, 0.34, 0.32, 0.24, 0.15, 0.05, 0, 0, 0, 0, 0, 0, 0, 0.05, 0.15, 0.25])
+    c.set_posy("LeftHip", [0.35, 0.34, 0.32, 0.27, 0.21, 0.14, 0.08, 0.03, 0, 0, 0, 0, 0, 0.05, 0.15, 0.25])
     c.mirror_limbs()
     c.set_rot(
         "Root",
@@ -170,8 +169,9 @@ def walk_back():
 def walk_left():
     c = Clip()
     c.set_rot("LeftHip", zs=half([-5, -20, -45, -80, -85, -83, -62, -25]))
-    c.set_posy("LeftHip", half([0, 0, 0.05, 0.08, 0.08, 0.08, 0.05, 0]))
-    c.set_rot("RightHip", zs=half([5, 10, 16, 5, 2, 2, 3, 5]))
+    c.set_posy("LeftHip", half([0.10, 0.06, 0.05, 0.08, 0.08, 0.08, 0.12, 0.24]))
+    c.set_rot("RightHip", zs=half([0, 6, 12, 4, 2, 2, 2, 0]))
+    c.set_posy("RightHip", half([0.13, 0.03, 0, 0, 0, 0, 0.05, 0.13]))
     c.set_rot(
         "LeftShoulder",
         xs=[0, -15, -30, -55, -60, -60, -50, -28, -5, 5, 8, 10, 10, 10, 6, 2],
@@ -207,7 +207,6 @@ def run():
     c.set_rot(
         "LeftHip",
         xs=[0, -15, -50, -78, -78, -65, -35, -5, 0, 12, 28, 35, 35, 28, 15, 5],
-        zs=[-3] * N,
     )
     c.set_posy("LeftHip", [0, 0.03, 0.10, 0.15, 0.15, 0.12, 0.06, 0, 0, 0.02, 0.04, 0.05, 0.05, 0.04, 0.02, 0])
     c.mirror_limbs()
@@ -251,8 +250,10 @@ def idle():
 # ---------------------------------------------------------------------------
 # Feet on the floor: R6 forward kinematics (root at the origin, floor at
 # y = -3). A tilted leg block touches the floor with a CORNER, which can dip
-# under it: at each key the body is lifted by what the lowest corner sinks
-# (never lowered: the hops and the bob stay as written).
+# under it, and a body bobbing down pushes the support leg into it: at each
+# key the sinking leg is pulled up into the torso by what it sinks (a bent
+# support knee). The body's bob stays exactly as written (low at the plant,
+# high at the flick / hop).
 # ---------------------------------------------------------------------------
 import math
 
@@ -293,23 +294,25 @@ def _joint(name, rot, pos, parent):
     return parent @ c0 @ (np.linalg.inv(axes) @ local @ axes) @ np.linalg.inv(c1)
 
 
-def lowest_foot(clip, i):
+def leg_low(clip, i, hip):
     torso = _joint("Root", clip.rot["Root"][i], clip.pos["Root"][i], np.eye(4))
-    low = 1e9
-    for hip in ("RightHip", "LeftHip"):
-        leg = _joint(hip, clip.rot[hip][i], clip.pos[hip][i], torso)
-        for x in (-0.5, 0.5):
-            for z in (-0.5, 0.5):
-                low = min(low, (leg @ np.array([x, -1, z, 1]))[1])
-    return low
+    leg = _joint(hip, clip.rot[hip][i], clip.pos[hip][i], torso)
+    return min((leg @ np.array([x, -1, z, 1]))[1] for x in (-0.5, 0.5) for z in (-0.5, 0.5))
+
+
+def lowest_foot(clip, i):
+    return min(leg_low(clip, i, hip) for hip in ("RightHip", "LeftHip"))
 
 
 def plant(clip, floor=-3.0):
     for i in range(N):
-        sink = floor - lowest_foot(clip, i)
-        if sink > 0:
-            x, y, z = clip.pos["Root"][i]
-            clip.pos["Root"][i] = (x, y + sink, z)
+        for hip in ("RightHip", "LeftHip"):
+            for _ in range(4):
+                sink = floor - leg_low(clip, i, hip)
+                if sink <= 1e-4:
+                    break
+                x, y, z = clip.pos[hip][i]
+                clip.pos[hip][i] = (x, y + sink, z)
     return clip
 
 # ---------------------------------------------------------------------------

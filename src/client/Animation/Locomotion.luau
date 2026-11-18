@@ -51,7 +51,9 @@ local WALK_CYCLE = 0.533
 local RUN_CYCLE = 0.5
 -- Slower than the nominal speed: longer AND smaller steps (cadence follows
 -- the square root of the speed, the rest is stride), within these limits.
-local CADENCE_MIN, CADENCE_MAX = 0.62, 1.18
+-- (above the nominal speed, e.g. sprinting sideways or back, the steps get
+-- quicker instead of sliding)
+local CADENCE_MIN, CADENCE_MAX = 0.62, 1.6
 -- Moving above / below these raw speeds (studs/s): a gap, so a speed hovering
 -- around one value doesn't flicker.
 local MOVE_START = 1
@@ -102,9 +104,10 @@ local MAX_ROLL = 6
 local MAX_BANK = 5
 -- Turning (visible body behind the root part): limit, and half-lives
 -- moving / standing / during a move (punch...) / not on its feet.
-local LAG_MAX = math.pi
-local LAG_MOVING = 0.08
-local LAG_STANDING = 0.12
+local LAG_MAX = math.rad(100)
+local LAG_BUSY_MAX = math.rad(15) -- (during a move: it leaves where it aims)
+local LAG_MOVING = 0.05
+local LAG_STANDING = 0.07
 local LAG_BUSY = 0.035
 local LAG_OFF = 0.03
 -- Turning on the spot faster than this (degrees/s): small steps go with it
@@ -147,7 +150,9 @@ export type State = {
 	pendingAngle: number,
 	moving: boolean,
 	stopTime: number,
+	stopHold: boolean, -- stopping: the swing under way finishes first
 	settled: boolean, -- stopped on a passing: the phase holds
+	wasAnchored: boolean,
 	idleTime: number,
 	lag: number, -- visible body's yaw behind the root part (radians)
 	lagV: number,
@@ -201,7 +206,9 @@ function Locomotion.new(): State
 		pendingAngle = 0,
 		moving = false,
 		stopTime = 0,
+		stopHold = false,
 		settled = true,
+		wasAnchored = false,
 		-- (each fighter breathes at its own moment)
 		idleTime = math.random() * 4,
 		lag = 0,
@@ -248,6 +255,7 @@ end
 -- our locomotion shows (not in the air, climbing, ragdolled...). `busy`: a
 -- move (punch, dash, reaction) is playing.
 function Locomotion.update(state: State, root: BasePart, active: boolean, busy: boolean, dt: number)
+	local hitch = dt > 0.1
 	dt = math.clamp(dt, 1e-4, 0.1)
 	table.clear(state.steps)
 	state.idleTime += dt
@@ -263,21 +271,33 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 	local yaw = math.atan2(-look.X, -look.Z)
 	local position = cframe.Position
 	local lastPosition = state.lastPosition
-	local jumped = lastPosition ~= nil and (position - lastPosition).Magnitude > TELEPORT
+	-- (an anchored root is placed by the server - a grab, a finisher -, and
+	-- so is the frame it lets go: a placement, not a turn to follow)
+	local anchored = root.Anchored
+	local placed = anchored or state.wasAnchored
+	state.wasAnchored = anchored
+	local jumped = placed
+		or (lastPosition ~= nil and (position - lastPosition).Magnitude > TELEPORT)
 	local turned = if state.lastYaw and not jumped then wrapAngle(yaw - state.lastYaw) else 0
+	local lagPrevious = state.lag
 	if jumped then
 		state.lag, state.lagV = 0, 0
 	elseif active then
-		state.lag = math.clamp(state.lag - turned, -LAG_MAX, LAG_MAX)
+		local limit = if busy then LAG_BUSY_MAX else LAG_MAX
+		state.lag = math.clamp(state.lag - turned, -limit, limit)
 	end
 	local halflife = if not active
 		then LAG_OFF
 		elseif busy then LAG_BUSY
 		elseif state.moving then LAG_MOVING
 		else LAG_STANDING
-	local lagBefore = state.lag
 	state.lag, state.lagV = Spring.step(state.lag, state.lagV, 0, halflife, dt)
-	state.yawRate = math.deg(turned + state.lag - lagBefore) / dt
+	-- (the visible body's turn this frame: the root's turn plus the change of lag)
+	state.yawRate = if jumped
+			or hitch
+			or state.lastYaw == nil
+		then 0
+		else math.deg(turned + state.lag - lagPrevious) / dt
 	state.lastYaw, state.lastPosition = yaw, position
 	local facing = CFrame.Angles(0, yaw + state.lag, 0)
 
@@ -302,7 +322,10 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 		dt
 	)
 	state.sprint = math.clamp(state.sprint, 0, 1)
-	local nominal = WALK_SPEED + (SPRINT_SPEED - WALK_SPEED) * state.sprint
+	-- (only going forward runs: sprinting back or sideways keeps the walk's
+	-- clips, with quicker steps)
+	local runShare = state.sprint * state.weights.Walk
+	local nominal = WALK_SPEED + (SPRINT_SPEED - WALK_SPEED) * runShare
 	local ratio = state.speed / nominal
 
 	-- Direction, relative to where the body is SEEN facing.
@@ -348,8 +371,16 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 	local turning = active and not moving and math.abs(state.yawRate) > TURN_STEP_RATE
 	if turning then
 		ampTarget = math.min(math.abs(state.yawRate) * TURN_STEP_PER, TURN_STEP_AMP)
+		-- (the steps of a turn go forward, whatever the last move was)
+		state.swinging = 0
+		if state.amp < 0.05 then
+			state.angle = 0
+		else
+			state.angle = wrapAngle(state.angle * Spring.keep(DIRECTION_HALFLIFE, dt))
+		end
+		updateWeights(state)
 	end
-	local cycle = (WALK_CYCLE + (RUN_CYCLE - WALK_CYCLE) * state.sprint)
+	local cycle = (WALK_CYCLE + (RUN_CYCLE - WALK_CYCLE) * runShare)
 		/ math.clamp(math.sqrt(math.max(ratio, 0)), CADENCE_MIN, CADENCE_MAX)
 	local advance = 0
 	if moving then
@@ -363,8 +394,13 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 		state.settled = false
 		advance = dt / WALK_CYCLE
 	elseif state.amp > 0.01 and not state.settled then
-		state.stopTime += dt
 		local before = state.phase
+		if state.stopTime == 0 then
+			-- (only a swing already under way finishes, never the next one)
+			local into = before % 0.5
+			state.stopHold = into >= 2 / 16 and into < RETURN_FROM
+		end
+		state.stopTime += dt
 		local after = before + dt / state.cycle
 		local passing = (math.floor(before * 2) + 1) / 2 -- the next one (0.5 or 1)
 		if after >= passing or state.stopTime > STOP_MAX then
@@ -372,7 +408,7 @@ function Locomotion.update(state: State, root: BasePart, active: boolean, busy: 
 			after = math.min(after, passing)
 		end
 		advance = after - before
-		if (before % 0.5) < RETURN_FROM and not state.settled then
+		if state.stopHold and (before % 0.5) < RETURN_FROM and not state.settled then
 			ampTarget = state.amp -- (the swing goes on until it comes back)
 		end
 	end
