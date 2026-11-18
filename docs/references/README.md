@@ -15,6 +15,11 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 | 7 | An "ultimate" VFX test in Studio (anime, no gore) | Cut-in grammar: a short wind-up, close-up shots of 2-4 frames, the background darkened round the character, one climax flash, calm afterwards |
 | 8 | A first-person execution of a downed R6 body (gore) | Gore that grows with each hit on the same part, blood mist, a volumetric pulped head, pools growing under the body, a slow deliberate pace, grading that makes the blood the most saturated thing |
 | 9 | A long custom moveset showcase (battlegrounds, no gore) | Heavy impacts: flash + thin speed lines, floor slabs and dust that stay on slams, sparks of metal on stone, light hits stagger and heavy ones ragdoll, finisher beats of 0.3-0.8 s |
+| 11 | A first-person execution of a downed R6 body (gore), close and slow | The pause before the payoff, gore building up shot by shot, everything staying, a 2 s held aftermath; NOT the see-through pink mist |
+| 12 | Blender tutorial: realistic water droplets | How to model and light convincing liquid drops (for blood drops, wet wounds, pools) |
+| 13 | Blender tutorial: rain ripples | Ripple rings on a liquid surface (drops landing in blood pools) |
+| 14 | Blender tutorial: realistic glass | Glass material and shape (bottles, flasks, shards) |
+| 15 | A custom R6 movement system | **The game's walk** (implemented: `MovementClips.Walk`): a quick power-march, high knees, arms pumping across the body, strong torso twist |
 | 10 | An ultimate-ability showcase (anime, no gore) | A quiet lull before each big hit, a smear frame to hide a camera cut, impact = spark + speed lines + ring on the same frame, the aftermath held 0.5-1 s |
 
 ## The rules that come out of them
@@ -100,6 +105,13 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 - Dark smoke that rises slowly.
 - An FOV punch on the beats.
 - Keep it short (3–5 s) so it suits PvP.
+
+## Techniques (Blender tutorials 12-14)
+Videos 12-14 are Blender tutorials. Their `videoN.md` files give the technique step by step (the settings read on screen) and what carries over to Roblox. Roblox has no custom shaders, so what carries over is:
+- the geometry (rounded, smooth-shaded drops; ripple rings);
+- baked highlights or rendered sprite sheets for particles;
+- SurfaceAppearance maps;
+- the Glass material with the right transparency and reflectance.
 
 ## Adding videos
 The player will send more videos. For each one:
