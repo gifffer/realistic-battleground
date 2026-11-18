@@ -1175,7 +1175,13 @@ function HeadBlast.apply(model: Model, live: boolean)
 	else
 		-- (a body we only see now, or its frozen copy: the neck's big pool is
 		-- already there - the same one BloodGush.neck pours live, seed + 101)
-		BloodGush.lay(torso, BloodGush.NECK_POINT, Config.Blood.FINISHER_POOLS.NECK, seed + 101)
+		BloodGush.lay(
+			torso,
+			BloodGush.NECK_POINT,
+			Config.Blood.FINISHER_POOLS.NECK,
+			seed + 101,
+			false
+		)
 	end
 	hideAll(model, head)
 	buildStump(torso, head.Color, random)

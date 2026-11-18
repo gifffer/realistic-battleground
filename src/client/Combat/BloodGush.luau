@@ -70,6 +70,14 @@ export type StumpOptions = {
 	ignore: { Instance }?, -- (what the floor ray goes through: the body, an organ)
 	delay: number?, -- seconds before it starts
 	drag: boolean?, -- false: no smear while it slides (its module draws one)
+	-- false: the pool stays centred on the wound instead of flowing toward
+	-- the middle of the body part (the neck: the pool is where the head was,
+	-- it must not slide down toward the legs as it grows)
+	under: boolean?,
+	-- true: once the first blood reaches the floor, the pool stays THERE
+	-- even if the body slides or rolls afterwards (the head burst: the pool
+	-- grows where the skull broke, not where the body ends up)
+	pin: boolean?,
 }
 
 export type Options = {
@@ -598,7 +606,7 @@ function BloodGush.neck(model: Model, seed: number)
 		BloodGush.NECK_POINT,
 		FINISHER_POOLS.NECK,
 		seed + 101,
-		{ ignore = { model :: Instance } }
+		{ ignore = { model :: Instance }, under = false, pin = true }
 	)
 end
 
@@ -744,6 +752,7 @@ function BloodGush.stump(
 		local nextDrip = 0
 		local drags = 0
 		local dragFrom: Vector3? = nil
+		local pinned: RaycastResult? = nil -- (opts.pin: the first floor hit)
 		while done < #amounts do
 			task.wait(STUMP_TICK)
 			local now = os.clock()
@@ -773,9 +782,12 @@ function BloodGush.stump(
 				workspace:Raycast(source + Vector3.new(0, 0.3, 0), Vector3.new(0, -14, 0), params)
 			local height = if hit then source.Y - hit.Position.Y else math.huge
 			if
-				hit == nil
-				or height > FINISHER_POOLS.MAX_HEIGHT
-				or speed > FINISHER_POOLS.MOVING
+				pinned == nil
+				and (
+					hit == nil
+					or height > FINISHER_POOLS.MAX_HEIGHT
+					or speed > FINISHER_POOLS.MOVING
+				)
 			then
 				-- in the air / moving: half of it is lost on the way
 				carried += amount * 0.5
@@ -819,13 +831,20 @@ function BloodGush.stump(
 				continue
 			end
 			dragFrom = nil
-			if hit.Material == Enum.Material.Water then
+			-- (pinned: always the first spot; else where the wound is now)
+			local floor = pinned or hit :: RaycastResult
+			if opts.pin and pinned == nil then
+				pinned = floor
+			end
+			if floor.Material == Enum.Material.Water then
 				continue -- (washed away)
 			end
 			-- (its pool flows a little toward the body part, under it: the
 			-- middle of the part, seen from the wound)
-			local toward = (if part.Parent then part.Position else source) - source
-			BloodPool.pour(key, hit, amount + carried, R, seed, spreadTime, toward)
+			local toward = if opts.under == false
+				then nil
+				else (if part.Parent then part.Position else source) - source
+			BloodPool.pour(key, floor, amount + carried, R, seed, spreadTime, toward)
 			carried = 0
 			-- oozing (after the spurts): drops falling off the wound into it
 			local t = now - start
@@ -848,10 +867,17 @@ end
 -- the finisher, or its frozen copy): its full size at once, under
 -- `localPoint` (in `part`'s space). Once per `seed`: the live one (stump)
 -- with the same seed, or an earlier look at this body, wins.
-function BloodGush.lay(part: BasePart, localPoint: Vector3, wound: Wound, seed: number)
+function BloodGush.lay(
+	part: BasePart,
+	localPoint: Vector3,
+	wound: Wound,
+	seed: number,
+	under: boolean?
+)
 	local size = poolSize(wound)
 	local at = part.CFrame * localPoint
-	BloodPool.lay(at, size, seed, part.Position - at)
+	-- (under = false: centred on the wound, see StumpOptions.under)
+	BloodPool.lay(at, size, seed, if under == false then nil else part.Position - at)
 end
 
 return table.freeze(BloodGush)
