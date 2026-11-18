@@ -1633,20 +1633,6 @@ function Gashes.watch(model: Model)
 		end
 	end
 	model.Destroying:Once(forget)
-	-- A limb torn off (HeavyGore) leaves the body with its cuts drawn on it:
-	-- they go with it (destroyed with it); only forgotten here.
-	model.ChildRemoved:Connect(function(child: Instance)
-		local state = if child:IsA("BasePart") then opened[child] else nil
-		if state and child:IsA("BasePart") then
-			opened[child] = nil
-			for _, link in state.tint do
-				link:Disconnect()
-			end
-			if state.connection then
-				state.connection:Disconnect()
-			end
-		end
-	end)
 	model.AncestryChanged:Connect(function()
 		if not model:IsDescendantOf(game) then
 			forget()
