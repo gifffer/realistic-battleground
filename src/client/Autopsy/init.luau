@@ -587,6 +587,32 @@ local function makeHud(): ScreenGui
 	return gui
 end
 
+-- The overhead lamp (housing, bulb, cables) sits between the camera and
+-- the body: hidden (and out of the pixel rays) while operating; its light
+-- stays.
+local operatePrompt: ProximityPrompt? = nil
+local function showLamp(visible: boolean)
+	local model = room and room.model
+	if model == nil then
+		return
+	end
+	for _, item in model:GetDescendants() do
+		if
+			item:IsA("BasePart")
+			and (item.Name == "LampHousing" or item.Name == "LampBulb" or item.Name == "Cable")
+		then
+			if not visible and item:GetAttribute("LampTransparency") == nil then
+				item:SetAttribute("LampTransparency", item.Transparency)
+			end
+			local saved = item:GetAttribute("LampTransparency")
+			item.Transparency = if visible
+				then (if typeof(saved) == "number" then saved else 0)
+				else 1
+			item.CanQuery = visible
+		end
+	end
+end
+
 local function enterOperation()
 	if operating or not inRoom then
 		return
@@ -596,6 +622,10 @@ local function enterOperation()
 		return
 	end
 	operating = true
+	if operatePrompt then
+		operatePrompt.Enabled = false
+	end
+	showLamp(false)
 	hrp.CFrame = room.stand
 	hrp.Anchored = true
 	CameraController.setCursorFree("Autopsy", true)
@@ -678,6 +708,10 @@ exitOperation = function()
 		return
 	end
 	operating = false
+	if operatePrompt then
+		operatePrompt.Enabled = true
+	end
+	showLamp(true)
 	unpress()
 	leftDown, rightDown = false, false
 	setPixel(false)
@@ -846,7 +880,8 @@ function Autopsy.start()
 	})
 	local back = CFrame.new(pad.Position + Vector3.new(0, 3, 3))
 	prompt(pad, "Enter (video)", "Kill room", Enum.KeyCode.E).Triggered:Connect(enterRoom)
-	prompt(room.tableTop, "Operate", "Patient", Enum.KeyCode.E).Triggered:Connect(enterOperation)
+	operatePrompt = prompt(room.tableTop, "Operate", "Patient", Enum.KeyCode.E)
+	operatePrompt.Triggered:Connect(enterOperation)
 	prompt(room.exitPlate, "Leave", "Kill room", Enum.KeyCode.E).Triggered:Connect(function()
 		leaveRoom(back)
 	end)
