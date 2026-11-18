@@ -21,7 +21,7 @@ Toutes les vitres de Marrow District sont maintenant en **vrai verre**, d'après
 - une vitre sous un **auvent** ou un toit reste **sèche** ;
 - sur les vitrines, les gouttes se voient **aussi depuis l'intérieur**.
 
-**Vitres cassées** : une vitrine (ou une porte vitrée) cassée par un coup lourd éclate en **éclats de verre fins** (triangles transparents, épaisseur du vrai verre, sans ombre), avec un éclat de lumière froide d'une image, des **paillettes** qui tombent et le **bruit de verre brisé**. Les éclats **restent au sol** 16 à 22 s. La vitre revient comme avant (25 s après, comme les murs).
+**Vitres cassées** : une vitrine (ou une porte vitrée) cassée par un coup lourd éclate en **éclats de verre fins** (triangles transparents, épaisseur du vrai verre, sans ombre), avec un éclat de lumière froide d'une image, des **paillettes** qui tombent et le **bruit de verre brisé**. Les éclats **restent au sol** 16 à 22 s (120 au plus dans toute la ville : au-delà, les plus vieux s'effacent ; posés, ils ne bougent plus). La vitre revient comme avant (25 s après, comme les murs).
 
 ## Qualité graphique (optimisation)
 
@@ -33,7 +33,7 @@ Toutes les vitres de Marrow District sont maintenant en **vrai verre**, d'après
 
 Aucune pièce n'est ajoutée à la map (elle est presque à sa limite de 7000) : seulement des images posées sur les vitres existantes, créées **sur ton écran seulement** et seulement près de toi.
 
-**Depuis l'intérieur** (bar, boutiques, pièce derrière un mur cassé) les vitrines passent en plastique transparent : en qualité haute, Roblox **n'affiche pas** la pluie, les faisceaux ni les enseignes derrière du verre « Glass », la rue aurait l'air sèche et noire. Dehors, c'est du vrai verre.
+**Depuis l'intérieur** (le bar, THREADBARE, REWIND ; pas sous un auvent) les vitrines passent en plastique transparent (après une seconde, pour ne pas clignoter à la porte), les morceaux d'une vitrine à moitié cassée aussi : en qualité haute, Roblox **n'affiche pas** la pluie, les faisceaux ni les enseignes derrière du verre « Glass », la rue aurait l'air sèche et noire. Dehors, c'est du vrai verre.
 
 ## Importer les images (une seule fois)
 

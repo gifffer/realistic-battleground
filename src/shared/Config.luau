@@ -874,8 +874,8 @@ return table.freeze({
 		-- Seconds for a pane to get fully wet once it rains, and to dry once it stops.
 		WET_TIME = 20,
 		DRY_TIME = 25,
-		-- Graphics tiers (Settings > Graphics quality 1-3 low, 4-7 medium, 8-10 / Automatic
-		-- high): panes that get rain on them (the nearest ones), within this many studs.
+		-- Graphics tiers (Settings > Graphics quality 1-3 low, 4-7 / Automatic medium, 8-10
+		-- high; phones and tablets capped at medium): panes that get rain on them (the nearest ones), within this many studs.
 		RAIN_PANES = table.freeze({ low = 8, medium = 18, high = 32 }),
 		RAIN_RANGE = table.freeze({ low = 30, medium = 50, high = 70 }),
 		-- Panes that get the dirt layer, within this many studs (0 = none).

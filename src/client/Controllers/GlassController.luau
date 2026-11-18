@@ -12,8 +12,9 @@
 --     DRY_TIME after. A pane under an awning or a roof stays dry. On a see-through pane the
 --     beads are drawn on both faces, so you see them from inside too.
 --   • PLAIN FALLBACK for see-through panes: on low graphics quality (Glass nearly vanishes
---     there), and while the camera is inside (on high quality Roblox draws no rain, beams
---     or signs behind Glass, so the street would look dry and dark through the shop window).
+--     there), and while the camera is inside a shop (on high quality Roblox draws no rain,
+--     beams or signs behind Glass, so the street would look dry and dark through the shop
+--     window). The pieces left standing when a pane breaks into pieces follow the same look.
 -- All of it is local (nothing new on the server) and every overlay is tagged
 -- "GlassOverlay" (Shared/Util/Breakable ignores it, so breaking still works the same).
 -- Images: Config.Glass.IMAGES (0 = not uploaded: that layer is not drawn).
@@ -34,6 +35,9 @@ local GlassController = {}
 local TAG = "CityGlass"
 local OVERLAY_TAG = "GlassOverlay"
 local REASSIGN_EVERY = 0.5 -- s: which panes get dirt / rain
+local INSIDE_PASSES = 2 -- passes in a row before "camera inside" flips (no flicker)
+-- Real interiors (Shared/Util/CityZones music zones); the Park is outside.
+local INTERIORS = { Bar = true, Threads = true, Rewind = true }
 local PROBES_PER_PASS = 24 -- panes whose sides we look at, per pass
 local FRAME_EVERY = 1 / 30 -- s: the running drops move at 30 Hz
 
@@ -64,6 +68,9 @@ local wet = 0 -- 0 dry → 1 soaked (all panes share it)
 local runFlow = 0 -- 0 → 1: how much water runs down right now
 local runOffset = 0
 local inside = false
+local insideVotes = 0 -- passes in a row that disagree with `inside`
+-- Pieces of a broken see-through pane (Server/Systems/Destruction): true while plain.
+local loose: { [BasePart]: boolean } = {}
 
 ------------------------------------------------------------------------------
 -- Faces
@@ -87,16 +94,43 @@ local function faces(part: BasePart): ({ Enum.NormalId }, number, number, boolea
 	return { Enum.NormalId.Top, Enum.NormalId.Bottom }, size.X, size.Z, vertical
 end
 
+-- The wall right behind a pane: only solid parts count.
 local probeParams = RaycastParams.new()
 probeParams.FilterType = Enum.RaycastFilterType.Exclude
 probeParams.RespectCanCollide = true
 probeParams.IgnoreWater = true
+
+-- The sky: any visible part shelters (awnings, canopies, cornices have no collision).
+local skyParams = RaycastParams.new()
+skyParams.FilterType = Enum.RaycastFilterType.Exclude
+skyParams.RespectCanCollide = false
+skyParams.IgnoreWater = true
+
+-- True if nothing visible is above `from` (invisible parts are skipped).
+local function openSky(from: Vector3, exclude: { Instance }): boolean
+	local skip = table.clone(exclude)
+	for _ = 1, 4 do
+		skyParams.FilterDescendantsInstances = skip
+		local hit = workspace:Raycast(from, Vector3.new(0, 80, 0), skyParams)
+		if hit == nil then
+			return true
+		end
+		if hit.Instance.Transparency < 0.95 then
+			return false
+		end
+		table.insert(skip, hit.Instance)
+	end
+	return false
+end
 
 -- Looks at both sides of the pane once: which one has a wall right behind it, which one
 -- the sky can rain on.
 local function probe(pane: Pane)
 	local part = pane.part
 	local exclude: { Instance } = { part }
+	if workspace.CurrentCamera then
+		table.insert(exclude, workspace.CurrentCamera)
+	end
 	for _, fighter in CollectionService:GetTagged(Config.Combat.TAG) do
 		table.insert(exclude, fighter)
 	end
@@ -113,13 +147,12 @@ local function probe(pane: Pane)
 		local rain = false
 		if open then
 			if pane.vertical then
-				-- the sky above the street in front of the pane
-				local above = part.Position + normal * 1.2 + Vector3.new(0, height / 2 + 0.2, 0)
-				rain = distance >= 4
-					and workspace:Raycast(above, Vector3.new(0, 80, 0), probeParams) == nil
+				-- the sky above the street in front of the pane (from just under the pane's top,
+				-- so a canopy flush with it is not started inside, and so not missed)
+				local above = part.Position + normal * 1.2 + Vector3.new(0, height / 2 - 0.05, 0)
+				rain = distance >= 4 and openSky(above, exclude)
 			else
-				rain = normal.Y > 0.5
-					and workspace:Raycast(from, Vector3.new(0, 80, 0), probeParams) == nil
+				rain = normal.Y > 0.5 and openSky(from, exclude)
 			end
 		end
 		table.insert(sides, { face = face, open = open, rain = rain })
@@ -224,13 +257,8 @@ local function setRain(pane: Pane, on: boolean)
 	end
 end
 
--- See-through panes: the engine's Glass, or the plain look (low quality / seen from inside).
-local function setPlain(pane: Pane, plain: boolean)
-	if pane.kind ~= "Clear" or pane.plain == plain or broken(pane.part) then
-		return
-	end
-	pane.plain = plain
-	local part = pane.part
+-- The engine's Glass, or the plain look, on one see-through part.
+local function applyLook(part: BasePart, plain: boolean)
 	if plain then
 		part.Material = Enum.Material.SmoothPlastic
 		part.Color = G.PLAIN_COLOR
@@ -242,6 +270,15 @@ local function setPlain(pane: Pane, plain: boolean)
 		part.Transparency = G.CLEAR_TRANSPARENCY
 		part.Reflectance = G.CLEAR_REFLECTANCE
 	end
+end
+
+-- See-through panes: the engine's Glass, or the plain look (low quality / seen from inside).
+local function setPlain(pane: Pane, plain: boolean)
+	if pane.kind ~= "Clear" or pane.plain == plain or broken(pane.part) then
+		return
+	end
+	pane.plain = plain
+	applyLook(pane.part, plain)
 end
 
 ------------------------------------------------------------------------------
@@ -299,6 +336,33 @@ local function remove(instance: Instance)
 	clear(pane.runs)
 end
 
+-- A piece left standing by a broken see-through pane (a "<name>_Pieces" folder in
+-- workspace.Destruction): it copied the server's clear-glass look.
+local function addPiece(instance: Instance)
+	if not instance:IsA("BasePart") or loose[instance] ~= nil then
+		return
+	end
+	local parent = instance.Parent
+	if parent == nil or string.sub(parent.Name, -7) ~= "_Pieces" then
+		return
+	end
+	local color = instance.Color
+	local glass = G.CLEAR_COLOR
+	local close = math.abs(color.R - glass.R)
+		+ math.abs(color.G - glass.G)
+		+ math.abs(color.B - glass.B)
+	if instance.Material ~= Enum.Material.Glass or close > 0.02 then
+		return
+	end
+	loose[instance] = false
+end
+
+local function removePiece(instance: Instance)
+	if instance:IsA("BasePart") then
+		loose[instance] = nil
+	end
+end
+
 ------------------------------------------------------------------------------
 -- Every half second: which panes get what
 ------------------------------------------------------------------------------
@@ -325,13 +389,22 @@ local function readQuality()
 	end
 end
 
+-- Inside a real interior only (the weather's "indoors" also counts awnings and lamps).
+-- It flips only after INSIDE_PASSES passes in a row, so walking along a doorway can't
+-- make every shop window pop between the two looks.
 local function cameraInside(position: Vector3): boolean
-	local _, _, _, indoors = WeatherController.rainState()
-	if indoors then
-		return true
-	end
 	local zone = CityZones.musicZoneAt(position)
-	return zone ~= nil and zone ~= "Park"
+	local now = zone ~= nil and INTERIORS[zone] == true
+	if now == inside then
+		insideVotes = 0
+		return inside
+	end
+	insideVotes += 1
+	if insideVotes >= INSIDE_PASSES then
+		insideVotes = 0
+		return now
+	end
+	return inside
 end
 
 local byDistance: { { pane: Pane, distance: number } } = {}
@@ -369,6 +442,12 @@ local function reassign()
 			table.insert(byDistance, { pane = pane, distance = distance })
 		else
 			setRain(pane, false)
+		end
+	end
+	for piece, isPlain in loose do
+		if isPlain ~= plain then
+			loose[piece] = plain
+			applyLook(piece, plain)
 		end
 	end
 	table.sort(byDistance, function(a, b)
@@ -447,6 +526,17 @@ function GlassController.start()
 	for _, instance in CollectionService:GetTagged(TAG) do
 		add(instance)
 	end
+	task.spawn(function()
+		local destruction = workspace:WaitForChild("Destruction", 30)
+		if destruction == nil then
+			return
+		end
+		destruction.DescendantAdded:Connect(addPiece)
+		destruction.DescendantRemoving:Connect(removePiece)
+		for _, descendant in destruction:GetDescendants() do
+			addPiece(descendant)
+		end
+	end)
 	RunService.Heartbeat:Connect(update)
 end
 

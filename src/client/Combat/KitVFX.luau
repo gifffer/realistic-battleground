@@ -2394,7 +2394,45 @@ local MAX_CHUNKS = 90 -- debris pieces per smash, at most
 type BrokenPiece = { cframe: CFrame, size: Vector3, color: Color3, material: Enum.Material }
 
 local GLASS_MAX = 60 -- glass shards per smash, at most
+local GLASS_LIVE_MAX = 120 -- glass shards on the ground at once, all smashes together
 local GLASS_GLINT = Color3.fromRGB(214, 232, 236)
+
+-- Shards still on the ground, oldest first.
+local liveShards: { BasePart } = {}
+
+local function dropShard(shard: BasePart)
+	local index = table.find(liveShards, shard)
+	if index then
+		table.remove(liveShards, index)
+	end
+end
+
+-- Room for one more shard: the oldest fades out fast when the cap is reached.
+local function makeShardRoom()
+	while #liveShards >= GLASS_LIVE_MAX do
+		local oldest = table.remove(liveShards, 1) :: BasePart
+		if oldest.Parent then
+			tween(oldest, 0.3, { Transparency = 1 })
+			Debris:AddItem(oldest, 0.35)
+		end
+	end
+end
+
+-- A shard that has come to rest is anchored: its long stay on the ground costs no physics.
+local function anchorAtRest(shard: BasePart)
+	task.spawn(function()
+		for _ = 1, 4 do
+			task.wait(2)
+			if shard.Parent == nil or shard.Anchored then
+				return
+			end
+			if shard.AssemblyLinearVelocity.Magnitude < 0.5 then
+				shard.Anchored = true
+				return
+			end
+		end
+	end)
+end
 
 -- A broken window pane: thin flat triangles of glass that keep the pane's thickness (the
 -- glass video: the thick edges are what reads as glass), see-through, no shadow; they stay
@@ -2405,6 +2443,7 @@ local function glassShards(piece: BrokenPiece, point: Vector3, push: Vector3, co
 	local span =
 		math.clamp(math.sqrt(size.X * size.Y * size.Z / math.max(thin, 0.01)) / 4, 0.5, 1.4)
 	for _ = 1, count do
+		makeShardRoom()
 		local edge = random:NextNumber(0.25, 1.1) * span
 		local shard = Instance.new("WedgePart")
 		shard.Size = Vector3.new(
@@ -2440,13 +2479,18 @@ local function glassShards(piece: BrokenPiece, point: Vector3, push: Vector3, co
 			+ Vector3.new(0, random:NextNumber(2, 10), 0)
 		shard.AssemblyAngularVelocity = random:NextUnitVector() * random:NextNumber(8, 25)
 		shard.Parent = fx
+		table.insert(liveShards, shard)
+		anchorAtRest(shard)
 		local life = random:NextNumber(Config.Glass.SHARD_LIFE.Min, Config.Glass.SHARD_LIFE.Max)
 		task.delay(life - 1.5, function()
 			if shard.Parent then
 				tween(shard, 1.5, { Transparency = 1 })
 			end
 		end)
-		Debris:AddItem(shard, life)
+		task.delay(life, function()
+			dropShard(shard)
+			shard:Destroy()
+		end)
 	end
 	-- glitter: tiny flecks catching the light, falling fast
 	emit(piece.cframe.Position, {
