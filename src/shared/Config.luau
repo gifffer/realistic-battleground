@@ -58,6 +58,8 @@ return table.freeze({
 		CAMERA_TOGGLE = Enum.KeyCode.Z,
 		-- Play the equipped emote (Shop). Not while fighting.
 		EMOTE = Enum.KeyCode.B,
+		-- Open / close the menu (the MENU button on the left does the same).
+		MENU = Enum.KeyCode.M,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,
@@ -104,6 +106,10 @@ return table.freeze({
 		-- In Studio only: every kit can be equipped without buying it (to
 		-- test new kits without levelling up). Never in the published game.
 		UNLOCK_KITS_IN_STUDIO = true,
+		-- In Studio only: a limping dummy walking near the spawn, and a stage
+		-- where one dummy finishes another with any kit's finisher, to watch
+		-- them from outside (Server/Systems/TestTools).
+		TEST_TOOLS = true,
 	}),
 
 	-- Basic combat (M1 combo, block, parry, dash). Times are in seconds.
@@ -134,6 +140,24 @@ return table.freeze({
 		-- Hitbox: a box in front of the attacker.
 		HITBOX_SIZE = Vector3.new(5, 5, 5.5),
 		HITBOX_FORWARD = 3, -- studs in front of the attacker's center
+
+		-- Lag compensation (Server/Systems/Combat/Rewind): every hitbox also
+		-- tests the victims where the ATTACKER saw them. That is his round
+		-- trip (measured by Roblox) + REWIND_INTERPOLATION ago: Roblox shows
+		-- other characters a little late, to move them smoothly.
+		REWIND_INTERPOLATION = 0.1,
+		-- Never further back than this (seconds): a very laggy (or lag
+		-- switching) player gains no reach beyond it.
+		REWIND_MAX = 0.35,
+		-- Also tested this much before and after (the ping jitters).
+		REWIND_TOLERANCE = 0.06,
+		-- Positions remembered per fighter (seconds; > REWIND_MAX + TOLERANCE).
+		REWIND_HISTORY = 0.6,
+		-- Studio only: added to the measured round trip (seconds). Studio's
+		-- simulated lag (Incoming Replication Lag) may not show in the ping
+		-- the server measures: if the rewind printed in the Output (with
+		-- DEBUG_HITBOXES) stays near REWIND_INTERPOLATION, set it to that lag.
+		REWIND_STUDIO_EXTRA_PING = 0,
 
 		-- Being hit.
 		HIT_STUN = 0.5, -- longer than M1_INTERVAL: a started combo can't be escaped

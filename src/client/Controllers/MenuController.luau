@@ -1,11 +1,15 @@
 --!strict
 -- MenuController: the game menu (everything that isn't fighting).
 --
--- Closed: a discreet "— MENU" on the left edge of the screen.
+-- Closed: a real MENU button on the left edge of the screen (an icon, the
+-- word and, on a PC, its key "M"), always outlined in the accent colour.
+-- Until the menu is opened once it also sends out a soft accent ring, so
+-- new players see it.
 -- Open: the world blurs and loses its colour, a numbered list of sections
--- on the left ("01 SETTINGS"...), the open section's panel next to it (big
--- light title, a subtitle, a hairline, then its content). "— CLOSE" (or the
--- MENU button again) closes it.
+-- on the left (tab buttons "01 KITS"...; the open one is outlined in the
+-- accent colour with a bar), the open section's panel next to it (big
+-- light title, a subtitle, a hairline, then its content). CLOSE (or the M
+-- key) closes it. The M key also opens it (not while typing in the chat).
 --
 -- Design rule: keys are for fighting; everything else is in this menu.
 -- Each feature ADDS ITS OWN section from its controller:
@@ -22,24 +26,68 @@
 --
 -- While the menu is open the mouse cursor is free
 -- (CameraController.setCursorFree("menu", ...)).
+--
+-- Screen size: the list, the panel and CLOSE sit on one "stage" drawn for
+-- 1920 × 1080. On a smaller screen (a phone, a small window) the stage
+-- moves up (never under Roblox's top bar) and shrinks just enough for the
+-- open section to fit (its own size); on a large screen it grows a little
+-- (Theme.scaleFor). It never shrinks under ×0.8 (text stays readable): a
+-- section still too tall then scrolls. On a short or narrow screen the list
+-- sits closer to the left edge (a narrower left column) so the panel gets
+-- the room. Sections build in the stage's pixels and never need to know.
+-- The list of sections scrolls too when it is taller than the panel (a
+-- phone: its buttons are taller for a finger).
+--
+-- A controller can pick the section MENU (or M) opens for a while:
+-- MenuController.setDefaultOverride(function() return "Duel" end).
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local Button = require(script.Parent.Parent.UI.Button)
 local CameraController = require(script.Parent.CameraController)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
 local C = Theme.Colors
 
-local ITEM_HEIGHT = 34
+local ITEM_GAP = 6 -- between two section buttons
+local NAV_TOP = 176 -- the list's header (stage pixels)
+local ITEMS_TOP = 34 -- the first section button, under the header
+-- The list's scrolling window reaches this far past each side, so a button
+-- that grows a little under the mouse isn't cut.
+local ITEMS_BLEED = 4
 local DEFAULT_SIZE = Vector2.new(440, 280)
 local DEFAULT_SCRIM_WIDTH = 900
 local PANEL_TOP = 168
 local OPEN_TIME = 0.25
 local CLOSE_TIME = 0.15
+-- What the stage must show: from just above the list (y 160) to under the
+-- CLOSE button, from the left edge to the panel's right edge + a margin.
+local STAGE_TOP = 160
+local STAGE_MARGIN = 8 -- screen pixels kept free at the top and bottom
+local MIN_TEXT_SCALE = 0.8 -- under this the 10 px captions can't be read
+local MIN_VISIBLE = 120 -- shortest visible panel when it scrolls
+-- The panel's scrolling window reaches this far past each side, so the
+-- markers drawn just left of a section's content (x -16) aren't cut off.
+local GUTTER = 24
+
+-- Where the left column and the panel sit (stage pixels).
+type Layout = {
+	navX: number,
+	navWidth: number,
+	dividerX: number,
+	panelX: number,
+	right: number, -- room kept right of the panel
+}
+local REGULAR: Layout = { navX = 64, navWidth = 180, dividerX = 268, panelX = 300, right = 40 }
+-- Short or narrow screen (a phone held sideways): a narrower left column.
+local COMPACT: Layout = { navX = 20, navWidth = 156, dividerX = 188, panelX = 208, right = 16 }
+local COMPACT_BELOW = Vector2.new(1000, 540)
 
 export type MenuEntry = {
 	id: string,
@@ -53,68 +101,38 @@ export type MenuEntry = {
 
 type EntryUi = {
 	entry: MenuEntry,
-	item: TextButton,
-	index: TextLabel,
-	name: TextLabel,
+	button: Button.Button,
 	panel: Frame?, -- created the first time it's opened
 }
 
 local MenuController = {}
 
 local gui: ScreenGui
-local menuButton: TextButton
+local menuButton: Button.Button
+local everOpened = false -- the MENU button pulses until then
 local openLayer: CanvasGroup -- everything shown while open (fades as one)
 local fadeToken = 0
 local nav: Frame
-local marker: Frame
-local panels: Frame
+local navItems: ScrollingFrame -- the section buttons
+local panels: Frame -- one panel per section, inside panelsView
+local panelsView: ScrollingFrame -- scrolls when a section can't fit
+local divider: Frame
 local scrimFrame: Frame
-local closeButton: TextButton
+local closeButton: Button.Button
+local stage: Frame -- nav, panels and CLOSE (scaled together)
+local stageScale: UIScale
+local scrimWidthNow = DEFAULT_SCRIM_WIDTH -- unscaled
 local blur: BlurEffect
 local grade: ColorCorrectionEffect
 local entries: { [string]: EntryUi } = {}
 local openId: string? = nil
 local lastId: string? = nil
 local openChanged = Signal.new() :: Signal.Signal<string?>
+local defaultOverride: (() -> string?)? = nil
 
 ------------------------------------------------------------------------------
 -- Building
 ------------------------------------------------------------------------------
-
--- A "— LABEL" text button with a hairline that grows on hover.
-local function lineButton(text: string, props: { [string]: any }): TextButton
-	props.BackgroundTransparency = 1
-	props.Text = ""
-	props.AutoButtonColor = false
-	local button = Theme.make("TextButton", props, {
-		Theme.make("Frame", {
-			Name = "Line",
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.fromScale(0, 0.5),
-			Size = UDim2.fromOffset(18, 1),
-			BackgroundColor3 = C.Ink,
-			BackgroundTransparency = 0.15,
-		}),
-		Theme.text({
-			Name = "Label",
-			Position = UDim2.fromOffset(28, 0),
-			Size = UDim2.new(1, -28, 1, 0),
-			TextTransparency = 0.15,
-			Text = Theme.track(text, "four"),
-		}),
-	}) :: TextButton
-	local line = button:FindFirstChild("Line") :: Frame
-	local label = button:FindFirstChild("Label") :: TextLabel
-	button.MouseEnter:Connect(function()
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1) })
-		Theme.tween(label, 0.15, { Position = UDim2.fromOffset(38, 0), TextTransparency = 0 })
-	end)
-	button.MouseLeave:Connect(function()
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1) })
-		Theme.tween(label, 0.15, { Position = UDim2.fromOffset(28, 0), TextTransparency = 0.15 })
-	end)
-	return button
-end
 
 local function createPanel(entry: MenuEntry): Frame
 	local panel = Theme.make("Frame", {
@@ -169,22 +187,91 @@ local function renumber()
 		return a.entry.order < b.entry.order
 	end)
 	for position, ui in list do
-		ui.index.Text = string.format("%02d", position)
+		local index = ui.button.index
+		if index then
+			index.Text = string.format("%02d", position)
+		end
 	end
 end
 
 local function setItemActive(ui: EntryUi, active: boolean)
-	Theme.tween(ui.name, Theme.FAST, { TextColor3 = if active then C.Ink else C.Ink3 })
-	Theme.tween(ui.index, Theme.FAST, { TextColor3 = if active then C.Ink2 else C.Ink3 })
-	if active then
-		marker.Visible = true
-		Theme.tween(marker, 0.18, {
-			Position = UDim2.fromOffset(
-				-16,
-				ui.item.AbsolutePosition.Y - nav.AbsolutePosition.Y + 11
-			),
-		}, Enum.EasingStyle.Quart)
+	ui.button.setSelected(active)
+	local index = ui.button.index
+	if index then
+		Theme.tween(index, Theme.FAST, { TextColor3 = if active then C.Accent else C.Ink3 })
 	end
+end
+
+-- Height of one section button in the list.
+local function navItemHeight(): number
+	return Button.height("medium") + 4
+end
+
+-- Fits the stage to the screen for a panel of `size` (see the top).
+local function layoutStage(size: Vector2)
+	local camera = workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local viewport = camera.ViewportSize
+	local layout = if viewport.X < COMPACT_BELOW.X or viewport.Y < COMPACT_BELOW.Y
+		then COMPACT
+		else REGULAR
+	nav.Position = UDim2.fromOffset(layout.navX, NAV_TOP)
+	divider.Position = UDim2.fromOffset(layout.dividerX, NAV_TOP)
+	panelsView.Position = UDim2.fromOffset(layout.panelX - GUTTER, PANEL_TOP)
+
+	-- Free screen: under Roblox's top bar (its buttons are on the left,
+	-- right where the list is), above the bottom margin.
+	local topMargin = math.max(STAGE_MARGIN, Theme.topInset("left", viewport) + 8)
+	local freeHeight = viewport.Y - topMargin - STAGE_MARGIN
+	local freeWidth = viewport.X - 2 * STAGE_MARGIN
+	-- Stage pixels above and under the panel: the list's top, CLOSE.
+	local closeHeight = closeButton.instance.Size.Y.Offset
+	local around = PANEL_TOP - STAGE_TOP + 12 + closeHeight + 12
+	local width = layout.panelX + size.X + layout.right
+	-- (scaleFor with a floor of 1: never smaller than drawn by itself, only
+	-- when the section does not fit; bigger on a large screen)
+	local scale =
+		math.min(Theme.scaleFor(viewport, 1), freeHeight / (around + size.Y), freeWidth / width)
+	-- Readable first: the panel scrolls rather than going under ×0.8 (the
+	-- width must still fit: only a tiny screen goes under it).
+	scale = math.max(scale, math.min(MIN_TEXT_SCALE, freeWidth / width), 0.4)
+	local visible = math.clamp(freeHeight / scale - around, math.min(MIN_VISIBLE, size.Y), size.Y)
+	local scrolls = visible < size.Y - 0.5
+	panelsView.Size = UDim2.fromOffset(size.X + 2 * GUTTER, visible)
+	panelsView.CanvasSize = UDim2.fromOffset(size.X + 2 * GUTTER, size.Y)
+	panelsView.ScrollingEnabled = scrolls
+	panelsView.ScrollBarImageTransparency = if scrolls then 0.6 else 1
+	panels.Size = UDim2.fromOffset(size.X, size.Y)
+	closeButton.instance.Position = UDim2.fromOffset(layout.panelX, PANEL_TOP + visible + 12)
+
+	-- The list goes down to CLOSE's bottom; past that it scrolls.
+	local navHeight = PANEL_TOP + visible + 12 + closeHeight - NAV_TOP
+	nav.Size = UDim2.fromOffset(layout.navWidth, navHeight)
+	local itemsView = navHeight - ITEMS_TOP
+	local count = 0
+	for _ in entries do
+		count += 1
+	end
+	local itemsHeight = count * navItemHeight() + math.max(count - 1, 0) * ITEM_GAP
+	local navScrolls = itemsHeight > itemsView + 0.5
+	navItems.Size = UDim2.new(1, 2 * ITEMS_BLEED, 0, itemsView + 2 * ITEMS_BLEED)
+	navItems.ScrollingEnabled = navScrolls
+	navItems.ScrollBarImageTransparency = if navScrolls then 0.6 else 1
+
+	-- Where it was drawn (y 160) if it fits there, else as high as needed.
+	local height = around + visible
+	local top =
+		math.max(topMargin, math.min(STAGE_TOP * scale, viewport.Y - STAGE_MARGIN - height * scale))
+	stageScale.Scale = scale
+	stage.Position = UDim2.fromOffset(0, top - STAGE_TOP * scale)
+	scrimFrame.Size = UDim2.new(0, scrimWidthNow * scale, 1, 0)
+end
+
+local function currentSize(): Vector2
+	local ui = if openId then entries[openId] else nil
+	return if ui and ui.entry.size then ui.entry.size else DEFAULT_SIZE
 end
 
 -- Blur + desaturation of the world behind the menu.
@@ -197,65 +284,60 @@ local function setWorldDimmed(dimmed: boolean)
 	})
 end
 
+-- Opens the section a controller asked for (setDefaultOverride), else the
+-- last section seen (the first of the list the first time).
+local function openDefault()
+	local override = defaultOverride
+	local wanted = if override then override() else nil
+	local target = if wanted and entries[wanted] then wanted else lastId
+	if target == nil then
+		local best: EntryUi? = nil
+		for _, ui in entries do
+			if best == nil or ui.entry.order < best.entry.order then
+				best = ui
+			end
+		end
+		target = if best then best.entry.id else nil
+	end
+	if target then
+		MenuController.open(target)
+	end
+end
+
 ------------------------------------------------------------------------------
 -- Public API
 ------------------------------------------------------------------------------
 
+-- Where the closed MENU button's centre sits: this many pixels from the
+-- middle of the screen's left edge (DuelController puts its status under it).
+MenuController.BUTTON_Y = -30
+
 function MenuController.register(entry: MenuEntry)
 	assert(entries[entry.id] == nil, `menu entry "{entry.id}" registered twice`)
 
-	local item = Theme.make("TextButton", {
-		Name = entry.id,
-		LayoutOrder = entry.order,
-		Size = UDim2.new(1, 0, 0, ITEM_HEIGHT),
-		BackgroundTransparency = 1,
-		Text = "",
-		AutoButtonColor = false,
-		Parent = nav:FindFirstChild("Items"),
-	}, {
-		Theme.text({
-			Name = "Index",
-			Size = UDim2.new(0, 18, 1, 0),
-			FontFace = Theme.Fonts.Number,
-			TextSize = 10,
-			TextColor3 = C.Ink3,
-			TextStrokeTransparency = 1,
-			Text = "00",
-		}),
-		Theme.text({
-			Name = "Name",
-			Position = UDim2.fromOffset(30, 0),
-			Size = UDim2.new(1, -30, 1, 0),
-			TextSize = 13,
-			TextColor3 = C.Ink3,
-			TextStrokeTransparency = 1,
-			Text = Theme.track(entry.label, "four"),
-		}),
-	}) :: TextButton
+	local button = Button.new({
+		name = entry.id,
+		text = entry.label,
+		variant = "tab",
+		index = "00",
+		layoutOrder = entry.order,
+		height = navItemHeight(),
+		fillWidth = true, -- as wide as the list
+		parent = navItems,
+		onActivated = function()
+			MenuController.open(entry.id)
+		end,
+	})
 
-	local ui: EntryUi = {
+	entries[entry.id] = {
 		entry = entry,
-		item = item,
-		index = item:FindFirstChild("Index") :: TextLabel,
-		name = item:FindFirstChild("Name") :: TextLabel,
+		button = button,
 		panel = nil,
 	}
-	entries[entry.id] = ui
 	renumber()
-
-	item.MouseEnter:Connect(function()
-		if openId ~= entry.id then
-			Theme.tween(ui.name, 0.1, { TextColor3 = C.Ink2 })
-		end
-	end)
-	item.MouseLeave:Connect(function()
-		if openId ~= entry.id then
-			Theme.tween(ui.name, 0.1, { TextColor3 = C.Ink3 })
-		end
-	end)
-	item.Activated:Connect(function()
-		MenuController.open(entry.id)
-	end)
+	if openId then
+		layoutStage(currentSize()) -- (one more button in the list)
+	end
 end
 
 function MenuController.open(id: string)
@@ -264,6 +346,7 @@ function MenuController.open(id: string)
 		return
 	end
 	local wasClosed = openId == nil
+	local previousScrim = scrimFrame.Size.X.Offset
 	if openId and openId ~= id then
 		local previous = entries[openId]
 		if previous and previous.panel then
@@ -277,44 +360,40 @@ function MenuController.open(id: string)
 	openId = id
 	lastId = id
 
+	-- This section's size: the panel, the backdrop and the CLOSE button
+	-- follow (layoutStage), from the top of the section.
+	local size = ui.entry.size or DEFAULT_SIZE
+	scrimWidthNow = ui.entry.scrimWidth or DEFAULT_SCRIM_WIDTH
+	layoutStage(size) -- (sets the backdrop's width at once)
+	panelsView.CanvasPosition = Vector2.zero
 	if wasClosed then
 		fadeToken += 1
 		openLayer.Visible = true
 		Theme.tween(openLayer, OPEN_TIME, { GroupTransparency = 0 })
-		menuButton.Visible = false
+		menuButton.instance.Visible = false
+		if not everOpened then
+			everOpened = true
+			menuButton.pulse(false)
+		end
 		setWorldDimmed(true)
 		CameraController.setCursorFree("menu", true)
-		-- Slide in from the left.
-		nav.Position = UDim2.fromOffset(48, 176)
-		panels.Position = UDim2.fromOffset(284, 168)
-		Theme.tween(nav, 0.22, { Position = UDim2.fromOffset(64, 176) }, Enum.EasingStyle.Quart)
+		-- Slide in from the left (to where layoutStage put them).
+		local navTarget = nav.Position
+		local panelsTarget = panelsView.Position
+		nav.Position = navTarget - UDim2.fromOffset(16, 0)
+		panelsView.Position = panelsTarget - UDim2.fromOffset(16, 0)
+		Theme.tween(nav, 0.22, { Position = navTarget }, Enum.EasingStyle.Quart)
 		task.delay(0.04, function()
-			Theme.tween(
-				panels,
-				0.22,
-				{ Position = UDim2.fromOffset(300, 168) },
-				Enum.EasingStyle.Quart
-			)
+			Theme.tween(panelsView, 0.22, { Position = panelsTarget }, Enum.EasingStyle.Quart)
 		end)
-	end
-	-- This section's size: the panel, the backdrop and the CLOSE button follow.
-	local size = ui.entry.size or DEFAULT_SIZE
-	panels.Size = UDim2.fromOffset(size.X, size.Y)
-	closeButton.Position = UDim2.fromOffset(300, PANEL_TOP + size.Y + 12)
-	local scrimWidth = ui.entry.scrimWidth or DEFAULT_SCRIM_WIDTH
-	if wasClosed then
-		scrimFrame.Size = UDim2.new(0, scrimWidth, 1, 0)
 	else
-		Theme.tween(
-			scrimFrame,
-			0.2,
-			{ Size = UDim2.new(0, scrimWidth, 1, 0) },
-			Enum.EasingStyle.Quart
-		)
+		-- (from the old width: slides to the new one)
+		local target = scrimFrame.Size
+		scrimFrame.Size = UDim2.new(0, previousScrim, 1, 0)
+		Theme.tween(scrimFrame, 0.2, { Size = target }, Enum.EasingStyle.Quart)
 	end
 	(ui.panel :: Frame).Visible = true
-	-- Wait a frame so the item has its position before moving the marker.
-	task.defer(setItemActive, ui, true)
+	setItemActive(ui, true)
 	openChanged.fire(id)
 end
 
@@ -331,6 +410,11 @@ function MenuController.close()
 		setItemActive(ui, false)
 	end
 	openId = nil
+	-- Hidden under the mouse: no MouseLeave comes, so drop the hover now.
+	for _, other in entries do
+		other.button.reset()
+	end
+	closeButton.reset()
 	-- Fade out, then hide (unless it was reopened meanwhile).
 	fadeToken += 1
 	local token = fadeToken
@@ -346,8 +430,8 @@ function MenuController.close()
 			openLayer.Visible = false
 		end
 	end)
-	menuButton.Visible = true
-	marker.Visible = false
+	menuButton.reset()
+	menuButton.instance.Visible = true
 	setWorldDimmed(false)
 	CameraController.setCursorFree("menu", false)
 	openChanged.fire(nil)
@@ -364,6 +448,12 @@ end
 -- Id of the open section, or nil.
 function MenuController.getOpen(): string?
 	return openId
+end
+
+-- While `pick` is set, MENU (and the M key) open the section it returns
+-- (nil: the usual one). DuelController: the DUEL section while searching.
+function MenuController.setDefaultOverride(pick: (() -> string?)?)
+	defaultOverride = pick
 end
 
 -- Fires with the id of the section just opened, or nil when the menu closes.
@@ -386,29 +476,19 @@ function MenuController.init()
 		Parent = player:WaitForChild("PlayerGui"),
 	})
 
-	menuButton = lineButton("MENU", {
-		Name = "MenuButton",
-		AnchorPoint = Vector2.new(0, 0.5),
-		Position = UDim2.new(0, 48, 0.5, -24),
-		Size = UDim2.fromOffset(120, 16),
-		Parent = gui,
+	menuButton = Button.new({
+		name = "MenuButton",
+		text = "MENU",
+		icon = "menu",
+		keyHint = Config.Controls.MENU.Name,
+		size = "large",
+		accent = true, -- (stays easy to spot after the first open)
+		anchorPoint = Vector2.new(0, 0.5),
+		position = UDim2.new(0, 16, 0.5, MenuController.BUTTON_Y),
+		parent = gui,
+		onActivated = openDefault,
 	})
-	menuButton.Activated:Connect(function()
-		local target = lastId
-		if target == nil then
-			-- First time: the first section of the list.
-			local best: EntryUi? = nil
-			for _, ui in entries do
-				if best == nil or ui.entry.order < best.entry.order then
-					best = ui
-				end
-			end
-			target = if best then best.entry.id else nil
-		end
-		if target then
-			MenuController.open(target)
-		end
-	end)
+	menuButton.pulse(true)
 
 	openLayer = Theme.make("CanvasGroup", {
 		Name = "Open",
@@ -433,12 +513,23 @@ function MenuController.init()
 		}),
 	})
 
-	nav = Theme.make("Frame", {
-		Name = "Nav",
-		Position = UDim2.fromOffset(64, 176),
-		Size = UDim2.fromOffset(180, 260),
+	-- The stage (see the top): everything but the backdrop.
+	stage = Theme.make("Frame", {
+		Name = "Stage",
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		Parent = openLayer,
+	})
+	stageScale = Theme.make("UIScale", { Name = "StageScale", Parent = stage })
+	divider = openLayer:FindFirstChild("Divider") :: Frame
+	divider.Parent = stage
+
+	nav = Theme.make("Frame", {
+		Name = "Nav",
+		Position = UDim2.fromOffset(REGULAR.navX, NAV_TOP),
+		Size = UDim2.fromOffset(REGULAR.navWidth, 300),
+		BackgroundTransparency = 1,
+		Parent = stage,
 	}, {
 		Theme.text({
 			Name = "Header",
@@ -448,39 +539,82 @@ function MenuController.init()
 			TextStrokeTransparency = 1,
 			Text = Theme.track("MENU", "three"),
 		}),
-		Theme.make("Frame", {
-			Name = "Items",
-			Position = UDim2.fromOffset(0, 34),
-			Size = UDim2.new(1, 0, 1, -34),
-			BackgroundTransparency = 1,
-		}, {
-			Theme.make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }),
-		}),
 	})
-	marker = Theme.make("Frame", {
-		Name = "Marker",
-		Size = UDim2.fromOffset(2, 12),
-		BackgroundColor3 = C.Ink,
-		Visible = false,
+	-- (sized by layoutStage; scrolls only when the list can't fit)
+	navItems = Theme.make("ScrollingFrame", {
+		Name = "Items",
+		Position = UDim2.fromOffset(-ITEMS_BLEED, ITEMS_TOP - ITEMS_BLEED),
+		Size = UDim2.new(1, 2 * ITEMS_BLEED, 1, 2 * ITEMS_BLEED - ITEMS_TOP),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = false,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(),
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = C.Ink,
+		ScrollBarImageTransparency = 1,
 		Parent = nav,
-	})
+	}, {
+		Theme.padding(ITEMS_BLEED),
+		Theme.make("UIListLayout", {
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, ITEM_GAP),
+		}),
+	}) :: ScrollingFrame
 
+	-- (sized by layoutStage; scrolls only when the section can't fit)
+	panelsView = Theme.make("ScrollingFrame", {
+		Name = "PanelsView",
+		Position = UDim2.fromOffset(REGULAR.panelX - GUTTER, PANEL_TOP),
+		Size = UDim2.fromOffset(DEFAULT_SIZE.X + 2 * GUTTER, DEFAULT_SIZE.Y),
+		CanvasSize = UDim2.fromOffset(DEFAULT_SIZE.X + 2 * GUTTER, DEFAULT_SIZE.Y),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollingDirection = Enum.ScrollingDirection.Y,
+		ScrollingEnabled = false,
+		ScrollBarThickness = 2,
+		ScrollBarImageColor3 = C.Ink,
+		ScrollBarImageTransparency = 1,
+		Parent = stage,
+	}) :: ScrollingFrame
 	panels = Theme.make("Frame", {
 		Name = "Panels",
-		Position = UDim2.fromOffset(300, 168),
-		Size = UDim2.fromOffset(440, 280),
+		Position = UDim2.fromOffset(GUTTER, 0),
+		Size = UDim2.fromOffset(DEFAULT_SIZE.X, DEFAULT_SIZE.Y),
 		BackgroundTransparency = 1,
-		Parent = openLayer,
+		Parent = panelsView,
 	})
 
-	closeButton = lineButton("CLOSE", {
-		Name = "Close",
-		Position = UDim2.fromOffset(300, PANEL_TOP + DEFAULT_SIZE.Y + 12),
-		Size = UDim2.fromOffset(120, 16),
-		Parent = openLayer,
+	closeButton = Button.new({
+		name = "Close",
+		text = "CLOSE",
+		icon = "close",
+		keyHint = Config.Controls.MENU.Name,
+		minWidth = 120,
+		position = UDim2.fromOffset(300, PANEL_TOP + DEFAULT_SIZE.Y + 12),
+		parent = stage,
+		onActivated = MenuController.close,
 	})
-	closeButton.Activated:Connect(MenuController.close)
 	scrimFrame = openLayer:FindFirstChild("Scrim") :: Frame
+	-- The screen changed size (a window resized, a phone turned): refit.
+	Theme.onViewportChanged(function()
+		layoutStage(currentSize())
+	end)
+	-- The closed MENU button follows the screen too (from its left edge).
+	Theme.autoScale(menuButton.instance, 0.8)
+
+	-- The menu key: opens the menu (last section) or closes it.
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed or input.KeyCode ~= Config.Controls.MENU then
+			return
+		end
+		if openId then
+			MenuController.close()
+		elseif menuButton.instance.Visible then
+			openDefault()
+		end
+	end)
 
 	-- World effects, local to this player (they live in Lighting on the client).
 	blur = Theme.make("BlurEffect", { Name = "MenuBlur", Size = 0, Parent = Lighting })
