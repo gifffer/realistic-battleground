@@ -12,16 +12,24 @@
 --   • one-shot actions (punches, dashes, hit reactions) that controllers
 --     start with CharacterAnimationController.playAction().
 --
--- Walking is directional: four clips (MovementClips Walk / WalkBack /
--- WalkLeft / WalkRight) blended by the direction the body really moves,
--- relative to where it faces (a strafe or a backpedal plays its own clip
--- instead of "moonwalking" the forward one), on one shared cycle; and the
--- whole body leans a little into where it goes (forward, back, sideways).
+-- Standing, walking (4 directions) and running are Animation/Locomotion:
+-- one phase per character driven by the distance walked, the clips blended
+-- on it by direction and speed, steps that grow / shrink with the speed,
+-- springs for the lean, the bank into turns and the body's turn itself (see
+-- its header). It is the base layer whenever the character is on its feet,
+-- so Roblox's own walk / idle never show through.
 --
--- Three channels, blended in this order (later ones win on the joints they use):
---   1. movement  crouch, slide, climb...      (+ the sprint lean, added on top)
+-- Then three channels, blended in this order (later ones win on the joints
+-- they use):
+--   1. movement  crouch, limp, slide, climb, the Bull's run...
 --   2. stance    guard, block, stunned        (loops, upper body)
 --   3. action    punch, dash, hit reaction... (plays once)
+--
+-- Transitions: switching what the BODY does (on its feet ↔ in the air, walk
+-- ↔ crouch / slide / climb...) is "inertialized": the new pose starts at
+-- once, and the difference with what was shown (and its motion) melts away
+-- with a spring in a few hundredths of a second. No pose is ever shown
+-- half-mixed with another, nothing pops. Stances fade with an ease in / out.
 --
 -- What makes the fights feel fluid and heavy:
 --   • Clips are sampled with a spline (R6Pose): motion flows through keyframes.
@@ -33,11 +41,11 @@
 --   • Flinch spring: a hit also kicks a small physical spring on the head and
 --     torso, added on top of the animation, so no two hits look identical.
 --
--- Each frame, right after Roblox's Animator has posed the body (the default
--- walk / idle / jump animations), we blend our pose on top of it:
---   final = robloxPose:Lerp(ourPose, weight)
--- Weights fade in and out, so switching animations never snaps. Joints a
--- clip doesn't list keep what's below (e.g. legs keep walking while you block).
+-- Each frame, right after Roblox's Animator has posed the body (its jump /
+-- fall / swim / climb animations still play in the air), we write ours: on
+-- its feet the locomotion replaces Roblox's pose entirely, then each channel
+-- is blended on top (final = below:Lerp(clip, weight)). Joints a clip
+-- doesn't list keep what's below (e.g. legs keep walking while you block).
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -47,32 +55,45 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local CombatClips = require(script.Parent.Parent.Animation.CombatClips)
+local Locomotion = require(script.Parent.Parent.Animation.Locomotion)
 local MovementClips = require(script.Parent.Parent.Animation.MovementClips)
 local R6Pose = require(script.Parent.Parent.Animation.R6Pose)
+local Footsteps = require(script.Parent.Parent.Combat.Footsteps)
 local ParkourController = require(script.Parent.ParkourController)
 
 local player = Players.LocalPlayer
 
--- Seconds to fade a clip in / out, per clip (default otherwise).
+-- Seconds to fade a stance clip in / out, per clip (default otherwise).
 local DEFAULT_FADE = 0.2
 local FADE_IN: { [string]: number } = {
-	Climb = 0.06,
-	Vault = 0.06,
-	Slide = 0.12,
 	Block = 0.08,
 	Stunned = 0.12,
 	Guard = 0.12,
 	-- Injuries: the tired posture settles in slowly.
 	HurtGuard = 0.3,
 	HurtIdle = 0.4,
-	LimpWalk = 0.2,
-	LimpWalkLeft = 0.2,
-	LimpIdle = 0.3,
-	LimpIdleLeft = 0.3,
-	Walk = 0.15,
-	Run = 0.15,
-	BullRun = 0.15,
 }
+-- Inertialization (see the header): half-life (seconds) of the difference
+-- melting away when the movement switches to this clip (default otherwise);
+-- and when the body gets on / off its feet.
+local DEFAULT_INERTIA = 0.1
+local INERTIA: { [string]: number } = {
+	Climb = 0.05,
+	Vault = 0.05,
+	Slide = 0.08,
+	LimpWalk = 0.12,
+	LimpWalkLeft = 0.12,
+	LimpIdle = 0.15,
+	LimpIdleLeft = 0.15,
+}
+local FEET_INERTIA = 0.08
+-- (an inertialized difference is dropped below these: degrees, studs)
+local INERTIA_DONE_ANGLE = math.rad(0.2)
+local INERTIA_DONE_MOVE = 0.005
+-- The difference's starting speed is the old pose's own, at most this
+-- (degrees / studs per second): a reasonable push, never a fling.
+local INERTIA_MAX_TURN = math.rad(600)
+local INERTIA_MAX_MOVE = 6
 -- Seconds to fade a looping clip out (default otherwise): the guard is
 -- lowered slowly when the fight is over.
 local FADE_OUT: { [string]: number } = { Guard = 0.5 }
@@ -115,9 +136,8 @@ local AVERAGE_MANTLE_DURATION = (Config.Climb.MANTLE_MIN_DURATION + Config.Climb
 local MOVING_SPEED = 1
 -- Crouch idle ↔ walk switch with a gap ("hysteresis"), so a speed hovering
 -- around one value doesn't flicker between the two clips.
--- Walk / run (studs per second): below WALK_MIN_SPEED we stand (Roblox's
--- idle); above RUN_START_SPEED we run, back to walking under RUN_STOP_SPEED.
-local WALK_MIN_SPEED = 1
+-- The Bull's run (studs per second): from RUN_START_SPEED, back to the
+-- normal locomotion under RUN_STOP_SPEED.
 local RUN_START_SPEED = 14
 local RUN_STOP_SPEED = 12
 local CROUCH_WALK_START = 1.5
@@ -134,14 +154,8 @@ local LIMP_CLIPS: { [string]: boolean } = table.freeze({
 })
 -- The limp walk is authored for this speed (studs/s): walking, slowed by the limp.
 local LIMP_WALK_SPEED = Config.Character.WALK_SPEED * Config.Injuries.LIMP_SPEED
--- Directional walk (see the header): the four clips, the time it takes the
--- blend to follow a change of direction, weights below which a clip is
--- dropped (a near-straight walk stays clean), and the lean into the move.
-local WALK_DIRECTIONS = { "Walk", "WalkBack", "WalkLeft", "WalkRight" }
-local WALK_DIRECTION_SMOOTH = 0.07 -- seconds (time constant)
-local WALK_MIN_WEIGHT = 0.1
-local WALK_LEAN = 9 -- degrees at full walking speed
-local WALK_LEAN_RATE = 10 -- how fast the lean follows (per second)
+-- The head takes back this much of the locomotion's lean (it stays level).
+local HEAD_STEADY = 0.6
 -- Characters farther than this from the camera aren't animated by us
 -- (too far to see the difference, saves work with 16 players).
 local MAX_DISTANCE = 200
@@ -161,6 +175,17 @@ type Layer = {
 -- are fading out).
 type Channel = { Layer }
 
+-- A difference melting away on one joint (inertialization): rotation as an
+-- axis × angle vector (radians) and position (studs), their speeds, since when.
+type Inertia = {
+	turn: Vector3,
+	turnSpeed: Vector3,
+	move: Vector3,
+	moveSpeed: Vector3,
+	time: number,
+	halflife: number,
+}
+
 type Tracked = {
 	player: Player?, -- nil for training dummies
 	model: Model,
@@ -171,11 +196,19 @@ type Tracked = {
 	stance: Channel,
 	action: Channel,
 	sprintWeight: number,
-	-- Directional walk: where the body moves, relative to where it faces
-	-- (X = to its right, Y = forward), smoothed; and its lean (the same axes,
-	-- 0 to 1 of WALK_LEAN).
-	walkDirection: Vector2,
-	walkLean: Vector2,
+	-- Standing / walking / running (Animation/Locomotion), and whether it
+	-- shows (on its feet) this frame.
+	loco: Locomotion.State,
+	locoActive: boolean,
+	locoPose: { [string]: CFrame }, -- sampled each frame (reused table)
+	-- Inertialization (see the header): per joint, what was written the two
+	-- last frames, the difference still melting away, and a switch waiting
+	-- for this frame's compose (its half-life).
+	inertia: { [Motor6D]: Inertia },
+	prevOut: { [Motor6D]: CFrame },
+	prevPrevOut: { [Motor6D]: CFrame },
+	pendingInertia: number?,
+	lastDt: number,
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
@@ -247,6 +280,34 @@ local function setChannelClip(channel: Channel, name: string?)
 	end
 end
 
+-- Asks for an inertialized switch on this character this frame (see the
+-- header); the fastest asked wins.
+local function requestInertia(entry: Tracked, halflife: number)
+	local pending = entry.pendingInertia
+	entry.pendingInertia = if pending then math.min(pending, halflife) else halflife
+end
+
+-- Makes `name` the movement clip (nil = none: the locomotion shows). The new
+-- one is at full weight at once and the switch is inertialized.
+local function setMovementClip(entry: Tracked, name: string?)
+	local channel = entry.movement
+	local current = channel[#channel]
+	if (current and current.name) == name then
+		return -- already playing
+	end
+	local clip = if name then findClip(name) else nil
+	if name ~= nil and clip == nil then
+		return
+	end
+	table.clear(channel)
+	if name and clip then
+		local layer = newLayer(name, clip, DEFAULT_FADE, DEFAULT_FADE)
+		layer.weight = 1
+		table.insert(channel, layer)
+	end
+	requestInertia(entry, if name then INERTIA[name] or DEFAULT_INERTIA else DEFAULT_INERTIA)
+end
+
 ------------------------------------------------------------------------------
 -- Choosing the clips
 ------------------------------------------------------------------------------
@@ -293,23 +354,19 @@ local function movementClip(entry: Tracked, state: string?): string?
 		return state
 	elseif state == nil or state == "Walk" or state == "Sprint" then
 		-- Standing up (our own state is nil, the others' "Walk" / "Sprint"
-		-- from the server): our own walk / run instead of Roblox's. Nothing in the
-		-- air (Roblox's jump / fall animation plays) or when standing still.
-		local airborne = entry.humanoid:GetState() == Enum.HumanoidStateType.Freefall
-			or entry.humanoid:GetState() == Enum.HumanoidStateType.Jumping
-		local speed = horizontalSpeed(entry.root)
-		if airborne or speed < WALK_MIN_SPEED then
+		-- from the server): the locomotion (stand / walk / run) shows,
+		-- except the Bull's sprint (head down, horns first), on the ground,
+		-- with a gap between the two speeds ("hysteresis") so a speed
+		-- hovering around one value doesn't flicker between the two.
+		if entry.model:GetAttribute("Kit") ~= "Bull" or not onGround then
 			return nil
 		end
-		-- Walk ↔ run with a gap between the two speeds ("hysteresis"), so a
-		-- speed hovering around one value doesn't flicker between the clips.
 		local current = entry.movement[#entry.movement]
-		local running = current ~= nil
-			and current.target == 1
-			and (current.name == "Run" or current.name == "BullRun")
-		-- (the Bull runs his own way: head down, horns first)
-		local run = if entry.model:GetAttribute("Kit") == "Bull" then "BullRun" else "Run"
-		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED) then run else "Walk"
+		local running = current ~= nil and current.name == "BullRun"
+		local speed = horizontalSpeed(entry.root)
+		return if speed > (if running then RUN_STOP_SPEED else RUN_START_SPEED)
+			then "BullRun"
+			else nil
 	end
 	return nil
 end
@@ -356,21 +413,6 @@ local function playbackRate(entry: Tracked, name: string): number
 	elseif name == "CrouchWalk" then
 		-- The legs follow the real walking speed (no foot sliding).
 		return math.clamp(horizontalSpeed(entry.root) / Config.Character.CROUCH_SPEED, 0.6, 1.8)
-	elseif name == "Walk" then
-		-- Faster walk = faster steps (about 3 steps per second at full walking speed).
-		-- (the clips' 0.8 s cycle: 0.533 s at full speed, slower when slower)
-		return math.clamp(
-			horizontalSpeed(entry.root) / Config.Character.WALK_SPEED * 1.5,
-			0.45,
-			1.6
-		)
-	elseif name == "Run" then
-		-- About 4.5 steps per second at full sprint.
-		return math.clamp(
-			horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED * 1.35,
-			0.8,
-			1.5
-		)
 	elseif name == "BullRun" then
 		-- (authored for the Bull's sprint: faster than everyone's)
 		return math.clamp(
@@ -433,105 +475,15 @@ end
 -- Writing the joints
 ------------------------------------------------------------------------------
 
--- Reused every frame: each directional clip's pose, and the weights.
-local walkPoses: { [string]: { [string]: CFrame } } = {}
-for _, name in WALK_DIRECTIONS do
-	walkPoses[name] = {}
-end
-local walkWeights: { [string]: number } = {}
-
--- Where the body moves relative to where it faces, followed smoothly, and
--- the lean that goes with it (every frame, for every character).
-local function updateWalkDirection(entry: Tracked, dt: number)
-	local v = entry.root.AssemblyLinearVelocity
-	local flat = Vector3.new(v.X, 0, v.Z)
-	local speed = flat.Magnitude
-	local alpha = 1 - math.exp(-dt / WALK_DIRECTION_SMOOTH)
-	local target = Vector2.zero
-	if speed > 0.5 then
-		local rel = entry.root.CFrame:VectorToObjectSpace(flat)
-		local direction = Vector2.new(rel.X, -rel.Z) / speed
-		-- (near a stop the direction is noise: keep the last one)
-		entry.walkDirection = entry.walkDirection:Lerp(direction, alpha)
-		target = direction * math.min(speed / Config.Character.WALK_SPEED, 1)
-	end
-	entry.walkLean = entry.walkLean:Lerp(target, 1 - math.exp(-WALK_LEAN_RATE * dt))
-end
-
--- The four directional clips' weights for this character: each counts as
--- the 4th power of its share of the direction (never forward with back or
--- left with right; the main direction wins fast, as in the reference where a
--- strafe only plays when the move is mostly sideways), normalised, tiny ones
--- dropped.
-local function walkBlendWeights(entry: Tracked)
-	local direction = entry.walkDirection
-	if direction.Magnitude < 1e-3 then
-		direction = Vector2.new(0, 1)
-	end
-	direction = direction.Unit
-	local forward, right = direction.Y, direction.X
-	walkWeights.Walk = math.max(forward, 0) ^ 4
-	walkWeights.WalkBack = math.max(-forward, 0) ^ 4
-	walkWeights.WalkRight = math.max(right, 0) ^ 4
-	walkWeights.WalkLeft = math.max(-right, 0) ^ 4
-	local total = 0
-	for _, name in WALK_DIRECTIONS do
-		-- (a soft cut: a clip fades in from zero instead of popping in)
-		walkWeights[name] = math.max(walkWeights[name] - WALK_MIN_WEIGHT, 0)
-		total += walkWeights[name]
-	end
-	if total <= 0 then
-		walkWeights.Walk = 1
-		total = 1
-	end
-	for _, name in WALK_DIRECTIONS do
-		walkWeights[name] /= total
-	end
-end
-
--- The "Walk" layer's pose: the directional clips at the same time in their
--- (shared) cycle, mixed by weight.
-local function sampleWalk(entry: Tracked, layer: Layer)
-	walkBlendWeights(entry)
-	local out = layer.pose
-	table.clear(out)
-	local sum = 0
-	for _, name in WALK_DIRECTIONS do
-		local weight = walkWeights[name]
-		local clip = (MovementClips :: any)[name] :: R6Pose.Clip?
-		if weight > 0 and clip then
-			local pose = walkPoses[name]
-			R6Pose.sample(clip, layer.time, pose)
-			sum += weight
-			for joint, cframe in pose do
-				local before = out[joint]
-				-- (a running weighted average: this clip's share of what's
-				-- been mixed so far)
-				out[joint] = if before then before:Lerp(cframe, weight / sum) else cframe
-			end
-		end
-	end
-end
-
-local function sampleChannel(entry: Tracked, channel: Channel)
+local function sampleChannel(channel: Channel)
 	for _, layer in channel do
-		if layer.name == "Walk" then
-			sampleWalk(entry, layer)
-		else
-			R6Pose.sample(layer.clip, layer.time, layer.pose)
-		end
+		R6Pose.sample(layer.clip, layer.time, layer.pose)
 	end
 end
 
--- How much the walk is showing (its layer's weight), for the lean.
-local function walkWeight(entry: Tracked): number
-	local weight = 0
-	for _, layer in entry.movement do
-		if layer.name == "Walk" then
-			weight = math.max(weight, layer.weight)
-		end
-	end
-	return weight
+-- Ease in / out of a fade (no sudden start or stop of the blend).
+local function eased(weight: number): number
+	return weight * weight * (3 - 2 * weight)
 end
 
 local function blendChannel(
@@ -539,7 +491,8 @@ local function blendChannel(
 	motor: Motor6D,
 	joint: string,
 	result: CFrame,
-	keepHeight: Vector3? -- Root only: the crouch's drop, for upper-body clips
+	keepHeight: Vector3?, -- Root only: the crouch's drop, for upper-body clips
+	smooth: boolean? -- ease the fades in / out
 ): (CFrame, boolean)
 	local touched = false
 	for _, layer in channel do
@@ -554,7 +507,7 @@ local function blendChannel(
 			if keepHeight and legs.RightHip == nil and legs.LeftHip == nil then
 				target += keepHeight
 			end
-			result = result:Lerp(target, layer.weight)
+			result = result:Lerp(target, if smooth then eased(layer.weight) else layer.weight)
 			touched = true
 		end
 	end
@@ -588,15 +541,93 @@ local function flinchRotation(flinch: Vector3, share: number): CFrame
 	)
 end
 
-local function compose(entry: Tracked)
-	sampleChannel(entry, entry.movement)
-	sampleChannel(entry, entry.stance)
-	sampleChannel(entry, entry.action)
-	local walking = walkWeight(entry)
+-- Inertialization helpers: a rotation as an axis × angle vector and back.
+local function turnVector(rotation: CFrame): Vector3
+	local axis, angle = rotation:ToAxisAngle()
+	if angle > math.pi then
+		angle -= 2 * math.pi
+	end
+	if angle ~= angle or axis.Magnitude < 1e-6 then
+		return Vector3.zero
+	end
+	return axis.Unit * angle
+end
+
+local function turnFrom(vector: Vector3): CFrame
+	local angle = vector.Magnitude
+	if angle < 1e-7 then
+		return CFrame.identity
+	end
+	return CFrame.fromAxisAngle(vector / angle, angle)
+end
+
+local function capped(vector: Vector3, limit: number): Vector3
+	local size = vector.Magnitude
+	return if size > limit then vector * (limit / size) else vector
+end
+
+-- A switch on this joint: the difference between what was shown last frame
+-- and the new pose (`result`), and the old pose's motion, to melt away.
+local function startInertia(entry: Tracked, motor: Motor6D, result: CFrame, halflife: number)
+	local previous: CFrame? = entry.prevOut[motor]
+	if not previous then
+		return
+	end
+	local offset = previous * result:Inverse() -- (previous = offset · result)
+	local turnSpeed, moveSpeed = Vector3.zero, Vector3.zero
+	local older: CFrame? = entry.prevPrevOut[motor]
+	if older and entry.lastDt > 0 then
+		local step = previous * older:Inverse()
+		turnSpeed = capped(turnVector(step.Rotation) / entry.lastDt, INERTIA_MAX_TURN)
+		moveSpeed = capped(step.Position / entry.lastDt, INERTIA_MAX_MOVE)
+	end
+	entry.inertia[motor] = {
+		turn = turnVector(offset.Rotation),
+		turnSpeed = turnSpeed,
+		move = offset.Position,
+		moveSpeed = moveSpeed,
+		time = 0,
+		halflife = halflife,
+	}
+end
+
+-- The difference left on `result` this frame (a critically damped spring
+-- from the difference and its speed to nothing), or nil once it's gone.
+local function applyInertia(inertia: Inertia, result: CFrame, dt: number): CFrame?
+	inertia.time += dt
+	local t = inertia.time
+	local y = 2 * math.log(2) / inertia.halflife
+	local decay = math.exp(-y * t)
+	local turn = (inertia.turn + (inertia.turnSpeed + inertia.turn * y) * t) * decay
+	local move = (inertia.move + (inertia.moveSpeed + inertia.move * y) * t) * decay
+	if
+		t > inertia.halflife
+		and turn.Magnitude < INERTIA_DONE_ANGLE
+		and move.Magnitude < INERTIA_DONE_MOVE
+	then
+		return nil
+	end
+	return CFrame.new(move) * turnFrom(turn) * result
+end
+
+local function compose(entry: Tracked, dt: number)
+	sampleChannel(entry.movement)
+	sampleChannel(entry.stance)
+	sampleChannel(entry.action)
+	local loco = entry.loco
+	local feet = entry.locoActive
+	if feet then
+		Locomotion.sample(loco, entry.locoPose)
+	end
+	-- (the locomotion's own lean only shows when it's what the legs do, not
+	-- under a crouch / limp / slide clip)
+	local lean = feet and #entry.movement == 0
 	local sprint = entry.sprintWeight
 	if sprint > 0 then
 		R6Pose.sample(MovementClips.SprintLean, 0, sprintPose)
 	end
+	local pending = entry.pendingInertia
+	entry.pendingInertia = nil
 
 	for joint, motor in entry.motors do
 		-- What Roblox's Animator wants this frame. If the joint still holds
@@ -610,35 +641,48 @@ local function compose(entry: Tracked)
 
 		local result = base
 		local touched, any = false, false
-		-- (the crouch's drop, worked out afresh each frame from the movement
-		-- clips alone: never from what was written before, or it piles up)
+		-- On its feet: the locomotion is the base (Roblox's walk / idle never show).
+		local locoPose = if feet then entry.locoPose[joint] else nil
+		if locoPose then
+			result = R6Pose.toTransform(motor, locoPose)
+			any = true
+		end
+		-- (the crouch's drop / the steps' bob, worked out afresh each frame
+		-- from the legs' clips alone: never from what was written before, or
+		-- it piles up)
 		local keepHeight: Vector3? = nil
 		if joint == "Root" then
-			keepHeight = (blendChannel(entry.movement, motor, joint, CFrame.identity)).Position
+			local legs = if locoPose then result else CFrame.identity
+			keepHeight = (blendChannel(entry.movement, motor, joint, legs)).Position
 		end
 		result, touched = blendChannel(entry.movement, motor, joint, result)
 		any = any or touched
 		if sprint > 0 and sprintPose[joint] then
-			local lean = R6Pose.toTransform(motor, sprintPose[joint])
+			local sprintLean = R6Pose.toTransform(motor, sprintPose[joint])
 			-- Partial lean: blend from "no rotation" (CFrame.new()) to the full lean.
-			result = result * CFrame.new():Lerp(lean, sprint)
+			result = result * CFrame.new():Lerp(sprintLean, sprint)
 			any = true
 		end
 		-- While limping, the limp owns the pelvis (Root): its weight shift
 		-- must stay under the guard / hurt posture, or the legs no longer
 		-- line up with the body.
 		if not (joint == "Root" and isLimping(entry)) then
-			result, touched = blendChannel(entry.stance, motor, joint, result, keepHeight)
+			result, touched = blendChannel(entry.stance, motor, joint, result, keepHeight, true)
 			any = any or touched
 		end
-		-- Walking: the body leans into where it goes (forward, back, to the
-		-- side), on top of the clip and of the guard
-		-- (so it still shows while guarding).
-		if joint == "Root" and walking > 0 and entry.walkLean.Magnitude > 0.01 then
-			local lean = entry.walkLean * (WALK_LEAN * walking)
-			local tilt = CFrame.Angles(math.rad(-lean.Y), 0, math.rad(-lean.X))
-			result = result * R6Pose.toTransform(motor, tilt)
-			any = true
+		-- Walking / running: the body leans into its acceleration and banks
+		-- into turns, on top of the clip and of the guard (so it still shows
+		-- while guarding); the head takes most of it back (stays level).
+		if lean and (joint == "Root" or joint == "Neck") then
+			local pitch, roll = loco.pitch, loco.roll
+			if joint == "Neck" then
+				pitch, roll = -HEAD_STEADY * pitch, -HEAD_STEADY * roll
+			end
+			if math.abs(pitch) + math.abs(roll) > 0.01 then
+				result = result
+					* R6Pose.toTransform(motor, CFrame.Angles(math.rad(-pitch), 0, math.rad(roll)))
+				any = true
+			end
 		end
 		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched
@@ -646,6 +690,12 @@ local function compose(entry: Tracked)
 		if entry.flinch ~= Vector3.zero and (joint == "Neck" or joint == "Root") then
 			local share = if joint == "Neck" then 1 else FLINCH_TORSO_SHARE
 			result = result * R6Pose.toTransform(motor, flinchRotation(entry.flinch, share))
+			any = true
+		end
+		-- The visible body turning behind the root part (Locomotion: a spring
+		-- instead of the root's snap), around the vertical.
+		if joint == "Root" and math.abs(loco.lag) > 1e-4 then
+			result = R6Pose.toTransform(motor, CFrame.Angles(0, loco.lag, 0)) * result
 			any = true
 		end
 		-- Pinned (pinRoot): the torso's centre put where it must be, whatever
@@ -664,6 +714,20 @@ local function compose(entry: Tracked)
 				pins[entry.model] = nil
 			end
 		end
+		-- A switch (see the header): what was shown melts into the new pose.
+		if pending then
+			startInertia(entry, motor, if any then result else base, pending)
+		end
+		local inertia = entry.inertia[motor]
+		if inertia then
+			local melted = applyInertia(inertia, if any then result else base, dt)
+			if melted then
+				result = melted
+				any = true
+			else
+				entry.inertia[motor] = nil
+			end
+		end
 
 		if any then
 			motor.Transform = result
@@ -675,7 +739,11 @@ local function compose(entry: Tracked)
 			entry.lastWritten[motor] = nil
 			entry.lastBase[motor] = nil
 		end
+		-- (what this joint shows now: the starting point of the next switch)
+		entry.prevPrevOut[motor] = entry.prevOut[motor]
+		entry.prevOut[motor] = if any then result else base
 	end
+	entry.lastDt = dt
 end
 
 local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
@@ -685,9 +753,10 @@ local function updateSprintWeight(entry: Tracked, state: string?, dt: number)
 		then false
 		elseif owner == player then owner:GetAttribute("Sprinting") == true and state == nil
 		else state == "Sprint"
-	-- Our Run clip already leans the body: no extra lean on top of it.
+	-- Our own run (the locomotion, the Bull's) already leans the body: no
+	-- extra lean on top of it.
 	local current = entry.movement[#entry.movement]
-	local ownRun = current ~= nil and (current.name == "Run" or current.name == "BullRun")
+	local ownRun = entry.locoActive or (current ~= nil and current.name == "BullRun")
 	if sprinting and not ownRun and horizontalSpeed(entry.root) > MOVING_SPEED then
 		target = math.clamp(horizontalSpeed(entry.root) / Config.Character.SPRINT_SPEED, 0, 1)
 	end
@@ -741,6 +810,31 @@ local function snapLooseLimbs(model: Model)
 	end
 end
 
+-- Humanoid states in which the body is NOT standing on its feet (Roblox's
+-- jump / fall / swim / climb / sit animations, or physics, play then).
+local NOT_ON_FEET: { [Enum.HumanoidStateType]: boolean } = {
+	[Enum.HumanoidStateType.Jumping] = true,
+	[Enum.HumanoidStateType.Freefall] = true,
+	[Enum.HumanoidStateType.FallingDown] = true,
+	[Enum.HumanoidStateType.Ragdoll] = true,
+	[Enum.HumanoidStateType.Physics] = true,
+	[Enum.HumanoidStateType.PlatformStanding] = true,
+	[Enum.HumanoidStateType.Seated] = true,
+	[Enum.HumanoidStateType.Climbing] = true,
+	[Enum.HumanoidStateType.Swimming] = true,
+	[Enum.HumanoidStateType.Dead] = true,
+}
+
+-- The locomotion shows: standing on its feet, not climbing / sliding /
+-- vaulting (ParkourController steers the body then).
+local function onItsFeet(entry: Tracked, state: string?): boolean
+	local humanoid = entry.humanoid
+	if humanoid.Sit or humanoid.PlatformStand or NOT_ON_FEET[humanoid:GetState()] then
+		return false
+	end
+	return not (state and ARM_MOVES[state])
+end
+
 local function onPreSimulation(dt: number)
 	local camera = workspace.CurrentCamera
 	local cameraPosition = if camera then camera.CFrame.Position else Vector3.zero
@@ -781,9 +875,18 @@ local function onPreSimulation(dt: number)
 			table.clear(entry.action)
 			table.clear(entry.lastWritten)
 			table.clear(entry.lastBase)
+			entry.loco = Locomotion.new()
+			entry.locoActive = false
+			table.clear(entry.inertia)
+			table.clear(entry.prevOut)
+			table.clear(entry.prevPrevOut)
+			entry.pendingInertia = nil
 			continue
 		end
 		if (entry.root.Position - cameraPosition).Magnitude > MAX_DISTANCE then
+			-- (what it showed is out of date by the time it comes back)
+			table.clear(entry.prevOut)
+			table.clear(entry.prevPrevOut)
 			continue
 		end
 		local state = movementState(entry)
@@ -794,20 +897,37 @@ local function onPreSimulation(dt: number)
 				layer.target = 0
 			end
 		end
-		setChannelClip(entry.movement, movementClip(entry, state))
+		setMovementClip(entry, movementClip(entry, state))
 		setChannelClip(entry.stance, stanceClip(entry, state))
-		updateWalkDirection(entry, dt)
+		-- On its feet or not (the locomotion shows): a switch is inertialized.
+		local feet = onItsFeet(entry, state)
+		if feet ~= entry.locoActive then
+			entry.locoActive = feet
+			requestInertia(entry, FEET_INERTIA)
+		end
+		local acting = false
+		for _, layer in entry.action do
+			if layer.target == 1 then
+				acting = true
+			end
+		end
+		Locomotion.update(entry.loco, entry.root, feet, acting, dt)
+		-- Footsteps exactly when a foot lands (only when the locomotion is
+		-- what the legs do: a crouch / limp clip has its own rhythm).
+		if feet and #entry.movement == 0 then
+			for _, step in entry.loco.steps do
+				Footsteps.step(model, step.foot, step.strength, step.scuff)
+			end
+		end
 		advanceChannel(entry, entry.movement, dt, false)
 		advanceChannel(entry, entry.stance, dt, false)
 		advanceChannel(entry, entry.action, dt, true)
 		updateSprintWeight(entry, state, dt)
 		updateFlinch(entry, dt)
 
-		local busy = #entry.movement > 0 or #entry.stance > 0 or #entry.action > 0
-		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero or pins[model] ~= nil
-		if busy or extras or next(entry.lastWritten) ~= nil then
-			compose(entry)
-		end
+		-- (every frame: the locomotion, the body's turn and the switches need
+		-- what was shown each frame)
+		compose(entry, dt)
 	end
 end
 
@@ -1005,8 +1125,14 @@ local function track(model: Model, owner: Player?)
 		stance = {},
 		action = {},
 		sprintWeight = 0,
-		walkDirection = Vector2.new(0, 1),
-		walkLean = Vector2.zero,
+		loco = Locomotion.new(),
+		locoActive = false,
+		locoPose = {},
+		inertia = {},
+		prevOut = {},
+		prevPrevOut = {},
+		pendingInertia = nil,
+		lastDt = 1 / 60,
 		combatUntil = 0,
 		freezeUntil = 0,
 		lastAction = nil,
