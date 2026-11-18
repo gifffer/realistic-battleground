@@ -278,7 +278,7 @@ local cinematics: { [string]: Cinematic } = {
 			},
 			-- Close on the face of the one on the ground (they plead): from its
 			-- left, its raised right hand reaching out in the back of the shot;
-			-- the barrel comes round over the face.
+			-- the barrel comes round over the face and straight down beside the head.
 			{
 				time = 0.48,
 				from = Vector3.new(-1.9, -1.1, -4.0),

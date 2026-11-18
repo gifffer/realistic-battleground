@@ -6084,9 +6084,9 @@ local clips: { [string]: R6Pose.Clip } = {
 					Grip = { rot = Vector3.new(52.71, 0, 57.89) },
 				},
 			},
-			-- (off the face, round beside the head: lining up the shot)
+			-- (straight off the face and round beside the head: lining up the shot)
 			{
-				time = 0.72,
+				time = 0.56,
 				pose = {
 					Root = {
 						rot = Vector3.new(-37.02, -1.6, -1.2),
@@ -6101,6 +6101,23 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			-- ADDRESS: the bat soled beside the head like a club behind the ball
+			{
+				time = 0.66,
+				tangent = "flat",
+				pose = {
+					Root = {
+						rot = Vector3.new(-40.02, -1.53, -1.29),
+						pos = Vector3.new(0, -0.6, 0),
+					},
+					Neck = { rot = Vector3.new(-25.26, 1.54, 0) },
+					RightShoulder = { rot = Vector3.new(71.01, -45, -56.18) },
+					LeftShoulder = { rot = Vector3.new(98.2, 5.76, 74) },
+					RightHip = { rot = Vector3.new(46.38, 0, 3.52), pos = Vector3.new(0, 0.497, 0) },
+					LeftHip = { rot = Vector3.new(45.08, 0, -3.29), pos = Vector3.new(0, 0.501, 0) },
+					Grip = { rot = Vector3.new(29.75, 0, 55.81) },
+				},
+			},
+			-- (held still at the address a beat)
 			{
 				time = 0.82,
 				tangent = "flat",
