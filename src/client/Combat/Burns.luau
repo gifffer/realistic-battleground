@@ -16,17 +16,23 @@
 -- Acid: its own set (yellow-brown stain, eroded slough, brown-black
 -- eschar). A laser / ray leaves a spot where it went in (a charred crater,
 -- a white cooked ring, peeled red skin round it).
--- THE FIRE ("BurnLit"): on each part in flames, flames (a flipbook, licking
--- up from the part's surface), thick dark smoke rising, embers; one
--- flickering light on the body (shadows on). Acid instead: fizz, pale
--- vapour, drops falling. Out ("BurnSmoke"): the charred parts smoulder, thin
--- grey smoke and a few embers, then nothing.
+-- THE FIRE ("BurnLit"), layered (Combat/FireLook) on each part in flames:
+-- a few big looping flame clusters born inside the part (the fire's mass),
+-- tongues licking up off it, a hot core glow, embers. Per body: ONE smoke
+-- column and ONE flickering light (shadows on), on a "heart" that follows
+-- the middle of the flames and wanders a little. The fire breathes (a gust
+-- value scales the flames and the light together), flares up now and then
+-- (a lick of tongues, the light pops), catches in a fraction of a second
+-- and dies down over about a second (a last puff of smoke). Acid instead:
+-- fizz, pale vapour, drops falling. Out ("BurnSmoke"): the charred parts
+-- smoulder, thin grey smoke and a few embers, then nothing.
 --
 -- Budget: the textures are built once per face and stage (at most 4 + 2
 -- spots on a face) and only reused after; the emitters once per part; no
 -- instance is made or dropped while it burns (only when a new face gets a
--- stage). One Heartbeat for every burning body; the textures update 15
--- times a second, the light every frame.
+-- stage). About 17 flame quads per fully lit part. One Heartbeat for every
+-- burning body; the textures and emitter rates update 15 times a second,
+-- the light every frame. The Roblox graphics level scales the rates.
 --
 -- Everything is named "BurnFx..." (RiftPortal's clone copies skip it).
 
@@ -37,6 +43,7 @@ local RunService = game:GetService("RunService")
 local BurnCode = require(ReplicatedStorage.Shared.Util.BurnCode)
 local Config = require(ReplicatedStorage.Shared.Config)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local FireLook = require(script.Parent.FireLook)
 
 local Burns = {}
 
@@ -49,10 +56,13 @@ local SHOW_DOWN = 2.5 -- and goes (healed)
 local TEXTURE_STEP = 1 / 15
 local CRY_INTERVAL = 2.5
 
-local FIRE_LIGHT = Color3.fromRGB(255, 136, 56)
+local FIRE_LIGHT = FireLook.LIGHT
+local CATCH_SPEED = 6 -- levels / s a part's fire grows (catching)
+local DIE_SPEED = 2.5 -- and dies down (out)
 
--- Fallback particle pictures (Roblox's own) while BURNS.flame/... are 0.
-local BUILTIN_FLAME = "rbxasset://textures/particles/fire_main.dds"
+local random = Random.new()
+
+-- Fallback particle pictures (Roblox's own) for the acid.
 local BUILTIN_SMOKE = "rbxasset://textures/particles/smoke_main.dds"
 local BUILTIN_EMBER = "rbxasset://textures/particles/sparkles_main.dds"
 
@@ -128,8 +138,9 @@ type FaceLook = {
 }
 
 type Fx = {
-	flame: ParticleEmitter?,
-	smoke: ParticleEmitter?,
+	body: ParticleEmitter?,
+	tongues: ParticleEmitter?,
+	glow: ParticleEmitter?,
 	embers: ParticleEmitter?,
 	fizz: ParticleEmitter?,
 	vapour: ParticleEmitter?,
@@ -145,6 +156,8 @@ type PartLook = {
 	faces: { [number]: FaceLook },
 	fx: Fx,
 	level: number, -- flames: 0 (out) .. 3
+	heat: number, -- the level drawn (eases toward it)
+	band: number, -- the body flames' size step (1..3)
 	acid: boolean,
 	hidden: boolean, -- (the part is invisible: no burn textures on it)
 	gone: boolean, -- (a burst head: no flames either)
@@ -157,6 +170,15 @@ type Session = {
 	smokeUntil: number,
 	smoking: boolean, -- (its smoke still on: one more pass turns it off)
 	light: PointLight?,
+	heart: Attachment?, -- (the light and the smoke: the middle of the fire)
+	smoke: ParticleEmitter?,
+	smokeMode: string,
+	centre: Vector3, -- the heart's place (Torso space)
+	heat: number, -- every part's heat, summed
+	gust: number, -- 0..1, how hard the fire breathes now
+	pop: number, -- the light pops until then (a flare-up, catching)
+	nextFlare: number,
+	puff: number, -- parts just gone out: a last puff of smoke
 	seed: number,
 	animating: boolean,
 	burning: boolean,
@@ -168,6 +190,11 @@ local sessions: { [Model]: Session } = {}
 local nextCry: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
 local heartbeat: RBXScriptConnection? = nil
 local textureClock = 0
+
+local function bodyPart(model: Model, name: string): BasePart?
+	local part = model:FindFirstChild(name)
+	return if part and part:IsA("BasePart") then part else nil
+end
 
 local function smoothstep(t: number): number
 	t = math.clamp(t, 0, 1)
@@ -405,24 +432,10 @@ local function image(id: number, fallback: string): string
 	return if id ~= 0 then asset(id) else fallback
 end
 
-local FLAME_COLOR = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 232, 178)),
-	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 168, 64)),
-	ColorSequenceKeypoint.new(0.6, Color3.fromRGB(226, 92, 26)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(110, 34, 16)),
-})
-local FLAME_ALPHA = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 1),
-	NumberSequenceKeypoint.new(0.08, 0.2),
-	NumberSequenceKeypoint.new(0.65, 0.45),
-	NumberSequenceKeypoint.new(1, 1),
-})
 -- Thick soot over a fire; thin grey over a smouldering body.
-local SMOKE_FIRE = ColorSequence.new(Color3.fromRGB(26, 23, 21), Color3.fromRGB(74, 70, 66))
-local SMOKE_SMOULDER = ColorSequence.new(Color3.fromRGB(96, 92, 88), Color3.fromRGB(140, 136, 132))
 local SMOKE_ALPHA_FIRE = NumberSequence.new({
 	NumberSequenceKeypoint.new(0, 1),
-	NumberSequenceKeypoint.new(0.12, 0.35),
+	NumberSequenceKeypoint.new(0.15, 0.45),
 	NumberSequenceKeypoint.new(1, 1),
 })
 local SMOKE_ALPHA_SMOULDER = NumberSequence.new({
@@ -447,107 +460,32 @@ local function scaleOf(part: BasePart): number
 	return math.clamp((part.Size.X + part.Size.Z) / 3, 0.6, 1.3)
 end
 
-local function flameOf(look: PartLook): ParticleEmitter
-	local current = look.fx.flame
-	if current then
-		return current
-	end
-	local s = scaleOf(look.part)
-	local flipbook = IMAGES.flame ~= 0
-	local emitter = newEmitter(look.part, {
-		Texture = image(IMAGES.flame, BUILTIN_FLAME),
-		Color = FLAME_COLOR,
-		Transparency = FLAME_ALPHA,
-		LightEmission = 0.85,
-		LightInfluence = 0,
-		Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.55 * s),
-			NumberSequenceKeypoint.new(0.35, 1.0 * s),
-			NumberSequenceKeypoint.new(1, 0.35 * s),
-		}),
-		Lifetime = NumberRange.new(0.45, 0.85),
-		Speed = NumberRange.new(1.2, 2.6),
-		Acceleration = Vector3.new(0, 6, 0),
-		SpreadAngle = Vector2.new(12, 12),
-		Rotation = NumberRange.new(-15, 15),
-		RotSpeed = NumberRange.new(-35, 35),
-		EmissionDirection = Enum.NormalId.Top,
-		Shape = Enum.ParticleEmitterShape.Box,
-		ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
-		ZOffset = 0.25,
-		LockedToPart = false,
-	})
-	if flipbook then
-		emitter.FlipbookLayout = Enum.ParticleFlipbookLayout.Grid4x4
-		emitter.FlipbookMode = Enum.ParticleFlipbookMode.OneShot
-		emitter.Squash = NumberSequence.new(-0.3) -- (taller tongues)
-	end
-	look.fx.flame = emitter
-	return emitter
+-- A fire layer born inside the part (Box volume), going up.
+local function partLayer(look: PartLook, kind: FireLook.Kind): ParticleEmitter
+	local e = FireLook.layer(kind, look.part, scaleOf(look.part), NAME)
+	e.Enabled = false
+	e.Shape = Enum.ParticleEmitterShape.Box
+	e.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	return e
 end
 
-local function smokeOf(look: PartLook): ParticleEmitter
-	local current = look.fx.smoke
-	if current then
-		return current
+-- The fire on one part: the body (a few big looping flame clusters), the
+-- tongues licking off it, the hot core glow, embers.
+local function fireOf(
+	look: PartLook
+): (ParticleEmitter, ParticleEmitter, ParticleEmitter, ParticleEmitter)
+	local fx = look.fx
+	local body, tongues, glow, embers = fx.body, fx.tongues, fx.glow, fx.embers
+	if body and tongues and glow and embers then
+		return body, tongues, glow, embers
 	end
-	local s = scaleOf(look.part)
-	local emitter = newEmitter(look.part, {
-		Texture = image(IMAGES.smoke, BUILTIN_SMOKE),
-		Color = SMOKE_FIRE,
-		Transparency = SMOKE_ALPHA_FIRE,
-		LightEmission = 0,
-		LightInfluence = 1,
-		Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.7 * s),
-			NumberSequenceKeypoint.new(1, 4.2 * s),
-		}),
-		Lifetime = NumberRange.new(2.2, 3.6),
-		Speed = NumberRange.new(2, 3.4),
-		Acceleration = Vector3.new(0, 2.2, 0),
-		Drag = 0.7,
-		SpreadAngle = Vector2.new(14, 14),
-		Rotation = NumberRange.new(0, 360),
-		RotSpeed = NumberRange.new(-25, 25),
-		EmissionDirection = Enum.NormalId.Top,
-		ZOffset = -0.4,
-	})
-	look.fx.smoke = emitter
-	return emitter
-end
-
-local function embersOf(look: PartLook): ParticleEmitter
-	local current = look.fx.embers
-	if current then
-		return current
-	end
-	local emitter = newEmitter(look.part, {
-		Texture = image(IMAGES.ember, BUILTIN_EMBER),
-		Color = ColorSequence.new(Color3.fromRGB(255, 196, 96), Color3.fromRGB(255, 86, 20)),
-		Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.7, 0.2),
-			NumberSequenceKeypoint.new(1, 1),
-		}),
-		LightEmission = 1,
-		LightInfluence = 0,
-		Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.12),
-			NumberSequenceKeypoint.new(1, 0.02),
-		}),
-		Lifetime = NumberRange.new(1.2, 2.4),
-		Speed = NumberRange.new(2, 5),
-		Acceleration = Vector3.new(0, 3, 0),
-		Drag = 0.8,
-		SpreadAngle = Vector2.new(35, 35),
-		Orientation = Enum.ParticleOrientation.VelocityParallel,
-		EmissionDirection = Enum.NormalId.Top,
-		Shape = Enum.ParticleEmitterShape.Box,
-		ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface,
-		ZOffset = 0.4,
-	})
-	look.fx.embers = emitter
-	return emitter
+	local newBody = partLayer(look, "body")
+	local newTongues = partLayer(look, "tongue")
+	local newGlow = partLayer(look, "glow")
+	local newEmbers = partLayer(look, "ember")
+	newEmbers.ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface
+	fx.body, fx.tongues, fx.glow, fx.embers = newBody, newTongues, newGlow, newEmbers
+	return newBody, newTongues, newGlow, newEmbers
 end
 
 local function acidOf(look: PartLook): (ParticleEmitter, ParticleEmitter, ParticleEmitter)
@@ -615,7 +553,7 @@ local function setRate(emitter: ParticleEmitter?, rate: number)
 	if emitter == nil then
 		return
 	end
-	if rate <= 0 then
+	if rate <= 0.01 then
 		if emitter.Enabled then
 			emitter.Enabled = false
 		end
@@ -635,41 +573,63 @@ local function maxDegree(look: PartLook): number
 	return top
 end
 
--- The emitters of one part from what burns there now.
-local function driveFx(look: PartLook, smouldering: boolean, firstPerson: boolean)
-	local level = if look.gone then 0 else look.level
-	local quality = 1
-	local fire = level > 0 and not look.acid
-	local acid = level > 0 and look.acid
+-- The emitters of one part from what burns there now (15 times a second).
+-- `heat` eases toward the level: the fire catches in a fraction of a second
+-- (with a burst of tongues), and dies down over about a second.
+local function driveFx(
+	session: Session,
+	look: PartLook,
+	smouldering: boolean,
+	firstPerson: boolean,
+	dt: number,
+	quality: number
+)
+	local target = if look.gone or look.acid then 0 else look.level
+	local was = look.heat
+	if target > was then
+		look.heat = math.min(target, was + CATCH_SPEED * dt)
+	else
+		look.heat = math.max(target, was - DIE_SPEED * dt)
+	end
+	local heat = look.heat
 	local head = look.name == "Head"
 	local hideFlames = head and firstPerson
-	if fire then
+	if heat > 0 then
 		local s = scaleOf(look.part)
-		setRate(flameOf(look), if hideFlames then 0 else (8 + 9 * level) * s * quality)
-		local smoke = smokeOf(look)
-		smoke.Color = SMOKE_FIRE
-		smoke.Transparency = SMOKE_ALPHA_FIRE
-		setRate(smoke, if hideFlames then 0 else (1.5 + 1.5 * level) * quality)
-		setRate(embersOf(look), (1 + 1.5 * level) * quality)
-	else
-		setRate(look.fx.flame, 0)
-		local charred = not look.gone and maxDegree(look) >= 2
-		if smouldering and charred and not hideFlames then
-			local smoke = smokeOf(look)
-			smoke.Color = SMOKE_SMOULDER
-			smoke.Transparency = SMOKE_ALPHA_SMOULDER
-			setRate(smoke, 1.2 * quality)
-			setRate(embersOf(look), if maxDegree(look) >= 3.5 then 0.6 else 0)
-		else
-			setRate(look.fx.smoke, 0)
-			setRate(look.fx.embers, 0)
+		local body, tongues, glow, embers = fireOf(look)
+		local g = 0.8 + 0.4 * session.gust
+		local flames = if hideFlames then 0 else quality * g
+		-- (bigger flame clusters at a higher level)
+		local band = math.clamp(math.round(heat), 1, 3)
+		if look.band ~= band then
+			look.band = band
+			body.Size = FireLook.bodySize(s, 1.6 + 0.45 * band)
 		end
+		setRate(body, (2.5 + 2.2 * heat) * s * flames)
+		setRate(tongues, (1.5 + 3 * heat) * s * flames)
+		setRate(glow, if quality >= 0.75 and not hideFlames then 5 * heat else 0)
+		setRate(embers, (0.4 + 0.6 * heat) * quality)
+		if was <= 0 and not hideFlames then
+			-- catching: a lick of tongues at once
+			tongues:Emit(4)
+			session.pop = os.clock() + 0.15
+		end
+	else
+		local fx = look.fx
+		setRate(fx.body, 0)
+		setRate(fx.tongues, 0)
+		setRate(fx.glow, 0)
+		if was > 0 then
+			session.puff += 1 -- (out: a last puff of smoke)
+		end
+		local charred = not look.gone and maxDegree(look) >= 3.5
+		setRate(fx.embers, if smouldering and charred and not hideFlames then 0.5 * quality else 0)
 	end
-	if acid then
+	if look.level > 0 and look.acid then
 		local fizz, vapour, drips = acidOf(look)
-		setRate(fizz, 10 + 8 * level)
-		setRate(vapour, 1.5 + level)
-		setRate(drips, 1 + level)
+		setRate(fizz, 10 + 8 * look.level)
+		setRate(vapour, 1.5 + look.level)
+		setRate(drips, 1 + look.level)
 	else
 		setRate(look.fx.fizz, 0)
 		setRate(look.fx.vapour, 0)
@@ -677,14 +637,116 @@ local function driveFx(look: PartLook, smouldering: boolean, firstPerson: boolea
 	end
 end
 
+-- One heart per body: an attachment on the Torso that follows the middle
+-- of what burns, holding the fire's light and its smoke (one column per
+-- body, not per part: much less overdraw).
+local function heartOf(session: Session): Attachment?
+	local current = session.heart
+	if current and current.Parent then
+		return current
+	end
+	local torso = bodyPart(session.model, "Torso")
+	if torso == nil then
+		return nil
+	end
+	local heart = Instance.new("Attachment")
+	heart.Name = NAME
+	heart.Parent = torso
+	local light = Instance.new("PointLight")
+	light.Name = NAME
+	light.Color = FIRE_LIGHT
+	light.Shadows = true
+	light.Range = 10
+	light.Brightness = 0
+	light.Enabled = false
+	light.Parent = heart
+	local smoke = FireLook.layer("smoke", heart, 1, NAME)
+	smoke.Enabled = false
+	session.heart, session.light, session.smoke = heart, light, smoke
+	return heart
+end
+
+-- The heart's place, the smoke and the flare-ups (15 times a second).
+local function driveHeart(session: Session, smouldering: boolean, quality: number)
+	local total, weight = 0, 0
+	local sum = Vector3.zero
+	local charredSum, charredCount = Vector3.zero, 0
+	local torso = bodyPart(session.model, "Torso")
+	for _, look in session.parts do
+		if look.part.Parent == nil then
+			continue
+		end
+		local heat = look.heat
+		local offset = if torso
+			then torso.CFrame:PointToObjectSpace(look.part.Position)
+			else Vector3.zero
+		if heat > 0 then
+			total += heat
+			weight += heat
+			sum += offset * heat
+		elseif smouldering and not look.gone and maxDegree(look) >= 2 then
+			charredSum += offset
+			charredCount += 1
+		end
+	end
+	session.heat = total
+	local needed = total > 0 or (smouldering and charredCount > 0) or session.puff > 0
+	if not needed and session.heart == nil then
+		return
+	end
+	local heart = heartOf(session)
+	local smoke = session.smoke
+	if heart == nil or smoke == nil then
+		return
+	end
+	if weight > 0 then
+		session.centre = sum / weight + Vector3.new(0, 0.3, 0)
+	elseif charredCount > 0 then
+		session.centre = charredSum / charredCount
+	end
+	if total > 0 then
+		if session.smokeMode ~= "fire" then
+			session.smokeMode = "fire"
+			smoke.Color = FireLook.SMOKE_FIRE
+			smoke.Transparency = SMOKE_ALPHA_FIRE
+		end
+		setRate(smoke, math.min(1.5 + 0.6 * total, 9) * quality)
+	elseif smouldering and charredCount > 0 then
+		if session.smokeMode ~= "smoulder" then
+			session.smokeMode = "smoulder"
+			smoke.Color = FireLook.SMOKE_THIN
+			smoke.Transparency = SMOKE_ALPHA_SMOULDER
+		end
+		setRate(smoke, (1 + 0.25 * charredCount) * quality)
+	else
+		setRate(smoke, 0)
+	end
+	if session.puff > 0 then
+		smoke:Emit(math.min(session.puff * 2, 5))
+		session.puff = 0
+	end
+	-- Flare-ups: now and then one lit part licks up higher, the light pops.
+	local now = os.clock()
+	if total > 0 and now >= session.nextFlare then
+		session.nextFlare = now + random:NextNumber(0.6, 1.5)
+		local lit = {}
+		for _, look in session.parts do
+			if look.heat > 0.5 and look.fx.tongues and not look.hidden then
+				table.insert(lit, look)
+			end
+		end
+		if #lit > 0 then
+			local look = lit[random:NextInteger(1, #lit)]
+			local tongues = look.fx.tongues :: ParticleEmitter
+			tongues:Emit(random:NextInteger(2, 3))
+			session.pop = now + 0.12
+		end
+	end
+end
+
 ------------------------------------------------------------------------------
 -- Reading the attributes
 ------------------------------------------------------------------------------
-
-local function bodyPart(model: Model, name: string): BasePart?
-	local part = model:FindFirstChild(name)
-	return if part and part:IsA("BasePart") then part else nil
-end
 
 local function ensureHeartbeat()
 	if heartbeat == nil then
@@ -712,6 +774,8 @@ local function lookOf(session: Session, partName: string): PartLook?
 		faces = {},
 		fx = {},
 		level = 0,
+		heat = 0,
+		band = 0,
 		acid = false,
 		hidden = false,
 		gone = false,
@@ -780,26 +844,6 @@ local function readLit(session: Session)
 	end
 	session.lit = lit
 	session.burning = anyFire or anyAcid
-	-- The light: one per body on fire.
-	if anyFire then
-		local light = session.light
-		local torso = bodyPart(model, "Torso")
-		if light == nil and torso then
-			local created = Instance.new("PointLight")
-			created.Name = NAME
-			created.Color = FIRE_LIGHT
-			created.Shadows = true
-			created.Range = 10
-			created.Brightness = 0
-			created.Parent = torso
-			session.light = created
-		end
-	elseif session.light then
-		session.light.Enabled = false
-	end
-	if session.light and anyFire then
-		session.light.Enabled = true
-	end
 	-- Catching fire: the sound, a cry (a living body, not too often).
 	if session.burning and not wasBurning then
 		local humanoid = model:FindFirstChildOfClass("Humanoid")
@@ -846,14 +890,14 @@ local function wipe(session: Session)
 			end
 		end
 		local fx = look.fx
-		for _, emitter in { fx.flame, fx.smoke, fx.embers, fx.fizz, fx.vapour, fx.drips } do
+		for _, emitter in { fx.body, fx.tongues, fx.glow, fx.embers, fx.fizz, fx.vapour, fx.drips } do
 			if emitter then
 				emitter:Destroy()
 			end
 		end
 	end
-	if session.light then
-		session.light:Destroy()
+	if session.heart then
+		session.heart:Destroy()
 	end
 	sessions[session.model] = nil
 end
@@ -877,22 +921,47 @@ function Burns._step(dt: number)
 	local any = false
 	for model, session in sessions do
 		local smouldering = now < session.smokeUntil
-		local busy = session.burning or smouldering or session.smoking or session.animating
+		local busy = session.burning
+			or smouldering
+			or session.smoking
+			or session.animating
+			or session.heat > 0
+			or session.puff > 0
 		if not busy then
 			continue
 		end
 		any = true
-		-- The light flickers (smooth noise, two speeds), every frame.
-		local light = session.light
-		if light and light.Enabled then
-			local n = math.noise(now * 7.3, session.seed) * 0.6
-				+ math.noise(now * 19.1, session.seed + 3) * 0.4
-			local total = 0
-			for _, level in session.lit do
-				total += level
+		-- Every frame: the fire breathes (gust), the light flickers on two
+		-- noise speeds with it and wanders round the middle of the flames
+		-- (shadows and highlights crawl), popping on a flare-up.
+		local heart = session.heart
+		if heart then
+			local seed = session.seed
+			session.gust = FireLook.gust(now, seed)
+			heart.Position = session.centre
+				+ Vector3.new(
+						math.noise(now * 2.3, seed, 1.1),
+						0.6 * math.noise(now * 2.9, seed, 2.3),
+						math.noise(now * 2.1, seed, 3.7)
+					)
+					* 0.6
+			local light = session.light
+			local total = session.heat
+			if light and total > 0 then
+				local n = math.noise(now * 7.3, seed) * 0.6 + math.noise(now * 19.1, seed + 3) * 0.4
+				local pop = if now < session.pop then 1.4 else 1
+				light.Enabled = true
+				light.Brightness = math.clamp(0.9 + total * 0.18, 1, 2.6)
+					* math.min(total, 1)
+					* (0.75 + 0.5 * session.gust)
+					* (1 + 0.35 * n)
+					* pop
+				light.Range = math.clamp(7 + total * 0.9, 8, 16)
+					* (0.9 + 0.15 * session.gust)
+					* (1 + 0.06 * n)
+			elseif light and light.Enabled then
+				light.Enabled = false
 			end
-			light.Brightness = math.clamp(0.9 + total * 0.18, 1, 2.6) * (1 + 0.45 * n)
-			light.Range = math.clamp(7 + total * 0.9, 8, 16) * (1 + 0.08 * n)
 		end
 		if not textures then
 			continue
@@ -903,6 +972,7 @@ function Burns._step(dt: number)
 			firstPerson = head ~= nil and (camera.CFrame.Position - head.Position).Magnitude < 1.6
 		end
 		local moving = false
+		local quality = FireLook.quality()
 		for _, look in session.parts do
 			if look.part.Parent == nil then
 				continue
@@ -930,8 +1000,9 @@ function Burns._step(dt: number)
 				moving = true
 				drawPart(session, look)
 			end
-			driveFx(look, smouldering, firstPerson)
+			driveFx(session, look, smouldering, firstPerson, textureDt, quality)
 		end
+		driveHeart(session, smouldering, quality)
 		session.animating = moving
 		session.smoking = smouldering
 	end
@@ -967,6 +1038,15 @@ function Burns.watch(model: Model)
 		smokeUntil = 0,
 		smoking = false,
 		light = nil,
+		heart = nil,
+		smoke = nil,
+		smokeMode = "",
+		centre = Vector3.zero,
+		heat = 0,
+		gust = 0.5,
+		pop = 0,
+		nextFlare = 0,
+		puff = 0,
 		seed = hash(model.Name) % 997,
 		animating = false,
 		burning = false,

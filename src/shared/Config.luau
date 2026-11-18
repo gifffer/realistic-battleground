@@ -375,6 +375,20 @@ return table.freeze({
 			smoke = 135930341177500, -- smoke.png
 			ember = 104956583136032, -- ember.png
 		}),
+		-- Fire textures (assets/fire, tools/pyro/make_fire.py, docs/FIRE_FR.md):
+		-- every flame in the game (burning bodies, the Pyromaniac). 0 = not
+		-- uploaded: Roblox's own particles stand in (Client/Combat/FireLook).
+		FIRE = table.freeze({
+			flameLoop = 0, -- flame_loop.png (8 x 8 flipbook, loops)
+			flameTongue = 0, -- flame_tongue.png (4 x 4 flipbook, one shot)
+			fireball = 0, -- fireball.png (8 x 8 flipbook, one shot)
+			groundFire = 0, -- ground_fire.png (4 x 4 flipbook, loops)
+			smoke = 0, -- smoke.png (2 x 2: four puffs)
+			ember = 0, -- ember.png (2 x 2: dot, streak, flake, sparks)
+			glow = 0, -- glow.png
+			flameStrip = 0, -- flame_strip.png (Beams, Trails)
+			scorch = 0, -- scorch.png (a decal on the floor)
+		}),
 		-- The first burn pictures (assets/burns/legacy), still used while
 		-- BURNS above is 0: acid 1..3 for acid, fire 1..3 for stages 2..4.
 		BURN_IMAGES = table.freeze({

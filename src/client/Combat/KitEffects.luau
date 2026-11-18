@@ -1042,6 +1042,7 @@ function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: 
 		SoundController.play(hitSound, victim)
 	end
 	KitVFX.onHit(victim, attacker, moveId)
+	PyroFx.onHit(victim, attacker, moveId) -- (a burning fist's flare)
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
 	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil

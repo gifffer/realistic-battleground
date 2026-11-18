@@ -1110,3 +1110,23 @@ Détails et import des images : `docs/BURNS_FR.md`. Tout marche **sans les nouve
 | B8 | Kill (la vie remonte) / nouvelle manche / réapparition | Les brûlures et les flammes partent. |
 | B9 | Brûlé en vue à la 1re personne | Pas de flammes ni de fumée devant la caméra (celles de la tête sont cachées), le reste du corps brûle normalement. |
 | B10 | Vision thermique du **Sentinel** | Le trou dans la peau comme avant ; pas de flammes. |
+
+## Feu v2 : flammes, flaques et effets du Pyromane (`feature/kit-pyromaniac`)
+
+Détails et import des 9 images : `docs/FIRE_FR.md`. **Faire les tests deux fois** : une fois **sans** les IDs (`Config.Injuries.FIRE` à 0 : tout doit marcher, avec l'ancien look) et une fois **avec**. Kit **Pyromane** contre le **Dummy**, puis à 2 joueurs. Les sons ne changent pas ici.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | Faire brûler le Dummy (Molotov dessus) et regarder de près | Plus de petites taches orange : de **gros paquets de flammes** qui se rejoignent sur chaque membre, des **langues** qui montent et se détachent, une lueur chaude collée au corps, des braises qui flottent. **Une seule** colonne de fumée noire (chaude en bas), **une seule** lumière qui bouge un peu sur le corps. Le feu **respire** et **flambe** de temps en temps (la lumière saute). |
+| F2 | Le feu prend sur un membre / s'éteint | Il **prend** d'un coup (gerbe de langues, la lumière saute) ; il **baisse en ~1 s** puis une dernière bouffée de fumée, puis le corps fume gris. Jamais coupé net. |
+| F3 | Flaque de Molotov au sol, la regarder de haut et de côté | Un **film de feu à plat** sur le sol (bords irréguliers, **jamais un rond**) + des flammes debout de hauteurs différentes ; ça part du centre (~0,6 s). La lumière orange bouge au-dessus des flammes ; seule la flaque la plus proche fait des **ombres**. |
+| F4 | Fin de la flaque | Les cellules **baissent** une par une (pas coupées net). La marque noire s'est **formée pendant le feu** : une grande tache irrégulière (avec des doigts et gouttes si `scorch.png` est importé ; sinon quelques ellipses sombres), plus quelques petites taches ; **pas de disque par cellule**. Elle s'efface après ~45 s. |
+| F5 | **1** (Zippo Flare) | Au clic de la molette : **étincelles**, la flamme **grandit** (pas allumée d'un coup) et la lumière monte. Puis un filet de **liquide**, et à 0,42 s **la boule de feu** en avant, pleine taille tout de suite, qui roule en suie ; braises. À la fermeture : la flamme s'éteint avec un petit filet de fumée. En bougeant la main, la flamme **laisse une traînée**. |
+| F6 | **2** (Molotov) | Le chiffon s'allume avec des **étincelles** et grandit ; pendant l'élan et le vol, il laisse une **traînée de feu** (avec `flame_strip.png` : un ruban de flamme), fumée fine. Impact : boule(s) de feu, **gouttes d'essence en feu** qui retombent en arcs, verre, fumée juste après. |
+| F7 | **3** (Fire Breath) / Inferno | Une **bouffée** de feu aux lèvres au départ, puis un jet qui **freine** et **monte** au bout ; avec `flame_strip.png` un **cœur de jet continu** qui sort en 0,08 s. La lumière est **dans** le jet (le sol s'éclaire devant lui). À la fin le jet se **détache** des lèvres au lieu de disparaître. |
+| F8 | **G** (BURNING MAN) | Rien au départ ; à **0,4 s** étincelles sur l'avant-bras gauche (le Zippo le touche), à **0,55 s** le feu prend au poignet gauche et **monte jusqu'au coude**, à **0,63 s** le bras droit, à **0,75 s** (bras écartés) une **gerbe de feu** sur chaque bras et un flash. Ensuite les bras brûlent comme un corps en feu, **une** lumière sur la poitrine. |
+| F9 | Rejoindre / revenir près d'un Pyromane déjà en Awakening | Ses bras sont déjà en feu (pas de délai). |
+| F10 | **1** en Awakening (Burning Fist), **4** (Burning Rush) | Le coup **attise** les flammes (plus de feu, une traînée le long du coup). Touché : au poing, **flamme + étincelles + flash** au moment exact de l'impact. Raté : pas d'impact. |
+| F11 | **Finisher** (Immolation) | Pendant le versement : l'essence **éclabousse** sa tête et ses épaules, une **tache d'essence** sombre et brillante s'étale sous lui. À l'embrasement : boule de feu, et **le sol prend feu autour du corps** (~0,4 s), qui brûle avec lui (~12 s) puis laisse une marque noire. |
+| F12 | *Graphics quality* 1 puis 10 | 1 : moins de particules, pas de lueur au cœur, toujours lisible. 10 : le look complet. Pas de lag dans les deux. |
+| F13 | 4 flaques + 2 corps en feu en même temps | Toujours fluide ; pas d'erreur dans l'Output. |
