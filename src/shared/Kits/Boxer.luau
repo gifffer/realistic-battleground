@@ -109,7 +109,8 @@ local kit: KitTypes.KitDef = {
 	},
 
 	-- Cinematic kill (Shared/Finishers "KnockoutCombo"): hauls the opponent
-	-- up, body shots, hooks, cross, then a huge uppercut that sends them flying.
+	-- up, body shots, hooks, cross, then the left hand into their side: the
+	-- liver torn out. (`impact` = the timeline's kill, `duration` its length.)
 	finisher = {
 		animation = "Boxer_FinisherCombo",
 		impact = 2.62,

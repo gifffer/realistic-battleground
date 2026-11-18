@@ -104,6 +104,10 @@ function GoreKit.get(): { [string]: Piece }?
 			optional[name] = true
 		end
 	end
+	-- (nor Dr. Rift's body cut in two: WaistCut draws simpler ones then)
+	for _, name in GoreShapes.cut do
+		optional[name] = true
+	end
 	for name in GoreShapes.slots do
 		if found[name] == nil and not optional[name] then
 			if not warned and next(found) == nil then

@@ -30,6 +30,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local GoreKit = require(script.Parent.GoreKit)
+local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
 local HeadBlast = require(script.Parent.HeadBlast)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
@@ -38,8 +39,8 @@ local ArmRip = {}
 
 ArmRip.ATTRIBUTE = "ArmTorn"
 
-local BLOOD = Color3.fromRGB(78, 6, 6)
-local BLOOD_WET = Color3.fromRGB(104, 8, 8)
+local BLOOD = Config.Blood.PALETTE.VENOUS
+local BLOOD_WET = Config.Blood.PALETTE.ARTERIAL
 local FLESH = Color3.fromRGB(122, 28, 30)
 local FLESH_DARK = Color3.fromRGB(80, 14, 16)
 local BONE = Color3.fromRGB(226, 214, 190)
@@ -83,6 +84,7 @@ local function emitter(parent: Attachment, rate: number): ParticleEmitter
 	blood.Drag = 0.5
 	blood.EmissionDirection = Enum.NormalId.Front
 	blood.Rate = rate
+	Blood.droplets(blood, "drops") -- (real drops when the picture is uploaded)
 	blood.Parent = parent
 	return blood
 end
@@ -192,6 +194,24 @@ local function drip(arm: BasePart)
 	drops.EmissionDirection = Enum.NormalId.Top
 	drops.Speed = NumberRange.new(0.5, 2)
 	drops.SpreadAngle = Vector2.new(40, 40)
+	Blood.dripEmitter(drops) -- (it only drips: real drops fall slowly)
+	-- (and real drops falling from it: they land, they make marks, a pool
+	-- where it lies)
+	task.spawn(function()
+		local random = Random.new()
+		local stop = os.clock() + DRIP_TIME
+		while os.clock() < stop and point.Parent and arm.Parent do
+			Blood.drop(
+				point.WorldPosition,
+				arm.AssemblyLinearVelocity * 0.5,
+				random:NextNumber(0.05, 0.1),
+				random,
+				Blood.passiveScale(), -- (a drip: it falls slowly, lands round)
+				{ passive = true }
+			)
+			task.wait(random:NextNumber(0.12, 0.3))
+		end
+	end)
 	task.delay(DRIP_TIME, function()
 		drops.Rate = 0
 		Debris:AddItem(point, 1.5)
@@ -229,7 +249,7 @@ function ArmRip.apply(model: Model, live: boolean)
 			size = 0.1,
 			pool = 0,
 			seed = seed + 3,
-			ignore = { model },
+			ignore = { model :: Instance },
 		})
 		drip(arm)
 	end
@@ -268,6 +288,14 @@ function ArmRip.pop(victim: Model)
 	spit.Speed = NumberRange.new(2, 5)
 	spit:Emit(14)
 	Debris:AddItem(point, 1.5)
+	Blood.landings(
+		point.WorldPosition,
+		point.WorldCFrame.LookVector,
+		18,
+		NumberRange.new(2, 5),
+		2,
+		NumberRange.new(0.04, 0.07)
+	)
 end
 
 -- He throws it down (the server lets go of it from Finishers.ARM_THROW_FROM):

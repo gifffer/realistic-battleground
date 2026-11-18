@@ -20,8 +20,10 @@ local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local GoreKit = require(script.Parent.GoreKit)
+local Blood = require(script.Parent.Blood)
 
 local WeaponFx = {}
 
@@ -29,7 +31,7 @@ local BONE = Color3.fromRGB(222, 208, 182)
 local BONE_BLOODY = Color3.fromRGB(176, 120, 104)
 local FLESH = Color3.fromRGB(112, 24, 26)
 local TENDON = Color3.fromRGB(210, 196, 178)
-local BLOOD = Color3.fromRGB(92, 10, 10)
+local BLOOD = Config.Blood.PALETTE.VENOUS
 local BONE_LENGTH = 1.7
 local HALF_LIFETIME = 20 -- seconds the two halves stay on the floor
 -- In the fist (Right Arm space): the hand closed round the shaft a third of
@@ -232,9 +234,18 @@ local function splinters(at: Vector3, count: number)
 	drops.SpreadAngle = Vector2.new(180, 180)
 	drops.Acceleration = Vector3.new(0, -60, 0)
 	drops.Rate = 0
+	Blood.droplets(drops, "drops")
 	drops.Parent = point
 	drops:Emit(10)
 	Debris:AddItem(point, 1)
+	Blood.landings(
+		at,
+		Vector3.new(0, 1, 0),
+		90,
+		NumberRange.new(4, 9),
+		2,
+		NumberRange.new(0.03, 0.06)
+	)
 end
 
 function WeaponFx.broke(id: string, throwId: number?, position: Vector3, velocity: Vector3)
