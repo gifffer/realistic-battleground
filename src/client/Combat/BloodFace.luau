@@ -524,7 +524,7 @@ local UPPISH: { [string]: boolean } = {
 	Headbutt = true,
 	DoubleHeadbutt = true,
 }
-local GLASS: { [string]: boolean } = { BottleSmash = true, BrokenBottle = true }
+local GLASS: { [string]: boolean } = { BottleSmash = true, BrokenBottle = true, BottleThrow = true }
 
 -- Rolls on the hit's seeded `random`: the same wounds on every screen.
 function BloodFace.hit(model: Model, attacker: Model?, info: HitInfo?, random: Random)

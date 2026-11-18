@@ -246,6 +246,22 @@ local sounds: { [string]: SoundInfo } = {
 		fallback = "OrganDrop",
 	},
 
+	-- Things thrown (Shared/Weapons) -----------------------------------------
+	MetalClang = { -- the iron bar landing: a ringing clang, then rattling on the floor
+		ids = {},
+		volume = 0.8,
+		pitch = 1.4,
+		pitchVariation = 0.08,
+		fallback = "HeavyHit",
+	},
+	PlankBreak = { -- the board cracking in two: a dry, splintering snap
+		ids = {},
+		volume = 0.8,
+		pitch = 1.15,
+		pitchVariation = 0.08,
+		fallback = "HeavyHit",
+	},
+
 	-- Dr. Rift --------------------------------------------------------------
 	FlaskThrow = { -- a glass flask flung (a light whoosh, liquid sloshing)
 		ids = {},
