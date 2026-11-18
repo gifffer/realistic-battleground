@@ -254,9 +254,9 @@ D.box(G, "AlleyFloor", 131, 169, -0.8, FINISH, 58, 66, COBBLE, "Cobblestone", ex
 D.box(G, "AlleyFloor", 131, 169, -0.8, FINISH, 90, 98, CONCRETE_DARK, "Concrete", extra={"t": ["CityWetSurface"]})
 D.box(G, "CourtFloor", 169, 205, -0.8, FINISH, 56, 102, (78, 75, 70), "Concrete", extra={"t": ["CityWetSurface"]})
 # A gutter down the middle of alley A, a drain grate in each alley
-D.box(G, "Gully", 131, 169, FINISH, FINISH + 0.03, 61.6, 62.4, (40, 40, 40), "Slate", flags=DECOR)
+D.box(G, "Gully", 131, 169, FINISH, FINISH + 0.08, 61.6, 62.4, (40, 40, 40), "Slate", flags=DECOR)
 for gx, gz in ((158, 62), (162, 94), (186, 66)):
-    D.box(G, "Drain", gx - 0.9, gx + 0.9, FINISH, FINISH + 0.04, gz - 0.6, gz + 0.6, (30, 30, 32), "DiamondPlate", flags=DECOR)
+    D.box(G, "Drain", gx - 0.9, gx + 0.9, FINISH, FINISH + 0.12, gz - 0.6, gz + 0.6, (30, 30, 32), "DiamondPlate", flags=DECOR)
 
 WALL_TOP = 30.2
 COURT_TOP = 34.2
@@ -293,8 +293,8 @@ for (x0, x1, z0, z1) in (
     D.box(V, "Arch", x0, x1, FLOOR, ARCH_TOP, z0, z1, BRICK[0], "Brick", extra={"a": UNBREAKABLE})
 D.box(V, "Arch", 169, 199, ARCH_TOP, 27.2, 72, 92, BRICK[0], "Brick", extra={"a": UNBREAKABLE})
 # Inside the vaults: a sooty ceiling and back wall
-D.box(V, "Vault", MARKET[0], MARKET[1], ARCH_TOP - 0.2, ARCH_TOP, 72, 80, SOOT, "Brick", flags=DECOR)
-D.box(V, "Vault", SQUAT[0], SQUAT[1], ARCH_TOP - 0.2, ARCH_TOP, 84, 92, SOOT, "Brick", flags=DECOR)
+D.box(V, "Vault", MARKET[0], MARKET[1], ARCH_TOP - 0.2, ARCH_TOP, 72.05, 80, SOOT, "Brick", flags=DECOR)
+D.box(V, "Vault", SQUAT[0], SQUAT[1], ARCH_TOP - 0.2, ARCH_TOP, 84, 91.95, SOOT, "Brick", flags=DECOR)
 
 
 def arch_trim(x0, x1, face_z, out):
@@ -329,7 +329,7 @@ arch_trim(SQUAT[0], SQUAT[1], 92, 1)
 # The tunnel's sides are bare dark concrete: brick cladding seen from the yard
 for z0, z1 in ((74.4, 75.0), (89.0, 89.6)):
     D.box(V, "Cladding", 147, 199, 27.2, 42.4, z0, z1, BRICK[2], "Brick", flags=SOLID, extra={"a": UNBREAKABLE})
-D.box(V, "Cladding", 147, 199, 42.2, 42.6, 74.4, 89.6, (52, 50, 48), "Slate", flags=SOLID)
+D.box(V, "Cladding", 147, 199.7, 42.2, 42.6, 74.3, 89.7, (52, 50, 48), "Slate", flags=SOLID)
 D.box(V, "Cladding", 198.4, 199.6, 27.2, 42.6, 74.4, 89.6, BRICK[2], "Brick", flags=SOLID)
 # Iron girder edges where the tunnel sits on the brick
 for z in (73.6, 90.4):
@@ -363,7 +363,7 @@ def wall_light(x, y, z, out, dead=False, flicker=False):
     D.part(L, "WallLight", (x, y, z), (0.6, 0.8, 0.5), (70, 70, 64), "SmoothPlastic", flags=DECOR)
     D.part(L, "Bulb", (x + out[0] * 0.35, y - 0.05, z + out[1] * 0.35), (0.45, 0.45, 0.45), WARM, "Neon",
            flags=DECOR,
-           shape=4, extra={"t": ["CityBulkhead"], "a": attrs or None,
+           shape=4, extra={"t": ["CityLamp" if (dead or flicker) else "CityBulkhead"], "a": attrs or None,
                            "l": {"type": "Point", "color": list(WARM), "range": 18, "brightness": 0.9,
                                  "name": "Light", "shadows": False}})
 
@@ -404,8 +404,8 @@ def graffiti(x, y, z, w, h, text, face, color=WHITE, rot=0):
                         "lit": False, "bg": None, "bg_tr": 1.0, "rot": 0, "align": "Center"}})
 
 
-graffiti(158, 6, 58.08, 10, 3, "NO COPS. NO NAMES.", "Back")
-graffiti(130.95, 7, 54, 7, 2.6, "ARCHES >", "Left", (190, 180, 120), rot=90)
+graffiti(158, 12.5, 58.08, 10, 3, "NO COPS. NO NAMES.", "Back")
+graffiti(130.95, 7, 54, 7, 2.6, "ARCHES >", "Front", (190, 180, 120), rot=90)
 graffiti(155, 7, 97.92, 9, 3, "MARROW EATS ITS OWN", "Front", (170, 60, 50))
 graffiti(190, 20, 56.08, 14, 4, "ARCHES", "Back", (150, 150, 140))
 graffiti(178, 16.5, 71.9, 9, 2.4, "ASK FOR VIC", "Front", (190, 180, 120))
@@ -434,11 +434,11 @@ D.part(P, "Tyre", (167, FINISH + 0.4, 64.5), (0.75, 3, 3), (24, 24, 24), "Rubber
 D.part(P, "Tyre", (167, FINISH + 1.1, 64.6), (0.75, 3, 3), (24, 24, 24), "Rubber", flags=PROP, shape=3, rot=(0, 0, 90))
 
 # Puddles (shown when it rains), drips from the tunnel, steam from a vent in alley A
-for (x, z, s) in ((140, 62, 3.5), (156, 63, 3.0), (161, 94, 3.5), (182, 68, 4.0), (199, 97, 3.0), (186, 60, 2.5)):
-    D.part(P, "Puddle", (x, FINISH + 0.02, z), (0.25, s, s), (72, 78, 90), "SmoothPlastic", flags=DECOR,
+for (x, z, s) in ((140, 62, 3.5), (156, 64.6, 2.6), (161, 94, 3.5), (182, 68, 4.0), (199, 97, 3.0), (190, 68, 2.5)):
+    D.part(P, "Puddle", (x, FINISH + 0.02, z), (0.25, s, s), (72, 78, 90), "SmoothPlastic", flags=DECOR, shape=3,
            transparency=1, rot=(0, 0, 90), extra={"t": ["CityPuddle"], "a": {"RainOnly": False}})
-for (x, z) in ((152, 73.3), (171, 73.3), (183, 90.7), (195, 73.3)):
-    D.part(P, "Drip", (x, 26.1, z), (0.4, 0.2, 0.4), (52, 50, 48), "Metal", flags=DECOR, transparency=1,
+for (x, y, z) in ((177.5, 12.6, 73.0), (185.0, 12.6, 78.5), (183.0, 12.6, 90.7), (190.5, 12.6, 85.5)):
+    D.part(P, "Drip", (x, y, z), (0.4, 0.2, 0.4), (52, 50, 48), "Metal", flags=DECOR, transparency=1,
            extra={"t": ["CityDrip"], "fx": "drip"})
 D.part(P, "SteamVent", (147.5, FINISH + 0.1, 64.8), (3, 0.2, 2.2), (50, 50, 50), "DiamondPlate", flags=DECOR,
        extra={"t": ["CitySteam"], "a": {"BaseRate": 4}, "fx": "steam_small"})
@@ -467,7 +467,7 @@ def dumpster(x, z, ry, color=DUMPSTER, lid=DUMPSTER_LID, open_lid=False):
         D.part(C_, "Wheel", (wx, FINISH + 0.3, wz), (0.3, 0.6, 0.6), (20, 20, 20), "Rubber", flags=DECOR, shape=3)
 
 
-dumpster(157, 60.3, 0, open_lid=True)
+dumpster(157, 61.3, 0, open_lid=True)
 dumpster(150.5, 95.6, 0, color=(70, 52, 38), lid=(50, 38, 28))
 dumpster(178.5, 98.8, 0)
 
@@ -580,7 +580,7 @@ for k in range(4):
            [(40, 36, 32), (60, 54, 46), (30, 34, 40), (70, 30, 30)][k], "Fabric", flags=DECOR)
 # a broken neon in the arch: "BUY · SELL", the S dead, flickering
 D.part(MK, "NeonSign", ((mx0 + mx1) / 2, 11.1, 72.3), (6.8, 1.2, 0.1), BLACK, "SmoothPlastic", flags=DECOR,
-       extra={"t": ["CityNeon"], "a": {"Color": "red", "Flicker": True},
+       extra={"t": ["CityNeon"], "a": {"Color": "red", "Flicker": "random"},
               "l": {"type": "Point", "color": list(RED_NEON), "range": 14, "brightness": 1.2, "name": "Light",
                     "shadows": False},
               "g": {"text": "BUY · ELL", "font": "Oswald", "color": list(RED_NEON), "face": "Front", "lit": True,
@@ -590,12 +590,14 @@ for k in range(6):
     x = mx0 + 1 + k * 2
     D.part(MK, "Bulb", (x, ARCH_TOP - 1.4 - (0.5 if k % 2 else 0.2), 74.5), (0.35, 0.35, 0.35), WARM, "Neon",
            flags=DECOR, shape=4,
-           extra={"l": {"type": "Point", "color": list(WARM), "range": 10, "brightness": 0.8, "name": "Light",
+           extra={"t": ["CityBulkhead"],
+                  "l": {"type": "Point", "color": list(WARM), "range": 10, "brightness": 0.8, "name": "Light",
                         "shadows": False}})
 # a caged work lamp hanging under the tarp, lighting the tables
 D.box(MK, "Cord", 180.97, 181.03, 8.6, 10.6, 69.47, 69.53, BLACK, "SmoothPlastic", flags=DECOR)
 D.part(MK, "WorkLamp", (181, 8.4, 69.5), (0.8, 0.6, 0.8), (60, 60, 56), "Metal", flags=DECOR,
-       extra={"l": {"type": "Spot", "color": [255, 196, 140], "range": 20, "brightness": 1.5, "angle": 120,
+       extra={"t": ["CityBulkhead"],
+              "l": {"type": "Spot", "color": [255, 196, 140], "range": 20, "brightness": 1.5, "angle": 120,
                     "face": "Bottom", "shadows": True, "name": "Light"}})
 D.box(MK, "Wire", mx0 + 0.6, mx1 - 0.6, ARCH_TOP - 1.25, ARCH_TOP - 1.2, 74.47, 74.53, BLACK, "SmoothPlastic",
       flags=DECOR)
@@ -605,9 +607,9 @@ D.part(N_, "NpcSpot", (181.5, FINISH, 72.8), (1, 1, 1), BLACK, "SmoothPlastic", 
 
 # -- Squat: mattresses, cardboard, blankets, a shopping cart, empties, a burn barrel outside.
 sx0, sx1 = SQUAT
-D.box(SQ, "Mattress", 183.6, 187.4, FINISH, FINISH + 0.7, 84.4, 90.6, MATTRESS, "Fabric", flags=PROP)
-D.box(SQ, "Stain", 184.4, 186.4, FINISH + 0.7, FINISH + 0.72, 86.0, 88.5, MATTRESS_STAIN, "Fabric", flags=DECOR)
-D.part(SQ, "Blanket", (185.5, FINISH + 0.85, 88.6), (3.6, 0.25, 3.2), BLANKET, "Fabric", flags=DECOR, rot=(0, 8, 2))
+D.box(SQ, "Mattress", 185.6, 189.4, FINISH, FINISH + 0.7, 86.2, 91.0, MATTRESS, "Fabric", flags=PROP)
+D.box(SQ, "Stain", 186.4, 188.4, FINISH + 0.7, FINISH + 0.72, 87.2, 89.7, MATTRESS_STAIN, "Fabric", flags=DECOR)
+D.part(SQ, "Blanket", (187.5, FINISH + 0.85, 89.0), (3.6, 0.25, 3.2), BLANKET, "Fabric", flags=DECOR, rot=(0, 8, 2))
 D.box(SQ, "Mattress", 189.4, 192.8, FINISH, FINISH + 0.6, 85.0, 89.8, (130, 122, 104), "Fabric", flags=PROP)
 D.part(SQ, "Blanket", (191.1, FINISH + 0.75, 86.4), (3.0, 0.2, 2.6), BLANKET2, "Fabric", flags=DECOR, rot=(0, -10, 0))
 for (x, z, r, w, d) in ((182.4, 88.6, 5, 2.2, 3.0), (188.6, 89.4, -20, 2.0, 2.6), (192.0, 91.2, 30, 2.6, 2.0)):
@@ -621,7 +623,7 @@ D.part(SQ, "Candle", (188.5, FINISH + 1.55, 85.2), (0.2, 0.3, 0.2), (220, 210, 1
        shape=3, rot=(0, 0, 90),
        extra={"l": {"type": "Point", "color": [255, 170, 90], "range": 7, "brightness": 0.6, "name": "Light",
                     "shadows": False}})
-for k, (x, z) in enumerate(((183.2, 91.5), (183.7, 91.7), (191.6, 84.6), (185.6, 91.2))):
+for k, (x, z) in enumerate(((183.2, 91.5), (183.7, 91.7), (191.6, 84.6), (184.6, 91.4))):
     D.part(SQ, "Bottle", (x, FINISH + 0.15, z), (0.3, 0.9, 0.3), GLASS_GREEN if k % 2 else GLASS_BROWN, "Glass",
            flags=DECOR, shape=3, rot=(rng.uniform(-20, 20), rng.uniform(0, 180), 0 if k == 1 else 90),
            transparency=0.2)
@@ -652,7 +654,7 @@ D.part(SQ, "Embers", (BX, FINISH + 3.28, BZ), (0.15, 2, 2), (255, 120, 40), "Neo
 for (x, z) in ((185.0, 96.4), (190.2, 95.4)):
     D.box(SQ, "MilkCrate", x - 0.7, x + 0.7, FINISH, FINISH + 1.3, z - 0.7, z + 0.7, (40, 70, 120), "Plastic", flags=PROP)
 # the vagrant, sitting on the ground against the arch's back wall, facing out (south)
-D.part(N_, "NpcSpot", (182.3, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
+D.part(N_, "NpcSpot", (183.3, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        rot=(0, 180, 0),
        extra={"a": {"NpcRole": "Vagrant", "NpcName": "Old Ray", "NpcPose": "SitGround", "NpcSeed": 47}})
 
@@ -665,11 +667,57 @@ WS_CITY = "Extras/WeaponSpawns"
 KINDS = ["IronBar", "Bottle", "Plank"]
 
 
+LENGTH = {"IronBar": 3.2, "Plank": 3.2, "Bottle": 1.0, "Random": 3.2}
+
+
+def boxes_all():
+    for row, b in city_parts():
+        if row[12] < 1:
+            yield b
+    for row in D.parts:
+        if row[12] >= 1:
+            continue
+        sx, sy, sz = row[7], row[8], row[9]
+        yield (row[1] - sx / 2, row[1] + sx / 2, row[2] - sy / 2, row[2] + sy / 2, row[3] - sz / 2, row[3] + sz / 2)
+
+
+def item_clear(x, z, ry, length, width=0.4):
+    """Nothing visible (props, bags, kerbs, walls...) where the item would lie."""
+    dx, dz = -math.sin(math.radians(ry)), -math.cos(math.radians(ry))
+    base = floor_at(x, z)
+    boxes = list(boxes_all())
+    for i in range(9):
+        t = i / 8 - 0.5
+        px, pz = x + dx * t * (length + 0.3), z + dz * t * (length + 0.3)
+        for b in boxes:
+            if b[0] < px + width and b[1] > px - width and b[4] < pz + width and b[5] > pz - width:
+                if b[2] < base + 3.0 and b[3] > base + 0.15:
+                    return False
+    return True
+
+
+def weapon_ry(x, z, kind, ry=None):
+    for r in ([ry] if ry is not None else [0, 30, 60, 90, 120, 150]):
+        if item_clear(x, z, r, LENGTH[kind]):
+            return r
+    return None
+
+
 def weapon_spawn(folder, x, z, kind, ry=None):
-    assert free_spot(x, z, 0.9, 2.5), ("weapon spot not free", x, z)
+    # (the given turn first, then any; nudged a little if the spot is taken)
+    found = None
+    for (dx, dz) in ((0, 0), (0.8, 0), (-0.8, 0), (0, 0.8), (0, -0.8), (1.6, 0), (-1.6, 0), (0, 1.6), (0, -1.6)):
+        r = weapon_ry(x + dx, z + dz, kind, ry)
+        if r is None and ry is not None:
+            r = weapon_ry(x + dx, z + dz, kind)
+        if r is not None:
+            found = (x + dx, z + dz, r)
+            break
+    assert found is not None, ("weapon spot not free", x, z)
+    x, z, ry = found
     y = floor_at(x, z) if folder == WS_CITY else FINISH
     D.part(folder, "WeaponSpawn", (x, y, z), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
-           rot=(0, ry if ry is not None else rng.choice([0, 30, 60, 90, 120, 150]), 0),
+           rot=(0, ry, 0),
            extra={"t": ["WeaponSpawn"], "a": {"Weapon": kind}})
 
 
@@ -713,7 +761,7 @@ for gx in range(-128, 129, 2):
             continue
         if floor_at(x, z) > 2.0 or not outdoors(x, z) or not against_wall(x, z):
             continue
-        if not free_spot(x, z, 1.0, 3.0):
+        if not free_spot(x, z, 1.0, 3.0) or weapon_ry(x, z, "Random") is None:
             continue
         candidates.append((x, z))
 picked = []

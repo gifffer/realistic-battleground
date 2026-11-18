@@ -715,6 +715,8 @@ local function throwThroughWalls(
 	-- (the floor it flew from: what's level with it is never broken)
 	local feetY = victim.root.Position.Y - 3
 	local started = now()
+	-- (a pushed body: the push it was given; another push replacing it ends the watch)
+	local ownPush: Instance? = if pushed then victim.root:FindFirstChild("PushAttachment") else nil
 	-- (a push only lasts KNOCKBACK_TIME; its body reaches the server a ping late)
 	local watch = if pushed
 		then math.min(C.THROUGH_WALL_WATCH, C.KNOCKBACK_TIME + 0.25)
@@ -734,7 +736,18 @@ local function throwThroughWalls(
 			connection:Disconnect()
 			return
 		end
-		local moving = if pushed then velocity else victim.root.AssemblyLinearVelocity
+		if pushed then
+			local current = victim.root:FindFirstChild("PushAttachment")
+			if current ~= ownPush then
+				connection:Disconnect() -- (another push - a hit, a block, a pull - replaced it)
+				return
+			end
+		end
+		-- (the push's own speed while it lasts - the body reaches the server a ping late -,
+		-- then the body's real one)
+		local moving = if pushed and now() - started < C.KNOCKBACK_TIME + 0.12
+			then velocity
+			else victim.root.AssemblyLinearVelocity
 		local flat = Vector3.new(moving.X, 0, moving.Z)
 		local speed = flat.Magnitude
 		if speed < C.THROUGH_WALL_SPEED then
@@ -768,7 +781,14 @@ local function throwThroughWalls(
 			C.THROUGH_WALL_RADIUS,
 			through * C.THROUGH_WALL_PUSH,
 			attacker,
-			{ feetY = feetY, only = onlyTagged }
+			{
+				feetY = feetY,
+				-- (only what this body is fast enough for: a weak wall broken
+				-- never takes a stronger one next to it along)
+				only = function(candidate: BasePart): boolean
+					return onlyTagged(candidate) and speed >= neededSpeed(candidate)
+				end,
+			}
 		)
 		if not smashed then
 			return
@@ -776,7 +796,10 @@ local function throwThroughWalls(
 		broke += 1
 		-- Most of its speed kept: it goes through.
 		if pushed then
-			Push.apply(victim.root, flat * C.THROUGH_WALL_KEEP, C.KNOCKBACK_TIME)
+			velocity = flat * C.THROUGH_WALL_KEEP
+			Push.apply(victim.root, velocity, C.KNOCKBACK_TIME)
+			ownPush = victim.root:FindFirstChild("PushAttachment")
+			started = now()
 		else
 			victim.root.AssemblyLinearVelocity = through * C.THROUGH_WALL_KEEP
 		end

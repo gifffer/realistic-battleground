@@ -21,6 +21,7 @@ Reference videos the player sends: extract them at about 15 fps and look at ever
 - **Blender works headless in Python**: `python3 -m venv venv && venv/bin/pip install bpy numpy scipy matplotlib pillow`, then `venv/bin/python -I script.py`. `venv/` is not committed.
   - Gore pieces: `tools/wounds/` (build with `venv/bin/python -I tools/wounds/build_wound_kit.py assets/wounds`).
   - Dr. Rift's gear: `tools/rift/`.
+  - The alleys (east of the ring, along the viaduct) and the street-weapon spawn markers: `venv/bin/python -I tools/city/alleys.py` regenerates `src/server/Systems/City/AlleyData.luau` (merged into the city's data by `City/init.luau`; the city itself comes from citygen.py, not in the repo).
   - Render previews (Cycles CPU) and LOOK at them before calling something done.
 - **Any change to an FBX asset:** give the player a zip of its folder (e.g. `assets/wounds/`) so he can re-import it in Studio.
 - **Checks before every push:** `stylua --check src` and `selene src`. Both are run by CI, and a Selene error fails it. Also run luau-lsp if you have it.

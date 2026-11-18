@@ -1487,6 +1487,16 @@ local function spawnNpc(spot: BasePart, folder: Instance, city: Instance, index:
 
 	local shop = if roleText == "Clerk" then shopNear(city, floor) else nil
 	addAccessories(model, roleText, look, if shop then SHOP_COLORS[shop] else nil)
+	-- A seated NPC is drawn lower by the client; its standing torso and head
+	-- (where the server keeps them) must not stop bodies in the air above him.
+	if poseText == "SitGround" or poseText == "SitStool" then
+		for _, partName in { "Torso", "Head" } do
+			local part = model:FindFirstChild(partName)
+			if part and part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
 
 	-- What the client needs to pose it.
 	model:SetAttribute("Npc", true)

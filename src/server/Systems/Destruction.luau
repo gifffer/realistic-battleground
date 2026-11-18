@@ -94,7 +94,13 @@ local function hide(part: BasePart): Saved
 	part.CanTouch = false
 	part:SetAttribute("Broken", true)
 	for _, child in part:GetDescendants() do
-		if child:IsA("Decal") then
+		if child:IsA("BasePart") then
+			-- (decoration parented under the wall - rails, plinths, sills - goes with it)
+			toggle(saved, child, "Transparency", 1)
+			toggle(saved, child, "CanCollide", false)
+			toggle(saved, child, "CanQuery", false)
+			toggle(saved, child, "CanTouch", false)
+		elseif child:IsA("Decal") then
 			toggle(saved, child, "Transparency", 1)
 		elseif
 			child:IsA("SurfaceGui")
