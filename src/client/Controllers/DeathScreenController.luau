@@ -2,18 +2,19 @@
 -- DeathScreenController: a short screen after you are eliminated, until you
 -- respawn. Low in the middle, the body stays visible above it:
 --
---                        FINISHED BY
+--                        Finished by
 --                         Rook_77
---                  17   BOXER  — LIVER RIP
+--                Lv 17   BOXER  — LIVER RIP
 --             ─────────────────────────────────   drains until the respawn
---             RESPAWN                       3.2
+--             Respawn                       3.2
 --
--- • "ELIMINATED BY" for a normal kill, "FINISHED BY" for a finisher (its
---   name after a red dash), "YOU DIED" when nobody gets the kill.
+-- • "Eliminated by" for a normal kill, "Finished by" for a finisher (its
+--   name after a red dash), "You died" when nobody gets the kill.
 -- • The killer's level and kit (their kit's name) under their name.
 -- • A finisher's cutscene plays first: the screen waits for its end
 --   (CinematicController.watchingUntil), then shows the time left.
 -- • The world loses its colour a little; everything goes on respawn.
+-- • It sits on one dark see-through plate (like the top bar panels).
 --
 -- Comes from the same server message as the kill feed (Remotes.KillFeed,
 -- details.victimId = our UserId). Duels have their own result screen (the
@@ -35,7 +36,8 @@ local player = Players.LocalPlayer
 local C = Theme.Colors
 local RESPAWN_TIME = Config.Knockout.RESPAWN_TIME
 
-local WIDTH = 360
+local WIDTH = 320
+local PLATE_PAD = 16 -- inside the dark plate
 -- Less than this left before the respawn: not worth showing.
 local MIN_SHOWN = 0.6
 
@@ -87,17 +89,22 @@ local function build()
 		Name = "Content",
 		AnchorPoint = Vector2.new(0.5, 1),
 		Position = UDim2.new(0.5, 0, 1, -72),
-		Size = UDim2.fromOffset(WIDTH, 132),
-		BackgroundTransparency = 1,
+		-- One dark see-through plate, like the top bar panels.
+		Size = UDim2.fromOffset(WIDTH + 2 * PLATE_PAD, 112 + 2 * PLATE_PAD - 6),
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = Theme.PANEL_TRANSPARENCY,
 		GroupTransparency = 1,
 		Parent = gui,
+	}, {
+		Theme.padding(PLATE_PAD),
 	}) :: CanvasGroup
 	Theme.autoScale(group, 0.75)
 
 	eyebrow = Theme.text({
 		Name = "Eyebrow",
-		Size = UDim2.new(1, 0, 0, 12),
-		TextSize = 10,
+		Size = UDim2.new(1, 0, 0, 14),
+		FontFace = Theme.Fonts.Body,
+		TextSize = 12,
 		TextColor3 = C.Ink2,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = "",
@@ -106,9 +113,9 @@ local function build()
 	title = Theme.text({
 		Name = "Title",
 		Position = UDim2.fromOffset(0, 16),
-		Size = UDim2.new(1, 0, 0, 40),
+		Size = UDim2.new(1, 0, 0, 28),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 34,
+		TextSize = 22,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Text = "",
@@ -119,7 +126,7 @@ local function build()
 	local line = Theme.make("Frame", {
 		Name = "Line",
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 60),
+		Position = UDim2.new(0.5, 0, 0, 48),
 		Size = UDim2.fromOffset(0, 14),
 		AutomaticSize = Enum.AutomaticSize.X,
 		BackgroundTransparency = 1,
@@ -149,7 +156,7 @@ local function build()
 	kitLabel = part("Kit", 2, { TextSize = 11, TextColor3 = C.Ink, Text = "" })
 	dash = part("Dash", 3, { TextSize = 11, TextColor3 = C.BloodHi, Text = "—" })
 	finisherLabel = part("Finisher", 4, {
-		FontFace = Theme.Fonts.LabelBold,
+		FontFace = Theme.Fonts.Label,
 		TextSize = 11,
 		TextColor3 = C.Ink2,
 		Text = "",
@@ -158,7 +165,7 @@ local function build()
 	-- Respawn countdown: a hairline that drains, the seconds on the right.
 	local track = Theme.make("Frame", {
 		Name = "Track",
-		Position = UDim2.fromOffset(0, 96),
+		Position = UDim2.fromOffset(0, 78),
 		Size = UDim2.new(1, 0, 0, 1),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.8,
@@ -172,17 +179,18 @@ local function build()
 	}) :: Frame
 	Theme.text({
 		Name = "RespawnLabel",
-		Position = UDim2.fromOffset(0, 104),
-		Size = UDim2.fromOffset(160, 12),
-		TextSize = 10,
+		Position = UDim2.fromOffset(0, 86),
+		Size = UDim2.fromOffset(160, 14),
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink2,
-		Text = Theme.track("RESPAWN", "three"),
+		Text = "Respawn",
 		Parent = group,
 	})
 	countNum = Theme.text({
 		Name = "Count",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 102),
+		Position = UDim2.new(1, 0, 0, 86),
 		Size = UDim2.fromOffset(60, 14),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 12,
@@ -272,20 +280,20 @@ local function onKillFeed(
 	local killerName = if typeof(killer) == "string" then killer else nil
 	local finished = kind == "Finished"
 	if killerName then
-		eyebrow.Text = Theme.track(if finished then "FINISHED BY" else "ELIMINATED BY", "three")
+		eyebrow.Text = if finished then "Finished by" else "Eliminated by"
 		title.Text = killerName
 	else
-		eyebrow.Text = Theme.track("ELIMINATED", "three")
-		title.Text = Theme.track("YOU DIED", "thin")
+		eyebrow.Text = "Eliminated"
+		title.Text = "You died"
 	end
 	local level = if typeof(killerLevel) == "number" and killerName then killerLevel else nil
-	levelLabel.Text = if level then `LV {math.floor(level)}` else ""
+	levelLabel.Text = if level then `Lv {math.floor(level)}` else ""
 	levelLabel.Visible = level ~= nil
 	local kit = Kits.get(details.killerKit)
-	kitLabel.Text = if kit and killerName then Theme.track(kit.name, "three") else ""
+	kitLabel.Text = if kit and killerName then kit.name else ""
 	kitLabel.Visible = kitLabel.Text ~= ""
 	local finisher = if finished then details.finisher else nil
-	finisherLabel.Text = if finisher then Theme.track(finisher, "three") else ""
+	finisherLabel.Text = finisher or ""
 	finisherLabel.Visible = finisher ~= nil
 	dash.Visible = finisher ~= nil and kitLabel.Visible
 

@@ -1,5 +1,5 @@
 --!strict
--- SettingsController: the "SETTINGS" section of the menu.
+-- SettingsController: the SETTINGS panel (the gear, last in the top bar).
 --
 --   CAMERA   first-person / third-person camera
 --   DUELS    block duel requests (nobody can challenge you; ranked search
@@ -58,9 +58,8 @@ local function keyLabel(key: Enum.KeyCode): string
 	return KEY_LABELS[key] or string.upper(key.Name)
 end
 
--- [ OFF ][ ON ]: two real buttons side by side. The chosen one is filled
--- (ON in the accent colour, OFF dark with an accent outline), the other is
--- a faint plate that lights up under the mouse. `onSet(value)` runs when
+-- OFF  ON: two words side by side (real buttons). The chosen one is white
+-- with a thin red line under it, the other grey (white under the mouse). `onSet(value)` runs when
 -- the player picks the side that isn't chosen yet.
 local function createToggle(parent: Instance, onSet: (value: boolean) -> ()): Toggle
 	local holder = Theme.make("Frame", {
@@ -87,7 +86,7 @@ local function createToggle(parent: Instance, onSet: (value: boolean) -> ()): To
 			variant = "tab",
 			size = "small",
 			align = "center",
-			width = 56,
+			width = 44,
 			layoutOrder = order,
 			parent = holder,
 			onActivated = function()
@@ -102,9 +101,7 @@ local function createToggle(parent: Instance, onSet: (value: boolean) -> ()): To
 
 	local function set(value: boolean)
 		chosen = value
-		on.setVariant(if value then "primary" else "tab")
-		on.setSelected(false)
-		off.setVariant(if value then "tab" else "secondary")
+		on.setSelected(value)
 		off.setSelected(not value)
 	end
 	return { set = set }
@@ -141,16 +138,16 @@ local function toggleBlockDuels()
 	Remotes.UpdateSetting:FireServer("blockDuels", blockDuels)
 end
 
--- A section title ("CAMERA", "DUELS"): small caps, faint.
+-- A section title ("Camera", "Duels"): small, grey.
 local function sectionTitle(content: Frame, text: string, y: number)
 	Theme.text({
 		Name = "Section" .. text,
 		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.new(1, 0, 0, 12),
-		TextSize = 10,
-		TextColor3 = C.Ink3,
+		Size = UDim2.new(1, 0, 0, 14),
+		TextSize = 12,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 		Parent = content,
 	})
 end
@@ -182,7 +179,7 @@ local function settingRow(
 			Position = UDim2.fromOffset(0, 8 + ROW_TEXT_Y),
 			Size = UDim2.fromOffset(320, 18),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 15,
+			TextSize = Theme.TEXT,
 			TextStrokeTransparency = 1,
 			Text = title,
 		}),
@@ -191,8 +188,8 @@ local function settingRow(
 			Position = UDim2.fromOffset(0, 28 + ROW_TEXT_Y),
 			Size = UDim2.fromOffset(320, 14),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 12,
-			TextColor3 = C.Ink3,
+			TextSize = Theme.SMALL,
+			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
 			Text = description,
 		}),
@@ -208,7 +205,7 @@ local function settingRow(
 end
 
 local function buildWindow(content: Frame)
-	sectionTitle(content, "CAMERA", 0)
+	sectionTitle(content, "Camera", 0)
 	firstPersonToggle = settingRow(
 		content,
 		"FirstPersonRow",
@@ -223,7 +220,7 @@ local function buildWindow(content: Frame)
 	)
 	setFirstPerson(firstPerson) -- show the current value
 
-	sectionTitle(content, "DUELS", 86)
+	sectionTitle(content, "Duels", 86)
 	blockDuelsToggle = settingRow(
 		content,
 		"BlockDuelsRow",
@@ -258,7 +255,7 @@ local function buildWindow(content: Frame)
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, 20),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 12,
+			TextSize = Theme.SMALL,
 			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
 			Text = `Press {Config.Controls.FREE_CURSOR.Name} to free or lock the cursor`,
@@ -284,7 +281,7 @@ local function buildWindow(content: Frame)
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, 20),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 12,
+			TextSize = Theme.SMALL,
 			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
 			Text = "Switch first / third person (W on AZERTY, Z on QWERTY)",
@@ -315,9 +312,10 @@ function SettingsController.start()
 	MenuController.register({
 		id = "Settings",
 		label = "SETTINGS",
-		subtitle = "CAMERA · DUELS · CONTROLS",
-		order = 100, -- last button; Kits/Duel/Quests/Shop will come before it
-		size = Vector2.new(440, 420), -- taller than the default for the DUELS row
+		icon = "settings",
+		hint = "Settings",
+		order = 100, -- last button of the top bar
+		size = Vector2.new(440, 304),
 		build = buildWindow,
 	})
 	PlayerDataController.onChanged(onProfileChanged)
