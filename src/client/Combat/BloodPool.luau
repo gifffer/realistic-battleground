@@ -233,24 +233,49 @@ local MAX_WET_SPOTS = 64
 local UP = Vector3.new(0, 1, 0)
 local DOWN = Vector3.new(0, -1, 0)
 
--- The ground under `position` (through bodies and blood).
-local function groundUnder(position: Vector3): RaycastResult?
-	return workspace:Raycast(position + UP * 1, Vector3.new(0, -14, 0), BloodStain.ground())
+-- Is `part` a piece of the map that can stop blood (a wall, a curb, a
+-- step, the floor)? Not: anything loose (a torn arm, a dropped organ,
+-- debris), anything you walk through (CanCollide off: gore, decals' parts),
+-- small bits (skull pieces, teeth, glass: smaller than 1.5 studs every
+-- way, even when anchored once they settled), or a body (a dummy, a body
+-- part, its frozen copy: anything inside a model with a Humanoid).
+-- Blood runs under / around all of those.
+local function stopsBlood(part: Instance): boolean
+	if part:IsA("Terrain") then
+		return true
+	end
+	if not part:IsA("BasePart") then
+		return false
+	end
+	if not part.Anchored or not part.CanCollide then
+		return false
+	end
+	local size = part.Size
+	if math.max(size.X, size.Y, size.Z) < 1.5 then
+		return false
+	end
+	local model = part:FindFirstAncestorWhichIsA("Model")
+	while model do
+		if model:FindFirstChildOfClass("Humanoid") then
+			return false
+		end
+		model = model:FindFirstAncestorWhichIsA("Model")
+	end
+	return true
 end
 
--- A ray for the pool's checks: it goes through loose things (unanchored: a
--- torn arm, a dropped organ, a body part, debris) - blood runs under them -
--- but not through the map (walls, curbs, floors are anchored).
+-- A ray for the pool's checks: it goes through everything that does not
+-- stop blood (stopsBlood) - blood runs under it - but not through the map
+-- (walls, curbs, floors).
 local function cast(from: Vector3, direction: Vector3): RaycastResult?
 	local params = BloodStain.ground()
 	local start, left = from, direction
-	for _ = 1, 4 do
+	for _ = 1, 6 do
 		local hit = workspace:Raycast(start, left, params)
 		if hit == nil then
 			return nil
 		end
-		local part = hit.Instance
-		if not part:IsA("BasePart") or part.Anchored or part:IsA("Terrain") then
+		if stopsBlood(hit.Instance) then
 			return hit
 		end
 		-- (a loose thing: on through it)
@@ -262,6 +287,17 @@ local function cast(from: Vector3, direction: Vector3): RaycastResult?
 		left = left.Unit * (left.Magnitude - gone)
 	end
 	return nil
+end
+
+-- The ground under `position` (through bodies, blood, gore bits and loose
+-- things: never a pool on top of a skull piece).
+local function groundUnder(position: Vector3): RaycastResult?
+	return cast(position + UP * 1, Vector3.new(0, -14, 0))
+end
+
+-- (the same, for the wounds pouring into a pool: BloodGush.stump)
+BloodPool.floorBelow = function(position: Vector3): RaycastResult?
+	return cast(position, Vector3.new(0, -14, 0))
 end
 
 -- The ground's height at `point`, off the plane through `origin` (nil: none).
