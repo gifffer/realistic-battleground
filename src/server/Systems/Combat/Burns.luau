@@ -18,8 +18,11 @@
 --       go (a burning body goes on a few seconds after death), it
 --       smoulders, the degrees settle.
 --   Burns.clear(model)       healed (a kill, a new round): no burns left.
+--   Burns.engulf(model, kind) on fire all over at once (a finisher).
 --   Burns.watch(model)       a fighter: "Burning" set from outside (a
---       finisher's attributes) sets it on fire all over; cleared, it's out.
+--       finisher's attributes) to a kind it isn't burning with sets it on
+--       fire all over; cleared, it's out. (Already "Fire": no change
+--       event, the finisher calls Burns.engulf itself.)
 --   Burns.start()            the loop, corpse copies.
 --
 -- How deep: degree 0..4 per face. Fire adds FIRE_RATE degrees a second on
@@ -53,6 +56,12 @@ local SMOKE_AFTER = 18 -- s of smouldering after a deep fire
 local SMOKE_LIGHT = 6 -- after a light one
 local CORPSE_BURN = 8 -- s a corpse copy burns on, if its body was alight
 local WRITE_EVERY = 0.2
+-- Standing in a burning floor (a puddle, a fire pool): it hits every tick,
+-- so its dose goes by the time spent in it (the loop's rates deepen it too).
+local FLOOR_SOLE = 0.5 -- degrees / s on the soles
+local FLOOR_SIDE = 0.25 -- on the sides of the legs
+local FLOOR_FIRST = 0.5 -- s of dose on first contact (the first mark)
+local FLOOR_GAP = 1 -- s out of it before a new contact counts as a first one
 
 -- Which parts touch which (to spread), and which way it is from there.
 local NEXT: { [string]: { { string } } } = {
@@ -70,12 +79,10 @@ local NEXT: { [string]: { { string } } } = {
 	["Left Leg"] = { { "Torso", "up" }, { "Right Leg", "side" } },
 }
 local NO_LINKS: { { string } } = {}
--- Acid runs down: a share of it reaches the part below.
+-- Acid runs down: a share of it reaches the part below (an R6 arm has
+-- nothing below it; the torso: the leg on the side it hit, see expose).
 local BELOW: { [string]: string } = {
 	Head = "Torso",
-	Torso = "Right Leg",
-	["Right Arm"] = "Right Arm",
-	["Left Arm"] = "Left Arm",
 }
 -- Opposite face index (FACES order: Right, Left, Top, Bottom, Back, Front).
 local OPPOSITE = { 2, 1, 4, 3, 6, 5 }
@@ -99,6 +106,7 @@ type Entry = {
 	endsAt: number?, -- burns out by itself at this time (after death, corpse copy)
 	nextWrite: number,
 	litWritten: string?,
+	floorAt: { [string]: number }, -- last floor exposure of each part (os.clock)
 }
 
 local entries: { [Model]: Entry } = {}
@@ -123,6 +131,7 @@ local function entryOf(model: Model): Entry
 			endsAt = nil,
 			nextWrite = 0,
 			litWritten = nil,
+			floorAt = {},
 		}
 		entry = created
 		entries[model] = created
@@ -375,6 +384,7 @@ function Burns.expose(
 	local kind: Kind = if burn.kind == "Acid" then "Acid" else "Fire"
 	local focused = burn.spot == true and kind == "Fire"
 	local strength = math.clamp(burn.perSecond / 3, 0.6, 1.6)
+	local force = zone ~= nil
 	for _, partName in zoneParts(model, zone, from) do
 		local part = bodyPart(model, partName)
 		if part == nil then
@@ -382,10 +392,19 @@ function Burns.expose(
 		end
 		local state = partState(entry, partName, kind)
 		if zone == nil then
-			-- standing in it: the soles and the lower legs
-			add(state, 4, 0.9 * strength)
+			-- standing in it: the soles and the lower legs, by the time in it
+			local time = os.clock()
+			local last = entry.floorAt[partName]
+			local dt = FLOOR_FIRST
+			if last and time - last <= FLOOR_GAP then
+				dt = math.min(time - last, FLOOR_FIRST)
+			else
+				force = true -- (a first mark: drawn now)
+			end
+			entry.floorAt[partName] = time
+			add(state, 4, FLOOR_SOLE * strength * dt)
 			for _, face in { 1, 2, 5, 6 } do
-				add(state, face, 0.45 * strength)
+				add(state, face, FLOOR_SIDE * strength * dt)
 			end
 		else
 			local face, point = landing(part, from)
@@ -416,11 +435,25 @@ function Burns.expose(
 				dose(state, face, 1.0 * strength, 0.4, 0.1)
 			else
 				dose(state, face, 1.0 * strength, 0.3, 0)
-				-- it runs down onto the part below
-				local below = BELOW[partName]
-				if below and bodyPart(model, below) then
-					local under = partState(entry, below, "Acid")
-					add(under, face, 0.5 * strength)
+				-- it runs down onto the part below (the torso: the leg on
+				-- that side, both when it hit the middle)
+				local belows: { string } = {}
+				if partName == "Torso" then
+					if point.X > 0.25 then
+						belows = { "Right Leg" }
+					elseif point.X < -0.25 then
+						belows = { "Left Leg" }
+					else
+						belows = { "Right Leg", "Left Leg" }
+					end
+				elseif BELOW[partName] then
+					belows = { BELOW[partName] }
+				end
+				for _, below in belows do
+					if bodyPart(model, below) then
+						local under = partState(entry, below, "Acid")
+						add(under, face, 0.5 * strength / #belows)
+					end
 				end
 			end
 		end
@@ -432,15 +465,17 @@ function Burns.expose(
 			light(state, 0.5, false)
 		end
 	end
-	if entry.active then
-		ensureLoop()
+	if entry.active or not force then
+		ensureLoop() -- (not written now: the loop writes it)
 	end
-	write(entry, true)
+	write(entry, force)
 end
 
 function Burns.ignite(model: Model, kind: string, perSecond: number, _duration: number)
 	local entry = entryOf(model)
 	local burnKind: Kind = if kind == "Acid" then "Acid" else "Fire"
+	-- (refreshed every tick by a floor: the loop writes it, not every call)
+	local same = entry.active and entry.kind == burnKind
 	entry.active = true
 	entry.kind = burnKind
 	entry.rate = perSecond
@@ -456,11 +491,13 @@ function Burns.ignite(model: Model, kind: string, perSecond: number, _duration: 
 		Burns.expose(model, { kind = burnKind, perSecond = perSecond, duration = 0 }, "Torso", nil)
 	end
 	ensureLoop()
-	write(entry, true)
+	write(entry, not same)
 end
 
--- Set on fire all over at once (a body doused and lit).
-local function engulf(model: Model, kind: Kind)
+-- Set on fire all over at once (a body doused and lit: a finisher). Its
+-- "Burning" set to "Fire" does it (watch), but a value that doesn't change
+-- (already "Fire") fires no event: call this then.
+function Burns.engulf(model: Model, kind: Kind)
 	local entry = entryOf(model)
 	for _, partName in BurnCode.PARTS do
 		if bodyPart(model, partName) then
@@ -568,8 +605,10 @@ function Burns.watch(model: Model)
 		local value = model:GetAttribute("Burning")
 		local current = entries[model]
 		if typeof(value) == "string" then
-			if current == nil or not current.active then
-				engulf(model, if value == "Acid" then "Acid" else "Fire")
+			-- (startBurning sets the entry first: same kind, nothing to do)
+			local kind: Kind = if value == "Acid" then "Acid" else "Fire"
+			if current == nil or not current.active or current.kind ~= kind then
+				Burns.engulf(model, kind)
 			end
 		elseif current and current.active then
 			Burns.extinguish(model)
@@ -586,10 +625,15 @@ function Burns.start()
 		end
 		local entry = entryOf(copy)
 		for partName, state in source.parts do
+			-- (its own spots: each body's deepen on their own)
+			local spots: { BurnCode.Spot } = {}
+			for _, spot in state.spots do
+				table.insert(spots, table.clone(spot))
+			end
 			entry.parts[partName] = {
 				kind = state.kind,
 				faces = table.clone(state.faces),
-				spots = table.clone(state.spots),
+				spots = spots,
 				lit = state.lit,
 				litSince = state.litSince,
 				spot = state.spot,

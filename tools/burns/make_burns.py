@@ -394,7 +394,6 @@ def cloth_set(seed):
     s2c, _ = blisters(skin_rng, skin_depth, 0.0)
     s3c, _ = eschar(skin_rng, skin_depth, 0.0)
     s4c, _ = char(skin_rng, skin_depth, 0.0)
-    s1c, _ = erythema(skin_rng, skin_depth)
 
     # 1: singed: the cloth browns (yellow-brown to dark brown), patchy.
     t = norm(depth + 0.25 * spectral(rng, 2.0, low=6, high=60))
@@ -421,12 +420,19 @@ def cloth_set(seed):
         black = mix(black, rgb(110, 104, 98), 0.5 * lip)
         # the skin seen through the hole, a shadow along the edge
         inner_shadow = np.clip(wrap_blur(1 - hole, 2.5) - (1 - hole), 0, 1)
-        skin = skin_color * (1 - 0.85 * smooth(0, 0.4, inner_shadow))[..., None]
+        # greyish dead skin just inside the burnt edge
+        dead, _ = edge_band(hole, 7)
+        skin = mix(skin_color, rgb(168, 150, 138), 0.45 * dead)
+        skin = skin * (1 - 0.85 * smooth(0, 0.4, inner_shadow))[..., None]
         color = mix(mix(brown, black, charred), skin, hole)
         alpha = np.maximum(np.maximum(charred, hole), 0.7 * ring)
         return color, alpha
 
-    save("cloth_2.png", *charred_cloth(0.3, 0.55, mix(s2c, s1c, 0.25)))
+    # (the skin in cloth_2's holes: a partial-thickness wound bed, not a
+    # flat red: swollen red skin and blisters at the hole's edge, peeling
+    # grey-white dead skin, the wet raw dermis in the middle)
+    bed, _ = blisters(np.random.default_rng(seed + 5), skin_depth, 0.5)
+    save("cloth_2.png", *charred_cloth(0.3, 0.55, bed))
     save("cloth_3.png", *charred_cloth(0.12, 0.3, mix(s3c, s2c, smooth(0.6, 0.3, depth))))
     # 4: burnt into the skin: char, with scraps of fused cloth on it
     color, alpha = char(np.random.default_rng(seed + 2), depth, 0.0)
@@ -439,57 +445,92 @@ def cloth_set(seed):
     save("cloth_4.png", color, alpha)
 
 
+def drips(rng, count, n=N):
+    """Periodic run-down streaks: each starts at a random point and runs
+    straight down a random length, thinning and fading as it goes (acid
+    trickling down the skin). 1 on a streak, 0 elsewhere."""
+    out = np.zeros((n, n))
+    py, px = np.mgrid[0:n, 0:n]
+    for _ in range(count):
+        x0, y0 = rng.random() * n, rng.random() * n
+        length = n * (0.15 + 0.45 * rng.random())
+        width = 5 + 12 * rng.random()
+        dy = (py - y0) % n  # (below the start, wrapping)
+        t = dy / length
+        wobble = 4 * np.sin(dy / (18 + 20 * rng.random()) + rng.random() * 6)
+        dx = np.abs(((px - x0 - wobble + n / 2) % n) - n / 2)
+        w = width * (1 - 0.7 * t)
+        streak = np.clip(1 - dx / np.maximum(w, 0.5), 0, 1) * np.clip(1 - t, 0, 1) ** 0.6
+        out = np.maximum(out, streak)
+    return wrap_blur(out, 1.2)
+
+
 def acid_set(seed):
-    """Acid runs DOWN: the depth map is stretched vertically, with runs.
-    (spectral's `stretch` > 1 on an axis damps change along it: features
-    get long on that axis.)"""
+    """Acid runs DOWN: the depth map is made of tall blobs and drip
+    streaks. (spectral's `stretch` (y, x) > 1 on an axis damps change
+    along it: features get long on that axis; low = 1 so the one-cycle
+    terms along x are kept, else the tile turns into horizontal bands.)"""
     rng = np.random.default_rng(seed)
-    big = spectral(rng, 3.4, low=1.5, high=10, stretch=(1.8, 1.0))
-    mid = spectral(rng, 2.6, low=4, high=40, stretch=(2.2, 1.0))
-    runs = spectral(rng, 1.8, low=6, high=90, stretch=(5.0, 0.9))
-    depth = rank(big + 0.35 * mid + 0.4 * runs)
-    jag = spectral(rng, 1.2, low=30, high=200) * 0.012  # eroded, ragged edges
+    big = spectral(rng, 3.4, low=1.0, high=10, stretch=(1.4, 1.0))
+    mid = spectral(rng, 2.6, low=1.0, high=40, stretch=(1.7, 1.0))
+    runs = spectral(rng, 1.8, low=1.0, high=90, stretch=(4.0, 0.9))
+    streaks = drips(rng, 22)
+    depth = rank(big + 0.35 * mid + 0.25 * runs + 2.2 * streaks)
+    # eroded, ragged edges: a coarse bite plus fine fraying
+    jag = spectral(rng, 1.6, low=8, high=60) * 0.03 + spectral(rng, 1.0, low=40, high=220) * 0.012
 
     # 1: chemical erythema with yellow-brown staining (the acid's colour
-    # soaked into the skin), streaked downward.
-    t = norm(depth + 0.3 * spectral(rng, 2.0, low=6, high=60, stretch=(2.0, 1.0)))
-    stain = palette(t, [(0, (196, 120, 90)), (0.5, (178, 118, 64)), (1, (140, 90, 44))])
-    alpha = 0.22 + 0.45 * smooth(0.1, 1.0, t)
-    save("acid_1.png", stain, alpha)
+    # soaked into the skin), streaked downward, darker tide marks where
+    # it dried at the edge of the wet area.
+    t = norm(depth + 0.3 * spectral(rng, 2.0, low=1.0, high=60, stretch=(2.4, 1.0)))
+    stain = palette(
+        t,
+        [(0, (200, 116, 88)), (0.35, (190, 132, 70)), (0.7, (168, 120, 48)), (1, (124, 84, 34))],
+    )
+    wet = smooth(0.35, 0.45, depth + jag)
+    tide, _ = edge_band(wet, 5)
+    stain = mix(stain, rgb(112, 76, 32), 0.55 * tide)
+    alpha = 0.3 + 0.45 * smooth(0.1, 1.0, t) + 0.2 * tide
+    save("acid_1.png", stain, np.clip(alpha, 0, 0.9))
 
     # 2: eroded: dull yellow-grey / brown slough (coagulated dead skin),
-    # raw red where it has come off, a pale eroded rim. Matte-moist.
+    # raw red where it has come off, pale ragged eroded margins with
+    # lifted shreds of skin. Matte-moist.
     cover = 0.3
     region = smooth(-0.006, 0.006, depth - cover + jag)
-    slough_t = norm(spectral(rng, 2.6, low=3, high=40, stretch=(2.0, 1)) + 1.2 * (depth - cover))
+    slough_t = norm(spectral(rng, 2.6, low=1.0, high=40, stretch=(2.4, 1)) + 1.2 * (depth - cover))
     slough = palette(
         slough_t,
-        [(0, (204, 178, 134)), (0.4, (186, 150, 104)), (0.75, (156, 114, 72)), (1, (122, 80, 50))],
+        [(0, (204, 180, 130)), (0.4, (184, 152, 96)), (0.75, (152, 114, 66)), (1, (118, 80, 46))],
     )
-    pits = smooth(0.74, 0.76, rank(spectral(rng, 2.8, low=3, high=30, stretch=(1.6, 1)) + 0.8 * depth) + jag * 2)
-    raw = palette(norm(spectral(rng, 2.4, low=4, high=40)), [(0, (178, 80, 66)), (1, (138, 52, 46))])
-    h = spectral(rng, 1.8, low=10, high=120, stretch=(2.0, 1.0)) * 0.8 - wrap_blur(pits, 2) * 3
+    pits = smooth(0.7, 0.72, rank(spectral(rng, 2.8, low=1.0, high=30, stretch=(2.0, 1)) + 0.6 * depth + 1.5 * streaks) + jag)
+    raw = palette(norm(spectral(rng, 2.4, low=4, high=40)), [(0, (178, 84, 66)), (1, (130, 50, 44))])
+    h = spectral(rng, 1.8, low=10, high=120, stretch=(2.4, 1.0)) * 0.8 - wrap_blur(pits, 2) * 3
     color = mix(slough, raw, pits)
     color = relit(color, h, 0.6, 0.85)
     _, spec = shade(h, 1.2)
     color = color + wrap_blur(spec**50, 0.7)[..., None] * 0.12  # moist, not glossy
-    rim, _ = edge_band(region, 4)
-    color = mix(color, rgb(214, 198, 160), 0.5 * rim)  # whitened, eroded edge
+    rim, _ = edge_band(region, 6)
+    shreds = smooth(0.55, 0.65, norm(spectral(rng, 1.2, low=30, high=200, stretch=(3.0, 1.0))))
+    color = mix(color, rgb(222, 208, 176), 0.55 * rim)  # whitened, eroded edge
+    color = mix(color, rgb(238, 228, 206), 0.6 * rim * shreds)  # lifted shreds
     save("acid_2.png", color, region)
 
-    # 3: deep: brown-black leathery eschar, a ragged slough rim.
+    # 3: deep: brown-black leathery eschar running down, a ragged
+    # yellow-brown slough rim.
     cover = 0.42
     region = smooth(-0.006, 0.006, depth - cover + jag)
     d = np.clip((depth - cover) / (1 - cover), 0, 1)
-    tone = norm(spectral(rng, 2.6, low=3, high=30, stretch=(1.6, 1.0)) + 1.2 * d)
+    tone = norm(spectral(rng, 2.6, low=1.0, high=30, stretch=(2.0, 1.0)) + 1.2 * d)
     esch = palette(tone, [(0, (122, 80, 44)), (0.4, (86, 52, 30)), (0.75, (52, 32, 20)), (1, (30, 19, 14))])
     leather = spectral(rng, 1.4, low=40, high=200, stretch=(1.0, 1.8))
     h = leather * 0.7 + spectral(rng, 2.6, low=4, high=30) * 1.6
     esch = relit(esch, h, 0.7, 0.78)
     _, spec = shade(h, 1.6)
     esch = esch + (spec**30)[..., None] * 0.08
-    rim, _ = edge_band(region, 7)
-    esch = mix(esch, rgb(176, 150, 96), 0.65 * rim)  # yellow-brown slough lip
+    rim, _ = edge_band(region, 8)
+    esch = mix(esch, rgb(176, 148, 92), 0.65 * rim)  # yellow-brown slough lip
+    esch = mix(esch, rgb(214, 196, 160), 0.5 * rim * shreds)
     save("acid_3.png", esch, region)
 
 

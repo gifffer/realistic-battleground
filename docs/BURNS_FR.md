@@ -20,6 +20,9 @@ Un seul système de brûlures pour tout le jeu : le **rayon** du Dr. Rift (son p
 - **Le feu s'éteint proprement** : les flammes partent, le corps **fume** encore (fumée grise, quelques braises sur les parties carbonisées) puis plus rien. Les brûlures **restent** jusqu'au kill (la vie remonte), la nouvelle manche ou la réapparition.
 - Un corps qui **meurt en brûlant** brûle encore ~4 s ; sa copie de cadavre aussi (~8 s), puis fume.
 - Un membre qui a une **plaie ouverte** (coupure au verre, trou du Sentinel) est remplacé par sa copie percée : ses flammes et sa fumée restent, mais ses images de brûlure ne s'affichent pas dessus tant que la plaie est là.
+- Une **tête qui éclate** ou un membre qui s'ouvre **après coup** (brûlure déjà finie, cadavre compris) : ses images de brûlure disparaissent aussitôt (plus de « boîte » brûlée qui flotte).
+- **Debout dans une flaque d'acide ou un feu au sol** : la brûlure dépend du **temps passé dedans** (une première marque au contact, puis elle s'approfondit seconde après seconde : il faut plusieurs secondes pour arriver à l'escarre, pas une).
+- L'acide **coule** : d'une tête vers le torse, du torse vers la jambe du côté touché (les deux si c'est au milieu).
 - **Dégâts** : côté serveur, toutes les 0,5 s pendant la durée de la brûlure (comme avant ; rien n'a changé pour l'équilibrage).
 - **Tout le monde voit la même chose** : tout passe par des attributs sur le personnage (`Burn_T`, `Burn_RA`... + `BurnLit` + `BurnSmoke`), donc un joueur qui arrive plus tard, un corps vu de loin puis de près, et les **cadavres** ont les mêmes brûlures.
 
@@ -67,5 +70,11 @@ Tout est généré (aucune photo) : `venv/bin/python -I tools/burns/make_burns.p
 
 - Un coup : `burn = { kind = "Fire" | "Acid", perSecond, duration, spot = true? }` dans le `HitDef` (`spot` = un laser : tache profonde, peu de propagation).
 - Un sol qui brûle (flaque, Molotov) : le `burn` des `Moves` (pieds d'abord).
-- Mettre quelqu'un en feu d'un coup (finisher) : l'attribut `"Burning" = "Fire"` sur le combattant (tout le corps prend feu) ; `nil` l'éteint.
+- Mettre quelqu'un en feu d'un coup (finisher) : l'attribut `"Burning" = "Fire"` sur le combattant (tout le corps prend feu, même s'il brûlait déjà à l'acide) ; `nil` l'éteint. **S'il brûlait déjà au feu**, l'attribut ne change pas (`"Fire"` → `"Fire"`) et rien ne se passe : appeler aussi `Burns.engulf(cible, "Fire")` côté serveur.
 - Côté serveur directement : `Combat/Burns` (`expose`, `ignite`, `extinguish`, `clear`).
+
+## À la fusion avec la branche du Pyromane (`feature/kit-pyromaniac`)
+
+- Dans `Combat/init.luau`, le rappel `onIgnite` d'**Immolation** (qui vide `burnPerSecond` / `burnUntil` de la victime) doit aussi appeler **`Burns.engulf(target, "Fire")`** : sinon une victime qui brûlait déjà d'un coup de feu du Pyromane ne prend pas feu partout (même valeur `"Fire"`, aucun événement).
+- Le commentaire de `Combat/Immolate.luau` qui cite « Client RiftBurn » devient « Client/Combat/Burns » (RiftBurn n'existe plus).
+- Les flaques de feu du Pyromane passent par `c.burn` (comme celles de l'acide) : rien d'autre à changer, la dose au sol dépend déjà du temps passé dedans.

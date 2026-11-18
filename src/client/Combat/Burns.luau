@@ -146,7 +146,8 @@ type PartLook = {
 	fx: Fx,
 	level: number, -- flames: 0 (out) .. 3
 	acid: boolean,
-	hidden: boolean, -- (the part went invisible: a burst head)
+	hidden: boolean, -- (the part is invisible: no burn textures on it)
+	gone: boolean, -- (a burst head: no flames either)
 }
 
 type Session = {
@@ -329,17 +330,23 @@ local function setSpot(
 	texture.Transparency = 1 - amount
 end
 
--- Gone (a burst head): nothing drawn, no flames. A part replaced by its
--- cut copy (Gashes: the real part invisible, a "Gashes" folder in it) still
--- burns: its flames go on (its burn textures can't show on the copy).
+-- Invisible (a burst head, a part replaced by its cut copy): no burn
+-- textures (a Texture still draws on an invisible part, over the cut copy
+-- and its hole). Gone (invisible with no "Gashes" folder: a burst head):
+-- no flames either; a cut part's flames go on (its copy still burns).
+local function isHidden(part: BasePart): boolean
+	return part.Transparency > 0.9
+end
+
 local function isGone(part: BasePart): boolean
-	return part.Transparency > 0.9 and part:FindFirstChild("Gashes") == nil
+	return isHidden(part) and part:FindFirstChild("Gashes") == nil
 end
 
 local function drawPart(session: Session, look: PartLook)
 	local burn = look.burn
-	local hidden = isGone(look.part)
+	local hidden = isHidden(look.part)
 	look.hidden = hidden
+	look.gone = isGone(look.part)
 	local set: Set = if burn and burn.kind == "Acid"
 		then "acid"
 		elseif isClothed(session.model, look.name) then "cloth"
@@ -630,7 +637,7 @@ end
 
 -- The emitters of one part from what burns there now.
 local function driveFx(look: PartLook, smouldering: boolean, firstPerson: boolean)
-	local level = if look.hidden then 0 else look.level
+	local level = if look.gone then 0 else look.level
 	local quality = 1
 	local fire = level > 0 and not look.acid
 	local acid = level > 0 and look.acid
@@ -646,7 +653,7 @@ local function driveFx(look: PartLook, smouldering: boolean, firstPerson: boolea
 		setRate(embersOf(look), (1 + 1.5 * level) * quality)
 	else
 		setRate(look.fx.flame, 0)
-		local charred = not look.hidden and maxDegree(look) >= 2
+		local charred = not look.gone and maxDegree(look) >= 2
 		if smouldering and charred and not hideFlames then
 			local smoke = smokeOf(look)
 			smoke.Color = SMOKE_SMOULDER
@@ -679,6 +686,14 @@ local function bodyPart(model: Model, name: string): BasePart?
 	return if part and part:IsA("BasePart") then part else nil
 end
 
+local function ensureHeartbeat()
+	if heartbeat == nil then
+		heartbeat = RunService.Heartbeat:Connect(function(dt: number)
+			Burns._step(dt)
+		end)
+	end
+end
+
 local function lookOf(session: Session, partName: string): PartLook?
 	local look = session.parts[partName]
 	local part = bodyPart(session.model, partName)
@@ -699,17 +714,21 @@ local function lookOf(session: Session, partName: string): PartLook?
 		level = 0,
 		acid = false,
 		hidden = false,
+		gone = false,
 	}
 	session.parts[partName] = created
-	return created
-end
-
-local function ensureHeartbeat()
-	if heartbeat == nil then
-		heartbeat = RunService.Heartbeat:Connect(function(dt: number)
-			Burns._step(dt)
+	-- (the part goes invisible later, a burn long settled: a burst head, a
+	-- cut opened, on a corpse too: hide its textures then)
+	table.insert(
+		session.connections,
+		part:GetPropertyChangedSignal("Transparency"):Connect(function()
+			if isHidden(part) ~= created.hidden or isGone(part) ~= created.gone then
+				session.animating = true
+				ensureHeartbeat()
+			end
 		end)
-	end
+	)
+	return created
 end
 
 local function readPart(session: Session, partName: string, instant: boolean)
@@ -889,7 +908,7 @@ function Burns._step(dt: number)
 				continue
 			end
 			local burn = look.burn
-			local changed = isGone(look.part) ~= look.hidden
+			local changed = isHidden(look.part) ~= look.hidden or isGone(look.part) ~= look.gone
 			for face = 1, 6 do
 				local goal = if burn then burn.faces[face] else 0
 				local value = look.shown[face]
