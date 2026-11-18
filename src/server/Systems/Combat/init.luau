@@ -647,17 +647,13 @@ local function addShards(victim: CombatState, attacker: CombatState, zone: strin
 end
 
 -- A kill (or nothing at all, see onKill): every injury is healed. Not the
--- heavy hits' gore (HeavyGore: a torn limb, an open fracture stay until
--- death), nor the limp of a broken shin.
+-- heavy hits' gore (HeavyGore: a torn limb stays until death).
 local function healInjuries(state: CombatState)
-	local limping = HeavyGoreUtil.hasLegFracture(state.model)
 	state.legDamage = 0
 	state.leftLegDamage = 0
-	state.limping = limping
-	setAttribute(state.model, "Limping", limping)
-	if not limping then
-		setAttribute(state.model, "LimpLeg", nil)
-	end
+	state.limping = false
+	setAttribute(state.model, "Limping", false)
+	setAttribute(state.model, "LimpLeg", nil)
 	-- Cuts and bruises: a new body.
 	for name in state.model:GetAttributes() do
 		if Gash.isInjuryAttribute(name) or Bruise.isAttribute(name) then
@@ -966,9 +962,9 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		end
 	end
 
-	-- The heavy blow that ends a big combo may break a bone open or tear an
-	-- arm off (HeavyGore: rare; never heat vision, nor a grab's catch). A
-	-- clone's hits count in its owner's combo.
+	-- The heavy blow that ends a big combo may tear an arm off (HeavyGore:
+	-- rare; never heat vision, nor a grab's catch). A clone's hits count in
+	-- its owner's combo.
 	local knockedOut = Knockout.isKnockedOut(victim.model)
 	if not spec.burns and not spec.grab then
 		local outcome = HeavyGore.landed(victim.model, credit.model, {
@@ -981,14 +977,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 			from = from,
 			knockedOut = knockedOut,
 		})
-		if outcome.brokeLeg then
-			-- (a broken shin: he limps, now or when he gets up)
-			victim.limping = true
-			local leftBroken = victim.model:GetAttribute(HeavyGoreUtil.FRACTURE_PREFIX .. "LeftLeg")
-				~= nil
-			setAttribute(victim.model, "LimpLeg", if leftBroken then "Left" else "Right")
-			setAttribute(victim.model, "Limping", true)
-		elseif outcome.torn == "RightArm" then
+		if outcome.torn == "RightArm" then
 			-- (no hand left to hold it: it breaks where the arm was)
 			dropWeapon(victim, true)
 		end

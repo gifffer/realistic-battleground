@@ -4,13 +4,9 @@
 --   • a limb torn off ("LimbTorn_<Limb>"): the open socket on the torso
 --     (the real shoulder blade / hip bone, torn muscles, skin), and on the
 --     limb lying there (its own model, tag HeavyGore.TAG) its torn end (the
---     real muscles' cut, the bone's head out of it);
---   • an open fracture ("Fracture_<Limb>"): the hole in the forearm / the
---     shin and the real broken bone out of it are Gashes' (the limb's skin
---     opened, the kit's "Break" insert in it); here the crack, the blood
---     spurting and running down when it happens.
--- Pieces from WoundKit (GoreKit, Gashes); simpler ones drawn here without
--- them (an older kit). Everything is welded to the body's parts: it goes
+--     real muscles' cut, the bone's head out of it).
+-- Pieces from WoundKit (GoreKit); simpler ones drawn here without them (an
+-- older kit). Everything is welded to the body's parts: it goes
 -- with them.
 --
 --   HeavyGore.watch(model)   follow a fighter's (or a body's) attributes
@@ -24,7 +20,6 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local GoreShapes = require(ReplicatedStorage.Shared.GoreShapes)
 local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local BloodGush = require(script.Parent.BloodGush)
-local Gashes = require(script.Parent.Gashes)
 local GoreKit = require(script.Parent.GoreKit)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
@@ -269,46 +264,6 @@ local function tornLimb(model: Model, key: string, seed: number, live: boolean)
 end
 
 ------------------------------------------------------------------------------
--- An open fracture
-------------------------------------------------------------------------------
-
-local function fracture(model: Model, key: string, seed: number, live: boolean)
-	local limb = HeavyGoreUtil.LIMBS[key]
-	local part = model:FindFirstChild(limb.part)
-	if part == nil or not part:IsA("BasePart") then
-		return
-	end
-	local tag = "HeavyGore_" .. limb.fracture
-	local at = limb.breakAt
-	if not Gashes.hasBreak(limb.fracture) and part:FindFirstChild(tag) == nil then
-		-- (an older kit: Gashes can't open the limb; a simpler wound on it)
-		dress(part, limb.fracture, tag, part.Color, function(folder: Instance)
-			simpleWound(
-				part,
-				CFrame.lookAt(at, at - Vector3.zAxis),
-				0.18,
-				Vector3.new(0.14, 0.14, 0.35),
-				folder
-			)
-		end)
-	end
-	if live then
-		SoundController.play("RibCrack", model)
-		local out = CFrame.lookAt(at, at + Vector3.new(0, -0.4, -1))
-		BloodGush.artery(part, out, {
-			seconds = 2,
-			beat = 0.45,
-			speed = 4,
-			size = 0.07,
-			pool = 1.2,
-			seed = seed,
-			ignore = { model :: Instance },
-		})
-		BloodGush.runDown(part, at, 4, seed + 7)
-	end
-end
-
-------------------------------------------------------------------------------
 -- What to draw for one attribute
 ------------------------------------------------------------------------------
 
@@ -323,8 +278,6 @@ local function apply(model: Model, name: string, live: boolean)
 	local kind, key = HeavyGoreUtil.parse(name)
 	if kind == "Torn" and key then
 		tornLimb(model, key, value, live)
-	elseif kind == "Fracture" and key then
-		fracture(model, key, value, live)
 	end
 end
 

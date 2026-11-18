@@ -662,7 +662,7 @@ end
 function Wounds.watch(model: Model)
 	Gashes.watch(model) -- glass cuts, drawn for real
 	GlassShards.watch(model) -- bits of glass stuck in the skin
-	HeavyGore.watch(model) -- limbs torn off, open fractures
+	HeavyGore.watch(model) -- limbs torn off
 	model.AttributeChanged:Connect(function(name: string)
 		if Bruise.isAttribute(name) then
 			local key = string.match(name, "^" .. Bruise.PREFIX .. "(%a+)_%d+$")

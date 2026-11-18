@@ -372,11 +372,10 @@ return table.freeze({
 	-- fighter (the server counts it per victim: the same attacker's hits
 	-- that land, each less than COMBO_GAP after the last); once it is big
 	-- enough, its next HEAVY blow (HEAVY_DAMAGE or more, the 4th M1, or a
-	-- blow that knocks down / launches) rolls ONCE: it may snap a bone open
-	-- (an open fracture of the forearm / the shin on the side it hit) or,
-	-- rarer, tear an arm off. Hit or miss, the combo then starts over. The
-	-- fighter stays alive and keeps fighting (a broken shin: he limps). On
-	-- the blow that knocks him out the chances are higher.
+	-- blow that knocks down / launches) rolls ONCE: it may tear off the arm on
+	-- the side it hit. Hit or miss, the combo then starts over. The
+	-- fighter stays alive and keeps fighting. On the blow that knocks him
+	-- out the chance is higher.
 	-- Decided by the server, drawn on every client. Off with
 	-- Injuries.SKIN_TEAR too.
 	HeavyGore = table.freeze({
@@ -390,12 +389,10 @@ return table.freeze({
 		-- A blow counts as heavy at this damage or more (or the 4th M1, or
 		-- a blow that knocks down / launches).
 		HEAVY_DAMAGE = 9,
-		-- The heavy blow that ends a big combo (one roll): the chance of an
-		-- open fracture, of a torn arm (a leg only rolls for a fracture)...
-		FRACTURE_CHANCE = 0.2,
+		-- The heavy blow that ends a big combo (one roll): the chance of a
+		-- torn arm (a blow on the legs does nothing)...
 		TEAR_CHANCE = 0.05,
 		-- ...and when that blow knocks him out.
-		KO_FRACTURE_CHANCE = 0.3,
 		KO_TEAR_CHANCE = 0.1,
 		-- Legs torn off too (an R6 body without a leg can't stand: off, only
 		-- arms come off).
@@ -406,7 +403,6 @@ return table.freeze({
 		IN_DUELS = false,
 		-- At most per body (the Bouncer's torn arm counts).
 		MAX_TORN_LIMBS = 2,
-		MAX_FRACTURES = 2,
 		-- A torn limb flies off (studs/s), then lies there this long.
 		LIMB_FLING_SPEED = 24,
 		LIMB_FLING_UP = 16,

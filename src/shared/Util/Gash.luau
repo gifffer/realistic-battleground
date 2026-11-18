@@ -24,9 +24,7 @@
 
 local Gash = {}
 
--- ("Break": an open fracture, Shared/Util/HeavyGore - never stored as a
--- cut: Client/Combat/Gashes draws it from the fracture's attribute.)
-export type Kind = "Lac" | "Slash" | "Tear" | "Burn" | "Bore" | "Break"
+export type Kind = "Lac" | "Slash" | "Tear" | "Burn" | "Bore"
 export type Size = "S" | "M" | "L"
 export type Data = {
 	kind: Kind,

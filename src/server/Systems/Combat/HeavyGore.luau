@@ -7,14 +7,13 @@
 -- Only in a fight, never from a finisher, and rare (Config.HeavyGore): the
 -- server counts the combo each fighter takes (the same attacker's hits that
 -- land, close enough together). Once it is big, the attacker's next HEAVY
--- blow rolls ONCE: it may snap the forearm / the shin on the side it hit
--- (an open fracture: a broken leg limps) or, rarer, tear the arm off. The
--- fighter stays alive and playable; the blow that knocks him out has higher
--- odds. Hit or miss, his combo then starts over (another big combo for
--- another roll); after a hit, nothing more happens to him for a while.
--- Caps per body (MAX_TORN_LIMBS, MAX_FRACTURES). It stays until death (a
--- limb doesn't grow back, an open fracture doesn't close: a kill's healing
--- leaves it), then goes with the body (the torn limb after TORN_LIMB_TIME).
+-- blow rolls ONCE: it may tear off the arm on the side it hit. The fighter
+-- stays alive and playable; the blow that knocks him out has higher odds.
+-- Hit or miss, his combo then starts over (another big combo for another
+-- roll); after a hit, nothing more happens to him for a while. Cap per body
+-- (MAX_TORN_LIMBS). It stays until death (a limb doesn't grow back: a
+-- kill's healing leaves it), then goes with the body (the torn limb after
+-- TORN_LIMB_TIME).
 --
 -- A torn limb leaves the body (it can't be dragged along when they get up):
 -- it flies off in a model of its own (a dead Humanoid in it: the shirt /
@@ -68,14 +67,11 @@ local function seed(): number
 	return random:NextInteger(1, 2 ^ 30)
 end
 
-local function count(victim: Model, attribute: (string) -> string): number
+local function tornCount(victim: Model): number
 	-- (the Bouncer's torn arm counts as a torn limb)
-	local total = if attribute == HeavyGoreUtil.tornAttribute
-			and victim:GetAttribute("ArmTorn") ~= nil
-		then 1
-		else 0
+	local total = if victim:GetAttribute("ArmTorn") ~= nil then 1 else 0
 	for _, key in KEYS do
-		if victim:GetAttribute(attribute(key)) ~= nil then
+		if victim:GetAttribute(HeavyGoreUtil.tornAttribute(key)) ~= nil then
 			total += 1
 		end
 	end
@@ -108,7 +104,7 @@ local function tearLimb(victim: Model, key: string, from: Vector3): boolean
 	local part = victim:FindFirstChild(limb.part)
 	if
 		isTorn(victim, key)
-		or count(victim, HeavyGoreUtil.tornAttribute) >= G.MAX_TORN_LIMBS
+		or tornCount(victim) >= G.MAX_TORN_LIMBS
 		or not (torso and torso:IsA("BasePart") and part and part:IsA("BasePart"))
 	then
 		return false
@@ -189,19 +185,6 @@ local function tearLimb(victim: Model, key: string, from: Vector3): boolean
 	return true
 end
 
-local function fracture(victim: Model, key: string): boolean
-	local attribute = HeavyGoreUtil.fractureAttribute(key)
-	if
-		isTorn(victim, key)
-		or victim:GetAttribute(attribute) ~= nil
-		or count(victim, HeavyGoreUtil.fractureAttribute) >= G.MAX_FRACTURES
-	then
-		return false
-	end
-	victim:SetAttribute(attribute, seed())
-	return true
-end
-
 -- The limb on the side the blow came from: the arm for the body and the
 -- head (raised to cover it), the leg for the legs.
 local function limbHit(blow: Blow): string
@@ -215,22 +198,17 @@ local function limbHit(blow: Blow): string
 	return if right then "RightArm" else "LeftArm"
 end
 
--- The other limb of the same kind (the other arm / leg).
-local OTHER =
-	{ RightArm = "LeftArm", LeftArm = "RightArm", RightLeg = "LeftLeg", LeftLeg = "RightLeg" }
-
--- What a blow did: brokeLeg (he limps), torn = the limb torn off (its
--- HeavyGoreUtil.LIMBS key) or nil.
+-- What a blow did: torn = the limb torn off (its HeavyGoreUtil.LIMBS key)
+-- or nil.
 export type Outcome = {
-	brokeLeg: boolean,
 	torn: string?,
 }
 
-local NOTHING: Outcome = table.freeze({ brokeLeg = false, torn = nil })
+local NOTHING: Outcome = table.freeze({ torn = nil })
 
 -- `attacker` landed a blow on `victim` (normal combat: not a finisher, not
 -- blocked). Counts it in the combo; at the end of a big one, a heavy blow
--- rolls once and may break him.
+-- rolls once and may tear a limb off.
 function HeavyGore.landed(victim: Model, attacker: Model, blow: Blow): Outcome
 	if not enabled() or (not G.IN_DUELS and victim:GetAttribute("DuelId") ~= nil) then
 		return NOTHING
@@ -258,25 +236,14 @@ function HeavyGore.landed(victim: Model, attacker: Model, blow: Blow): Outcome
 	combo.hits = 0
 	combo.damage = 0
 	local key = limbHit(blow)
-	-- (a limb that can't come off only rolls for a fracture)
+	-- (a limb that can't come off: nothing)
 	local tear = if not (LIMBS[key].arm or G.TEAR_LEGS)
 		then 0
 		elseif blow.knockedOut then G.KO_TEAR_CHANCE
 		else G.TEAR_CHANCE
-	local breaks = if blow.knockedOut then G.KO_FRACTURE_CHANCE else G.FRACTURE_CHANCE
-	local roll = random:NextNumber()
-	if roll < tear and tearLimb(victim, key, blow.from) then
+	if random:NextNumber() < tear and tearLimb(victim, key, blow.from) then
 		combo.quietUntil = time + G.COOLDOWN
-		return { brokeLeg = false, torn = key }
-	end
-	if roll < tear + breaks then
-		-- (that one already broken or gone: the other one)
-		for _, which in { key, OTHER[key] } do
-			if fracture(victim, which) then
-				combo.quietUntil = time + G.COOLDOWN
-				return { brokeLeg = not LIMBS[which].arm, torn = nil }
-			end
-		end
+		return { torn = key }
 	end
 	return NOTHING
 end
