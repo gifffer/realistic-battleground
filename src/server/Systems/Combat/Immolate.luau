@@ -1,18 +1,20 @@
 --!strict
 -- Immolate: the Pyromaniac's finisher on the server (Shared/Finishers
 -- "Immolate"). Only attributes on the victim; every client draws them
--- (Client/Combat/PyroFx), a body seen later too:
+-- (Client/Combat/PyroFx, Client/Combat/Burns), a body seen later too:
 --   • "Douse": soaked in petrol (PyroConfig.DOUSED_ATTRIBUTE);
---   • "Ignite": alight ("Burning" = "Fire": flames all over, Client RiftBurn);
+--   • "Ignite": alight all over (Combat/Burns.engulf, "Burning" = "Fire"):
+--     the burns deepen everywhere, clothes char, flames and black smoke;
 --   • the kill: PyroConfig.IMMOLATED_ATTRIBUTE = the server time it caught
---     fire; the corpse burns on, then smoulders. "Burning" goes after
---     PyroConfig.IMMOLATE_BURN seconds (the flames die down, the char stays).
+--     fire; the body (then its corpse copy) burns on for
+--     PyroConfig.IMMOLATE_BURN seconds (Burns.burnOn), then smoulders.
 -- Cut short before the kill, Combat puts every attribute back (woundsBefore).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Finishers = require(ReplicatedStorage.Shared.Finishers)
 local PyroConfig = require(ReplicatedStorage.Shared.PyroConfig)
+local Burns = require(script.Parent.Burns)
 
 local Immolate = {}
 
@@ -53,6 +55,9 @@ function Immolate.run(
 					onIgnite()
 					-- (its own burn slot is cleared: cut short, the flames go out too)
 					before["Burning"] = false
+					-- (on fire all over: first, so "Burning" changing does
+					-- nothing more; already "Fire", it wouldn't fire an event)
+					Burns.engulf(target, "Fire")
 					set(target, "Burning", "Fire", before)
 				end
 			end)
@@ -65,6 +70,7 @@ function Immolate.killed(target: Model)
 	local caught = workspace:GetServerTimeNow()
 	target:SetAttribute(PyroConfig.IMMOLATED_ATTRIBUTE, caught)
 	target:SetAttribute("Burning", "Fire")
+	Burns.burnOn(target, PyroConfig.IMMOLATE_BURN)
 	task.delay(PyroConfig.IMMOLATE_BURN, function()
 		if target.Parent and target:GetAttribute(PyroConfig.IMMOLATED_ATTRIBUTE) == caught then
 			target:SetAttribute("Burning", nil)

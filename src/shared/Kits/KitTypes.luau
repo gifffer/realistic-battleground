@@ -42,11 +42,16 @@ export type HitDef = {
 -- one, any new one refreshes the time. Separate from bleeding.
 -- `spot`: a focused burn (a laser / ray): a deep spot where it lands,
 -- little around it, flames that hardly spread (Server Combat/Burns).
+-- `dose`: how deep one hit burns where it lands (degrees, default 1; a
+-- cone that hits every tick takes a small one). `where`: the part it burns
+-- if not the one the blow hit (a splash off the floor: "Legs").
 export type BurnDef = {
 	kind: "Acid" | "Fire",
 	perSecond: number,
 	duration: number,
 	spot: boolean?,
+	dose: number?,
+	where: Types.HitZone?,
 }
 
 -- A grab (Bouncer): the hands close `at` seconds into the move on the first

@@ -1,6 +1,6 @@
 # Brûlures (toutes les sources de feu et d'acide)
 
-Un seul système de brûlures pour tout le jeu : le **rayon** du Dr. Rift (son pistolet laser), son **acide** (fioles, flaques), sa **fiole explosive**, le **feu du Pyromane** (Molotov, souffle, Immolation, quand sa branche sera fusionnée), et tout ce qui brûlera plus tard. La vision thermique du Sentinel ne change pas (ses trous brûlés dans la peau).
+Un seul système de brûlures pour tout le jeu : le **rayon** du Dr. Rift (son pistolet laser), son **acide** (fioles, flaques), sa **fiole explosive**, le **feu du Pyromane** (Zippo, Molotov, souffle, poings en feu, Immolation), et tout ce qui brûlera plus tard. La vision thermique du Sentinel ne change pas (ses trous brûlés dans la peau).
 
 ## Ce qu'on voit
 
@@ -68,13 +68,26 @@ Tout est généré (aucune photo) : `venv/bin/python -I tools/burns/make_burns.p
 
 ## Pour les autres sources de brûlure (code)
 
-- Un coup : `burn = { kind = "Fire" | "Acid", perSecond, duration, spot = true? }` dans le `HitDef` (`spot` = un laser : tache profonde, peu de propagation).
+- Un coup : `burn = { kind = "Fire" | "Acid", perSecond, duration, spot = true?, dose = 1?, where = "Legs"? }` dans le `HitDef` (`spot` = un laser : tache profonde, peu de propagation ; `dose` = profondeur d'un coup ; `where` = la partie brûlée si ce n'est pas celle du coup).
 - Un sol qui brûle (flaque, Molotov) : le `burn` des `Moves` (pieds d'abord).
 - Mettre quelqu'un en feu d'un coup (finisher) : l'attribut `"Burning" = "Fire"` sur le combattant (tout le corps prend feu, même s'il brûlait déjà à l'acide) ; `nil` l'éteint. **S'il brûlait déjà au feu**, l'attribut ne change pas (`"Fire"` → `"Fire"`) et rien ne se passe : appeler aussi `Burns.engulf(cible, "Fire")` côté serveur.
-- Côté serveur directement : `Combat/Burns` (`expose`, `ignite`, `extinguish`, `clear`).
+- Côté serveur directement : `Combat/Burns` (`expose`, `ignite`, `engulf`, `burnOn`, `extinguish`, `clear`).
 
-## À la fusion avec la branche du Pyromane (`feature/kit-pyromaniac`)
+## Le Pyromane
 
-- Dans `Combat/init.luau`, le rappel `onIgnite` d'**Immolation** (qui vide `burnPerSecond` / `burnUntil` de la victime) doit aussi appeler **`Burns.engulf(target, "Fire")`** : sinon une victime qui brûlait déjà d'un coup de feu du Pyromane ne prend pas feu partout (même valeur `"Fire"`, aucun événement).
-- Le commentaire de `Combat/Immolate.luau` qui cite « Client RiftBurn » devient « Client/Combat/Burns » (RiftBurn n'existe plus).
-- Les flaques de feu du Pyromane passent par `c.burn` (comme celles de l'acide) : rien d'autre à changer, la dose au sol dépend déjà du temps passé dedans.
+Tout son feu passe par ce système (plus aucune flamme ni fumée « à lui » sur les corps, sauf ses propres avant-bras en Awakening) :
+
+| Coup | Où ça brûle | Profondeur d'un coup |
+|---|---|---|
+| **Zippo Flare** | le **visage** (face tournée vers lui) | ~1 degré, puis le feu continue |
+| **Molotov** sur quelqu'un | la partie touchée par la bouteille | ~1,4 degré |
+| Éclaboussure du Molotov | les **jambes** (côté de l'éclatement) | ~0,8 |
+| **Flaque de feu** | les **pieds et le bas des jambes** d'abord, selon le temps passé dedans | (au temps) |
+| **Fire Breath** / **Inferno Breath** | le **torse** (face vers sa bouche), un peu à chaque coup du jet | ~0,35 / ~0,3 par coup (4-5 coups) |
+| **Burning Fist** / **Burning Rush** | là où le poing frappe | ~0,7 |
+| **Immolation** | **tout le corps** prend feu d'un coup | 0,5 partout, puis ça s'aggrave ~12 s : carbonisé |
+
+- **Trempé d'essence** (Douse, Molotov, Immolation) : le premier feu qui le touche **embrase tout le corps** (en plus de ×1,5 dégâts et +2 s).
+- Les **vêtements** se carbonisent par la série « tissu » (roussi, trous, fondu dans la peau) : plus de teinte noire posée sur le T-shirt.
+- **Immolation** : le corps mort brûle encore `PyroConfig.IMMOLATE_BURN` (12 s, sa copie de cadavre aussi), puis **fume** (fumée grise ~18 s). `PyroFx` ne garde que le son du corps qui brûle.
+- Réglages par coup : `dose` (profondeur d'un coup, 1 par défaut) et `where` (la partie brûlée si ce n'est pas celle du coup) dans le `burn` du `HitDef` (`Shared/Kits/Pyromaniac.luau`).

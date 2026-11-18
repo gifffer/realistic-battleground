@@ -303,9 +303,13 @@ local function startBurning(
 	duration: number
 )
 	local time = now()
-	-- Soaked in petrol (the Pyromaniac): fire burns them harder, longer.
+	-- Soaked in petrol (the Pyromaniac): fire burns them harder, longer,
+	-- and the whole body goes up.
 	local doused = victim.model:GetAttribute(PyroConfig.DOUSED_ATTRIBUTE)
-	if kind == "Fire" and typeof(doused) == "number" and doused > workspace:GetServerTimeNow() then
+	local soaked = kind == "Fire"
+		and typeof(doused) == "number"
+		and doused > workspace:GetServerTimeNow()
+	if soaked then
 		perSecond *= PyroConfig.DOUSED_RATE
 		duration += PyroConfig.DOUSED_EXTRA
 	end
@@ -321,6 +325,9 @@ local function startBurning(
 	victim.burnKind = kind
 	-- (the body's burns, the flames: Combat/Burns, Client/Combat/Burns)
 	Burns.ignite(victim.model, kind, victim.burnPerSecond, duration)
+	if soaked then
+		Burns.engulf(victim.model, "Fire")
+	end
 	setAttribute(victim.model, "Burning", kind)
 end
 
@@ -1001,7 +1008,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 	local burn = spec.burn
 	if burn then
-		Burns.expose(victim.model, burn, zone, from) -- (where it burns)
+		-- (where it burns: its own part if it has one, a splash the legs)
+		Burns.expose(victim.model, burn, burn.where or zone, from)
 		startBurning(victim, credit, burn.kind, burn.perSecond, burn.duration)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)

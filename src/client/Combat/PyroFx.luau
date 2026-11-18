@@ -12,9 +12,11 @@
 --     thick black smoke - petrol burns sooty -, embers, one flickering light,
 --     a black scorch that stays), the cones (spat flame, flung petrol).
 --   • on every fighter: soaked in petrol (drips), his burning forearms in his
---     Awakening, the finisher's burning body (and its corpse, later).
+--     Awakening, the finisher's burning body's roar (and its corpse's).
 --   • the finisher "Immolate" (Shared/Finishers), from FinisherStarted.
--- The body's own burning skin and flames: Client/Combat/RiftBurn ("Burning").
+-- The burns themselves (degrees on the skin, charred clothes, flames on the
+-- body, smoke, smouldering): Client/Combat/Burns, from the server's burn
+-- attributes, like every other burn in the game.
 -- Sounds: layered cues (Shared/SoundCues, Combat/SoundLayers), silent until
 -- their ids are filled in.
 
@@ -50,7 +52,6 @@ local EMBER = Color3.fromRGB(255, 132, 40)
 local PETROL = Color3.fromRGB(196, 168, 96)
 local GLASS = Color3.fromRGB(46, 72, 40) -- a green wine bottle
 local SCORCH = Color3.fromRGB(20, 17, 15)
-local CHARRED_CLOTH = Color3.fromRGB(58, 48, 42)
 
 local LIGHT_COLOR = Color3.fromRGB(255, 150, 70)
 
@@ -1458,159 +1459,45 @@ local function refreshArms(model: Model)
 	end
 end
 
--- A body burning (the finisher): thick black smoke going up, the fire's
--- sound; on a corpse copy (no RiftBurn there) flames too. Then it smoulders.
-type Pyre = { items: { Instance }, sound: SoundLayers.Loop?, stage: number }
+-- A body burning (the finisher): the fire's roar while it burns. Its burns,
+-- charred clothes, flames, smoke and light are Client/Combat/Burns (the
+-- server's burn attributes, a corpse copy too).
+type Pyre = { sound: SoundLayers.Loop, endsAt: number }
 local pyres: { [Model]: Pyre } = setmetatable({}, { __mode = "k" }) :: any
-
-local clothesBefore: { [Instance]: Color3 } = setmetatable({}, { __mode = "k" }) :: any
-local function charClothes(model: Model, seconds: number)
-	for _, item in model:GetChildren() do
-		if item:IsA("Clothing") then
-			local saved: Color3? = clothesBefore[item]
-			if saved == nil then
-				clothesBefore[item] = item.Color3
-			end
-			if seconds <= 0 then
-				item.Color3 = CHARRED_CLOTH
-			else
-				TweenService
-					:Create(item :: Instance, TweenInfo.new(seconds), { Color3 = CHARRED_CLOTH })
-					:Play()
-			end
-		end
-	end
-end
-
-local function uncharClothes(model: Model)
-	for _, item in model:GetChildren() do
-		local before: Color3? = clothesBefore[item]
-		if before and item:IsA("Clothing") then
-			item.Color3 = before
-			clothesBefore[item] = nil
-		end
-	end
-end
 
 local function stopPyre(model: Model)
 	local pyre = pyres[model]
 	pyres[model] = nil
-	if pyre == nil then
-		return
-	end
-	if pyre.sound then
+	if pyre then
 		pyre.sound.stop(1.2)
 	end
-	for _, item in pyre.items do
-		for _, child in item:GetChildren() do
-			if child:IsA("ParticleEmitter") then
-				child.Enabled = false
-			elseif child:IsA("PointLight") then
-				child:Destroy()
-			end
-		end
-		Debris:AddItem(item, 5)
-	end
 end
 
-local function smokeColumn(at: Attachment, heavy: boolean)
-	emitter(at, {
-		Texture = SMOKE_TEXTURE,
-		Color = colors({ 0, 0.6, 1 }, { SOOT, SOOT, SOOT_THIN }),
-		LightInfluence = 1,
-		Size = numbers({ 0, 0.4, 1 }, { 1.2, 3, if heavy then 7 else 4 }),
-		Transparency = numbers({ 0, 0.15, 0.7, 1 }, { 0.7, if heavy then 0.3 else 0.65, 0.7, 1 }),
-		Lifetime = NumberRange.new(3, 5),
-		Speed = NumberRange.new(2, 4),
-		SpreadAngle = Vector2.new(10, 10),
-		Acceleration = Vector3.new(0, 1.2, 0),
-		Drag = 0.4,
-		Rotation = NumberRange.new(0, 360),
-		RotSpeed = NumberRange.new(-10, 10),
-		Rate = if heavy then 7 else 2.5,
-		ZOffset = -0.5,
-	})
-end
-
--- stage 1: burning (until `burnLeft` s), 2: smouldering (`smoulderLeft` s).
-local function startPyre(model: Model, burnLeft: number, smoulderLeft: number)
+-- Burning `burnLeft` more seconds (one already roaring: it goes on till then).
+local function startPyre(model: Model, burnLeft: number)
 	local torso = bodyPart(model, "Torso")
-	if torso == nil then
+	if torso == nil or burnLeft <= 0 then
 		return
 	end
-	stopPyre(model)
-	local items: { Instance } = {}
-	local pyre: Pyre = { items = items, sound = nil, stage = 0 }
-	pyres[model] = pyre
-	if burnLeft > 0 then
-		pyre.stage = 1
-		local at = Instance.new("Attachment")
-		at.Name = "PyroPyre"
-		-- (the smoke column from the body up: world up, whichever way it lies)
-		at.Parent = torso
-		table.insert(items, at)
-		smokeColumn(at, true)
-		pyre.sound = SoundLayers.loopOn("BodyBurn", torso)
-		if CollectionService:HasTag(model, Config.Combat.CORPSE_TAG) then
-			-- a corpse copy: its own flames (RiftBurn only draws fighters)
-			for _, name in { "Torso", "Head", "Right Arm", "Left Arm", "Right Leg", "Left Leg" } do
-				local limb = bodyPart(model, name)
-				if limb then
-					local flames = emitter(limb, {
-						Name = "PyroPyreFlames",
-						Texture = FIRE_TEXTURE,
-						Color = colors({ 0, 0.3, 0.8, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP, SOOT }),
-						LightEmission = 0.6,
-						Size = numbers({ 0, 0.3, 1 }, { 0.6, 1.3, 0.3 }),
-						Transparency = numbers({ 0, 0.2, 1 }, { 0.5, 0.2, 1 }),
-						Lifetime = NumberRange.new(0.4, 0.8),
-						Speed = NumberRange.new(0.5, 1.5),
-						Acceleration = Vector3.new(0, 6, 0),
-						Rate = if name == "Torso" then 16 else 7,
-						ZOffset = 0.1,
-					})
-					table.insert(items, flames)
-				end
-			end
-			fireLight(at, 2, 16)
-		end
-		task.delay(burnLeft, function()
-			if pyres[model] == pyre and model.Parent then
-				stopPyre(model)
-				startPyre(model, 0, smoulderLeft)
-			end
-		end)
-	elseif smoulderLeft > 0 then
-		pyre.stage = 2
-		local at = Instance.new("Attachment")
-		at.Name = "PyroSmoulder"
-		at.Parent = torso
-		table.insert(items, at)
-		smokeColumn(at, false)
-		task.delay(smoulderLeft, function()
-			if pyres[model] == pyre then
-				stopPyre(model)
-			end
-		end)
+	local endsAt = os.clock() + burnLeft
+	local pyre = pyres[model]
+	if pyre then
+		pyre.endsAt = endsAt
+	else
+		pyres[model] = { sound = SoundLayers.loopOn("BodyBurn", torso), endsAt = endsAt }
 	end
+	task.delay(burnLeft, function()
+		local current = pyres[model]
+		if current and os.clock() >= current.endsAt - 0.05 then
+			stopPyre(model)
+		end
+	end)
 end
 
 local function refreshImmolated(model: Model)
 	local caught = model:GetAttribute(PyroConfig.IMMOLATED_ATTRIBUTE)
-	if typeof(caught) ~= "number" then
-		return
-	end
-	charClothes(model, 0)
-	local age = serverNow() - caught
-	local burnLeft = PyroConfig.IMMOLATE_BURN - age
-	local smoulderLeft = PyroConfig.IMMOLATE_SMOULDER - math.max(0, -burnLeft)
-	local pyre = pyres[model]
-	if burnLeft > 0 then
-		if pyre == nil or pyre.stage ~= 1 then
-			startPyre(model, burnLeft, PyroConfig.IMMOLATE_SMOULDER)
-		end
-	elseif smoulderLeft > 0 and (pyre == nil or pyre.stage ~= 2) then
-		startPyre(model, 0, smoulderLeft)
+	if typeof(caught) == "number" then
+		startPyre(model, PyroConfig.IMMOLATE_BURN - (serverNow() - caught))
 	end
 end
 
@@ -1752,8 +1639,7 @@ local function finisherEvent(show: Show, kind: string, attacker: Model, victim: 
 			SoundLayers.playAt("BodyIgnite", torso.Position, torso)
 			fireball(torso.Position + Vector3.new(0, 0.5, 0), 3.2)
 		end
-		charClothes(victim, 2.5)
-		startPyre(victim, PyroConfig.IMMOLATE_BURN, PyroConfig.IMMOLATE_SMOULDER)
+		startPyre(victim, PyroConfig.IMMOLATE_BURN)
 		if run and run.zippo then
 			run.zippo.setLit(false) -- (it's in the fire now)
 		end
@@ -1816,7 +1702,6 @@ local function onFinisherEnded(attacker: unknown, victim: unknown, killed: unkno
 	shows[attacker] = nil
 	endRun(attacker)
 	stopPyre(show.victim)
-	uncharClothes(show.victim)
 end
 
 ------------------------------------------------------------------------------

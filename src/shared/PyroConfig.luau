@@ -30,11 +30,10 @@ PyroConfig.POOL_TICK = 0.25
 PyroConfig.SCORCH_TIME = 45
 
 -- The finisher (Shared/Finishers "Immolate"): the body burns on after the
--- kill for this long (seconds), then smoulders. On the dead body: the
--- server time it caught fire (the clients draw it, a body seen later too).
+-- kill for this long (seconds), then smoulders (Server Combat/Burns). On
+-- the dead body: the server time it caught fire (its roar, PyroFx).
 PyroConfig.IMMOLATED_ATTRIBUTE = "Immolated"
 PyroConfig.IMMOLATE_BURN = 12
-PyroConfig.IMMOLATE_SMOULDER = 25
 
 -- His Awakening: his forearms are on fire (the clients draw them).
 PyroConfig.KIT_ID = "Pyromaniac"

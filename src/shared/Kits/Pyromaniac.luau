@@ -7,7 +7,9 @@
 -- Molotov breaks and the petrol burns on the floor for a few seconds, dying
 -- out patch by patch; a lighter flare scorches a face; fuel he splashes on
 -- someone makes the next fire on them far worse (Shared/PyroConfig). Every
--- burn goes through the server's burn slot (Combat startBurning: "Fire").
+-- burn goes through the server's burn slot (Combat startBurning: "Fire")
+-- and the burn system (Server Combat/Burns, Client Combat/Burns): degrees
+-- that deepen where it touched, clothes charring, flames, smoke.
 --
 -- Pure data, read by Shared/Kits (see KitTypes). `at` / `release` / `from`
 -- values = the keyframes of the clips (Client/Animation/PyroClips). The
@@ -20,15 +22,19 @@ local KitTypes = require(script.Parent.KitTypes)
 local NONE = Vector3.zero
 
 -- Fire on the skin (damage per second, seconds). A soaked target burns
--- harder and longer (PyroConfig.DOUSED_*).
-local FLARE: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 2.5 }
-local IGNITE: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 4 }
-local SPLASHED: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 3 }
+-- harder and longer, and goes up all over (PyroConfig.DOUSED_*). Where it
+-- burns and how deep: Server Combat/Burns (`dose` per hit: a cone hits
+-- every tick, so a small one; `where`: a splash off the floor, the legs).
+local FLARE: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 2.5, dose = 1.1 }
+local IGNITE: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 4, dose = 1.4 }
+local SPLASHED: KitTypes.BurnDef =
+	{ kind = "Fire", perSecond = 3, duration = 3, dose = 0.8, where = "Legs" }
+-- (a pool: dosed by the time stood in it, Burns.expose with no zone)
 local POOL: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 1.5 }
-local BREATH: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 3 }
-local FIST: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 2.5 }
+local BREATH: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 3, dose = 0.35 }
+local FIST: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 2.5, dose = 0.7 }
 local BIG_POOL: KitTypes.BurnDef = { kind = "Fire", perSecond = 5, duration = 1.5 }
-local INFERNO: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 3.5 }
+local INFERNO: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 3.5, dose = 0.3 }
 
 local kit: KitTypes.KitDef = {
 	id = "Pyromaniac",

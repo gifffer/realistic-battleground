@@ -18,7 +18,11 @@
 --       go (a burning body goes on a few seconds after death), it
 --       smoulders, the degrees settle.
 --   Burns.clear(model)       healed (a kill, a new round): no burns left.
---   Burns.engulf(model, kind) on fire all over at once (a finisher).
+--   Burns.engulf(model, kind) on fire all over at once (a finisher, a
+--       body soaked in petrol catching fire). Parts already alight keep
+--       their degrees: calling it again only keeps them all lit.
+--   Burns.burnOn(model, seconds) a dead body goes on burning this long (a
+--       finisher's pyre; its corpse copy too), then smoulders.
 --   Burns.watch(model)       a fighter: "Burning" set from outside (a
 --       finisher's attributes) to a kind it isn't burning with sets it on
 --       fire all over; cleared, it's out. (Already "Fire": no change
@@ -384,6 +388,7 @@ function Burns.expose(
 	local kind: Kind = if burn.kind == "Acid" then "Acid" else "Fire"
 	local focused = burn.spot == true and kind == "Fire"
 	local strength = math.clamp(burn.perSecond / 3, 0.6, 1.6)
+	local hitDose = burn.dose or 1 -- (a cone hitting every tick: a small one)
 	local force = zone ~= nil
 	for _, partName in zoneParts(model, zone, from) do
 		local part = bodyPart(model, partName)
@@ -432,9 +437,9 @@ function Burns.expose(
 				end
 				dose(state, face, 0.7, 0.2, 0)
 			elseif kind == "Fire" then
-				dose(state, face, 1.0 * strength, 0.4, 0.1)
+				dose(state, face, hitDose * strength, 0.4, 0.1)
 			else
-				dose(state, face, 1.0 * strength, 0.3, 0)
+				dose(state, face, hitDose * strength, 0.3, 0)
 				-- it runs down onto the part below (the torso: the leg on
 				-- that side, both when it hit the middle)
 				local belows: { string } = {}
@@ -452,7 +457,7 @@ function Burns.expose(
 				for _, below in belows do
 					if bodyPart(model, below) then
 						local under = partState(entry, below, "Acid")
-						add(under, face, 0.5 * strength / #belows)
+						add(under, face, 0.5 * hitDose * strength / #belows)
 					end
 				end
 			end
@@ -502,10 +507,14 @@ function Burns.engulf(model: Model, kind: Kind)
 	for _, partName in BurnCode.PARTS do
 		if bodyPart(model, partName) then
 			local state = partState(entry, partName, kind)
-			light(state, 0.6, false)
-			for index = 1, 6 do
-				add(state, index, 0.5)
+			if state.lit <= 0 then
+				-- (catching now: a first burn all round; alight already, it
+				-- just stays lit)
+				for index = 1, 6 do
+					add(state, index, 0.5)
+				end
 			end
+			light(state, 0.6, false)
 		end
 	end
 	entry.active = true
@@ -514,6 +523,17 @@ function Burns.engulf(model: Model, kind: Kind)
 	entry.rate = math.max(entry.rate, 4)
 	ensureLoop()
 	write(entry, true)
+end
+
+-- A dead body left burning (a finisher's pyre): `seconds` more, then out.
+function Burns.burnOn(model: Model, seconds: number)
+	local entry = entries[model]
+	if entry == nil then
+		return
+	end
+	entry.active = false -- (Combat's burn ending no longer puts it out)
+	entry.endsAt = math.max(entry.endsAt or 0, serverNow() + seconds)
+	ensureLoop()
 end
 
 local function settle(degree: number): number
@@ -644,7 +664,8 @@ function Burns.start()
 		entry.kind = source.kind
 		entry.litWritten = copy:GetAttribute(BurnCode.LIT) :: string?
 		if source.active or source.endsAt ~= nil then
-			entry.endsAt = serverNow() + CORPSE_BURN
+			-- (a pyre set to burn longer goes on till then)
+			entry.endsAt = math.max(serverNow() + CORPSE_BURN, source.endsAt or 0)
 			ensureLoop()
 		end
 	end)
