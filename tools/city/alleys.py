@@ -523,12 +523,14 @@ wall(PW.downpipe, 203, 102, OUT_S, height=32.5)
 wall(PW.building_top, 187, 102, OUT_S, width=36, top=COURT_TOP, clutter="tank")
 wall(PW.cable_sag, 186, 102, OUT_S, span=10, y=16, y_end=14, cables=2)
 # The arch block's faces (brick, sooty, posters and tags)
-wall(PW.wall_grime, 184, 72, OUT_S, width=30, height=4)
+wall(PW.wall_grime, 172, 72, OUT_S, width=6, height=4)
+wall(PW.wall_grime, 193, 72, OUT_S, width=12, height=4)
 wall(PW.torn_posters, 171.8, 72, OUT_S, y=4, width=2.6, height=3.4)
 wall(PW.graffiti_tag, 192.5, 72, OUT_S, y=6, width=5, text="ASK FOR VIC", color=(190, 180, 120))
 wall(PW.rust_streak, 172, 72, OUT_S, y=26, length=10, bolt=False)
 wall(PW.rust_streak, 196, 72, OUT_S, y=26, length=8, bolt=False)
-wall(PW.wall_grime, 184, 92, OUT_N, width=30, height=4)
+wall(PW.wall_grime, 175, 92, OUT_N, width=12, height=4)
+wall(PW.wall_grime, 196, 92, OUT_N, width=6, height=4)
 wall(PW.rust_streak, 175, 92, OUT_N, y=26, length=9, bolt=False)
 wall(PW.efflorescence, 196, 92, OUT_N, width=4)
 
@@ -538,9 +540,9 @@ wall(PW.background_facade, 188, 44, OUT_N, folder=F, width=48, height=62, depth=
 wall(PW.background_facade, 188, 114, OUT_S, folder=F, width=48, height=58, depth=12, lit_share=0.15)
 
 # -- the floor: alley A (kitchen back) ----------------------------------------------------------
-place(PO.dumpster, 156.6, 60.2, OUT_N, lid="open", full=True)
+place(PO.dumpster, 156.6, 60.2, OUT_N, lid="open", full=True, against_wall=True)
 place(PG.trash_heap, 151.6, 60.4, OUT_N, count=5)
-place(PO.recycling_bin, 166.2, 60.2, OUT_N, kind="paper", lid="closed")
+place(PO.recycling_bin, 144.5, 60.2, OUT_N, kind="paper", lid="closed")
 place(PG.cardboard_flat, 161.4, 60.0, OUT_N + 10, wet=True, torn=True)
 place(PG.cardboard_box, 160.6, 61.0, 25, state="crushed")
 place(PG.milk_crate, 149.6, 61.0, 15, state="upside")
@@ -559,7 +561,7 @@ place(PG.wrapper, 146.0, 63.3, 0, kind="takeaway")
 
 # -- the floor: alley B (demolition job) --------------------------------------------------------
 place(PO.scaffolding, 150.5, 96.2, OUT_S, bays=1, levels=2, netting=True)
-place(PO.construction_barrier, 134.5, 93.4, -80, kind="aframe", banner=True)
+place(PO.construction_barrier, 134.5, 96.3, 10, kind="aframe", banner=True)
 place(PG.cinder_block, 158.0, 96.9, 0, state="stack")
 place(PG.cement_bag, 160.8, 97.0, 10, torn=True)
 place(PG.plank_stack, 165.5, 96.6, OUT_S, count=6)
@@ -578,19 +580,23 @@ place(PG.leaves_drift, 168.0, 97.0, OUT_S, corner=True)
 
 # -- the yard, north: Vic's black market ---------------------------------------------------------
 start = len(D.extras)
-place(PO.market_stall, 181.0, 68.2, 0, goods="electronics", light=True)
+place(PO.market_stall, 180.0, 68.2, 0, goods="electronics", light=True, compact=True)
 faulty_since(start, 0.25)
-place(PO.wooden_crates, 176.6, 76.4, 0, count=3)
-place(PO.wooden_crates, 185.0, 77.6, 180, count=2)
+for ex in D.extras[start:]:
+    if ex.get("l"):
+        ex["t"] = sorted(set((ex.get("t") or []) + ["CityBulkhead"]))
+        ex["l"]["shadows"] = False
+place(PO.wooden_crates, 177.7, 76.4, 0, count=3)
+place(PO.wooden_crates, 184.2, 77.6, 180, count=2)
 place(PO.clothes_rack, 181.0, 78.6, 0, count=5)
-place(PO.tv, 176.6, 76.4, 10, floor_y=FINISH + 4.4, kind="crt", state="ok")
-place(PO.plastic_crates, 188.6, 69.6, 90, count=4)
+place(PO.tv, 177.7, 76.4, 10, floor_y=FINISH + 4.4, kind="crt", state="ok")
+place(PO.plastic_crates, 191.0, 66.6, 90, count=4)
 place(PO.shoe_boxes, 172.6, 70.6, 90, count=5)
 place(PO.radio, 184.4, 75.2, 180)
 # the neon in the arch (the S dead), flickering like a failing tube
 D.part(MK, "NeonSign", ((MARKET[0] + MARKET[1]) / 2, 11.1, 72.3), (6.8, 1.2, 0.1), BLACK, "SmoothPlastic",
        flags=DECOR,
-       extra={"t": ["CityNeon"], "a": {"Color": "red", "Faulty": 0.6},
+       extra={"t": ["CityNeon"], "a": {"Color": "red", "Flicker": "random"},
               "l": {"type": "Point", "color": list(RED_NEON), "range": 14, "brightness": 1.2, "name": "Light",
                     "shadows": False},
               "g": {"text": "BUY · ELL", "font": "Oswald", "color": list(RED_NEON), "face": "Front", "lit": True,
@@ -629,7 +635,7 @@ place(PO.shopping_cart, 192.0, 99.6, 30, full=True, state="upright")
 start = len(D.extras)
 place(PO.oil_drum, 187.6, 96.0, 0, state="fire", light=True)
 place(PO.armchair, 184.2, 97.6, -60, state="worn", blanket=True)
-place(PO.camp_stool, 190.6, 95.0, 20)
+place(PO.camp_stool, 189.5, 97.9, 200)
 place(PG.milk_crate, 186.0, 94.2, 40, state="upright")
 place(PG.cardboard_flat, 174.2, 93.4, 5, wet=True)
 place(PG.wrapper, 177.5, 94.0, 0, kind="foil")
@@ -640,7 +646,7 @@ place(PG.wall_base_grime, 187, 101.8, OUT_S, length=30)
 place(PG.weeds, 202.0, 101.6, OUT_S, kind="wall", length=4)
 place(PG.leaves_drift, 204.0, 100.8, OUT_S, corner=True)
 place(PG.damp_stain, 195.0, 94.6, 90, size=3)
-D.part(N_, "NpcSpot", (183.3, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
+D.part(N_, "NpcSpot", (184.4, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        rot=(0, 180, 0),
        extra={"a": {"NpcRole": "Vagrant", "NpcName": "Old Ray", "NpcPose": "SitGround", "NpcSeed": 47}})
 
@@ -652,8 +658,9 @@ for (x, y, z) in ((177.5, 12.6, 73.0), (185.0, 12.6, 78.5), (183.0, 12.6, 90.7),
     D.part(P, "Drip", (x, y, z), (0.4, 0.2, 0.4), (52, 50, 48), "Metal", flags=DECOR, transparency=1,
            extra={"t": ["CityDrip"], "fx": "drip"})
 D.part(P, "SteamVent", (147.6, FINISH + 0.1, 64.6), (3, 0.2, 2.2), (50, 50, 50), "DiamondPlate", flags=DECOR,
-       extra={"t": ["CitySteam"], "a": {"BaseRate": 4}, "fx": "steam_small"})
-D.part(P, "SteamVent", (155.5, 9.4, 58.9), (1.4, 0.2, 1.0), (50, 50, 50), "Metal", flags=DECOR, transparency=1,
+       extra={"t": ["CitySteam"], "a": {"BaseRate": 4}, "fx": "steam"})
+D.part(P, "SteamVent", (155.5, 9.4, 58.9), (1.0, 0.2, 1.4), (50, 50, 50), "Metal", flags=DECOR, transparency=1,
+       rot=(0, 90, 0),
        extra={"t": ["CitySteam"], "a": {"BaseRate": 2}, "fx": "steam_small"})
 
 # -- the mood zones (AlleyAtmosphereController: darker, hazier inside) ---------------------------
@@ -734,7 +741,7 @@ def weapon_spawn(folder, x, z, kind, ry=None):
 
 # in the alleys and the courtyard
 weapon_spawn(WS_ALLEY, 144, 64.6, "IronBar", 90)
-weapon_spawn(WS_ALLEY, 166, 92.0, "Plank")
+weapon_spawn(WS_ALLEY, 164.6, 93.4, "Plank")
 weapon_spawn(WS_ALLEY, 172.0, 64.0, "Plank", 15)
 weapon_spawn(WS_ALLEY, 197.5, 97.0, "IronBar")
 weapon_spawn(WS_ALLEY, 201.5, 68.0, "IronBar", 0)

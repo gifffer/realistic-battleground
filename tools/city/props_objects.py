@@ -316,7 +316,7 @@ def _streak(f, rng, x, ytop, z, face, length=None, color=RUST_DARK):
 # Bins, skips, the container, drums
 # =============================================================================================
 @prop({"lid": "closed"}, {"lid": "open"}, {"lid": "half"}, {"lid": "open", "color": (40, 54, 74), "full": True})
-def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None):
+def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, against_wall=False):
     """A big steel commercial dumpster (front-load skip): sloped top, the body's shell with three
     stamped ribs on the front, corner posts, a rolled rim, fork pockets on both sides, two black
     plastic lids on hinges (closed / one or both thrown back "open" / one propped up by the rubbish
@@ -392,7 +392,9 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None):
     lid_col = _tone(_pick(rng, [LID_BLACK, LID_BLACK, dark]), rng, 4)
     open_sides = []
     for s, st in zip((-1, 1), states):
-        ang = {"c": -slope + rng.uniform(-0.6, 0.6), "o": rng.uniform(98, 116), "h": rng.uniform(14, 30)}[st]
+        # against a wall the thrown-back lid rests on the bricks instead of going through them
+        o_ang = rng.uniform(91, 95) if against_wall else rng.uniform(98, 116)
+        ang = {"c": -slope + rng.uniform(-0.6, 0.6), "o": o_ang, "h": rng.uniform(14, 30)}[st]
         if st != "c":
             open_sides.append((s, st))
         g = f.sub((s * L / 4, y0 + H2 + 0.09, W / 2 - 0.06), rx=ang, rz=rng.uniform(-1.2, 1.2))
@@ -987,7 +989,7 @@ def oil_drum(D, folder, origin, ry, rng, state=None, color=None, light=True):
             "Slate",
             transparency=0.3,
         )
-        ex = {"t": ["CityFireEmbers"], "fx": "fire"}
+        ex = {"t": ["CityFireEmbers"]}
         if light:
             ex["l"] = {
                 "type": "Point",
@@ -998,6 +1000,17 @@ def oil_drum(D, folder, origin, ry, rng, state=None, color=None, light=True):
                 "shadows": False,
             }
         _cyl(f, "Embers", (0, H - 0.35, 0), 0.15, d - 0.2, NEON_FIRE, "Neon", rot=(0, 0, 90), extra=ex)
+        # the flames come from an unrotated invisible part, so they rise (the embers disc lies on its side)
+        f.box(
+            "FireFx",
+            (-0.4, H - 0.3, -0.4),
+            (0.4, H - 0.2, 0.4),
+            NEON_FIRE,
+            "SmoothPlastic",
+            flags=DECOR,
+            transparency=1,
+            extra={"fx": "fire"},
+        )
 
 
 # =============================================================================================
@@ -2056,17 +2069,19 @@ def cash_box(D, folder, origin, ry, rng, open=True):
 
 
 @prop({}, {"goods": "electronics"}, {"goods": "clothes"})
-def market_stall(D, folder, origin, ry, rng, goods=None, light=True):
+def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=False):
     """A whole black-market stall, composed: the canopy over a folding table laid with goods
     (phones, watches, car stereos, a radio, a TV, a cash box) or clothes (sneaker boxes, the
     jacket rail beside it), crates of stock stacked behind, a cardboard box of more. For quick
     dressing; place the pieces by hand for anything bespoke.
-    Footprint ~9 x 7 studs, 7.8 tall. 117-175 parts (the sum of its pieces)."""
+    Footprint ~9 x 7 studs, 7.8 tall (`compact`: ~7 x 5.5, no stock crates behind, for tight
+    yards). 117-175 parts (the sum of its pieces)."""
     f = Frame(D, folder, origin, ry=ry)
     goods = goods or _pick(rng, ["electronics", "electronics", "clothes"])
     yaw = _yaw(f)
-    market_canopy(D, folder, _w(f, 0, 0.5), yaw, rng, w=rng.uniform(8.5, 9.5), d=rng.uniform(6, 7), light=light)
-    tw = rng.uniform(5.5, 6.2)
+    cw, cd = (6.8, 5.4) if compact else (rng.uniform(8.5, 9.5), rng.uniform(6, 7))
+    market_canopy(D, folder, _w(f, 0, 0.5), yaw, rng, w=cw, d=cd, light=light)
+    tw = 4.8 if compact else rng.uniform(5.5, 6.2)
     folding_table(D, folder, _w(f, rng.uniform(-0.4, 0.4), -1.0), yaw + rng.uniform(-3, 3), rng, w=tw)
     top = 2.45
     if goods == "electronics":
@@ -2095,6 +2110,8 @@ def market_stall(D, folder, origin, ry, rng, goods=None, light=True):
         clothes_rack(
             D, folder, _w(f, rng.uniform(-0.5, 0.5), 1.8), yaw + rng.uniform(-6, 6), rng, count=rng.randint(4, 5)
         )
+    if compact:
+        return
     wooden_crates(D, folder, _w(f, -3.0, 2.2), yaw + rng.uniform(-10, 10), rng, count=rng.randint(1, 2))
     plastic_crates(D, folder, _w(f, 3.1, 2.4), yaw + rng.uniform(-20, 20), rng, count=rng.randint(2, 3))
 

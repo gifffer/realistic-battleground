@@ -514,6 +514,11 @@ end
 local function setWindow(window: BasePart, level: string)
 	remember(window)
 	window:SetAttribute("LitLevel", level)
+	-- A window with its own room light (the alleys' lit windows) goes dark with it.
+	local roomLight = lightOf(window)
+	if roomLight then
+		roomLight.Enabled = level ~= "off"
+	end
 	if level == "off" then
 		window.Material = builtMaterial(window)
 		window.Color = builtColor(window)

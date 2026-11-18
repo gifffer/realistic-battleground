@@ -185,9 +185,14 @@ type Entry = {
 	wroteBrightness: number?,
 	baseColor: Color3?,
 	wroteColor: Color3?,
+	-- The factor of the last frame (to see a cut-out start).
+	lastFactor: number,
 }
 
 local entries: { [BasePart]: Entry } = {}
+
+-- Called with the part when one of its cut-outs starts (WeatherFx: the electric crackle).
+local cutOutListeners: { (BasePart) -> () } = {}
 
 local function lightOf(part: BasePart): Light?
 	local named = part:FindFirstChild("Light")
@@ -227,7 +232,7 @@ end
 
 local function add(instance: Instance)
 	if instance:IsA("BasePart") and entries[instance] == nil then
-		entries[instance] = { part = instance, seed = seedOf(instance) }
+		entries[instance] = { part = instance, seed = seedOf(instance), lastFactor = 1 }
 	end
 end
 
@@ -255,9 +260,16 @@ local function updateOne(entry: Entry, now: number, cameraPosition: Vector3)
 		if entry.baseBrightness or entry.baseColor then
 			release(entry)
 		end
+		entry.lastFactor = 1
 		return
 	end
 	local factor = faultFactor(entry.seed, amount, now)
+	if factor <= 0 and entry.lastFactor > 0 then
+		for _, listener in cutOutListeners do
+			task.spawn(listener, part)
+		end
+	end
+	entry.lastFactor = factor
 	if light then
 		local current = light.Brightness
 		if entry.wroteBrightness == nil or current ~= entry.wroteBrightness then
@@ -295,6 +307,11 @@ local function update()
 	for _, entry in entries do
 		updateOne(entry, now, cameraPosition)
 	end
+end
+
+-- `callback(part)` runs each time a faulty light near the camera cuts out (the light goes to 0).
+function FaultyLightController.onCutOut(callback: (BasePart) -> ())
+	table.insert(cutOutListeners, callback)
 end
 
 function FaultyLightController.start()

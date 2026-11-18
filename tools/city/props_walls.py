@@ -507,7 +507,7 @@ def window(D, folder, origin, ry, rng, width=3.4, height=5.0, y=4.0, variant="di
     lit = variant == "lit"
     # the room behind
     if lit:
-        f.box("Room", (-w / 2, y, -0.07), (w / 2, y + h, -0.02), jitter(WARM_DIM, rng, 6), "Neon", flags=DECOR,
+        f.box("Room", (-w / 2, y, -0.07), (w / 2, y + h, -0.02), (30, 32, 34), "Glass", flags=DECOR,
               extra={"t": ["CityWindowLit"], "a": {"Kind": kind, "Day": True},
                      "l": {"type": "Point", "color": list(WARM), "range": 12, "brightness": 0.45, "name": "Light",
                            "shadows": False}})
