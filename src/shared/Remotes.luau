@@ -201,6 +201,12 @@ return table.freeze({
 	-- the victim's death screen (DeathScreenController).
 	KillFeed = event("KillFeed"),
 
+	-- server → all clients  (victim: Model, impact: Vector3, velocity: Vector3, seed: number)
+	-- The city's train just hit (and killed) `victim` at `impact`; its body was torn apart by
+	-- the server (the limbs fly at about `velocity`). Every client plays the crash, the
+	-- scream and the same blood (random numbers from `seed`): TrainController / TrainGore.
+	TrainHit = event("TrainHit"),
+
 	-- client → server  (aim: Vector3)
 	-- Throw what we hold (Shared/Weapons) where we aim. Checked and rate-limited.
 	ThrowWeapon = event("ThrowWeapon"),
@@ -214,6 +220,11 @@ return table.freeze({
 	--                        velocity: Vector3)
 	-- It broke there (hit someone / a wall / the floor, or dropped): two halves.
 	WeaponBroke = event("WeaponBroke"),
+
+	-- client → server  ()
+	-- "R pressed" (Config.Controls.USE_ITEM): drink the SpezCola in my pocket. The server
+	-- checks I carry one and can drink now (Server/Systems/SpezCola), and rate-limits it.
+	UseItem = event("UseItem"),
 
 	-- server → all clients  (kind: string, data: { [string]: any })
 	-- Dr. Rift's gadgets, for the look only (Client/Combat/RiftFx): a flask

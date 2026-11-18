@@ -165,7 +165,8 @@ function Hitbox.query(
 			ageByModel[model] = nil -- (in the box now too: not only back then)
 		elseif model then
 			local parts = partsByModel[model]
-			if parts == nil and isAlive(model) then
+			-- (The city's NPCs — shopkeepers, bar patrons — are never targets: attribute Npc.)
+			if parts == nil and model:GetAttribute("Npc") ~= true and isAlive(model) then
 				parts = {}
 				partsByModel[model] = parts
 				table.insert(result, model)

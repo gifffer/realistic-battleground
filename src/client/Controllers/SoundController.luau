@@ -124,38 +124,6 @@ function SoundController.play(name: string, model: Model?): Sound?
 	return sound
 end
 
--- The same, at a point in the world (a flask bursting, a portal): from an
--- attachment left there while it plays.
-function SoundController.playAt(name: string, position: Vector3): Sound?
-	local info = Sounds[name]
-	if info == nil then
-		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
-		return nil
-	end
-	local ids = resolveIds(name)
-	if #ids == 0 then
-		return nil
-	end
-	local point = Instance.new("Attachment")
-	point.Name = name
-	point.WorldPosition = position
-	point.Parent = workspace.Terrain
-	local sound = Instance.new("Sound")
-	sound.Name = name
-	sound.SoundId = assetUrl(pickId(name, ids))
-	sound.Volume = info.volume
-	sound.PlaybackSpeed = info.pitch
-		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
-	sound.RollOffMode = Enum.RollOffMode.InverseTapered
-	sound.RollOffMaxDistance = MAX_HEARING_DISTANCE
-	sound.Parent = point
-	sound.TimePosition = info.start or 0
-	sound:Play()
-	cutShort(sound, info.length)
-	Debris:AddItem(point, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
-	return sound
-end
-
 -- A looping sound heard only by this player, not placed in the world (the
 -- heartbeat when you're hurt...). Returns it stopped, volume from Sounds;
 -- nil if the sound has no id yet. The caller plays / stops / fades it.
@@ -179,10 +147,89 @@ function SoundController.loop(name: string): Sound?
 	return sound
 end
 
+-- A one-shot sound heard by this player only, not placed in the world (thunder...).
+-- `volumeScale` multiplies the volume from Sounds (default 1). Returns the Sound, or nil
+-- if the sound has no id yet.
+function SoundController.play2D(name: string, volumeScale: number?): Sound?
+	local info = Sounds[name]
+	if info == nil then
+		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
+		return nil
+	end
+	local ids = resolveIds(name)
+	if #ids == 0 then
+		return nil
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = name
+	sound.SoundId = assetUrl(pickId(name, ids))
+	sound.Volume = info.volume * (volumeScale or 1)
+	sound.PlaybackSpeed = info.pitch
+		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
+	sound.Parent = game:GetService("SoundService")
+	sound:Play()
+	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, 12) + 0.5)
+	return sound
+end
+
+-- A one-shot sound IN 3D at a point of the world (not on a character): a flask bursting,
+-- a portal, the train hitting someone, a can falling... `parent` = a part to play it from instead (it then follows that
+-- part: a body flying away). `maxDistance` = beyond this it can't be heard (default 90).
+-- Returns the Sound, or nil if the sound has no id yet.
+function SoundController.playAt(
+	name: string,
+	position: Vector3,
+	maxDistance: number?,
+	parent: BasePart?
+): Sound?
+	local info = Sounds[name]
+	if info == nil then
+		warn(`[SoundController] unknown sound "{name}" (see Shared/Sounds.luau)`)
+		return nil
+	end
+	local ids = resolveIds(name)
+	if #ids == 0 then
+		return nil
+	end
+	-- Without a part: an invisible attachment of the terrain, at that point.
+	local holder: Instance
+	local anchor: Attachment? = nil
+	if parent then
+		holder = parent
+	else
+		local attachment = Instance.new("Attachment")
+		attachment.Name = name .. "_At"
+		attachment.WorldPosition = position
+		attachment.Parent = workspace.Terrain
+		holder = attachment
+		anchor = attachment
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = name
+	sound.SoundId = assetUrl(pickId(name, ids))
+	sound.Volume = info.volume
+	sound.PlaybackSpeed = info.pitch
+		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
+	sound.RollOffMode = Enum.RollOffMode.InverseTapered
+	sound.RollOffMinDistance = 10
+	sound.RollOffMaxDistance = maxDistance or MAX_HEARING_DISTANCE
+	sound.Parent = holder
+	sound.TimePosition = info.start or 0
+	sound:Play()
+	cutShort(sound, info.length)
+	local lifetime = math.max(sound.TimeLength / sound.PlaybackSpeed, 8) + 0.5
+	Debris:AddItem(anchor or sound, lifetime)
+	return sound
+end
+
 -- Downloads every sound in the background at startup.
 local function preloadAll()
 	local urls: { any } = {}
 	for _, info in Sounds do
+		-- (music is long: it downloads when it starts, not all at once at startup)
+		if info.music == true then
+			continue
+		end
 		for _, id in info.ids do
 			table.insert(urls, assetUrl(id))
 		end

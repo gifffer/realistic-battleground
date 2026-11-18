@@ -30,6 +30,9 @@
 -- (Server/Systems/Shop): Remotes.BuyCosmetic(id), Remotes.EquipCosmetic
 -- (category, id or "" = take it off), Remotes.Emote (play the equipped
 -- emote). The wallet (coins) sits top right.
+--
+-- The shop counters in the city (clothes shop, emote shop) open this same
+-- section on the right category: ShopMenuController.openAt("Outfit").
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -650,6 +653,42 @@ refreshAll = function(animate: boolean)
 			catalog.wallet.set(coins, animate)
 		end
 		paintCatalog(catalog, animate)
+	end
+end
+
+------------------------------------------------------------------------------
+-- Public API
+------------------------------------------------------------------------------
+
+-- Opens the panel that sells `category` (SHOP, or EMOTES for "Emote") with
+-- that category's tab already selected. Used by the shop counters in the city
+-- (ShopFrontController): the clothes shop opens OUTFITS, the emote shop opens
+-- EMOTES. Nothing happens for an unknown category.
+function ShopMenuController.openAt(category: Cosmetics.Category)
+	local known = false
+	for _, candidate in CATEGORIES do
+		if candidate.id == category then
+			known = true
+			break
+		end
+	end
+	if not known then
+		return
+	end
+	MenuController.open(if category == "Emote" then "Emotes" else "Shop")
+	-- (Like show(), without picking an item: the panel is built by now.)
+	for _, catalog in catalogs do
+		for index, info in catalog.categories do
+			if info.id == category and catalog.category ~= info then
+				local tabs = catalog.tabs
+				if tabs then
+					tabs.set(index) -- (its callback fills the grid)
+				else
+					catalog.category = info
+					fillGrid(catalog)
+				end
+			end
+		end
 	end
 end
 
