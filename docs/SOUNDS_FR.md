@@ -34,6 +34,13 @@ Block = { ids = { 1234567890, 2345678901 }, volume = 0.6, pitch = 1, pitchVariat
 
 Rojo synchronise, *Play*.
 
+## Sons en couches (Pyromane)
+Les sons du kit **Pyromane** sont faits de **5 couches** chacun (`_Transient`, `_Mechanism`,
+`_Body`, `_Sub`, `_Tail`), chaque couche étant une entrée à part dans `Sounds.luau` (section
+*Pyromaniac*, à la fin du fichier) jouée ensemble au bon moment (`src/shared/SoundCues.luau`).
+Le design de chaque son, **le prompt à coller pour générer chaque couche** et le mix sont dans
+**[`SONS_PYROMANE_FR.md`](SONS_PYROMANE_FR.md)**. Tant qu'une couche n'a pas d'ID, elle est muette.
+
 ## Les sons et quand ils jouent
 | Nom | Quand |
 |---|---|

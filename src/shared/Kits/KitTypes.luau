@@ -128,9 +128,10 @@ export type MoveDef = {
 -- it bursts on the first thing it touches (or after `lifetime`): `hit` on a
 -- body it hits directly, `splash` on everyone else within `radius` of the
 -- burst (if nothing stands between). Acid leaves a puddle that keeps
--- burning whoever stands in it.
+-- burning whoever stands in it. A Molotov (the Pyromaniac) sets the floor
+-- on fire there instead (`fire`).
 export type FlaskDef = {
-	kind: "Acid" | "Explosive",
+	kind: "Acid" | "Explosive" | "Molotov",
 	release: number,
 	speed: number, -- studs/s at release, where he aims
 	lift: number, -- studs/s added upward (the arc)
@@ -140,6 +141,34 @@ export type FlaskDef = {
 	radius: number,
 	splash: HitDef, -- (zone: the torso)
 	puddle: { radius: number, seconds: number, burn: BurnDef }?,
+	fire: FireDef?,
+}
+
+-- Burning fuel on the floor (a Molotov). `cells` small fires spread out
+-- from the burst over the first moment, then die out one by one, the last
+-- after `seconds`. Whoever stands in a live cell catches `burn`.
+export type FireDef = {
+	radius: number, -- studs, the whole pool
+	seconds: number,
+	cells: number,
+	burn: BurnDef,
+}
+
+-- A cone in front of him (the Pyromaniac): flame he spits through his
+-- lighter, or fuel he splashes from a can. From `from` to `to` seconds into
+-- the move, every `tick` seconds, `hit` lands on whoever is within `range`
+-- studs and `angle` degrees of where he faces (in sight). `douse`: they are
+-- soaked in fuel for that many seconds (Shared/PyroConfig: fire burns them
+-- harder).
+export type ConeDef = {
+	kind: "Flame" | "Fuel",
+	from: number,
+	to: number,
+	tick: number,
+	range: number,
+	angle: number,
+	hit: HitDef, -- (its hitbox / forward unused)
+	douse: number?,
 }
 
 -- A ray gun (Dr. Rift): `at` seconds into the move, a beam from his hand
@@ -194,6 +223,7 @@ export type GadgetDef = {
 	portal: PortalDef?,
 	wave: WaveDef?,
 	swarm: SwarmDef?,
+	cone: ConeDef?,
 }
 
 -- Dr. Rift's Awakening: `count` copies of him step out of portals and fight

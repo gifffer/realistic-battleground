@@ -782,6 +782,10 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	Rift_FinisherPortalCutVictim = true,
 	Rift_Awaken = true,
 	Rift_ClonePunch = true,
+	-- The Pyromaniac: his cinematic, its victim, his activation.
+	Pyro_FinisherImmolate = true,
+	Pyro_FinisherImmolateVictim = true,
+	Pyro_Awaken = true,
 	-- (a grab's hold clips too: only the server knows it caught someone,
 	-- KitEffects.grabOf)
 })

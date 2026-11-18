@@ -35,6 +35,15 @@
 --                    looks at them, and lets it close: cut in two. The upper
 --                    body falls back off the legs, the legs stay standing a
 --                    moment, spurting, then fold.
+--   "Immolate"       Pyromaniac: the opponent laid on their back across in
+--                    front of him. He unscrews a jerrycan and pours petrol
+--                    over them from the head down (they cough, it stings),
+--                    tosses the can, flicks his Zippo open and lights it,
+--                    looks at them a beat while they beg, and lets it drop
+--                    on their chest: the fuel goes up with a soft "whump".
+--                    They writhe and scream inside the fire, then go still,
+--                    curled up (the heat tightens the muscles: arms bent up,
+--                    fists clenched). The body burns on, black smoke.
 --
 -- One timeline, read by the server (placement, the killing blow) and by
 -- every client (camera, sounds, blood, the bat). Times in seconds from the
@@ -700,6 +709,113 @@ cinematics.Gore = {
 			to = Vector3.new(7.5, 7, -20),
 			look = Vector3.new(0, -2.6, -16.5),
 			fov = 60,
+		},
+	},
+}
+
+-- Pyromaniac: "Immolate" (see the top of the file). The victim lies at
+-- SIDE_VICTIM (its head to his left, at about X = -1.2; its legs to his
+-- right), he stands where he is. The kill comes after the writhing, when
+-- it goes still (the server: Combat/Fire, the burning body).
+cinematics.Immolate = {
+	id = "Immolate",
+	duration = 5.8,
+	kill = 4.6,
+	placement = "side",
+	victimAnimation = "Pyro_FinisherImmolateVictim",
+	events = {
+		{ time = 0.15, kind = "Uncap" }, -- the jerrycan's cap off
+		{ time = 0.4, kind = "Douse" }, -- the petrol pours (head first, down the body)
+		{ time = 1.45, kind = "DouseEnd" },
+		{ time = 1.6, kind = "CanAway" }, -- the can tossed aside
+		{ time = 1.85, kind = "Open" }, -- the Zippo's lid: clink
+		{ time = 2.15, kind = "Strike" }, -- the wheel: the flame
+		{ time = 2.4, kind = "Plea" }, -- the quiet beat: they beg
+		{ time = 2.8, kind = "Release" }, -- he lets it drop
+		{ time = 3.05, kind = "Ignite" }, -- on the chest: the fuel goes up
+		{ time = 3.2, kind = "Writhe" }, -- screaming, thrashing in the fire
+		{ time = 4.6, kind = "Still" }, -- the kill: curled up, silent
+	},
+	shots = {
+		-- Wide, from behind his right shoulder: him over the body, the can.
+		{
+			time = 0,
+			from = Vector3.new(5.2, 1.4, 3.2),
+			to = Vector3.new(4.6, 1.2, 2.6),
+			look = Vector3.new(0.3, -2.2, -2.4),
+			fov = 60,
+		},
+		-- Low by their head, along the body: the petrol glugging on them.
+		{
+			time = 0.4,
+			from = Vector3.new(-3.8, -2.45, -4.6),
+			to = Vector3.new(-3.4, -2.35, -4.2),
+			look = Vector3.new(0.8, -2.4, -2.7),
+			fov = 50,
+		},
+		-- Their face, wet, coughing.
+		{
+			time = 1.0,
+			from = Vector3.new(-2.3, -1.15, -3.9),
+			to = Vector3.new(-2.1, -1.2, -3.7),
+			look = "victim",
+			fov = 40,
+		},
+		-- From the far side, low: the can thrown away.
+		{
+			time = 1.6,
+			from = Vector3.new(0.9, -1.7, -7.6),
+			to = Vector3.new(0.7, -1.5, -7.2),
+			look = Vector3.new(0, 0.4, 0),
+			fov = 52,
+		},
+		-- Close on his right hand: the lid, the wheel, the flame.
+		{
+			time = 1.85,
+			from = Vector3.new(1.7, 1.0, -2.5),
+			to = Vector3.new(1.5, 0.95, -2.25),
+			look = Vector3.new(0.55, 0.35, -0.85),
+			fov = 34,
+		},
+		-- The still beat: their face, from above, begging.
+		{
+			time = 2.4,
+			from = Vector3.new(-1.6, 0.2, -2.9),
+			to = Vector3.new(-1.55, 0.1, -2.85),
+			look = "victim",
+			fov = 38,
+		},
+		-- Side on: he opens his hand, the lighter falls.
+		{
+			time = 2.8,
+			from = Vector3.new(4.6, -0.9, -5.6),
+			to = Vector3.new(4.9, -0.7, -5.9),
+			look = Vector3.new(0.3, -1.3, -1.7),
+			fov = 55,
+		},
+		-- Low and wide by their head: it goes up.
+		{
+			time = 3.05,
+			from = Vector3.new(-5.6, -2.2, -1.0),
+			to = Vector3.new(-6.3, -1.8, -0.6),
+			look = Vector3.new(0.5, -2.0, -2.7),
+			fov = 62,
+		},
+		-- Close on the burning upper body.
+		{
+			time = 3.6,
+			from = Vector3.new(-2.7, -0.7, -5.3),
+			to = Vector3.new(-2.4, -0.4, -5.0),
+			look = Vector3.new(-0.6, -2.3, -2.7),
+			fov = 48,
+		},
+		-- High and wide: he watches it burn, the smoke going up.
+		{
+			time = 4.6,
+			from = Vector3.new(3.6, 3.4, 2.6),
+			to = Vector3.new(4.2, 4.3, 3.2),
+			look = Vector3.new(0.3, -2.2, -2.7),
+			fov = 58,
 		},
 	},
 }

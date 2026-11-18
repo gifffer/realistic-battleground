@@ -778,6 +778,38 @@ Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à *
 | R20 | Un joueur qui arrive après | Il voit le corps en deux morceaux avec les coupes, sans le sang qui gicle. |
 | R21 | Le Dr. Rift quitte le jeu (ou meurt) **avant** la coupe | Tout s'arrête (portail, pistolet), la victime retombe KO, entière. |
 
+## Kit Pyromane (`feature/kit-pyromaniac`)
+
+Le nouveau kit qui remplace le Bull : un **pyromane** avec un **Zippo**, des **cocktails Molotov** et un **jerrican** d'essence.
+Dans **Studio**, tous les kits sont débloqués ; dans le jeu publié, le Pyromane demande le **niveau 6** et **650 coins**.
+Menu **KITS** → **PYROMANIAC** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**.
+**Les sons sont muets** tant que tu n'as pas mis leurs IDs (voir `docs/SONS_PYROMANE_FR.md` : un prompt par couche à générer). Aucune erreur dans l'Output à cause d'eux.
+Les brûlures sur le corps sont encore celles du Dr. Rift (flammes et marques de `RiftBurn`, attribut `Burning`).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| P1 | Menu KITS | La carte **PYROMANIAC** (bras droit levé, comme pour lancer) avec ses 4 coups, l'Awakening **BURNING MAN** et le finisher **IMMOLATION**. |
+| P2 | **1** (Zippo Flare) face au Dummy, de près | Un **Zippo chromé** dans la main droite : le couvercle **s'ouvre**, la flamme s'allume, il **pousse la flamme vers le visage** : une **courte gerbe de feu** en avant, un flash. Touché : la cible est **sonnée** un moment et **prend feu** (flammes, perte de vie 2-3 s). Le Zippo se referme. |
+| P3 | **2** (Molotov) en visant le sol à 15-25 studs | Une **bouteille verte** avec un **chiffon** dans le goulot ; le Zippo dans la main gauche **allume le chiffon** ; il arme le bras au-dessus de la tête et **lance en cloche**. La bouteille tourne en l'air, le chiffon brûle, traînée de fumée. |
+| P4 | L'impact du Molotov | **Verre qui éclate** (éclats verts qui rebondissent et restent quelques secondes), **éclaboussure d'essence**, une **boule de feu** qui apparaît d'un coup et monte en **fumée noire**. Puis une **flaque de feu** : petits feux qui **s'étendent du centre vers le bord** (~0,6 s), **fumée noire épaisse** qui monte lentement, braises, lumière orange qui **vacille** au sol. |
+| P5 | Rester dans le feu | La cible **brûle** tant qu'elle est dedans (et ~1,5 s après). En **sautant par-dessus**, pas de brûlure. Dans le **parc** (zone sûre) : rien. |
+| P6 | Attendre la fin du feu (~8 s) | Les feux **s'éteignent un par un**, ceux du bord d'abord, le centre en dernier. Une **tache noire** reste au sol ~45 s, puis s'efface. |
+| P7 | Molotov **directement sur** le Dummy | Il prend feu **plus fort** et dégouline d'essence (voir P10), et la flaque se fait sous lui. |
+| P8 | Lancer 5 Molotov de suite (plusieurs joueurs) | Jamais plus de **4 feux** en même temps : le plus vieux **s'éteint** quand un 5ᵉ commence. Les gros feux en même temps peuvent être plus petits (budget). Pas de lag. |
+| P9 | **3** (Fire Breath) face au Dummy à ~8 studs | Une **flasque** à la main gauche : il **boit une gorgée** (tête en arrière), sort le Zippo, l'allume sous ses lèvres, se penche et **crache un jet de feu** (~13 studs, cône). Il peut **tourner pendant le jet** pour balayer. La cible prend plusieurs petits coups et brûle. Derrière un mur : rien. |
+| P10 | **4** (Douse) sur le Dummy | Un **jerrican rouge** à la main droite, il le balance : **une gerbe d'essence** part devant lui. Touché : la cible est un peu ralentie et **dégouline d'essence** ~8 s. |
+| P11 | Douse **puis** 2 / 3 / 1 | Trempée, la cible brûle **plus fort et plus longtemps** (×1,5, +2 s) et la flaque de feu l'attrape d'un peu plus loin. |
+| P12 | Remplir la jauge, **G** (BURNING MAN) | Il croise les bras, le Zippo touche son avant-bras : **ses deux avant-bras prennent feu** (flammes, fumée, braises, lumière). Ils brûlent tout l'Awakening, puis s'éteignent. |
+| P13 | **1** en Awakening (Burning Fist) | Un **crochet** du droit en feu : la cible est repoussée et prend feu. |
+| P14 | **2** en Awakening (Firebomb) | Le chiffon s'allume **sur son poing**, lancer plus rapide, **feu plus large et plus long** (~10 s). |
+| P15 | **3** en Awakening (Inferno Breath) | Comme P9 mais **plus loin** (~17 studs), plus large, plus long. |
+| P16 | **4** en Awakening (Burning Rush) | Il fonce bras en avant : la cible est **mise au sol** et prend feu (passe la garde). |
+| P17 | **Finisher** sur un KO (Dummy) | Bandes noires. Le corps est **couché sur le dos** devant lui. Jerrican à la main, il **verse l'essence** sur le corps de la tête vers les jambes (filet qui coule, le corps tousse et bouge la tête), **jette le jerrican** (il rebondit et reste au sol), sort le **Zippo**, l'ouvre, l'allume (gros plan sur la main), un **moment calme** sur le visage qui supplie, puis il **lâche le Zippo** sur la poitrine : le corps **s'embrase d'un coup** (flash, boule de feu), il **recule** de la chaleur. La victime **se débat et hurle** dans le feu, puis **se recroqueville** (bras repliés, poings vers le visage, genoux levés) et ne bouge plus. Les vêtements deviennent **noirs**. ~5,8 s. |
+| P18 | Après le finisher | Le corps **brûle encore ~12 s** (flammes, colonne de **fumée noire**), puis **fume** ~25 s. |
+| P19 | Un joueur qui arrive après (ou le corps resté après la réapparition) | Le corps a les vêtements **carbonisés** et brûle / fume encore selon le temps passé. |
+| P20 | Le Pyromane est frappé / meurt / quitte **avant** « l'embrasement » | Tout s'arrête (jerrican, Zippo), la victime retombe KO, **sans essence ni feu**. |
+| P21 | Sons (après avoir mis les IDs) | Chaque son est fait de **5 couches** jouées ensemble au bon moment ; la flaque de feu et le corps qui brûle sont des **boucles** qui baissent quand le feu meurt. |
+
 ## Grosses flaques des finishers (`feature/finisher-pools`)
 
 Un membre arraché, une tête éclatée, un corps coupé en deux : **beaucoup** de sang (2,5 à 4 litres en

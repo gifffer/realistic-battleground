@@ -77,6 +77,8 @@ local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
 local Clones = require(script.Clones)
 local Gadgets = require(script.Gadgets)
+local Immolate = require(script.Immolate)
+local PyroConfig = require(ReplicatedStorage.Shared.PyroConfig)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
 local Rewind = require(script.Rewind)
@@ -300,6 +302,12 @@ local function startBurning(
 	duration: number
 )
 	local time = now()
+	-- Soaked in petrol (the Pyromaniac): fire burns them harder, longer.
+	local doused = victim.model:GetAttribute(PyroConfig.DOUSED_ATTRIBUTE)
+	if kind == "Fire" and typeof(doused) == "number" and doused > workspace:GetServerTimeNow() then
+		perSecond *= PyroConfig.DOUSED_RATE
+		duration += PyroConfig.DOUSED_EXTRA
+	end
 	local burning = time < victim.burnUntil
 	victim.burnPerSecond = math.max(perSecond, if burning then victim.burnPerSecond else 0)
 	victim.burnUntil = math.max(victim.burnUntil, time + duration)
@@ -2079,6 +2087,18 @@ local function startCinematic(
 			end
 		end)
 	end
+	if cinematic.id == "Immolate" then
+		-- petrol, then fire (Combat/Immolate: attributes put back if cut short)
+		Immolate.run(cinematic, target, woundsBefore, function(): boolean
+			return not over and state.attackToken == token and isAlive(state)
+		end, function()
+			local victimState = states[target]
+			if victimState then
+				victimState.burnPerSecond = 0 -- (its own burn ending must not put this out)
+				victimState.burnUntil = 0
+			end
+		end)
+	end
 	-- (the Boxer's: the hole opens as the hand goes in, "Gut"; cut short
 	-- before the kill, it closes again)
 	local liverAttribute: string? = nil
@@ -2164,6 +2184,8 @@ local function startCinematic(
 			elseif cinematic.id == "Gore" then
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
+			elseif cinematic.id == "Immolate" then
+				Immolate.killed(target) -- (the body burns on)
 			end
 		elseif cinematic.id == "KnockoutCombo" then
 			-- (it didn't die after all: no hole left in a living body)

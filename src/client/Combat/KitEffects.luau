@@ -39,6 +39,7 @@ local BloodPool = require(script.Parent.BloodPool)
 local BloodRivulet = require(script.Parent.BloodRivulet)
 local BloodStain = require(script.Parent.BloodStain)
 local RiftFx = require(script.Parent.RiftFx)
+local PyroFx = require(script.Parent.PyroFx)
 
 local KitEffects = {}
 
@@ -138,10 +139,15 @@ local HIT_SOUNDS: { [string]: string } = {
 	ThunderClap = "HeavyHit",
 	Skyfall = "HeavyHit",
 	Haymaker = "HeavyHit",
-	GoreCharge = "Tackle",
-	HornHook = "HeavyHit",
-	Stampede = "KickLow",
-	BullToss = "Tackle",
+	-- The Pyromaniac (his fire makes its own sounds: Combat/PyroFx)
+	ZippoFlare = "",
+	Molotov = "",
+	Firebomb = "",
+	FireBreath = "",
+	InfernoBreath = "",
+	Douse = "",
+	BurningFist = "HeavyHit",
+	BurningRush = "Tackle",
 	Shove = "BodyShot",
 	HammerFist = "HeavyHit",
 	DoubleHammer = "HeavyHit",
@@ -834,6 +840,7 @@ local swingToken: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: an
 function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local move = moveByAnimation[animation]
 	RiftFx.onAction(model, animation) -- (Dr. Rift's flask, guns, glove)
+	PyroFx.onAction(model, animation) -- (the Pyromaniac's lighter, bottles, can)
 	local prop = if move then move.prop else nil
 	if move and prop then
 		holdProp(model, prop, move.duration)
@@ -1021,6 +1028,7 @@ function KitEffects.stopAction(model: Model)
 	KitVFX.stop(model)
 	removeProp(model)
 	RiftFx.stopAction(model)
+	PyroFx.stopAction(model)
 end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).

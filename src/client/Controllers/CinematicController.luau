@@ -129,6 +129,15 @@ local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 	-- before the last one pulls the view out a little. The wrench
 	-- and the rip don't freeze: the hand keeps turning, and the victim goes
 	-- limp on the rip - the server ragdolls it there)
+	-- (the Pyromaniac's: quiet until the fire goes up; its effects are
+	-- Combat/PyroFx's, from the same timeline)
+	Immolate = {
+		CanAway = { at = 0, strength = 0.4, punch = 0 },
+		Release = { at = 0, strength = 0.2, punch = 1 },
+		Ignite = { at = 0, strength = 2.6, punch = -4, flash = 0.5 },
+		Writhe = { at = 0, strength = 0.8, punch = 0 },
+		Still = { at = 0, strength = 0.6, punch = 1.5, grade = true },
+	},
 	KnockoutCombo = {
 		Grab = { at = 0, strength = 0.8, punch = 1 },
 		Body = { at = 0, strength = 1.8, punch = 3, stop = 0.05 },
@@ -180,6 +189,7 @@ local ATTACKER_CLIPS = {
 	"Sentinel_Finisher",
 	"Bull_Finisher",
 	"Rift_FinisherPortalCut",
+	"Pyro_FinisherImmolate",
 }
 local VICTIM_CLIPS = {
 	"Boxer_FinisherVictim",
@@ -187,6 +197,7 @@ local VICTIM_CLIPS = {
 	"Sentinel_FinisherVictim",
 	"Bull_FinisherVictim",
 	"Rift_FinisherPortalCutVictim",
+	"Pyro_FinisherImmolateVictim",
 }
 local runs: { [Model]: Run } = {}
 -- What stops the camera of the cinematic we're in now (a new one ends it
