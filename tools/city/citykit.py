@@ -178,6 +178,7 @@ cams = json.load(open(sys.argv[sys.argv.index("--") + 2]))
 out = sys.argv[sys.argv.index("--") + 3]
 night = sys.argv[sys.argv.index("--") + 4] == "night"
 samples = int(sys.argv[sys.argv.index("--") + 5])
+world = float(sys.argv[sys.argv.index("--") + 6])
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
 sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = samples
@@ -185,7 +186,7 @@ sc.cycles.use_denoising = False; sc.cycles.max_bounces = 4
 sc.render.resolution_x, sc.render.resolution_y = 900, 600
 w = bpy.data.worlds.new("w"); sc.world = w; w.use_nodes = True
 w.node_tree.nodes["Background"].inputs[0].default_value = (0.04, 0.05, 0.08, 1) if night else (0.6, 0.64, 0.7, 1)
-w.node_tree.nodes["Background"].inputs[1].default_value = 0.35 if night else 1.0
+w.node_tree.nodes["Background"].inputs[1].default_value = (0.35 if night else 1.0) * world
 if not night:
     sun = bpy.data.objects.new("sun", bpy.data.lights.new("sun", "SUN")); sun.data.energy = 3.0
     sun.rotation_euler = (math.radians(40), math.radians(15), math.radians(130)); sc.collection.objects.link(sun)
@@ -258,7 +259,7 @@ for i, (eye, look, fov) in enumerate(cams):
 '''
 
 
-def preview(data, cams, out, night=False, samples=24, python=None):
+def preview(data, cams, out, night=False, samples=24, python=None, world=1.0):
     """Renders `data` (a Data) from each camera (eye, look, fov) to out_0.png, out_1.png...
     Returns the image paths. Look at them!"""
     import subprocess
@@ -272,6 +273,6 @@ def preview(data, cams, out, night=False, samples=24, python=None):
         f.write(_PREVIEW)
     py = python or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "venv", "bin", "python")
     subprocess.run([py, "-I", os.path.join(tmp, "r.py"), "--", os.path.join(tmp, "d.json"),
-                    os.path.join(tmp, "c.json"), out, "night" if night else "day", str(samples)],
+                    os.path.join(tmp, "c.json"), out, "night" if night else "day", str(samples), str(world)],
                    check=True, capture_output=True)
     return [f"{out}_{i}.png" for i in range(len(cams))]
