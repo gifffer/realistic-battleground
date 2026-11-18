@@ -658,7 +658,7 @@ local function placeCells(cameraPosition: Vector3, intensity: number, heavy: num
 	end
 	local fall = WeatherController.fallDirection()
 	local up = -fall
-	local right = Vector3.zAxis:Cross(up).Unit
+	local right = Vector3.new(0, 0, 1):Cross(up).Unit
 	local fallY = math.max(-fall.Y, 0.2)
 	local verticalSpeed = R.FALL_SPEED * fallY
 	local topY = cameraPosition.Y + R.TOP
