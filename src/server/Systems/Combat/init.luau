@@ -1317,9 +1317,10 @@ local KILL_POSE: { [string]: CFrame } = {
 
 -- Thrown things (Shared/Weapons): one in the right hand ("Weapon"
 -- attribute: the clients show it). A left click throws it (throwWeapon); it
--- breaks in two on what it hits first (Remotes.WeaponBroke: every client
--- shows the two halves there). Knocked out or dead: dropped, it breaks at
--- their feet.
+-- lands on what it hits first (Remotes.WeaponBroke: every client shows it
+-- break there, or lie there a while). Knocked out or dead: dropped at their
+-- feet. Picked up from a torn arm (offerBone, below) or in the street
+-- (Systems/Pickups, through Combat.takeWeapon).
 local throwSeq = 0
 
 local function giveWeapon(state: CombatState, id: string)
@@ -1342,6 +1343,28 @@ local function dropWeapon(state: CombatState, breakIt: boolean)
 	setAttribute(state.model, "Weapon", nil)
 end
 
+-- Whether `state` can pick something up right now: alive, free, nothing in
+-- the hand already, not in a duel (no weapons there).
+local function canTakeWeapon(state: CombatState): boolean
+	return isAlive(state)
+		and not isBusy(state)
+		and not isStunned(state)
+		and state.weapon == nil
+		and state.model:GetAttribute("DuelId") == nil
+end
+
+-- Something lying in the street (Systems/Pickups) taken by `model`: in his
+-- hand if he can take it (canTakeWeapon). The caller checks the distance.
+-- Returns whether he took it.
+function Combat.takeWeapon(model: Model, id: string): boolean
+	local state = states[model]
+	if state == nil or Weapons.get(id) == nil or not canTakeWeapon(state) then
+		return false
+	end
+	giveWeapon(state, id)
+	return true
+end
+
 -- A torn arm lying on the floor: anyone close can pull the bone out of it
 -- (a ProximityPrompt; the server checks everything again).
 local function offerBone(victim: Model, arm: BasePart)
@@ -1360,11 +1383,7 @@ local function offerBone(victim: Model, arm: BasePart)
 		local state = if character then states[character] else nil
 		if
 			state == nil
-			or not isAlive(state)
-			or isBusy(state)
-			or isStunned(state)
-			or state.weapon ~= nil
-			or state.model:GetAttribute("DuelId") ~= nil -- (no weapons in a duel)
+			or not canTakeWeapon(state)
 			or victim:GetAttribute("BoneTaken") == true
 			or arm.Parent == nil
 			or (state.root.Position - arm.Position).Magnitude > 9
@@ -2821,7 +2840,7 @@ local function throwWeapon(state: CombatState, direction: Vector3)
 	state.attackingUntil = time + weapon.release
 	state.attackToken += 1
 	local token = state.attackToken
-	Remotes.CombatAction:FireAllClients(state.model, "Bone_Throw")
+	Remotes.CombatAction:FireAllClients(state.model, weapon.clip)
 	task.delay(weapon.release, function()
 		if state.attackToken ~= token or not isAlive(state) or state.weapon ~= weapon.id then
 			return -- (stunned during the wind-up: he still holds it)
@@ -2878,9 +2897,11 @@ local function throwWeapon(state: CombatState, direction: Vector3)
 							legSlow = true,
 							kind = "Hit",
 							blockCost = C.BLOCK_STAMINA_COST * 2,
-							knockback = 14,
+							knockback = weapon.knockback,
 							bloodChance = weapon.bloodChance,
-							moveId = "BoneThrow",
+							cuts = weapon.cuts, -- (the bottle: glass in the skin)
+							bleed = weapon.bleed,
+							moveId = weapon.moveId,
 							from = a,
 						})
 					end

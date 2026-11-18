@@ -183,7 +183,7 @@ local function tryAttack()
 		combo = 0
 		lastAttackAt = time
 		nextAttackAt = time + weapon.recovery
-		CharacterAnimationController.playAction(character, "Bone_Throw")
+		CharacterAnimationController.playAction(character, weapon.clip)
 		SoundController.play("HeavySwing", character)
 		Remotes.ThrowWeapon:FireServer(AimController.getAimDirection())
 		return
