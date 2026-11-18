@@ -72,8 +72,8 @@ local PANEL_TOP = 160
 -- off so their content keeps its room.
 local HEADER = 52
 local OLD_HEADER = 116
--- Drawn smaller than the sections' own pixels on a PC (the menu stays a
--- quiet overlay). A touch screen keeps x1: a finger needs the room.
+-- Drawn smaller than the sections' own pixels on a PC, on any window size
+-- (the menu stays a quiet overlay). A touch screen keeps x1: a finger needs the room.
 local PC_SCALE = 0.9
 local OPEN_TIME = 0.25
 local CLOSE_TIME = 0.15
@@ -193,10 +193,9 @@ local function navItemHeight(): number
 	return Button.height("medium")
 end
 
--- The stage's scale before fitting: as drawn (x1 under 1080p, a little
--- bigger above), times PC_SCALE on a PC.
-local function drawnScale(viewport: Vector2): number
-	return Theme.scaleFor(viewport, 1) * (if Theme.isTouch() then 1 else PC_SCALE)
+-- PC_SCALE on a PC, x1 on a touch screen.
+local function pcScale(): number
+	return if Theme.isTouch() then 1 else PC_SCALE
 end
 
 -- Fits the stage to the screen for a panel of `size` (see the top).
@@ -222,9 +221,13 @@ local function layoutStage(size: Vector2)
 	local closeHeight = closeButton.instance.Size.Y.Offset
 	local around = PANEL_TOP - STAGE_TOP + 12 + closeHeight + 12
 	local width = layout.panelX + size.X + layout.right
-	-- (scaleFor with a floor of 1: never smaller than drawn by itself, only
-	-- when the section does not fit; bigger on a large screen)
-	local scale = math.min(drawnScale(viewport), freeHeight / (around + size.Y), freeWidth / width)
+	-- As drawn (bigger on a large screen), or smaller when the section does
+	-- not fit. Then PC_SCALE on top, so a small window gets a smaller menu too.
+	local scale = math.min(
+		Theme.scaleFor(viewport, 1),
+		freeHeight / (around + size.Y),
+		freeWidth / width
+	) * pcScale()
 	-- Readable first: the panel scrolls rather than going under ×0.8 (the
 	-- width must still fit: only a tiny screen goes under it).
 	scale = math.max(scale, math.min(MIN_TEXT_SCALE, freeWidth / width), 0.4)

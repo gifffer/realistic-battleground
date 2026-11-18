@@ -46,7 +46,6 @@ local screen: ScreenGui
 local letterTop: Frame
 local letterBottom: Frame
 local overlay: CanvasGroup -- vignette, red edges, text (fades as one group)
-local eyebrow: TextLabel
 local title: TextLabel
 local cdFill: Frame
 local cdLabel: TextLabel
@@ -134,17 +133,6 @@ local function buildScreen()
 		Size = UDim2.fromOffset(400, 130),
 		BackgroundTransparency = 1,
 		Parent = overlay,
-	})
-	eyebrow = Theme.text({
-		Name = "Eyebrow",
-		Size = UDim2.new(1, 0, 0, 12),
-		TextSize = 10,
-		TextColor3 = C.Ink2,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		-- No trailing space: the tracking is tight now, so a space after
-		-- the last letter would only push the centred text to the left.
-		Text = Theme.track("YOU ARE DOWN", "three"),
-		Parent = block,
 	})
 	title = Theme.text({
 		Name = "Title",
@@ -332,7 +320,6 @@ local function setDown(down: boolean, character: Model?)
 		local by = if character then character:GetAttribute("KOBy") else nil
 		byName.Text = if typeof(by) == "string" then by else ""
 		byLabel.Visible = typeof(by) == "string"
-		eyebrow.TextTransparency = 1
 		title.TextTransparency = 1
 		local barSize = UDim2.new(1, 0, 0, BAR_HEIGHT)
 		Theme.tween(letterTop, 0.35, { Size = barSize }, Enum.EasingStyle.Quart)
@@ -344,9 +331,6 @@ local function setDown(down: boolean, character: Model?)
 			Contrast = 0.15,
 			TintColor = Color3.fromHex("#F2E4E2"),
 		})
-		task.delay(0.15, function()
-			Theme.tween(eyebrow, 0.3, { TextTransparency = 0 })
-		end)
 		task.delay(0.2, function()
 			Theme.tween(title, 0.6, { TextTransparency = 0 })
 		end)

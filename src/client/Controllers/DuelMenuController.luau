@@ -48,8 +48,8 @@ local D = Config.Duels
 local SECTION_ID = "Duel"
 
 -- The rank ladder: five segments of LADDER_WIDTH px, LADDER_GAP px apart
--- (5 × 108 + 4 × 5 = 560, the panel's width).
-local LADDER_WIDTH = 108
+-- (5 × 92 + 4 × 5 = 480, the panel's width).
+local LADDER_WIDTH = 92
 local LADDER_GAP = 5
 -- BRONZE starts at 0 ELO, but a bar from 0 would always look full: it is
 -- drawn from 900. DIAMOND has no next rank: it fills towards 1900.
@@ -444,7 +444,7 @@ local function leftLine(parent: Instance): TextLabel
 	return micro("", {
 		Name = "Left",
 		Position = UDim2.new(0, 0, 0.5, -6),
-		Size = UDim2.fromOffset(340, 11),
+		Size = UDim2.fromOffset(280, 11),
 		TextColor3 = C.Ink2,
 		Parent = parent,
 	})
@@ -553,7 +553,7 @@ local function buildActionRow(parent: Instance)
 	Theme.text({
 		Name = "Left",
 		Position = UDim2.new(0, 0, 0.5, -7),
-		Size = UDim2.fromOffset(340, 14),
+		Size = UDim2.fromOffset(280, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
@@ -779,7 +779,7 @@ local function buildPlayers(parent: Instance)
 	local head = sectionHead(parent, PLAYERS_Y, "On this server")
 	micro("Rank", {
 		Name = "RankColumn",
-		Position = UDim2.fromOffset(300, 1),
+		Position = UDim2.fromOffset(210, 1),
 		Size = UDim2.fromOffset(100, 11),
 		Parent = head,
 	})
@@ -810,7 +810,7 @@ local function buildPlayers(parent: Instance)
 	emptyText = Theme.text({
 		Name = "Empty",
 		Position = UDim2.fromOffset(0, PLAYERS_Y + 27),
-		Size = UDim2.fromOffset(400, 14),
+		Size = UDim2.fromOffset(360, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink3,
@@ -846,7 +846,7 @@ local function createRow(target: Player): Row
 	local name = Theme.text({
 		Name = "Name",
 		Position = UDim2.fromOffset(36, 0),
-		Size = UDim2.new(0, 250, 1, 0),
+		Size = UDim2.new(0, 166, 1, 0),
 		TextSize = 13,
 		TextStrokeTransparency = 1,
 		TextTruncate = Enum.TextTruncate.AtEnd,
@@ -854,8 +854,8 @@ local function createRow(target: Player): Row
 	}) :: TextLabel
 	local rank = Theme.text({
 		Name = "Rank",
-		Position = UDim2.fromOffset(300, 0),
-		Size = UDim2.new(0, 110, 1, 0),
+		Position = UDim2.fromOffset(210, 0),
+		Size = UDim2.new(0, 100, 1, 0),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextStrokeTransparency = 1,
@@ -1247,7 +1247,7 @@ function DuelMenuController.start()
 		id = SECTION_ID,
 		label = "DUEL",
 		order = 30, -- between KITS (10) and PROFILE (50)
-		size = Vector2.new(560, 480 + PLAYERS_Y - 158),
+		size = Vector2.new(480, 480 + PLAYERS_Y - 158),
 		scrimWidth = 1100,
 		build = build,
 	})

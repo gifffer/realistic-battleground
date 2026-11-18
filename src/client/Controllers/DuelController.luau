@@ -191,7 +191,6 @@ local statusShown = false
 -- In-duel block
 local playLayer: Frame -- DuelTop + round beats (hidden while the menu is open)
 local duelTop: CanvasGroup
-local topKind: TextLabel
 local topRound: TextLabel
 local topMine: TextLabel
 local topTheirs: TextLabel
@@ -231,7 +230,6 @@ local resBand: Frame
 local barTop: Frame
 local barBottom: Frame
 local resEyebrow: CanvasGroup
-local resKind: TextLabel
 local resLv: TextLabel
 local resName: TextLabel
 local resTitle: TextLabel
@@ -531,8 +529,8 @@ local function buildPrompt()
 	}) :: CanvasGroup
 	promptEyebrow = Theme.text({
 		Name = "Eyebrow",
-		Size = UDim2.new(1, 0, 0, 11),
-		TextSize = 9,
+		Size = UDim2.new(1, 0, 0, 13),
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink2,
 		Parent = prompt,
 	}) :: TextLabel
@@ -629,9 +627,9 @@ local function buildStatus()
 	}, 8) :: CanvasGroup
 	statusLabel = piece(statusGroup, 1, {
 		Name = "Label",
-		TextSize = 9,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink2,
-		Size = UDim2.fromOffset(0, 11),
+		Size = UDim2.fromOffset(0, 13),
 		TextYAlignment = Enum.TextYAlignment.Bottom,
 	})
 	statusTime = piece(statusGroup, 2, {
@@ -666,35 +664,18 @@ local function buildTop()
 		Parent = playLayer,
 	}) :: CanvasGroup
 
-	-- RANKED · ROUND 2 · BEST OF 3
+	-- Round 2
 	local tagRow = hRow("Frame", {
 		Name = "TagRow",
-		Size = UDim2.new(1, 0, 0, 11),
+		Size = UDim2.new(1, 0, 0, 13),
 		Parent = duelTop,
 	}, 9, Enum.HorizontalAlignment.Center) :: Frame
-	local function micro(order: number, color: Color3, text: string?): TextLabel
-		return piece(tagRow, order, {
-			TextSize = 9,
-			TextColor3 = color,
-			Size = UDim2.fromOffset(0, 11),
-			Text = text or "",
-		})
-	end
-	local function dot(order: number)
-		piece(tagRow, order, {
-			Name = "Dot",
-			FontFace = F.LabelRegular,
-			TextSize = 9,
-			TextColor3 = C.Ink2,
-			Size = UDim2.fromOffset(0, 11),
-			Text = "·",
-		})
-	end
-	topKind = micro(1, C.Ink)
-	dot(2)
-	topRound = micro(3, C.Ink2)
-	dot(4)
-	micro(5, C.Ink2, Theme.track("BEST OF 3", "three"))
+	topRound = piece(tagRow, 1, {
+		TextSize = Theme.SMALL,
+		TextColor3 = C.Ink2,
+		Size = UDim2.fromOffset(0, 13),
+		Text = "",
+	})
 
 	-- YOU 1 — 0 (the spacer keeps the digits on the screen centre)
 	local scoreRow = hRow("Frame", {
@@ -982,15 +963,13 @@ local function buildResult()
 		Parent = resultLayer,
 	}) :: Frame
 
-	-- RANKED · VS  12 Vex
+	-- 12 Vex (the opponent)
 	resEyebrow = hRow("CanvasGroup", {
 		Name = "Eyebrow",
 		Size = UDim2.new(1, 0, 0, 14),
 		GroupTransparency = 1,
 		Parent = block,
 	}, 6, Enum.HorizontalAlignment.Center) :: CanvasGroup
-	resKind =
-		piece(resEyebrow, 1, { TextSize = 10, TextColor3 = C.Ink2, Size = UDim2.fromOffset(0, 12) })
 	resLv = piece(resEyebrow, 2, {
 		FontFace = F.Number,
 		TextSize = 10,
@@ -1250,7 +1229,7 @@ local function showChallenge(from: number, name: string, expiresAt: number)
 	challengeExpiresAt = expiresAt
 	setKeysBound(true)
 	presentPrompt(function()
-		promptEyebrow.Text = Theme.track("DUEL REQUEST · BEST OF 3", "three")
+		promptEyebrow.Text = "Duel request"
 		setLine(from, displayNameOf(from, name), "challenges you to a duel")
 		keysRow.Visible = true
 		timerTrack.Visible = true
@@ -1273,7 +1252,7 @@ local function showNotice(userId: number, name: string, reason: string)
 	challengeFrom = nil
 	setKeysBound(false)
 	presentPrompt(function()
-		promptEyebrow.Text = Theme.track("YOUR CHALLENGE", "three")
+		promptEyebrow.Text = "Your challenge"
 		if reason == "COOLDOWN" then
 			setLine(nil, nil, COOLDOWN_SENTENCE)
 		else
@@ -1318,11 +1297,11 @@ local function refreshStatus()
 	local want = wantsStatus()
 	if want then
 		if state == "Searching" then
-			statusLabel.Text = Theme.track("RANKED · SEARCHING", "three")
+			statusLabel.Text = "Searching"
 			statusTime.Visible = true
 			statusTime.Text = formatClock(DuelController.getSearchTime())
 		else
-			statusLabel.Text = Theme.track("WAITING FOR AN ARENA", "three")
+			statusLabel.Text = "Waiting for an arena"
 			statusTime.Visible = false
 		end
 	end
@@ -1437,7 +1416,7 @@ local function watchOpponent(userId: number?)
 end
 
 local function setTopRound(roundNumber: number, animate: boolean)
-	local text = Theme.track("ROUND " .. roundNumber, "three")
+	local text = "Round " .. roundNumber
 	if not animate or topRound.Text == text then
 		topRound.Text = text
 		return
@@ -1464,7 +1443,6 @@ local function setDigit(label: TextLabel, value: number, animate: boolean)
 end
 
 local function showTop()
-	topKind.Text = Theme.track(if ranked then "RANKED" else "CHALLENGE", "three")
 	setTopRound(math.max(round, 1), false)
 	topMine.Text = tostring(scoreMine)
 	topTheirs.Text = tostring(scoreTheirs)
@@ -1696,7 +1674,8 @@ local function clearResultRows()
 	table.clear(resultTrash)
 end
 
--- One row of the result table: label on the left, value row on the right.
+-- One row of the result table: just the value, on the right (no caption:
+-- each value says what it is). `label` names the instance.
 local function tableRow(index: number, label: string): (CanvasGroup, Frame)
 	local row = Theme.make("CanvasGroup", {
 		Name = label,
@@ -1712,15 +1691,6 @@ local function tableRow(index: number, label: string): (CanvasGroup, Frame)
 		Position = UDim2.new(0, 0, 1, -1),
 		Size = UDim2.new(1, 0, 0, 1),
 		BackgroundTransparency = 0.93,
-	})
-	Theme.text({
-		Name = "Label",
-		Position = UDim2.fromOffset(0, 12),
-		Size = UDim2.fromOffset(120, 11),
-		TextSize = 9,
-		TextColor3 = C.Ink2,
-		Text = Theme.track(label, "three"),
-		Parent = row,
 	})
 	local value = hRow("Frame", {
 		Name = "Value",
@@ -1754,11 +1724,11 @@ end
 local function fillRewards(value: Frame, xp: number, coins: number, forfeit: boolean)
 	if xp <= 0 and coins <= 0 then
 		piece(value, 1, {
-			TextSize = 9,
+			TextSize = Theme.SMALL,
 			TextColor3 = C.Ink2,
 			Size = UDim2.fromOffset(0, 13),
 			TextYAlignment = Enum.TextYAlignment.Bottom,
-			Text = Theme.track(if forfeit then "NO REWARD · FORFEIT" else "NO REWARD", "three"),
+			Text = if forfeit then "No reward (forfeit)" else "No reward",
 		})
 		return
 	end
@@ -1778,12 +1748,13 @@ local function fillRewards(value: Frame, xp: number, coins: number, forfeit: boo
 			7
 		)
 		mono(value, 4, "+" .. coins, 11, C.Ink2)
-		pad(mono(value, 5, "COINS", 10, C.Ink2), 4, 0)
+		pad(mono(value, 5, "coins", 10, C.Ink2), 4, 0)
 	end
 end
 
 -- "1088 → 1112   +24": the new value counts up, the change appears after.
 local function fillElo(value: Frame, before: number, afterElo: number): (TextLabel, TextLabel)
+	pad(mono(value, 0, "ELO", 10, C.Ink2), 0, 8)
 	mono(value, 1, tostring(before), 11, C.Ink2)
 	pad(mono(value, 2, "→", 11, C.Ink2), 8, 8)
 	local afterLabel = mono(value, 3, tostring(before), 11, C.Ink)
@@ -1830,7 +1801,6 @@ local function onEnd(data: { [string]: any })
 	enforceHudHidden()
 
 	-- Texts
-	resKind.Text = Theme.track(if isRanked then "RANKED · VS" else "CHALLENGE · VS", "three")
 	local level = opponentLevelNow()
 	resLv.Visible = level ~= nil
 	resLv.Text = if level then tostring(level) else ""
@@ -1858,17 +1828,17 @@ local function onEnd(data: { [string]: any })
 		rankUp = toIndex > fromIndex
 		if not rankUp then
 			local rankRow, rankValue = tableRow(3, "RANK")
-			local rankText = DuelRanks.rankOf(eloAfter)
+			local rankText = Theme.sentence(DuelRanks.rankOf(eloAfter))
 			local down = toIndex < fromIndex
 			if down then
-				rankText = DuelRanks.rankOf(eloBefore) .. " → " .. rankText
+				rankText = Theme.sentence(DuelRanks.rankOf(eloBefore)) .. " → " .. rankText
 			end
 			piece(rankValue, 1, {
 				TextSize = 11,
 				TextColor3 = if down then C.Ink2 else C.Ink,
 				Size = UDim2.fromOffset(0, 13),
 				TextYAlignment = Enum.TextYAlignment.Bottom,
-				Text = Theme.track(rankText, "three"),
+				Text = rankText,
 			})
 			table.insert(rows, rankRow)
 		end

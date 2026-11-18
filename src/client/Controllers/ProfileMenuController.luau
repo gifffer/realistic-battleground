@@ -410,7 +410,7 @@ local function buildLevel()
 	toGo = caption("", {
 		Name = "ToGo",
 		Position = UDim2.fromOffset(0, 74),
-		Size = UDim2.fromOffset(300, 12),
+		Size = UDim2.fromOffset(230, 12),
 		TextColor3 = C.Ink2,
 		Parent = body,
 	})
@@ -473,7 +473,7 @@ local function buildRecord()
 		local cell = Theme.make("Frame", {
 			Name = definition[1],
 			LayoutOrder = order,
-			Size = UDim2.new(0, 140, 1, 0),
+			Size = UDim2.new(0.25, 0, 1, 0),
 			BackgroundTransparency = 1,
 			Parent = row,
 		})
@@ -544,14 +544,14 @@ local function buildRanked()
 	rankedName = Theme.text({
 		Name = "Name",
 		Position = UDim2.fromOffset(0, 6),
-		Size = UDim2.fromOffset(300, 13),
+		Size = UDim2.new(1, -220, 0, 13),
 		TextStrokeTransparency = 1,
 		Parent = row,
 	}) :: TextLabel
 	rankedSentence = Theme.text({
 		Name = "Sentence",
 		Position = UDim2.fromOffset(0, 22),
-		Size = UDim2.fromOffset(300, 14),
+		Size = UDim2.new(1, -220, 0, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
@@ -594,19 +594,19 @@ local function buildNextUnlock()
 	nextName = Theme.text({
 		Name = "Name",
 		Position = UDim2.fromOffset(0, 6),
-		Size = UDim2.fromOffset(300, 13),
+		Size = UDim2.new(1, -156, 0, 13),
 		TextStrokeTransparency = 1,
 		Parent = nextRow,
 	}) :: TextLabel
 	nextSentence = Theme.text({
 		Name = "Sentence",
 		Position = UDim2.fromOffset(0, 22),
-		Size = UDim2.fromOffset(380, 14),
+		Size = UDim2.new(1, -156, 0, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
-		-- Ends with "…" rather than running into the LEVEL column (≈ 414 px in).
+		-- Ends with "…" rather than running into the LEVEL column.
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		Parent = nextRow,
 	}) :: TextLabel
@@ -721,7 +721,7 @@ function ProfileMenuController.start()
 		label = "PROFILE",
 		subtitle = player.DisplayName,
 		order = 50, -- between DUEL (30) and SETTINGS (100)
-		size = Vector2.new(560, 492), -- 12 px taller for the RANKED row
+		size = Vector2.new(480, 492), -- 12 px taller for the RANKED row
 		scrimWidth = 1100,
 		build = build,
 	})

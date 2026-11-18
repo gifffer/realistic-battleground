@@ -60,7 +60,8 @@ local DETAIL_Y = -DETAIL_INSET.Y
 -- On a touch screen the action button's hit area is taller: everything
 -- under the kit's name moves down by the difference.
 local TOP_SHIFT = Button.height("small") - 24
-local DETAIL_HEIGHT = 448 + TOP_SHIFT -- moves, awakening, finisher
+local DETAIL_HEIGHT = 386 + TOP_SHIFT -- moves, awakening, finisher
+local MOVE_ROW = 34
 local CARD_HEIGHT = if Theme.isTouch() then 52 else 38
 local CARD_GAP = 0
 local ROSTER_WIDTH = 140
@@ -259,7 +260,7 @@ local function moveRow(
 	local row = Theme.make("Frame", {
 		Name = `Move{index}`,
 		LayoutOrder = index,
-		Size = UDim2.new(1, 0, 0, 42),
+		Size = UDim2.new(1, 0, 0, MOVE_ROW),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
@@ -277,7 +278,7 @@ local function moveRow(
 	})
 	local sentence = Theme.text({
 		Name = "Sentence",
-		Position = UDim2.fromOffset(34, 22),
+		Position = UDim2.fromOffset(34, 19),
 		Size = UDim2.fromOffset(230, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
@@ -304,7 +305,7 @@ local function moveRow(
 		local furyLine = Theme.make("Frame", {
 			Name = "FuryVersion",
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, 0, 0, 24),
+			Position = UDim2.new(1, 0, 0, 21),
 			Size = UDim2.fromOffset(0, 11),
 			AutomaticSize = Enum.AutomaticSize.X,
 			BackgroundTransparency = 1,
@@ -589,11 +590,11 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		return
 	end
 
-	sectionHead(body, 80 + TOP_SHIFT, "Moves", { "Cooldown", "Stamina" })
+	sectionHead(body, 78 + TOP_SHIFT, "Moves", { "Cooldown", "Stamina" })
 	local list = Theme.make("Frame", {
 		Name = "Moves",
-		Position = UDim2.fromOffset(0, 99 + TOP_SHIFT),
-		Size = UDim2.new(1, 0, 0, 4 * 42),
+		Position = UDim2.fromOffset(0, 96 + TOP_SHIFT),
+		Size = UDim2.new(1, 0, 0, 4 * MOVE_ROW),
 		BackgroundTransparency = 1,
 		Parent = body,
 	}, {
@@ -605,11 +606,11 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 	end
 
 	if awakening then
-		sectionHead(body, 291 + TOP_SHIFT, "Awakening", { "Lasts" })
+		sectionHead(body, 240 + TOP_SHIFT, "Awakening", { "Lasts" })
 		local row = Theme.make("Frame", {
 			Name = "AwakeningRow",
-			Position = UDim2.fromOffset(0, 309 + TOP_SHIFT),
-			Size = UDim2.new(1, 0, 0, 60),
+			Position = UDim2.fromOffset(0, 258 + TOP_SHIFT),
+			Size = UDim2.new(1, 0, 0, 56),
 			BackgroundTransparency = 1,
 			Parent = body,
 		})
@@ -627,7 +628,7 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		Theme.text({
 			Name = "Sentence",
 			Position = UDim2.fromOffset(34, 22),
-			Size = UDim2.new(1, -34, 0, 40), -- two lines at most (the finisher follows)
+			Size = UDim2.new(1, -34, 0, 34), -- two lines at most (the finisher follows)
 			FontFace = Theme.Fonts.Body,
 			TextSize = 12,
 			TextColor3 = C.Ink2,
@@ -644,10 +645,10 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 	-- The finisher: M1 on a knocked-out fighter (the kit's own, or the
 	-- default one). Under the Awakening (or where it would be).
 	local finisher = Kits.finisher(kit.id)
-	sectionHead(body, 377 + TOP_SHIFT, "Finisher", { "On a KO" })
+	sectionHead(body, 314 + TOP_SHIFT, "Finisher", { "On a KO" })
 	local finisherRow = Theme.make("Frame", {
 		Name = "FinisherRow",
-		Position = UDim2.fromOffset(0, 395 + TOP_SHIFT),
+		Position = UDim2.fromOffset(0, 332 + TOP_SHIFT),
 		Size = UDim2.new(1, 0, 0, 52),
 		BackgroundTransparency = 1,
 		Parent = body,
@@ -875,7 +876,7 @@ function KitsMenuController.start()
 		id = "Kits",
 		label = "KITS",
 		order = 10, -- first in the list, above PROFILE and SETTINGS
-		size = Vector2.new(536, 548 + TOP_SHIFT), -- (taller: the finisher row)
+		size = Vector2.new(536, 486 + TOP_SHIFT), -- (taller: the finisher row)
 		scrimWidth = 1100,
 		build = build,
 	})

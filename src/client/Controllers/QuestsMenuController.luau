@@ -210,7 +210,7 @@ function QuestsMenuController.start()
 		id = SECTION_ID,
 		label = "QUESTS",
 		order = 40, -- between DUEL (30) and PROFILE (50)
-		size = Vector2.new(560, 400),
+		size = Vector2.new(480, 304), -- 3 rows and the countdown
 		scrimWidth = 1100,
 		build = function(content)
 			build(content)
