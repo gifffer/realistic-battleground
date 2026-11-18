@@ -9,15 +9,17 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+-- The combat camera layer owns the field of view (base + hit push-ins):
+-- we only move its base.
+local VfxCamera = require(script.Parent.Parent.Combat.Vfx.Camera)
 
 local player = Players.LocalPlayer
 
-local FOV_TWEEN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local FOV_TWEEN_TIME = 0.35 -- seconds (ease-out)
 
 local SprintController = {}
 
@@ -33,13 +35,9 @@ local function setWantsToSprint(value: boolean)
 end
 
 local function updateFieldOfView()
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
 	local sprinting = player:GetAttribute("Sprinting") == true
 	local target = if sprinting then Config.Camera.SPRINT_FOV else Config.Camera.DEFAULT_FOV
-	TweenService:Create(camera, FOV_TWEEN, { FieldOfView = target }):Play()
+	VfxCamera.setBaseFov(target, FOV_TWEEN_TIME)
 end
 
 function SprintController.start()

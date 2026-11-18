@@ -3,6 +3,14 @@
 -- Bull's moves, shown by every client from the moves' animations
 -- (KitEffects.onAction) and hits (KitEffects.onHit).
 --
+-- The look follows docs/references/README.md: the Sentinel is HEAT and AIR
+-- PRESSURE (hot warm-white light that pops for 1-2 frames, see-through
+-- air rings, dust, debris), never blue energy, lightning or neon balls.
+-- The hit on a BODY is the shared Vfx library's (Vfx/Moves/Sentinel):
+-- this file draws the moves' own set pieces (the clap's blast, the Skyfall
+-- crater, the Haymaker's air blast, the heat-vision beam). Every camera
+-- shake goes through Vfx/Camera (the one owner of the camera's offsets).
+--
 -- A small toolbox, reused by every move (and meant for the next kits):
 --   flash / light            bursts of light
 --   shockSphere              an expanding energy shell
@@ -57,6 +65,11 @@ end
 local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
 local KitLooks = require(script.Parent.KitLooks)
+local VfxCamera = require(script.Parent.Vfx.Camera)
+local VfxImpact = require(script.Parent.Vfx.Impact)
+local VfxLayers = require(script.Parent.Vfx.Layers)
+local VfxLimb = require(script.Parent.Vfx.Limb)
+local VfxPalette = require(script.Parent.Vfx.Palette)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local KitVFX = {}
@@ -77,8 +90,8 @@ local LASER_CORE = Color3.fromRGB(255, 244, 232)
 local LASER = Color3.fromRGB(255, 30, 18)
 local LASER_DEEP = Color3.fromRGB(150, 0, 6)
 local EMBER = Color3.fromRGB(255, 130, 40)
-local ENERGY = Color3.fromRGB(176, 214, 255)
-local ENERGY_DEEP = Color3.fromRGB(70, 130, 255)
+-- The Sentinel's heat: a hot warm white (his moves are heat and air, not energy)
+local HEAT = Color3.fromRGB(255, 240, 220)
 local DUST = Color3.fromRGB(160, 146, 124)
 local STEAM = Color3.fromRGB(236, 236, 240)
 local CHAR = Color3.fromRGB(24, 18, 16)
@@ -252,26 +265,15 @@ local function light(
 	Debris:AddItem(point, time + 0.1)
 end
 
--- A burst of light: a glowing ball that swells and fades, and its light.
+-- A burst of light. It POPS at full size for 2 frames and is cut (README:
+-- "pop, don't grow"; never a neon ball), its light fades over ~0.2 s.
 local function flash(position: Vector3, color: Color3, size: number, time: number)
-	light(position, color, 10, size * 6, time * 1.4)
-	local core = newPart(Vector3.one * size * 0.35, WHITE, Enum.Material.Neon, Enum.PartType.Ball)
-	core.CFrame = CFrame.new(position)
-	core.Parent = fx
-	local halo = newPart(Vector3.one * size * 0.6, color, Enum.Material.Neon, Enum.PartType.Ball)
-	halo.Transparency = 0.35
-	halo.CFrame = CFrame.new(position)
-	halo.Parent = fx
-	animate(time, function(alpha)
-		local e = outQuart(alpha)
-		core.Size = Vector3.one * size * (0.35 + 0.5 * e)
-		core.Transparency = alpha ^ 0.6
-		halo.Size = Vector3.one * size * (0.6 + 1.2 * e)
-		halo.Transparency = 0.35 + 0.65 * alpha ^ 0.8
-	end, function()
-		core:Destroy()
-		halo:Destroy()
-	end)
+	VfxLayers.contactFlash(position, size * 0.6, {
+		frames = 2,
+		spikes = 6,
+		color = color:Lerp(VfxPalette.FlashCore, 0.55),
+	})
+	VfxLayers.light(position, 10, size * 6, { color = color, fade = math.min(time, 0.2) })
 end
 
 -- An expanding shell of energy (radius `from` → `to`).
@@ -816,8 +818,9 @@ local function streaks(
 		local offset = base.RightVector * random:NextNumber(-spread, spread)
 			+ base.UpVector * random:NextNumber(-spread, spread)
 		local start = origin + offset
-		local line = newPart(Vector3.new(0.06, 0.06, length), color, Enum.Material.Neon)
-		line.Transparency = 0.2
+		-- (thin see-through lines of moving air, not glowing neon)
+		local line = newPart(Vector3.new(0.06, 0.06, length), color, Enum.Material.SmoothPlastic)
+		line.Transparency = 0.45
 		line.Parent = fx
 		local delay = random:NextNumber(0, time * 0.3)
 		local travel = speed * random:NextNumber(0.7, 1.2)
@@ -827,7 +830,7 @@ local function streaks(
 			local at = start + d * (travel * time * outQuad(t))
 			line.CFrame = facing(at + d * stretch / 2, d)
 			line.Size = Vector3.new(0.06 * (1 - t * 0.6), 0.06 * (1 - t * 0.6), stretch)
-			line.Transparency = if t <= 0 then 1 else 0.2 + 0.8 * t
+			line.Transparency = if t <= 0 then 1 else 0.45 + 0.55 * t
 		end, function()
 			line:Destroy()
 		end)
@@ -978,8 +981,9 @@ local function trail(
 	})
 	streak.WidthScale = NumberSequence.new(1, 0.1)
 	streak.Lifetime = lifetime or 0.25
-	streak.LightEmission = 0.8
-	streak.LightInfluence = 0
+	-- (air, lit by the scene like everything else: barely glowing)
+	streak.LightEmission = 0.15
+	streak.LightInfluence = 0.7
 	streak.FaceCamera = true
 	streak.Parent = part
 	task.delay(time, function()
@@ -990,34 +994,12 @@ local function trail(
 	Debris:AddItem(streak, time + (lifetime or 0.25) + 0.1)
 end
 
--- Camera shake (position only: a rotating shake would shift the aim) for
--- us if we're close to `position`, stronger closer.
-local shakeUntil, shakeStrength, shakeSeed = 0, 0, 0
-local function shake(position: Vector3, strength: number, radius: number, time: number)
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local distance = (camera.CFrame.Position - position).Magnitude
-	if distance > radius then
-		return
-	end
-	local amount = strength * (1 - distance / radius)
-	shakeStrength = math.max(if os.clock() < shakeUntil then shakeStrength else 0, amount)
-	shakeUntil = math.max(shakeUntil, os.clock() + time)
-	shakeSeed = random:NextNumber(0, 100)
+-- Camera shake for us if we're close to `position`, stronger closer: Vfx's
+-- "trauma" shake (the one owner of the camera's offsets). `strength` is the
+-- old scale (1 = a hit, 3 = a crater), `radius` where it fades to nothing.
+local function shake(position: Vector3, strength: number, radius: number, _time: number)
+	VfxCamera.trauma(math.min(1, strength * 0.3), position, radius)
 end
-RunService:BindToRenderStep("KitVFXShake", Enum.RenderPriority.Camera.Value + 2, function()
-	local left = shakeUntil - os.clock()
-	local camera = workspace.CurrentCamera
-	if left <= 0 or camera == nil then
-		return
-	end
-	local t = os.clock() * 28
-	local power = shakeStrength * 0.12 * math.min(1, left * 5)
-	local offset = Vector3.new(math.noise(t, shakeSeed), math.noise(shakeSeed, t), 0) * 2 * power
-	camera.CFrame += camera.CFrame:VectorToWorldSpace(offset)
-end)
 
 -- A colour punch on our screen if we're close to a big impact.
 local function punch(position: Vector3, radius: number, tint: Color3, strength: number)
@@ -1041,10 +1023,12 @@ local function punch(position: Vector3, radius: number, tint: Color3, strength: 
 	Debris:AddItem(correction, 0.45)
 end
 
--- Everything a big ground impact does.
+-- Everything a big ground impact does: a hot flash at the floor (it pops),
+-- a wall of dust rolling out, a see-through ring of air low along the
+-- floor, slabs torn up, cracks that stay, rocks with weight, chips.
 type ImpactOptions = {
 	size: number, -- 1 = a stomp, 1.6 = a crater
-	glow: Color3?, -- energy colour (cracks glow, energy rings)
+	glow: Color3?, -- (the cracks' glow: a heat colour, or none)
 	flashColor: Color3?,
 }
 local function groundImpact(position: Vector3, o: ImpactOptions)
@@ -1052,16 +1036,7 @@ local function groundImpact(position: Vector3, o: ImpactOptions)
 	local floor = floorAt(position)
 	local at = if floor then floor.position else position
 	local dust = dustColor(floor)
-	flash(
-		at + Vector3.new(0, 0.8, 0),
-		o.flashColor or o.glow or Color3.fromRGB(255, 220, 180),
-		4 * s,
-		0.35
-	)
-	if o.glow then
-		shockSphere(at, 1, 9 * s, 0.45, o.glow)
-		groundRing(at, 1.5, 17 * s, 0.55, o.glow, { neon = true, width = 0.5, height = 0.35 })
-	end
+	flash(at + Vector3.new(0, 0.8, 0), o.flashColor or Color3.fromRGB(255, 220, 180), 4 * s, 0.35)
 	groundRing(
 		at,
 		2,
@@ -1070,31 +1045,24 @@ local function groundImpact(position: Vector3, o: ImpactOptions)
 		dust,
 		{ width = 1.2 * s, height = 1.4 * s, transparency = 0.25 }
 	)
-	task.delay(0.06, function()
-		groundRing(
-			at,
-			1,
-			12 * s,
-			0.6,
-			WHITE,
-			{ neon = true, width = 0.18, height = 0.12, transparency = 0.3 }
-		)
-	end)
+	-- the air pushed out along the floor, a few frames after (behind the dust)
+	VfxLayers.shockRing(at + Vector3.new(0, 0.15, 0), Vector3.yAxis, {
+		from = 1,
+		to = 12 * s,
+		life = 0.35,
+		delayFrames = 4,
+		alpha = 0.45,
+		color = dust,
+	})
 	dustRing(at, 3 * s, s, dust)
 	smokePuff(at + Vector3.new(0, 1, 0), math.floor(12 * s), 1.5 * s, dust, Vector3.yAxis, 16 * s)
 	eruption(at, 4.2 * s, math.floor(10 * s), 5)
 	cracks(at, math.floor(6 * s) + 2, 6.5 * s, 9, o.glow)
 	rocks(at, math.floor(10 * s), 0.7 + 0.3 * s)
-	sparks(
-		at + Vector3.new(0, 0.5, 0),
-		math.floor(16 * s),
-		o.glow or EMBER,
-		Vector3.yAxis,
-		36 * s,
-		70
-	)
+	-- chips of the floor (no glowing sparks: stone doesn't spark on a body)
+	VfxLayers.chips(at + Vector3.new(0, 0.5, 0), math.floor(16 * s), dust)
 	shake(at, 3 * s, 55 * s, 0.55)
-	punch(at, 30 * s, o.glow or Color3.fromRGB(255, 220, 190), math.min(1, 0.5 * s))
+	punch(at, 30 * s, Color3.fromRGB(255, 220, 190), math.min(1, 0.5 * s))
 	KitLooks.gust(at, 60 * s, 30 * s)
 end
 
@@ -1676,18 +1644,22 @@ local function heatVision(model: Model, move: Kits.MoveDef, token: number)
 	end)
 end
 
+-- THUNDER CLAP (0.34): the palms meet = a shock of air. Wind-up: a faint
+-- warm light grows between the opening hands (heat, no crackle). The clap:
+-- the hot flash between the palms, the air thrown ahead in see-through
+-- rings, dust pushed along the floor. (A body it reaches: Vfx/Moves/Sentinel.)
 local function thunderClap(model: Model, token: number)
-	-- the hands crackle as the arms open
-	for step = 1, 4 do
-		later(model, token, 0.05 + step * 0.06, function()
-			for _, arm in { "Right Arm", "Left Arm" } do
-				local hand = fist(model, arm)
-				if hand then
-					crackle(hand, 1, 1, ENERGY)
-				end
-			end
-		end)
-	end
+	later(model, token, 0.2, function()
+		local right, left = fist(model, "Right Arm"), fist(model, "Left Arm")
+		if right and left then
+			VfxLayers.light(
+				(right + left) / 2,
+				2.5,
+				7,
+				{ color = HEAT, holdFrames = 6, fade = 0.12 }
+			)
+		end
+	end)
 	later(model, token, 0.34, function()
 		local right, left = fist(model, "Right Arm"), fist(model, "Left Arm")
 		if right == nil or left == nil then
@@ -1696,36 +1668,26 @@ local function thunderClap(model: Model, token: number)
 		local hands = (right + left) / 2
 		local forward = forwardOf(model)
 		SoundController.play("ThunderClap", model)
-		flash(hands, ENERGY, 5, 0.35)
-		shockSphere(hands, 0.5, 6, 0.35, ENERGY)
-		-- the blast: rings in a cone, air lines, lightning, dust pushed ahead
-		for index = 0, 3 do
-			task.delay(index * 0.04, function()
-				local at = hands + forward * (1 + index * 2.4)
-				ring(
-					axisFrame(at, forward),
-					0.5 + index * 0.5,
-					4 + index * 2.6,
-					0.45,
-					if index % 2 == 0 then WHITE else ENERGY,
-					{
-						neon = true,
-						width = 0.22,
-						height = 0.14,
-					}
-				)
-			end)
-		end
-		streaks(hands + forward, forward, 16, 2.2, 3, 45, WHITE, 0.4)
-		for _ = 1, 4 do
-			local reach = forward * random:NextNumber(7, 12)
-				+ Vector3.new(
-					random:NextNumber(-3, 3),
-					random:NextNumber(-1, 2),
-					random:NextNumber(-3, 3)
-				)
-			lightning(hands, hands + reach, ENERGY_DEEP, 0.08, 0.22)
-		end
+		-- The clap itself: a "Last" stack in front of the hands, bigger air
+		-- rings facing forward (his own camera gets the push-in; the clap
+		-- holds him a few frames: the hit-stop of the blast).
+		VfxImpact.hit({
+			point = hands + forward * 0.3,
+			dir = forward,
+			tier = "Last",
+			attacker = model,
+			scale = 1.3,
+			skip = { specks = true, puff = true },
+		})
+		-- the blast rolling on ahead: a 2nd, wider ring further out
+		VfxLayers.shockRing(hands + forward * 4, forward, {
+			from = 2,
+			to = 9,
+			life = 0.3,
+			delayFrames = 3,
+			alpha = 0.4,
+		})
+		streaks(hands + forward, forward, 8, 2.2, 3, 45, VfxPalette.Streak, 0.35)
 		local ground = feet(model)
 		if ground then
 			local floor = floorAt(ground)
@@ -1749,11 +1711,13 @@ local function thunderClap(model: Model, token: number)
 			)
 		end
 		shake(hands, 1.8, 35, 0.35)
-		punch(hands, 22, ENERGY, 0.6)
 		KitLooks.gust(hands - forward * 2, 70, 30)
 	end)
 end
 
+-- SKYFALL: crouch (dust), the jump (a crater where he left), the dive
+-- (an air trail on the body, speed lines, the fist's trail), the landing
+-- (a slam: flash at the floor, dust ring, debris, a crack, slabs torn up).
 local function skyfall(model: Model, move: Kits.MoveDef, token: number)
 	local leap = move.leap
 	local jumpAt = if leap then leap.at else 0.18
@@ -1777,37 +1741,17 @@ local function skyfall(model: Model, move: Kits.MoveDef, token: number)
 		local torso = part(model, "Torso")
 		SoundController.play("SkyfallJump", model)
 		if spot then
-			groundImpact(spot, { size = 1, glow = ENERGY })
+			groundImpact(spot, { size = 1 })
 		end
 		if torso then
-			trail(torso, ENERGY, hitAt - jumpAt, 1.8, 0.35)
-			local wind = Instance.new("Attachment")
-			wind.Parent = torso
-			stream(wind, {
-				texture = TEX.sparkle,
-				color = WHITE,
-				color2 = ENERGY,
-				size = { 0.2, 0 },
-				transparency = { 0.3, 1 },
-				speed = NumberRange.new(2, 6),
-				lifetime = NumberRange.new(0.2, 0.4),
-				spread = 180,
-				glow = 1,
-				count = 0,
-			}, 40)
-			Debris:AddItem(wind, hitAt - jumpAt)
+			trail(torso, VfxPalette.Trail, hitAt - jumpAt, 1.8, 0.3)
 		end
+		VfxLimb.speedLines(model, hitAt - jumpAt, { dir = Vector3.yAxis })
 	end)
-	-- coming down: the fist glows, speed lines
+	-- coming down: the fist's trail, air lines rushing up past him
 	later(model, token, hitAt - 0.22, function()
-		local arm = part(model, "Right Arm")
 		local root = part(model, "HumanoidRootPart")
-		if arm then
-			gather(arm, Vector3.new(0, -1, 0), 1.6, 0.22, ENERGY, 60, function()
-				return not alive(model, token)
-			end)
-			trail(arm, ENERGY, 0.25, 0.8, 0.2, Vector3.new(0, -1, 0))
-		end
+		VfxLimb.trailWindow(model, "RightArm", 0, 0.25, { life = 0.16 })
 		if root then
 			streaks(
 				root.Position + Vector3.new(0, 4, 0),
@@ -1816,7 +1760,7 @@ local function skyfall(model: Model, move: Kits.MoveDef, token: number)
 				1.6,
 				4,
 				30,
-				WHITE,
+				VfxPalette.Streak,
 				0.35
 			)
 		end
@@ -1827,52 +1771,41 @@ local function skyfall(model: Model, move: Kits.MoveDef, token: number)
 			return
 		end
 		SoundController.play("Slam", model)
-		groundImpact(spot + forwardOf(model) * 1, { size = 1.7, glow = ENERGY })
+		local at = spot + forwardOf(model) * 1
+		-- the slam (Vfx): flash at the floor, ring, dust, debris, a crack;
+		-- plus the crater's own slabs and a cloud
+		VfxImpact.groundSlam(at, "Slam", { attacker = model, debris = 6, crack = 6, scale = 1.3 })
+		local floor = floorAt(at)
+		local where = if floor then floor.position else at
+		eruption(where, 5, 12, 5)
+		smokePuff(where + Vector3.new(0, 1, 0), 14, 2, dustColor(floor), Vector3.yAxis, 20)
+		KitLooks.gust(where, 80, 40)
 	end)
 end
 
+-- HAYMAKER (0.55): the long wind-up = a warm light gathering on the fist
+-- (no glowing ball), the stance digging in; at 0.55 the air in front of
+-- the fist is blown out (lines of air, dust thrown ahead, a ring). The
+-- fist's trail / smear and the hit on a body: Vfx/Moves/Sentinel.
 local function haymaker(model: Model, token: number)
 	local impactAt = 0.55
 	local arm = part(model, "Right Arm")
 	if arm then
-		-- the fist charges up during the wind-up
-		local charge = newPart(Vector3.one * 0.3, ENERGY, Enum.Material.Neon, Enum.PartType.Ball)
-		charge.Transparency = 0.4
-		charge.Anchored = false
-		charge.Massless = true
-		charge.CFrame = arm.CFrame * CFrame.new(0, -1.05, 0)
-		local joint = Instance.new("WeldConstraint")
-		joint.Part0 = arm
-		joint.Part1 = charge
-		joint.Parent = charge
+		-- a warm light builds on the fist as he winds up, gone on the punch
+		local point = Instance.new("Attachment")
+		point.Position = Vector3.new(0, -1.05, 0)
+		point.Parent = arm
 		local glow = Instance.new("PointLight")
-		glow.Color = ENERGY
+		glow.Color = HEAT
 		glow.Brightness = 0
-		glow.Range = 8
+		glow.Range = 7
 		glow.Shadows = false
-		glow.Parent = charge
-		charge.Parent = fx
-		tween(charge, impactAt, { Size = Vector3.one * 1.2, Transparency = 0.1 })
-		tween(glow, impactAt, { Brightness = 6 })
-		gather(arm, Vector3.new(0, -1, 0), 2.4, impactAt, ENERGY, 80, function()
-			return not alive(model, token)
-		end)
-		for step = 1, 5 do
-			later(model, token, step * 0.09, function()
-				local hand = fist(model, "Right Arm")
-				if hand then
-					crackle(hand, 1.2, 2, ENERGY)
-				end
-			end)
-		end
+		glow.Parent = point
+		tween(glow, impactAt, { Brightness = 3 })
 		later(model, token, impactAt, function()
-			tween(charge, 0.15, { Transparency = 1, Size = Vector3.one * 2.5 })
-			tween(glow, 0.2, { Brightness = 0 })
+			tween(glow, 0.12, { Brightness = 0 })
 		end)
-		Debris:AddItem(charge, impactAt + 0.4)
-		later(model, token, impactAt - 0.15, function()
-			trail(arm, ENERGY, 0.3, 0.9, 0.2, Vector3.new(0, -0.8, 0))
-		end)
+		Debris:AddItem(point, impactAt + 0.3)
 	end
 	local ground = feet(model)
 	if ground then
@@ -1886,28 +1819,16 @@ local function haymaker(model: Model, token: number)
 		end
 		local forward = forwardOf(model)
 		SoundController.play("Haymaker", model)
-		flash(hand + forward * 0.5, ENERGY, 4, 0.3)
-		shockSphere(hand + forward, 0.3, 3.5, 0.3, ENERGY)
-		-- the air blast: rings along the punch, air lines, sparks
-		for index = 0, 3 do
-			task.delay(index * 0.035, function()
-				local at = hand + forward * (1 + index * 1.8)
-				ring(
-					axisFrame(at, forward),
-					0.4 + index * 0.3,
-					2.5 + index * 1.6,
-					0.4,
-					if index == 0 then WHITE else ENERGY,
-					{
-						neon = true,
-						width = 0.18,
-						height = 0.12,
-					}
-				)
-			end)
-		end
-		streaks(hand + forward, forward, 14, 1.4, 2.5, 50, WHITE, 0.35)
-		sparks(hand + forward, 18, ENERGY, forward, 40, 45)
+		-- the air blown out ahead of the fist (whether it lands or not: one
+		-- ring; a landed one gets the impact's own rings, Vfx/Moves/Sentinel)
+		VfxLayers.shockRing(hand + forward * 2.5, forward, {
+			from = 0.8,
+			to = 5,
+			life = 0.3,
+			delayFrames = 1,
+			alpha = 0.5,
+		})
+		streaks(hand + forward, forward, 8, 1.4, 2.5, 50, VfxPalette.Streak, 0.3)
 		local spot = feet(model)
 		if spot then
 			smokePuff(
@@ -1919,8 +1840,7 @@ local function haymaker(model: Model, token: number)
 				22
 			)
 		end
-		shake(hand, 2, 32, 0.3)
-		punch(hand, 18, ENERGY, 0.5)
+		shake(hand, 1.2, 32, 0.3)
 		KitLooks.gust(hand - forward, 50, 22)
 	end)
 end
@@ -2363,21 +2283,11 @@ function KitVFX.onHit(victim: Model, attacker: Model, moveId: string)
 			{ neon = true, width = 0.14, height = 0.08 }
 		)
 		shake(torso.Position, 1.2, 25, 0.25)
-	elseif moveId == "Haymaker" or moveId == "ThunderClap" or moveId == "Skyfall" then
-		flash(torso.Position, ENERGY, 2.5, 0.25)
-		sparks(torso.Position, 14, ENERGY, direction, 30, 50)
-		ring(
-			axisFrame(torso.Position, direction),
-			0.5,
-			4.5,
-			0.3,
-			ENERGY,
-			{ neon = true, width = 0.14, height = 0.08 }
-		)
 	elseif moveId == "Stampede" then
 		smokePuff(torso.Position - Vector3.new(0, 2, 0), 6, 0.8, DUST, Vector3.yAxis, 8)
 	end
-	-- (heat vision: no hit effect here, the beam chars them where it touches)
+	-- (heat vision: no hit effect here, the beam chars them where it touches;
+	-- the Sentinel's punches / blasts on a body: Vfx/Moves/Sentinel)
 end
 
 -- The move was refused / cut short: its pending effects don't play.
@@ -3285,30 +3195,19 @@ local function bullFinisherEvent(
 end
 
 -- A fist landing hard at `position`, driven along `direction` (the Boxer's
--- finisher blows; every client): the air shoved out in a ring round the
--- blow, sweat and spit thrown off the far side. `strength`: 1 a body shot,
--- 1.5 a hook to the face, 2 the hand going in.
+-- finisher blows, LIVER RIP; every client). `strength`: 1 a body shot, 1.5
+-- a hook to the face, 2 the hand going in. It is the shared impact stack
+-- (Vfx Impact.hit) with the tier of the blow: Clean / Heavy / Last. The
+-- cinematic owns the camera and the freeze: no camera, no hit-stop here.
 function KitVFX.fistImpact(position: Vector3, direction: Vector3, strength: number)
 	local along = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.zAxis
-	ring(axisFrame(position, along), 0.25, 1.1 * strength, 0.2, WHITE, {
-		width = 0.08,
-		height = 0.05,
-		segments = 20,
-		transparency = 0.55,
-		material = Enum.Material.Glass,
-	})
-	emit(position + along * 0.2, {
-		texture = TEX.sparkle,
-		color = Color3.fromRGB(230, 235, 240),
-		size = { 0.06, 0.03 },
-		transparency = { 0.3, 1 },
-		speed = NumberRange.new(10, 22),
-		lifetime = NumberRange.new(0.15, 0.35),
-		spread = 35,
-		direction = along,
-		acceleration = Vector3.new(0, -40, 0),
-		drag = 3,
-		count = math.floor(6 * strength),
+	VfxImpact.hit({
+		point = position,
+		dir = along,
+		tier = if strength >= 1.8 then "Last" elseif strength >= 1.3 then "Heavy" else "Clean",
+		camera = false,
+		hitstop = false,
+		floor = false,
 	})
 end
 

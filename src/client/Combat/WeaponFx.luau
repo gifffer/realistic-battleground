@@ -33,6 +33,7 @@ local FLESH = Color3.fromRGB(112, 24, 26)
 local TENDON = Color3.fromRGB(210, 196, 178)
 local BLOOD = Config.Blood.PALETTE.VENOUS
 local BONE_LENGTH = 1.7
+local TRAIL = Color3.fromRGB(235, 232, 225) -- (the swing trails' air colour, Vfx/Palette.Trail)
 local HALF_LIFETIME = 20 -- seconds the two halves stay on the floor
 -- In the fist (Right Arm space): the hand closed round the shaft a third of
 -- the way up from the elbow end, the bone carrying on forward from the fist
@@ -156,6 +157,46 @@ end
 -- In the air
 ------------------------------------------------------------------------------
 
+-- A faint trail of air behind a thrown thing (VFX overhaul): a short
+-- see-through ribbon along its flight. It rides an invisible part that
+-- follows the flight without the spin (a trail on the tumbling bone would
+-- draw a corkscrew), parented to the bone so it goes when the bone goes.
+local function airTrail(bone: BasePart, origin: Vector3, velocity: Vector3): BasePart
+	local carrier = Instance.new("Part")
+	carrier.Name = "AirTrail"
+	carrier.Size = Vector3.new(0.05, 0.05, 0.05)
+	carrier.Transparency = 1
+	carrier.Anchored = true
+	carrier.CanCollide = false
+	carrier.CanQuery = false
+	carrier.CanTouch = false
+	carrier.CastShadow = false
+	carrier.CFrame = CFrame.lookAt(origin, origin + velocity)
+	local a0 = Instance.new("Attachment")
+	a0.Position = Vector3.new(0, 0.09, 0)
+	a0.Parent = carrier
+	local a1 = Instance.new("Attachment")
+	a1.Position = Vector3.new(0, -0.09, 0)
+	a1.Parent = carrier
+	local trail = Instance.new("Trail")
+	trail.Attachment0 = a0
+	trail.Attachment1 = a1
+	trail.Lifetime = 0.12
+	trail.MinLength = 0.05
+	trail.FaceCamera = true
+	trail.Color = ColorSequence.new(TRAIL)
+	trail.LightEmission = 0.15
+	trail.LightInfluence = 0.7
+	trail.WidthScale = NumberSequence.new(1, 0.1)
+	trail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.6),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	trail.Parent = carrier
+	carrier.Parent = bone
+	return carrier
+end
+
 function WeaponFx.thrown(
 	thrower: Model,
 	id: string,
@@ -175,6 +216,7 @@ function WeaponFx.thrown(
 	quiet(bone)
 	bone.Anchored = true
 	bone.Parent = workspace
+	local carrier = airTrail(bone, origin, velocity)
 	local position, moving = origin, velocity
 	local spin = 0
 	local start = os.clock()
@@ -185,6 +227,8 @@ function WeaponFx.thrown(
 		-- (its welded layers follow the main part: anchored, moved by hand)
 		bone.CFrame = CFrame.lookAt(position, position + moving)
 			* CFrame.Angles(-math.pi / 2 + spin, 0, 0)
+		-- (the trail follows the flight, not the spin)
+		carrier.CFrame = CFrame.lookAt(position, position + moving)
 		if os.clock() - start > weapon.lifetime + 1 then
 			local flight = flying[throwId]
 			if flight then

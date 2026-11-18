@@ -2,25 +2,24 @@
 -- BouncerFx: what the Bouncer's moves look like when they land (Shared/Kits/
 -- Bouncer). Purely visual, on this client; the server decided everything.
 --
---   • A body driven into the floor (Body Slam, Powerbomb, a thrown body
---     landing): a ring of dust kicked up from the floor's own colour, chips
---     of it, a ripple of air low along the ground, the camera shaking for
---     whoever is close (more the closer).
+--   • A body driven into the floor (Body Slam, Powerbomb): a low cloud of
+--     dust from the floor's own colour hanging after it. (The slam itself -
+--     the flash at the floor, the ring, debris, the crack, the camera - is
+--     Vfx: Vfx/Moves/Bouncer. So is a thrown body landing: Vfx Impact.landing.)
 --   • Hammer fists: sweat and spit thrown off the head.
 --   • A shove: the feet scraping back, a puff of dust under them.
 --   • A choke: the face going red-violet then deep violet with each squeeze, spit at the
 --     lips; for the one choked, the edges of the screen closing in (black at
 --     the end of a Sleeper Hold). It all fades back when they breathe again.
---   • The Awakening: a stamp of dust at his feet when he squares up, his
---     breath steaming.
+--   • The Awakening: his breath steaming when he squares up (the stamp
+--     itself is Vfx: Impact.awakening).
 --
 --   BouncerFx.onHit(victim, attacker, moveId, shake)   a move landed
 --   BouncerFx.onAction(model, animation)                a move / clip started
--- `shake(strength, seconds)` shakes our camera (CombatEffectsController).
+-- (`shake` is no longer used: every camera shake goes through Vfx/Camera.)
 
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local BouncerFx = {}
@@ -34,7 +33,6 @@ local SPIT = Color3.fromRGB(226, 226, 220)
 -- (a choked face: red-violet, then deep violet - never a plain red)
 local CHOKED_RED = Color3.fromRGB(148, 52, 96)
 local CHOKED_PURPLE = Color3.fromRGB(98, 40, 104)
-local SHAKE_RANGE = 40 -- studs: farther, the camera doesn't feel a slam
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -92,55 +90,19 @@ local function dustEmitter(parent: Attachment, color: Color3): ParticleEmitter
 	return dust
 end
 
-local function chip(at: Vector3, color: Color3, velocity: Vector3)
-	local piece = Instance.new("Part")
-	piece.Name = "Debris"
-	local s = math.random() * 0.12 + 0.05
-	piece.Size = Vector3.new(s * 1.4, s * 0.5, s)
-	piece.Material = Enum.Material.Concrete
-	piece.Color = color:Lerp(Color3.new(0, 0, 0), 0.15)
-	piece.CanCollide = true
-	piece.CanQuery = false
-	piece.CanTouch = false
-	piece.CFrame = CFrame.new(at)
-		* CFrame.Angles(math.random() * 6.3, math.random() * 6.3, math.random() * 6.3)
-	piece.AssemblyLinearVelocity = velocity
-	piece.AssemblyAngularVelocity = Vector3.new(
-		math.random() - 0.5,
-		math.random() - 0.5,
-		math.random() - 0.5
-	) * 25
-	piece.Parent = workspace
-	Debris:AddItem(piece, 5)
-end
-
--- Our camera shakes for an impact at `position`, less with distance.
-local function shakeNear(position: Vector3, strength: number, seconds: number, shake: Shake)
-	local camera = workspace.CurrentCamera
-	if camera == nil then
-		return
-	end
-	local distance = (camera.CFrame.Position - position).Magnitude
-	if distance < SHAKE_RANGE then
-		local k = 1 - distance / SHAKE_RANGE
-		shake(strength * k * k, seconds)
-	end
-end
-
 ------------------------------------------------------------------------------
 -- A body driven into the floor
 ------------------------------------------------------------------------------
 
-local function groundImpact(position: Vector3, size: number, ignore: { Instance }, shake: Shake)
+-- The dust that hangs after a slam: a low, slow cloud of the floor's
+-- colour. (Vfx's groundSlam already threw the fast dust ring, the chips,
+-- the debris and the flat air ring: only this lingering part is ours.)
+local function slamHaze(position: Vector3, size: number, ignore: { Instance })
 	local floor, color = floorUnder(position, ignore)
 	if floor == nil then
 		return
 	end
 	local point = attachmentAt(floor + Vector3.new(0, 0.1, 0))
-	local dust = dustEmitter(point, color)
-	dust.Speed = NumberRange.new(6 * size, 12 * size)
-	dust:Emit(math.floor(26 * size))
-	-- a low, slow cloud hanging after it
 	local haze = dustEmitter(point, color)
 	haze.Speed = NumberRange.new(1, 3)
 	haze.Lifetime = NumberRange.new(1.8, 2.8)
@@ -154,68 +116,6 @@ local function groundImpact(position: Vector3, size: number, ignore: { Instance 
 	})
 	haze:Emit(math.floor(8 * size))
 	Debris:AddItem(point, 4)
-	-- Chips of the floor thrown out.
-	for _ = 1, math.floor(10 * size) do
-		local angle = math.random() * math.pi * 2
-		local out = Vector3.new(math.cos(angle), 0, math.sin(angle))
-		chip(
-			floor + out * 0.6 + Vector3.new(0, 0.15, 0),
-			color,
-			out * (6 + math.random() * 8) + Vector3.new(0, 6 + math.random() * 8, 0)
-		)
-	end
-	-- A ripple of air, low along the floor (barely there).
-	local ring = Instance.new("Part")
-	ring.Name = "Shockwave"
-	ring.Shape = Enum.PartType.Cylinder
-	ring.Anchored = true
-	ring.CanCollide = false
-	ring.CanQuery = false
-	ring.CanTouch = false
-	ring.CastShadow = false
-	ring.Material = Enum.Material.SmoothPlastic
-	ring.Color = color
-	ring.Transparency = 0.6
-	ring.Size = Vector3.new(0.08, 1, 1)
-	ring.CFrame = CFrame.new(floor + Vector3.new(0, 0.05, 0)) * CFrame.Angles(0, 0, math.pi / 2)
-	ring.Parent = workspace
-	TweenService:Create(
-		ring,
-		TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = Vector3.new(0.02, 9 * size, 9 * size), Transparency = 1 }
-	):Play()
-	Debris:AddItem(ring, 0.5)
-	shakeNear(floor, 2.4 * size, 0.45, shake)
-end
-
--- A body thrown through the air: dust where it comes down.
-local function watchLanding(victim: Model, shake: Shake)
-	local torso = victim:FindFirstChild("Torso")
-	if torso == nil or not torso:IsA("BasePart") then
-		return
-	end
-	local start = os.clock()
-	local wasFalling = false
-	local connection: RBXScriptConnection? = nil
-	connection = RunService.Heartbeat:Connect(function()
-		local elapsed = os.clock() - start
-		if elapsed > 2.5 or torso.Parent == nil then
-			if connection then
-				connection:Disconnect()
-			end
-			return
-		end
-		local vy = torso.AssemblyLinearVelocity.Y
-		if vy < -8 then
-			wasFalling = true
-		end
-		if wasFalling and vy > -2 and elapsed > 0.15 then
-			if connection then
-				connection:Disconnect()
-			end
-			groundImpact(torso.Position, 0.8, { victim }, shake)
-		end
-	end)
 end
 
 ------------------------------------------------------------------------------
@@ -383,23 +283,20 @@ end
 -- Public
 ------------------------------------------------------------------------------
 
-function BouncerFx.onHit(victim: Model, attacker: Model, moveId: string, shake: Shake)
+function BouncerFx.onHit(victim: Model, attacker: Model, moveId: string, _shake: Shake)
 	local head = victim:FindFirstChild("Head")
 	local torso = victim:FindFirstChild("Torso")
 	if moveId == "BodySlam_Hold" or moveId == "Powerbomb_Hold" then
 		if torso and torso:IsA("BasePart") then
 			local size = if moveId == "Powerbomb_Hold" then 1.35 else 1.1
-			groundImpact(torso.Position, size, { victim, attacker }, shake)
+			slamHaze(torso.Position, size, { victim, attacker })
 		end
 		if head and head:IsA("BasePart") then
 			spray(head, attacker, 10, SPIT)
 		end
-	elseif moveId == "ThrowOut_Hold" then
-		watchLanding(victim, shake)
 	elseif moveId == "HammerFist" or moveId == "DoubleHammer" then
 		if head and head:IsA("BasePart") then
 			spray(head, attacker, 12, SPIT)
-			shakeNear(head.Position, 0.9, 0.25, shake)
 		end
 	elseif moveId == "Shove" then
 		scrape(victim, 0.3)
@@ -409,25 +306,16 @@ function BouncerFx.onHit(victim: Model, attacker: Model, moveId: string, shake: 
 			squeeze(victim, attacker, moveId == "SleeperHold_Hold")
 		end
 	end
+	-- (Throw Out: the body's landing is Vfx's Impact.landing now)
 end
 
 function BouncerFx.onAction(model: Model, animation: string)
 	if animation == "Bouncer_Awaken" then
-		-- squares up at 0.55-0.7 s: a stamp of dust, breath steaming
+		-- squares up at 0.55-0.7 s: breath steaming (the stamp of dust, the
+		-- crack and the colour drain: Vfx/Moves/Bouncer, Impact.awakening)
 		task.delay(0.62, function()
 			if model.Parent == nil then
 				return
-			end
-			local root = model:FindFirstChild("HumanoidRootPart")
-			if root and root:IsA("BasePart") then
-				local floor, color = floorUnder(root.Position - Vector3.new(0, 2.5, 0), { model })
-				if floor then
-					local point = attachmentAt(floor + Vector3.new(0, 0.1, 0))
-					local dust = dustEmitter(point, color)
-					dust.Speed = NumberRange.new(3, 7)
-					dust:Emit(16)
-					Debris:AddItem(point, 3)
-				end
 			end
 			local head = model:FindFirstChild("Head")
 			if head and head:IsA("BasePart") then

@@ -21,6 +21,7 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 | 13 | Blender tutorial: rain ripples | Ripple rings on a liquid surface (drops landing in blood pools) |
 | 14 | Blender tutorial: realistic glass | Glass material and shape (bottles, flasks, shards) |
 | 15 | A custom R6 movement system | **The game's walk** (implemented: `MovementClips.Walk`): a quick power-march, high knees, arms pumping across the body, strong torso twist |
+| 16 | A Moon Animator fight cutscene between two R6 rigs (cartoon VFX, some blood) | **Punches and the hit grammar**: pre-glow then burst then shards then smoke, all within 0.5 s; the screen dims before heavy hits; blocked hits show little or nothing; the key poses for rebuilding the M1 punch clips (`video16.md` section 5) |
 
 ## The rules that come out of them
 
@@ -40,6 +41,20 @@ The player sent reference videos of other Roblox games to show the **feel** he w
   - A body hitting a wall or the floor leaves a crack decal on the same frame, sized by the hit.
   - The decal stays for several seconds.
 - **The last or killing hit must look different** from the others. That is where the blood burst or dismemberment goes.
+- **A 4-beat hit (video 16)**, at 30 fps:
+  - F-1: a tiny glow at the contact point;
+  - F0: the burst, at full size, for 1 frame;
+  - F+1: shards and specks breaking outward;
+  - F+2 to about F+15: smoke or dust drifting.
+  - The burst is small (1.5–2.5 studs) and the whole hit lasts under 0.5 s.
+- **Dim before heavy hits (video 16):** on the strike frame, 1–2 frames before contact, darken the screen about 25 % (about 45 % at the edges, as a vignette) and recover linearly over about 0.3 s. Normal hits get no full-screen flash; the flash stays local.
+- **Three intensities:**
+  - a hit on the guard gets a small warm spark, with no blood and no shake;
+  - a clean hit gets the flash, spray, streaks and dust;
+  - a heavy or last hit gets the dim, a push-in, shake and blood.
+  - A fully blocked or missed swing shows **nothing**.
+- **Air arcs:** on medium and heavy hits, a faint see-through pressure ring or wind wisps round the victim for 0.2–0.3 s. Never white anime crescents.
+- **Rhythm:** hits come in clusters of 2–3, 0.13–0.2 s apart, then a reset of 0.5–1 s. A heavy rally speeds up and ends on a climax, followed by a calm lull.
 - **Effects end by breaking up** (eroding, shedding droplets or shards), never by vanishing.
   - A rough split: about 10 % build-up and flash, 70 % hold with secondary motion, 20 % fast break-up.
 
@@ -67,6 +82,7 @@ The player sent reference videos of other Roblox games to show the **feel** he w
   - a pool spreads under a body over about 1 s;
   - big finishers leave a large stain of 1.5–2 m.
 - **Persistence:** blood, chunks and bodies stay for a long time and are never cleaned up on screen.
+  - After a blood hit, the **attacker's fist** is bloodied too (video 16).
   - Hitting a corpse opens new wounds and new sprays.
 - **Death:**
   - freeze the body upright for about 0.4–0.5 s;
@@ -106,6 +122,14 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 - An FOV punch on the beats.
 - Keep it short (3–5 s) so it suits PvP.
 
+## Punch animation (video 16)
+`video16.md` section 5 gives the key poses and timings (at 60 fps) of the jab, the one-two, the heavy straight, the uppercut, the overhand, the spinning back-fist and the push-kick. In short:
+- a load of 2–8 frames held on a pose, then a strike of 2–4 frames reaching full extension on the contact frame (no ease-in);
+- a hitstop of about 4 frames on heavy hits;
+- a torso swing of about 60° and a root lunge of about 0.4–0.6 stud;
+- the off arm countering (back to the chin, or flung back on haymakers);
+- a high, hunched guard.
+
 ## Techniques (Blender tutorials 12-14)
 Videos 12-14 are Blender tutorials. Their `videoN.md` files give the technique step by step (the settings read on screen) and what carries over to Roblox. Roblox has no custom shaders, so what carries over is:
 - the geometry (rounded, smooth-shaded drops; ripple rings);
@@ -115,7 +139,7 @@ Videos 12-14 are Blender tutorials. Their `videoN.md` files give the technique s
 
 ## Adding videos
 The player will send more videos. For each one:
-1. Extract frames at 15 fps (`ffmpeg -i video.mp4 -vf "fps=15,scale=240:-1" f/%04d.png`).
+1. Extract frames at 15 fps (`ffmpeg -i video.mp4 -vf "fps=15,scale=240:-1" f/%04d.png`). For fast fights, also look at every frame of the source (30 fps) round each impact, cropped and enlarged, and measure the frame brightness to time flashes and dimming.
 2. Make contact sheets and watch every frame.
 3. Write `videoN.md` (what it is, attacks, hit VFX, gore, pacing, key takeaways) and add its key sheets here as JPEG.
 4. Update this README.

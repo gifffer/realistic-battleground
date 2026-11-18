@@ -41,6 +41,8 @@ local KitEffects = require(script.Parent.Parent.Combat.KitEffects)
 local KitVFX = require(script.Parent.Parent.Combat.KitVFX)
 local LiverRip = require(script.Parent.Parent.Combat.LiverRip)
 local RiftFx = require(script.Parent.Parent.Combat.RiftFx)
+-- (the finishers' impact layers: flash, light, air ring, dust - no camera)
+local VfxCinematics = require(script.Parent.Parent.Combat.Vfx.Moves.Cinematics)
 local CameraController = require(script.Parent.CameraController)
 local CharacterAnimationController = require(script.Parent.CharacterAnimationController)
 local CombatController = require(script.Parent.CombatController)
@@ -705,10 +707,26 @@ local function playEvent(
 		SoundController.play("VictimPlea", victim)
 	elseif kind == "Swing" then
 		SoundController.play(if cinematic.id == "Bat" then "BatSwing" else "HeavySwing", attacker)
+		-- the swing's trail (the bat, or the Boxer's last left), until the
+		-- blow it leads to lands
+		local lands = event.time + 0.15
+		for _, other in cinematic.events do
+			if other.time > event.time and (other.kind == "Kill" or other.kind == "Gut") then
+				lands = other.time
+				break
+			end
+		end
+		VfxCinematics.swing(
+			attacker,
+			if cinematic.id == "Bat" then "Prop" else "LeftArm",
+			lands - event.time
+		)
 	elseif kind == "Body" or kind == "Stomp" then
 		SoundController.play("BodyShot", victim)
 		if kind == "Body" then
 			impact(attacker, victim, "Torso", 1)
+		else
+			VfxCinematics.stomp(victim) -- (a boot on the chest: dust from under them)
 		end
 		if event.kick then
 			flinchAfterStop(cinematic, kind, victim, event.kick)
@@ -735,6 +753,9 @@ local function playEvent(
 		SoundController.play("BatCrush", victim)
 		SoundController.play("BatImpact", victim)
 		-- it goes all over him, his face too, and the bat comes out red
+		-- the bat's impact on the head: the "Last" stack (flash, light,
+		-- sparks, rings; the camera is the cinematic's), then the gore
+		VfxCinematics.strike(attacker, victim, "Head", "Last", true)
 		local head = victim:FindFirstChild("Head")
 		local from = if head and head:IsA("BasePart")
 			then head.Position
@@ -763,6 +784,7 @@ local function playEvent(
 		end
 	elseif kind == "Pop" then
 		ArmRip.pop(victim)
+		VfxCinematics.pop(victim, "Right Arm") -- (a dull crack: a tiny flash, dark specks)
 	elseif kind == "Tear" then
 		-- (the arm off itself: ArmRip, from the server's "ArmTorn"): the first
 		-- jet hits him full on
