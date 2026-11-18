@@ -1,4 +1,4 @@
-# Sons du Pyromane (à générer)
+# Sons du Pyromane
 
 Chaque son du kit **Pyromane** est fait de **cinq couches** jouées ensemble, chacune avec son propre son dans `src/shared/Sounds.luau` (section *Pyromaniac*, à la fin du fichier) :
 
@@ -10,21 +10,72 @@ Chaque son du kit **Pyromane** est fait de **cinq couches** jouées ensemble, ch
 | `_Sub` | le grave, le poids (on le sent plus qu'on ne l'entend) |
 | `_Tail` | la fin qui s'éteint |
 
-Tant que les `ids` d'une couche sont vides (`{}`), elle est **muette** (aucune erreur). Le jeu joue déjà toutes les couches **au bon moment** (colonne *Début*) et au **bon volume** (le *mix* ci-dessous, déjà mis dans `volume`).
+Une couche dont les `ids` sont vides (`{}`) est **muette** (aucune erreur). Le jeu joue toutes les couches **au bon moment** (colonne *Début* plus bas).
 
-## Comment faire
+## Sons de la boutique Roblox (en place)
+
+Tu ne veux pas générer ni importer les sons toi-même : chaque son du Pyromane utilise donc des **effets sonores gratuits et publics** du *Creator Store* de Roblox (*Toolbox → Audio*), déjà mis dans `src/shared/Sounds.luau`. Il n'y a **rien à faire** : Rojo synchronise, *Play*.
+
+- Presque tous viennent de **Pro Sound Effects** (`ProSoundEffects`, créateur vérifié) : la bibliothèque sous licence que Roblox offre à toutes les expériences. Ce sont des enregistrements réalistes, pas des bruitages de dessin animé.
+- Seules les **boucles** de feu (`PoolFire`, `BodyBurn`) viennent de membres de la communauté : Pro Sound Effects n'a pas de feu qui dure sur la boutique. Si l'une d'elles clique au bouclage ou disparaît (modération), remplace son ID dans `STOCK` (`tools/sounds/pyro_sounds.py`).
+- En général, un seul son par effet, dans la couche `_Body` ; une deuxième couche seulement quand un second son aide vraiment (le verre **et** l'essence qui gicle pour le Molotov, le grésillement de la chair sous le « whoump » du corps). Les autres couches restent vides (muettes). Plusieurs IDs dans une couche = une variante au hasard à chaque fois.
+- `volume` est réglé d'après le niveau de chaque fichier ; *Début coupé* saute le blanc au début du fichier (`start`), *Coupé à* arrête un son trop long avec un fondu rapide (`length`).
+
+| Son | Couche | ID | Nom sur la boutique | Créateur | Durée | Pourquoi | Réglage |
+|---|---|---|---|---|---|---|---|
+| [`ZippoOpen`](#zippoopen) | `_Body` | `9121005566` | Zippo Lighter 1 (SFX) | ProSoundEffects (vérifié) | 0,45 s | le « clink » du couvercle qui s'ouvre, avec son petit tintement | `volume` 1,2 |
+| [`ZippoStrike`](#zippostrike) | `_Body` | `9121005779` | Zippo Lighter 3 (SFX) | ProSoundEffects (vérifié) | 0,7 s | la molette puis le « fff » de la mèche qui prend | `volume` 1,5 |
+| [`ZippoClose`](#zippoclose) | `_Body` | `9121005783` | Zippo Lighter 5 (SFX) | ProSoundEffects (vérifié) | 0,7 s | un « clac » sec, sans tintement : le couvercle refermé | `volume` 0,7 |
+| [`FlameFlare`](#flameflare) | `_Body` | `9125616655` | Kerosene Explosion Whooshing Poofs Crackling | ProSoundEffects (vérifié) | 1,1 s | un « pouf » de kérosène qui s'embrase : la boule de feu courte | `volume` 2,2 |
+|  |  | `9125615451` | Kerosene Explosion Whooshing Poofs Crackling | ProSoundEffects (vérifié) | 1,05 s | variante |  |
+|  |  | `9125616715` | Kerosene Explosion Whooshing Poofs Crackling | ProSoundEffects (vérifié) | 1,2 s | variante, un peu plus longue |  |
+| [`MolotovLight`](#molotovlight) | `_Body` | `9114442370` | Fire Whoosh 13 (SFX) | ProSoundEffects (vérifié) | 0,8 s | petit souffle de feu (torche à kérosène) : le chiffon qui prend, joué un peu plus grave | `volume` 1,4, `pitch` 0,9, début coupé 0,05 s |
+|  |  | `9114446852` | Fire Whoosh 15 (SFX) | ProSoundEffects (vérifié) | 0,8 s | variante |  |
+| [`MolotovThrow`](#molotovthrow) | `_Body` | `9114463219` | Flame Licks 8 (SFX) | ProSoundEffects (vérifié) | 1,7 s | une torche agitée qui passe : la flamme du chiffon qui file | `volume` 1,25, début coupé 0,15 s |
+|  |  | `9114463410` | Flame Licks 10 (SFX) | ProSoundEffects (vérifié) | 1,9 s | variante |  |
+|  |  | `9114463016` | Flame Licks 4 (SFX) | ProSoundEffects (vérifié) | 1,9 s | variante |  |
+| [`MolotovShatter`](#molotovshatter) | `_Transient` | `9113553645` | Bottle Breaks 1 (SFX) | ProSoundEffects (vérifié) | 4,5 s | une grande bouteille en verre (1,2 l) jetée sur du béton (coupée à 2,2 s) | `volume` 1,6, début coupé 0,2 s, coupé à 2,2 s |
+|  |  | `9113552246` | Bottle Breaks 3 (SFX) | ProSoundEffects (vérifié) | 3,2 s | variante |  |
+|  | `_Mechanism` | `9125702439` | Mud Puddle Splash Shallow Water Impacts | ProSoundEffects (vérifié) | 0,9 s | liquide qui gicle sur le sol | `volume` 1,5, `pitch` 0,9 |
+|  |  | `9125702803` | Mud Puddle Splash Shallow Water Impacts | ProSoundEffects (vérifié) | 0,8 s | variante |  |
+| [`FuelIgnite`](#fuelignite) | `_Body` | `9114430091` | Fire Burst 2 (SFX) | ProSoundEffects (vérifié) | 5,8 s | une vague de flammes qui gronde (coupée à 3 s, la flaque prend le relais) | `volume` 0,9, début coupé 0,15 s, coupé à 3 s |
+|  |  | `9114432358` | Fire Burst 11 (SFX) | ProSoundEffects (vérifié) | 5,9 s | variante, plus sourde |  |
+|  | `_Sub` | `9114554567` | Gas Fire Explosion 3 (SFX) | ProSoundEffects (vérifié) | 4 s | le « whoump » grave de l'essence, joué plus bas et court | `volume` 0,35, `pitch` 0,8, coupé à 1,5 s |
+| [`PoolFire`](#poolfire) | `_Body` | `82555625627924` | Fire burning SFX 1 | Obamacaremathlab | 5 s | feu qui brûle, publié « Loopable » (BOUCLE) | `volume` 0,8 |
+|  | `_Mechanism` | `516449725` | Fire Crackling | KittyNebulaPlays | 8 s | crépitement de feu, très bas : du grain sous la flaque (BOUCLE) | `volume` 0,3 |
+| [`FuelSwig`](#fuelswig) | `_Body` | `9114171960` | Drinking Cu Gulping 5 (SFX) | ProSoundEffects (vérifié) | 0,9 s | une gorgée bue de près | `volume` 2,5, début coupé 0,05 s |
+|  |  | `9114172109` | Drinking Cu Gulping 6 (SFX) | ProSoundEffects (vérifié) | 1,2 s | variante |  |
+| [`FireBreath`](#firebreath) | `_Body` | `9114446277` | Fire Whoosh 6 (SFX) | ProSoundEffects (vérifié) | 1,5 s | jet de kérosène à travers une torche (« usage : lance-flammes ») : c'est ce que fait un cracheur de feu | `volume` 1,6, début coupé 0,15 s |
+|  |  | `9117987278` | Pyro Fire Ball Burst 12 (SFX) | ProSoundEffects (vérifié) | 1,2 s | jet de feu court (effets pyrotechniques de cinéma) |  |
+| [`FuelSplash`](#fuelsplash) | `_Body` | `9125702439` | Mud Puddle Splash Shallow Water Impacts | ProSoundEffects (vérifié) | 0,9 s | liquide qui gicle sur le sol | `volume` 2,2 |
+|  |  | `9125702803` | Mud Puddle Splash Shallow Water Impacts | ProSoundEffects (vérifié) | 0,8 s | variante |  |
+|  | `_Mechanism` | `9126173160` | Water Burst Movement Out Of Liquid Splashing | ProSoundEffects (vérifié) | 6,6 s | le liquide qui part d'un coup (coupé à 1 s) | `volume` 1,2, coupé à 1 s |
+| [`BodyBurn`](#bodyburn) | `_Body` | `140718666763137` | fire_burning1 | Loyalist6283 | 5 s | feu qui brûle de près (BOUCLE) | `volume` 0,8 |
+|  | `_Mechanism` | `9079463756` | Fire Crackling | Vults_x | 8 s | crépitement enregistré dans une cheminée : les vêtements qui crépitent (BOUCLE) | `volume` 0,3 |
+| [`SelfIgnite`](#selfignite) | `_Body` | `9117987278` | Pyro Fire Ball Burst 12 (SFX) | ProSoundEffects (vérifié) | 1,2 s | jet de feu court (effets pyrotechniques de cinéma) | `volume` 1,6, début coupé 0,2 s |
+|  |  | `9117983605` | Pyro Fire Ball Burst 9 (SFX) | ProSoundEffects (vérifié) | 1,5 s | variante, plus forte |  |
+| [`FuelPour`](#fuelpour) | `_Body` | `9120575856` | Water Pour 1 (SFX) | ProSoundEffects (vérifié) | 3,6 s | un liquide versé qui éclabousse du béton (coupé à 1,2 s) | `volume` 2,5, début coupé 0,05 s, coupé à 1,2 s |
+| [`CanThrow`](#canthrow) | `_Body` | `9116536883` | Metal Can Large Sized Hit Drop 1 (SFX) | ProSoundEffects (vérifié) | 3,1 s | un grand bidon de métal vide qui tombe et sonne creux (coupé à 2 s) | `volume` 0,6, coupé à 2 s |
+| [`ZippoDrop`](#zippodrop) | `_Body` | `9114462912` | Flame Licks 2 (SFX) | ProSoundEffects (vérifié) | 1,6 s | une petite flamme qui passe : le Zippo allumé qui tombe, joué plus aigu | `volume` 0,9, `pitch` 1,15, début coupé 0,15 s |
+| [`BodyIgnite`](#bodyignite) | `_Body` | `9114554766` | Gas Fire Explosion 4 (SFX) | ProSoundEffects (vérifié) | 4,2 s | l'essence qui s'embrase d'un coup, rugissante (coupée à 2,5 s) | `volume` 0,75, coupé à 2,5 s |
+|  | `_Tail` | `9119165650` | Sizzle Short And Explosive Sear 4 (SFX) | ProSoundEffects (vérifié) | 1,4 s | une saisie qui grésille : la chair et le tissu qui brûlent | `volume` 1, début coupé 0,15 s |
+| [`BurnScream`](#burnscream) | `_Body` | `9116454870` | Male Screams In Pain Injury Yells Agony 1 (SFX) | ProSoundEffects (vérifié) | 2,4 s | un homme qui hurle de douleur (coupé à 1,4 s) | `volume` 1,3, début coupé 0,05 s, coupé à 1,4 s |
+|  |  | `9125652466` | Male Scream Short Yelling Bursts Death Cries | ProSoundEffects (vérifié) | 1,4 s | cri d'agonie bref |  |
+|  |  | `9125652432` | Male Scream Short Yelling Bursts Death Cries | ProSoundEffects (vérifié) | 1,1 s | variante |  |
+
+> Les sons de la communauté ont été choisis sur leur nom et leur description (on ne peut pas les télécharger sans compte) ; ceux de Pro Sound Effects ont été vérifiés sur leur forme d'onde (durée, attaque, blanc au début, niveau). Si un son ne te plaît pas en jeu, dis-le : on en prend un autre.
+
+## Plus tard (optionnel) : générer ses propres sons
+
+Pas nécessaire : les sons de la boutique ci-dessus suffisent. Mais pour un son encore plus précis, chaque fiche plus bas donne un design en cinq couches et un **prompt** prêt à coller dans un générateur audio.
+
 1. Pour chaque son, copie le **prompt** de chaque couche (en anglais) dans ton générateur audio. Un fichier par couche.
 2. Coupe le silence au début du fichier (sinon la couche arrive en retard).
 3. Les sons marqués **BOUCLE** doivent boucler sans clic : coupe-les sur un passage à zéro et fais un fondu enchaîné début / fin.
-4. Importe-les (*Creator Hub → Creations → Audio → Upload*), copie chaque ID et mets-le dans `ids` de la bonne entrée, par exemple :
-
-```lua
-ZippoOpen_Transient = { ids = { 1234567890 }, volume = 0.63, pitch = 1, pitchVariation = 0.06 },
-```
-
+4. Importe-les (*Creator Hub → Creations → Audio → Upload*), copie chaque ID et mets-le dans `STOCK` (`tools/sounds/pyro_sounds.py`) à la place de celui de la boutique, puis lance `python3 tools/sounds/pyro_sounds.py --write`.
 5. Rojo synchronise, *Play*. Si une couche est trop forte ou faible, change seulement son `volume`.
 
-> Le texte de départ de chaque fiche est exactement ta demande (le *brief*) ; la suite en est la réponse. Ces fichiers (`Sounds.luau` section Pyromane, `SoundCues.luau`, ce document) sont générés par `tools/sounds/pyro_sounds.py` : pour changer un design, change-le là puis lance `python3 tools/sounds/pyro_sounds.py --write` (les IDs déjà remplis sont gardés).
+> Le texte de départ de chaque fiche est exactement ta demande (le *brief*) ; la suite en est la réponse. Ces fichiers (`Sounds.luau` section Pyromane, `SoundCues.luau`, ce document) sont générés par `tools/sounds/pyro_sounds.py` : pour changer un design ou un ID, change-le là puis lance `python3 tools/sounds/pyro_sounds.py --write`.
 
 ## La liste
 
@@ -93,11 +144,11 @@ Tiny metallic ring decaying in a small room, very short natural reverb tail only
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `ZippoOpen_Transient` | -4 dB | 0.63 |
-| `ZippoOpen_Mechanism` | -7 dB | 0.45 |
-| `ZippoOpen_Body` | -12 dB | 0.25 |
-| `ZippoOpen_Sub` | -20 dB | 0.1 |
-| `ZippoOpen_Tail` | -18 dB | 0.13 |
+| `ZippoOpen_Transient` | -4 dB | 0.63 (vide : muette) |
+| `ZippoOpen_Mechanism` | -7 dB | 0.45 (vide : muette) |
+| `ZippoOpen_Body` | -12 dB | 1.2 (boutique) |
+| `ZippoOpen_Sub` | -20 dB | 0.1 (vide : muette) |
+| `ZippoOpen_Tail` | -18 dB | 0.13 (vide : muette) |
 
 Le son entier est à -4 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -144,11 +195,11 @@ Small steady lighter flame fluttering gently in still air, soft breathy flicker 
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `ZippoStrike_Transient` | -4 dB | 0.63 |
-| `ZippoStrike_Mechanism` | -8 dB | 0.4 |
-| `ZippoStrike_Body` | -6 dB | 0.5 |
-| `ZippoStrike_Sub` | -18 dB | 0.13 |
-| `ZippoStrike_Tail` | -16 dB | 0.16 |
+| `ZippoStrike_Transient` | -4 dB | 0.63 (vide : muette) |
+| `ZippoStrike_Mechanism` | -8 dB | 0.4 (vide : muette) |
+| `ZippoStrike_Body` | -6 dB | 1.5 (boutique) |
+| `ZippoStrike_Sub` | -18 dB | 0.13 (vide : muette) |
+| `ZippoStrike_Tail` | -16 dB | 0.16 (vide : muette) |
 
 Le son entier est à -4 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -195,11 +246,11 @@ Tiny puff of a small flame being smothered under a metal lid, short soft hiss cu
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `ZippoClose_Transient` | -5 dB | 0.56 |
-| `ZippoClose_Mechanism` | -10 dB | 0.32 |
-| `ZippoClose_Body` | -14 dB | 0.2 |
-| `ZippoClose_Sub` | -23 dB | 0.07 |
-| `ZippoClose_Tail` | -17 dB | 0.14 |
+| `ZippoClose_Transient` | -5 dB | 0.56 (vide : muette) |
+| `ZippoClose_Mechanism` | -10 dB | 0.32 (vide : muette) |
+| `ZippoClose_Body` | -14 dB | 0.7 (boutique) |
+| `ZippoClose_Sub` | -23 dB | 0.07 (vide : muette) |
+| `ZippoClose_Tail` | -17 dB | 0.14 (vide : muette) |
 
 Le son entier est à -5 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -246,11 +297,11 @@ Small burning droplets crackling and sizzling as they die out, sparse pops fadin
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `FlameFlare_Transient` | -5 dB | 0.56 |
-| `FlameFlare_Mechanism` | -7 dB | 0.45 |
-| `FlameFlare_Body` | -1 dB | 0.89 |
-| `FlameFlare_Sub` | -11 dB | 0.28 |
-| `FlameFlare_Tail` | -13 dB | 0.22 |
+| `FlameFlare_Transient` | -5 dB | 0.56 (vide : muette) |
+| `FlameFlare_Mechanism` | -7 dB | 0.45 (vide : muette) |
+| `FlameFlare_Body` | -1 dB | 2.2 (boutique) |
+| `FlameFlare_Sub` | -11 dB | 0.28 (vide : muette) |
+| `FlameFlare_Tail` | -13 dB | 0.22 (vide : muette) |
 
 Le son entier est à -1 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -297,11 +348,11 @@ Small rag flame burning and fluttering on a bottle neck, soft roar with light cr
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `MolotovLight_Transient` | -9 dB | 0.35 |
-| `MolotovLight_Mechanism` | -9 dB | 0.35 |
-| `MolotovLight_Body` | -3 dB | 0.71 |
-| `MolotovLight_Sub` | -17 dB | 0.14 |
-| `MolotovLight_Tail` | -12 dB | 0.25 |
+| `MolotovLight_Transient` | -9 dB | 0.35 (vide : muette) |
+| `MolotovLight_Mechanism` | -9 dB | 0.35 (vide : muette) |
+| `MolotovLight_Body` | -3 dB | 1.4 (boutique) |
+| `MolotovLight_Sub` | -17 dB | 0.14 (vide : muette) |
+| `MolotovLight_Tail` | -12 dB | 0.25 (vide : muette) |
 
 Le son entier est à -3 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -348,11 +399,11 @@ Fluttering flame receding into the distance, fading fire flutter, isolated, 1 se
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `MolotovThrow_Transient` | -7 dB | 0.45 |
-| `MolotovThrow_Mechanism` | -12 dB | 0.25 |
-| `MolotovThrow_Body` | -3 dB | 0.71 |
-| `MolotovThrow_Sub` | -19 dB | 0.11 |
-| `MolotovThrow_Tail` | -15 dB | 0.18 |
+| `MolotovThrow_Transient` | -7 dB | 0.45 (vide : muette) |
+| `MolotovThrow_Mechanism` | -12 dB | 0.25 (vide : muette) |
+| `MolotovThrow_Body` | -3 dB | 1.25 (boutique) |
+| `MolotovThrow_Sub` | -19 dB | 0.11 (vide : muette) |
+| `MolotovThrow_Tail` | -15 dB | 0.18 (vide : muette) |
 
 Le son entier est à -3 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -399,11 +450,11 @@ Last few glass fragments settling with sparse tinkles, a little liquid trickling
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `MolotovShatter_Transient` | +0 dB | 1.0 |
-| `MolotovShatter_Mechanism` | -5 dB | 0.56 |
-| `MolotovShatter_Body` | -3 dB | 0.71 |
-| `MolotovShatter_Sub` | -10 dB | 0.32 |
-| `MolotovShatter_Tail` | -14 dB | 0.2 |
+| `MolotovShatter_Transient` | +0 dB | 1.6 (boutique) |
+| `MolotovShatter_Mechanism` | -5 dB | 1.5 (boutique) |
+| `MolotovShatter_Body` | -3 dB | 0.71 (vide : muette) |
+| `MolotovShatter_Sub` | -10 dB | 0.32 (vide : muette) |
+| `MolotovShatter_Tail` | -14 dB | 0.2 (vide : muette) |
 
 Le son entier est à +0 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -450,11 +501,11 @@ A large fire roar settling down into a steady crackling burn, fading, isolated, 
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `FuelIgnite_Transient` | -2 dB | 0.79 |
-| `FuelIgnite_Mechanism` | -6 dB | 0.5 |
-| `FuelIgnite_Body` | +0 dB | 1.0 |
-| `FuelIgnite_Sub` | -4 dB | 0.63 |
-| `FuelIgnite_Tail` | -8 dB | 0.4 |
+| `FuelIgnite_Transient` | -2 dB | 0.79 (vide : muette) |
+| `FuelIgnite_Mechanism` | -6 dB | 0.5 (vide : muette) |
+| `FuelIgnite_Body` | +0 dB | 0.9 (boutique) |
+| `FuelIgnite_Sub` | -4 dB | 0.35 (boutique) |
+| `FuelIgnite_Tail` | -8 dB | 0.4 (vide : muette) |
 
 Le son entier est à +0 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -501,11 +552,11 @@ Seamless loop of air being drawn into a fire, soft breathy flutter like gentle w
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `PoolFire_Transient` | -11 dB | 0.28 |
-| `PoolFire_Mechanism` | -13 dB | 0.22 |
-| `PoolFire_Body` | -3 dB | 0.71 |
-| `PoolFire_Sub` | -13 dB | 0.22 |
-| `PoolFire_Tail` | -17 dB | 0.14 |
+| `PoolFire_Transient` | -11 dB | 0.28 (vide : muette) |
+| `PoolFire_Mechanism` | -13 dB | 0.3 (boutique) |
+| `PoolFire_Body` | -3 dB | 0.8 (boutique) |
+| `PoolFire_Sub` | -13 dB | 0.22 (vide : muette) |
+| `PoolFire_Tail` | -17 dB | 0.14 (vide : muette) |
 
 Le son entier est à -3 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -552,11 +603,11 @@ Short tense exhale through the nose, breathy, close-miked, isolated, 0.4 seconds
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `FuelSwig_Transient` | -10 dB | 0.32 |
-| `FuelSwig_Mechanism` | -12 dB | 0.25 |
-| `FuelSwig_Body` | -6 dB | 0.5 |
-| `FuelSwig_Sub` | -22 dB | 0.08 |
-| `FuelSwig_Tail` | -18 dB | 0.13 |
+| `FuelSwig_Transient` | -10 dB | 0.32 (vide : muette) |
+| `FuelSwig_Mechanism` | -12 dB | 0.25 (vide : muette) |
+| `FuelSwig_Body` | -6 dB | 2.5 (boutique) |
+| `FuelSwig_Sub` | -22 dB | 0.08 (vide : muette) |
+| `FuelSwig_Tail` | -18 dB | 0.13 (vide : muette) |
 
 Le son entier est à -6 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -603,11 +654,11 @@ A jet of flame curling up and dying out in the air, rolling flutter with crackle
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `FireBreath_Transient` | -4 dB | 0.63 |
-| `FireBreath_Mechanism` | -8 dB | 0.4 |
-| `FireBreath_Body` | +0 dB | 1.0 |
-| `FireBreath_Sub` | -6 dB | 0.5 |
-| `FireBreath_Tail` | -10 dB | 0.32 |
+| `FireBreath_Transient` | -4 dB | 0.63 (vide : muette) |
+| `FireBreath_Mechanism` | -8 dB | 0.4 (vide : muette) |
+| `FireBreath_Body` | +0 dB | 1.6 (boutique) |
+| `FireBreath_Sub` | -6 dB | 0.5 (vide : muette) |
+| `FireBreath_Tail` | -10 dB | 0.32 (vide : muette) |
 
 Le son entier est à +0 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -654,11 +705,11 @@ Liquid dripping from clothes onto concrete, scattered drips and a small trickle,
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `FuelSplash_Transient` | -5 dB | 0.56 |
-| `FuelSplash_Mechanism` | -10 dB | 0.32 |
-| `FuelSplash_Body` | -2 dB | 0.79 |
-| `FuelSplash_Sub` | -14 dB | 0.2 |
-| `FuelSplash_Tail` | -16 dB | 0.16 |
+| `FuelSplash_Transient` | -5 dB | 0.56 (vide : muette) |
+| `FuelSplash_Mechanism` | -10 dB | 1.2 (boutique) |
+| `FuelSplash_Body` | -2 dB | 2.2 (boutique) |
+| `FuelSplash_Sub` | -14 dB | 0.2 (vide : muette) |
+| `FuelSplash_Tail` | -16 dB | 0.16 (vide : muette) |
 
 Le son entier est à -2 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -705,11 +756,11 @@ Seamless loop of a wet sizzle, like meat on a hot grill, continuous steam hiss, 
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `BodyBurn_Transient` | -13 dB | 0.22 |
-| `BodyBurn_Mechanism` | -11 dB | 0.28 |
-| `BodyBurn_Body` | -3 dB | 0.71 |
-| `BodyBurn_Sub` | -15 dB | 0.18 |
-| `BodyBurn_Tail` | -17 dB | 0.14 |
+| `BodyBurn_Transient` | -13 dB | 0.22 (vide : muette) |
+| `BodyBurn_Mechanism` | -11 dB | 0.3 (boutique) |
+| `BodyBurn_Body` | -3 dB | 0.8 (boutique) |
+| `BodyBurn_Sub` | -15 dB | 0.18 (vide : muette) |
+| `BodyBurn_Tail` | -17 dB | 0.14 (vide : muette) |
 
 Le son entier est à -3 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -756,11 +807,11 @@ Fire burning on fists and forearms, fluttering roar with crackle settling to ste
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `SelfIgnite_Transient` | -6 dB | 0.5 |
-| `SelfIgnite_Mechanism` | -6 dB | 0.5 |
-| `SelfIgnite_Body` | +0 dB | 1.0 |
-| `SelfIgnite_Sub` | -8 dB | 0.4 |
-| `SelfIgnite_Tail` | -10 dB | 0.32 |
+| `SelfIgnite_Transient` | -6 dB | 0.5 (vide : muette) |
+| `SelfIgnite_Mechanism` | -6 dB | 0.5 (vide : muette) |
+| `SelfIgnite_Body` | +0 dB | 1.6 (boutique) |
+| `SelfIgnite_Sub` | -8 dB | 0.4 (vide : muette) |
+| `SelfIgnite_Tail` | -10 dB | 0.32 (vide : muette) |
 
 Le son entier est à +0 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -807,11 +858,11 @@ Last drips of liquid from a can spout landing on fabric and concrete, the stream
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `FuelPour_Transient` | -6 dB | 0.5 |
-| `FuelPour_Mechanism` | -8 dB | 0.4 |
-| `FuelPour_Body` | -2 dB | 0.79 |
-| `FuelPour_Sub` | -16 dB | 0.16 |
-| `FuelPour_Tail` | -14 dB | 0.2 |
+| `FuelPour_Transient` | -6 dB | 0.5 (vide : muette) |
+| `FuelPour_Mechanism` | -8 dB | 0.4 (vide : muette) |
+| `FuelPour_Body` | -2 dB | 2.5 (boutique) |
+| `FuelPour_Sub` | -16 dB | 0.16 (vide : muette) |
+| `FuelPour_Tail` | -14 dB | 0.2 (vide : muette) |
 
 Le son entier est à -2 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -858,11 +909,11 @@ Metal can skidding to a stop on concrete with a little liquid sloshing inside, i
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `CanThrow_Transient` | -4 dB | 0.63 |
-| `CanThrow_Mechanism` | -10 dB | 0.32 |
-| `CanThrow_Body` | -8 dB | 0.4 |
-| `CanThrow_Sub` | -16 dB | 0.16 |
-| `CanThrow_Tail` | -16 dB | 0.16 |
+| `CanThrow_Transient` | -4 dB | 0.63 (vide : muette) |
+| `CanThrow_Mechanism` | -10 dB | 0.32 (vide : muette) |
+| `CanThrow_Body` | -8 dB | 0.6 (boutique) |
+| `CanThrow_Sub` | -16 dB | 0.16 (vide : muette) |
+| `CanThrow_Tail` | -16 dB | 0.16 (vide : muette) |
 
 Le son entier est à -4 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -909,11 +960,11 @@ Tiny flame licking at a fuel-soaked fabric, a short rising hiss right before ign
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `ZippoDrop_Transient` | -6 dB | 0.5 |
-| `ZippoDrop_Mechanism` | -12 dB | 0.25 |
-| `ZippoDrop_Body` | -12 dB | 0.25 |
-| `ZippoDrop_Sub` | -20 dB | 0.1 |
-| `ZippoDrop_Tail` | -16 dB | 0.16 |
+| `ZippoDrop_Transient` | -6 dB | 0.5 (vide : muette) |
+| `ZippoDrop_Mechanism` | -12 dB | 0.25 (vide : muette) |
+| `ZippoDrop_Body` | -12 dB | 0.9 (boutique) |
+| `ZippoDrop_Sub` | -20 dB | 0.1 (vide : muette) |
+| `ZippoDrop_Tail` | -16 dB | 0.16 (vide : muette) |
 
 Le son entier est à -6 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -960,11 +1011,11 @@ A fire roar settling into a steady crackling burn of clothes, fading, isolated, 
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `BodyIgnite_Transient` | -2 dB | 0.79 |
-| `BodyIgnite_Mechanism` | -5 dB | 0.56 |
-| `BodyIgnite_Body` | +0 dB | 1.0 |
-| `BodyIgnite_Sub` | -4 dB | 0.63 |
-| `BodyIgnite_Tail` | -8 dB | 0.4 |
+| `BodyIgnite_Transient` | -2 dB | 0.79 (vide : muette) |
+| `BodyIgnite_Mechanism` | -5 dB | 0.56 (vide : muette) |
+| `BodyIgnite_Body` | +0 dB | 0.75 (boutique) |
+| `BodyIgnite_Sub` | -4 dB | 0.63 (vide : muette) |
+| `BodyIgnite_Tail` | -8 dB | 1.0 (boutique) |
 
 Le son entier est à +0 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
@@ -1011,11 +1062,11 @@ A scream breaking into a rasping wheeze and stopping, voice giving out, isolated
 
 | Couche | Niveau | `volume` |
 |---|---|---|
-| `BurnScream_Transient` | -5 dB | 0.56 |
-| `BurnScream_Mechanism` | -9 dB | 0.35 |
-| `BurnScream_Body` | -1 dB | 0.89 |
-| `BurnScream_Sub` | -15 dB | 0.18 |
-| `BurnScream_Tail` | -9 dB | 0.35 |
+| `BurnScream_Transient` | -5 dB | 0.56 (vide : muette) |
+| `BurnScream_Mechanism` | -9 dB | 0.35 (vide : muette) |
+| `BurnScream_Body` | -1 dB | 1.3 (boutique) |
+| `BurnScream_Sub` | -15 dB | 0.18 (vide : muette) |
+| `BurnScream_Tail` | -9 dB | 0.35 (vide : muette) |
 
 Le son entier est à -1 dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). Le *Sub* reste bas : il doit donner du poids, pas du bruit.
 
