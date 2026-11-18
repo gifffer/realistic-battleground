@@ -763,7 +763,8 @@ return table.freeze({
 		-- Chances of each event (they don't need to add up to 100). Rain is likelier at
 		-- night; a power cut only happens at night (and at most once per night).
 		WEIGHTS_DAY = table.freeze({ Rain = 40, Fog = 30, Nothing = 30 }),
-		WEIGHTS_NIGHT = table.freeze({ Rain = 55, Fog = 20, PowerCut = 25, Nothing = 15 }),
+		-- (PowerCut = 0: no power cuts for now; put 25 back to have them.)
+		WEIGHTS_NIGHT = table.freeze({ Rain = 55, Fog = 20, PowerCut = 0, Nothing = 15 }),
 
 		-- RAIN: lasts 2 to 4 min. The rain grows for RAMP_IN, fades over RAMP_OUT.
 		RAIN_DURATION = NumberRange.new(120, 240),
