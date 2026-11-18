@@ -279,12 +279,16 @@ local function onKillFeed(
 
 	local killerName = if typeof(killer) == "string" then killer else nil
 	local finished = kind == "Finished"
+	local train = kind == "Train" -- (the city's train: Knockout.killByEnvironment)
 	if killerName then
-		eyebrow.Text = if finished then "Finished by" else "Eliminated by"
+		eyebrow.Text = if finished
+			then "Finished by"
+			elseif train then "Thrown under a train by"
+			else "Eliminated by"
 		title.Text = killerName
 	else
 		eyebrow.Text = "Eliminated"
-		title.Text = "You died"
+		title.Text = if train then "Hit by a train" else "You died"
 	end
 	local level = if typeof(killerLevel) == "number" and killerName then killerLevel else nil
 	levelLabel.Text = if level then `Lv {math.floor(level)}` else ""
