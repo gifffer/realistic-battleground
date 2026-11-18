@@ -139,7 +139,7 @@ dernier qui l'a frappé gagne le kill.
 | U2 | Prendre un coup | La ligne de vie baisse, un petit morceau rouge s'efface juste après, le chiffre flashe rouge, l'image perd ses couleurs un instant. |
 | U3 | Courir jusqu'à 0 | La ligne d'endurance devient rouge et pulse, le texte dit **WINDED**. En garde (F) il dit **GUARD**. |
 | U4 | Parer / se faire briser la garde | Petit mot espacé à côté de l'épaule avec un trait (PARRY, GUARD BREAK en rouge si c'est ta garde). Plus de contours bleus/jaunes. |
-| U5 | Cliquer « — MENU » à gauche | Le monde se floute et se désature, liste « 01 SETTINGS », panneau avec grand titre, OFF / ON souligné, touche LEFT CTRL. « — CLOSE » referme. |
+| U5 | Cliquer le bouton **MENU** à gauche | Le monde se floute et se désature, liste « 01 KITS »…, panneau avec grand titre, boutons OFF / ON, touche LEFT CTRL. **CLOSE** referme. |
 | U6 | Kill feed | Lignes de texte simples en haut à droite sur un léger fond sombre, ton nom en gras blanc avec un petit trait, l'âge de la ligne à droite. |
 
 ## Réactions aux coups (`feature/hit-reactions`)
@@ -202,7 +202,7 @@ Les touches **1 2 3 4** lancent les attaques du kit, **G** l'Awakening quand la 
 ### Menu Kits
 | # | Test | Résultat attendu |
 |---|---|---|
-| M1 | « — MENU » | La liste montre **01 KITS**, **02 SETTINGS** ; le menu s'ouvre sur KITS. |
+| M1 | Bouton **MENU** | La liste montre **01 KITS**, **02 SETTINGS** ; le menu s'ouvre sur KITS. |
 | M2 | KITS | À gauche **STREET BRAWLER** (EQUIPPED) et **BOXER** (NOT AVAILABLE YET). À droite : les 4 moves avec endurance, recharge et leur version Street Fury (petit tiret rouge), puis la ligne **G STREET FURY 10 s**. |
 | M3 | Cliquer BOXER | Sa fiche s'affiche (pas encore jouable, pas de bouton EQUIP). |
 | M4 | Cliquer une ligne de la barre de moves (curseur libre : Ctrl gauche) | Le move part, comme avec la touche. |
@@ -215,7 +215,7 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la jambe gauche. |
+| B1 | Se faire frapper aux jambes (à 2 joueurs : Dirty Kick ×4–5, ou M1 visés bas) | Après **25 dégâts aux jambes** : tu **boites** (marche sur la bonne jambe, plus lent −25 %), pas de sprint, la ligne d'endurance dit **LIMPING**. À l'arrêt, le poids est sur la **bonne** jambe (voir B9–B13). |
 | B2 | Faire un kill en boitant | La boiterie **disparaît** (le kill soigne toutes les blessures). |
 | B3 | Frapper le Dummy plusieurs fois à la tête / au torse / aux jambes | Des **petites marques sombres** (bleus, coupure au sourcil) apparaissent là où il a été touché (3 max par partie). Elles partent à sa mort. |
 | B4 | 4ᵉ M1 visé à la **tête** | L'adversaire **saigne** un peu (3 s), même sans bouteille. |
@@ -223,6 +223,11 @@ utilisent les sons de coups existants (plus graves / aigus). Tu peux mettre tes 
 | B6 | Rester **10 s sans être touché** sous 25 PV | La vie remonte doucement (1 PV/s) **jusqu'à 25**, pas plus. Pas pendant un saignement. |
 | B7 | Être KO | Les effets faible vie s'arrêtent (l'écran KO prend le relais). |
 | B8 | Se faire frapper **à 70 PV ou moins** | Le perso pousse un **cri de douleur** (3 sons au hasard), entendu par tout le monde. |
+| B9 | Boiter (B1), marcher droit devant, regarder de profil depuis un 2ᵉ joueur | Boiterie **réaliste** (démarche antalgique) : le pied blessé **touche le sol à chaque pas**, posé à plat et prudemment, mais **très peu de temps** ; le corps retombe vite sur la bonne jambe (petite **chute de la tête** à ce moment), qui porte le poids longtemps. Rythme irrégulier « tac-TAAAC ». Jamais de jambe levée en l'air (« flamant rose »). |
+| B10 | Même chose, de face | Pendant l'appui sur la jambe blessée le buste **penche au-dessus d'elle** ; puis il repasse au-dessus de la bonne jambe. La jambe blessée avance **raide** avec la hanche qui monte et un petit arc vers l'extérieur. Bras qui balancent peu, celui du côté blessé un peu écarté. |
+| B11 | S'arrêter en boitant | Debout : bassin et poids **sur la bonne jambe**, le pied blessé **posé au sol** un peu en avant (genou souple), **main sur la cuisse blessée**. De temps en temps le perso **teste** sa jambe blessée, grimace (tête qui baisse) et repasse vite sur la bonne. Les pieds **ne glissent pas** pendant l'idle. |
+| B12 | Se faire boiter par des coups sur la jambe **gauche** (frappé de son côté gauche), puis sur la **droite** (autre vie) | La boiterie est du **bon côté** : c'est la jambe la plus touchée qui est ménagée (animation en miroir). Les autres joueurs voient le même côté. Si l'**autre** jambe prend ensuite plus de coups (même vie), la boiterie **change de côté** (fondu, pas de saut). |
+| B13 | Boiter puis ralentir / accélérer (marche normale, ralenti par un coup au tibia) | Les pas suivent la vitesse réelle (pas de patinage marqué), **même très lentement** : boiter en **bloquant** ou **étourdi** donne des petits pas lents, pas des jambes qui moulinent ; vitesse en boitant = **75 %** de la marche, pas de sprint. Accroupi en boitant : marche accroupie normale. |
 
 Sous 25 PV tu entends aussi le **battement de cœur** et la **respiration** (seulement toi).
 
@@ -343,10 +348,16 @@ Mettre un adversaire KO (le Dummy suffit), se placer devant, **clic gauche**.
 
 | # | Test | Résultat attendu |
 |---|---|---|
-| F1 | **Street Brawler** sur un KO (couché **ou resté debout**) — **ré-importer `WoundKit` avant** | Bandes noires. La victime est allongée sur le dos devant lui, tête vers lui. Plan large de côté : le corps au sol, le perso sort une **grosse batte**. Gros plan sur la victime (vue de sa gauche) qui lève la tête et tend la main en suppliant (on l'entend) ; le bras ne bouche pas l'image. Plan du sol : comme au **golf**, à deux mains, il aligne la batte sur la tête, l'arme en arrière vers sa droite, puis **balaie** la tête au ras du sol de sa droite vers sa gauche et finit la batte au-dessus de l'épaule gauche. Plan de côté tenu : la **tête explose** en vraies pièces — morceaux de crâne (peau dehors, os dedans), cerveau, yeux, dents ; gerbe de sang, fine brume ; au sol, une éclaboussure et des traînées **sur le sol, jamais sur le corps**. Il reste la vraie mâchoire du bas avec ses dents, la peau du menton déchirée, les vertèbres ; le cou gicle par saccades, une flaque s'étend. Caméra normale ensuite (~3,3 s). |
-| F2 | **Boxer** sur un KO — **ré-importer `WoundKit` avant** | Il **relève** l'adversaire, deux coups au corps, crochet droit, crochet gauche, direct (la tête part d'un côté puis de l'autre, un peu de sang). Puis un **crochet du gauche dans son flanc droit, sous les côtes** : le poing rentre (craquement, ton son du coup final, gerbe de sang, éclats de côte), fouille, et **arrache le vrai foie** (avec la vésicule verte). Il le tient **à bout de bras** sur le côté, il dégouline, il le regarde (plan de face, bien visible) ; la victime s'effondre, un **trou** dans le flanc droit avec des **côtes cassées** dedans, à travers le t-shirt, qui gicle par saccades, flaque dessous. Il **ouvre la main : le foie tombe** au sol (plan bas), bruit mouillé et éclaboussure quand il touche le sol. ~4,1 s. |
+| F1 | **Street Brawler** sur un KO (couché **ou resté debout**) — **ré-importer `WoundKit` avant** | Bandes noires. La victime est allongée sur le dos devant lui, tête vers lui. Plan large de côté : le corps au sol, le perso sort une **batte de taille réelle** (~0,85 m). Gros plan sur la victime (vue de sa gauche) qui lève la tête et tend la main en suppliant (on l'entend) ; le bras ne bouche pas l'image. Plan du sol : comme au **golf**, à deux mains, il aligne la batte sur la tête, l'arme en arrière vers sa droite, puis **balaie** la tête au ras du sol de sa droite vers sa gauche (coup à **2,62 s**) et finit en **fin de swing haute**, tourné vers la cible, la batte **derrière sa tête**. Plan de côté tenu : la **tête explose** en vraies pièces — morceaux de crâne (peau dehors, os dedans), cerveau, yeux, dents ; gerbe de sang, fine brume ; au sol, une éclaboussure et des traînées **sur le sol, jamais sur le corps**. Il reste la vraie mâchoire du bas avec ses dents, la peau du menton déchirée, les vertèbres ; le cou gicle par saccades, une flaque s'étend. Caméra normale ensuite (~4,5 s ; la provocation et le ralenti : section « Finisher batte plus spectaculaire » en bas). |
+| F2 | **Boxer** sur un KO — **ré-importer `WoundKit` avant** | Il **relève** l'adversaire, deux coups au corps, crochet droit, crochet gauche, direct (la tête part d'un côté puis de l'autre, un peu de sang). Il **s'enroule** (bas, poing gauche loin derrière, un temps d'arrêt) puis un **crochet du gauche dans son flanc droit, sous les côtes** : le poing rentre (craquement, ton son du coup final, gerbe de sang, éclats de côte), fouille, **tourne**, et **arrache le vrai foie** (avec la vésicule verte). Il le tient **à bout de bras** sur le côté, il dégouline, il le regarde, le **serre** ; la victime s'effondre, un **trou** dans le flanc droit avec des **côtes cassées** dedans, à travers le t-shirt, qui gicle par saccades, flaque dessous. Il **ouvre la main : le foie tombe** au sol, bruit mouillé et éclaboussure quand il touche le sol. ~4,1 s. |
+| F2-cam | Boxer : **pas de caméra de cinématique** — à tester en **3ᵉ personne** puis en **1ʳᵉ personne** (Paramètres), côté tueur **et** côté victime | **Aucune bande noire, aucun plan** : chacun garde **sa propre caméra**, comme avant le finisher (3ᵉ personne sur l'épaule ou 1ʳᵉ personne), et peut toujours la **tourner à la souris** ; le perso, lui, **ne tourne pas** avec la caméra (il reste face à la victime). Seule chose en plus : **petites secousses** sur les coups. En **1ʳᵉ personne**, le Boxer **voit ses deux bras** (les coups, le foie dans son poing ; un bras qui passerait dans la caméra est caché), mais **pas** le reste de son corps (pas de tête/torse devant l'écran). **Après** le finisher : même caméra qu'avant, même champ de vision (pas de zoom resté), en 1ʳᵉ personne **les bras redeviennent invisibles**, le perso tourne de nouveau avec la caméra, on peut attaquer. |
+| F2a | Boxer : les coups (vus depuis sa propre caméra, tueur ou victime) | Chaque coup **fige l'image une fraction de seconde** (hit-stop : les **deux corps** s'arrêtent ensemble — la victime ne bouge plus non plus, la petite secousse de l'image reste figée sur l'impact — puis repartent), léger zoom sec et secousse **légère** (rien qui donne mal au cœur). Coups au visage : la **tête part** dans le sens du coup **à la fin de l'arrêt** et rebondit ; coups au corps : la tête **plonge en avant**. Petit anneau d'air et gouttes de sueur à l'impact (visibles par tout le monde). Avant le coup final, la vue **s'élargit très légèrement** pendant qu'il s'enroule, avec un **grognement d'effort** grave du Boxer. |
+| F2b | Boxer : la main qui rentre | Plus gros arrêt sur image, secousse et petit zoom plus forts, **l'écran flashe** (plus clair, contraste, teinte rouge) puis revient. Sur le flanc : le **trou est déjà ouvert** pendant que la main fouille (avant, il n'apparaissait qu'à la mort) ; le sang est poussé autour du poignet, des **filets épais** pendent et coulent le long du flanc ; quand la main **tourne** : craquement, la victime gémit, nouveau petit flash. |
+| F2c | Boxer : l'arrachage | Des **filaments rouge sombre** (vaisseaux) restent tendus entre le trou et le foie, puis **cassent** l'un après l'autre (le plus épais en dernier), avec un filet de sang qui fouette à chaque bout. Le foie **tremble** (mou) dans le poing, en travers du poing (il ne se tasse pas à la verticale). La main qui tourne et l'arrachage ne figent pas l'image. |
+| F2d | Boxer : il serre le foie (~3,1 s) | Le foie **s'écrase** dans le poing et reprend sa forme en tremblant, bruit mouillé, le sang **coule entre les doigts** en filets et le long de son avant-bras. |
+| F2e | Boxer : coupé **entre la main qui rentre et l'arrachage** (le joueur Boxer **se réinitialise** par le menu Roblox, ou **quitte la partie**, vers 2,3–2,6 s ; on ne peut pas le tuer pendant la cinématique, cf. F3) | Tout s'arrête, le **trou du flanc se referme** (les coupures d'avant reviennent s'il y en avait), la victime retombe KO (on peut l'achever à nouveau), pas de foie, pas de flash qui reste à l'écran, pas de secousse ni de zoom qui reste, la caméra tourne de nouveau le perso (et en 1ʳᵉ personne ses bras redeviennent invisibles). Si c'est la **victime** qui quitte la partie, la cinématique s'arrête aussi (le Boxer est libéré, pas d'erreur dans la sortie). |
 | F3 | Pendant un finisher, un 3ᵉ joueur frappe l'attaquant | Rien ne se passe : l'attaquant est intouchable pendant la scène. |
-| F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. |
+| F4 | La victime (2ᵉ joueur) | Elle voit la même cinématique (bandes noires et caméra), puis son écran de mort. **Sauf Boxer** : elle garde sa propre caméra (cf. F2-cam). |
 | F5 | Un 3ᵉ joueur qui regarde | Pas de cinématique pour lui (sa caméra reste normale), mais il voit l'animation, la batte, le sang et entend les coups. |
 | F6 | Après le finisher | Le joueur peut de nouveau bouger et attaquer normalement, la caméra est revenue comme avant. |
 | F7 | Un 3ᵉ joueur tue l'attaquant (ou il quitte) avant le coup final | La cinématique s'arrête tout de suite chez les deux, la caméra revient, la victime retombe toujours KO (quelqu'un d'autre peut l'achever). |
@@ -461,9 +472,54 @@ Menu **KITS** → **BOUNCER** → **EQUIP**. Tester sur le **Dummy**, puis à **
 | # | Test | Résultat attendu |
 |---|---|---|
 | S1 | Finisher **batte** (Street Brawler) | Le cou **gicle par jets** au rythme du cœur : **deux jets** (les carotides) qui montent et retombent en arc, un flot plus lent derrière ; les jets ralentissent et faiblissent en ~5 s. Là où ils retombent : éclaboussures et **gouttes allongées dans le sens du jet**. Le sang **coule sur la poitrine et le dos** en traînées qui s'allongent ; grande flaque. Taches de sang sur l'attaquant. |
-| S2 | Finisher **foie** (Boxer) | Le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras). |
+| S2 | Finisher **foie** (Boxer) | Dès que la main rentre : gerbe, fine brume rouge, filets épais, taches sur le Boxer. À l'arrachage : le trou gicle par jets puis coule sur le flanc, flaque, et l'attaquant est **couvert de sang** (torse, bras, avant-bras gauche quand il serre le foie). |
 | S3 | Finisher **bras** (Bouncer) | L'épaule **gicle fort** sur le côté à chaque battement (gouttes au sol dans l'axe des jets), le sang coule le long du flanc, flaque ; le **bout du bras** dans sa main gicle aussi un peu ; le Bouncer est éclaboussé au moment de l'arrachage. |
 
+## Finisher batte plus spectaculaire (`feature/finisher-bat`)
+
+Street Brawler, un adversaire KO (le Dummy suffit), **clic gauche**. Tester aussi à **2 joueurs** (attaquant, victime) et avec un **3ᵉ joueur** qui regarde. Durée totale ~**4,5 s**, coup final à **2,62 s**. La victime est maintenant couchée **plus près** (2,4 studs devant lui, la batte est à taille réelle).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| FB0 | La batte elle-même | Une **vraie batte de baseball en bois** (érable clair), à l'échelle du perso (~0,85 m : à peu près la longueur d'une jambe) : **pommeau** évasé au bout, **manche fin** avec du **grip noir** enroulé (on voit les spires en biais), une longue partie qui **s'épaissit** progressivement, un **gros bout** épais et une **extrémité arrondie**. Les deux mains sont sur le manche, le pommeau dépasse sous la main gauche. Plus de batte géante. Pendant tout le finisher, la batte **tourne avec ses poignets** et reste dans ses deux mains, chez tous les clients (jamais figée de travers, même si une autre animation arrive sur lui au début). |
+| FB1 | Le début | Il sort la batte de derrière son dos : la batte **n'entre jamais dans le sol** en sortant, et arrive au-dessus du visage **sans traverser la tête**. |
+| FB2 | La provocation | Gros plan sur le visage : il **tapote le visage avec le bout de la batte, trois fois** (petit bruit de bois à chaque fois, `BatTap`), la victime **tressaille** et détourne la tête à chaque coup, puis retend la main. La caméra tremble à peine à chaque tape. |
+| FB3 | La batte posée | Plan depuis sa droite, derrière son bras : la batte **reste posée** sur le visage, il **penche la tête** d'un air moqueur (son `BrawlerTaunt` : pas encore de fichier, rien ne doit s'entendre ni d'erreur dans la sortie). |
+| FB4 | Le swing de golf | Plan du sol : il **se met en position** (batte posée à côté de la tête, comme derrière la balle), puis **monte lentement** (~0,8 s) : les hanches puis les épaules tournent, le poids passe sur le pied droit, **les poignets se cassent** (la batte tourne dans ses mains) jusqu'en haut, batte **au-dessus de sa tête pointée vers la cible**. **Aucun arrêt en haut** : les hanches repartent pendant que les bras finissent de monter, la batte se retourne et enchaîne directement (pas de blocage ni d'hésitation visible). La **descente est explosive** (~0,27 s) : hanches, torse, bras, et les **poignets lâchent en dernier** ; la batte accélère jusqu'à la tête. Le **woosh** (`BatSwing`) part quand la batte prend de la vitesse, pas pendant qu'elle est encore en haut. Plan de côté (du côté où part la batte) : on voit la tête et lui dans le même cadre. |
+| FB5 | L'impact (attaquant **et** victime) | La caméra **se fige net** une fraction de seconde, **zoomée**, l'image devient **pâle et dure** (désaturée, contrastée) puis revient en ~1,4 s ; ensuite seulement la caméra tremble et **dézoome lentement** : effet de ralenti. La batte arrive sur la tête **à sa vitesse maximale** (elle ne fait qu'accélérer pendant la descente, aucun ralenti avant le coup), continue vite juste après, puis **freine** jusqu'à une **fin de swing haute**, tourné vers la cible, batte derrière la tête, talon droit levé, **tenue** ~0,7 s ; puis il remonte la batte et la remet sur l'épaule. Gros boum sourd sous le craquement (`BatImpact`, emprunte `Slam` plus grave). |
+| FB6 | L'explosion | Plus de morceaux qu'avant : en plus des vraies pièces (crâne, cerveau, yeux, dents), des **éclats d'os**, des **miettes de cervelle** molles, des **lambeaux de cuir chevelu** (peau dessus, os dessous). La plupart partent **vers la gauche de l'attaquant** (le sens du swing). Les petits morceaux (éclats, miettes, lambeaux, dents) **s'effacent après ~7 s** ; les vraies pièces restent avec le corps. Gerbe de sang basse dans ce sens, un peu vers l'attaquant aussi, un **nuage rouge** qui reste ~2 s et dérive dans le sens du swing en retombant. |
+| FB7 | Le sol | En plus de l'éclaboussure sous la tête : un **long éventail de gouttes allongées** (4 à 7,5 studs) dans le sens du swing, et une **2ᵉ éclaboussure** à ~2 studs. Jamais sur le corps. Pareil chez tous les clients. |
+| FB8 | L'attaquant | **Beaucoup de taches** de sang sur lui : torse, bras, **visage**. La batte ressort **rouge** : le gros bout et la boule couverts de sang, un anneau rouge, quelques taches plus haut ; elle **goutte** ~1,6 s (les gouttes tombent et éclaboussent le sol, projetées un peu dans le sens du geste). Le 3ᵉ joueur voit la même batte rouge. |
+| FB9 | Le plan d'après | Plan bas au-delà des pieds du corps, sur sa droite : le corps au bas de l'image, lui au fond dans sa fin de swing, la batte rouge bien visible derrière sa tête. La caméra **n'est jamais dans le corps** (pas d'image grise/remplie par le torse ou une jambe), même si le corps a bougé en ragdoll. Puis plan large qui monte et tourne lentement. La batte disparaît juste avant la fin, la caméra normale revient. |
+| FB10 | 3ᵉ joueur tue l'attaquant **pendant la provocation** (avant 2,62 s) | Tout s'arrête net chez les deux (caméra, bandes, batte, pas d'image figée ni d'image pâle qui reste), la victime retombe KO avec sa tête. |
+| FB11 | Deux finishers batte à la suite | La 2ᵉ fois, l'image pâle et le zoom refonctionnent normalement ; jamais d'image qui reste pâle après une cinématique. |
+| FB12 | Un joueur qui arrive après | Corps sans tête, cou ouvert, morceaux au sol (les petits éclats déjà partis après ~7 s) ; pas d'explosion rejouée. |
+
+## Hitbox et lag : compensation de latence (`feature/hitbox-lag`)
+
+Le serveur teste maintenant chaque coup (M1, coups de kit, charge, prise) **aussi** là où
+l'attaquant **voyait** sa cible : il « remonte le temps » de son ping + 0,1 s (jamais plus de
+0,35 s, ± 0,06 s). Pour simuler du lag : *Studio → File → Studio Settings → Network →
+Incoming Replication Lag* = `0.15`, puis *Test → Clients and Servers → 2 Players*.
+**Vérifier d'abord (L0)** que ce lag simulé est bien pris en compte, sinon les tests L2, L3,
+L6 et L12 ne veulent rien dire.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| L0 | Lag 0,15, 2 joueurs : A frappe B (M1), regarder l'Output du **serveur** | Une ligne `[Rewind] … round trip … -> rewind …` par coup. Avec 0,15 de lag, **rewind ≈ 0,25 s** (round trip ≈ 0,15). Si le round trip reste ≈ 0 (rewind ≈ 0,1) : Studio ne compte pas ce lag dans le ping, mettre `REWIND_STUDIO_EXTRA_PING = 0.15` dans `Shared/Config` (Studio seulement) et refaire : rewind ≈ 0,25. Remettre `0` après les tests. |
+| L1 | Dans Studio, frapper le Dummy (M1) | Comme avant : boîte **rouge** (la hitbox) ; en plus une petite boîte **bleue** sur le torse du Dummy (là où le serveur l'a « vu »). Aucune ligne rouge dans l'Output. |
+| L2 | 2 joueurs avec lag 0,15 : B **sprinte de gauche à droite** devant A, A clique quand son poing touche B **sur son écran** | Le coup **compte** (dégâts, réaction) dans la grande majorité des cas. Avant : presque toujours raté. |
+| L3 | Même chose, B court **en s'éloignant** de A | Si le poing touche sur l'écran de A, ça compte ; la boîte bleue est derrière B (là où A le voyait). |
+| L4 | A frappe B, la réaction prédite (instantanée) chez A | Elle n'est presque plus jamais **annulée** juste après (le serveur et l'écran de A sont d'accord). |
+| L5 | B est à 10 studs ou plus de A, A frappe dans le vide | **Rien** : la compensation ne rallonge pas la portée (0,35 s max). |
+| L6 | Visée tête pendant que B court (A vise la tête sur son écran) | Le coup est compté **à la tête** (zone calculée sur le corps « remonté »). |
+| L7 | B **bloque** (F) quand le coup arrive | Toujours **bloqué** : seule la **position** est remontée, pas l'état (garde, parade). |
+| L8 | Dash (Q) de B au bon moment | Toujours **esquivé** (les frames d'esquive comptent comme avant). |
+| L12 | Lag 0,15 : B **dashe un peu tôt** pour s'éloigner (Q, ~0,1–0,2 s avant que le poing de A arrive), A frappe | **Esquivé** (« Dodged »), même si la boîte bleue montre B encore dans la hitbox : touché seulement là où il **était**, ses frames d'esquive depuis ce moment-là comptent. Avant la correction, le coup passait. |
+| L13 | Lag 0,15 : Bouncer, prise (Chokehold / Body Slam) sur B qui **s'enfuit en sprint** | Si B est encore à portée de bras, il est attrapé (court déplacement devant le Bouncer). S'il est déjà **loin** (plus de ~6–7 studs du Bouncer), il n'est **pas** attrapé : jamais ramené en arrière sur plusieurs studs. |
+| L9 | Coups de kit (1–4), charge (tackle du Street Brawler) et prises du Bouncer sur une cible qui bouge | Ils touchent là où l'attaquant voit la cible (boîtes bleues), comme le M1. |
+| L10 | B meurt / réapparaît / est téléporté dans l'arène de duel, A frappe là où B était | **Rien** : l'historique est effacé lors d'une téléportation. |
+| L11 | Mettre `DEBUG_HITBOXES = false` dans `Shared/Config` | Plus aucune boîte (rouge ni bleue). |
 ## Sang réaliste (`feature/realistic-blood`)
 
 Sans les images (`Config.Blood.IMAGES` à 0), le sang est dessiné avec des formes simples ; avec les
@@ -609,3 +665,131 @@ Tester sur le **Dummy**, sur sol **plat**, puis **à 2 joueurs** (comparer les d
 | P15 | Sans images (`Config.Blood.IMAGES.pool`, `poolRim`, `poolLobe`, `serumHalo` à 0) | La même flaque en **formes simples** (ellipses, bord sombre, centre plus foncé), même taille. |
 | P16 | `Config.Blood.FINISHER_POOLS.ENABLED = false` | Plus de grosses flaques ; les jets et leurs taches au sol sont toujours là. |
 | P17 | Un combattant qui **saigne** debout ou KO (pas un finisher) | Sa flaque est elle aussi **une seule flaque uniforme** qui grandit doucement (pas de taches séparées) et continue de ramper ~3 s après la fin du saignement. |
+
+## Membres qui partent à l'autre bout de la map (`fix/limbs-fly-away`)
+
+Le bug : parfois les bras et les jambes d'un corps au sol partaient très loin, puis revenaient petit à petit sur le perso.
+La cause : quand un corps tombe (ragdoll), chaque bras, jambe et la tête deviennent des morceaux séparés, tenus par une articulation molle. Le serveur ne prenait en charge que le tronc ; Roblox donnait les membres **à l'ordinateur d'un joueur** (la victime, ou le joueur le plus proche). Cet ordinateur avait encore le membre là où **son animation** le dessinait (une animation de finisher peut déplacer tout le corps de plusieurs mètres) et envoyait cette position à tout le monde : le membre « s'envolait », puis l'articulation le ramenait lentement.
+Maintenant le **serveur** simule **tous** les morceaux du corps au sol (même chute pour tout le monde, un tricheur ne peut plus bouger ses membres KO), et chaque client remet tout de suite sur le corps un membre trop loin de son articulation.
+
+Tester à **2 joueurs** (le bug venait d'un autre ordinateur), avec un peu de lag si possible (Studio : File → Studio Settings → Network → Incoming Replication Lag = 0,2).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| M1 | Mettre l'autre joueur KO, plusieurs fois, sous plusieurs angles | Il tombe mou, **les bras et les jambes restent attachés** au corps, sur les deux écrans. |
+| M2 | Tackle / Uppercut / Gravity Glove sur l'autre joueur (il tombe vivant), puis il se relève | Chute et relevé propres ; une fois debout il **contrôle de nouveau son perso** normalement (marcher, sauter, frapper). |
+| M3 | Faire chaque finisher (Batte, KnockoutCombo, Arm Rip, Incinerate, Gore, Portal Cut) sur le **Dummy** et sur un **joueur** | À la fin, le corps tombe **là où il est** : aucun membre ne part au loin puis revient. Le bras arraché (Arm Rip) reste dans la main puis est lancé normalement ; les jambes (Gore, Portal Cut) se séparent normalement. |
+| M4 | Gros combo sur le Dummy jusqu'au KO, puis attendre qu'il se relève | Pareil : membres en place, relevé propre. |
+| M5 | Duel : perdre une manche | Le perdant tombe, membres en place ; la manche suivante il est debout et contrôle son perso. |
+| M6 | **Dr. Rift** : **4** (Portal Gun) pendant que l'autre joueur te frappe ; essayer d'être mis au sol (Tackle / Uppercut) **juste en sortant** du portail (fenêtre très courte, 0,1 s) | Si ça tombe dedans : corps mou, membres en place sur les deux écrans ; une fois relevé, tu contrôles de nouveau ton perso. Sinon, le passage au portail reste normal. |
+## Outils de test Studio (`feature/test-tools`)
+
+Deux outils pour **regarder de l'extérieur** ce que tu ne peux pas voir seul (boiterie,
+finishers). Ils n'existent **que dans Studio** (jamais dans le jeu publié), construits par
+`Server/Systems/TestTools`. Pour les désactiver : `Config.Dev.TEST_TOOLS = false`.
+Rien n'est sauvegardé dans la place : arrête le Play et tout disparaît.
+
+Place-toi au spawn et regarde vers la **gauche** (le parcours de test est à droite) :
+
+- **Limping Dummy** (marron), devant à gauche : il fait des allers-retours en boitant
+  (~24 studs). Il s'arrête ~1 s à chaque bout (pose debout sur sa bonne jambe). À chaque
+  tour, la jambe qui boite change (`LimpLeg` = Left / Right : visible seulement avec la
+  boiterie de la branche `feature/limp-realistic` ; sur les autres branches il boite
+  toujours pareil). On peut le frapper : touché (étourdi) il s'arrête sur place, puis repart
+  vers le même bout. Sa vie revient après 3 s sans coup, ses bleus et coupures s'effacent
+  un par un après ~13 s (comme le Dummy) ; il réapparaît 8 s après sa mort.
+- **FINISHER DEMO**, derrière à gauche : une zone sombre au sol, un mannequin gris
+  (« Finisher Victim ») et un bleu, et devant une rangée de **plots rouges**, un par kit
+  (nom du kit + nom du finisher écrits au-dessus). Si tu tues un des deux mannequins
+  hors démo, une paire neuve réapparaît ~4 s après.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| 1 | Regarder le **Limping Dummy** de côté | Il marche lentement en boitant, jamais de pied dans le sol, il ne glisse pas. Debout aux bouts : appuyé sur sa bonne jambe. |
+| 2 | Le suivre plusieurs tours | Il ne se bloque pas ; avec `feature/limp-realistic`, le côté de la boiterie alterne à chaque tour. |
+| 3 | Aller à un plot rouge, appuyer sur **E** (« Watch finisher ») | Une nouvelle paire apparaît : le bleu (au nom du kit) met le gris KO, ~2 s après il fait **le finisher du kit** sur lui. **Ta caméra ne bouge pas** : tu regardes de l'extérieur (seuls les deux mannequins ont la cinématique). |
+| 4 | Pendant la démo | Les plots sont désactivés (pas d'invite E) jusqu'à la fin. |
+| 5 | Après la démo | Le corps reste ~8 s pour regarder les blessures, puis une paire neuve réapparaît debout et les plots se réactivent. |
+| 6 | Tester chaque plot | STREET BRAWLER → **Bat** (la tête explose), BOXER → **KnockoutCombo** (foie arraché), SENTINEL → **Incinerate** (trou dans le cœur), BOUNCER → **ArmRip** (bras arraché, on peut prendre l'os). |
+| 7 | Regarder depuis plusieurs angles (tourne autour pendant la démo) | Animations, sang, accessoires (batte, bras) visibles comme pour un vrai joueur. |
+
+Si une démo ne démarre pas, l'Output affiche une ligne jaune `[TestTools] <kit> : ...` :
+copie-la moi. Un nouveau kit avec un finisher aura **automatiquement** son plot.
+## Interface : menu Kits, HUD, kill feed, écran de mort, écrans mobiles (`feature/ui-overhaul`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| U1 | Menu → **KITS**, choisir chaque kit | Sous MOVES et AWAKENING, une nouvelle section **FINISHER · ON A KO** : touche **[M1]**, le nom (**HOME RUN**, **LIVER RIP**, **ARM RIP**, **INCINERATE**) et une phrase. Le panneau est un peu plus haut, **CLOSE** reste en dessous, rien n'est coupé. |
+| U2 | Kit verrouillé (niveau trop bas / pas assez de pièces) | Tout est visible mais plus terne (touches et noms), y compris le finisher ; l'action en haut à droite (LEVEL / BUY / NEED…) fonctionne comme avant (achat en deux clics, vérifié par le serveur). |
+| U3 | Finisher sur le **Dummy** avec chaque kit | Kill feed en haut à droite : `TonNom finished Dummy — LIVER RIP` (tiret **rouge**, nom du finisher en petites capitales). |
+| U4 | Tuer sans finisher (2 joueurs, l'autre tombe de la carte après un coup) | Ligne `X eliminated Y`, **sans** nom de finisher. |
+| U5 | 2 joueurs : se faire **finir** | La cinématique joue d'abord **en entier**, puis en bas au centre : **FINISHED BY**, le nom du tueur, `LV 12  BOXER — LIVER RIP`, une ligne qui se vide et **RESPAWN 2.3** qui descend ; le monde perd ses couleurs. Au respawn tout disparaît en fondu. |
+| U6 | Se faire tuer normalement | **ELIMINATED BY** + nom + niveau + kit, pas de tiret rouge. |
+| U7 | Mourir seul (tomber de la carte, personne ne t'a frappé) | **ELIMINATED / YOU DIED**, pas de nom ni de kit. |
+| U8 | En **duel** | Aucun écran de mort (l'écran de fin de duel reste le seul). |
+| U9 | Deux joueurs avec le **même nom d'affichage** | Ta ligne du kill feed est la tienne (nom en gras blanc + petit trait) uniquement quand c'est vraiment toi (comparé par UserId). |
+| U10 | *Test → Device* : **iPhone** (paysage), puis une petite fenêtre | HUD (vie à gauche, kit à droite), kill feed et tableau des joueurs plus petits mais lisibles, toujours dans leur coin. Le bloc du kit est **au-dessus du bouton de saut**. |
+| U11 | Sur iPhone : **toucher** un move de la barre du kit | Le move part (comme la touche 1-4). Jauge pleine : toucher **[G] AWAKEN** lance l'Awakening. |
+| U12 | Sur iPhone (paysage) / petite fenêtre : ouvrir le **MENU** (chaque section, surtout **KITS**) | Le menu commence **sous la barre Roblox** (boutons menu / chat / sac en haut à gauche) : **01, 02… et KITS se touchent** sans ouvrir le menu Roblox. La liste est plus près du bord gauche, le texte reste lisible (jamais plus petit que ×0.8). Si la section est trop haute, le panneau **défile** (glisser du doigt / molette, fine barre à droite) et **CLOSE** reste visible dessous ; changer de section repart en haut. La section choisie est entourée en ambre ; redimensionner la fenêtre recale tout. |
+| U13 | Écran 1080p normal | Tout est **exactement comme avant** (mêmes tailles, mêmes places). En 1440p / 4K : un peu plus grand. |
+| U14 | Shop / Profile après un achat | Pièces, niveau/XP, cosmétiques et stats se mettent à jour comme avant ; les soulignés (EQUIPPED, réglages ON/OFF) ont la bonne largeur, même sur iPhone. |
+| U15 | Sur iPhone : le **HUD** pendant un combat | Le bloc de vie (chiffre, barres, XP) est **en haut à gauche, sous la barre Roblox**, plus en bas à gauche sous le joystick et le pouce. Sur PC il reste en bas à gauche. |
+| U16 | Sur iPhone : kill feed et tableau des joueurs (Tab / bouton) | La première ligne du kill feed et le titre PLAYERS ne passent **jamais sous les boutons Roblox** en haut à droite (s'il y en a) ; sur PC 1080p ils restent à leur place. |
+| U17 | Écran de mort (U5 / U6) | La **bande sombre** du bas apparaît **en fondu** avec le texte, et disparaît en fondu au respawn (plus de coupure sèche). |
+| U18 | Finir le **Dummy** puis quitter le jeu pendant le finisher (ou finisher sans tueur crédité) | Si le kill feed n'a pas de tueur : `Dummy died` **sans** `— NOM DU FINISHER` derrière. |
+
+## Interface : tout ce qui se clique ressemble à un bouton (`feature/ui-overhaul`)
+
+Tout ce qu'on peut cliquer / toucher est maintenant un **vrai bouton** (un seul modèle,
+`src/client/UI/Button.luau`) : fond plein, coins arrondis, contour ; il **s'éclaire et grossit un
+peu** sous la souris, **s'enfonce** quand on appuie. L'action principale d'un écran est **ambre**
+(EQUIP, BUY, FIND MATCH, CHALLENGE, ACCEPT, ON). Grisé = pas cliquable (avec la raison écrite
+dessus). Sur téléphone les boutons sont plus hauts (doigt).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| V1 | Arriver en jeu (PC) | À gauche au milieu : un bouton **MENU** bien visible (icône ☰, le mot MENU, la touche **M** dessinée dessus), **toujours entouré d'ambre avec l'icône ambre** (même après la première ouverture). Un **anneau ambre** en sort régulièrement tant que le menu n'a jamais été ouvert ; il s'arrête après la première ouverture. |
+| V2 | Survoler / cliquer **MENU** | Le bouton s'éclaire et grossit un peu au survol, s'enfonce au clic ; le menu s'ouvre. |
+| V3 | Touche **M** (hors chat) | Ouvre le menu sur la dernière section vue (pendant une recherche ranked / l'attente d'arène : sur **DUEL**, comme un clic sur MENU) ; **M** à nouveau (ou **CLOSE**, qui affiche aussi « M ») le ferme. Taper « m » dans le chat ne fait **rien**. Pendant l'écran de fin de duel (bouton MENU caché) : rien. |
+| V4 | Liste des sections (01 KITS, 02 DUEL…) | Chaque section est un **bouton-onglet** (plaque légère). Survol : plus clair. La section ouverte : **contour ambre + barre ambre à gauche**, numéro ambre. |
+| V5 | **KITS** → colonne ROSTER | Chaque kit est une **carte** (nom + ligne d'état). Le kit choisi a le contour ambre ; le kit équipé dit **EQUIPPED en ambre**. |
+| V6 | KITS → **BOXER** (possédé, pas équipé) | En haut à droite un gros bouton **ambre EQUIP**. Clic → il devient le badge **✓ EQUIPPED** (contour ambre, pas de fond plein : on voit que ce n'est plus un bouton) et la carte BOXER dit EQUIPPED. Le serveur vérifie toujours. |
+| V7 | KITS → kit pas encore acheté / verrouillé | Assez de pièces : bouton ambre **(pièce) BUY · 500** → 1er clic **CONFIRM · 500** (3 s), 2e clic **BUYING…** puis EQUIP. Refusé par le serveur : contour **rouge** un instant et retour à BUY. Pas assez de pièces : bouton **gris** « NEED 160 MORE » (rien ne se passe au clic). Niveau trop bas : bouton gris avec **cadenas** « UNLOCKS AT LV 10 ». |
+| V8 | **SHOP** | Catégories en cartes (comme les kits), l'article équipé de chaque catégorie écrit en ambre. Chaque article : bouton **EQUIP** ambre / **BUY · 250** ambre (CONFIRM au 2e clic) / gris « LEVEL 10 » (cadenas) / gris « NEED 120 MORE ». L'article porté : **✓ EQUIPPED** avec contour ambre ; sur PC le survol affiche **TAKE OFF** et un clic l'enlève. Émotes : badge EQUIPPED (on ne peut pas l'enlever). |
+| V9 | **SETTINGS** | Chaque réglage a deux boutons **OFF / ON** côte à côte : le choisi est plein (ON = ambre, OFF = sombre avec contour ambre), l'autre est une plaque légère qui s'éclaire au survol. Cliquer le côté déjà choisi ne change rien. Le réglage est toujours sauvegardé (rejoindre → même valeur). |
+| V10 | **DUEL** | **FIND MATCH** = bouton ambre ; pendant la recherche **CANCEL** = bouton sombre. Chaque joueur de la liste : bouton ambre **CHALLENGE** (gris quand tu es en duel / en attente). |
+| V11 | Recevoir un défi (2 joueurs) | Deux boutons : **✓ ACCEPT** (ambre, touche Y dessinée) et **✕ DECLINE** (sombre, touche N). Répondre avec Y / N fait aussi « enfoncer » le bouton. La barre de temps est juste en dessous, rien ne se chevauche. Recherche ranked en cours : la ligne « RANKED · SEARCHING » est **sous** le bouton MENU. |
+| V12 | Jauge Street Fury pleine | **[G] AWAKEN** est sur une plaque ambre (et reste cliquable / touchable). |
+| V13 | *Test → Device* : **iPhone** (paysage) | Boutons plus hauts (faciles à toucher), pas de touche dessinée (M / Y / N cachées). Pas d'effet de survol bloqué après un toucher. La barre de moves du kit a une plaque sombre arrondie par move. |
+| V14 | iPhone, une émote équipée (SHOP → EMOTES) | Un bouton **EMOTE** au-dessus du bouton MENU ; le toucher joue l'émote (hors combat, vérifié par le serveur). Il disparaît quand le menu est ouvert, et n'existe pas sur PC (touche B). Dans SHOP → EMOTES, l'indice dit « TAP EMOTE ON THE SCREEN » (PC : « PRESS B »). |
+| V15 | Manette (si dispo) | Sélectionner un bouton avec la manette l'éclaire comme le survol souris. |
+| V16 | KITS ou SHOP : acheter avec un achat **refusé** (ex. Studio, retirer des pièces entre les 2 clics) | Après « BUYING… », le bouton revient à BUY avec un **contour rouge bien visible ~0,35 s**, puis repasse ambre. |
+| V17 | Cliquer (plusieurs fois) un bouton **gris** (« NEED 160 MORE », « LEVEL 10 », « BUYING… ») ou double-cliquer EQUIP, avec un joueur / PNJ devant soi | **Aucun coup de poing** n'est donné. Plus généralement, aucun clic dans le menu ouvert ne lance de M1. |
+| V18 | Cliquer **MENU** à la souris, puis fermer avec **M** (ou CLOSE) sans bouger la souris | Le bouton MENU revient **normal** (pas resté éclairé / grossi). Pareil pour les onglets 01, 02… à la réouverture. |
+| V19 | Survoler EQUIP / BUY (KITS, SHOP), FIND MATCH / CANCEL / CHALLENGE (DUEL) | Le bouton grossit sans que son **contour soit coupé** à droite (ni en haut / bas). |
+| V20 | *Test → Device* : **iPhone** paysage (844 × 390) : MENU, onglets, EQUIP / BUY, OFF / ON, FIND MATCH, CHALLENGE, CLOSE, ACCEPT / DECLINE | Chaque bouton fait **au moins ~44 px** de haut à l'écran (facile à toucher). La liste des sections **défile** au doigt si elle ne tient pas (fine barre à droite), rien ne passe sous l'écran. Dans SETTINGS / SHOP le texte d'une ligne reste centré sur son bouton ; dans DUEL, « ON THIS SERVER » est sous FIND MATCH sans chevauchement ; dans le défi, la barre de temps et son chiffre ne sont pas coupés. |
+
+## Gore des coups très forts (`feature/gore-heavy-hits`)
+
+Seulement **en combat**, **jamais par un finisher**, et rare exprès. Le serveur compte le **combo** que chaque combattant encaisse : les coups **du même attaquant** qui touchent (pas bloqués), chacun moins de `COMBO_GAP` (1,6 s) après le précédent. Une fois le combo **gros** (`COMBO_HITS` = 6 coups ou `COMBO_DAMAGE` = 40 dégâts), son prochain **coup lourd** (≥ `HEAVY_DAMAGE` dégâts, le **4ᵉ M1**, ou un coup qui met au sol / fait décoller) fait **un seul tirage** : il peut **casser un os à l'air libre** (`FRACTURE_CHANCE` = 20 %) ou, plus rare, **arracher un bras** (`TEAR_CHANCE` = 5 %, jamais une jambe) ; un peu plus si ce coup **met KO** (`KO_*` = 30 % / 10 %). **Raté ou pas, le combo repart de zéro** : il faut un **nouveau gros combo** pour un nouveau tirage. Après une fracture ou un bras arraché, rien d'autre ne lui arrive pendant `COOLDOWN` (8 s). Les coups des **clones** du Dr. Rift comptent dans le combo de leur maître. Réglages : `Config.HeavyGore`.
+
+**Avant de tester : ré-importer `assets/wounds/WoundKit.fbx`** dans Studio (sinon formes simples, voir H12). **Pour tester vite** (sur le **Dummy**) : mettre temporairement dans `Config.HeavyGore` `COMBO_HITS = 2`, `FRACTURE_CHANCE = 1` (fracture à coup sûr) ou `TEAR_CHANCE = 1` (bras arraché à coup sûr), `COOLDOWN = 0` ; puis 4 M1 d'affilée sur le Dummy (le 4ᵉ est lourd). Remettre les valeurs ensuite.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| H1 | **Gros combo** (2 séries de M1 enchaînées sur le même joueur), le 4ᵉ M1 de la 2ᵉ série **au corps** | Parfois : **fracture ouverte de l'avant-bras** du côté touché. Un **trou déchiré** s'ouvre dans l'avant de l'avant-bras (la peau et le t-shirt percés, bord de peau à vif retroussé) ; dedans : la **graisse jaune** sous la peau, les **vrais muscles** de l'avant-bras déchirés (deux rouges), du sang caillé, des **vaisseaux et nerfs** arrachés qui pendent (artère rouge, veine sombre, nerf jaune pâle), des **éclats d'os**. Le **vrai radius** cassé **sort du trou** en biais vers le bas, un **bout court et épais** (pas une plaque) : cassure irrégulière, **anneau d'os blanc épais (cortex) autour de la moelle rouge sombre** enfoncée dans l'os, du sang autour là où il sort de la peau ; le **cubitus** cassé se voit au fond. Craquement, giclée de sang, le sang coule sur la peau. Les autres joueurs voient la même chose. |
+| H2 | Pareil, le coup lourd **aux jambes** | Parfois : **fracture ouverte du tibia** (sur le devant) : un trou **plus petit** que celui du bras ; le **bout cassé du vrai tibia** (le morceau du bas) **sort du trou vers le haut et vers l'avant**, court et épais : vu d'au-dessus (caméra 3ᵉ personne) on voit **l'anneau blanc de l'os et la moelle rouge sombre au milieu**, du sang en collier là où il sort de la peau ; l'autre morceau du tibia et le péroné restent dedans. Ça doit se lire comme **un os cassé**, pas comme une feuille blanche. Le joueur **boite** tout de suite (et après s'être relevé d'un KO). |
+| H3 | Gros combo, coup lourd au corps ou à la tête, plus rare | Le **bras du côté touché** est **arraché** à l'épaule et **vole** loin de l'attaquant (avec sa manche et un accessoire porté dessus). Sur le torse : l'**épaule ouverte** (vraie omoplate, muscles arrachés), la **peau déchirée en bord irrégulier** (plus de « pétales »), la graisse jaune dessous ; elle **gicle par saccades**, flaque. Le bras au sol : bout à vif, **tête de l'humérus** qui dépasse, peau déchirée irrégulière ; il gicle, goutte, reste ~12 s puis disparaît. Solide sur la carte mais **pas pour les combattants** ; le **viseur passe à travers** ; un finisher peut se placer par-dessus. |
+| H4 | Après H3 (bras arraché, **toujours vivant**) | Le joueur **joue toujours** (il manque juste le bras) : animé normalement (marche, M1, garde), y compris vu par un joueur qui **rejoint après** ; il ne peut plus prendre d'os sans bras droit ; ses finishers cinématiques demandent ses deux mains → **finisher simple** à la place. Le Bouncer sur une victime sans bras droit : finisher simple. |
+| H5 | **Finishers** (Batte, KnockoutCombo, ArmRip, Incinerate, Gore, finisher simple) | **Aucun** membre arraché, **aucune** fracture, aucune dent, rien de ce gore-là en plus de leur propre gore. |
+| H6 | Combo **trop petit** (1 série de M1), ou des coups **bloqués**, ou **2 attaquants** qui se relaient, ou une pause > 1,6 s | Jamais rien (le combo ne compte que les coups qui touchent, du même attaquant, enchaînés). |
+| H7 | Fracture (H1/H2), puis le joueur **tue** quelqu'un (soins du tueur) | Coupures et bleus guérissent, mais la **fracture reste** (et l'os qui sort), il **boite toujours** si c'est la jambe ; un bras arraché reste arraché, jusqu'à la mort. |
+| H8 | Un joueur qui **arrive après** / le **corps laissé** après un finisher | Il voit les mêmes plaies (fracture, épaule ouverte), sans rejouer les jets de sang. |
+| H9 | Plafonds | Jamais plus de **2 membres arrachés** (le bras du Bouncer compris) ni **2 fractures** par corps ; un membre déjà cassé : c'est l'autre bras / l'autre jambe (le côté opposé) qui casse. Les **jambes** ne sont jamais arrachées (`TEAR_LEGS = false` : un corps R6 sans jambe ne tient pas debout). |
+| H10 | Duel | Rien de tout ça en duel (`IN_DUELS = false`). |
+| H11 | Vision de la Sentinelle, prise du Videur | Ne comptent pas (pas de coup lourd de ce genre). |
+| H12 | Ancien `WoundKit` (pas ré-importé) | La fracture est dessinée en **forme simple** (disque à vif, os en bloc) sur l'avant-bras / le tibia ; ré-importer le kit l'ouvre pour de vrai (sans se reconnecter). |
+| H13 | `Config.HeavyGore.ENABLED = false` ou `Injuries.SKIN_TEAR = false` | Plus aucun de ces effets. |
+| H14 | **Rareté** : un combat normal (plusieurs gros combos) | La plupart des combats : **rien**. Un gros combo = **un seul** tirage (20 % fracture, 5 % bras) ; le coup lourd suivant du **même** combo ne retire pas. Une jambe ne fait jamais de fracture « en plus » (jamais plus que `FRACTURE_CHANCE`). |
+| H15 | Tenir un **os** (arme) dans la main droite, puis se faire **arracher le bras droit** (H3) | L'os **tombe et se casse** tout de suite (il ne reste pas collé au bras qui vole) ; plus d'arme en main ; **impossible de lancer** quoi que ce soit sans bras droit. |
+| H16 | Rejoindre la partie / se faire arracher un bras **pendant que le `WoundKit` charge encore** | D'abord une forme simple possible, puis dès que le kit est là, l'**épaule ouverte** et le **bout du bras** sont redessinés avec les vraies pièces (sans se reconnecter). |

@@ -23,6 +23,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local HeavyGoreUtil = require(ReplicatedStorage.Shared.Util.HeavyGore)
 local Types = require(ReplicatedStorage.Shared.Types)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -62,6 +63,8 @@ local onHead = false
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.IgnoreWater = true
+-- (what the ray goes through: our own body, the torn limbs lying around)
+local ignored: { Instance } = {}
 
 -- Is this part a body part of a fighter (player or training dummy)?
 local function fighterPart(part: Instance): Types.HitZone?
@@ -90,7 +93,16 @@ local function updateAim()
 		else UserInputService:GetMouseLocation()
 	local ray = camera:ViewportPointToRay(screenPoint.X, screenPoint.Y)
 
-	rayParams.FilterDescendantsInstances = { player.Character :: any }
+	table.clear(ignored)
+	local own = player.Character
+	if own then
+		table.insert(ignored, own)
+	end
+	local limbs = workspace:FindFirstChild(HeavyGoreUtil.FOLDER)
+	if limbs then
+		table.insert(ignored, limbs)
+	end
+	rayParams.FilterDescendantsInstances = ignored
 	local hit = workspace:Raycast(ray.Origin, ray.Direction * AIM_DISTANCE, rayParams)
 	aimPoint = if hit then hit.Position else ray.Origin + ray.Direction * AIM_DISTANCE
 	local zone = if hit then fighterPart(hit.Instance) else nil

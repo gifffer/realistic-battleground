@@ -51,6 +51,7 @@ export type CombatState = {
 
 	-- Injuries (step 5), cleared by a kill or a new life.
 	legDamage: number, -- damage taken on the legs
+	leftLegDamage: number, -- the part of it taken on the left leg
 	limping: boolean, -- legDamage reached Config.Injuries.LIMP_LEG_DAMAGE
 	lastDamagedAt: number, -- for the out-of-combat regeneration
 	regenCarry: number, -- fraction of HP regenerated, not given yet
@@ -113,6 +114,11 @@ export type HitSpec = {
 	-- A thrown thing (Shared/Weapons): where it hit from. It can't be
 	-- parried or slipped (no one to stun / counter there); a block faces it.
 	from: Vector3?,
+	-- Lag compensation (Combat/Hitbox.query): the victim was caught only
+	-- where he was this long ago (seconds), not where he is now. His dodge
+	-- frames then count over that whole time: a dash started since then
+	-- still dodges it.
+	rewound: number?,
 	-- Acid / fire on the skin (Kits.BurnDef).
 	burn: KitTypes.BurnDef?,
 	-- A blast (an explosion, a shockwave): pushed away from this point,
