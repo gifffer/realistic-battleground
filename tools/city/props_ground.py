@@ -220,11 +220,11 @@ def paper_ball(D, folder, origin, ry, rng, size=None, color=None):
 @prop({"kind": "sheet"}, {"kind": "newspaper"}, {"kind": "newspaper", "wet": True}, {"kind": "flyer"})
 def paper_sheet(D, folder, origin, ry, rng, kind="sheet", wet=None):
     """A loose sheet / an open newspaper / a flyer lying flat, its crease lifted, maybe soaked.
-    Footprint: sheet 0.7 x 1.0, newspaper (open spread) 2.1 x 1.5, flyer 0.6 x 0.85 studs. 3-7 parts, DECOR."""
+    Footprint: sheet 0.7 x 1.0, newspaper (open spread) 1.9 x 1.4, flyer 0.6 x 0.85 studs. 3-8 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     if kind == "newspaper":
-        W, L = rng.uniform(0.95, 1.15), rng.uniform(1.35, 1.6)
-        col = _tone(NEWSPRINT, rng, 6, darken=rng.uniform(0, 0.2))
+        W, L = rng.uniform(0.85, 1.0), rng.uniform(1.2, 1.4)
+        col = _tone(NEWSPRINT, rng, 6, darken=rng.uniform(0.05, 0.25))
     elif kind == "flyer":
         W, L = rng.uniform(0.55, 0.65), rng.uniform(0.8, 0.9)
         col = _tone(_pick(rng, FLYER), rng, 10, darken=rng.uniform(0.1, 0.35))
@@ -234,18 +234,26 @@ def paper_sheet(D, folder, origin, ry, rng, kind="sheet", wet=None):
     wet = (rng.random() < 0.35) if wet is None else wet
     th = 0.05
     if kind == "newspaper":
-        # an open spread: two pages side by side, the right one shifted and its corner lifted
-        for s in (-1, 1):
-            g = f.sub((s * W / 2, 0, 0), ry=(rng.uniform(3, 9) if s > 0 else 0), rz=(-rng.uniform(1, 3) if s > 0 else 0))
-            pc = _tone(col, rng, 4)
-            g.part("Paper", (0, th / 2 + (0.006 if s > 0 else 0), 0), (W, th, L), pc, "SmoothPlastic", flags=DECOR)
-            # columns of print (faded ink), a headline on the left page
-            for c in (-1, 1):
-                g.part("Print", (c * W * 0.22, th + 0.012, L * 0.08), (W * 0.36, th, L * 0.66), INK, "SmoothPlastic",
-                       flags=DECOR, transparency=0.84)
-            if s < 0:
-                g.part("Print", (0, th + 0.016, -L * 0.36), (W * 0.82, th, 0.12), INK, "SmoothPlastic", flags=DECOR,
-                       transparency=0.45)
+        # an open spread, trodden on: the left page lies flat (its headline and a print block
+        # barely darker than the paper), the right page is crumpled along its middle: its outer
+        # half lifted and twisted, a corner dog-eared; a grey shoe print across the fold
+        f.part("Paper", (-W / 2, th / 2, 0), (W, th, L), _tone(col, rng, 4), "SmoothPlastic", flags=DECOR,
+               rot=(0, rng.uniform(-2, 2), 0))
+        f.part("Print", (-W / 2, th + 0.004, -L * 0.36), (W * 0.8, th, 0.1), mix(col, INK, 0.55), "SmoothPlastic",
+               flags=DECOR)
+        f.part("Print", (-W / 2 + rng.uniform(-0.05, 0.05), th + 0.002, L * 0.1), (W * 0.74, th, L * 0.56),
+               mix(col, INK, 0.16), "SmoothPlastic", flags=DECOR)
+        g = f.sub((0.02, 0, rng.uniform(-0.06, 0.06)), ry=rng.uniform(2, 8))
+        g.part("Paper", (W * 0.25, th / 2 + 0.006, 0), (W / 2, th, L), _tone(col, rng, 4), "SmoothPlastic",
+               flags=DECOR)
+        h = g.sub((W / 2, th, 0), rz=rng.uniform(8, 22), rx=rng.uniform(-6, 6))
+        h.part("Paper", (W * 0.24, -th / 2, 0), (W * 0.48, th, L * rng.uniform(0.92, 0.98)), _tone(col, rng, 6, 0.04),
+               "SmoothPlastic", flags=DECOR)
+        # a dog-eared corner folded back over the lifted half
+        _tri(h, "Paper", W * 0.38, -L / 2 + 0.16, 0.26, 0.26, th, mix(col, DUST, 0.3), "SmoothPlastic", y=0.004,
+             yaw=rng.uniform(-8, 8))
+        f.part("ShoePrint", (rng.uniform(-0.25, 0.05), th + 0.012, rng.uniform(-0.25, 0.25)), (0.42, 0.05, 0.95),
+               (44, 40, 36), "SmoothPlastic", flags=DECOR, transparency=0.55, rot=(0, rng.uniform(-40, 40), 0))
     else:
         _flat(f, "Paper", 0, -L / 4, W, L / 2, th, col, "SmoothPlastic")
         # the other half folded on the crease, lifted a little
@@ -267,7 +275,7 @@ def paper_sheet(D, folder, origin, ry, rng, kind="sheet", wet=None):
 @prop({}, {"wet": True}, {"torn": True, "w": 3.6})
 def cardboard_flat(D, folder, origin, ry, rng, w=None, d=None, wet=None, torn=None):
     """A flattened cardboard box on the floor: two faces peaked at the crease, its flaps (one torn,
-    one bent up), packing tape, soggy dark patches. Footprint 2.6-3.8 x 2.6-4 studs. 6-11 parts, DECOR."""
+    one bent up), packing tape, soggy dark patches. Footprint 2.6-3.8 x 2.6-4 studs. 8-10 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     W = w or rng.uniform(2.6, 3.6)
     L = d or rng.uniform(1.8, 2.6)
@@ -316,7 +324,7 @@ def cardboard_flat(D, folder, origin, ry, rng, w=None, d=None, wet=None, torn=No
 def cardboard_box(D, folder, origin, ry, rng, size=None, state=None, wet=None):
     """A battered cardboard box standing on the floor: open (flaps splayed at odd angles, one torn
     off), closed (taped lid), or crushed (a wall caved in, the lid sagging). Water-stained bottom,
-    a shipping label, hand holes. Footprint 1.4-2.6 x 1.4-2.2 studs, 1.2-2 tall. 8-17 parts, SMALL."""
+    a shipping label, hand holes. Footprint 1.4-2.6 x 1.4-2.2 studs, 1.2-2 tall. 8-14 parts, SMALL."""
     f = Frame(D, folder, origin, ry=ry)
     W, H, Dp = size or (rng.uniform(1.5, 2.5), rng.uniform(1.2, 1.9), rng.uniform(1.3, 2.1))
     state = state or _pick(rng, ["open", "open", "closed", "crushed"])
@@ -388,8 +396,8 @@ def cardboard_box(D, folder, origin, ry, rng, size=None, state=None, wet=None):
 
 @prop({"kind": "packet"}, {"kind": "takeaway"}, {"kind": "cup"}, {"kind": "foil"})
 def wrapper(D, folder, origin, ry, rng, kind=None):
-    """Food litter: a crushed crisp packet, an open foam takeaway box with leftovers, a crushed paper
-    coffee cup (lid, sleeve, a spill), or a crumpled foil ball. Footprint 0.4-1.6 studs. 1-5 parts, DECOR."""
+    """Food litter: a crushed crisp packet, an open foam takeaway box with leftovers, a stamped-flat paper
+    coffee cup (lid popped off, sleeve, a spill), or a crumpled foil ball. Footprint 0.4-1.6 studs. 2-5 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     kind = kind or _pick(rng, ["packet", "packet", "takeaway", "cup", "foil"])
     if kind == "packet":
@@ -417,12 +425,19 @@ def wrapper(D, folder, origin, ry, rng, kind=None):
                    "SmoothPlastic", flags=DECOR, rot=(rng.uniform(-6, 6), rng.uniform(0, 90), rng.uniform(-6, 6)))
         _disk(f, "Grease", rng.uniform(-0.3, 0.3), -0.55, 0.5, 0.05, OIL, "SmoothPlastic", transparency=0.55)
     elif kind == "cup":
+        # a paper coffee cup stamped flat: a squashed tapered body (wider at the mouth), the
+        # cardboard sleeve slid down it, the lid popped off beside it, a dried coffee spill
         col = _tone((176, 170, 158), rng, 8, darken=rng.uniform(0, 0.25))
-        _cyl(f, "Cup", (0, 0.15, 0), 0.6, 0.3, col, "SmoothPlastic", rot=(0, 0, rng.uniform(-6, 6)))
-        _cyl(f, "Sleeve", (0.04, 0.155, 0), 0.24, 0.32, _tone(CARDBOARD, rng, 8), CARDBOARD_MAT)
-        _cyl(f, "CupLid", (-0.31, 0.16, 0), 0.06, 0.34, (40, 40, 42), "Plastic", rot=(0, 0, rng.uniform(-4, 4)))
-        _disk(f, "Spill", -0.6, rng.uniform(-0.15, 0.15), rng.uniform(0.5, 0.8), 0.05, (44, 32, 22), "SmoothPlastic",
-              transparency=0.45)
+        g = f.sub((0, 0, 0), ry=rng.uniform(-10, 10))
+        g.part("Cup", (0, 0.07, 0), (0.62, 0.13, 0.3), col, "SmoothPlastic", flags=DECOR,
+               rot=(rng.uniform(-4, 4), 0, rng.uniform(-3, 3)))
+        g.part("Cup", (-0.25, 0.08, 0), (0.16, 0.15, 0.4), _tone(col, rng, 5), "SmoothPlastic", flags=DECOR,
+               rot=(rng.uniform(-8, 8), rng.uniform(-6, 6), 0))
+        g.part("Sleeve", (0.02, 0.075, 0), (0.24, 0.155, 0.36), _tone(CARDBOARD, rng, 8), CARDBOARD_MAT, flags=DECOR,
+               rot=(0, rng.uniform(-5, 5), 0))
+        _disk(f, "CupLid", rng.uniform(-0.75, -0.5), rng.uniform(-0.35, 0.35), 0.36, 0.06, (40, 40, 42), "Plastic")
+        _disk(f, "Spill", -0.45, rng.uniform(-0.15, 0.15), rng.uniform(0.5, 0.8), 0.05, (44, 32, 22), "SmoothPlastic",
+              transparency=0.5)
     else:
         s = rng.uniform(0.28, 0.4)
         _ball(f, "Foil", (0, s * 0.42, 0), s, (150, 150, 148), "Metal", reflectance=0.1)
@@ -484,23 +499,33 @@ def leaves_drift(D, folder, origin, ry, rng, width=None, depth=None, corner=Fals
 @prop({}, {"length": 8})
 def wall_base_grime(D, folder, origin, ry, rng, length=None):
     """The dirty foot of a wall (the wall on +Z, running along X): a strip of silt and grit against
-    it, a damp dark band, moss, and a few leaves and scraps caught in it. Footprint length 3-10 x
-    0.8 studs. 6-22 parts, DECOR."""
+    it, a damp dark band, moss, grit and gravel, a few leaves and a paper scrap caught in it.
+    Footprint length 3-10 x 1.2 studs. 7-21 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     L = length or rng.uniform(4, 8)
     _flat(f, "Damp", 0, -0.15, L, 1.2, 0.05, DAMP, "Concrete", transparency=0.55)
     x = -L / 2
     while x < L / 2 - 0.4:
         seg = min(rng.uniform(1.4, 3.0), L / 2 - x)
-        h = rng.uniform(0.08, 0.22)
-        f.part("Silt", (x + seg / 2, h / 2, 0.2), (seg, h, rng.uniform(0.5, 0.7)),
+        h = rng.uniform(0.14, 0.32)
+        f.part("Silt", (x + seg / 2, h / 2, 0.2), (seg, h, rng.uniform(0.55, 0.8)),
                _tone(_pick(rng, [SOIL, SOIL_DARK, DUST]), rng, 6), "Ground", shape=WEDGE, flags=DECOR,
                rot=(0, rng.uniform(-2, 2), 0))
         if rng.random() < 0.55:
             _flat(f, "Moss", x + seg * rng.uniform(0.2, 0.8), 0.38, seg * rng.uniform(0.3, 0.6), 0.22, 0.05 + h,
                   _tone(_pick(rng, MOSS), rng, 6), "Grass")
         x += seg
-    for _ in range(int(L * rng.uniform(0.6, 1.1))):
+    # grit and gravel washed against the wall, a scrap of paper caught in the silt
+    for _ in range(int(L * rng.uniform(0.4, 0.7))):
+        s = rng.uniform(0.1, 0.22)
+        f.part("Grit", (rng.uniform(-L / 2, L / 2), s * 0.35, rng.uniform(-0.35, 0.3)), (s, s * 0.7, s * 0.8),
+               _tone(_pick(rng, [CONCRETE_OLD, DUST, CINDER]), rng, 8, 0.1), "Concrete", flags=DECOR,
+               rot=(rng.uniform(-30, 30), rng.uniform(0, 180), rng.uniform(-30, 30)))
+    if rng.random() < 0.6:
+        f.part("Paper", (rng.uniform(-L, L) * 0.35, 0.12, 0.2), (0.6, 0.05, 0.45),
+               _tone(_pick(rng, PAPER), rng, 8, darken=0.35), "SmoothPlastic", flags=DECOR,
+               rot=(rng.uniform(-25, -12), rng.uniform(-30, 30), rng.uniform(-8, 8)))
+    for _ in range(int(L * rng.uniform(0.5, 0.9))):
         col = _tone(_pick(rng, LEAF), rng, 10, darken=0.2)
         f.part("Leaf", (rng.uniform(-L / 2, L / 2), 0.1, rng.uniform(-0.1, 0.4)), (0.3, 0.05, 0.2), col, "Fabric",
                flags=DECOR, rot=(rng.uniform(-20, 20), rng.uniform(0, 180), rng.uniform(-20, 20)))
@@ -509,7 +534,7 @@ def wall_base_grime(D, folder, origin, ry, rng, length=None):
 @prop({}, {"radius": 2.4, "density": 1.4})
 def litter_scatter(D, folder, origin, ry, rng, radius=None, density=1.0):
     """A natural spread of small litter over an area (more at its +Z side, as if against a wall):
-    paper balls, sheets, wrappers, butts, a few leaves. Footprint 2-5 studs across. 8-45 parts, DECOR."""
+    paper balls, sheets, wrappers, butts, a few leaves. Footprint 2-5 studs across. 11-63 parts (a cluster of litter props), DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     R = radius or rng.uniform(1.6, 2.6)
     n = max(4, int(R * R * 2.0 * density))
@@ -604,7 +629,7 @@ def trash_bag(D, folder, origin, ry, rng, size=None, torn=False, color=None):
 def trash_heap(D, folder, origin, ry, rng, count=None):
     """A heap of bin bags dumped against a wall (on +Z): bags side by side and slumped on each
     other, one torn open, a flattened box under them, loose litter around. Footprint ~5 x 4 studs.
-    35-110 parts (count 3-6 bags)."""
+    44-104 parts (count 3-6 bags)."""
     f = Frame(D, folder, origin, ry=ry)
     n = count or rng.randint(3, 5)
     torn_i = rng.randrange(n) if rng.random() < 0.7 else -1
@@ -656,7 +681,7 @@ def _plank(f, name, x, y, z, length, w, th, col, yaw=0.0, pitch=0.0, roll=0.0, b
 def wood_scraps(D, folder, origin, ry, rng, kind=None):
     """Broken wood on the floor: a snapped plank (one end resting on a scrap, a bent nail), a scatter
     of offcuts (one with old green paint), or a little pile of splinters.
-    Footprint 1.5-5 studs. 3-16 parts, DECOR_SHADOW / DECOR."""
+    Footprint 1.5-5 studs. 4-20 parts, DECOR_SHADOW / DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     kind = kind or _pick(rng, ["plank", "scatter", "splinters"])
     if kind == "plank":
@@ -772,7 +797,7 @@ def pallet(D, folder, origin, ry, rng, state=None):
 @prop({}, {"count": 4})
 def pallet_stack(D, folder, origin, ry, rng, count=None):
     """A stack of 2-4 pallets, each a little off the one below, the top one maybe broken.
-    Footprint 4.6 x 3.4 studs, 0.55 per pallet. 26-68 parts, SMALL (climbable)."""
+    Footprint 4.6 x 3.4 studs, 0.55 per pallet. 27-61 parts, SMALL (climbable)."""
     f = Frame(D, folder, origin, ry=ry)
     n = count or rng.randint(2, 3)
     y = 0.0
@@ -828,7 +853,7 @@ def _cinder_in(f, rng, col, half=False):
 def cinder_block(D, folder, origin, ry, rng, state=None):
     """A hollow concrete (cinder) block: lying flat (cores up), on its side (cores showing), broken
     in half with a pale break and a chip, or a small stack of 3-5 (one knocked off, one broken).
-    Footprint 1.3 x 0.65 studs (stack ~2.8 x 1.5). 5-7 parts (stack 15-34), SMALL."""
+    Footprint 1.3 x 0.65 studs (stack ~2.8 x 1.5). 5-7 parts (stack 15-35), SMALL."""
     state = state or _pick(rng, ["flat", "side", "broken"])
     f = Frame(D, folder, origin, ry=ry)
     col = _tone(_pick(rng, [CINDER, CONCRETE, CONCRETE_OLD]), rng, 6, darken=rng.uniform(0, 0.15))
@@ -921,7 +946,7 @@ def concrete_chunk(D, folder, origin, ry, rng, size=None, rebar=None):
 def rubble_pile(D, folder, origin, ry, rng, radius=None):
     """A pile of demolition rubble: a gritty mound (irregular slopes of dust and broken stuff),
     concrete lumps, bricks, a bent rebar or two sticking out, a broken plank, dust spread around.
-    Footprint 2 x radius (4.4-7 studs), 0.8-1.6 tall. 35-70 parts; the mound is PROP (climbable)."""
+    Footprint 2 x radius (4.4-7 studs), 0.8-1.6 tall. 39-53 parts; the mound is PROP (climbable)."""
     f = Frame(D, folder, origin, ry=ry)
     R = radius or rng.uniform(2.2, 3.4)
     h = R * rng.uniform(0.32, 0.45)
@@ -997,7 +1022,7 @@ def rebar(D, folder, origin, ry, rng, bends=None, length=None):
 # =============================================================================================
 # Worn urban objects and construction leftovers
 # =============================================================================================
-def _ring(f, rng, R_out, t, W, col, n=12, flags=DECOR_SHADOW, wear=0.25):
+def _ring(f, rng, R_out, t, W, col, n=16, flags=DECOR_SHADOW, wear=0.25):
     """A tyre ring around the frame's Y axis, centred on its origin."""
     rm = R_out - t / 2
     chord = 2 * R_out * math.tan(math.pi / n) + 0.02
@@ -1007,14 +1032,14 @@ def _ring(f, rng, R_out, t, W, col, n=12, flags=DECOR_SHADOW, wear=0.25):
         if rng.random() < wear:
             c = mix(c, RUBBER_OLD, rng.uniform(0.3, 0.7))
         f.part("Tyre", (math.cos(th) * rm, 0, math.sin(th) * rm), (t, W, chord), c, "Rubber",
-               rot=(0, -math.degrees(th), 0), flags=flags if i % 3 == 0 else DECOR_SHADOW)
+               rot=(0, -math.degrees(th), 0), flags=flags if i % 4 == 0 else DECOR_SHADOW)
 
 
 @prop({"state": "flat"}, {"state": "leaning"}, {"state": "stack"})
 def tyre(D, folder, origin, ry, rng, state=None):
     """An old car tyre: lying flat (stagnant water and dirt in it), leaning against a wall (on +Z),
-    or a stack of 2-4 slightly off each other. Built as a ring of 12 rubber segments, sun-greyed in
-    patches. Footprint 2.3 studs (stack ~2.6). 12-14 parts (stack 26-56); some segments SMALL."""
+    or a stack of 2-3 slightly off each other. Built as a ring of 16 rubber segments, sun-greyed in
+    patches. Footprint 2.3 studs (stack ~2.6). 16-18 parts (stack 33-49); some segments SMALL."""
     f = Frame(D, folder, origin, ry=ry)
     state = state or _pick(rng, ["flat", "leaning", "stack"])
     R, t, W = rng.uniform(1.05, 1.2), 0.46, rng.uniform(0.62, 0.75)
@@ -1031,7 +1056,7 @@ def tyre(D, folder, origin, ry, rng, state=None):
         g = f.sub((0, R * math.cos(lr) + W / 2 * math.sin(lr), R * math.sin(lr)), rx=90 + lean)
         _ring(g, rng, R, t, W, col, flags=SMALL)
     else:
-        n = rng.randint(2, 4)
+        n = rng.randint(2, 3)
         for i in range(n):
             g = f.sub((rng.uniform(-0.25, 0.25), W / 2 + i * W * 0.98, rng.uniform(-0.25, 0.25)),
                       rx=rng.uniform(-3, 3), rz=rng.uniform(-3, 3))
@@ -1249,8 +1274,8 @@ def traffic_cone(D, folder, origin, ry, rng, state=None):
 @prop({"state": "upright"}, {"state": "upside"}, {"state": "broken"})
 def milk_crate(D, folder, origin, ry, rng, state=None):
     """A plastic milk crate, faded and scuffed: open-sided frame (posts, rims, rails), upright,
-    upside down (a seat), or broken (rails gone, a rim cracked off). Footprint 1.2 x 1.2 studs,
-    1 tall. 14-20 parts; frame SMALL."""
+    upside down (a seat), or broken (rails and slats gone, a rim cracked off). Footprint 1.2 x 1.2
+    studs, 1 tall. 14-22 parts; frame SMALL."""
     f = Frame(D, folder, origin, ry=ry)
     state = state or _pick(rng, ["upright", "upside", "broken"])
     col = _tone(_pick(rng, CRATE), rng, 8, darken=rng.uniform(0.1, 0.35))
@@ -1279,6 +1304,20 @@ def milk_crate(D, folder, origin, ry, rng, state=None):
                 x = (-1 if side == 2 else 1) * (S / 2 - b / 2)
                 f.box("Crate", (x - b / 2, y, -S / 2 + b), (x + b / 2, y + hh, S / 2 - b), c, "Plastic", flags=SMALL)
             k += 1
+    # the lattice of the walls: two vertical slats a side (with the rails they make the grid of
+    # holes a crate reads by); a broken crate has lost some
+    for side in range(4):
+        for u in (-1, 1):
+            if state == "broken" and rng.random() < 0.3:
+                continue
+            c = _tone(col, rng, 4, 0.03)
+            p = u * S / 6
+            if side < 2:
+                z = (-1 if side == 0 else 1) * (S / 2 - b * 0.4)
+                f.box("Crate", (p - 0.05, 0.1, z - 0.04), (p + 0.05, H - 0.12, z + 0.04), c, "Plastic", flags=DECOR)
+            else:
+                x = (-1 if side == 2 else 1) * (S / 2 - b * 0.4)
+                f.box("Crate", (x - 0.04, 0.1, p - 0.05), (x + 0.04, H - 0.12, p + 0.05), c, "Plastic", flags=DECOR)
     if state == "broken":
         f.part("CrateBit", (rng.uniform(0.9, 1.4), 0.06, rng.uniform(-0.6, 0.6)), (S * 0.7, 0.12, b), col,
                "Plastic", flags=DECOR, rot=(0, rng.uniform(0, 180), rng.uniform(-5, 5)))
@@ -1290,13 +1329,19 @@ def milk_crate(D, folder, origin, ry, rng, state=None):
 @prop({"state": "standing"}, {"state": "tipped"})
 def bucket(D, folder, origin, ry, rng, state=None):
     """An old paint bucket: tapered, rolled rim, wire handle, crusted paint inside and dried drips down
-    its side; standing or tipped over with a dried spill. Footprint 1 studs (tipped 1 x 1.6),
-    1.1 tall. 7-9 parts, SMALL."""
+    its side; standing or tipped over with a dried, trodden spill. Footprint 1 studs (tipped 1 x 2),
+    1.1 tall. 8-11 parts, SMALL."""
     f = Frame(D, folder, origin, ry=ry)
     state = state or _pick(rng, ["standing", "tipped"])
     paint = _tone(_pick(rng, [PAINT["white"], (150, 150, 140), PAINT["blue"], (120, 110, 90)]), rng, 8, 0.1)
     if state == "tipped":
-        _disk(f, "Spill", -0.2, -1.1, rng.uniform(1.2, 1.6), 0.05, paint, "SmoothPlastic", transparency=0.1)
+        # a dried spill, dirtied and trodden: two overlapping blots and a smear
+        dried = mix(paint, DUST, rng.uniform(0.3, 0.5))
+        _disk(f, "Spill", -0.15, -1.0, rng.uniform(1.0, 1.3), 0.05, dried, "SmoothPlastic", transparency=0.15)
+        _disk(f, "Spill", rng.uniform(-0.6, 0.2), -1.5, rng.uniform(0.5, 0.8), 0.055, _tone(dried, rng, 6, 0.08),
+              "SmoothPlastic", transparency=0.25)
+        _flat(f, "Spill", rng.uniform(0.2, 0.5), -1.7, 0.3, 0.9, 0.05, mix(dried, SOIL_DARK, 0.4), "SmoothPlastic",
+              yaw=rng.uniform(-40, 40), transparency=0.35)
         f = f.sub((0, 0.46, 0), rx=-90 + rng.uniform(-4, 4)).sub((0, -0.5, 0))
     col = _tone(_pick(rng, [(176, 172, 160), (60, 62, 66), (140, 40, 34)]), rng, 8, darken=rng.uniform(0.1, 0.3))
     _cyl(f, "Bucket", (0, 0.25, 0), 0.5, 0.84, col, "Plastic", rot=(0, 0, 90), flags=SMALL)
@@ -1321,9 +1366,10 @@ def oil_stain(D, folder, origin, ry, rng, size=None):
     s = size or rng.uniform(1.0, 1.6)
     for i in range(rng.randint(2, 3)):
         _disk(f, "OilStain", rng.uniform(-0.4, 0.4) * s, rng.uniform(-0.3, 0.3) * s, s * rng.uniform(1.0, 1.8),
-              0.05 + 0.004 * i, _tone(OIL, rng, 3), "SmoothPlastic", transparency=0.3 + 0.12 * i,
+              0.05 + 0.004 * i, _tone(OIL, rng, 3), "SmoothPlastic", transparency=0.45 + 0.12 * i,
               reflectance=0.12)
-    _disk(f, "OilStain", 0, 0, s * 0.7, 0.064, OIL, "SmoothPlastic", transparency=0.1, reflectance=0.25)
+    _disk(f, "OilStain", rng.uniform(-0.15, 0.15) * s, 0, s * 0.6, 0.064, OIL, "SmoothPlastic", transparency=0.3,
+          reflectance=0.25)
     for _ in range(rng.randint(0, 3)):
         a = rng.uniform(0, 2 * math.pi)
         r = s * rng.uniform(1.0, 1.5)

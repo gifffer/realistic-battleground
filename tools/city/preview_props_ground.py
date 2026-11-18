@@ -3,7 +3,7 @@ group, from a few day cameras and one night view lit by a bulb, to LOOK at them.
 
     venv/bin/python -I tools/city/preview_props_ground.py OUT_DIR [group ...] [--fast]
 
-Groups: litter, bags, wood, masonry, objects, floor. Writes OUT_DIR/<group>_day_<i>.png and
+Groups: litter, bags, wood, masonry, objects, junk, floor, covers, edges. Writes OUT_DIR/<group>_day_<i>.png and
 OUT_DIR/<group>_night_0.png. Also checks every prop stays in its part budget over many seeds.
 """
 
@@ -18,14 +18,15 @@ import citykit  # noqa: E402
 import props_ground as pg  # noqa: E402
 
 GROUPS = {
-    "litter": ["paper_ball", "paper_sheet", "wrapper", "cigarette_butts", "litter_scatter", "gum_spots"],
-    "bags": ["trash_bag", "trash_heap", "cardboard_box", "cardboard_flat"],
-    "wood": ["wood_scraps", "pallet", "pallet_stack", "plank_stack"],
-    "masonry": ["cinder_block", "loose_bricks", "concrete_chunk", "rubble_pile", "rebar"],
-    "objects": ["tyre", "carpet_roll", "scrap_sheet", "tarp_scrap", "rope_coil", "cement_bag", "pipe_piece",
-                "traffic_cone", "milk_crate", "bucket"],
-    "floor": ["oil_stain", "damp_stain", "crack", "pothole", "asphalt_patch", "manhole", "drain_grate", "weeds",
-              "moss_patch", "puddle", "paint_marks", "leaves_drift", "wall_base_grime"],
+    "litter": ["paper_ball", "paper_sheet", "wrapper", "cigarette_butts", "gum_spots", "litter_scatter"],
+    "bags": ["trash_bag", "cardboard_box", "cardboard_flat", "trash_heap"],
+    "wood": ["wood_scraps", "plank_stack", "pallet", "pallet_stack"],
+    "masonry": ["rebar", "concrete_chunk", "loose_bricks", "cinder_block", "rubble_pile"],
+    "objects": ["pipe_piece", "bucket", "milk_crate", "traffic_cone", "cement_bag", "rope_coil"],
+    "junk": ["tarp_scrap", "tyre", "scrap_sheet", "carpet_roll"],
+    "floor": ["gum_spots", "oil_stain", "damp_stain", "crack", "pothole", "asphalt_patch", "puddle"],
+    "covers": ["paint_marks", "manhole", "drain_grate", "moss_patch", "weeds"],
+    "edges": ["leaves_drift", "wall_base_grime"],
 }
 CELL = {"litter_scatter": 6, "trash_heap": 8, "pallet_stack": 6, "plank_stack": 8, "rubble_pile": 8,
         "carpet_roll": 8, "scrap_sheet": 7, "pallet": 6, "leaves_drift": 6, "wall_base_grime": 9, "weeds": 7,
@@ -78,12 +79,14 @@ def build(group, seed=1):
 
 
 def cameras(width, depth):
-    cx, cz = width / 2 - 2, depth / 2 - 2
-    span = max(width, depth)
+    """An overview from the front, high, fitted to the grid; two views at a character's eye height
+    (5 studs) on the front rows and the back rows."""
+    cx, cz = width / 2 - 1.5, depth / 2 - 2
+    span = max(width * 0.62, depth * 0.95, 8)
     return [
-        ((cx, span * 0.75, -span * 0.45), (cx, 0, cz * 0.9), 50),  # overview, from the front, high
-        ((width * 0.22, 4.0, -4.5), (width * 0.3, 0.2, depth * 0.22), 50),  # a character's eye, front rows
-        ((width * 0.78, 4.5, depth * 0.3), (width * 0.55, 0.2, depth * 0.62), 55),  # eye level, back rows
+        ((cx, span * 1.05, cz - span * 0.95), (cx, 0, cz + 0.4), 50),
+        ((width * 0.3, 5.0, -5.5), (width * 0.38, 0.0, depth * 0.3), 55),
+        ((width * 0.7, 5.0, depth * 0.25 - 4.5), (width * 0.55, 0.0, depth * 0.75), 55),
     ]
 
 
@@ -91,6 +94,13 @@ def linear(D):
     """A copy whose colours are linearised (Roblox colours are sRGB; the preview feeds them raw)."""
     L = copy.deepcopy(D)
     L.colors = [[255 * (c / 255) ** 2.2 for c in col] for col in L.colors]
+    # citykit.preview builds its wedge mesh turned 180 deg about X (full face up, slope underneath):
+    # pre-turn every wedge by 180 deg about its own X so the render shows it as Roblox does
+    flip = citykit.yxz_matrix(180, 0, 0)
+    for r in L.parts:
+        if r[0] == citykit.WEDGE:
+            m = citykit.yxz_matrix(r[4], r[5], r[6]) @ flip
+            r[4], r[5], r[6] = (round(a, 2) for a in citykit.yxz_angles(m))
     return L
 
 

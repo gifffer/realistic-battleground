@@ -12,9 +12,11 @@
 --        SitStool     sitting on a stool (attributes SeatHeight, SeatBack)
 --        ArmsCrossed  standing, arms crossed, weight on one leg
 --        Phone        looking down at a phone held in front of the face
---        SitGround    sitting on the floor, back against a wall, legs stretched out, hands on
---                     the knees (or one hand on a bottle in a paper bag), breathing slowly,
---                     on a flattened cardboard box (the vagrant of the alleys)
+--        SitGround    sitting on the floor, back against a wall, legs stretched out under a
+--                     blanket, the hands on it at the knees (or the right hand held out with a
+--                     paper cup of coins: SitGroundCup), breathing slowly, on a flattened
+--                     cardboard box (the vagrant of the alleys: his things around him, see
+--                     addSquat)
 --     (an unknown pose name gets Idle);
 --   • turns the HEAD towards the closest player within HEAD_RANGE studs (smoothly, never
 --     further than HEAD_MAX_YAW), and now and then looks around when nobody is there;
@@ -24,8 +26,8 @@
 -- Only the NPCs near your camera are animated (ANIMATE_RANGE): the others freeze where they
 -- are. Nothing here is sent to the server.
 --
--- The rag, the phone, the bottle and the cardboard are small parts created here, on your
--- screen only.
+-- The rag, the phone, the paper cup, the cardboard, the blanket and the vagrant's things
+-- (his sign, backpack, book, coins) are small parts created here, on your screen only.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -91,6 +93,13 @@ local player = Players.LocalPlayer
 local function v(x: number, y: number, z: number): Vector3
 	return Vector3.new(x, y, z)
 end
+
+local function darker(color: Color3, amount: number): Color3
+	return color:Lerp(Color3.new(0, 0, 0), amount)
+end
+
+-- SitGroundCup: how far forward the right arm is swung (degrees), holding out the cup.
+local CUP_ARM = 64
 
 local CLIPS: { [string]: R6Pose.Clip } = {
 	Idle = {
@@ -295,9 +304,9 @@ local CLIPS: { [string]: R6Pose.Clip } = {
 		},
 	},
 
-	-- The same, the right hand down by the hip holding a bottle in a paper bag by its neck
-	-- (the bag stands on the floor: see addBottle).
-	SitGroundBottle = {
+	-- The same, the right forearm held out over the knee, a paper cup of coins in the hand
+	-- (resting on the blanket: see addCup); the left hand stays on the blanket.
+	SitGroundCup = {
 		length = 5.6,
 		looped = true,
 		keyframes = {
@@ -305,8 +314,8 @@ local CLIPS: { [string]: R6Pose.Clip } = {
 				time = 0,
 				pose = {
 					Root = { rot = v(10, 0, 0) },
-					Neck = { rot = v(-14, 0, 0) },
-					RightShoulder = { rot = v(35, 0, 4) },
+					Neck = { rot = v(-12, 0, 0) },
+					RightShoulder = { rot = v(CUP_ARM, 0, -6) },
 					LeftShoulder = { rot = v(40, 0, 30) },
 					RightHip = { rot = v(80, 0, 5) },
 					LeftHip = { rot = v(78, 0, -6) },
@@ -316,8 +325,8 @@ local CLIPS: { [string]: R6Pose.Clip } = {
 				time = 2.6,
 				pose = {
 					Root = { rot = v(11.2, 0, 0.4) },
-					Neck = { rot = v(-15.4, 0, 1) },
-					RightShoulder = { rot = v(33.8, 0, 4) },
+					Neck = { rot = v(-13.4, 0, 1) },
+					RightShoulder = { rot = v(CUP_ARM - 1.2, 0, -6) },
 					LeftShoulder = { rot = v(38.8, 0, 30.5) },
 					RightHip = { rot = v(78.8, 0, 5) },
 					LeftHip = { rot = v(76.8, 0, -6) },
@@ -381,7 +390,7 @@ local npcs: { [Model]: Npc } = {}
 local pose: { [string]: CFrame } = {} -- reused every frame
 local random = Random.new()
 
--- A small prop held in a hand (the rag, the phone, the bottle), on this screen only.
+-- A small prop held in a hand (the rag, the phone), on this screen only.
 local function holdProp(
 	model: Model,
 	size: Vector3,
@@ -441,55 +450,477 @@ local function groundOffset(model: Model): CFrame
 	return CFrame.new(0, seatHeight + 0.25 + math.cos(math.rad(10)) - 3, seatBack)
 end
 
--- A flattened cardboard box on the floor under someone sitting there: from just behind the
--- hips to near the heels (the legs reach 2.2 in front of them), a little crooked.
-local function addCardboard(model: Model, root: BasePart)
+-- A part made here (props), never touched, queried or collided with.
+local function newPart(
+	model: Model,
+	name: string,
+	size: Vector3,
+	color: Color3,
+	material: Enum.Material?,
+	shape: Enum.PartType?
+): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = shape or Enum.PartType.Block
+	part.Size = size
+	part.Color = color
+	part.Material = material or Enum.Material.SmoothPlastic
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = size.X > 0.25 and size.Y > 0.25
+	part.Parent = model
+	return part
+end
+
+-- A prop lying on the floor (anchored: it never moves).
+local function floorPart(
+	model: Model,
+	name: string,
+	size: Vector3,
+	cframe: CFrame,
+	color: Color3,
+	material: Enum.Material?,
+	shape: Enum.PartType?
+): Part
+	local part = newPart(model, name, size, color, material, shape)
+	part.Anchored = true
+	part.CFrame = cframe
+	return part
+end
+
+-- A Cylinder part stands upright with this turn (its axis is its X).
+local UPRIGHT = CFrame.Angles(0, 0, math.rad(90))
+
+-- The floor point under someone sitting on the ground (SitGround): under the hips, Y up,
+-- facing where he faces (-Z), in the world. His legs reach 2.2 in front of it (-Z), the wall
+-- is about 0.8 behind it (+Z).
+local function groundFrame(model: Model, root: BasePart): CFrame
 	local seat = model:GetAttribute("SeatHeight")
 	local back = model:GetAttribute("SeatBack")
 	local floor = -3 + (if typeof(seat) == "number" then seat else 0)
 	local seatBack = if typeof(back) == "number" then back else 0
-	local part = Instance.new("Part")
-	part.Name = "Cardboard"
-	part.Size = Vector3.new(2.5, GROUND_PAD, 2.7)
-	part.Color = Color3.fromRGB(122, 96, 66)
-	part.Material = Enum.Material.Cardboard
-	part.Anchored = true
-	part.CanCollide = false
-	part.CanQuery = false
-	part.CanTouch = false
-	part.CFrame = root.CFrame
-		* CFrame.new(0.05, floor + GROUND_PAD / 2, seatBack - 0.75)
-		* CFrame.Angles(0, math.rad(4), 0)
-	part.Parent = model
+	return root.CFrame * CFrame.new(0, floor, seatBack)
 end
 
--- The bottle of SitGroundBottle: a brown paper bag standing upright on the floor by the right
--- hip, the green glass neck sticking out of it in the fist. The props are welded to the arm,
--- which is tilted by the torso and the shoulder: the opposite tilt (from the clip's first
--- key) keeps them upright.
-local function addBottle(model: Model)
-	local first = CLIPS.SitGroundBottle.keyframes[1].pose
+-- A flattened cardboard box on the floor under someone sitting there: from just behind the
+-- hips to past the heels, a little crooked, damaged: a crease where it was folded, a strip of
+-- old packing tape, a wet stain, a torn flap at the front bent up off the floor.
+local function addCardboard(model: Model, root: BasePart)
+	local base = groundFrame(model, root)
+	local color = Color3.fromRGB(122, 96, 66)
+	local sheet = base * CFrame.new(0.05, GROUND_PAD / 2, -0.75) * CFrame.Angles(0, math.rad(4), 0)
+	floorPart(
+		model,
+		"Cardboard",
+		Vector3.new(2.5, GROUND_PAD, 2.7),
+		sheet,
+		color,
+		Enum.Material.Cardboard
+	)
+	floorPart(
+		model,
+		"CardboardCrease",
+		Vector3.new(2.5, GROUND_PAD + 0.006, 0.05),
+		sheet * CFrame.new(0, 0, 0.45),
+		darker(color, 0.25),
+		Enum.Material.Cardboard
+	)
+	floorPart(
+		model,
+		"CardboardTape",
+		Vector3.new(0.22, GROUND_PAD + 0.008, 1.2),
+		sheet * CFrame.new(-0.85, 0, -0.3) * CFrame.Angles(0, math.rad(3), 0),
+		Color3.fromRGB(176, 150, 104),
+		Enum.Material.SmoothPlastic
+	).Transparency =
+		0.25
+	floorPart(
+		model,
+		"CardboardStain",
+		Vector3.new(0.9, GROUND_PAD + 0.004, 0.7),
+		sheet * CFrame.new(0.6, 0, -1.0) * CFrame.Angles(0, math.rad(20), 0),
+		darker(color, 0.35),
+		Enum.Material.Cardboard
+	)
+	floorPart(
+		model,
+		"CardboardFlap",
+		Vector3.new(0.9, 0.05, 0.62),
+		sheet
+			* CFrame.new(-0.7, 0, -1.35)
+			* CFrame.Angles(math.rad(12), 0, 0)
+			* CFrame.new(0, 0.01, -0.3),
+		darker(color, 0.08),
+		Enum.Material.Cardboard
+	)
+end
+
+-- A paper coffee cup with a few coins in it, built around `cframe` (its middle, upright):
+-- the cup, its cardboard sleeve, the rim, the dark inside, the coins on top. `attach`
+-- (optional) = the body part it is welded to; otherwise it stands anchored.
+local function addCup(model: Model, cframe: CFrame, attach: BasePart?)
+	local function piece(
+		name: string,
+		size: Vector3,
+		offset: CFrame,
+		color: Color3,
+		material: Enum.Material?
+	)
+		local part = newPart(model, name, size, color, material, Enum.PartType.Cylinder)
+		local world = cframe * offset * UPRIGHT
+		part.CFrame = world
+		if attach then
+			part.Massless = true
+			local weld = Instance.new("Weld")
+			weld.Part0 = attach
+			weld.Part1 = part
+			weld.C0 = attach.CFrame:ToObjectSpace(world)
+			weld.Parent = part
+		else
+			part.Anchored = true
+		end
+	end
+	piece("Cup", Vector3.new(0.56, 0.44, 0.44), CFrame.identity, Color3.fromRGB(222, 214, 198))
+	piece(
+		"CupSleeve",
+		Vector3.new(0.2, 0.46, 0.46),
+		CFrame.new(0, -0.03, 0),
+		Color3.fromRGB(146, 108, 68),
+		Enum.Material.Cardboard
+	)
+	piece(
+		"CupRim",
+		Vector3.new(0.05, 0.47, 0.47),
+		CFrame.new(0, 0.27, 0),
+		Color3.fromRGB(232, 226, 212)
+	)
+	piece(
+		"CupInside",
+		Vector3.new(0.012, 0.38, 0.38),
+		CFrame.new(0, 0.284, 0),
+		Color3.fromRGB(42, 34, 28)
+	)
+	local coins: { { at: CFrame, color: Color3 } } = {
+		{
+			at = CFrame.new(-0.06, 0.296, 0.04) * CFrame.Angles(0, 0, math.rad(8)),
+			color = Color3.fromRGB(176, 176, 172),
+		},
+		{
+			at = CFrame.new(0.07, 0.3, -0.04) * CFrame.Angles(math.rad(14), 0, 0),
+			color = Color3.fromRGB(168, 104, 64),
+		},
+		{
+			at = CFrame.new(0.0, 0.31, 0.08) * CFrame.Angles(math.rad(-10), 0, math.rad(6)),
+			color = Color3.fromRGB(196, 168, 92),
+		},
+	}
+	for _, coin in coins do
+		piece("Coin", Vector3.new(0.03, 0.15, 0.15), coin.at, coin.color, Enum.Material.Metal)
+	end
+end
+
+-- A coin lying on the floor (or on the cardboard).
+local function addCoin(model: Model, cframe: CFrame, color: Color3)
+	floorPart(
+		model,
+		"Coin",
+		Vector3.new(0.025, 0.15, 0.15),
+		cframe * UPRIGHT,
+		color,
+		Enum.Material.Metal,
+		Enum.PartType.Cylinder
+	)
+end
+
+-- SitGroundCup: the cup in the right hand. The hand is tilted by the torso and the shoulder:
+-- the opposite tilt (from the clip's first key) keeps the cup upright, its middle a little
+-- below and in front of the fist, its bottom on the blanket over the knee.
+local CUP_IN_FIST = CFrame.new(0, -0.06, -0.3)
+local function addCupInHand(model: Model)
+	local arm = model:FindFirstChild("Right Arm")
+	if arm == nil or not arm:IsA("BasePart") then
+		return
+	end
+	local first = CLIPS.SitGroundCup.keyframes[1].pose
 	local function angles(rot: Vector3): CFrame
 		return CFrame.Angles(math.rad(rot.X), math.rad(rot.Y), math.rad(rot.Z))
 	end
 	local upright = (angles(first.Root.rot) * angles(first.RightShoulder.rot)):Inverse()
-	local grip = CFrame.new(0, -0.8, 0) * upright -- in the fist, upright
-	holdProp(
+	-- (in the arm's space: the bottom of the hand, then upright, then the cup's offset)
+	local grip = CFrame.new(0, -0.95, 0) * upright * CUP_IN_FIST
+	addCup(model, arm.CFrame * grip, arm)
+end
+
+-- The blanket over his legs (SitGround): a grey wool blanket pulled over the thighs, tucked
+-- against his belly, two dark stripes near its end, a crumpled fold on top, its end rolled
+-- over above the knees (the hands rest there), its sides falling to the floor. The legs
+-- (1 thick) lie with their tops 0.75 above the seat (see groundOffset): the blanket lies on
+-- them, from the hips to just before the knees (the knees and the boots show).
+local function addBlanket(model: Model, root: BasePart, seed: number)
+	local base = groundFrame(model, root)
+	local seat = GROUND_PAD
+	local wool = if seed % 2 == 0 then Color3.fromRGB(92, 86, 76) else Color3.fromRGB(70, 76, 82)
+	local stripe = Color3.fromRGB(96, 38, 34)
+	local fabric = Enum.Material.Fabric
+	local main = base * CFrame.new(0.03, seat + 0.81, -0.78) * CFrame.Angles(0, math.rad(2), 0)
+	floorPart(model, "Blanket", Vector3.new(2.5, 0.1, 0.86), main, wool, fabric)
+	for _, z in { -0.2, -0.29 } do
+		floorPart(
+			model,
+			"BlanketStripe",
+			Vector3.new(2.51, 0.104, 0.05),
+			main * CFrame.new(0, 0, z),
+			stripe,
+			fabric
+		)
+	end
+	floorPart(
 		model,
-		Vector3.new(0.16, 0.34, 0.16),
-		Color3.fromRGB(46, 70, 42),
-		grip,
-		"BottleNeck",
-		Enum.Material.Glass
+		"BlanketFold",
+		Vector3.new(1.2, 0.08, 0.5),
+		main * CFrame.new(-0.42, 0.07, 0.08) * CFrame.Angles(0, math.rad(-12), math.rad(2)),
+		wool:Lerp(Color3.fromRGB(150, 140, 124), 0.12),
+		fabric
 	)
-	holdProp(
+	floorPart(
 		model,
-		Vector3.new(0.44, 0.72, 0.4),
-		Color3.fromRGB(138, 108, 74),
-		grip * CFrame.new(0, -0.17 - 0.36, 0) * CFrame.Angles(0, math.rad(12), 0),
-		"PaperBag",
+		"BlanketRoll",
+		Vector3.new(2.44, 0.24, 0.24),
+		main * CFrame.new(0, -0.02, -0.47),
+		darker(wool, 0.08),
+		fabric,
+		Enum.PartType.Cylinder
+	)
+	for _, side in { -1, 1 } do
+		floorPart(
+			model,
+			"BlanketSide",
+			Vector3.new(0.08, 0.86, 0.9),
+			base
+				* CFrame.new(side * 1.29, seat + 0.38, -0.8)
+				* CFrame.Angles(0, math.rad(2), math.rad(side * 6)),
+			darker(wool, 0.12),
+			fabric
+		)
+	end
+end
+
+-- The vagrant's things around him (role Vagrant, sitting on the ground):
+--   • a cardboard sign leaning against the wall on his left, "ANYTHING HELPS / GOD BLESS"
+--     in black marker, a crease where it was folded, the bottom gone dark with wet;
+--   • his backpack against the wall on his right: a front pocket, the lid with two straps
+--     and buckles, a sewn-on patch, a sleeping roll strapped on top, dirt at the bottom;
+--   • a dog-eared paperback on the floor by his left hip (a corner folded, a bookmark);
+--   • a few coins on the cardboard by his right knee, and the paper cup on the floor when he
+--     does not hold it out.
+local function addSquat(model: Model, root: BasePart, cupInHand: boolean)
+	local base = groundFrame(model, root)
+
+	-- the sign
+	local sign = base
+		* CFrame.new(-2.45, 0, 0.42)
+		* CFrame.Angles(0, math.rad(-6), 0)
+		* CFrame.Angles(math.rad(14), 0, 0)
+		* CFrame.new(0, 0.575, 0)
+	local cardboard = Color3.fromRGB(150, 116, 78)
+	local board = floorPart(
+		model,
+		"Sign",
+		Vector3.new(1.7, 1.15, 0.06),
+		sign,
+		cardboard,
 		Enum.Material.Cardboard
 	)
+	floorPart(
+		model,
+		"SignCrease",
+		Vector3.new(1.7, 0.025, 0.064),
+		sign * CFrame.new(0, 0.03, 0),
+		darker(cardboard, 0.2),
+		Enum.Material.Cardboard
+	)
+	floorPart(
+		model,
+		"SignWet",
+		Vector3.new(1.704, 0.16, 0.064),
+		sign * CFrame.new(0, -0.5, 0),
+		darker(cardboard, 0.35),
+		Enum.Material.Cardboard
+	)
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "SignText"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 90
+	gui.LightInfluence = 1
+	gui.Adornee = board
+	gui.Parent = board
+	local lines = {
+		{ text = "ANYTHING\nHELPS", y = 0.06, height = 0.6, rotation = -3 },
+		{ text = "GOD BLESS", y = 0.68, height = 0.18, rotation = -1 },
+	}
+	for _, line in lines do
+		local label = Instance.new("TextLabel")
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.fromScale(0.06, line.y)
+		label.Size = UDim2.fromScale(0.88, line.height)
+		label.Rotation = line.rotation
+		label.Font = Enum.Font.PermanentMarker
+		label.Text = line.text
+		label.TextScaled = true
+		label.TextColor3 = Color3.fromRGB(24, 20, 18)
+		label.TextTransparency = 0.08
+		label.Parent = gui
+	end
+
+	-- the backpack
+	local olive = Color3.fromRGB(64, 68, 52)
+	local pack = base
+		* CFrame.new(2.65, 0, 0.3)
+		* CFrame.Angles(0, math.rad(-10), 0)
+		* CFrame.Angles(math.rad(5), 0, 0)
+	local fabric = Enum.Material.Fabric
+	local function packPart(
+		name: string,
+		size: Vector3,
+		offset: CFrame,
+		color: Color3,
+		material: Enum.Material?,
+		shape: Enum.PartType?
+	)
+		floorPart(model, name, size, pack * offset, color, material or fabric, shape)
+	end
+	packPart("Backpack", Vector3.new(1.2, 1.4, 0.62), CFrame.new(0, 0.7, 0), olive)
+	packPart(
+		"PackDirt",
+		Vector3.new(1.21, 0.22, 0.63),
+		CFrame.new(0, 0.11, 0),
+		olive:Lerp(Color3.fromRGB(40, 34, 28), 0.5)
+	)
+	packPart(
+		"PackPocket",
+		Vector3.new(0.86, 0.62, 0.16),
+		CFrame.new(0, 0.45, -0.38),
+		darker(olive, 0.08)
+	)
+	packPart(
+		"PackPocketZip",
+		Vector3.new(0.7, 0.03, 0.012),
+		CFrame.new(0, 0.68, -0.464),
+		Color3.fromRGB(30, 30, 30)
+	)
+	packPart("PackLid", Vector3.new(1.24, 0.22, 0.66), CFrame.new(0, 1.42, 0), darker(olive, 0.12))
+	packPart(
+		"PackPatch",
+		Vector3.new(0.26, 0.16, 0.012),
+		CFrame.new(0.3, 1.42, -0.336),
+		Color3.fromRGB(150, 60, 50)
+	)
+	for _, side in { -1, 1 } do
+		packPart(
+			"PackStrap",
+			Vector3.new(0.1, 0.5, 0.03),
+			CFrame.new(side * 0.32, 1.2, -0.325),
+			darker(olive, 0.4)
+		)
+		packPart(
+			"PackBuckle",
+			Vector3.new(0.14, 0.1, 0.03),
+			CFrame.new(side * 0.32, 0.98, -0.345),
+			Color3.fromRGB(26, 26, 26),
+			Enum.Material.Plastic
+		)
+		packPart(
+			"PackSide",
+			Vector3.new(0.14, 0.5, 0.42),
+			CFrame.new(side * 0.67, 0.42, 0),
+			darker(olive, 0.15)
+		)
+		packPart(
+			"RollStrap",
+			Vector3.new(0.08, 0.43, 0.43),
+			CFrame.new(side * 0.42, 1.73, 0.02),
+			Color3.fromRGB(26, 26, 26),
+			nil,
+			Enum.PartType.Cylinder
+		)
+	end
+	packPart(
+		"SleepingRoll",
+		Vector3.new(1.5, 0.4, 0.4),
+		CFrame.new(0, 1.73, 0.02),
+		Color3.fromRGB(58, 72, 92),
+		nil,
+		Enum.PartType.Cylinder
+	)
+
+	-- the paperback
+	local book = base * CFrame.new(-1.55, 0, -0.1) * CFrame.Angles(0, math.rad(25), 0)
+	local cover = Color3.fromRGB(52, 66, 54)
+	floorPart(
+		model,
+		"BookBack",
+		Vector3.new(0.56, 0.03, 0.78),
+		book * CFrame.new(0, 0.015, 0),
+		cover
+	)
+	floorPart(
+		model,
+		"BookPages",
+		Vector3.new(0.52, 0.08, 0.74),
+		book * CFrame.new(0.02, 0.07, 0),
+		Color3.fromRGB(214, 202, 170)
+	)
+	floorPart(
+		model,
+		"BookCover",
+		Vector3.new(0.56, 0.03, 0.78),
+		book * CFrame.new(0, 0.125, 0),
+		cover
+	)
+	floorPart(
+		model,
+		"BookSpine",
+		Vector3.new(0.05, 0.15, 0.78),
+		book * CFrame.new(-0.285, 0.075, 0),
+		darker(cover, 0.25)
+	)
+	floorPart(
+		model,
+		"DogEar",
+		Vector3.new(0.11, 0.012, 0.11),
+		book * CFrame.new(0.2, 0.146, -0.31) * CFrame.Angles(0, math.rad(45), 0),
+		Color3.fromRGB(196, 186, 160)
+	)
+	floorPart(
+		model,
+		"BookTitle",
+		Vector3.new(0.3, 0.006, 0.06),
+		book * CFrame.new(0, 0.143, -0.15),
+		Color3.fromRGB(170, 146, 90)
+	)
+	floorPart(
+		model,
+		"Bookmark",
+		Vector3.new(0.04, 0.01, 0.2),
+		book * CFrame.new(0.1, 0.1, -0.45),
+		Color3.fromRGB(150, 40, 36)
+	)
+
+	-- the coins, and the cup on the floor if he is not holding it out
+	local seat = GROUND_PAD + 0.0125
+	addCoin(
+		model,
+		base * CFrame.new(1.22, seat, -1.62) * CFrame.Angles(0, 0.4, 0),
+		Color3.fromRGB(176, 176, 172)
+	)
+	addCoin(model, base * CFrame.new(1.13, seat, -1.84), Color3.fromRGB(168, 104, 64))
+	if not cupInHand then
+		addCup(model, base * CFrame.new(1.6, 0.28, -1.25))
+	end
 end
 
 local function linesFor(model: Model, role: string): { string }
@@ -532,13 +963,14 @@ local function addNpc(instance: Instance)
 	local seed = model:GetAttribute("NpcSeed")
 	local seedNumber = if typeof(seed) == "number" then seed else 0
 	local poseText = if typeof(poseName) == "string" then poseName else "Idle"
-	-- (SitGroundBottle is a variant of SitGround, picked by the seed: two out of three hold
-	-- a bottle)
-	if poseText == "SitGround" and seedNumber % 3 ~= 0 then
-		poseText = "SitGroundBottle"
+	-- (SitGroundCup is a variant of SitGround, picked by the seed: two out of three hold out
+	-- the paper cup)
+	local cupInHand = poseText == "SitGround" and seedNumber % 3 ~= 0
+	if cupInHand then
+		poseText = "SitGroundCup"
 	end
 	local clip = CLIPS[poseText] or CLIPS.Idle
-	local onGround = clip == CLIPS.SitGround or clip == CLIPS.SitGroundBottle
+	local onGround = clip == CLIPS.SitGround or clip == CLIPS.SitGroundCup
 
 	if clip == CLIPS.WipeCounter then
 		-- an off-white rag under the right hand
@@ -558,11 +990,15 @@ local function addNpc(instance: Instance)
 			CFrame.new(0, -1.15, -0.3) * CFrame.Angles(math.rad(-70), 0, 0),
 			"Phone"
 		)
-	elseif clip == CLIPS.SitGroundBottle then
-		addBottle(model)
+	elseif clip == CLIPS.SitGroundCup then
+		addCupInHand(model)
 	end
 	if onGround then
 		addCardboard(model, root)
+		addBlanket(model, root, seedNumber)
+		if roleText == "Vagrant" then
+			addSquat(model, root, cupInHand)
+		end
 	end
 
 	npcs[model] = {

@@ -59,14 +59,14 @@ SOOT = (34, 31, 29)
 DAMP = (40, 36, 32)
 WET_DARK = (26, 24, 22)
 MOSS = (46, 54, 34)
-PLASTER = [(118, 112, 100), (106, 102, 92), (124, 116, 100), (98, 96, 90)]
+PLASTER = [(104, 98, 86), (94, 90, 80), (108, 100, 86), (88, 86, 80)]
 CONCRETE = (96, 92, 86)
 CONCRETE_DARK = (70, 68, 64)
 STONE = (126, 120, 108)
 EFFLO = (178, 174, 162)
 RUST = (89, 47, 30)
 RUST_DARK = (59, 29, 19)
-RUST_STAIN = (88, 50, 30)
+RUST_STAIN = (72, 38, 22)
 METAL = (58, 62, 64)
 METAL_DARK = (40, 40, 40)
 GALV = (104, 106, 104)
@@ -142,8 +142,9 @@ def _ov(k=0):
     return -(0.035 + 0.022 * k)
 
 
-def overlay(f, name, x0, x1, y0, y1, color, k=0, tr=0.5, material="SmoothPlastic", rz=0.0, **kw):
-    """A thin stain / paint / paper layer flat on the wall face."""
+def overlay(f, name, x0, x1, y0, y1, color, k=0, tr=0.5, material="Concrete", rz=0.0, **kw):
+    """A thin stain / paint / paper layer flat on the wall face. Matte by default (Concrete):
+    a glossy translucent layer reads as a grey film, a matte one as a stain soaked in."""
     return f.part(name, ((x0 + x1) / 2, (y0 + y1) / 2, _ov(k)), (abs(x1 - x0), abs(y1 - y0), 0.05),
                   color, material, rot=(0, 0, rz), flags=kw.pop("flags", DECOR), transparency=tr, **kw)
 
@@ -163,7 +164,7 @@ def streak(f, rng, name, x, y_top, length, width, color, k=1, tr=0.55, taper=3):
     return n
 
 
-def soft(f, rng, name, x0, x1, y0, y1, color, opacity=0.5, layers=3, k=0, anchor="center", material="SmoothPlastic",
+def soft(f, rng, name, x0, x1, y0, y1, color, opacity=0.5, layers=3, k=0, anchor="center", material="Concrete",
          ragged=0.25):
     """A soft-edged stain: `layers` nested translucent rectangles shrinking toward the centre
     (or toward the bottom / top edge for anchor = "bottom" / "top"), so the colour builds
@@ -212,7 +213,7 @@ def wall_grime(D, folder, origin, ry, rng, width=12.0, height=5.0, soot=True, mo
     translucent bands (each a few pieces of different heights, so the top edge is ragged
     and the colour deepens toward the ground), a wet splash band, moss in the corner of the
     floor, and an optional soot haze higher up. Footprint: width x height (flat on the face).
-    Parts: 10-22."""
+    Parts: 12-28."""
     f = frame_at(D, folder, origin, ry)
     n = 0
     bands = 4
@@ -220,9 +221,21 @@ def wall_grime(D, folder, origin, ry, rng, width=12.0, height=5.0, soot=True, mo
     for b in range(bands):
         t = b / (bands - 1)
         h = height * (0.85 - 0.62 * t) * rng.uniform(0.9, 1.1)
-        x0 = -width / 2 + rng.uniform(0, 0.4) * (b > 0)
-        x1 = width / 2 - rng.uniform(0, 0.4) * (b > 0)
-        overlay(f, "Damp", x0, x1, 0, h, jitter(mix(DAMP, WET_DARK, t), rng, 3), k=b, tr=0.8, rz=rng.uniform(-0.3, 0.3))
+        col = jitter(mix(DAMP, WET_DARK, t), rng, 3)
+        if b == 0:  # the tide mark: uneven runs, never one straight line
+            segs = max(3, min(7, int(width / 3)))
+            edges = sorted(rng.uniform(-width / 2, width / 2) for _ in range(segs - 1))
+            edges = [-width / 2] + edges + [width / 2]
+            for a, c in zip(edges, edges[1:]):
+                if c - a < 0.3:
+                    continue
+                overlay(f, "Damp", a - 0.15, c + 0.15, 0, h * rng.uniform(0.75, 1.15), col, k=b, tr=0.8,
+                        rz=rng.uniform(-1.2, 1.2))
+                n += 1
+            continue
+        x0 = -width / 2 + rng.uniform(0, 0.4)
+        x1 = width / 2 - rng.uniform(0, 0.4)
+        overlay(f, "Damp", x0, x1, 0, h, col, k=b, tr=0.8, rz=rng.uniform(-0.3, 0.3))
         n += 1
     # ...and faint tongues climbing higher where the wall wicks more water (ragged tide mark)
     for _ in range(max(2, min(5, int(width / 4)))):
@@ -251,18 +264,21 @@ def plaster_patch(D, folder, origin, ry, rng, width=6.0, height=5.0, y=2.0, colo
     """A patch of old render on a brick wall, chipped away at its edges and in one hole so
     the brick shows through: irregular rows of render (each row a few runs with jagged ends),
     loose bricks standing proud in the hole, a darker dirt band at its foot.
-    Footprint: width x height at height y. Parts: 8-24."""
+    Footprint: width x height at height y. Parts: 10-26."""
     f = frame_at(D, folder, origin, ry)
     base = color or rng.choice(PLASTER)
     brick = brick or rng.choice(BRICK)
     n = 0
     rows = max(4, int(height / 0.65))
-    row_h = height / rows
+    hs = [rng.uniform(0.6, 1.4) for _ in range(rows)]
+    hs = [h * height / sum(hs) for h in hs]
+    starts = [y + sum(hs[:i]) for i in range(rows)]
     hole_c = (rng.uniform(-width * 0.25, width * 0.25), y + rng.uniform(0.3, 0.7) * height)
     hole_r = rng.uniform(0.18, 0.3) * min(width, height)
+    thick = rng.uniform(0.08, 0.1)
     for r in range(rows):
-        y0 = y + r * row_h + rng.uniform(-0.05, 0.05)
-        y1 = y0 + row_h + 0.06
+        y0 = starts[r] + rng.uniform(-0.04, 0.04)
+        y1 = y0 + hs[r] + 0.08
         # each row is shorter at the patch's top/bottom (the patch is roughly oval)
         t = abs((r + 0.5) / rows - 0.5) * 2
         half = width / 2 * (1 - 0.35 * t * t) * rng.uniform(0.85, 1.0)
@@ -277,8 +293,11 @@ def plaster_patch(D, folder, origin, ry, rng, width=6.0, height=5.0, y=2.0, colo
         for a, b in runs:
             if b - a < 0.3:
                 continue
-            thick = rng.uniform(0.07, 0.1)
-            f.box("Render", (a, y0, -thick), (b, y1, 0.0), jitter(base, rng, 5), "Concrete", flags=DECOR)
+            # one even skin (same colour / thickness, overlapping runs: no seams), only its
+            # outline is jagged; the chipped edge shows as the runs' uneven ends
+            tk = thick + 0.008 * (r % 2)  # overlapping rows never coplanar (no z-fighting)
+            f.part("Render", ((a + b) / 2, (y0 + y1) / 2, -tk / 2), (b - a, y1 - y0 + 0.1, tk),
+                   jitter(base, rng, 1.5), "Plaster", rot=(0, 0, rng.uniform(-0.4, 0.4)), flags=DECOR)
             n += 1
     # loose / exposed bricks in the hole (proud, darker, chipped)
     for _ in range(rng.randint(2, 4)):
@@ -288,6 +307,8 @@ def plaster_patch(D, folder, origin, ry, rng, width=6.0, height=5.0, y=2.0, colo
                rot=(0, 0, rng.uniform(-3, 3)), flags=DECOR)
         n += 1
     # dirt on the render (darker toward its foot) and a run-off streak
+    n += soft(f, rng, "Dirt", -width * 0.45, width * 0.45, y, y + height * 0.45, DAMP, opacity=0.35, layers=2, k=4,
+              anchor="bottom")
     n += streak(f, rng, "Streak", rng.uniform(-width / 3, width / 3), y + height, height * 0.7, 0.5, DAMP, k=5,
                 tr=0.72, taper=2)
     return n
@@ -358,7 +379,7 @@ POSTER_TEXTS = ["MISSING", "LIVE · THE ROT", "CASH FOR GOLD", "ROOMS · NO ID",
 def torn_posters(D, folder, origin, ry, rng, width=3.6, height=4.2, y=3.5, text=None, layers=None):
     """Fly-posting built up over years: several paper layers (older ones larger and paler),
     torn so the lower layers and the wall show, a hanging peeled flap, glue stains and
-    tape. The top poster carries a faded headline. Footprint: width x height. Parts: 6-14."""
+    tape. The top poster carries a faded headline. Footprint: width x height. Parts: 9-18."""
     f = frame_at(D, folder, origin, ry)
     n = 0
     layers = layers or rng.randint(2, 4)
@@ -407,7 +428,7 @@ def painted_sign(D, folder, origin, ry, rng, width=9.0, height=2.4, y=11.0, text
                  color=None, ground=None):
     """A faded 'ghost sign' painted on brick decades ago: weathered ground colour, a border,
     the lettering half gone, bare patches where the paint flaked off, a soot wash.
-    Footprint: width x height at y. Parts: 6-10."""
+    Footprint: width x height at y. Parts: 9-16."""
     f = frame_at(D, folder, origin, ry)
     ground = ground or jitter(rng.choice([(108, 92, 64), (70, 76, 70), (96, 54, 44), (120, 116, 104)]), rng, 6)
     ink = color or jitter(rng.choice([(176, 166, 140), (150, 140, 112), (30, 30, 28)]), rng, 6)
@@ -476,7 +497,7 @@ def window(D, folder, origin, ry, rng, width=3.4, height=5.0, y=4.0, variant="di
     Variants: "dirty" (grimy panes, sagging blind), "lit" (warm room light, half-drawn
     curtain, tag CityWindowLit + a weak light), "boarded" (plywood + nailed planks),
     "barred" (rusted security bars on lugs), "broken" (panes smashed, shards in the frame
-    and on the sill). Footprint: (width + 1) x (height + 1.2), 0.6 deep. Parts: 15-28."""
+    and on the sill). Footprint: (width + 1) x (height + 1.2), 0.6 deep. Parts: 18-34 (boarded ~18, barred ~33)."""
     f = frame_at(D, folder, origin, ry)
     f = f.sub((x, 0, 0))
     w, h = width, height
@@ -621,7 +642,7 @@ def back_door(D, folder, origin, ry, rng, width=4.0, height=7.6, variant="closed
     stencilled warning, and a caged bulkhead light above (optional).
     Variants: "closed", "ajar" (swung out 12-25 deg, dark corridor behind), "chained"
     (a chain and padlock across the handle and a hasp). Footprint: (width + 1.2) x 1.4 deep,
-    (height + 2.5) tall with the light. Parts: 22-34."""
+    (height + 2.5) tall with the light. Parts: 38-48."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     w, h = width, height
     paint = color or jitter(rng.choice(STEEL_PAINT), rng, 6)
@@ -717,7 +738,7 @@ def roller_shutter(D, folder, origin, ry, rng, width=8.0, height=7.0, open_heigh
     a curtain of slats (dented, uneven shades), bottom bar with lift handle and ground lock
     padlock, rust and grime climbing up from the foot, often a tag. open_height > 0 leaves
     it jammed part-open on a dark gap. Footprint: (width + 0.8) x 1.2 deep x (height + 1.4).
-    Parts: 16-28."""
+    Parts: 24-30."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     w, h = width, height
     base = color or jitter(rng.choice([GALV, (84, 88, 86), (70, 76, 84), (96, 70, 56)]), rng, 6)
@@ -922,7 +943,7 @@ def building_top(D, folder, origin, ry, rng, width=16.0, top=30.0, depth=4.0, cl
         ln = min(rng.uniform(1.8, 2.8), width / 2 - x)
         if rng.random() > 0.1:
             f.part("Coping", (x + ln / 2, top + 2.35 + rng.uniform(-0.04, 0.06), 0.5 + rng.uniform(-0.08, 0.08)),
-                   (ln - 0.06, 0.3, 1.45), jitter(STONE, rng, 8, rng.uniform(0, 0.2)), "Concrete",
+                   (ln - 0.06, 0.3, 1.45), jitter(STONE, rng, 2, rng.uniform(0.05, 0.3)), "Concrete",
                    rot=(rng.uniform(-1.5, 1.5), rng.uniform(-1.5, 1.5), rng.uniform(-1.2, 1.2)), flags=SOLID)
             n += 1
         x += ln
@@ -1156,7 +1177,7 @@ def ac_unit(D, folder, origin, ry, rng, y=9.0, x=0.0, scale=1.0):
     """A wall-hung air-con condenser: yellowed casing with a round fan grille (dark,
     two crossed guards), side louvres, on two steel angle brackets with diagonal struts,
     a condensate pipe dribbling down the wall (dark wet streak), rust round the screws and
-    soot above the outlet. Footprint: 3 x 1.4 (x scale), 2.2 tall. Parts: 13-19."""
+    soot above the outlet. Footprint: 3 x 1.4 (x scale), 2.2 tall. Parts: 21."""
     f = frame_at(D, folder, origin, ry).sub((x, y, 0))
     s = scale
     W, H, Dp = 3.0 * s, 2.2 * s, 1.3 * s
@@ -1202,7 +1223,7 @@ def meter_box(D, folder, origin, ry, rng, y=3.2, x=0.0, conduits=2):
     """Electrical meter / junction cabinet: steel box with a door (seam, hinges, hasp and
     padlock), a yellow warning label, a vent slot, conduits leaving the top (with straps)
     and one into the ground, a loose cable looping out, rust dribbling from the bottom.
-    Footprint: 2.4 x 0.8, ~3 tall (+ conduits up to y + 8). Parts: 12-20."""
+    Footprint: 2.4 x 0.8, ~3 tall (+ conduits up to y + 8). Parts: 16-22."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     W, H = rng.uniform(2.0, 2.6), rng.uniform(2.6, 3.2)
     body = jitter(rng.choice([(78, 86, 78), (92, 92, 86), (60, 64, 66)]), rng, 6)
@@ -1249,7 +1270,7 @@ def cable_sag(D, folder, origin, ry, rng, span=14.0, y=14.0, y_end=None, cables=
     A's face, the cables run along local -Z to wall B's face `span` studs away, from height y
     to y_end; each cable sags differently (parabola, `segments` cylinders), with wall clamps
     at both ends. shoes=True (or by chance) adds a pair of trainers tossed over a cable.
-    Footprint: 1 x span. Parts: cables*segments + 4 (+3 shoes): 3 cables ~28."""
+    Footprint: 1 x span. Parts: cables*segments + 4 (+5 shoes): 3 cables ~28-33."""
     f = frame_at(D, folder, origin, ry)
     y_end = y if y_end is None else y_end
     n = 0
@@ -1278,10 +1299,12 @@ def cable_sag(D, folder, origin, ry, rng, span=14.0, y=14.0, y_end=None, cables=
         pts = sags[rng.randrange(len(sags))]
         p = pts[segments // 2 + rng.randint(-1, 1)]
         g = f.sub(p)
+        upper = jitter((150, 146, 136), rng, 6, rng.uniform(0.1, 0.35))  # once white, now grey with grime
         for s_ in (-1, 1):
-            g.part("Trainer", (0.05 * s_, -1.1 - 0.15 * (s_ > 0), 0.3 * s_), (0.4, 0.45, 1.05), jitter((200, 196, 186), rng, 12, 0.35),
-                   "Fabric", rot=(rng.uniform(60, 85) * s_, 0, rng.uniform(-10, 10)), flags=DECOR)
-            n += 1
+            h = g.sub((0.05 * s_, -1.1 - 0.15 * (s_ > 0), 0.3 * s_), rx=rng.uniform(60, 85) * s_, rz=rng.uniform(-10, 10))
+            h.part("Trainer", (0, 0.04, 0), (0.4, 0.4, 1.0), upper, "Fabric", flags=DECOR)
+            h.part("Sole", (0, -0.2, 0.02), (0.42, 0.12, 1.08), (40, 38, 36), "Rubber", flags=DECOR)
+            n += 2
         rod(g, "Laces", (0, 0, 0), (0, -0.7, 0.05), 0.04, (150, 150, 140), "Fabric", flags=DECOR)
         n += 1
     return n
@@ -1322,7 +1345,6 @@ def pipe_run(D, folder, origin, ry, rng, length=10.0, y=6.0, x=0.0, diameter=0.6
         n += 2
     end = length / 2
     if drop in ("down", "up"):
-        sgn = -1 if drop == "down" else 1
         f.part("Elbow", (end, y, zc), (diameter + 0.12, diameter + 0.12, diameter + 0.12), jitter(pc, rng, 4, 0.1), mat,
                shape=BALL, flags=DECOR)
         y1 = 0.0 if drop == "down" else y + rng.uniform(5, 10)
@@ -1350,7 +1372,7 @@ def downpipe(D, folder, origin, ry, rng, height=24.0, x=0.0, gutter=6.0, color=N
     end), an outlet and swan-neck offset, pipe lengths with collars and wall brackets, a
     cracked joint leaking a long wet stain, a shoe at the foot (tag CityGutter: it spouts in
     the rain) with a green slimy splash patch on the wall and floor.
-    Footprint: gutter x 1, height tall. Parts: 14-22."""
+    Footprint: gutter x 1, height tall. Parts: 18-24."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     pc = color or jitter(rng.choice([METAL_DARK, (60, 62, 60), (34, 34, 34), (70, 60, 52)]), rng, 6)
     n = 0

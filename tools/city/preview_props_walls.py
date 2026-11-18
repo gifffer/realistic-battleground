@@ -13,13 +13,27 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import citykit  # noqa: E402
 import props_walls as pw  # noqa: E402
 import numpy as np  # noqa: E402
 from citykit import SOLID, Data, preview, yxz_matrix  # noqa: E402
 
+# Closer to what Roblox shows (preview only, citykit itself is left alone): Color3 values are
+# sRGB, so they are linearised before going into Blender's (linear) BSDF; and a part whose
+# CastShadow flag is off (overlays, stains, DECOR) casts no shadow, as in Roblox.
+citykit._PREVIEW = citykit._PREVIEW.replace(
+    "    c = tuple(v / 255 for v in rgb) + (1,)",
+    "    c = tuple(((v / 255) / 12.92) if v / 255 <= 0.04045 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in rgb) + (1,)",
+).replace(
+    "    ob.data.materials.append(",
+    "    ob.visible_shadow = bool(r[14] & 4)\n    ob.data.materials.append(",
+)
+assert "visible_shadow" in citykit._PREVIEW and "12.92" in citykit._PREVIEW
+
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "_preview")
 ONLY = set(sys.argv[2:])
 F = "Preview/Props"
+SAMPLES = int(os.environ.get("SAMPLES", "20"))
 
 
 def wall(D, x0, x1, top, z0=0.0, z1=1.0, color=(84, 60, 50)):
@@ -157,11 +171,11 @@ def main():
             continue
         D, cams = make()
         t = time.time()
-        paths = preview(D, cams, os.path.join(OUT, name), samples=20)
+        paths = preview(D, cams, os.path.join(OUT, name), samples=SAMPLES)
         print(name, len(D.parts), "parts", paths, f"{time.time() - t:.0f}s", flush=True)
         if name in NIGHT:
             lights_out_of_bulbs(D)
-            paths = preview(D, NIGHT[name], os.path.join(OUT, name + "_night"), night=True, samples=32)
+            paths = preview(D, NIGHT[name], os.path.join(OUT, name + "_night"), night=True, samples=SAMPLES * 2)
             print(name, "night", paths, flush=True)
 
 
