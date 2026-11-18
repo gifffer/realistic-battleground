@@ -856,10 +856,10 @@ return table.freeze({
 		-- (guide: docs/GLASS_FR.md) and paste the IMAGE ids here. 0 = not uploaded: that
 		-- layer is simply not drawn (the glass material itself still works).
 		IMAGES = table.freeze({
-			dirtWide = 0, -- glass_dirt_wide.png (shop fronts, transoms, strips)
-			dirtTall = 0, -- glass_dirt_tall.png (windows, doors, phone box)
-			rainBeads = 0, -- glass_rain_beads.png (drops sitting on the glass)
-			rainRuns = 0, -- glass_rain_runs.png (drops running down)
+			dirtWide = 134459334470369, -- glass_dirt_wide.png (shop fronts, transoms, strips)
+			dirtTall = 106840351675381, -- glass_dirt_tall.png (windows, doors, phone box)
+			rainBeads = 127340739642896, -- glass_rain_beads.png (drops sitting on the glass)
+			rainRuns = 104057695886112, -- glass_rain_runs.png (drops running down)
 		}),
 		-- How see-through the dirt layer is (1 = invisible).
 		DIRT_TRANSPARENCY = 0.3,
