@@ -5994,31 +5994,30 @@ local clips: { [string]: R6Pose.Clip } = {
 	-- BEGIN finishers
 	-- Cinematic finishers (Shared/Finishers). Authored with a pose tool that
 	-- solves the hits: the bat's barrel lands on the head of a body lying 2.4
-	-- studs ahead (impact 2.62 s, the left hand on the handle), each punch's
+	-- studs ahead (impact 1.92 s, the left hand on the handle), each punch's
 	-- fist lands on the held victim 2.2 studs ahead (body shots 0.7 / 0.95 s,
 	-- hooks 1.25 / 1.55 s, cross 1.85 s, uppercut 2.42 s), and the feet stay
 	-- on the ground (the hips were solved for it).
 	-- Street Brawler: the bat pulled from behind the back and brought over
-	-- the face of the one on the ground; the taunt: the barrel's end tapped on
-	-- their face three times (0.62 / 0.9 / 1.16 s), left resting there while
-	-- he tilts his head. Then a real golf swing, the head as the ball: the
+	-- the face of the one on the ground, lined up beside the head (no taps,
+	-- no taunt). Then one big golf swing, the head as the ball: a short
 	-- address (bat soled beside the head), a controlled 0.77 s backswing
 	-- (hips then shoulders turning, wrists hinging, weight onto the right
 	-- foot) to the top (bat over his head pointing at the target), a
 	-- transition with no stop (the hips turn back while the arms finish the
-	-- turn; the bat turns over at 2.35 s), an explosive 0.27 s downswing
+	-- turn; the bat turns over at 1.65 s), an explosive 0.27 s downswing
 	-- (hips, torso, arms, the wrists releasing last) through the head at full speed,
 	-- and a braking follow-through to a high finish facing the target, held;
 	-- then the bat up, round in front and back on the shoulder.
 	-- "Grip" is not a body joint: the bat's angle in his right fist (the
 	-- wrists), read by KitEffects every frame (the bat cocks and releases).
-	-- (Checked with forward kinematics: the bat tip is never near still for
-	-- more than 0.05 s at the top, speeds up all through the downswing and is
-	-- fastest at the contact, about 120-125 studs/s; it never
-	-- goes into the floor, nor through the head before the impact; the feet
-	-- stay planted, the right heel coming up in the finish.)
+	-- (Checked with forward kinematics: the bat tip speeds up all through the
+	-- downswing and is fastest while the barrel is in the head (1.91-1.93 s,
+	-- 120-137 studs/s); it never goes into the floor (lowest point 0.29 stud
+	-- above it before the contact), nor through the head before the impact;
+	-- the feet stay planted, the right heel coming up in the finish.)
 	Brawler_FinisherBat = {
-		length = 4.5,
+		length = 3.8,
 		looped = false,
 		keyframes = {
 			{
@@ -6085,105 +6084,9 @@ local clips: { [string]: R6Pose.Clip } = {
 					Grip = { rot = Vector3.new(52.71, 0, 57.89) },
 				},
 			},
-			-- TAUNT: the barrel's end tapped on their face, three times
+			-- (straight off the face and round beside the head: lining up the shot)
 			{
-				time = 0.62,
-				tangent = "flat",
-				pose = {
-					Root = {
-						rot = Vector3.new(-36.02, -1.62, -1.18),
-						pos = Vector3.new(0, -0.52, 0.04),
-					},
-					Neck = { rot = Vector3.new(-28.65, 1.49, 0) },
-					RightShoulder = { rot = Vector3.new(92.47, 30.13, -58.67) },
-					LeftShoulder = { rot = Vector3.new(93.86, -22.71, 82.85) },
-					RightHip = { rot = Vector3.new(44.11, 0, 3.48), pos = Vector3.new(0, 0.415, 0) },
-					LeftHip = { rot = Vector3.new(42.77, 0, -3.32), pos = Vector3.new(0, 0.421, 0) },
-					Grip = { rot = Vector3.new(24.97, 0, 51.59) },
-				},
-			},
-			{
-				time = 0.76,
-				pose = {
-					Root = {
-						rot = Vector3.new(-29.02, -1.75, -0.97),
-						pos = Vector3.new(0, -0.38, 0.04),
-					},
-					Neck = { rot = Vector3.new(-35.57, 1.39, 0) },
-					RightShoulder = { rot = Vector3.new(84.11, 33.58, -63.67) },
-					LeftShoulder = { rot = Vector3.new(79.7, -28.39, 82.36) },
-					RightHip = { rot = Vector3.new(36.98, 0, 3.48), pos = Vector3.new(0, 0.299, 0) },
-					LeftHip = { rot = Vector3.new(35.68, 0, -3.32), pos = Vector3.new(0, 0.305, 0) },
-					Grip = { rot = Vector3.new(52.71, 0, 57.89) },
-				},
-			},
-			{
-				time = 0.9,
-				tangent = "flat",
-				pose = {
-					Root = {
-						rot = Vector3.new(-36.02, -1.62, -1.18),
-						pos = Vector3.new(0, -0.52, 0.04),
-					},
-					Neck = { rot = Vector3.new(-28.65, 1.49, 0) },
-					RightShoulder = { rot = Vector3.new(92.47, 30.13, -58.67) },
-					LeftShoulder = { rot = Vector3.new(93.86, -22.71, 82.85) },
-					RightHip = { rot = Vector3.new(44.11, 0, 3.48), pos = Vector3.new(0, 0.415, 0) },
-					LeftHip = { rot = Vector3.new(42.77, 0, -3.32), pos = Vector3.new(0, 0.421, 0) },
-					Grip = { rot = Vector3.new(24.97, 0, 51.59) },
-				},
-			},
-			{
-				time = 1.03,
-				pose = {
-					Root = {
-						rot = Vector3.new(-29.02, -1.75, -0.97),
-						pos = Vector3.new(0, -0.38, 0.04),
-					},
-					Neck = { rot = Vector3.new(-35.57, 1.39, 0) },
-					RightShoulder = { rot = Vector3.new(84.11, 33.58, -63.67) },
-					LeftShoulder = { rot = Vector3.new(79.7, -28.39, 82.36) },
-					RightHip = { rot = Vector3.new(36.98, 0, 3.48), pos = Vector3.new(0, 0.299, 0) },
-					LeftHip = { rot = Vector3.new(35.68, 0, -3.32), pos = Vector3.new(0, 0.305, 0) },
-					Grip = { rot = Vector3.new(52.71, 0, 57.89) },
-				},
-			},
-			{
-				time = 1.16,
-				tangent = "flat",
-				pose = {
-					Root = {
-						rot = Vector3.new(-36.02, -1.62, -1.18),
-						pos = Vector3.new(0, -0.52, 0.04),
-					},
-					Neck = { rot = Vector3.new(-28.65, 1.49, 0) },
-					RightShoulder = { rot = Vector3.new(92.47, 30.13, -58.67) },
-					LeftShoulder = { rot = Vector3.new(93.86, -22.71, 82.85) },
-					RightHip = { rot = Vector3.new(44.11, 0, 3.48), pos = Vector3.new(0, 0.415, 0) },
-					LeftHip = { rot = Vector3.new(42.77, 0, -3.32), pos = Vector3.new(0, 0.421, 0) },
-					Grip = { rot = Vector3.new(24.97, 0, 51.59) },
-				},
-			},
-			-- (resting there, head tilted: lining up the shot)
-			{
-				time = 1.34,
-				tangent = "flat",
-				pose = {
-					Root = {
-						rot = Vector3.new(-36.02, -1.62, -1.18),
-						pos = Vector3.new(0, -0.52, 0.04),
-					},
-					Neck = { rot = Vector3.new(-24.65, 7.49, 14) },
-					RightShoulder = { rot = Vector3.new(92.47, 30.13, -58.67) },
-					LeftShoulder = { rot = Vector3.new(93.86, -22.71, 82.85) },
-					RightHip = { rot = Vector3.new(44.11, 0, 3.48), pos = Vector3.new(0, 0.415, 0) },
-					LeftHip = { rot = Vector3.new(42.77, 0, -3.32), pos = Vector3.new(0, 0.421, 0) },
-					Grip = { rot = Vector3.new(24.97, 0, 51.59) },
-				},
-			},
-			-- (off the face, round beside the head: the address)
-			{
-				time = 1.42,
+				time = 0.56,
 				pose = {
 					Root = {
 						rot = Vector3.new(-37.02, -1.6, -1.2),
@@ -6199,7 +6102,24 @@ local clips: { [string]: R6Pose.Clip } = {
 			},
 			-- ADDRESS: the bat soled beside the head like a club behind the ball
 			{
-				time = 1.52,
+				time = 0.66,
+				tangent = "flat",
+				pose = {
+					Root = {
+						rot = Vector3.new(-40.02, -1.53, -1.29),
+						pos = Vector3.new(0, -0.6, 0),
+					},
+					Neck = { rot = Vector3.new(-25.26, 1.54, 0) },
+					RightShoulder = { rot = Vector3.new(71.01, -45, -56.18) },
+					LeftShoulder = { rot = Vector3.new(98.2, 5.76, 74) },
+					RightHip = { rot = Vector3.new(46.38, 0, 3.52), pos = Vector3.new(0, 0.497, 0) },
+					LeftHip = { rot = Vector3.new(45.08, 0, -3.29), pos = Vector3.new(0, 0.501, 0) },
+					Grip = { rot = Vector3.new(29.75, 0, 55.81) },
+				},
+			},
+			-- (held still at the address a beat)
+			{
+				time = 0.82,
 				tangent = "flat",
 				pose = {
 					Root = {
@@ -6216,7 +6136,7 @@ local clips: { [string]: R6Pose.Clip } = {
 			},
 			-- BACKSWING (0.77 s): slow takeaway, hips and shoulders turning, wrists hinging
 			{
-				time = 1.7,
+				time = 1,
 				pose = {
 					Root = {
 						rot = Vector3.new(-40.05, -9.96, -6.61),
@@ -6231,7 +6151,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 1.89,
+				time = 1.19,
 				pose = {
 					Root = {
 						rot = Vector3.new(-42.78, -26.07, -16.77),
@@ -6249,7 +6169,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.05,
+				time = 1.35,
 				pose = {
 					Root = {
 						rot = Vector3.new(-50.01, -40.5, -28.96),
@@ -6267,7 +6187,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.19,
+				time = 1.49,
 				pose = {
 					Root = {
 						rot = Vector3.new(-59.97, -49.73, -41.71),
@@ -6287,7 +6207,7 @@ local clips: { [string]: R6Pose.Clip } = {
 			-- TOP: bat over his head pointing at the target, weight on the right foot
 			-- (not held: the hips turn back while the arms finish the turn)
 			{
-				time = 2.29,
+				time = 1.59,
 				pose = {
 					Root = {
 						rot = Vector3.new(-71.93, -55.38, -55.47),
@@ -6307,7 +6227,7 @@ local clips: { [string]: R6Pose.Clip } = {
 			-- TRANSITION: the hips already turning back, the arms and bat still going up;
 			-- the bat turns over here and the downswing flows on from it
 			{
-				time = 2.36,
+				time = 1.66,
 				pose = {
 					Root = {
 						rot = Vector3.new(-64.38, -50.96, -45.65),
@@ -6326,7 +6246,7 @@ local clips: { [string]: R6Pose.Clip } = {
 			},
 			-- DOWNSWING (0.27 s): hips, then torso, then arms; the wrists release late
 			{
-				time = 2.49,
+				time = 1.79,
 				pose = {
 					Root = {
 						rot = Vector3.new(-55.54, -43.76, -33.32),
@@ -6344,7 +6264,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.52,
+				time = 1.82,
 				pose = {
 					Root = {
 						rot = Vector3.new(-52.66, -40.44, -28.9),
@@ -6362,7 +6282,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.54,
+				time = 1.84,
 				pose = {
 					Root = {
 						rot = Vector3.new(-49.03, -35.89, -23.19),
@@ -6380,7 +6300,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.56,
+				time = 1.86,
 				pose = {
 					Root = {
 						rot = Vector3.new(-44.56, -29.02, -15.63),
@@ -6395,7 +6315,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.58,
+				time = 1.88,
 				pose = {
 					Root = {
 						rot = Vector3.new(-39.64, -17.6, -5.72),
@@ -6413,7 +6333,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.59,
+				time = 1.89,
 				pose = {
 					Root = {
 						rot = Vector3.new(-39.11, -11.38, -2.76),
@@ -6428,7 +6348,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.6,
+				time = 1.9,
 				pose = {
 					Root = {
 						rot = Vector3.new(-39.4, -5.03, -0.64),
@@ -6443,7 +6363,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.61,
+				time = 1.91,
 				pose = {
 					Root = {
 						rot = Vector3.new(-40.03, 2.23, 1.63),
@@ -6457,9 +6377,9 @@ local clips: { [string]: R6Pose.Clip } = {
 					Grip = { rot = Vector3.new(63.62, 0, 12.31) },
 				},
 			},
-			-- IMPACT (2.62 s): the barrel through the head at full speed
+			-- IMPACT (1.92 s): the barrel through the head at full speed
 			{
-				time = 2.62,
+				time = 1.92,
 				pose = {
 					Root = {
 						rot = Vector3.new(-40.85, 11.67, 5.11),
@@ -6478,7 +6398,7 @@ local clips: { [string]: R6Pose.Clip } = {
 			},
 			-- FOLLOW-THROUGH: braking all the way to the high finish
 			{
-				time = 2.63,
+				time = 1.93,
 				pose = {
 					Root = {
 						rot = Vector3.new(-41.75, 21, 9.7),
@@ -6493,7 +6413,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.64,
+				time = 1.94,
 				pose = {
 					Root = {
 						rot = Vector3.new(-42.59, 28.1, 13.53),
@@ -6508,7 +6428,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.65,
+				time = 1.95,
 				pose = {
 					Root = {
 						rot = Vector3.new(-43.22, 34.19, 16.88),
@@ -6526,7 +6446,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.66,
+				time = 1.96,
 				pose = {
 					Root = {
 						rot = Vector3.new(-43.35, 39.63, 19.77),
@@ -6544,7 +6464,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.68,
+				time = 1.98,
 				pose = {
 					Root = {
 						rot = Vector3.new(-42.4, 46.42, 23.1),
@@ -6559,7 +6479,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.7,
+				time = 2,
 				pose = {
 					Root = {
 						rot = Vector3.new(-41.43, 50.75, 25.25),
@@ -6577,7 +6497,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.72,
+				time = 2.02,
 				pose = {
 					Root = {
 						rot = Vector3.new(-41.15, 54.79, 27.55),
@@ -6595,7 +6515,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.76,
+				time = 2.06,
 				pose = {
 					Root = {
 						rot = Vector3.new(-46, 66.91, 36.91),
@@ -6613,7 +6533,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.8,
+				time = 2.1,
 				pose = {
 					Root = {
 						rot = Vector3.new(-52.82, 74.96, 46.4),
@@ -6634,7 +6554,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.84,
+				time = 2.14,
 				pose = {
 					Root = {
 						rot = Vector3.new(-55.77, 78.4, 50.63),
@@ -6652,7 +6572,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.88,
+				time = 2.18,
 				pose = {
 					Root = {
 						rot = Vector3.new(-56.43, 79.39, 51.73),
@@ -6671,7 +6591,7 @@ local clips: { [string]: R6Pose.Clip } = {
 			},
 			-- FINISH: high, facing the target, held
 			{
-				time = 2.936,
+				time = 2.236,
 				tangent = "flat",
 				pose = {
 					Root = {
@@ -6693,7 +6613,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.65,
+				time = 2.95,
 				tangent = "flat",
 				pose = {
 					Root = {
@@ -6715,7 +6635,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.8,
+				time = 3.1,
 				pose = {
 					Root = {
 						rot = Vector3.new(-7.09, 61.81, 5.46),
@@ -6733,7 +6653,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.94,
+				time = 3.24,
 				pose = {
 					Root = {
 						rot = Vector3.new(-6.92, 23.82, 3.45),
@@ -6748,7 +6668,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 4.05,
+				time = 3.35,
 				tangent = "flat",
 				pose = {
 					Root = { rot = Vector3.new(0, -12, 0) },
@@ -6761,7 +6681,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 4.25,
+				time = 3.55,
 				pose = {
 					Root = { rot = Vector3.new(-4, -12, 0) },
 					Neck = { rot = Vector3.new(-6, 2, 3) },
@@ -6773,7 +6693,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 4.5,
+				time = 3.8,
 				pose = {
 					Root = { rot = Vector3.new(-8, -12, 0) },
 					Neck = { rot = Vector3.new(6, 10, 0) },
@@ -7562,11 +7482,11 @@ local clips: { [string]: R6Pose.Clip } = {
 		},
 	},
 	-- Under the Street Brawler's bat (Shared/Finishers "Bat"): laid out on
-	-- its back, it lifts its head and reaches out a hand, pleading, flinches
-	-- at each tap of the bat on its face, then turns its face away as the bat
-	-- comes down (2.62 s). Root at rest: the server lays the body flat.
+	-- its back, it lifts its head and reaches out a hand, pleading, then
+	-- turns its face away as the bat comes down (1.92 s). Root at rest: the
+	-- server lays the body flat.
 	Brawler_FinisherBatVictim = {
-		length = 3.0,
+		length = 2.3,
 		looped = false,
 		keyframes = {
 			{
@@ -7602,75 +7522,9 @@ local clips: { [string]: R6Pose.Clip } = {
 					LeftHip = { rot = Vector3.new(0, 0, -5) },
 				},
 			},
-			-- (flinching at each tap of the bat)
+			-- (pleading, the hand out, as he lines up and swings)
 			{
-				time = 0.66,
-				pose = {
-					Root = { rot = Vector3.new(0, 0, 0) },
-					Neck = { rot = Vector3.new(13, -14, 0) },
-					RightShoulder = { rot = Vector3.new(98, 0, 16) },
-					LeftShoulder = { rot = Vector3.new(16, 0, -18) },
-					RightHip = { rot = Vector3.new(0, 0, 5) },
-					LeftHip = { rot = Vector3.new(0, 0, -5) },
-				},
-			},
-			{
-				time = 0.8,
-				pose = {
-					Root = { rot = Vector3.new(0, 0, 0) },
-					Neck = { rot = Vector3.new(22, 2, 0) },
-					RightShoulder = { rot = Vector3.new(120, 0, 11) },
-					LeftShoulder = { rot = Vector3.new(19, 0, -16) },
-					RightHip = { rot = Vector3.new(0, 0, 5) },
-					LeftHip = { rot = Vector3.new(0, 0, -5) },
-				},
-			},
-			{
-				time = 0.94,
-				pose = {
-					Root = { rot = Vector3.new(0, 0, 0) },
-					Neck = { rot = Vector3.new(12, 16, 0) },
-					RightShoulder = { rot = Vector3.new(94, 0, 18) },
-					LeftShoulder = { rot = Vector3.new(15, 0, -19) },
-					RightHip = { rot = Vector3.new(0, 0, 5) },
-					LeftHip = { rot = Vector3.new(0, 0, -5) },
-				},
-			},
-			{
-				time = 1.08,
-				pose = {
-					Root = { rot = Vector3.new(0, 0, 0) },
-					Neck = { rot = Vector3.new(22, 2, 0) },
-					RightShoulder = { rot = Vector3.new(120, 0, 11) },
-					LeftShoulder = { rot = Vector3.new(19, 0, -16) },
-					RightHip = { rot = Vector3.new(0, 0, 5) },
-					LeftHip = { rot = Vector3.new(0, 0, -5) },
-				},
-			},
-			{
-				time = 1.2,
-				pose = {
-					Root = { rot = Vector3.new(0, 0, 0) },
-					Neck = { rot = Vector3.new(13, -14, 0) },
-					RightShoulder = { rot = Vector3.new(98, 0, 16) },
-					LeftShoulder = { rot = Vector3.new(16, 0, -18) },
-					RightHip = { rot = Vector3.new(0, 0, 5) },
-					LeftHip = { rot = Vector3.new(0, 0, -5) },
-				},
-			},
-			{
-				time = 1.45,
-				pose = {
-					Root = { rot = Vector3.new(0, 0, 0) },
-					Neck = { rot = Vector3.new(22, 2, 0) },
-					RightShoulder = { rot = Vector3.new(120, 0, 11) },
-					LeftShoulder = { rot = Vector3.new(19, 0, -16) },
-					RightHip = { rot = Vector3.new(0, 0, 5) },
-					LeftHip = { rot = Vector3.new(0, 0, -5) },
-				},
-			},
-			{
-				time = 1.85,
+				time = 1.15,
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
 					Neck = { rot = Vector3.new(26, -3, 0) },
@@ -7681,7 +7535,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.12,
+				time = 1.42,
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
 					Neck = { rot = Vector3.new(25, 3, 0) },
@@ -7692,7 +7546,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.3,
+				time = 1.6,
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
 					Neck = { rot = Vector3.new(28, 0, 0) },
@@ -7703,7 +7557,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.42,
+				time = 1.72,
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
 					Neck = { rot = Vector3.new(11, 21, 0) },
@@ -7714,7 +7568,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.54,
+				time = 1.84,
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
 					Neck = { rot = Vector3.new(-1, 33, 0) },
@@ -7725,7 +7579,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 2.66,
+				time = 1.96,
 				tangent = "flat",
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
@@ -7737,7 +7591,7 @@ local clips: { [string]: R6Pose.Clip } = {
 				},
 			},
 			{
-				time = 3.0,
+				time = 2.3,
 				pose = {
 					Root = { rot = Vector3.new(0, 0, 0) },
 					Neck = { rot = Vector3.new(-4, 36, 0) },
