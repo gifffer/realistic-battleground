@@ -38,8 +38,11 @@ local HeatBeam = require(ReplicatedStorage.Shared.Util.HeatBeam)
 local Destruction = require(script.Parent.Parent.Destruction)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Stamina = require(script.Parent.Parent.Stamina)
+local Clones = require(script.Parent.Clones)
+local Gadgets = require(script.Parent.Gadgets)
 local Grab = require(script.Parent.Grab)
 local Hitbox = require(script.Parent.Hitbox)
+local Rewind = require(script.Parent.Rewind)
 local State = require(script.Parent.State)
 
 type CombatState = State.CombatState
@@ -60,7 +63,13 @@ export type Context = {
 	isAwakened: (state: CombatState) -> boolean,
 	setAttribute: (model: Model, name: string, value: any) -> (),
 	resolveHit: (attacker: CombatState, victim: CombatState, spec: HitSpec) -> boolean,
-	aimZone: (attacker: CombatState, victim: Model, direction: Vector3) -> Types.HitZone?,
+	-- (`rootAt`: the victim's rewound root, see Hitbox.query)
+	aimZone: (
+		attacker: CombatState,
+		victim: Model,
+		direction: Vector3,
+		rootAt: CFrame?
+	) -> Types.HitZone?,
 	landingZone: (
 		requested: Types.HitZone,
 		partsInBox: { [string]: boolean },
@@ -111,10 +120,12 @@ local function specFor(hit: Kits.HitDef, zone: Types.HitZone, moveId: string): H
 		burns = hit.burns,
 		launch = hit.launch,
 		staminaDrain = hit.staminaDrain,
+		burn = hit.burn,
 		attackId = nil,
 		moveId = moveId,
 	}
 end
+Moves.specFor = specFor
 
 -- The zone `hit` lands on for `victimModel`: its own zone, or where the
 -- attacker aims (head or torso, like an M1).
@@ -123,7 +134,8 @@ local function zoneFor(
 	hit: Kits.HitDef,
 	victimModel: Model,
 	parts: { [string]: boolean },
-	aim: Vector3?
+	aim: Vector3?,
+	rootAt: CFrame?
 ): Types.HitZone
 	local fixed = hit.zone
 	if fixed then
@@ -132,7 +144,7 @@ local function zoneFor(
 	end
 	local c = context()
 	local aimed: Types.HitZone = if aim
-		then c.aimZone(state, victimModel, aim) or "Torso"
+		then c.aimZone(state, victimModel, aim, rootAt) or "Torso"
 		else "Torso"
 	return c.landingZone(aimed, parts, AIMABLE_ZONES)
 end
@@ -140,16 +152,18 @@ end
 -- Checks the hitbox of `hit` in front of the attacker and resolves it on
 -- everyone inside. Returns the fighters it really LANDED on (not the ones
 -- who dodged, parried, blocked, were protected or already knocked out).
+-- `rewind`: lag compensation (seconds, Combat/Rewind.amount).
 local function strike(
 	state: CombatState,
 	hit: Kits.HitDef,
 	moveId: string,
 	aim: Vector3?,
-	cframe: CFrame?
+	rewind: number
 ): { CombatState }
 	local c = context()
-	local boxCFrame = cframe or state.root.CFrame * CFrame.new(0, 0, -hit.forward)
-	local victims, partsByModel = Hitbox.query(boxCFrame, hit.hitbox, state.model)
+	local boxCFrame = state.root.CFrame * CFrame.new(0, 0, -hit.forward)
+	local victims, partsByModel, rootByModel, ageByModel =
+		Hitbox.query(boxCFrame, hit.hitbox, state.model, rewind)
 	if hit.breaks then
 		-- a heavy blow: the walls around go too
 		local push = state.root.CFrame.LookVector * 35 + Vector3.new(0, 18, 0)
@@ -160,9 +174,17 @@ local function strike(
 		local victim = c.getState(victimModel)
 		-- (A knocked-out body on the floor is not a target: walk over it.)
 		if victim and c.isAlive(victim) and not Knockout.isKnockedOut(victimModel) then
-			local zone: Types.HitZone =
-				zoneFor(state, hit, victimModel, partsByModel[victimModel], aim)
-			if c.resolveHit(state, victim, specFor(hit, zone, moveId)) then
+			local zone: Types.HitZone = zoneFor(
+				state,
+				hit,
+				victimModel,
+				partsByModel[victimModel],
+				aim,
+				rootByModel[victimModel]
+			)
+			local spec = specFor(hit, zone, moveId)
+			spec.rewound = ageByModel[victimModel]
+			if c.resolveHit(state, victim, spec) then
 				table.insert(reached, victim)
 			end
 		end
@@ -254,7 +276,8 @@ local function runCharge(state: CombatState, move: Kits.MoveDef, token: number)
 				state.model
 			)
 		end
-		local reached = strike(state, charge.hit, move.id, nil)
+		-- (the attacker's view of the others, like a punch: see Rewind)
+		local reached = strike(state, charge.hit, move.id, nil, Rewind.amount(state.player, 0))
 		if #reached > 0 then
 			if connection then
 				connection:Disconnect()
@@ -379,20 +402,33 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	if time < state.nextAttackAt - grace or time < (state.cooldowns[move.id] or 0) - grace then
 		return false
 	end
+	-- The portal gun: where would it open? Decided now, before anything is
+	-- spent. Nowhere (aimed too high, at the void, out of the map...): the
+	-- shot fizzles, the gun is back soon, no stamina.
+	local gadget = move.gadget
+	local portal = if gadget then gadget.portal else nil
+	local portalExit: CFrame?, portalFace: CFrame? = nil, nil
+	local fizzle = false
+	if portal then
+		portalExit, portalFace = Gadgets.portalTarget(state, portal, aim)
+		fizzle = portalExit == nil
+	end
 	local player = state.player
-	if player and not Stamina.trySpend(player, move.stamina) then
+	if player and not fizzle and not Stamina.trySpend(player, move.stamina) then
 		return false
 	end
 	-- Using a move ends the spawn protection (like attacking).
 	Knockout.endProtection(state.model)
 	state.slipUntil = 0 -- a new move ends the previous slip
 
-	state.cooldowns[move.id] = time + move.cooldown
-	c.setAttribute(state.model, `CD_{move.id}`, serverTime(move.cooldown))
+	local cooldown = if fizzle and portal then portal.failCooldown else move.cooldown
+	local duration = if fizzle and portal then portal.at + 0.3 else move.duration
+	state.cooldowns[move.id] = time + cooldown
+	c.setAttribute(state.model, `CD_{move.id}`, serverTime(cooldown))
 	state.combo = 0 -- a move breaks the M1 combo
 	state.lastAttackAt = time
-	state.nextAttackAt = time + move.duration
-	state.attackingUntil = time + move.duration
+	state.nextAttackAt = time + duration
+	state.attackingUntil = time + duration
 	state.attackToken += 1
 	local token = state.attackToken
 	Remotes.CombatAction:FireAllClients(state.model, move.animation)
@@ -410,13 +446,16 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	-- one reached (if still close and standing), they can't miss halfway.
 	local chained: { CombatState }? = nil
 	for index, hit in move.hits do
+		local dueAt = time + hit.at
 		task.delay(hit.at, function()
 			-- Cancelled (stunned meanwhile), dead or removed?
 			if state.attackToken ~= token or not c.isAlive(state) then
 				return
 			end
 			if not move.chain or index == 1 then
-				local reached = strike(state, hit, move.id, aim)
+				-- (how late we are: the attacker saw it land at `at`)
+				local reached =
+					strike(state, hit, move.id, aim, Rewind.amount(state.player, c.now() - dueAt))
 				if move.chain then
 					chained = reached
 				end
@@ -438,6 +477,9 @@ function Moves.use(state: CombatState, slot: number, aim: Vector3?): boolean
 	end
 	runCharge(state, move, token)
 	runBeam(state, move, token)
+	if gadget then
+		Gadgets.run(state, move, gadget, aim, token, portalExit, portalFace)
+	end
 	local grab = move.grab
 	if grab then
 		Grab.run({
@@ -542,6 +584,11 @@ function Moves.awaken(state: CombatState): boolean
 	state.attackingUntil = time + activation
 	state.attackToken += 1
 	Remotes.CombatAction:FireAllClients(state.model, awakening.animation)
+	-- Dr. Rift: copies of him step out of portals.
+	local clones = awakening.clones
+	if clones then
+		Clones.summon(state, clones)
+	end
 	return true
 end
 

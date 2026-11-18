@@ -28,6 +28,7 @@ local Bruise = require(ReplicatedStorage.Shared.Util.Bruise)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local Gashes = require(script.Parent.Gashes)
+local BloodAge = require(script.Parent.BloodAge)
 local GlassShards = require(script.Parent.GlassShards)
 
 local Wounds = {}
@@ -41,7 +42,7 @@ local TO_BLUE = 70
 local CUT = Color3.fromRGB(104, 12, 12)
 local PETECHIA = Color3.fromRGB(96, 8, 18) -- pinpoint bleeding under the skin
 local RIM = Color3.fromRGB(78, 62, 118) -- the blue-purple tint at a bruise's edge
-local BLOOD = Color3.fromRGB(86, 8, 8)
+local BLOOD = Config.Blood.PALETTE.VENOUS
 
 -- Size of a level-1 bruise, studs (it grows with its level).
 local BASE_SIZE: { [string]: number } = {
@@ -562,12 +563,17 @@ local function draw(part: BasePart, key: string, data: Bruise.Data, folder: Inst
 		local length = 0.16 + 0.04 * level
 		local run = newPart("Blood", Enum.PartType.Block, Vector3.new(0.01, length, 0.022), BLOOD)
 		run.Reflectance = 0.1
+		-- (tapered like real blood running, not a straight band)
+		local spindle = Instance.new("SpecialMesh")
+		spindle.MeshType = Enum.MeshType.Sphere
+		spindle.Parent = run
 		attach(
 			run,
 			part,
 			frame * CFrame.new(0.002, -length / 2, random:NextNumber(-0.04, 0.04)),
 			folder
 		)
+		BloodAge.track(run, "wound", Config.Blood.PALETTE.ARTERIAL)
 	end
 end
 

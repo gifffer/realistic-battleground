@@ -147,6 +147,12 @@ local function spawnDummy(kind: DummyKind, position: Vector3)
 	end)
 end
 
+-- A plain R6 dummy body (not in the workspace yet, not a fighter yet):
+-- also used by the Studio test tools (Server/Systems/TestTools).
+function TrainingDummies.createModel(name: string, color: Color3): Model
+	return createModel(name, color)
+end
+
 function TrainingDummies.start()
 	if not Config.Combat.TRAINING_DUMMIES then
 		return

@@ -23,6 +23,8 @@
 --   KitVFX.onAction(model, animation, move)   a move starts
 --   KitVFX.onHit(victim, attacker, moveId)    one of its hits lands
 --   KitVFX.stop(model)                        the move was refused / cut
+--   KitVFX.fistImpact(position, direction, strength)  a heavy punch lands
+--                                             (the Boxer's finisher)
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
@@ -3280,6 +3282,34 @@ local function bullFinisherEvent(
 			)
 		end
 	end
+end
+
+-- A fist landing hard at `position`, driven along `direction` (the Boxer's
+-- finisher blows; every client): the air shoved out in a ring round the
+-- blow, sweat and spit thrown off the far side. `strength`: 1 a body shot,
+-- 1.5 a hook to the face, 2 the hand going in.
+function KitVFX.fistImpact(position: Vector3, direction: Vector3, strength: number)
+	local along = if direction.Magnitude > 1e-3 then direction.Unit else Vector3.zAxis
+	ring(axisFrame(position, along), 0.25, 1.1 * strength, 0.2, WHITE, {
+		width = 0.08,
+		height = 0.05,
+		segments = 20,
+		transparency = 0.55,
+		material = Enum.Material.Glass,
+	})
+	emit(position + along * 0.2, {
+		texture = TEX.sparkle,
+		color = Color3.fromRGB(230, 235, 240),
+		size = { 0.06, 0.03 },
+		transparency = { 0.3, 1 },
+		speed = NumberRange.new(10, 22),
+		lifetime = NumberRange.new(0.15, 0.35),
+		spread = 35,
+		direction = along,
+		acceleration = Vector3.new(0, -40, 0),
+		drag = 3,
+		count = math.floor(6 * strength),
+	})
 end
 
 -- One moment of a Sentinel / Bull finisher (CinematicController).
