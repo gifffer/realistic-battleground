@@ -447,7 +447,7 @@ def drip(seed, N=256):
     return to_rgba(lum(t), edge_alpha(A, t))
 
 
-def pool_shape(seed, N=1024):
+def pool_shape(seed, N=1024, drips=True):
     """Outline of a passive pool: a random walk of overlapping blobs (the pool
     spread unevenly over a rough floor), a few fingers that ran further, and
     drips that landed next to it (some joined by a liquid neck)."""
@@ -475,7 +475,10 @@ def pool_shape(seed, N=1024):
         x2, y2 = bx + np.cos(a) * (br + L), by + np.sin(a) * (br + L)
         S.add(ucap(bx, by, r1, x2, y2, r2), N * 0.03)
         S.add(circle(x2, y2, r2 * rng.uniform(1.0, 1.25)), N * 0.03)
-    for _ in range(int(rng.integers(4, 10))):
+    # The drips that landed next to the pool. drips=False gives the "clean"
+    # pictures (cleanpool_n...): same outline, no drops around it - a big
+    # finisher pool scales its picture up and the drops would grow with it.
+    for _ in range(int(rng.integers(4, 10)) if drips else 0):
         a = rng.uniform(0, 2 * np.pi)
         d = N * rng.uniform(0.36, 0.45)
         r = N * np.clip(rng.lognormal(np.log(0.012), 0.5), 0.004, 0.026)
@@ -483,10 +486,10 @@ def pool_shape(seed, N=1024):
     return rng, S
 
 
-def pool(seed, N=1024):
+def pool(seed, N=1024, drips=True):
     """A passive pool: big lobes, a thin bright meniscus band, dark thick body
     with a slightly lighter area where the gloss film will sit."""
-    rng, S = pool_shape(seed, N)
+    rng, S = pool_shape(seed, N, drips)
     A = S.alpha()
     d = depth_of(A)
     rng2 = np.random.default_rng(seed + 999)
@@ -508,10 +511,10 @@ def pool(seed, N=1024):
     return to_rgba(lum(t), edge_alpha(A, t))
 
 
-def pool_rim(seed, N=1024):
+def pool_rim(seed, N=1024, drips=True):
     """Same outline as pool_<n>: only the drying tide-line (dark), the serum
     halo just inside it (light, faint), and clot speckles. Faded in by age."""
-    rng, S = pool_shape(seed, N)
+    rng, S = pool_shape(seed, N, drips)
     A = S.alpha()
     d = depth_of(A)
     rng2 = np.random.default_rng(seed + 4242)
@@ -1593,11 +1596,11 @@ def wick_weave(seed=2301, N=512):
     return to_rgba(lum(np.clip(t, 0, 1)), np.clip(A * 0.95, 0, 1))
 
 
-def serum_halo(n, N=512):
+def serum_halo(n, N=512, drips=True):
     """Paired with pool_<n> (same outline, same frame): the pale ring of
     serum that seeps OUT of an old pool as the clot shrinks (plasma leaves
     the red cells behind). Transparent inside the pool. Tinted SERUM."""
-    _, S = pool_shape(700 + n, 1024)
+    _, S = pool_shape(700 + n, 1024, drips)
     big = S.alpha()
     A0 = big.reshape(N, 2, N, 2).mean(axis=(1, 3))  # 1024 -> 512, same frame
     # small drops beside the pool dry too fast to weep serum: keep the big body
@@ -2023,6 +2026,11 @@ def flesh_tear(seed, N=512):
 
 
 JOBS_V2 = [
+    # Pools without the drops drawn around them (same outline as pool_n):
+    # the big finisher pools scale their picture up, so drawn drops grew too.
+    *[(f"cleanpool_{i}", lambda i=i: pool(700 + i, drips=False)) for i in (1, 2, 3)],
+    *[(f"cleanrim_{i}", lambda i=i: pool_rim(700 + i, drips=False)) for i in (1, 2, 3)],
+    *[(f"cleanserum_{i}", lambda i=i: serum_halo(i, drips=False)) for i in (1, 2, 3)],
     # Tier 1
     *[(f"rivulet_strip_{i}", lambda i=i: rivulet_strip(1800 + i)) for i in (1, 2, 3)],
     *[(f"rivulet_bead_{i}", lambda i=i: rivulet_bead(1810 + i)) for i in (1, 2)],

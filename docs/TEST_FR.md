@@ -631,6 +631,44 @@ Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à *
 | R20 | Un joueur qui arrive après | Il voit le corps en deux morceaux avec les coupes, sans le sang qui gicle. |
 | R21 | Le Dr. Rift quitte le jeu (ou meurt) **avant** la coupe | Tout s'arrête (portail, pistolet), la victime retombe KO, entière. |
 
+## Grosses flaques des finishers (`feature/finisher-pools`)
+
+Un membre arraché, une tête éclatée, un corps coupé en deux : **beaucoup** de sang (2,5 à 4 litres en
+une vingtaine de secondes). Chaque plaie verse son sang **au sol sous elle** (`BloodGush.stump`) : par
+**à-coups** au rythme du cœur d'abord, puis un **suintement** régulier, puis de plus en plus lent. Ça
+fait **une seule flaque uniforme qui se forme** : une seule image de flaque, **une seule couleur**,
+qui naît toute petite (~0,6 stud) là où le sang tombe et **grandit en douceur depuis le centre**
+pendant tout l'écoulement, puis **continue de ramper ~25 s** après (de plus en plus lentement,
+jamais d'un coup : on la voit grandir ~35-45 s en tout). **Plus de taches séparées** ni de langues /
+doigts autour. Ce sont de **grandes** flaques (un **lac sombre** autour du corps, ~2 fois la taille
+d'un corps) : elles **coulent vers le corps et passent dessous** (le corps est couché dans son sang),
+pas seulement à côté de la plaie. La flaque **suit la partie du corps** quand elle tombe ou glisse.
+Tous les réglages : `Config.Blood.FINISHER_POOLS` (litres, durées ; taille finale = `SIZE_PER_LITRE`
+(4,1) × litres^`SIZE_POWER` (0,63) studs de large ; `CREEP`). Tailles finales (diamètre visible) :
+**torse coupé ~9,5**, **cou ~8,9**, **épaule ~8,2**, **trou du foie / jambes du Bull ~7,5**,
+**jambes du portail ~7,1**, **bras arraché ~3**, **foie ~1,9**.
+Tester sur le **Dummy**, sur sol **plat**, puis **à 2 joueurs** (comparer les deux écrans).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| P1 | Finisher **batte** (Street Brawler) | Sous le **cou** (là où était la tête) **une seule flaque** qui se forme et grandit **régulièrement** depuis le centre (pas de saut, pas de taches séparées) : ~3 studs de large à 4 s, ~4,6 à 8 s, ~7 à 15 s, ~8,1 à 25 s, **~8,9 studs** au final (~45 s). Elle **part du cou et s'étale sous le torse** (le corps est couché dedans). Bord irrégulier (la forme de l'image), **même couleur partout** (le bord n’est pas plus clair que le milieu), **pas de disque plus clair dedans** : rouge frais au début, puis elle fonce en séchant. Les gouttes qui tombent du cou dedans font des **anneaux** et des **étoiles de gouttelettes** autour. |
+| P2 | Finisher **bras** (Bouncer) | Sous l'**épaule** : une flaque **~8,2 studs** qui passe sous le torse. Le **bras jeté** par terre fait **sa propre flaque** (~3 studs) à son bout arraché ; s'il tombe près du corps et que les deux flaques se touchent, elles **deviennent une seule flaque** qui **recouvre les deux** (le bras finit dans la grande flaque, ~9-10 studs ; elle glisse doucement vers le bras, quelques secondes de transition). Tant qu'il est dans la main du Bouncer : pas de flaque sous le bras. Le sang passe **sous** le bras posé au sol. |
+| P3 | Finisher **foie** (Boxer) | Pendant qu'il est tenu debout, le sang du **flanc** coule au sol sous lui ; quand le corps **tombe**, la flaque continue **là où le corps est couché** (**~7,5 studs**, sous le corps). Le **foie** jeté par terre fait une **petite flaque** (~1,9 stud) sous lui. |
+| P4 | Finisher **portail** (Dr. Rift) | Le **haut du corps** : une flaque **~9,5 studs** sous la coupe (et sous le torse). Les **jambes** : **~7 studs** sous elles. Si les deux flaques se touchent (corps proches), elles **fusionnent en une seule grande flaque** (~11-12 studs) qui recouvre les deux moitiés et glisse doucement vers le milieu ; sinon deux flaques séparées, chacune uniforme. |
+| P5 | Finisher **Bull** (déchiré en deux) | En l'air : pas de flaque sous les morceaux. Le **haut** glisse : la traînée de sang derrière lui, puis **une fois immobile** une flaque **~9,5 studs** sous sa coupe ; les **jambes** : **~7,5 studs** (fusion si elles se touchent, comme P4). |
+| P6 | Un corps qui **glisse** pendant qu'il saigne (foie, bras, portail) | Pas de flaque pendant qu'il glisse vite : des **traînées** (image `drag`) derrière la plaie (12 au plus), puis la flaque là où il s'arrête. |
+| P7 | Finisher sur une **pente** | Toujours **une seule flaque** : son centre **glisse un peu vers le bas** et elle **s'allonge dans le sens de la pente** ; sur une vraie pente (> ~3-4°) **une seule petite coulure** collée à la flaque part vers le bas (≤ ~2,5 studs au-delà du bord). |
+| P8 | Finisher contre un **trottoir / un mur** / au bord d'une **marche** | La flaque **ne passe jamais à travers** le mur / trottoir : elle est **poussée** du côté libre (elle s'étale de ce côté, **sans rétrécir** contre un seul mur ; elle peut s'arrêter un peu avant le mur : son bord suit la forme de l'image) et reste plus petite seulement si elle ne tient pas (coin, couloir étroit). Au bord d'une marche elle **s'arrête** au bord (jamais dans le vide) et le sang **coule le long** de la marche. Un objet posé au sol non ancré (bras, caisse lâche) ne l'arrête pas (elle passe dessous). |
+| P9 | Regarder la flaque de près, caméra basse | Pas de clignotement avec le sol ; deux flaques qui se chevauchent ne clignotent pas (hauteurs différentes) ; **jamais sur le corps** de la victime ni de l'attaquant (elle passe dessous). |
+| P10 | Regarder la flaque pendant **4 min** | **Toute la flaque** garde la même couleur et vieillit d'un bloc : rouge sombre brillant tant qu'elle est alimentée, puis le reflet rétrécit, **bord sombre** (caillot) vers 30-60 s, **anneau jaune pâle** (sérum) vers 90-180 s, sèche et brunit, disparaît vers 4 min. |
+| P11 | **2 joueurs** regardent le même finisher | La flaque a **la même forme** (même image, même orientation) sur les deux écrans, au même endroit (à quelques centimètres près : la physique du corps). |
+| P12 | Un joueur qui **arrive après** le finisher (ou qui regarde le **corps figé** laissé ~10 s) | Les flaques sont **déjà là, à leur taille finale** (une seule flaque uniforme par plaie, fusionnées si elles se touchent). Pas de **deuxième** flaque par-dessus quand le corps est remplacé par sa copie figée. (Foie : pas de flaque pour un joueur arrivé après — connu.) |
+| P13 | 4-5 finishers d'affilée au même endroit + des combattants qui saignent (qualité **Low**) | Pas de lag (MicroProfiler : `BloodPool` reste petit : une flaque = 1 image + 1 reflet + au plus 1 coulure). Les flaques qui se chevauchent fusionnent. Ce sont les petites flaques des saignements qui s'arrêtent de grandir d'abord. |
+| P14 | Marcher dans une flaque de finisher fraîche (même au bord) | Empreintes sanglantes (comme W6), glissade possible en courant. |
+| P15 | Sans images (`Config.Blood.IMAGES.pool`, `poolRim`, `poolLobe`, `serumHalo` à 0) | La même flaque en **formes simples** (ellipses, bord sombre, centre plus foncé), même taille. |
+| P16 | `Config.Blood.FINISHER_POOLS.ENABLED = false` | Plus de grosses flaques ; les jets et leurs taches au sol sont toujours là. |
+| P17 | Un combattant qui **saigne** debout ou KO (pas un finisher) | Sa flaque est elle aussi **une seule flaque uniforme** qui grandit doucement (pas de taches séparées) et continue de ramper ~3 s après la fin du saignement. |
+
 ## Membres qui partent à l'autre bout de la map (`fix/limbs-fly-away`)
 
 Le bug : parfois les bras et les jambes d'un corps au sol partaient très loin, puis revenaient petit à petit sur le perso.
