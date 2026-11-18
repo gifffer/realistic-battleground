@@ -705,22 +705,28 @@ return table.freeze({
 		-- pours (never separate blotches), then goes on creeping a little for
 		-- CREEP seconds after it stops (slower and slower). On a slope it
 		-- slides and stretches a little downhill (one short run leaves it on a
-		-- real slope); against a curb or a wall it stays on its side; two
-		-- pools that meet become one.
+		-- real slope); against a curb or a wall it spreads on its free side;
+		-- it flows toward the body and under it (a body lying in its own
+		-- blood); two pools that meet become one.
 		-- Its size once it is done spreading: SIZE_PER_LITRE studs across for
 		-- 1 litre, × the litres to the power SIZE_POWER (a bit more than the
 		-- square root: a small wound makes a small pool):
-		--   the torso cut in two 3.8 L ≈ 5.2 studs, the neck 3.4 L ≈ 4.9,
-		--   the shoulder 3 L ≈ 4.5, the liver hole / the Bull's legs 2.6 L ≈ 4.2,
-		--   the portal's legs 2.4 L ≈ 4, the torn arm 0.6 L ≈ 1.8,
-		--   the liver itself 0.3 L ≈ 1.2.
-		-- (1 stud ≈ 30 cm: about 1.5 m across for the big ones. Raise
-		-- SIZE_PER_LITRE for bigger pools, all in proportion.)
+		--   the torso cut in two 3.8 L ≈ 9.5 studs, the neck 3.4 L ≈ 8.9,
+		--   the shoulder 3 L ≈ 8.2, the liver hole / the Bull's legs 2.6 L ≈ 7.5,
+		--   the portal's legs 2.4 L ≈ 7.1, the torn arm 0.6 L ≈ 3,
+		--   the liver itself 0.3 L ≈ 1.9.
+		-- (For scale: a body is ~5 studs long. In real life 1.5 L on a hard
+		-- floor is a pool ~1 m across, ~2 mm thick; these are about twice
+		-- that, like games and films show them - a body lying in a big dark
+		-- lake. Change SIZE_PER_LITRE to make them all bigger or smaller, in
+		-- proportion: 2.4 was the old, smaller look.)
 		FINISHER_POOLS = table.freeze({
 			ENABLED = true, -- false: no big finisher pools (the spurts still land)
-			SIZE_PER_LITRE = 2.4, -- studs across for 1 litre...
-			SIZE_POWER = 0.58, -- ...× litres ^ this (0.5 = the square root)
-			CREEP = 15, -- seconds the pool keeps spreading after its wound stops pouring
+			SIZE_PER_LITRE = 4.1, -- studs across for 1 litre...
+			SIZE_POWER = 0.63, -- ...× litres ^ this (0.5 = the square root)
+			-- seconds the pool keeps spreading after its wound stops pouring
+			-- (slower and slower: you see it keep growing ~30-40 s in all)
+			CREEP = 25,
 			LIFE = 240, -- seconds a finisher pool stays (the serum ring shows from 90 s)
 			MOVING = 2.5, -- studs/s: a wound moving faster smears instead of pooling
 			MAX_HEIGHT = 4.5, -- studs: a wound higher than this (in the air) pools nothing yet

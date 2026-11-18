@@ -11,6 +11,8 @@
 --     and slower, and it keeps CREEPING a little after the wound stops (thick
 --     blood spreads slowly). It never jumps: its size always eases toward
 --     where the blood poured so far would reach;
+--   • a finisher's pool flows toward the body it pours out of and UNDER it
+--     (a body lying in its own blood), not only beside the wound;
 --   • it FLOWS DOWNHILL: on a slope its middle slides a little down the slope
 --     and it stretches that way (still one shape), and on a real slope one
 --     short run of blood leaves it downhill (joined to it: it starts under it);
@@ -39,14 +41,15 @@
 --       `area` studs² a second, for `seconds` (call again to keep it going)
 --   BloodPool.spread(position, size, seconds, seed)   a pool growing to
 --       `size` studs across in `seconds` (the finishers' arteries)
---   BloodPool.pour(key, hit, area, maxRadius, seed, spreadTime?)   `area`
---       studs² of blood poured at once on the ground `hit` (a finisher's
---       stump bleeding, BloodGush.stump): a BIG pool that spreads for
---       `spreadTime` seconds, kept before the small ones when there are too
---       many, the same shape on every client (`seed`)
+--   BloodPool.pour(key, hit, area, maxRadius, seed, spreadTime?, toward?)
+--       `area` studs² of blood poured at once on the ground `hit` (a
+--       finisher's stump bleeding, BloodGush.stump): a BIG pool that spreads
+--       for `spreadTime` seconds, kept before the small ones when there are
+--       too many, the same shape on every client (`seed`), flowing a little
+--       `toward` the body (under it)
 --   BloodPool.claim(seed)   true the first time a finisher pool's `seed` is
 --       asked for (a body seen again, its frozen copy: no second pool)
---   BloodPool.lay(position, size, seed)   a finisher's pool already there
+--   BloodPool.lay(position, size, seed, toward?)   a finisher's pool already there
 --       (a body we only see after the finisher): fully spread at once
 --   BloodPool.wetAt(position)  0 (dry ground) → 1 (fresh wet blood): feet
 --       stepping in it get bloody (BloodTracks)
@@ -79,7 +82,14 @@ local GROW_TIME = 0.9 -- seconds: the edge eases toward where the blood reaches 
 local MAX_SPEED = 1.6 -- studs/s: the edge never moves faster
 -- A finisher's pool, while its wound still pours, is this much (of its size
 -- then) behind where its blood would reach; it catches up as it creeps on.
-local CREEP_SHARE = 0.3
+local CREEP_SHARE = 0.35
+-- A finisher's pool flows toward and UNDER the body it pours out of (a body
+-- lying in its own blood): its middle is this × its radius from the wound
+-- toward the body (BloodGush.stump gives the way).
+local UNDER_BODY = 0.3
+-- Against a wall it spreads on its free side: its middle may be pushed this
+-- × its radius away (else it would stay small against the wall).
+local PUSH_LIMIT = 1.2
 local LOW_SIDE = 0.6 -- studs: a lying body's pool starts this far downhill
 -- On a slope: the full effect from this slope on (the sine of its angle:
 -- 0.2 ≈ 11.5°), the middle sliding this × its radius downhill, the pool
@@ -118,8 +128,16 @@ local CLAIM_TIME = Config.Knockout.FINISHER_BODY_TIME + 5
 -- Without pictures the plain shapes fill the whole size.
 local POOL_COVER = { 0.465, 0.39, 0.42 }
 local POOL_SHIFT = { -0.01, -0.06, -0.07 }
--- (and its blob is not round: its longest side, × that diameter)
-local POOL_EXTENT = { 1.33, 1.08, 1.26 }
+-- (and its blob is not round: how far its edge is from its middle, × that
+-- radius, every 15° from the picture's +X (0°) to its -X (180°), the same
+-- both sides - measured on the pictures, the satellite drops left out)
+local POOL_REACH: { { number } } = {
+	{ 1.27, 1.42, 1.46, 1.43, 1.04, 1.00, 0.95, 1.00, 1.02, 1.03, 1.41, 1.48, 1.46 },
+	{ 1.05, 1.07, 1.12, 1.16, 1.15, 1.08, 1.17, 1.28, 1.28, 1.15, 1.04, 1.05, 0.98 },
+	{ 0.91, 0.92, 1.01, 1.08, 1.21, 1.23, 1.48, 1.48, 1.28, 1.17, 1.10, 1.04, 1.01 },
+}
+-- (the plain shapes, without pictures: about round)
+local ROUND_REACH = table.create(13, 1.06)
 local LOBE_FROM, LOBE_TO, LOBE_WIDE = -0.48, 0.25, 0.4
 local _, lobeImage = BloodStain.resolve("poolLobe")
 local LOBE_PICTURE = lobeImage ~= 0
@@ -167,6 +185,8 @@ type Pool = {
 	center: Vector3, -- where its blood landed (its rays start here)
 	normal: Vector3,
 	forward: Vector3, -- (its picture's direction when made)
+	aspect: number, -- (its picture's width / its length)
+	toward: Vector3, -- (a finisher's: toward the body it pours out of; zero if none)
 	twist: number, -- (radians: its picture turns this much as it grows - an uneven spread)
 	slopeDir: Vector3, -- (down the slope, a unit vector; zero if flat)
 	slope: number, -- 0 flat → 1 a real slope (SLOPE_FULL)
@@ -175,6 +195,7 @@ type Pool = {
 	target: number, -- (where its edge is going)
 	full: number, -- its full size (radius)
 	area: number, -- studs² poured into it
+	boost: number, -- (×its area: two pools merged spread to cover both)
 	fedArea: number, -- (the area when last drawn: more since = fed, wet again)
 	maxRadius: number,
 	rate: number,
@@ -185,7 +206,8 @@ type Pool = {
 	record: BloodAge.Record?,
 	cover: number,
 	shift: number,
-	extent: number,
+	extent: number, -- (its longest reach, × its radius)
+	reach: { number }, -- (its reach all around: POOL_REACH)
 	offset: Vector3, -- (its middle: slid downhill, pushed away from a wall close by)
 	drawnR: number, -- (as drawn last: redrawn only when it changed)
 	drawnAt: Vector3,
@@ -315,17 +337,52 @@ local function newRay(dir: Vector3): Ray
 	return { dir = dir, probed = 0, lastH = 0, stop = nil, stopKind = nil, ran = false }
 end
 
--- How far the pool's blob reaches going `dir` from its middle, its radius
--- being `r` (its longest side all around, stretched down a slope).
-local function reachIn(pool: Pool, dir: Vector3, r: number): number
-	local k = 1
-	if pool.stretch > 1 then
-		local along = math.sqrt(pool.stretch)
-		local c = dir:Dot(pool.slopeDir)
-		local s2 = math.max(0, 1 - c * c)
-		k = 1 / math.sqrt(c * c / (along * along) + s2 * along * along)
+-- Its picture's direction when its radius is `r` (it turns a little as it
+-- grows: it spreads more one way than another).
+-- (the last one asked for, kept: reachIn asks for it ~100 times a step)
+local turnedPool: Pool? = nil
+local turnedR, turnedTwist, turnedForward = -1, 0, Vector3.zero
+
+local function turned(pool: Pool, r: number): Vector3
+	local grown = math.clamp(r / math.max(pool.full, 0.1), 0, 1)
+	local twist = pool.twist * grown
+	if turnedPool ~= pool or turnedR ~= r or turnedTwist ~= twist then
+		turnedPool, turnedR, turnedTwist = pool, r, twist
+		turnedForward = CFrame.fromAxisAngle(pool.normal, twist):VectorToWorldSpace(pool.forward)
 	end
-	return r * pool.extent * k
+	return turnedForward
+end
+
+-- How much its picture is stretched along `forward` (its direction) and
+-- across it: down a slope it is longer that way, narrower across (1, 1 flat).
+local function stretchOf(pool: Pool, forward: Vector3): (number, number)
+	if pool.stretch <= 1 then
+		return 1, 1
+	end
+	local s = math.sqrt(pool.stretch)
+	local c = math.abs(forward:Dot(pool.slopeDir))
+	local k = 1 + (s - 1) * c
+	return k, 1 / k
+end
+
+-- How far the pool's blob reaches going `dir` from its middle, its radius
+-- being `r`: its real outline (POOL_REACH), turned and stretched the way it
+-- is drawn.
+local function reachIn(pool: Pool, dir: Vector3, r: number): number
+	local forward = turned(pool, r)
+	local side = forward:Cross(pool.normal)
+	local along, across = stretchOf(pool, forward)
+	across *= pool.aspect
+	-- (the angle in the picture before it is stretched: 0 its +X, π its -X)
+	local u = dir:Dot(forward) / along
+	local v = math.abs(dir:Dot(side)) / across
+	local angle = math.atan2(v, u)
+	local reach = pool.reach
+	local x = angle / math.pi * (#reach - 1)
+	local i = math.clamp(math.floor(x), 0, #reach - 2)
+	local rho = reach[i + 1] + (reach[i + 2] - reach[i + 1]) * (x - i)
+	local cx, cz = math.cos(angle) * along, math.sin(angle) * across
+	return rho * math.sqrt(cx * cx + cz * cz) * r
 end
 
 -- How many rays check the ground around it: fewer at a lower quality.
@@ -463,6 +520,8 @@ local function makePool(
 		center = hit.Position,
 		normal = normal,
 		forward = forward,
+		aspect = aspect,
+		toward = Vector3.zero,
 		twist = twist,
 		slopeDir = slopeDir,
 		slope = slope,
@@ -471,6 +530,7 @@ local function makePool(
 		target = START_RADIUS,
 		full = maxRadius * spec.visible,
 		area = 0,
+		boost = 1,
 		fedArea = 0,
 		maxRadius = maxRadius,
 		rate = 0,
@@ -481,7 +541,8 @@ local function makePool(
 		record = record,
 		cover = cover,
 		shift = shift,
-		extent = if picture then POOL_EXTENT[index] else 1.06,
+		extent = 0,
+		reach = if picture then POOL_REACH[index] else ROUND_REACH,
 		offset = Vector3.zero,
 		drawnR = START_RADIUS,
 		drawnAt = Vector3.zero,
@@ -498,6 +559,9 @@ local function makePool(
 		life = life,
 		spec = spec,
 	}
+	for _, reach in pool.reach do
+		pool.extent = math.max(pool.extent, reach)
+	end
 	-- its rays all around (evenly spaced, turned by its seed)
 	local count = rayCount(spec)
 	local turn = random:NextNumber(0, math.pi * 2)
@@ -640,7 +704,8 @@ function BloodPool.pour(
 	area: number,
 	maxRadius: number,
 	seed: number,
-	spreadTime: number?
+	spreadTime: number?,
+	toward: Vector3?
 ): Pool?
 	if not Config.Blood.ENABLED or area <= 0 or hit.Material == Enum.Material.Water then
 		return nil
@@ -648,6 +713,11 @@ function BloodPool.pour(
 	local target = poolAt(key, hit, maxRadius, seed, 2)
 	if target == nil then
 		return nil
+	end
+	if toward and target.key == key and target.area == 0 then
+		-- (its own new pool: it flows toward the body, on the ground's plane)
+		local flat = toward - target.normal * toward:Dot(target.normal)
+		target.toward = if flat.Magnitude > 0.2 then flat.Unit else Vector3.zero
 	end
 	local now = os.clock()
 	target.area += area
@@ -672,7 +742,7 @@ end
 -- Where its edge is going now: where the blood poured so far reaches
 -- (its area, spread thinner and thinner).
 local function goal(pool: Pool, now: number): number
-	local plain = math.sqrt(pool.area / math.pi)
+	local plain = math.sqrt(pool.area * pool.boost / math.pi)
 	if pool.priority >= 2 then
 		-- a finisher's: a little behind while it pours, catching up as it
 		-- creeps on, all there at `spreadTime` (an ease-out: slower and slower)
@@ -689,24 +759,30 @@ end
 -- wall or a ledge close by (it spreads on its free side), smaller if it still
 -- doesn't fit. Returns the offset of its middle and the radius drawn.
 local function fit(pool: Pool, r: number): (Vector3, number)
-	local drift = pool.slopeDir * r * SLOPE_DRIFT * pool.slope
-	for _, ray in pool.rays do
-		probeRay(pool, ray, drift:Dot(ray.dir) + reachIn(pool, ray.dir, r) + 0.3)
-	end
+	-- (downhill, and toward the body it pours out of)
+	local drift = pool.slopeDir * r * SLOPE_DRIFT * pool.slope + pool.toward * r * UNDER_BODY
 	local offset = drift
-	local limit = math.max(r * 0.6, drift.Magnitude)
-	for _ = 1, 3 do
+	local limit = math.max(r * PUSH_LIMIT, drift.Magnitude)
+	-- (twice: the ground checked as far as it reaches, then again from where
+	-- it was pushed - its free side reaches further)
+	for _ = 1, 2 do
 		for _, ray in pool.rays do
-			local stop = ray.stop
-			if stop then
-				local over = offset:Dot(ray.dir) + reachIn(pool, ray.dir, r) - stop
-				if over > 0 then
-					offset -= ray.dir * over
+			probeRay(pool, ray, offset:Dot(ray.dir) + reachIn(pool, ray.dir, r) + 0.3)
+		end
+		offset = drift
+		for _ = 1, 3 do
+			for _, ray in pool.rays do
+				local stop = ray.stop
+				if stop then
+					local over = offset:Dot(ray.dir) + reachIn(pool, ray.dir, r) - stop
+					if over > 0 then
+						offset -= ray.dir * over
+					end
 				end
 			end
-		end
-		if offset.Magnitude > limit then
-			offset = offset.Unit * limit
+			if offset.Magnitude > limit then
+				offset = offset.Unit * limit
+			end
 		end
 	end
 	local k = 1
@@ -800,7 +876,14 @@ end
 local function merge(pool: Pool, other: Pool, now: number)
 	local a, b = math.max(pool.area, 1e-3), math.max(other.area, 1e-3)
 	local was = pool.center + pool.offset
-	local between = (pool.center * a + other.center * b) / (a + b)
+	-- its new middle: between both, weighted by their blood, but at least far
+	-- enough toward the other one that, full, it covers both (one pool over
+	-- both: none of the other's blood left out)
+	local ra, rb = pool.maxRadius, other.maxRadius
+	local gap = other.center - pool.center
+	local d = gap.Magnitude
+	local t = math.clamp(math.max(d * b / (a + b), (d + rb - ra) / 2), 0, d)
+	local between = if d > 1e-3 then pool.center + gap.Unit * t else pool.center
 	local hit = groundUnder(between)
 	if hit and math.abs((hit.Position - pool.center):Dot(pool.normal)) < 0.3 then
 		-- (its rays start again from its new middle; drawn where it was)
@@ -816,8 +899,16 @@ local function merge(pool: Pool, other: Pool, now: number)
 		end
 	end
 	pool.area += other.area
-	pool.maxRadius = math.sqrt(pool.maxRadius ^ 2 + other.maxRadius ^ 2)
-	pool.full = math.sqrt(pool.full ^ 2 + other.full ^ 2)
+	-- (it flows toward both bodies, weighted by their blood: two halves lying
+	-- on each side of it pull about evenly - it stays over both wounds)
+	pool.toward = (pool.toward * a + other.toward * b) / (a + b)
+	-- (big enough to cover both: a little more than their blood alone when
+	-- they are far apart - it spreads thinner)
+	local both = math.sqrt(ra * ra + rb * rb)
+	local cover = math.max(both, (d + ra + rb) / 2)
+	pool.boost *= (cover / both) ^ 2
+	pool.maxRadius = cover
+	pool.full = math.sqrt(pool.full ^ 2 + other.full ^ 2) * cover / both
 	pool.rate = math.max(pool.rate, other.rate)
 	pool.feedUntil = math.max(pool.feedUntil, other.feedUntil)
 	if other.spreadTime > 0 then
@@ -930,20 +1021,13 @@ local function draw(pool: Pool, fresh: boolean)
 		pool.drawnR = pool.radius
 		pool.drawnAt = offset
 		-- (it turns a little as it grows: it spreads more one way than another)
-		local grown = math.clamp(pool.radius / math.max(pool.full, 0.1), 0, 1)
-		local forward = CFrame.fromAxisAngle(pool.normal, pool.twist * grown)
-			:VectorToWorldSpace(pool.forward)
+		local forward = turned(pool, pool.radius)
 		local size = pool.radius * 2 / pool.cover
 		local k = size / pool.core0
 		-- (stretched down a slope: longer that way, narrower across)
-		local along, across = k, k
-		if pool.stretch > 1 then
-			local s = math.sqrt(pool.stretch)
-			local c = math.abs(forward:Dot(pool.slopeDir))
-			along *= 1 + (s - 1) * c
-			across /= 1 + (s - 1) * c
-		end
-		local at = pool.center + offset - forward * pool.shift * size * (along / k)
+		local sAlong, sAcross = stretchOf(pool, forward)
+		local along, across = k * sAlong, k * sAcross
+		local at = pool.center + offset - forward * pool.shift * size * sAlong
 		BloodStain.fit(record, at, forward, along, across)
 	end
 	local run = pool.run
@@ -987,7 +1071,7 @@ end
 -- `size` studs across, fully spread at once (the same shape as the live
 -- one: it merges with one already there just the same). Once per `seed`
 -- (BloodPool.claim).
-function BloodPool.lay(position: Vector3, size: number, seed: number)
+function BloodPool.lay(position: Vector3, size: number, seed: number, toward: Vector3?)
 	if not Config.Blood.ENABLED or not FINISHER_POOLS.ENABLED or not BloodPool.claim(seed) then
 		return
 	end
@@ -998,7 +1082,8 @@ function BloodPool.lay(position: Vector3, size: number, seed: number)
 	local radius = size / 2
 	local spreadTime = 20 + FINISHER_POOLS.CREEP
 	local key = { seed = seed }
-	local pool = BloodPool.pour(key, hit, math.pi * radius * radius, radius, seed, spreadTime)
+	local pool =
+		BloodPool.pour(key, hit, math.pi * radius * radius, radius, seed, spreadTime, toward)
 	if pool == nil or pool.key ~= key then
 		-- (none, or its blood went into a pool already there - maybe one
 		-- still spreading live: that one just gets bigger, as it goes)

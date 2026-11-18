@@ -822,7 +822,10 @@ function BloodGush.stump(
 			if hit.Material == Enum.Material.Water then
 				continue -- (washed away)
 			end
-			BloodPool.pour(key, hit, amount + carried, R, seed, spreadTime)
+			-- (its pool flows a little toward the body part, under it: the
+			-- middle of the part, seen from the wound)
+			local toward = (if part.Parent then part.Position else source) - source
+			BloodPool.pour(key, hit, amount + carried, R, seed, spreadTime, toward)
 			carried = 0
 			-- oozing (after the spurts): drops falling off the wound into it
 			local t = now - start
@@ -847,7 +850,8 @@ end
 -- with the same seed, or an earlier look at this body, wins.
 function BloodGush.lay(part: BasePart, localPoint: Vector3, wound: Wound, seed: number)
 	local size = poolSize(wound)
-	BloodPool.lay(part.CFrame * localPoint, size, seed)
+	local at = part.CFrame * localPoint
+	BloodPool.lay(at, size, seed, part.Position - at)
 end
 
 return table.freeze(BloodGush)
