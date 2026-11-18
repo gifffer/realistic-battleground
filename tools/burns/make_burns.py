@@ -189,132 +189,159 @@ def erythema(rng, depth):
 
 
 def blisters(rng, depth, cover):
-    """Stage 2 (partial thickness): wet glossy pink-red dermis where the
-    skin has come off, peeling sheets of dead white skin curling at their
-    edges, intact fluid blisters around. Opaque within `cover`."""
-    region = smooth(-0.02, 0.02, depth - cover)  # (soft edge, ~2 px)
-    # The dermis: bright wet pink-red, mottled darker (deeper) and paler.
-    mott = norm(spectral(rng, 2.0, low=8, high=90))
+    """Stage 2 (partial thickness). Three zones from the rim inward:
+    intact but swollen red skin with a few fluid blisters; a band of dead
+    epidermis coming loose (grey-white, wrinkled, torn edge, curling);
+    the denuded dermis in the middle (raw red, wet, glistening, mottled).
+    Never fully uniform: the deeper the depth map, the rawer."""
+    region = smooth(-0.02, 0.02, depth - cover)
+    raw_at = cover + 0.16  # the skin is off past this depth
+    jag = spectral(rng, 1.8, low=12, high=90) * 0.012
+    denuded = smooth(-0.006, 0.006, depth - raw_at + jag)
+
+    # Intact zone: swollen erythema under a dull, tight epidermis.
+    mott = norm(spectral(rng, 2.2, low=5, high=70))
+    intact = palette(mott, [(0, (198, 104, 88)), (0.6, (184, 80, 70)), (1, (164, 62, 58))])
+    intact_alpha = 0.62 + 0.18 * mott
+
+    # The dermis: red, not pink; paler punctate spots, darker deep patches.
+    deep = norm(spectral(rng, 2.6, low=3, high=30) + 2.2 * (depth - raw_at))
     dermis = palette(
-        0.6 * mott + 0.4 * depth,
-        [(0, (232, 140, 128)), (0.45, (218, 100, 94)), (0.75, (196, 70, 70)), (1, (168, 52, 56))],
+        deep,
+        [(0, (206, 104, 92)), (0.4, (190, 76, 70)), (0.75, (164, 54, 54)), (1, (132, 38, 42))],
     )
-    # Deep partial thickness: waxy pale islands in the deepest dermis.
-    wax = smooth(0.72, 0.9, depth + 0.12 * spectral(rng, 1.5, low=10, high=80))
-    dermis = mix(dermis, rgb(236, 206, 196), 0.55 * wax)
-    wet_h = spectral(rng, 2.4, low=6, high=50) * 3.0
-    dermis = relit(dermis, wet_h, 1.0, 0.85)
-    _, spec = shade(wet_h, 1.6)
-    dermis = dermis + (spec ** 60)[..., None] * 0.45  # glossy, wet
+    punct = smooth(0.78, 0.95, norm(spectral(rng, 0.9, low=60, high=240)))
+    dermis = mix(dermis, rgb(206, 124, 110), 0.25 * wrap_blur(punct, 1.0))
+    # deep partial thickness: waxy pale, poorly perfused islands
+    wax = smooth(0.78, 0.92, deep + 0.15 * spectral(rng, 1.6, low=8, high=60))
+    dermis = mix(dermis, rgb(214, 170, 156), 0.35 * wax)
+    # wet: a fine film (small highlights), barely any relief
+    film = spectral(rng, 1.8, low=20, high=160)
+    dermis = relit(dermis, film * 0.7, 0.6, 0.9)
+    _, spec = shade(film * 1.2 + spectral(rng, 2.6, low=3, high=24) * 2.0, 1.4)
+    dermis = dermis + wrap_blur((spec**90), 0.7)[..., None] * 0.3
 
-    # Peeling epidermis: sheets where the field says so, more at the rim.
-    sheet_f = rank(spectral(rng, 2.8, low=3, high=24) + 0.9 * (1 - depth))
-    sheet = smooth(0.7, 0.72, sheet_f)
-    wrinkle = spectral(rng, 1.6, low=20, high=90, stretch=(1.0, 2.0))
-    skin_c = palette(
-        norm(wrinkle) * 0.5 + 0.5 * norm(sheet_f),
-        [(0, (214, 190, 170)), (0.5, (230, 214, 196)), (1, (240, 230, 214))],
+    # Peeling epidermis: a band along the denuded edge (the dead skin rolls
+    # back from it), wider in places, plus a few torn flaps lying on it.
+    band_w = 0.05 + 0.06 * norm(spectral(rng, 2.4, low=3, high=18))
+    band = smooth(-0.004, 0.004, depth - (raw_at - band_w) + jag) * (1 - denuded)
+    flap_f = rank(spectral(rng, 2.6, low=4, high=40))
+    flaps = smooth(0.9, 0.905, flap_f) * denuded * smooth(0.0, 0.05, raw_at + 0.1 - depth)
+    sheet = np.clip(band + flaps, 0, 1)
+    wrinkle = spectral(rng, 1.4, low=30, high=160, stretch=(1.0, 2.4))
+    sheet_c = palette(
+        norm(wrinkle + 0.5 * spectral(rng, 2.0, low=6, high=40)),
+        [(0, (176, 150, 136)), (0.5, (204, 186, 172)), (1, (226, 214, 202))],
     )
-    skin_c = relit(skin_c, wrinkle * 1.2, 0.8, 0.8)
-    # the rolled edge: a lighter lip, a dark shadow line on the dermis
-    lip, _ = edge_band(sheet, 5)
-    skin_c = mix(skin_c, rgb(250, 246, 236), 0.6 * lip)
-    shadow = np.clip(wrap_blur(sheet, 2.5) - sheet, 0, 1)
-    dermis = dermis * (1 - 0.45 * wrap_blur(smooth(0, 0.35, shadow), 1.2))[..., None]
+    sheet_c = relit(sheet_c, wrinkle * 1.6, 0.7, 0.75)
+    # the torn edge curls up: a lighter lip, a thin shadow on the dermis
+    lip, _ = edge_band(sheet, 3)
+    sheet_c = mix(sheet_c, rgb(236, 228, 218), 0.5 * lip)
+    shadow = np.clip(wrap_blur(sheet, 2.0) - sheet, 0, 1)
+    dermis = dermis * (1 - 0.55 * smooth(0, 0.3, shadow))[..., None]
 
-    color = mix(dermis, skin_c, sheet)
+    color = mix(mix(intact, dermis, denuded), sheet_c, sheet)
+    alpha = np.maximum(intact_alpha * (1 - denuded), denuded)
+    alpha = np.maximum(alpha, 0.92 * sheet)
 
-    # Intact blisters: rounded domes of yellowish fluid under thin skin,
-    # in the shallow part of the region.
-    f1, f2, _ = cells(rng, 34)
-    radius = 12 + 14 * norm(spectral(rng, 2.0, low=4, high=30))
+    # Intact blisters: a few flat domes of straw fluid under thin skin, in
+    # the intact zone near the edge of the raw area.
+    f1, _, _ = cells(rng, 22)
+    radius = 10 + 18 * norm(spectral(rng, 2.0, low=3, high=20))
     dome = np.clip(1 - f1 / radius, 0, 1)
-    keep = smooth(0.15, 0.4, 1 - depth) * smooth(0.3, 0.5, norm(spectral(rng, 2.5, low=3, high=20)))
-    dome = dome * (keep > 0.4)
-    blister = dome > 0
-    height = np.sqrt(np.clip(dome, 0, 1))
-    _, bspec = shade(height * 14, 1.0)
-    fluid = mix(rgb(228, 196, 150), rgb(246, 228, 196), height)
-    fluid = fluid * (0.8 + 0.25 * height)[..., None] + (bspec ** 40)[..., None] * 0.9
-    ring = smooth(0.0, 0.2, dome) * (1 - smooth(0.2, 0.45, dome))
-    fluid = mix(fluid, rgb(200, 90, 80), 0.6 * ring)  # red base around each
-    color = mix(color, fluid, smooth(0, 0.08, dome) * blister)
-
-    alpha = region
-    return color, alpha
+    near = smooth(cover + 0.03, cover + 0.08, depth) * (1 - smooth(raw_at - 0.07, raw_at - 0.04, depth))
+    dome = dome * (near > 0.5) * (norm(spectral(rng, 2.0, low=3, high=12)) > 0.4)
+    height = np.sqrt(dome)
+    _, bspec = shade(height * 10, 1.0)
+    fluid = mix(rgb(206, 156, 116), rgb(232, 204, 160), height)
+    fluid = fluid + (bspec**60)[..., None] * 0.7
+    cover_d = smooth(0, 0.12, dome)
+    color = mix(color, fluid, 0.75 * cover_d)
+    alpha = np.maximum(alpha, 0.85 * cover_d)
+    return color, alpha * region
 
 
 def eschar(rng, depth, cover):
-    """Stage 3 (full thickness): dry leathery dead skin, pearly white,
-    parchment tan and mahogany brown, clotted veins showing as dark lines;
-    a rim of raw red where it meets the living skin."""
-    region = smooth(-0.02, 0.02, depth - cover)
-    t = norm(0.55 * spectral(rng, 2.6, low=3, high=40) + 0.45 * (depth - cover) * 3)
+    """Stage 3 (full thickness): dry, matte, leathery dead skin, mostly
+    waxy grey-white to parchment tan, mottled mahogany where deeper,
+    thrombosed vessels showing as dark branching lines under it; a thin
+    raw red rim where it meets the partial-thickness burn."""
+    jag = spectral(rng, 1.3, low=24, high=180) * 0.012
+    region = smooth(-0.006, 0.006, depth - cover + jag)
+    d = np.clip((depth - cover) / (1 - cover), 0, 1)
+    t = norm(0.45 * spectral(rng, 2.8, low=2, high=24) + 0.3 * spectral(rng, 1.8, low=10, high=80) + 1.0 * d)
     color = palette(
         t,
         [
-            (0.0, (238, 230, 214)),  # pearly / waxy white
-            (0.28, (222, 204, 168)),  # parchment
-            (0.5, (196, 160, 112)),  # tan
-            (0.72, (150, 96, 58)),  # light mahogany
-            (1.0, (104, 58, 36)),  # mahogany brown
+            (0.0, (216, 208, 196)),  # waxy white-grey
+            (0.4, (208, 192, 168)),  # parchment
+            (0.7, (190, 160, 124)),  # tan leather
+            (0.9, (156, 112, 80)),  # light mahogany
+            (1.0, (122, 76, 56)),  # mahogany
         ],
     )
-    # Clotted vessels: branching dark lines (ridges of a noise).
+    # Thrombosed vessels: a few branching dark lines (ridges of low noise).
     veins = np.zeros((N, N))
-    for scale in (24, 60):
-        n = spectral(rng, 2.0, low=scale / 4, high=scale)
-        veins = np.maximum(veins, 1 - smooth(0.0, 0.09, np.abs(n) / 3))
-    veins *= smooth(0.2, 0.7, norm(spectral(rng, 2.5, low=2, high=12)))
-    color = mix(color, rgb(84, 34, 38), 0.65 * veins)
-    # Leather: fine wrinkles, matte.
-    leather = spectral(rng, 1.6, low=30, high=110, stretch=(1.6, 1.0))
-    bumps = spectral(rng, 2.6, low=4, high=30)
-    color = relit(color, leather * 0.8 + bumps * 3.0, 0.7, 0.8)
-    # The living rim: raw red and a little peeled skin.
-    rim, _ = edge_band(region, 7)
-    color = mix(color, rgb(182, 64, 60), 0.75 * rim)
+    for low, high, w in ((2, 8, 0.05), (5, 18, 0.035)):
+        n = spectral(rng, 2.4, low=low, high=high)
+        n = n + 0.15 * spectral(rng, 1.4, low=30, high=120)
+        veins = np.maximum(veins, 1 - smooth(0.0, w, np.abs(n) / 3))
+    veins *= smooth(0.35, 0.75, norm(spectral(rng, 2.5, low=2, high=10)))
+    veins = wrap_blur(veins, 0.8)
+    color = mix(color, rgb(74, 40, 46), 0.55 * veins)
+    # Leather: fine dry wrinkles, a few shallow fissures, matte.
+    leather = spectral(rng, 1.4, low=40, high=200, stretch=(1.8, 1.0))
+    f1, f2, _ = cells(rng, 30)
+    fissure = 1 - smooth(0.0, 1.6, f2 - f1)
+    fissure *= smooth(0.5, 0.8, norm(spectral(rng, 2.2, low=3, high=16))) * smooth(0.2, 0.6, d)
+    color = mix(color, rgb(120, 66, 52), 0.6 * fissure)
+    color = relit(color, leather * 0.7 + spectral(rng, 2.6, low=3, high=24) * 1.5 - fissure * 2, 0.6, 0.82)
+    # The living rim: a thin raw red line, a little dead skin.
+    rim, _ = edge_band(region, 5)
+    color = mix(color, rgb(168, 60, 56), 0.7 * rim)
     return color, region
 
 
 def char(rng, depth, cover):
     """Stage 4: charred black, dull ash on raised plates, split by cracks
-    that show yellow fat and dark red flesh; brown where the char thins."""
-    region = smooth(-0.02, 0.02, depth - cover)
+    that show dark red flesh and a little yellow fat; a sooty brown scorch
+    spreading past the char (half see-through) so it never ends sharp."""
+    jag = spectral(rng, 1.3, low=24, high=180) * 0.014
+    region = smooth(-0.006, 0.006, depth - cover + jag)
+    scorch = smooth(cover - 0.16, cover, depth + jag) * (1 - region)
     d = np.clip((depth - cover) / (1 - cover), 0, 1)
     f1, f2, idx = cells(rng, 140, stretch=(1, 1))
-    # crack walls, jittered (crooked)
     jx = spectral(rng, 1.6, low=10, high=80) * 2.2
     jy = spectral(rng, 1.6, low=10, high=80) * 2.2
     walls = warp(f2 - f1, jx, jy)
-    width = 1.2 + 3.5 * smooth(0.2, 1.0, d) * norm(spectral(rng, 2.0, low=4, high=30))
+    width = 1.0 + 3.0 * smooth(0.2, 1.0, d) * norm(spectral(rng, 2.0, low=4, high=30))
     crack = 1 - smooth(0.0, 1.0, walls / width)
-    crack *= smooth(0.1, 0.35, d)  # no cracks at the thin edge
-    # plates: each cell slightly different (some greyer, some browner)
+    crack *= smooth(0.08, 0.3, d)
     plate_rng = np.random.default_rng(int(rng.integers(1 << 30)))
     tone = plate_rng.random(140)[idx]
     rough = spectral(rng, 1.6, low=30, high=120)
     blob = spectral(rng, 2.4, low=6, high=40)
     base = palette(
-        0.5 * tone + 0.3 * norm(blob) + 0.2 * norm(rough),
-        [(0, (14, 12, 12)), (0.45, (28, 22, 20)), (0.75, (46, 36, 30)), (1, (70, 62, 58))],
+        0.45 * tone + 0.35 * norm(blob) + 0.2 * norm(rough),
+        [(0, (12, 11, 11)), (0.45, (24, 20, 19)), (0.75, (40, 33, 29)), (1, (64, 58, 54))],
     )
-    # ash sheen on the raised middle of a plate
     middle = smooth(0.3, 1.0, np.clip(walls / 10, 0, 1))
-    base = mix(base, rgb(104, 98, 94), 0.25 * middle * smooth(0.55, 1, norm(rough)))
-    # thin char at the edge: brown, singed
-    thin = 1 - smooth(0.0, 0.35, d)
-    base = mix(base, rgb(74, 42, 26), 0.75 * thin)
+    base = mix(base, rgb(98, 94, 90), 0.22 * middle * smooth(0.55, 1, norm(rough)))
+    thin = 1 - smooth(0.0, 0.25, d)
+    base = mix(base, rgb(70, 42, 28), 0.7 * thin)
     height = -crack * 3 + blob * 2.0 + rough * 0.5
     base = relit(base, height, 1.0, 0.65)
     _, spec = shade(height, 2.0)
-    base = base + (spec ** 25)[..., None] * 0.08  # a dull, greasy sheen
-    # inside the cracks: yellow fat, dark red flesh, black at the bottom
+    base = base + (spec**25)[..., None] * 0.07
     inner_t = norm(spectral(rng, 2.0, low=6, high=50))
-    inner = palette(inner_t, [(0, (34, 12, 10)), (0.4, (104, 28, 24)), (0.75, (150, 70, 44)), (1, (196, 160, 100))])
+    inner = palette(inner_t, [(0, (30, 10, 9)), (0.5, (92, 24, 20)), (0.85, (128, 50, 34)), (1, (176, 140, 90))])
     core = smooth(0.4, 1.0, crack)
-    color = mix(base, inner * (0.55 + 0.45 * core)[..., None], smooth(0.2, 0.7, crack))
-    return color, region
+    color = mix(base, inner * (0.5 + 0.5 * core)[..., None], smooth(0.25, 0.75, crack))
+    # the scorch past it: soot over the eschar, darker toward the char
+    soot = palette(norm(spectral(rng, 2.0, low=8, high=80)), [(0, (46, 32, 26)), (1, (78, 52, 36))])
+    color = mix(soot, color, region)
+    alpha = np.maximum(region, 0.7 * scorch * (0.75 + 0.25 * norm(rough)))
+    return color, alpha
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +349,9 @@ def char(rng, depth, cover):
 # ---------------------------------------------------------------------------
 
 # Depth thresholds: stage k covers depth > COVER[k] (share of the tile).
-SKIN_COVER = {2: 0.08, 3: 0.26, 4: 0.38}
+# Each deeper stage covers most of the one before (a limb burnt to a stage
+# is mostly that stage, with the shallower ones showing between).
+SKIN_COVER = {2: 0.06, 3: 0.16, 4: 0.3}
 
 
 def skin_set(seed):
@@ -411,48 +440,56 @@ def cloth_set(seed):
 
 
 def acid_set(seed):
-    """Acid runs DOWN: the depth map is stretched vertically, with drips."""
+    """Acid runs DOWN: the depth map is stretched vertically, with runs.
+    (spectral's `stretch` > 1 on an axis damps change along it: features
+    get long on that axis.)"""
     rng = np.random.default_rng(seed)
-    big = spectral(rng, 3.4, low=1.5, high=10, stretch=(0.55, 1.0))
-    mid = spectral(rng, 2.6, low=4, high=40, stretch=(0.45, 1.0))
-    runs = spectral(rng, 1.8, low=6, high=90, stretch=(0.18, 1.2))
-    depth = rank(big + 0.35 * mid + 0.35 * runs)
+    big = spectral(rng, 3.4, low=1.5, high=10, stretch=(1.8, 1.0))
+    mid = spectral(rng, 2.6, low=4, high=40, stretch=(2.2, 1.0))
+    runs = spectral(rng, 1.8, low=6, high=90, stretch=(5.0, 0.9))
+    depth = rank(big + 0.35 * mid + 0.4 * runs)
+    jag = spectral(rng, 1.2, low=30, high=200) * 0.012  # eroded, ragged edges
 
-    # 1: chemical erythema, yellow-brown staining.
-    t = norm(depth + 0.3 * spectral(rng, 2.0, low=6, high=60))
-    stain = palette(t, [(0, (196, 128, 92)), (0.5, (184, 124, 66)), (1, (150, 92, 44))])
-    alpha = 0.25 + 0.45 * smooth(0.1, 1.0, t)
+    # 1: chemical erythema with yellow-brown staining (the acid's colour
+    # soaked into the skin), streaked downward.
+    t = norm(depth + 0.3 * spectral(rng, 2.0, low=6, high=60, stretch=(2.0, 1.0)))
+    stain = palette(t, [(0, (196, 120, 90)), (0.5, (178, 118, 64)), (1, (140, 90, 44))])
+    alpha = 0.22 + 0.45 * smooth(0.1, 1.0, t)
     save("acid_1.png", stain, alpha)
 
-    # 2: eroded: yellow-grey wet slough, raw pink-red pits, raised pale rim.
+    # 2: eroded: dull yellow-grey / brown slough (coagulated dead skin),
+    # raw red where it has come off, a pale eroded rim. Matte-moist.
     cover = 0.3
-    region = smooth(-0.02, 0.02, depth - cover)
-    slough_t = norm(spectral(rng, 2.6, low=3, high=40, stretch=(0.5, 1)))
-    slough = palette(slough_t, [(0, (214, 196, 140)), (0.5, (196, 172, 110)), (1, (164, 132, 78))])
-    pits = smooth(0.66, 0.7, rank(spectral(rng, 2.8, low=3, high=30) + 1.2 * depth))
-    raw = palette(norm(spectral(rng, 2.4, low=4, high=40)), [(0, (190, 84, 72)), (1, (150, 56, 50))])
-    h = spectral(rng, 2.4, low=5, high=60, stretch=(0.5, 1.0)) * 2 - wrap_blur(pits, 3) * 6
+    region = smooth(-0.006, 0.006, depth - cover + jag)
+    slough_t = norm(spectral(rng, 2.6, low=3, high=40, stretch=(2.0, 1)) + 1.2 * (depth - cover))
+    slough = palette(
+        slough_t,
+        [(0, (204, 178, 134)), (0.4, (186, 150, 104)), (0.75, (156, 114, 72)), (1, (122, 80, 50))],
+    )
+    pits = smooth(0.74, 0.76, rank(spectral(rng, 2.8, low=3, high=30, stretch=(1.6, 1)) + 0.8 * depth) + jag * 2)
+    raw = palette(norm(spectral(rng, 2.4, low=4, high=40)), [(0, (178, 80, 66)), (1, (138, 52, 46))])
+    h = spectral(rng, 1.8, low=10, high=120, stretch=(2.0, 1.0)) * 0.8 - wrap_blur(pits, 2) * 3
     color = mix(slough, raw, pits)
-    color = relit(color, h, 0.8, 0.8)
-    _, spec = shade(h, 1.4)
-    color = color + (spec ** 60)[..., None] * 0.4  # wet
-    rim, _ = edge_band(region, 5)
-    color = mix(color, rgb(232, 220, 196), 0.55 * rim)  # whitened, eroded edge
+    color = relit(color, h, 0.6, 0.85)
+    _, spec = shade(h, 1.2)
+    color = color + wrap_blur(spec**50, 0.7)[..., None] * 0.12  # moist, not glossy
+    rim, _ = edge_band(region, 4)
+    color = mix(color, rgb(214, 198, 160), 0.5 * rim)  # whitened, eroded edge
     save("acid_2.png", color, region)
 
     # 3: deep: brown-black leathery eschar, a ragged slough rim.
-    cover = 0.45
-    region = smooth(-0.02, 0.02, depth - cover)
+    cover = 0.42
+    region = smooth(-0.006, 0.006, depth - cover + jag)
     d = np.clip((depth - cover) / (1 - cover), 0, 1)
-    tone = norm(spectral(rng, 2.6, low=3, high=30) + 1.2 * d)
-    esch = palette(tone, [(0, (120, 76, 40)), (0.4, (80, 46, 26)), (0.75, (48, 28, 18)), (1, (26, 16, 12))])
-    leather = spectral(rng, 1.6, low=30, high=110, stretch=(1.4, 1.0))
-    h = leather * 0.8 + spectral(rng, 2.6, low=4, high=30) * 3.0
-    esch = relit(esch, h, 0.8, 0.75)
-    _, spec = shade(h, 2.0)
-    esch = esch + (spec ** 30)[..., None] * 0.18
-    rim, _ = edge_band(region, 9)
-    esch = mix(esch, rgb(206, 182, 120), 0.7 * rim)  # yellow slough lip
+    tone = norm(spectral(rng, 2.6, low=3, high=30, stretch=(1.6, 1.0)) + 1.2 * d)
+    esch = palette(tone, [(0, (122, 80, 44)), (0.4, (86, 52, 30)), (0.75, (52, 32, 20)), (1, (30, 19, 14))])
+    leather = spectral(rng, 1.4, low=40, high=200, stretch=(1.0, 1.8))
+    h = leather * 0.7 + spectral(rng, 2.6, low=4, high=30) * 1.6
+    esch = relit(esch, h, 0.7, 0.78)
+    _, spec = shade(h, 1.6)
+    esch = esch + (spec**30)[..., None] * 0.08
+    rim, _ = edge_band(region, 7)
+    esch = mix(esch, rgb(176, 150, 96), 0.65 * rim)  # yellow-brown slough lip
     save("acid_3.png", esch, region)
 
 
@@ -512,39 +549,52 @@ def spot(seed, n=N):
 
 
 def flame_sheet(seed, frame=256, grid=4):
-    """16 frames of one flame tongue rising and breaking up: a teardrop of
-    turbulent fire, brightest low in the core, licks tearing off the tip.
-    Grey (luminance and alpha): the game tints it orange."""
+    """16 frames of one flame tongue's life (a one-shot): it rises from the
+    skin, stretches into a tall licking tongue that sways, its tip tears
+    off into a wisp, then it shrinks and lifts away. Smooth edges (a real
+    flame is a sheet of glowing gas, not a cloud), the brightest at the
+    root, dimmer and redder up the tongue. Grey (luminance + alpha): the
+    game tints it."""
     rng = np.random.default_rng(seed)
     n = frame
     sheet = np.zeros((n * grid, n * grid, 4))
-    big = spectral(rng, 2.2, low=2, high=40, n=n * 2)  # turbulence, scrolled up
-    fine = spectral(rng, 2.0, low=6, high=40, n=n * 2)
+    # turbulence fields, scrolled up through the frames (wrap: seamless)
+    sway = spectral(rng, 3.0, low=1, high=6, n=n * 2)
+    edge = spectral(rng, 2.2, low=3, high=18, n=n * 2)
+    tear = spectral(rng, 2.6, low=2, high=10, n=n * 2)
     py, px = np.mgrid[0:n, 0:n] / n
-    for i in range(grid * grid):
-        t = i / (grid * grid)
-        shift = int(t * n * 1.6)
-        tb = np.roll(big, shift, axis=0)[:n, :n]
-        tf = np.roll(fine, int(shift * 1.7), axis=0)[:n, :n]
-        # height: 0 at the bottom, 1 at the top
-        y = 1 - py
-        x = px - 0.5 + tb * 0.05 * (0.3 + y)
-        # life: grows in, then shrinks and lifts (a one-shot)
-        reach = 0.82 + 0.1 * np.sin(t * np.pi)
-        base = 0.08 + 0.12 * t  # the flame lifts off the bottom as it dies
-        width = 0.2 * (1 - smooth(0.0, reach, y)) ** 0.75 * smooth(base - 0.08, base + 0.08, y)
-        width = width * (1.0 - 0.45 * t)
-        body = smooth(0.0, 0.05, width - np.abs(x) + tf * 0.025 + tb * 0.03)
-        # tearing licks at the tip
-        tear = smooth(0.15, 0.6, tf + 0.4 * tb + (y - reach * 0.6) * 1.5)
-        body = body * (1 - 0.8 * tear * smooth(0.4, 0.9, y))
-        core = smooth(0.0, 0.08, width * 0.55 - np.abs(x)) * (1 - smooth(0.15, 0.55, y))
-        lum = 0.55 + 0.45 * core + 0.15 * tf
-        lum *= 1 - 0.4 * smooth(0.5, 1.0, y)  # darker, redder up the tongue
-        alpha = body * (0.75 + 0.25 * core)
-        alpha = ndimage.gaussian_filter(alpha, 1.8)
-        lum = ndimage.gaussian_filter(lum, 1.5)
-        # (padding: nothing within 4 px of a frame's border, mip bleed)
+    y = 1 - py  # 0 at the bottom, 1 at the top
+    count = grid * grid
+    for i in range(count):
+        t = i / (count - 1)
+        shift = int(t * n * 1.2)  # the gas rises
+        sw = np.roll(sway, shift, axis=0)[:n, :n]
+        ed = np.roll(edge, int(shift * 1.6), axis=0)[:n, :n]
+        tr = np.roll(tear, int(shift * 1.3), axis=0)[:n, :n]
+        # life: height grows fast, holds, then the flame lifts and shrinks
+        height = 0.45 + 0.45 * smooth(0.0, 0.25, t) - 0.25 * smooth(0.6, 1.0, t)
+        lift = 0.06 + 0.3 * smooth(0.55, 1.0, t)
+        width = 0.15 * (1 - 0.4 * smooth(0.5, 1.0, t))
+        # the tongue sways more the higher it is
+        x = px - 0.5 - sw * 0.06 * (y - lift).clip(0) / max(height, 0.1)
+        h = np.clip((y - lift) / height, -1, 2)
+        profile = width * np.clip(1 - h, 0, 1) ** 0.7 * np.sqrt(smooth(0.0, 0.16, h))
+        body = smooth(0.0, 0.02, profile - np.abs(x) + ed * 0.012 * (0.3 + h.clip(0, 1)))
+        body *= smooth(-0.02, 0.04, h)  # (nothing below the root)
+        # the tip tears off: gaps cut across the upper tongue
+        gap = smooth(0.25, 0.45, tr + (h - 0.45) * 1.4) * smooth(0.45, 0.7, h)
+        body *= 1 - gap
+        # a detached wisp above the tongue in the middle of its life
+        wisp_h = (y - lift - height * 0.95) / 0.18
+        wisp = smooth(-0.01, 0.01, 0.035 * (1 - np.abs(wisp_h - 0.5) * 2).clip(0) - np.abs(x - sw * 0.03))
+        wisp *= smooth(0.15, 0.35, t) * (1 - smooth(0.7, 0.9, t))
+        alpha = np.maximum(body, 0.7 * wisp)
+        core = smooth(-0.01, 0.03, profile * 0.5 - np.abs(x)) * (1 - smooth(0.0, 0.5, h))
+        lum = 0.5 + 0.5 * core - 0.25 * smooth(0.3, 1.0, h) + 0.06 * ed
+        alpha = ndimage.gaussian_filter(alpha, 1.2)
+        alpha *= 0.85 + 0.15 * core
+        alpha *= 1 - 0.5 * smooth(0.6, 1.0, t)  # it fades as it dies
+        lum = ndimage.gaussian_filter(lum, 1.0)
         pad = np.ones((n, n))
         pad[:4, :] = pad[-4:, :] = pad[:, :4] = pad[:, -4:] = 0
         alpha *= ndimage.gaussian_filter(pad, 2)
