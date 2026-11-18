@@ -51,3 +51,53 @@ Notes :
 - **Ne redimensionne pas** les `streak_*.png` (128 × 512) : le jeu n'affiche que le bas de l'image (la traînée s'allonge quand la goutte coule) et compte en pixels de l'image.
 - Pour refaire les images (autres formes, plus de variantes) : `python3 tools/raindrops/make_raindrop_textures.py` depuis la racine du dépôt, puis l'aperçu : `python3 tools/raindrops/preview.py sortie.png capture1.png capture2.png …`.
 - Les réglages (combien de gouttes, leur taille, la vitesse à laquelle elles coulent ou sèchent) sont en haut de `src/client/UI/LensRain.luau`.
+
+# Pluie dans la ville (la vraie pluie qui tombe)
+
+Pendant l'événement météo **Rain** (et l'orage, sa version forte), la pluie tombe **partout autour de toi** dans la ville, en trois profondeurs, pour que ça ne ressemble jamais à un filtre collé sur l'écran :
+
+- **près de toi** (≈ 20 studs) : peu de gouttes, mais de longs traits nets qui tombent vite (une goutte d'eau claire avec un reflet brillant, étirée par sa vitesse comme sur une vraie caméra) ;
+- **plus loin** (jusqu'à ≈ 100 studs) : des traits plus fins, plus serrés, plus pâles ;
+- **au fond** (≈ 150 studs) : des « rideaux » de pluie grise + la brume que le serveur ajoute au ciel : la ville lointaine devient voilée.
+
+Les gouttes tombent à ≈ 150 studs/s, un peu penchées par le vent (beaucoup en orage, plus fort pendant une rafale). Elles sont posées sur une **grille fixe dans le monde** : quand tu marches, tu traverses la pluie, elle ne te suit pas.
+
+**Pas de pluie dedans** : le jeu connaît la hauteur du premier toit sous chaque morceau de ciel (quelques rayons vers le bas, gardés en mémoire) ; les gouttes s'arrêtent sur les toits, les auvents, le viaduc. Près de toi il prend le toit le plus haut (aucune goutte sous un auvent).
+
+Au sol : **petites couronnes d'éclaboussures** sur le sol dur (pas sur l'herbe), **petits cercles** sur le sol mouillé et dans les flaques, et une **brume** très légère au ras du sol. Le son de la pluie devient **sourd** sous un toit et à l'intérieur.
+
+Ça commence et finit **en douceur avec l'événement** (même rampe que le ciel du serveur : ≈ 25 s pour monter, ≈ 30 s pour s'arrêter) et ça s'arrête complètement à la fin. Rien dans le parc (toujours ensoleillé) ni en duel.
+
+**Qualité** (Paramètres Roblox → Qualité graphique) : 1-3 = léger (moins de gouttes au loin, pas de cercles ni de brume, 4 rideaux), 4-7 = moyen, 8-10 = tout. En « Automatique », le jeu commence en moyen et baisse / remonte tout seul selon les FPS. Téléphones et tablettes : moyen au maximum. Au plus ≈ 3 800 gouttes à l'écran en plein orage en qualité max, ≈ 1 300 en qualité basse.
+
+![Aperçu : les images de la pluie sur une rue de nuit](../assets/rain/preview.png)
+
+## Importer les images (une seule fois)
+
+**Sans les images, la pluie marche déjà** (textures Roblox intégrées à la place), mais sans les rideaux lointains et avec des éclaboussures plus simples. Les 4 images de `assets/rain/` (pas `preview.png`) :
+
+| Fichier | Taille | Rôle | Où coller l'ID dans `Config.Weather.RAIN_IMAGES` |
+|---|---|---|---|
+| `rain_drop.png` | 64 × 64 | une goutte (étirée en trait par le jeu) | `drop` |
+| `rain_splash.png` | 512 × 512 (4 × 4 images) | l'éclaboussure en couronne | `splash` |
+| `rain_ripple.png` | 1024 × 1024 (4 × 4 images) | le cercle sur l'eau (rues mouillées et flaques) | `ripple` |
+| `rain_sheet.png` | 1024 × 256 | le rideau de pluie lointain | `sheet` |
+
+Même méthode que plus haut (Asset Manager → Bulk Import → clic droit → Copy Asset ID, l'ID de l'**image**), puis dans `src/shared/Config.luau`, section `Weather` :
+
+```lua
+RAIN_IMAGES = table.freeze({
+	drop = id_rain_drop,
+	splash = id_rain_splash,
+	ripple = id_rain_ripple,
+	sheet = id_rain_sheet,
+}),
+```
+
+Notes :
+
+- **Ne redimensionne pas** `rain_splash.png` ni `rain_ripple.png` : ce sont des animations de 16 images en grille 4 × 4.
+- Si les rideaux lointains semblent **monter** au lieu de tomber, mets `CURTAIN_SPEED` en négatif dans `Config.Weather.RAIN`.
+- Si les traits de pluie paraissent **trop courts / trop larges**, joue sur `NEAR_SIZE` / `MID_SIZE` et `STRETCH` (de `-3` = le plus long, à `0` = une goutte ronde) dans `Config.Weather.RAIN`. La densité : `NEAR_RATE`, `MID_RATE` ; la vitesse : `FALL_SPEED`.
+- Pour refaire les images : `python3 tools/rain/make_rain_textures.py` depuis la racine du dépôt, puis l'aperçu : `python3 tools/rain/preview.py`.
+- Le code : `src/client/Controllers/RainController.luau` (la pluie, les éclaboussures, les cercles, la brume, les rideaux) ; `WeatherController` donne la force de la pluie et le vent.

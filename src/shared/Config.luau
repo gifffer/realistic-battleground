@@ -799,12 +799,37 @@ return table.freeze({
 		-- Speed of the restore wave, in studs per second.
 		POWER_WAVE_SPEED = 66,
 
-		-- Client: the rain around the camera.
-		RAIN_RATE = 900, -- drops per second (halved on low graphics quality)
-		RAIN_AREA = 90, -- side of the square area it falls on, in studs
-		RAIN_HEIGHT = 45, -- the drops start this high above the camera
-		RAIN_LEAD = 0.4, -- the area moves ahead of a moving camera (× its speed)
-		SPLASH_RATE = 220, -- little splashes on the ground around you
+		-- Client: the rain in the world (Client/Controllers/RainController, guide: docs/RAIN_FR.md).
+		-- Three depth layers: NEAR (big, long streaks in cells around the camera), MID (finer
+		-- streaks in a ring of bigger cells, up to ~105 studs) and FAR (rain curtains around the
+		-- camera at ~150 studs, plus the server's haze). Rates are at full rain, top quality; low
+		-- and medium graphics quality draw less (TIERS in RainController).
+		RAIN = table.freeze({
+			FALL_SPEED = 150, -- studs/s (real rain: about 9 m/s; 90-200 reads right on screen)
+			TOP = 70, -- the drops are born this high above the camera
+			NEAR_CELL = 14, -- side of a near cell (3 x 3 of them around the camera)
+			MID_CELL = 42, -- side of a mid cell (5 x 5 of them, the middle one is the near cells)
+			NEAR_RATE = 75, -- drops per second per near cell (at most 400 with a storm)
+			MID_RATE = 150, -- drops per second per mid cell (at most 400 with a storm)
+			NEAR_SIZE = NumberRange.new(0.2, 0.32), -- width of a near drop before the stretch
+			MID_SIZE = NumberRange.new(0.11, 0.16),
+			STRETCH = -3, -- ParticleEmitter.Squash (-3 = the longest streak along the fall)
+			SPLASHES = 70, -- splashes per second on the ground around you
+			SPLASH_RADIUS = 38, -- ...this far from the camera at most
+			CURTAINS = 10, -- far rain curtains (needs RAIN_IMAGES.sheet)
+			CURTAIN_RADIUS = 150, -- studs from the camera
+			CURTAIN_SPEED = 1.6, -- how fast the curtain's texture falls (flip the sign if it rises)
+		}),
+		-- Pictures of the world rain, made by tools/rain/make_rain_textures.py into assets/rain/.
+		-- Upload them (docs/RAIN_FR.md) and paste the IMAGE ids. 0 = not uploaded: the drop and
+		-- the splash fall back to a built-in Roblox sparkle, the ripple to the built-in ring, and
+		-- the far curtains are not drawn.
+		RAIN_IMAGES = table.freeze({
+			drop = 0, -- rain_drop.png (64 x 64)
+			splash = 0, -- rain_splash.png (4 x 4 flipbook)
+			ripple = 0, -- rain_ripple.png (4 x 4 flipbook)
+			sheet = 0, -- rain_sheet.png (1024 x 256, the far curtains)
+		}),
 		-- The one-line notice top-left ("RAIN", "POWER CUT").
 		NOTICE_TIME = 3,
 
