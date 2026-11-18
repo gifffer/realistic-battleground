@@ -19,6 +19,12 @@
 --       break what's within `radius` studs of `centre`; `push` = the
 --       direction × strength the debris fly (studs/s); `attacker`: the
 --       fighter (his feet tell where the floor is; never his own body).
+--       `options` (optional): feetY = where the floor is instead (a body
+--       thrown into a wall: the floor it flew from), only = what may break
+--       (a piece of a cut wall is judged by its wall).
+--   Destruction.bodyBreakable(part, feetY) → the wall a thrown body hitting
+--       `part` breaks (the part, or the wall a piece was cut from), or nil:
+--       only walls tagged "Breakable" (Breakable.tagged).
 
 local CollectionService = game:GetService("CollectionService")
 local PhysicsService = game:GetService("PhysicsService")
@@ -213,11 +219,17 @@ local overlap = OverlapParams.new()
 overlap.FilterType = Enum.RaycastFilterType.Exclude
 overlap.RespectCanCollide = true
 
+export type BlastOptions = {
+	feetY: number?,
+	only: ((BasePart) -> boolean)?,
+}
+
 function Destruction.blast(
 	centre: Vector3,
 	radius: number,
 	push: Vector3,
-	attacker: Model?
+	attacker: Model?,
+	options: BlastOptions?
 ): boolean
 	local root = attacker and attacker:FindFirstChild("HumanoidRootPart")
 	local fighters = CollectionService:GetTagged(Config.Combat.TAG)
@@ -227,6 +239,10 @@ function Destruction.blast(
 		feetY = root.Position.Y - 3
 		under = Breakable.support(root, fighters)
 	end
+	if options and options.feetY then
+		feetY = options.feetY
+	end
+	local only = if options then options.only else nil
 	overlap.FilterDescendantsInstances = fighters
 	local blast: Blast =
 		{ centre = centre, reach = radius * 0.85, feetY = feetY, thrown = {}, now = os.clock() }
@@ -236,6 +252,9 @@ function Destruction.blast(
 			return -- (never what he stands on)
 		end
 		local original = pieceOf[part]
+		if only and not only(original or part) then
+			return
+		end
 		if original then
 			-- a piece of an already cut wall: it goes for good
 			if
@@ -291,6 +310,17 @@ function Destruction.blast(
 		Remotes.WallBroken:FireAllClients(blast.thrown, centre, push)
 	end
 	return #blast.thrown > 0
+end
+
+function Destruction.bodyBreakable(part: BasePart, feetY: number): BasePart?
+	local original = pieceOf[part]
+	if original then
+		return if Breakable.tagged(original) then original else nil
+	end
+	if Breakable.tagged(part) and Breakable.check(part, feetY) ~= nil then
+		return part
+	end
+	return nil
 end
 
 -- Is a fighter standing inside `part`? (don't trap them in it)
