@@ -357,13 +357,23 @@ return table.freeze({
 		-- uploaded: the old BURN_IMAGES below stand in (Roblox's own
 		-- particles for the flame / smoke / ember).
 		BURNS = table.freeze({
-			skin = table.freeze({ 0, 0, 0, 0 }), -- skin_1..4.png (bare skin)
-			cloth = table.freeze({ 0, 0, 0, 0 }), -- cloth_1..4.png (over a shirt / pants)
-			acid = table.freeze({ 0, 0, 0 }), -- acid_1..3.png
-			spot = 0, -- spot.png (a laser / ray burn)
-			flame = 0, -- flame.png (4 x 4 flipbook)
-			smoke = 0, -- smoke.png
-			ember = 0, -- ember.png
+			skin = table.freeze({
+				113128765394969,
+				131967997605329,
+				74252597997417,
+				125259548593338,
+			}), -- skin_1..4.png (bare skin)
+			cloth = table.freeze({
+				103796817123786,
+				82410079132632,
+				134218033394583,
+				129471308703785,
+			}), -- cloth_1..4.png (over a shirt / pants)
+			acid = table.freeze({ 112442746763176, 111696045453314, 92317291431094 }), -- acid_1..3.png
+			spot = 108212204997924, -- spot.png (a laser / ray burn)
+			flame = 83282802493156, -- flame.png (4 x 4 flipbook)
+			smoke = 135930341177500, -- smoke.png
+			ember = 104956583136032, -- ember.png
 		}),
 		-- The first burn pictures (assets/burns/legacy), still used while
 		-- BURNS above is 0: acid 1..3 for acid, fire 1..3 for stages 2..4.
