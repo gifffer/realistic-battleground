@@ -156,7 +156,8 @@ local LOOKS: { [Variant]: { [Mode]: Look } } = {
 		hover = look(C.Ink, 0, C.Ink, 1, C.Surface, C.Accent, 1),
 		pressed = look(C.Muted, 0, C.Muted, 1, C.Surface, C.Accent, 1),
 		selected = look(C.InkHi, 0, C.InkHi, 1, C.Surface, C.Accent, 1),
-		disabled = look(C.CardHi, 0.4, C.CardHi, 1, C.Ink3, C.Accent, 1),
+		-- Same white shape, dimmed (as Roblox does): "BUYING…" stays readable.
+		disabled = look(C.InkHi, 0.5, C.InkHi, 1, C.Surface, C.Accent, 1),
 	},
 	secondary = {
 		idle = look(C.Surface, 0.4, C.InkHi, 0.78, C.Ink, C.Accent, 1),

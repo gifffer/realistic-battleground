@@ -138,7 +138,8 @@ function Panel.tabs(parent: Instance, labels: { string }): Tabs
 		local tab: Tab = { button = button, label = label, badge = badge, count = count }
 		table.insert(tabs, tab)
 		button.MouseEnter:Connect(function()
-			if index ~= current then
+			-- (no hover on touch: MouseLeave often never comes)
+			if index ~= current and not Theme.isTouch() then
 				label.TextColor3 = C.InkHi
 				button.BackgroundColor3 = C.Card
 				button.BackgroundTransparency = 0
@@ -313,6 +314,9 @@ function Panel.card(options: CardOptions): Card
 		end
 	end
 	instance.MouseEnter:Connect(function()
+		if Theme.isTouch() then
+			return -- (MouseLeave often never comes on touch)
+		end
 		hovered = true
 		paint()
 	end)

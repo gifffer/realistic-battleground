@@ -1006,14 +1006,14 @@ Ces tests **remplacent M1, M2, M5, M7, M9, M12, M18 et M19** ; les autres M rest
 | T14 | Fin de duel (écran VICTORY / DEFEAT) | La barre du haut **disparaît** (et le panneau ouvert se ferme), puis revient au retour dans l'arène. |
 | T15 | *Test → Device* : **iPhone** paysage | Les boutons sont dans la barre Roblox ; s'ils ne tiennent pas tous, la rangée **défile du doigt** sur le côté. Un panneau tient sous la barre (réduit, jamais sous ×0,75) ; s'il est trop haut il **défile**. Toucher hors du panneau le ferme. Bouton **EMOTE** (émote équipée) à gauche au milieu de l'écran, caché quand un panneau est ouvert. |
 | T16 | Fenêtre Studio petite (~830 × 515) puis plein écran | Panneaux réduits pour tenir, recalés au redimensionnement ; sur un grand écran (1440p) un peu plus grands. |
-| T17 | Kill feed + écran de mort | Kill feed : **noms en gras blanc** (le tien plus épais), bande sombre un peu plus marquée. Écran de mort : sur **une plaque noire transparente** (comme les panneaux). |
+| T17 | Kill feed + écran de mort | Kill feed : **noms en gras blanc** (le tien plus épais), bande sombre un peu plus marquée. Écran de mort : sur **une plaque noire transparente**, carrée (plus transparente que les panneaux, qui sont maintenant presque noirs et arrondis, voir R3). |
 | T18 | **Shop**, **Kits**, **Profile** : regarder « 820 coins » | Les coins sont **sur la ligne du titre**, en haut à droite, **hors du contenu** : ils ne cachent ni le type ni le haut des cartes (Shop), ni le nom du kit (Kits), ni les stats (Profile), et **ne défilent pas** quand le contenu défile (petite fenêtre). |
 
 ## Barre du haut et panneaux au style Roblox (`fix/topbar-visible-2`)
 
 Même fonctionnement qu'avant ; seul l'aspect change, copié sur la barre et les menus sombres de
 Roblox (valeurs et sources : `docs/UI_ROBLOX_STYLE.md`). Ces tests remplacent l'aspect décrit
-dans T1, T2 (bouton blanc) et T7 (trait blanc sous l'onglet) ; le reste de T1–T18 reste valable.
+dans T1, T2 (bouton blanc), T7 (trait blanc sous l'onglet) et T17 (l'écran de mort ne ressemble plus aux panneaux) ; le reste de T1–T18 reste valable.
 
 | # | Test | Résultat attendu |
 |---|---|---|
@@ -1025,3 +1025,6 @@ dans T1, T2 (bouton blanc) et T7 (trait blanc sous l'onglet) ; le reste de T1–
 | R6 | Boutons **EQUIP** / **BUY** / **FIND MATCH** | Bouton principal **blanc, texte sombre** (comme les boutons Roblox), un peu gris au survol. Les autres boutons : sombres, contour discret, coins arrondis. Plus de petite marque rouge. |
 | R7 | Pastille de nombre (finir un défi) | Petit rond **blanc** avec un nombre sombre en haut à droite de l'icône **Rewards**, dans la pastille groupée. |
 | R8 | iPhone paysage / ancienne barre Roblox (36 px) | Les pastilles rapetissent pour avoir la hauteur de la barre Roblox ; tout reste cliquable. |
+| R9 | Regarder les icônes de près | Settings = un **engrenage** (dents pleines collées à l'anneau, moyeu ouvert), différent de l'étincelle des effets ; Shop = un **chapeau** (haut évasé, bande, large bord) ; Duel = **deux épées croisées** (garde en travers près de la poignée, poignées dans les coins du bas) ; Emotes = un **smiley**. Tous les petits ronds ont un trou bien visible. |
+| R10 | Acheter dans Shop ou Kits | Pendant « BUYING… » (et après EQUIP), le bouton reste **blanc grisé** avec le texte sombre **bien lisible** (il ne disparaît plus). |
+| R11 | Téléphone : toucher une icône puis fermer le panneau | Aucun rond clair ne **reste collé** derrière une icône ; pareil pour les onglets et les cartes des panneaux (pas d'effet de survol au doigt). Panneau ouvert : rond pâle léger derrière son icône. |

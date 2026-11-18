@@ -16,7 +16,7 @@ copy and where they come from. Our code: `src/client/UI/Theme.luau`,
 | Gap between pills | 8 px | TopbarPlus (`startInset` on the new bar), and our pills on the screenshot |
 | Hover | white at alpha 0.1 behind the icon | UIBlox `BackgroundOnHover = White, Transparency 0.9` |
 | Pressed | black at alpha 0.3 | UIBlox `BackgroundOnPress` |
-| Selected / open | a pale round "spot" (RGB 208, 217, 251) behind the icon, inside the 4 px border (36 px) | TopbarPlus `IconSpot BackgroundColor3 (208,217,251), Transparency 0.85, "Selected"`; `Widget BorderSize 4` |
+| Selected / open | a pale round "spot" (RGB 208, 217, 251) behind the icon, inside the 4 px border (36 px) | TopbarPlus `IconSpot BackgroundColor3 (208,217,251), Transparency 0.85, "Selected"`; `Widget BorderSize 4`. Ours: the same 0.85 (0.8 under the mouse). The tint comes from TopbarPlus; Roblox's own bar is not verified |
 | Label | Builder Sans **Bold 16** | TopbarPlus `IconLabel FontFace BuilderSans Bold`, `TextSize 16` |
 | Badge | white circle 20 px, dark number 13 px, top right | TopbarPlus `Notice Size 20×20`, `NoticeLabel TextSize 13`, `Notice.lua` white background; UIBlox `Badge = White`, `BadgeContent = Flint` |
 | Dropdown / panel | RGB 18, 18, 21 at transparency **0.08** | TopbarPlus `Dropdown BackgroundColor3 (18,18,21)`, `BackgroundTransparency 0.08` |
@@ -35,7 +35,7 @@ Roblox's own app and in-experience menus are built with:
 | Graphite | 101, 102, 104 | `#656668` | default UI lines | — |
 | Pumice | 189, 190, 190 | `#BDBEBE` | default text | `Muted` |
 | White | | `#FFFFFF` | emphasis text, icons | `InkHi` |
-| Divider | white, transparency 0.8 | | thin lines | `DIVIDER_TRANSPARENCY` (0.85) |
+| Divider | white, transparency 0.8 | | thin lines | `DIVIDER_TRANSPARENCY` (0.8) |
 | Surface 0 | 18, 18, 21 | `#121215` | roblox.com dark surface | `Surface` (panel plate) |
 
 - Font: **Builder Sans** (Roblox's own; `rbxasset://fonts/families/BuilderSans.json`),

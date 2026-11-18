@@ -2,7 +2,8 @@
 -- Icons: the top bar's and the cards' icons, drawn with frames (no image
 -- assets to upload). Line icons like Roblox's own (menu, chat, mic): one
 -- stroke width for every line, round ends, drawn on a 22 × 22 grid and
--- scaled to the size asked for, so every icon has the same weight.
+-- scaled to the size asked for, so every icon has the same weight. Rings are
+-- at least 6 grid units wide so their holes stay open at 22 px.
 --
 --   local icon = Icons.draw("kits", parent, 22)       -- a 22 × 22 icon
 --   Icons.paint(icon, Color3.new(0, 0, 0))           -- recolour it
@@ -116,6 +117,21 @@ local function dot(pen: Pen, x: number, y: number, d: number)
 	Theme.make("UICorner", { CornerRadius = UDim.new(1, 0), Parent = frame })
 end
 
+-- A filled block centred on (x, y): `length` along its axis, `width` across,
+-- turned `angle` degrees (0 = the length points up). For gear teeth.
+local function slab(pen: Pen, x: number, y: number, length: number, width: number, angle: number)
+	Theme.make("Frame", {
+		Name = "Part",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(at(pen, x), at(pen, y)),
+		Size = UDim2.fromOffset(at(pen, width), at(pen, length)),
+		Rotation = angle,
+		BorderSizePixel = 0,
+		BackgroundColor3 = WHITE,
+		Parent = pen.holder,
+	})
+end
+
 -- A frame where only rows y1 to y2 of the icon show (for an arc). Shapes
 -- drawn in it keep the icon's own grid positions.
 local function clip(pen: Pen, y1: number, y2: number): Frame
@@ -154,32 +170,34 @@ function Icons.draw(name: IconName, parent: Instance, size: number): Frame
 		ring(pen, 11, 20, 14, clip(pen, 12, 20))
 		line(pen, 4, 19, 18, 19)
 	elseif name == "duel" then
-		-- Two crossed swords: blade, guard, grip.
-		line(pen, 3, 3, 14, 14)
-		line(pen, 12, 16, 16, 12)
-		line(pen, 15.5, 15.5, 18.5, 18.5)
-		line(pen, 19, 3, 8, 14)
-		line(pen, 6, 12, 10, 16)
-		line(pen, 6.5, 15.5, 3.5, 18.5)
+		-- Two crossed swords, hilts in the bottom corners: blade, a guard
+		-- square to the blade, and a short grip.
+		line(pen, 18, 3, 6, 16)
+		line(pen, 8.2, 18.03, 3.8, 13.97)
+		line(pen, 6, 16, 3.5, 19)
+		line(pen, 4, 3, 16, 16)
+		line(pen, 18.2, 13.97, 13.8, 18.03)
+		line(pen, 16, 16, 18.5, 19)
 	elseif name == "rewards" then
 		-- A gift: lid, box, ribbon and a two-loop bow.
-		box(pen, 3, 7, 19, 11, 1.5)
-		box(pen, 4.5, 11, 17.5, 20, 1.5)
-		line(pen, 11, 7, 11, 20)
-		ring(pen, 8.5, 4.5, 4.5)
-		ring(pen, 13.5, 4.5, 4.5)
+		box(pen, 3, 8, 19, 12, 1.5)
+		box(pen, 4.5, 12, 17.5, 20, 1.5)
+		line(pen, 11, 8, 11, 20)
+		ring(pen, 8, 5, 6)
+		ring(pen, 14, 5, 6)
 	elseif name == "emotes" then
-		-- A figure cheering: arms up, legs apart.
-		ring(pen, 11, 4.5, 5)
-		line(pen, 11, 9, 11, 14)
-		line(pen, 11, 10.5, 5, 6.5)
-		line(pen, 11, 10.5, 17, 6.5)
-		line(pen, 11, 14, 7, 20)
-		line(pen, 11, 14, 15, 20)
+		-- A smiley face, like Roblox's emote button: eyes and a smile.
+		ring(pen, 11, 11, 18)
+		dot(pen, 8, 9, 2.5)
+		dot(pen, 14, 9, 2.5)
+		ring(pen, 11, 10.5, 10, clip(pen, 13.5, 17))
 	elseif name == "shop" then
-		-- A hat: crown and brim.
-		box(pen, 6, 4, 16, 16, 3)
-		line(pen, 2, 16, 20, 16)
+		-- A hat: a tapered crown with a band, on a wide brim.
+		line(pen, 7, 16, 8, 5)
+		line(pen, 8, 5, 14, 5)
+		line(pen, 14, 5, 15, 16)
+		line(pen, 7.4, 12, 14.6, 12)
+		line(pen, 2.5, 16, 19.5, 16)
 	elseif name == "profile" then
 		-- A chart: three bars on a base line.
 		line(pen, 6, 11, 6, 16)
@@ -187,13 +205,12 @@ function Icons.draw(name: IconName, parent: Instance, size: number): Frame
 		line(pen, 16, 8, 16, 16)
 		line(pen, 3, 19.5, 19, 19.5)
 	elseif name == "settings" then
-		-- A gear: a ring with eight short teeth around a hub.
+		-- A gear: a ring with eight solid teeth on it, and an open hub.
 		ring(pen, 11, 11, 12)
-		ring(pen, 11, 11, 5)
+		ring(pen, 11, 11, 6)
 		for index = 0, 7 do
 			local angle = math.rad(index * 45)
-			local sin, cos = math.sin(angle), math.cos(angle)
-			line(pen, 11 + sin * 7, 11 - cos * 7, 11 + sin * 10, 11 - cos * 10)
+			slab(pen, 11 + math.sin(angle) * 7.5, 11 - math.cos(angle) * 7.5, 4, 3.5, index * 45)
 		end
 	elseif name == "effect" then
 		-- A burst: eight rays around a dot, the long ones on the axes.

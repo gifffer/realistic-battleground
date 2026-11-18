@@ -81,7 +81,7 @@ Theme.PANEL_TRANSPARENCY = 0.35
 Theme.SURFACE_TRANSPARENCY = 0.08
 
 -- Thin lines (dividers): white at this transparency (Roblox: alpha 0.2).
-Theme.DIVIDER_TRANSPARENCY = 0.85
+Theme.DIVIDER_TRANSPARENCY = 0.8
 
 -- Corner radius (pixels): buttons and cards, then panels.
 Theme.RADIUS = 8

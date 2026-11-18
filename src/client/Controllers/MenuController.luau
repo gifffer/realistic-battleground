@@ -163,12 +163,13 @@ local function barArea(viewport: Vector2): (number, number, number, number)
 	return FALLBACK_LEFT, FALLBACK_TOP, PILL, viewport.X - 12
 end
 
--- Roblox's states: hover = white at 0.9 behind the icon; open = a pale
--- mark (a little stronger under the mouse). The icon stays white.
+-- Roblox's states: hover = white at 0.9 behind the icon; open = the pale
+-- spot at 0.85 (TopbarPlus "Selected"; 0.8 under the mouse). The icon
+-- stays white.
 local function paintButton(ui: EntryUi, hovered: boolean)
 	local open = openId == ui.entry.id
 	ui.spot.BackgroundColor3 = if open then C.Spot else C.InkHi
-	local transparency = if open then (if hovered then 0.72 else 0.78) elseif hovered then 0.9 else 1
+	local transparency = if open then (if hovered then 0.8 else 0.85) elseif hovered then 0.9 else 1
 	Theme.tween(ui.spot, Theme.FAST, { BackgroundTransparency = transparency })
 end
 
@@ -199,7 +200,11 @@ local function checkBarOnce()
 	local position = bar.AbsolutePosition
 	local size = bar.AbsoluteSize
 	local problem: string? = nil
-	if next(entries) == nil then
+	local count = 0
+	for _ in entries do
+		count += 1
+	end
+	if count == 0 then
 		problem = "no button registered"
 	elseif size.X < 1 or size.Y < 1 then
 		problem = "zero size"
@@ -217,7 +222,7 @@ local function checkBarOnce()
 		warn(
 			`[Menu] top bar not visible ({problem}): position {position}, size {size}, `
 				.. `viewport {viewport}, TopbarInset {GuiService.TopbarInset}, `
-				.. `GuiInset {GuiService:GetGuiInset()}, pills {#bar:GetChildren() - 3}`
+				.. `GuiInset {GuiService:GetGuiInset()}, buttons {count}`
 		)
 	end
 end
@@ -314,8 +319,13 @@ local function buildButton(entry: MenuEntry): EntryUi
 		host = nil,
 	}
 	button.MouseEnter:Connect(function()
+		-- No hover on touch: a finger fires MouseEnter but often no
+		-- MouseLeave, so the light would stay stuck.
+		if Theme.isTouch() then
+			return
+		end
 		paintButton(ui, true)
-		if word == nil and not Theme.isTouch() then
+		if word == nil then
 			tooltip.Text = entry.hint or entry.label
 			local position = button.AbsolutePosition
 			local size = button.AbsoluteSize
