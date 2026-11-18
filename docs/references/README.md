@@ -11,6 +11,11 @@ The player sent reference videos of other Roblox games to show the **feel** he w
 | 3 | A shotgun gore showcase on an R6 test dummy | Gore timing, blood mist colour, high-detail wound meshes on the blocky body, death freeze then ragdoll |
 | 4 | An "awakening" transformation cinematic (no fight) | Awakening / ultimate staging: flash frame, desaturated world, smoke, FOV punch, ground eruptions |
 | 5 | A battlegrounds-style anime finisher (no gore) | Heavy-hit timing: long wind-up then instant strike, knockback, wall crack decals, barrage rhythm, a different final hit |
+| 6 | A wall-combo cutscene (anime battlegrounds, no gore) | Finisher cinematic structure: grab at a wall, 6-10 short shots with hard cuts, a still hold before the hit, impact frames, the result shown back in gameplay |
+| 7 | An "ultimate" VFX test in Studio (anime, no gore) | Cut-in grammar: a short wind-up, close-up shots of 2-4 frames, the background darkened round the character, one climax flash, calm afterwards |
+| 8 | A first-person execution of a downed R6 body (gore) | Gore that grows with each hit on the same part, blood mist, a volumetric pulped head, pools growing under the body, a slow deliberate pace, grading that makes the blood the most saturated thing |
+| 9 | A long custom moveset showcase (battlegrounds, no gore) | Heavy impacts: flash + thin speed lines, floor slabs and dust that stay on slams, sparks of metal on stone, light hits stagger and heavy ones ragdoll, finisher beats of 0.3-0.8 s |
+| 10 | An ultimate-ability showcase (anime, no gore) | A quiet lull before each big hit, a smear frame to hide a camera cut, impact = spark + speed lines + ring on the same frame, the aftermath held 0.5-1 s |
 
 ## The rules that come out of them
 
@@ -63,7 +68,29 @@ The player sent reference videos of other Roblox games to show the **feel** he w
   - then go to a limp ragdoll that collapses and settles in about 0.4 s;
   - little bounce, no anime launch for a kill.
 - **Point-blank gore** can splash the screen (a red overlay for about 2 frames, fading in about 0.5 s). Keep that for the heaviest hits.
+- **Gore that progresses:** repeated hits on the same part escalate the wound in stages (mist, then smears, then a pulped mass), so each part tracks how damaged it is.
+- **Volumetric damage:** a destroyed head is a lumpy cluster of wet red 3D parts covering the neck and upper chest, not a texture.
+- **Downed and dying bodies already bleed:** a pool is already under someone who is down, so their state reads before the kill.
+- **Grading:** a desaturated world with crushed blacks and warm low light, so the red blood is the most saturated thing on screen.
 - **No damage numbers, no hit markers.** The feedback is the body, the blood, the camera and the sound.
+
+### Finisher cinematics
+- **Length:** 4-6 s in all.
+- **Shots:** 6-10 shots of 2-12 frames each, joined by **hard cuts** (or a single smear frame hiding the cut), not slow pans.
+  - The sequence: over the shoulder for the wind-up, a low wide shot for the impact, a close-up on the face or the wound, then an aftermath shot.
+- **Hold before the hit:** a still, quiet shot of about 0.5 s (4-8 frames darker and calmer) right before the decisive blow. The contrast sells it.
+- **Impact frames:** on the hit, 1-2 frame full-screen frames (solid or inverted, desaturated red / black / white for us), alternating 3-5 times over about 1 s.
+- **During the cinematic:**
+  - push the palette (desaturate the world, keep the blood red, darken it by 20-30 %);
+  - hide the HUD.
+- **Back to gameplay** exactly where the cutscene ends, with the result left in place:
+  - the body slumped at the wall base;
+  - a drag trail on the floor;
+  - wall splatter;
+  - dust and smoke lingering for 1 s or more.
+- **Debris that stays:** on slams, 3-8 slabs and chunks of the floor's own material tumble and stay 5-10 s, with a dust billow for 1-2 s.
+  - Metal dragged or hitting stone throws orange sparks.
+- **Hit weight:** light hits only stagger the body; heavy enders switch to a ragdoll that slides or tumbles.
 
 ### Awakening / ultimates
 - A 1-frame full-screen flash.
