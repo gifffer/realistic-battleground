@@ -1,5 +1,5 @@
 --!strict
--- SettingsController: the "SETTINGS" section of the menu.
+-- SettingsController: the SETTINGS panel (the gear, last in the top bar).
 --
 --   CAMERA   first-person / third-person camera
 --   DUELS    block duel requests (nobody can challenge you; ranked search
@@ -26,6 +26,7 @@ local CameraController = require(script.Parent.CameraController)
 local CityAudioController = require(script.Parent.CityAudioController)
 local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
+local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 -- After a click, saves that still hold the OLD value can arrive for a short
@@ -62,57 +63,51 @@ local function keyLabel(key: Enum.KeyCode): string
 	return KEY_LABELS[key] or string.upper(key.Name)
 end
 
--- "OFF   ON" in text, the chosen one bright and underlined (no pill, no switch).
-local function createToggle(parent: Instance, onClick: () -> ()): Toggle
+-- OFF  ON: two words side by side (real buttons). The chosen one is white
+-- with a thin red line under it, the other grey (white under the mouse). `onSet(value)` runs when
+-- the player picks the side that isn't chosen yet.
+local function createToggle(parent: Instance, onSet: (value: boolean) -> ()): Toggle
 	local holder = Theme.make("Frame", {
 		Name = "Toggle",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
-		Size = UDim2.fromOffset(70, 22),
+		Position = UDim2.new(1, -3, 0.5, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, Button.height("small")),
 		BackgroundTransparency = 1,
 		Parent = parent,
+	}, {
+		Theme.make("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, 4),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
 	})
-	local function option(text: string, x: number): TextButton
-		return Theme.text({
-			ClassName = "TextButton",
-			Name = text,
-			Position = UDim2.fromOffset(x, 0),
-			Size = UDim2.fromOffset(26, 18),
-			TextSize = 12,
-			TextColor3 = C.Ink3,
-			TextStrokeTransparency = 1,
-			TextXAlignment = Enum.TextXAlignment.Center,
-			AutoButtonColor = false,
-			Text = Theme.track(text, "four"),
-			Parent = holder,
-		}) :: TextButton
+	local chosen: boolean? = nil
+	local function option(text: string, value: boolean, order: number): Button.Button
+		return Button.new({
+			name = text,
+			text = text,
+			variant = "tab",
+			size = "small",
+			align = "center",
+			width = 44,
+			layoutOrder = order,
+			parent = holder,
+			onActivated = function()
+				if chosen ~= value then
+					onSet(value)
+				end
+			end,
+		})
 	end
-	local off = option("OFF", 4)
-	local on = option("ON", 44)
-	local underline = Theme.make("Frame", {
-		Name = "Underline",
-		Position = UDim2.fromOffset(44, 20),
-		Size = UDim2.fromOffset(20, 2),
-		BackgroundColor3 = C.Ink,
-		Parent = holder,
-	})
-	off.Activated:Connect(onClick)
-	on.Activated:Connect(onClick)
+	local off = option("OFF", false, 1)
+	local on = option("ON", true, 2)
 
 	local function set(value: boolean)
-		local chosen = if value then on else off
-		Theme.tween(on, Theme.FAST, { TextColor3 = if value then C.Ink else C.Ink3 })
-		Theme.tween(off, Theme.FAST, { TextColor3 = if value then C.Ink3 else C.Ink })
-		-- The underline matches the chosen word's real width (known once the
-		-- text is laid out, hence the deferred call).
-		task.defer(function()
-			local width = math.max(chosen.TextBounds.X, 8)
-			local x = chosen.Position.X.Offset + (chosen.Size.X.Offset - width) / 2
-			Theme.tween(underline, 0.18, {
-				Position = UDim2.fromOffset(x, 20),
-				Size = UDim2.fromOffset(width - 3, 2),
-			}, Enum.EasingStyle.Quart)
-		end)
+		chosen = value
+		on.setSelected(value)
+		off.setSelected(not value)
 	end
 	return { set = set }
 end
@@ -163,53 +158,58 @@ local function toggleMusic()
 	Remotes.UpdateSetting:FireServer("music", musicOn)
 end
 
--- A section title ("CAMERA", "DUELS"): small caps, faint.
+-- A section title ("Camera", "Duels"): small, grey.
 local function sectionTitle(content: Frame, text: string, y: number)
 	Theme.text({
 		Name = "Section" .. text,
 		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.new(1, 0, 0, 12),
-		TextSize = 10,
-		TextColor3 = C.Ink3,
+		Size = UDim2.new(1, 0, 0, 14),
+		TextSize = 12,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 		Parent = content,
 	})
 end
 
--- A setting row: name, a sentence under it, the OFF / ON toggle on the
+-- A setting row: name, a sentence under it, the OFF / ON buttons on the
 -- right and a faint rule at the bottom.
+-- One setting row: 52 px, taller on touch so its OFF / ON fit (the text
+-- moves down by half the difference to stay centred on them).
+local ROW_HEIGHT = math.max(52, Button.height("small") + 8)
+local ROW_TEXT_Y = (ROW_HEIGHT - 52) // 2
+
 local function settingRow(
 	content: Frame,
 	name: string,
 	y: number,
 	title: string,
 	description: string,
-	onClick: () -> ()
+	onSet: (value: boolean) -> ()
 ): Toggle
 	local row = Theme.make("Frame", {
 		Name = name,
 		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.new(1, 0, 0, 52),
+		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = content,
 	}, {
 		Theme.text({
 			Name = "Name",
-			Position = UDim2.fromOffset(0, 8),
+			Position = UDim2.fromOffset(0, 8 + ROW_TEXT_Y),
 			Size = UDim2.fromOffset(320, 18),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 15,
+			TextSize = Theme.TEXT,
 			TextStrokeTransparency = 1,
 			Text = title,
 		}),
 		Theme.text({
 			Name = "Description",
-			Position = UDim2.fromOffset(0, 28),
+			Position = UDim2.fromOffset(0, 28 + ROW_TEXT_Y),
 			Size = UDim2.fromOffset(320, 14),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 12,
-			TextColor3 = C.Ink3,
+			TextSize = Theme.SMALL,
+			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
 			Text = description,
 		}),
@@ -221,33 +221,41 @@ local function settingRow(
 			BackgroundTransparency = 0.9,
 		}),
 	})
-	return createToggle(row, onClick)
+	return createToggle(row, onSet)
 end
 
 local function buildWindow(content: Frame)
-	sectionTitle(content, "CAMERA", 0)
+	sectionTitle(content, "Camera", 0)
 	firstPersonToggle = settingRow(
 		content,
 		"FirstPersonRow",
 		12,
 		"First-person camera",
 		"See the fight through your character's eyes.",
-		toggleFirstPerson
+		function(value)
+			if value ~= firstPerson then
+				toggleFirstPerson()
+			end
+		end
 	)
 	setFirstPerson(firstPerson) -- show the current value
 
-	sectionTitle(content, "DUELS", 86)
+	sectionTitle(content, "Duels", 86)
 	blockDuelsToggle = settingRow(
 		content,
 		"BlockDuelsRow",
 		98,
 		"Block duel requests",
 		"Nobody can challenge you. Ranked search still works.",
-		toggleBlockDuels
+		function(value)
+			if value ~= blockDuels then
+				toggleBlockDuels()
+			end
+		end
 	)
 	setBlockDuels(blockDuels)
 
-	sectionTitle(content, "SOUND", 172)
+	sectionTitle(content, "Sound", 172)
 	musicToggle = settingRow(
 		content,
 		"MusicRow",
@@ -278,7 +286,7 @@ local function buildWindow(content: Frame)
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, 20),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 12,
+			TextSize = Theme.SMALL,
 			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
 			Text = `Press {Config.Controls.FREE_CURSOR.Name} to free or lock the cursor`,
@@ -304,7 +312,7 @@ local function buildWindow(content: Frame)
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, 20),
 			FontFace = Theme.Fonts.Body,
-			TextSize = 12,
+			TextSize = Theme.SMALL,
 			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
 			Text = "Switch first / third person (W on AZERTY, Z on QWERTY)",
@@ -340,9 +348,11 @@ function SettingsController.start()
 	MenuController.register({
 		id = "Settings",
 		label = "SETTINGS",
-		subtitle = "CAMERA · DUELS · SOUND · CONTROLS",
-		order = 100, -- last button; Kits/Duel/Quests/Shop will come before it
-		size = Vector2.new(440, 500), -- taller than the default for the DUELS and SOUND rows
+		icon = "settings",
+		hint = "Settings",
+		order = 100, -- last button of the top bar
+		-- (tall enough for the CAMERA, DUELS and SOUND rows and the two hints)
+		size = Vector2.new(440, 390),
 		build = buildWindow,
 	})
 	PlayerDataController.onChanged(onProfileChanged)

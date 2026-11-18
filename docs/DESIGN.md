@@ -65,16 +65,27 @@ On se bat en **arène libre**, et on peut **défier quelqu'un en duel** (best of
 
 Règle : **les touches servent seulement au combat**. Tout le reste passe par des **boutons à
 l'écran** qui ouvrent une fenêtre (GUI). Une seule fenêtre ouverte à la fois, fermeture avec ✕
-ou en cliquant le même bouton.
+ou en cliquant le même bouton. Raccourci en plus du bouton : **M** ouvre / ferme le dernier panneau. Tout ce qui se clique a l'air d'un **vrai bouton**
+(réagit au survol et à l'appui ; voir `src/client/UI/Button.luau`).
+Style **minimaliste et discret** : petit, noir / blanc / gris, une seule police, des listes de mots
+(choisi = blanc + fine barre rouge), bouton principal = petit contour blanc avec une marque rouge ;
+pas de gros blocs de couleur, le jeu reste visible derrière (voir `src/client/UI/Theme.luau`).
 
-**Menu latéral** (boutons-icônes à gauche de l'écran, avec le nom au survol) :
-| Bouton | Fenêtre |
+**Barre du haut** (boutons ronds **à côté des boutons Roblox**, même hauteur et même style ;
+une icône, un mot sur certains, une **petite pastille blanche** avec un nombre quand il y a
+quelque chose à voir). Chaque bouton ouvre **son propre panneau** (une seule fenêtre à la fois ;
+fermeture : le même bouton, **Échap** ou un clic en dehors ; **M** rouvre le dernier panneau vu).
+Panneau = **une plaque noire transparente**, sans bordure, petits onglets au-dessus, titre gras
+centré, contenu en **grille de cartes** (voir `src/client/UI/Panel.luau`) :
+| Bouton | Panneau |
 |---|---|
-| **Kits** | Cartes des kits (aperçu, attaques, verrouillé/débloqué) → bouton **Equip**. Changement hors combat seulement. |
-| **Duel** | Liste des joueurs du serveur → **Challenge** ; défis reçus en attente |
-| **Quests** | Les 3 quêtes du jour et leur progression |
-| **Shop** | Boutique (étape 10) |
-| **Settings** | 1ʳᵉ/3ᵉ personne, bloquer les défis de duel, sensibilité caméra, volume |
+| **Kits** (mot + pastille = kits achetables) | Cartes des kits (silhouette R6 posée, nom, état) ; à droite les attaques du kit choisi → **Equip** / **Buy** |
+| **Duel** | Classé (ELO, rang, Find match) ; liste des joueurs du serveur → **Challenge** |
+| **Rewards** (pastille = nouveautés) | Onglets **REWARDS** (niveau, barre d'XP, piste des déblocages par niveau) et **CHALLENGES** (les 3 défis du jour) |
+| **Emotes** | Cartes des émotes → Equip / Buy / **Play** (touche B) |
+| **Shop** | Onglets **TITLES / OUTFITS / KILL EFFECTS**, cartes, barre de l'article choisi → Buy / Equip / Take off |
+| **Profile** | Niveau, record, classé, prochain déblocage |
+| **Settings** | 1ʳᵉ/3ᵉ personne, bloquer les défis de duel |
 
 **HUD de combat** (bas de l'écran) : barres de vie et d'endurance, **barre des attaques** du kit
 (4 cases avec icône, touche et cooldown — cliquables aussi), jauge d'ultime.

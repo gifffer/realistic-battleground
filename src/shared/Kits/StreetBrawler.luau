@@ -110,11 +110,14 @@ local kit: KitTypes.KitDef = {
 
 	-- Finishing a knocked-out opponent: a quick stomp on the head.
 	-- Cinematic kill (Shared/Finishers "Bat"): a baseball bat from behind his
-	-- back, brought down on the head of the opponent lying there.
+	-- back, lined up by the head of the opponent lying there, then one big
+	-- swing through it. (impact / duration = the cinematic's kill / duration)
 	finisher = {
+		name = "HOME RUN",
+		description = "A baseball bat from behind his back. One swing at the head.",
 		animation = "Brawler_FinisherBat",
-		impact = 1.7,
-		duration = 3.3,
+		impact = 1.92,
+		duration = 3.8,
 		cinematic = "Bat",
 	},
 

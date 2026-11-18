@@ -124,4 +124,16 @@ export type DuelEventKind =
 --   Train     hit by the city's train (Knockout.killByEnvironment)
 export type KillFeedKind = "Finished" | "Fled" | "Died" | "Train"
 
+-- The extra facts sent with a kill feed line (6th argument). Every field can
+-- be missing (a dummy has no user id, a death with no killer has no kit).
+--   finisher   name of the finisher that killed ("LIVER RIP"), Finished only
+--   killerKit  the killer's kit id ("Boxer"), for the death screen
+--   victimId / killerId   UserIds (names can repeat: ids say who is who)
+export type KillFeedDetails = {
+	finisher: string?,
+	killerKit: string?,
+	victimId: number?,
+	killerId: number?,
+}
+
 return nil

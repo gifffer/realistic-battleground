@@ -19,6 +19,12 @@
 --   colour with warm dark edges (nothing flashy, nothing in the centre).
 -- • Hidden while knocked out or while the menu is open. Fades back when
 --   nothing happens for a while (like the health block).
+-- • Screen size: the block follows it (Theme.autoScale). On a phone the
+--   slots and "AWAKEN" are the buttons (a tap uses the move): each slot
+--   gets a dark square plate so it reads as a button, and the block sits
+--   higher, clear of Roblox's jump button.
+-- • "[G] AWAKEN" is a small outlined button with a short red mark (it is
+--   the one thing to press).
 --
 -- Everything is read from attributes the server sets on our character
 -- ("Kit", "CD_<moveId>", "Fury", "Awakened", "AwakenedUntil") and from
@@ -160,15 +166,32 @@ local function keyCap(parent: Instance, text: string, size: Vector2): (Frame, UI
 end
 
 local function buildSlot(index: number, holder: GuiObject): Slot
+	local touch = Theme.isTouch()
 	local button = Theme.make("TextButton", {
 		Name = `Slot{index}`,
 		Position = UDim2.fromOffset(2, 2 + (index - 1) * SLOT_HEIGHT),
-		Size = UDim2.new(1, -4, 0, SLOT_HEIGHT),
-		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -4, 0, if touch then SLOT_HEIGHT - 2 else SLOT_HEIGHT),
+		-- (a phone: a dark square plate, so each move reads as a button)
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = if touch then 0.55 else 1,
 		AutoButtonColor = false,
 		Text = "",
 		Parent = holder,
 	}) :: TextButton
+	if touch then
+		Theme.make("UIStroke", {
+			Thickness = 1,
+			Color = C.Ink,
+			Transparency = 0.8,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Parent = button,
+		})
+		Theme.make("UIPadding", {
+			PaddingLeft = UDim.new(0, 2),
+			PaddingRight = UDim.new(0, 6),
+			Parent = button,
+		})
+	end
 	local cap, stroke, keyText = keyCap(button, tostring(index), Vector2.new(22, 18))
 	cap.Position = UDim2.fromOffset(0, 3)
 	local name = Theme.text({
@@ -286,6 +309,17 @@ local function build()
 		ZIndex = 2,
 		Parent = gui,
 	})
+	-- (bigger floor on a phone: the slots are what you tap)
+	Theme.autoScale(block, if Theme.isTouch() then 0.85 else 0.75)
+	-- On a phone: above Roblox's jump button (bottom right: about 95 × 90
+	-- on a small screen, 170 × 210 on a tablet), still in the corner.
+	Theme.onViewportChanged(function(viewport)
+		if not Theme.isTouch() then
+			return
+		end
+		local small = math.min(viewport.X, viewport.Y) <= 500
+		block.Position = if small then UDim2.new(1, -24, 1, -104) else UDim2.new(1, -40, 1, -224)
+	end)
 	-- One CanvasGroup per half so the idle fade dims everything at once.
 	-- (A CanvasGroup cuts what sticks out of it, outlines included: each
 	-- group has a 2 px margin all around, so positions inside are +2.)
@@ -322,19 +356,19 @@ local function build()
 		Name = "FuryLabel",
 		Position = UDim2.fromOffset(16, 133), -- same line as HEALTH
 		Size = UDim2.fromOffset(150, 12),
-		TextSize = 10,
+		TextSize = 11,
 		TextColor3 = C.Ink2,
-		Text = Theme.track("STREET FURY", "three"),
+		Text = "STREET FURY",
 		Parent = furyGroup,
 	})
 	furyNum = Theme.text({
 		Name = "FuryNum",
 		AnchorPoint = Vector2.new(1, 0),
-		-- (y 122, not 124: the bigger number keeps its baseline on the "%".)
-		Position = UDim2.new(1, -15, 0, 122),
-		Size = UDim2.fromOffset(80, 28),
+		-- (y 127: the bigger number keeps its baseline on the "%".)
+		Position = UDim2.new(1, -15, 0, 127),
+		Size = UDim2.fromOffset(80, 22),
 		FontFace = Theme.Fonts.NumberLight,
-		TextSize = 22,
+		TextSize = 17,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = "0",
@@ -366,16 +400,34 @@ local function build()
 		BackgroundColor3 = C.Ink,
 		Parent = track,
 	})
+	-- A small outline with a short red mark: it is the one thing to press.
 	furyGo = Theme.make("Frame", {
 		Name = "FuryGo",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -2, 0, 130),
-		Size = UDim2.fromOffset(0, 18),
+		Position = UDim2.new(1, -2, 0, 126),
+		Size = UDim2.fromOffset(0, 26),
 		AutomaticSize = Enum.AutomaticSize.X,
-		BackgroundTransparency = 1,
+		BackgroundColor3 = C.Scrim,
+		BackgroundTransparency = 0.5,
 		Visible = false,
 		Parent = furyGroup,
 	}, {
+		Theme.make("UIStroke", {
+			Thickness = 1,
+			Color = C.Ink,
+			Transparency = 0.2,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+		Theme.make("UIPadding", {
+			PaddingLeft = UDim.new(0, 0),
+			PaddingRight = UDim.new(0, 10),
+		}),
+		Theme.make("Frame", {
+			Name = "Mark",
+			LayoutOrder = 0,
+			Size = UDim2.new(0, 2, 1, 0),
+			BackgroundColor3 = C.Accent,
+		}),
 		Theme.make("UIListLayout", {
 			FillDirection = Enum.FillDirection.Horizontal,
 			HorizontalAlignment = Enum.HorizontalAlignment.Right,
@@ -388,14 +440,32 @@ local function build()
 	goKey.LayoutOrder = 1
 	stroke.Transparency = 0.1
 	goStroke = stroke
+	-- "[G] AWAKEN" can be clicked (cursor free) or tapped (phone), like the slots.
+	local goButton = Theme.make("TextButton", {
+		Name = "GoButton",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, 124),
+		Size = UDim2.fromOffset(130, 30),
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		Text = "",
+		Visible = false,
+		ZIndex = 3,
+		Parent = furyGroup,
+	}) :: TextButton
+	goButton.Activated:Connect(KitController.awaken)
+	furyGo:GetPropertyChangedSignal("Visible"):Connect(function()
+		goButton.Visible = furyGo.Visible
+	end)
 	Theme.text({
 		Name = "GoWord",
 		LayoutOrder = 2,
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 18),
 		FontFace = Theme.Fonts.LabelBold,
-		TextSize = 13,
-		Text = Theme.track("AWAKEN", "three"),
+		TextSize = 12,
+		TextColor3 = C.InkHi,
+		Text = "AWAKEN",
 		Parent = furyGo,
 	})
 
@@ -471,10 +541,10 @@ local function styleSlot(slot: Slot, state: SlotState, animate: boolean)
 			end)
 		end
 		if state == "LowStamina" then
-			slot.state.FontFace = Theme.Fonts.Label
-			slot.state.TextSize = math.floor(9 * Theme.TEXT_SCALE + 0.5)
+			slot.state.FontFace = Theme.Fonts.Body
+			slot.state.TextSize = math.floor(10 * Theme.TEXT_SCALE + 0.5)
 			slot.state.TextColor3 = C.Ink2
-			slot.state.Text = Theme.track("LOW STAMINA", "three")
+			slot.state.Text = "Low stamina"
 		elseif state == "Ready" then
 			slot.state.Text = ""
 		else
@@ -534,7 +604,7 @@ local function updateSlots(model: Model, kit: Kits.KitDef)
 			local first = slot.moveId == nil
 			slot.moveId = move.id
 			slot.readyAt = nil
-			local text = Theme.track(move.name, "four")
+			local text = move.name
 			if first then
 				slot.name.Text = text
 			else
@@ -611,8 +681,8 @@ local function setFuryState(state: "Charging" | "Full" | "Active")
 		Theme.tween(furyUnit, 0.12, { TextTransparency = 1 }, Enum.EasingStyle.Linear)
 		Theme.tween(furyLabel, 0.2, { TextColor3 = C.Ink })
 		furyGo.Visible = true
-		furyGo.Position = UDim2.new(1, 6, 0, 130)
-		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, -2, 0, 130) }, Enum.EasingStyle.Quart)
+		furyGo.Position = UDim2.new(1, 6, 0, 126)
+		Theme.tween(furyGo, 0.2, { Position = UDim2.new(1, -2, 0, 126) }, Enum.EasingStyle.Quart)
 		local pulse = TweenService:Create(
 			goStroke,
 			TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
@@ -669,7 +739,7 @@ local function updateFury(model: Model, kit: Kits.KitDef)
 	if awakening == nil then
 		return
 	end
-	furyLabel.Text = Theme.track(awakening.name, "three")
+	furyLabel.Text = awakening.name
 	if isAwakened(model) then
 		setFuryState("Active")
 		local untilTime = model:GetAttribute("AwakenedUntil")

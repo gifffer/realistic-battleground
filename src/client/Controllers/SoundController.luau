@@ -71,6 +71,25 @@ local function pickId(name: string, ids: { number }): number
 	return id
 end
 
+-- A sound with a `length` (Shared/Sounds): faded out and stopped there.
+local function cutShort(sound: Sound, length: number?)
+	if length == nil then
+		return
+	end
+	task.delay(length, function()
+		if sound.Parent == nil then
+			return
+		end
+		local start = sound.Volume
+		for step = 1, 6 do
+			sound.Volume = start * (1 - step / 6)
+			task.wait(0.025)
+		end
+		sound:Stop()
+		sound:Destroy()
+	end)
+end
+
 -- Returns the Sound (to stop it early), or nil if nothing played.
 function SoundController.play(name: string, model: Model?): Sound?
 	local info = Sounds[name]
@@ -96,7 +115,9 @@ function SoundController.play(name: string, model: Model?): Sound?
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMaxDistance = MAX_HEARING_DISTANCE
 	sound.Parent = root
+	sound.TimePosition = info.start or 0
 	sound:Play()
+	cutShort(sound, info.length)
 	-- Removed once finished (TimeLength is 0 until the file is loaded, hence
 	-- the safe minimum).
 	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
@@ -151,8 +172,8 @@ function SoundController.play2D(name: string, volumeScale: number?): Sound?
 	return sound
 end
 
--- A one-shot sound IN 3D at a point of the world (not on a character): the train hitting
--- someone, a can falling... `parent` = a part to play it from instead (it then follows that
+-- A one-shot sound IN 3D at a point of the world (not on a character): a flask bursting,
+-- a portal, the train hitting someone, a can falling... `parent` = a part to play it from instead (it then follows that
 -- part: a body flying away). `maxDistance` = beyond this it can't be heard (default 90).
 -- Returns the Sound, or nil if the sound has no id yet.
 function SoundController.playAt(
@@ -193,7 +214,9 @@ function SoundController.playAt(
 	sound.RollOffMinDistance = 10
 	sound.RollOffMaxDistance = maxDistance or MAX_HEARING_DISTANCE
 	sound.Parent = holder
+	sound.TimePosition = info.start or 0
 	sound:Play()
+	cutShort(sound, info.length)
 	local lifetime = math.max(sound.TimeLength / sound.PlaybackSpeed, 8) + 0.5
 	Debris:AddItem(anchor or sound, lifetime)
 	return sound

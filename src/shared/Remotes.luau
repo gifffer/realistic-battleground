@@ -188,9 +188,17 @@ return table.freeze({
 	-- A finisher with a kill effect equipped: every client plays it there.
 	KillEffect = event("KillEffect"),
 
+	-- server → all clients  (pieces: { { cframe: CFrame, size: Vector3, color: Color3,
+	--                        material: Enum.Material } }, point: Vector3, push: Vector3)
+	-- Parts of the map smashed by a heavy move (Destruction): every client
+	-- throws their debris from `point`, along `push` (studs/s).
+	WallBroken = event("WallBroken"),
+
 	-- server → all clients  (kind: Types.KillFeedKind, victimName: string, killerName: string?,
-	--                        victimLevel: number?, killerLevel: number?)
-	-- A fighter was eliminated: one line in the kill feed (top right).
+	--                        victimLevel: number?, killerLevel: number?,
+	--                        details: Types.KillFeedDetails)
+	-- A fighter was eliminated: one line in the kill feed (top right), and
+	-- the victim's death screen (DeathScreenController).
 	KillFeed = event("KillFeed"),
 
 	-- server → all clients  (victim: Model, impact: Vector3, velocity: Vector3, seed: number)
@@ -217,4 +225,12 @@ return table.freeze({
 	-- "R pressed" (Config.Controls.USE_ITEM): drink the SpezCola in my pocket. The server
 	-- checks I carry one and can drink now (Server/Systems/SpezCola), and rate-limits it.
 	UseItem = event("UseItem"),
+
+	-- server → all clients  (kind: string, data: { [string]: any })
+	-- Dr. Rift's gadgets, for the look only (Client/Combat/RiftFx): a flask
+	-- flying / bursting, an acid puddle, a ray, portals opening, a portal
+	-- shot fizzling, a clone stepping in / out. Every client shows the same
+	-- thing; the server already decided what it did. Kinds and data: see
+	-- Server/Systems/Combat/Gadgets.luau (top).
+	RiftFx = event("RiftFx"),
 })

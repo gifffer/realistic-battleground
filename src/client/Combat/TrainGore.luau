@@ -13,8 +13,10 @@
 --   • torn ends: a raw red cap with the white of the bone on every torn limb, and on the
 --     torso where each limb was;
 --   • blood spurting from every torn end for a few seconds, weaker and weaker;
---   • blood on the floor: a big splash where it hit, a pool spreading under the torso, a
---     smaller splash under each limb once it lands.
+--   • blood on the floor: a big splash where it hit, then the finishers' big pools
+--     (BloodGush.stump, Config.Blood.FINISHER_POOLS.TRAIN_TORSO / TRAIN_LIMB): one pouring
+--     out of the torso wherever it ends up (a smear while it slides), a small one under
+--     each limb, plus a smaller splash where each limb lands.
 -- Everything is stuck to the body parts, so it goes away with the body when the player
 -- respawns. Gore switched off in Config (Injuries.SKIN_TEAR = false): no blood, the limbs
 -- still come off.
@@ -23,6 +25,7 @@ local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BloodGush = require(script.Parent.BloodGush)
 local HeadBlast = require(script.Parent.HeadBlast)
 
 local TrainGore = {}
@@ -33,6 +36,9 @@ local FLESH = Color3.fromRGB(128, 26, 28)
 local BONE = Color3.fromRGB(226, 216, 196)
 local SPURT_TIME = 3.5 -- seconds the torn ends keep bleeding
 local CAP_THICKNESS = 0.12
+local POOLS = Config.Blood.FINISHER_POOLS
+-- The finishers' big pools are on (else: the old pool under the torso, HeadBlast.pool).
+local BIG_POOLS = Config.Blood.ENABLED and POOLS.ENABLED
 
 -- Where a torn end is on a body part, in that part's own space: the centre of the face and
 -- the direction it faces (`axis`), and the size of the cap.
@@ -187,10 +193,19 @@ function TrainGore.play(victim: Model, impact: Vector3, velocity: Vector3, seed:
 	HeadBlast.splash(impact, 3.4, seed)
 
 	local torso = victim:FindFirstChild("Torso")
+	local poolSeed = seed + 110 -- (one seed per pool: BloodPool.claim; the torso: + 101)
 	for limbName, wound in LIMB_WOUNDS do
 		local limb = victim:FindFirstChild(limbName)
 		if limb and limb:IsA("BasePart") then
 			bleed(tornEnd(limb, wound, random), 0.6)
+			poolSeed += 1
+			if BIG_POOLS then
+				-- (it only oozes once it lies still: stump waits while it flies)
+				BloodGush.stump(limb, wound.position, POOLS.TRAIN_LIMB, poolSeed, {
+					ignore = { victim :: Instance },
+					drag = false,
+				})
+			end
 			-- a smaller splash where the limb lands
 			local splashSeed = random:NextInteger(1, 1_000_000)
 			task.delay(random:NextNumber(1.2, 1.8), function()
@@ -205,11 +220,19 @@ function TrainGore.play(victim: Model, impact: Vector3, velocity: Vector3, seed:
 	end
 	-- the pool under the torso, once it has landed
 	if torso and torso:IsA("BasePart") then
-		task.delay(1.6, function()
-			if torso.Parent then
-				HeadBlast.pool(torso.Position, 4.5, 5, seed + 1)
-			end
-		end)
+		if BIG_POOLS then
+			-- the finishers' pool: it pours out of the torso where it settles, a smear
+			-- behind it while it slides
+			BloodGush.stump(torso, Vector3.zero, POOLS.TRAIN_TORSO, seed + 101, {
+				ignore = { victim :: Instance },
+			})
+		else
+			task.delay(1.6, function()
+				if torso.Parent then
+					HeadBlast.pool(torso.Position, 4.5, 5, seed + 1)
+				end
+			end)
+		end
 	end
 end
 

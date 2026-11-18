@@ -3,6 +3,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local KitTypes = require(ReplicatedStorage.Shared.Kits.KitTypes)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 -- Everything the server knows about one fighter (player or training dummy).
@@ -29,6 +30,7 @@ export type CombatState = {
 	finishingUntil: number, -- doing a finisher: can't move until then
 	invulnerableUntil: number, -- dash dodge frames
 	cinematicUntil: number, -- in a cinematic finisher: nobody can hit them
+	channelUntil: number, -- channelling a beam: rooted until then
 	cinematicToken: number, -- changes with each cinematic (stale timers do nothing)
 	nextDashAt: number,
 	knockbackUntil: number, -- a knockback push is running until then
@@ -49,6 +51,7 @@ export type CombatState = {
 
 	-- Injuries (step 5), cleared by a kill or a new life.
 	legDamage: number, -- damage taken on the legs
+	leftLegDamage: number, -- the part of it taken on the left leg
 	limping: boolean, -- legDamage reached Config.Injuries.LIMP_LEG_DAMAGE
 	lastDamagedAt: number, -- for the out-of-combat regeneration
 	regenCarry: number, -- fraction of HP regenerated, not given yet
@@ -66,6 +69,19 @@ export type CombatState = {
 
 	-- A thing to throw in the right hand (Shared/Weapons id).
 	weapon: string?,
+
+	-- Burning (Dr. Rift's acid / ray): damage over time, its own slot
+	-- (a bleed and a burn add up). burnKind = "Acid" / "Fire".
+	burnPerSecond: number, -- 0 = not burning
+	burnUntil: number,
+	nextBurnTick: number,
+	burnSource: Model?,
+	burnKind: string?,
+
+	-- A clone (Dr. Rift's Awakening, Combat/Clones): whose. Its hits are
+	-- dealt in its owner's name (credit, Fury); it can't hit its owner or
+	-- the owner's other clones, and they can't hit it.
+	owner: CombatState?,
 }
 
 -- What one hit does. An M1 builds one, every kit move hit builds one
@@ -87,6 +103,7 @@ export type HitSpec = {
 	-- Chance of visible blood per zone (nil: the M1 rules in Config.Injuries).
 	bloodChance: { [string]: number }?,
 	cuts: ("Lac" | "Slash")?, -- glass: cuts the skin where it lands (Gash)
+	burns: boolean?, -- heat vision: burnt, not bruised (the burn is set by the beam)
 	launch: number?, -- with knockdown: thrown up at this speed (uppercuts)
 	staminaDrain: number?, -- the victim loses this much stamina (body shots)
 	attackId: number?, -- M1 number from the client (prediction), nil for moves
@@ -97,6 +114,16 @@ export type HitSpec = {
 	-- A thrown thing (Shared/Weapons): where it hit from. It can't be
 	-- parried or slipped (no one to stun / counter there); a block faces it.
 	from: Vector3?,
+	-- Lag compensation (Combat/Hitbox.query): the victim was caught only
+	-- where he was this long ago (seconds), not where he is now. His dodge
+	-- frames then count over that whole time: a dash started since then
+	-- still dodges it.
+	rewound: number?,
+	-- Acid / fire on the skin (Kits.BurnDef).
+	burn: KitTypes.BurnDef?,
+	-- A blast (an explosion, a shockwave): pushed away from this point,
+	-- not from the attacker.
+	pushFrom: Vector3?,
 }
 
 return nil

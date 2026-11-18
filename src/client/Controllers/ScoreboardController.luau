@@ -1,14 +1,14 @@
 --!strict
 -- ScoreboardController: hold Tab to see who is in the server.
 --
---                                    P L A Y E R S                8 / 12
---                                    THIS SERVER · THIS SESSION
---                                    #  LV  PLAYER          KILLS  DEATHS
+--                                    PLAYERS                      8 / 12
+--                                    This session
+--                                    #  Lv  Player          Kills  Deaths
 --                                    1  17  Rook_77             9       3
 --                                    2  46  Nightjar            7       2
 --                                  | 3   8  gifffer             5       2
 --                                    ...
---                                    [TAB]  RELEASE TO CLOSE
+--                                    [TAB]  Release to close
 --
 -- • It replaces Roblox's own player list (turned off here).
 -- • It opens on the RIGHT, the mirror of the menu on the left, over a dark
@@ -45,6 +45,7 @@ local ROWS_TOP = 83 -- y of the first row inside the board
 local FOOTER_GAP = 17 -- between the last row and the "TAB" footer
 local BOARD_X = -48 -- right margin of the board
 local SLIDE = 16 -- the board slides in from this many pixels to the right
+local BOARD_TOP = 44 -- lower when Roblox's top bar has buttons on the right
 
 -- One fading thing: an instance, which transparency property, and its
 -- value when fully shown. The whole board fades by tweening these.
@@ -73,6 +74,7 @@ local ScoreboardController = {}
 local gui: ScreenGui
 local scrim: Frame
 local board: Frame
+local boardTop = BOARD_TOP
 local rowsFrame: Frame
 local footer: Frame
 local countNow: TextLabel
@@ -184,10 +186,11 @@ local function fadeOut(list: { Fade }, seconds: number)
 	end
 end
 
--- A small grey column head ("KILLS").
+-- A small grey column head ("Kills").
 local function columnHead(text: string, props: { [string]: any }): TextLabel
-	props.Text = Theme.track(text, "three")
-	props.TextSize = 9
+	props.Text = text
+	props.FontFace = Theme.Fonts.Body
+	props.TextSize = 10
 	props.TextColor3 = C.Ink3
 	props.TextStrokeTransparency = 1
 	props.Size = props.Size or UDim2.fromOffset(40, 11)
@@ -219,6 +222,17 @@ local function buildRow(owner: Player): Row
 		BackgroundTransparency = 0.93,
 		Parent = frame,
 	})
+	if mine then
+		-- Your own row: a red mark on the left (the one accent).
+		Theme.make("Frame", {
+			Name = "Mine",
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(0, -6, 0.5, 0),
+			Size = UDim2.new(0, 2, 1, -10),
+			BackgroundColor3 = C.Accent,
+			Parent = frame,
+		})
+	end
 	local rank = Theme.text({
 		Name = "Rank",
 		Size = UDim2.new(0, 18, 1, 0),
@@ -425,22 +439,29 @@ local function build()
 	board = Theme.make("Frame", {
 		Name = "Board",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, BOARD_X + SLIDE, 0, 44),
+		Position = UDim2.new(1, BOARD_X + SLIDE, 0, boardTop),
 		Size = UDim2.fromOffset(440, 370),
 		BackgroundTransparency = 1,
 		ZIndex = 3,
 		Parent = gui,
 	})
+	-- Follows the screen size from its corner (smaller on a phone).
+	Theme.autoScale(board, 0.7)
+	-- Never under Roblox's top-bar buttons (they'd cover the title).
+	Theme.onViewportChanged(function(viewport)
+		boardTop = math.max(BOARD_TOP, Theme.topInset("right", viewport) + 8)
+		board.Position = UDim2.new(1, board.Position.X.Offset, 0, boardTop)
+	end)
 
 	-- Title, player count, subtitle.
 	local title = Theme.text({
 		Name = "Title",
-		Position = UDim2.fromOffset(0, -4),
-		Size = UDim2.fromOffset(300, 30),
+		Position = UDim2.fromOffset(0, 0),
+		Size = UDim2.fromOffset(300, 24),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 26,
+		TextSize = Theme.TITLE,
 		TextStrokeTransparency = 1,
-		Text = Theme.track("PLAYERS", "thin"),
+		Text = "PLAYERS",
 		Parent = board,
 	})
 	local count = Theme.make("Frame", {
@@ -480,12 +501,13 @@ local function build()
 	})
 	local sub = Theme.text({
 		Name = "Sub",
-		Position = UDim2.fromOffset(0, 34),
-		Size = UDim2.new(1, 0, 0, 11),
-		TextSize = 9,
-		TextColor3 = C.Ink3,
+		Position = UDim2.fromOffset(0, 28),
+		Size = UDim2.new(1, 0, 0, 14),
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
-		Text = Theme.track("THIS SERVER · THIS SESSION", "three"),
+		Text = "This session",
 		Parent = board,
 	})
 
@@ -505,18 +527,18 @@ local function build()
 			BackgroundTransparency = 0.9,
 		}),
 		columnHead("#", { Position = UDim2.fromOffset(0, 4) }),
-		columnHead("LV", { Position = UDim2.fromOffset(30, 4) }),
+		columnHead("Lv", { Position = UDim2.fromOffset(30, 4) }),
 		columnHead(
-			"PLAYER",
+			"Player",
 			{ Position = UDim2.fromOffset(66, 4), Size = UDim2.fromOffset(120, 11) }
 		),
-		columnHead("KILLS", {
+		columnHead("Kills", {
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, -90, 0, 4),
 			Size = UDim2.fromOffset(60, 11),
 			TextXAlignment = Enum.TextXAlignment.Right,
 		}),
-		columnHead("DEATHS", {
+		columnHead("Deaths", {
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, 0, 0, 4),
 			Size = UDim2.fromOffset(70, 11),
@@ -532,7 +554,7 @@ local function build()
 		Parent = board,
 	})
 
-	-- [TAB]  RELEASE TO CLOSE
+	-- [TAB]  Release to close
 	footer = Theme.make("Frame", {
 		Name = "Footer",
 		Position = UDim2.fromOffset(0, ROWS_TOP + FOOTER_GAP),
@@ -553,10 +575,11 @@ local function build()
 			LayoutOrder = 2,
 			AutomaticSize = Enum.AutomaticSize.X,
 			Size = UDim2.fromOffset(0, 20),
-			TextSize = 10,
+			FontFace = Theme.Fonts.Body,
+			TextSize = Theme.SMALL,
 			TextColor3 = C.Ink2,
 			TextStrokeTransparency = 1,
-			Text = Theme.track("RELEASE TO CLOSE", "three"),
+			Text = "Release to close",
 		}),
 	})
 
@@ -587,11 +610,11 @@ local function setOpen(value: boolean)
 		-- after the other.
 		scrim.BackgroundTransparency = 1
 		Theme.tween(scrim, 0.15, { BackgroundTransparency = 0 })
-		board.Position = UDim2.new(1, BOARD_X + SLIDE, 0, 44)
+		board.Position = UDim2.new(1, BOARD_X + SLIDE, 0, boardTop)
 		Theme.tween(
 			board,
 			0.18,
-			{ Position = UDim2.new(1, BOARD_X, 0, 44) },
+			{ Position = UDim2.new(1, BOARD_X, 0, boardTop) },
 			Enum.EasingStyle.Quart
 		)
 		setInvisible(boardFades)
@@ -607,7 +630,7 @@ local function setOpen(value: boolean)
 		Theme.tween(
 			board,
 			0.1,
-			{ Position = UDim2.new(1, BOARD_X + SLIDE, 0, 44) },
+			{ Position = UDim2.new(1, BOARD_X + SLIDE, 0, boardTop) },
 			Enum.EasingStyle.Quad,
 			quadIn
 		)

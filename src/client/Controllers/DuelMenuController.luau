@@ -1,24 +1,23 @@
 --!strict
--- DuelMenuController: the DUEL section of the menu (02 DUEL, between KITS
--- and PROFILE).
+-- DuelMenuController: the DUEL panel (the crossed blades in the top bar,
+-- after KITS).
 --
 --   DUEL
---   ONE ON ONE · FIRST TO 2 ROUNDS
---   ──────────────────────────────────────────────────────────────────
---   RANKED                                                         ELO
+--   Ranked                                                         ELO
 --   SILVER                                                        1112
 --   ━━━━━━━━━  ━─────────  ──────────  ──────────  ──────────
---   BRONZE     SILVER 1100  GOLD 1300   PLATINUM 1500  DIAMOND 1700
---   188 TO GOLD · 15 WINS · 9 LOSSES                      — FIND MATCH
+--   Bronze     Silver 1100  Gold 1300   Platinum 1500  Diamond 1700
+--   188 to Gold · 15 wins · 9 losses                      [FIND MATCH]
 --
---   ON THIS SERVER                RANK                      5 PLAYERS
---   17  Rook_77                   GOLD                    — CHALLENGE
---   12  Mara                      SILVER                    IN A DUEL
---   22  Nightjar                  SILVER         CHALLENGE SENT  ·  7
+--   On this server                Rank                      5 players
+--   17  Rook_77                   Gold                     [CHALLENGE]
+--   12  Mara                      Silver                    In a duel
+--   22  Nightjar                  Silver         Challenge sent  ·  7
 --
 -- Top: your ranked standing (ELO from the save, the rank and the ladder
 -- from Shared/DuelRanks) and the ranked search: FIND MATCH, then
--- "SEARCHING · 0:23 — CANCEL", then "Waiting for a free arena…".
+-- "SEARCHING · 0:23 [CANCEL]", then "Waiting for a free arena…".
+-- FIND MATCH and CHALLENGE are main buttons, CANCEL a quiet one (UI/Button).
 -- Bottom: every other player on the server, with CHALLENGE or the reason
 -- you can't challenge them right now (in a duel, in combat...).
 --
@@ -33,6 +32,7 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local DuelRanks = require(ReplicatedStorage.Shared.DuelRanks)
+local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local DuelController = require(script.Parent.DuelController)
 local MenuController = require(script.Parent.MenuController)
@@ -48,8 +48,8 @@ local D = Config.Duels
 local SECTION_ID = "Duel"
 
 -- The rank ladder: five segments of LADDER_WIDTH px, LADDER_GAP px apart
--- (5 × 108 + 4 × 5 = 560, the panel's width).
-local LADDER_WIDTH = 108
+-- (5 × 92 + 4 × 5 = 480, the panel's width).
+local LADDER_WIDTH = 92
 local LADDER_GAP = 5
 -- BRONZE starts at 0 ELO, but a bar from 0 would always look full: it is
 -- drawn from 900. DIAMOND has no next rank: it fills towards 1900.
@@ -59,6 +59,16 @@ local DIAMOND_CEILING = 1900
 -- How often the time-based parts (search clock, cooldowns, "in combat")
 -- are refreshed while the section is open.
 local TICK_SECONDS = 0.25
+
+-- The action row (FIND MATCH / CANCEL) and the players' rows fit a button,
+-- with room for it to grow under the mouse (each is a canvas: it cuts).
+local ACTION_Y = 100
+local ACTION_HEIGHT = Button.height("small") + 8
+local ROW_HEIGHT = Button.height("small") + 8
+-- Buttons sit this far from the right edge of their canvas (same reason).
+local BUTTON_INSET = 7
+-- ON THIS SERVER: at y 158, lower on touch (the taller action row).
+local PLAYERS_Y = math.max(158, ACTION_Y + ACTION_HEIGHT + 22)
 
 -- A refused challenge (DuelController.getState().declined), as shown in
 -- the row's reason slot for a few seconds. Keys = the server's reasons.
@@ -87,7 +97,7 @@ type RowView = {
 	seconds: number, -- cooldown left (kind "sent")
 }
 
--- A "— WORD" button (the menu's MENU / EQUIP button), right-aligned.
+-- A button (UI/Button), right-aligned, that can be turned off.
 type LineButton = {
 	button: TextButton,
 	setEnabled: (enabled: boolean) -> (),
@@ -228,13 +238,14 @@ end
 -- Building blocks
 ------------------------------------------------------------------------------
 
--- "Micro": tiny caps, RobotoCondensed Medium 9, wide tracking.
+-- Small grey text (column names, status lines).
 local function micro(text: string, props: { [string]: any }): TextLabel
 	local base: { [string]: any } = {
-		TextSize = 9,
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink3,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 	}
 	for key, value in props do
 		base[key] = value
@@ -280,90 +291,40 @@ local function sectionHead(parent: Instance, y: number, title: string): Frame
 	}) :: Frame
 	micro(title, {
 		Name = "Label",
-		Size = UDim2.new(1, 0, 0, 12),
-		TextSize = 10, -- "Label" size (the column heads are Micro)
+		Size = UDim2.new(1, 0, 0, 14),
+		FontFace = Theme.Fonts.Label,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
 		Parent = head,
 	})
-	hairline(head, UDim.new(1, 0), 0.9)
+	hairline(head, UDim.new(1, 0), 0.92)
 	return head
 end
 
--- The menu's "— WORD" button, right-aligned: a short line, then the word.
--- Hover: the line grows from 18 to 28 px and the word lights up.
--- Disabled: everything at 0.65, no hover, presses ignored.
-local function lineButton(word: string, props: { [string]: any }, onPress: () -> ()): LineButton
-	props.AutomaticSize = Enum.AutomaticSize.X
-	props.Size = UDim2.fromOffset(0, 14)
-	props.BackgroundTransparency = 1
-	props.AutoButtonColor = false
-	props.Text = ""
-	local button = Theme.make("TextButton", props, {
-		row(10, Enum.HorizontalAlignment.Right),
-	}) :: TextButton
-	local line = Theme.make("Frame", {
-		Name = "Line",
-		LayoutOrder = 1,
-		Size = UDim2.fromOffset(18, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.15,
-		Parent = button,
-	}) :: Frame
-	local label = Theme.text({
-		Name = "Label",
-		LayoutOrder = 2,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		TextTransparency = 0.15,
-		TextStrokeTransparency = 1,
-		Text = Theme.track(word, "four"),
-		Parent = button,
-	}) :: TextLabel
-
-	local enabled = true
-	local hovered = false
-	local function paint(seconds: number)
-		local lit = enabled and hovered
-		local transparency = if not enabled then 0.65 elseif lit then 0 else 0.15
-		local lineSize = UDim2.fromOffset(if lit then 28 else 18, 1)
-		if seconds <= 0 then
-			-- Set directly: a 0-second tween only applies on the next frame.
-			line.Size = lineSize
-			line.BackgroundTransparency = transparency
-			label.TextTransparency = transparency
-			return
-		end
-		Theme.tween(line, seconds, { Size = lineSize, BackgroundTransparency = transparency })
-		Theme.tween(label, seconds, { TextTransparency = transparency })
-	end
-
-	button.MouseEnter:Connect(function()
-		hovered = true
-		if enabled then
-			paint(0.15)
-		end
-	end)
-	button.MouseLeave:Connect(function()
-		hovered = false
-		if enabled then
-			paint(0.15)
-		end
-	end)
-	button.Activated:Connect(function()
-		if enabled then
-			onPress()
-		end
-	end)
-
+-- A small button (UI/Button), centred on its row's height. `props` gives
+-- its Name, Position, AnchorPoint, LayoutOrder, Visible and Parent.
+-- Disabled: greyed, presses ignored.
+local function lineButton(
+	word: string,
+	props: { [string]: any },
+	onPress: () -> (),
+	variant: Button.Variant?
+): LineButton
+	local button = Button.new({
+		name = props.Name,
+		text = word,
+		variant = variant or "primary",
+		size = "small",
+		anchorPoint = props.AnchorPoint,
+		position = props.Position,
+		layoutOrder = props.LayoutOrder,
+		visible = props.Visible,
+		parent = props.Parent,
+		onActivated = onPress,
+	})
 	return {
-		button = button,
-		setEnabled = function(value: boolean)
-			if value == enabled then
-				return
-			end
-			enabled = value
-			button.Active = value
-			paint(0)
-		end,
+		button = button.instance,
+		setEnabled = button.setEnabled,
 	}
 end
 
@@ -406,7 +367,7 @@ local function buildLadder(parent: Instance)
 		}, {
 			row(6, nil, Enum.VerticalAlignment.Bottom),
 		})
-		local name = micro(rank.name, {
+		local name = micro(Theme.sentence(rank.name), {
 			Name = "Name",
 			LayoutOrder = 1,
 			AutomaticSize = Enum.AutomaticSize.X,
@@ -421,7 +382,7 @@ local function buildLadder(parent: Instance)
 				AutomaticSize = Enum.AutomaticSize.X,
 				Size = UDim2.fromOffset(0, 11),
 				FontFace = Theme.Fonts.Number,
-				TextSize = 9,
+				TextSize = 10,
 				TextColor3 = C.Ink3,
 				TextStrokeTransparency = 1,
 				Text = formatElo(rank.minElo),
@@ -482,8 +443,8 @@ end
 local function leftLine(parent: Instance): TextLabel
 	return micro("", {
 		Name = "Left",
-		Position = UDim2.fromOffset(0, 4),
-		Size = UDim2.fromOffset(340, 11),
+		Position = UDim2.new(0, 0, 0.5, -6),
+		Size = UDim2.fromOffset(280, 11),
 		TextColor3 = C.Ink2,
 		Parent = parent,
 	})
@@ -493,10 +454,10 @@ end
 local function rightGroup(parent: Instance, padding: number): Frame
 	return Theme.make("Frame", {
 		Name = "Right",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 3),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -BUTTON_INSET, 0.5, 0),
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
+		Size = UDim2.fromOffset(0, ACTION_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	}, {
@@ -504,14 +465,14 @@ local function rightGroup(parent: Instance, padding: number): Frame
 	}) :: Frame
 end
 
--- "SEARCHING", "MATCH FOUND": Label size, bright.
+-- "Searching", "Match found": small, bright.
 local function statusWord(parent: Instance, text: string, order: number): TextLabel
 	return micro(text, {
 		Name = "Word",
 		LayoutOrder = order,
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 14),
-		TextSize = 10,
+		TextSize = 12,
 		TextColor3 = C.Ink,
 		Parent = parent,
 	})
@@ -534,25 +495,25 @@ end
 local function buildActionRow(parent: Instance)
 	local actionRow = Theme.make("Frame", {
 		Name = "ActionRow",
-		Position = UDim2.fromOffset(0, 108),
-		Size = UDim2.new(1, 0, 0, 20),
+		Position = UDim2.fromOffset(0, ACTION_Y),
+		Size = UDim2.new(1, 0, 0, ACTION_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
 
-	-- Idle: "188 TO GOLD · 15 WINS · 9 LOSSES"   — FIND MATCH
+	-- Idle: "188 to Gold · 15 wins · 9 losses"   — FIND MATCH
 	local idle = modeGroup(actionRow, "idle")
 	idleText = leftLine(idle)
 	findButton = lineButton("FIND MATCH", {
 		Name = "FindMatch",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 3),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -BUTTON_INSET, 0.5, 0),
 		Parent = idle,
 	}, function()
 		DuelController.findMatch()
 	end)
 
-	-- Searching: "MATCHING WITHIN ±200 ELO"   SEARCHING · 0:23   — CANCEL
+	-- Searching: "Matching within ±200 ELO"   Searching · 0:23   — CANCEL
 	local searching = modeGroup(actionRow, "searching")
 	searchText = leftLine(searching)
 	local searchRight = rightGroup(searching, 28)
@@ -566,7 +527,7 @@ local function buildActionRow(parent: Instance)
 	}, {
 		row(8),
 	})
-	statusWord(status, "SEARCHING", 1)
+	statusWord(status, "Searching", 1)
 	dot(status, 2, 11)
 	searchClock = Theme.text({
 		Name = "Clock",
@@ -585,14 +546,14 @@ local function buildActionRow(parent: Instance)
 		Parent = searchRight,
 	}, function()
 		DuelController.cancelSearch()
-	end)
+	end, "secondary")
 
 	-- Waiting (a match was found, every arena is busy).
 	local waiting = modeGroup(actionRow, "waiting")
 	Theme.text({
 		Name = "Left",
-		Position = UDim2.fromOffset(0, 2),
-		Size = UDim2.fromOffset(340, 14),
+		Position = UDim2.new(0, 0, 0.5, -7),
+		Size = UDim2.fromOffset(280, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
@@ -602,7 +563,7 @@ local function buildActionRow(parent: Instance)
 	})
 	-- MATCH FOUND · 12 Vex (the opponent, or the challenger you accepted).
 	local waitRight = rightGroup(waiting, 8)
-	statusWord(waitRight, "MATCH FOUND", 1)
+	statusWord(waitRight, "Match found", 1)
 	waitDot = dot(waitRight, 2, 11)
 	waitOpponent = Theme.make("Frame", {
 		Name = "Opponent",
@@ -635,7 +596,7 @@ local function buildActionRow(parent: Instance)
 		Parent = waitOpponent,
 	}) :: TextLabel
 
-	-- In a duel (or on its result screen): "IN A DUEL · ROUND 2".
+	-- In a duel (or on its result screen): "In a duel · round 2".
 	local duel = modeGroup(actionRow, "duel")
 	duelText = leftLine(duel)
 
@@ -643,7 +604,7 @@ local function buildActionRow(parent: Instance)
 	-- the server works (searching / waiting). No spinner.
 	sweepLine = Theme.make("Frame", {
 		Name = "SweepLine",
-		Position = UDim2.fromOffset(0, 132),
+		Position = UDim2.fromOffset(0, ACTION_Y + ACTION_HEIGHT + 2),
 		Size = UDim2.new(1, 0, 0, 1),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.9,
@@ -662,7 +623,7 @@ local function buildActionRow(parent: Instance)
 end
 
 local function buildRanked(parent: Instance)
-	local head = sectionHead(parent, 0, "RANKED")
+	local head = sectionHead(parent, 0, "Ranked")
 	micro("ELO", {
 		Name = "Column",
 		AnchorPoint = Vector2.new(1, 0),
@@ -673,20 +634,20 @@ local function buildRanked(parent: Instance)
 	})
 	rankName = Theme.text({
 		Name = "RankName",
-		Position = UDim2.fromOffset(0, 26),
-		Size = UDim2.fromOffset(300, 30),
+		Position = UDim2.fromOffset(0, 28),
+		Size = UDim2.fromOffset(300, 24),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 26,
+		TextSize = 17,
 		TextStrokeTransparency = 1,
 		Parent = parent,
 	}) :: TextLabel
 	eloNum = Theme.text({
 		Name = "EloNum",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 27),
-		Size = UDim2.fromOffset(120, 28),
+		Position = UDim2.new(1, 0, 0, 28),
+		Size = UDim2.fromOffset(120, 24),
 		FontFace = Theme.Fonts.NumberLight,
-		TextSize = 22,
+		TextSize = 17,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Parent = parent,
@@ -761,7 +722,7 @@ end
 local function refreshRanked(animate: boolean)
 	local elo = ownElo()
 	local progress = DuelRanks.progress(elo)
-	rankName.Text = Theme.track(progress.rank, "thin")
+	rankName.Text = progress.rank
 	if shownElo ~= elo then
 		countTo(eloNum, shownElo or elo, elo, if animate and shownElo then 0.4 else 0, formatElo)
 		shownElo = elo
@@ -779,12 +740,9 @@ local function refreshRanked(animate: boolean)
 	local losses = if data then data.rankedLosses else 0
 	local nextRank, nextMin = progress.nextRank, progress.nextMinElo
 	local goal = if nextRank and nextMin
-		then `{formatElo(nextMin - elo)} TO {nextRank}`
-		else "TOP RANK"
-	idleText.Text = Theme.track(
-		`{goal} · {plural(wins, "WIN", "WINS")} · {plural(losses, "LOSS", "LOSSES")}`,
-		"three"
-	)
+		then `{formatElo(nextMin - elo)} to {Theme.sentence(nextRank)}`
+		else "Top rank"
+	idleText.Text = `{goal} · {plural(wins, "win", "wins")} · {plural(losses, "loss", "losses")}`
 
 	local info = DuelController.getState()
 	local mode: Mode = info.mode
@@ -793,7 +751,7 @@ local function refreshRanked(animate: boolean)
 		local now = workspace:GetServerTimeNow()
 		local waited = math.max(0, now - (info.searchingSince or now))
 		local range = D.MATCH_RANGE + D.MATCH_RANGE_GROWTH * math.floor(waited / 5)
-		searchText.Text = Theme.track(`MATCHING WITHIN ±{range} ELO`, "three")
+		searchText.Text = `Matching within ±{range} ELO`
 		searchClock.Text = formatClock(waited)
 	elseif mode == "waiting" then
 		local opponentId = info.opponent
@@ -806,10 +764,7 @@ local function refreshRanked(animate: boolean)
 			waitName.Text = opponent.DisplayName -- as typed
 		end
 	elseif mode == "duel" then
-		duelText.Text = Theme.track(
-			if info.round > 0 then `IN A DUEL · ROUND {info.round}` else "IN A DUEL",
-			"three"
-		)
+		duelText.Text = if info.round > 0 then `In a duel · round {info.round}` else "In a duel"
 	end
 	-- Searching does not block challenges; a duel and its arena wait do.
 	findButton.setEnabled(player:GetAttribute("InDuel") ~= true)
@@ -821,10 +776,10 @@ end
 ------------------------------------------------------------------------------
 
 local function buildPlayers(parent: Instance)
-	local head = sectionHead(parent, 158, "ON THIS SERVER")
-	micro("RANK", {
+	local head = sectionHead(parent, PLAYERS_Y, "On this server")
+	micro("Rank", {
 		Name = "RankColumn",
-		Position = UDim2.fromOffset(300, 1),
+		Position = UDim2.fromOffset(210, 1),
 		Size = UDim2.fromOffset(100, 11),
 		Parent = head,
 	})
@@ -838,7 +793,7 @@ local function buildPlayers(parent: Instance)
 	})
 	rowsFrame = Theme.make("ScrollingFrame", {
 		Name = "Rows",
-		Position = UDim2.fromOffset(0, 177),
+		Position = UDim2.fromOffset(0, PLAYERS_Y + 19),
 		Size = UDim2.new(1, 0, 0, 180),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -854,8 +809,8 @@ local function buildPlayers(parent: Instance)
 	}) :: ScrollingFrame
 	emptyText = Theme.text({
 		Name = "Empty",
-		Position = UDim2.fromOffset(0, 185),
-		Size = UDim2.fromOffset(400, 14),
+		Position = UDim2.fromOffset(0, PLAYERS_Y + 27),
+		Size = UDim2.fromOffset(360, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink3,
@@ -869,7 +824,7 @@ end
 local function createRow(target: Player): Row
 	local frame = Theme.make("Frame", {
 		Name = target.Name,
-		Size = UDim2.new(1, 0, 0, 30),
+		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = rowsFrame,
 	}) :: Frame
@@ -891,7 +846,7 @@ local function createRow(target: Player): Row
 	local name = Theme.text({
 		Name = "Name",
 		Position = UDim2.fromOffset(36, 0),
-		Size = UDim2.new(0, 250, 1, 0),
+		Size = UDim2.new(0, 166, 1, 0),
 		TextSize = 13,
 		TextStrokeTransparency = 1,
 		TextTruncate = Enum.TextTruncate.AtEnd,
@@ -899,9 +854,10 @@ local function createRow(target: Player): Row
 	}) :: TextLabel
 	local rank = Theme.text({
 		Name = "Rank",
-		Position = UDim2.fromOffset(300, 0),
-		Size = UDim2.new(0, 110, 1, 0),
-		TextSize = 10,
+		Position = UDim2.fromOffset(210, 0),
+		Size = UDim2.new(0, 100, 1, 0),
+		FontFace = Theme.Fonts.Body,
+		TextSize = 12,
 		TextStrokeTransparency = 1,
 		Parent = slide,
 	}) :: TextLabel
@@ -916,7 +872,7 @@ local function createRow(target: Player): Row
 	local challenge = lineButton("CHALLENGE", {
 		Name = "Challenge",
 		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
+		Position = UDim2.new(1, -BUTTON_INSET, 0.5, 0),
 		Visible = false,
 		Parent = action,
 	}, function()
@@ -926,8 +882,8 @@ local function createRow(target: Player): Row
 	end)
 	local reason = Theme.make("Frame", {
 		Name = "Reason",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 30),
 		BackgroundTransparency = 1,
@@ -1047,7 +1003,7 @@ local function applyRow(entry: Row, view: RowView)
 	entry.level.TextColor3 = if view.available then C.Ink2 else C.Ink3
 	entry.name.Text = target.DisplayName -- as typed, never re-cased
 	entry.name.TextColor3 = if view.available then C.Ink else C.Ink2
-	entry.rank.Text = Theme.track(DuelRanks.rankOf(eloOf(target)), "three")
+	entry.rank.Text = Theme.sentence(DuelRanks.rankOf(eloOf(target)))
 	entry.rank.TextColor3 = if view.available then C.Ink2 else C.Ink3
 
 	local previous: ActionKind? = entry.kind
@@ -1059,7 +1015,7 @@ local function applyRow(entry: Row, view: RowView)
 	entry.challenge.setEnabled(view.kind == "challenge")
 	entry.reason.Visible = not showButton
 	if not showButton then
-		entry.reasonWord.Text = Theme.track(view.text, "three")
+		entry.reasonWord.Text = Theme.sentence(view.text)
 		entry.reasonWord.TextColor3 = view.color
 		local sent = view.kind == "sent"
 		entry.reasonDot.Visible = sent
@@ -1138,7 +1094,7 @@ local function refreshRows(animate: boolean)
 		applyRow(item.entry, item.view)
 	end
 
-	playersCount.Text = Theme.track(plural(#list, "PLAYER", "PLAYERS"), "three")
+	playersCount.Text = plural(#list, "player", "players")
 	emptyText.Visible = #list == 0
 	if animate then
 		for _, entry in created do
@@ -1290,10 +1246,10 @@ function DuelMenuController.start()
 	MenuController.register({
 		id = SECTION_ID,
 		label = "DUEL",
-		subtitle = "ONE ON ONE · FIRST TO 2 ROUNDS",
-		order = 30, -- between KITS (10) and PROFILE (50)
-		size = Vector2.new(560, 480),
-		scrimWidth = 1100,
+		icon = "duel",
+		hint = "Duel",
+		order = 30, -- after KITS (10)
+		size = Vector2.new(480, 364 + PLAYERS_Y - 158),
 		build = build,
 	})
 	MenuController.onOpenChanged(function(id)

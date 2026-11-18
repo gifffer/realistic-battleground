@@ -1,39 +1,35 @@
 --!strict
--- ShopMenuController: the SHOP section of the menu (between PROFILE and
--- SETTINGS). Cosmetics bought with coins (step 10): nothing here changes a
--- fight.
+-- ShopMenuController: the SHOP and EMOTES panels (top bar buttons).
+-- Cosmetics bought with coins (step 10): nothing here changes a fight.
 --
---   SHOP                                                       820
---   COSMETICS · 4 OF 17 OWNED                                COINS
---   ──────────────────────────────────────────────────────────────
---   CATEGORY            TITLES
---   | TITLES            Shown under your name, on your name tag.
---     ROOKIE            CATALOG
---   OUTFITS             ROOKIE                           EQUIPPED
---   NONE EQUIPPED       Everybody starts somewhere.      ‾‾‾‾‾‾‾‾
---   KILL EFFECTS        BARE KNUCKLE                       — EQUIP
---   ...                 No gloves, no rules.
---                       BACK ALLEY                    — BUY · 250
---                       Grew up fighting behind the bar.
---                       HEAVY HANDS                      LEVEL 10
---                       One clean shot is enough.
+--   TITLES | OUTFITS | KILL EFFECTS                         820 coins
+--                          SHOP
+--   [ card ][ card ][ card ][ card ]
+--   [ card ]
+--   BACK ALLEY                                        [ BUY · 250 ]
+--   Grew up fighting behind the bar.
 --
--- Left: the 4 categories (like the KITS roster: a small marker on the
--- selected one, the equipped item's name under each). Right: every item of
--- the category (Shared/Cosmetics), one row each, with its state on the right:
---   Locked     level too low        "LEVEL 10"           (words, no padlock)
---   Buyable    enough coins         "— BUY · 250"        (two presses: CONFIRM)
---   Short      not enough coins     "NEED 120 MORE"
---   Owned      bought (or free)     "— EQUIP"
---   Equipped   the one you wear     "EQUIPPED" underlined. On a title or a
---              kill effect, clicking it takes it off (hover reads TAKE OFF).
--- Outfit rows show two small colour squares (top above, trousers below).
--- Emote rows add a hint with the emote key ("PRESS B").
+-- SHOP: tabs above the panel for the categories (titles, outfits, kill
+-- effects), a grid of cards for the open one. EMOTES: the same, for the
+-- emotes (their own button in the top bar). A card shows the item (the
+-- title's words, a figure in the outfit's colours, a burst, the emote's
+-- pose), its name in bold, a small caps line for its state, its type top
+-- right. Click a card: it is picked (lighter, white outline) and the bar
+-- under the grid shows its sentence and a real button (UI/Button) for its
+-- state:
+--   Locked     level too low        [lock] LEVEL 10        greyed, not clickable
+--   Buyable    enough coins         [coin] BUY · 250       main button (two presses: CONFIRM)
+--   Short      not enough coins     [coin] NEED 120 MORE   greyed, not clickable
+--   Owned      bought (or free)     EQUIP                  main button
+--   Equipped   the one you wear     TAKE OFF (titles, outfits, kill effects)
+--                                   PLAY (emotes: plays it, like the B key)
+-- The card of what you wear has a thin gold outline and "EQUIPPED" in gold.
 --
 -- Everything is worked out from the save (PlayerDataController: coins, XP →
 -- level, ownedCosmetics, equipped). The SERVER checks everything again
 -- (Server/Systems/Shop): Remotes.BuyCosmetic(id), Remotes.EquipCosmetic
--- (category, id or "" = take it off). The wallet (coins) sits top right.
+-- (category, id or "" = take it off), Remotes.Emote (play the equipped
+-- emote). The wallet (coins) sits top right.
 --
 -- The shop counters in the city (clothes shop, emote shop) open this same
 -- section on the right category: ShopMenuController.openAt("Outfit").
@@ -46,6 +42,9 @@ local Cosmetics = require(ReplicatedStorage.Shared.Cosmetics)
 local ProgressionCurve = require(ReplicatedStorage.Shared.Progression)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Button = require(script.Parent.Parent.UI.Button)
+local Icons = require(script.Parent.Parent.UI.Icons)
+local Panel = require(script.Parent.Parent.UI.Panel)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
@@ -56,17 +55,15 @@ local formatNumber = ProfileMenuController.formatNumber
 
 local C = Theme.Colors
 
--- Same columns as the KITS section: the detail starts at x 200 of the
--- content; its canvas starts a bit before (and the content is inset by the
--- same amount) so nothing sticking out gets cut.
-local DETAIL_INSET = Vector2.new(16, 8)
-local DETAIL_X = 200 - DETAIL_INSET.X
-local DETAIL_Y = -DETAIL_INSET.Y
-local DETAIL_SIZE = Vector2.new(360, 380)
-
-local ROW_HEIGHT = 42 -- one item (like a kit's move row)
-local ROWS_TOP = 99 -- first row, under the CATALOG head
-local OUTFIT_INDENT = 26 -- outfit rows: room for the two colour squares
+-- Four cards per row, the bar for the picked item under them.
+local CARD = Vector2.new(112, 140)
+local CARD_GAP = 8
+local COLUMNS = 4
+local GRID_ROWS = 2
+local GRID_SIZE =
+	Vector2.new(COLUMNS * CARD.X + (COLUMNS - 1) * CARD_GAP + 8, GRID_ROWS * CARD.Y + CARD_GAP + 4)
+local ACTION_BAR = 52
+local CONTENT_SIZE = Vector2.new(GRID_SIZE.X, GRID_SIZE.Y + 10 + ACTION_BAR)
 
 -- Second press on BUY must come within this many seconds of the first.
 local CONFIRM_SECONDS = 3
@@ -84,69 +81,53 @@ type ItemState = "Locked" | "Buyable" | "Short" | "Owned" | "Equipped"
 
 type CategoryInfo = {
 	id: Cosmetics.Category,
-	label: string, -- roster name and detail title
-	description: string, -- one line under the title (≤ 50 characters)
-	canTakeOff: boolean, -- clicking EQUIPPED takes it off ("" = none)
+	label: string, -- tab name
+	tag: string, -- small type word top right of a card
+	canTakeOff: boolean, -- the equipped one can be taken off ("" = none)
 }
 
 local CATEGORIES: { CategoryInfo } = {
-	{
-		id = "Title",
-		label = "TITLES",
-		description = "Shown under your name, on your name tag.",
-		canTakeOff = true,
-	},
-	{
-		id = "Outfit",
-		label = "OUTFITS",
-		description = "The colour of your top and trousers.",
-		canTakeOff = true, -- (the avatar's own clothes come back next life)
-	},
-	{
-		id = "KillEffect",
-		label = "KILL EFFECTS",
-		description = "A short effect when you finish someone.",
-		canTakeOff = true,
-	},
-	{
-		id = "Emote",
-		label = "EMOTES",
-		description = `A gesture between fights. Press {EMOTE_KEY} to play it.`,
-		canTakeOff = false,
-	},
+	{ id = "Title", label = "TITLES", tag = "TITLE", canTakeOff = true },
+	-- (the avatar's own clothes come back next life)
+	{ id = "Outfit", label = "OUTFITS", tag = "OUTFIT", canTakeOff = true },
+	{ id = "KillEffect", label = "KILL EFFECTS", tag = "EFFECT", canTakeOff = true },
+	{ id = "Emote", label = "EMOTES", tag = "EMOTE", canTakeOff = false },
 }
+
+-- Each emote's pose on its card (UI/Panel figure).
+local EMOTE_POSES: { [string]: Panel.Pose } = {
+	EmoteShrug = { leftArm = Vector2.new(25, 45), rightArm = Vector2.new(25, 45) },
+	EmoteComeHere = { rightArm = Vector2.new(85, 0), leftArm = Vector2.new(0, 10) },
+	EmoteKnuckles = { leftArm = Vector2.new(75, -35), rightArm = Vector2.new(75, -35) },
+	EmoteFlex = { leftArm = Vector2.new(60, -60), rightArm = Vector2.new(60, -60) },
+}
+local SKIN = Color3.fromHex("#2A2A2A")
 
 local ShopMenuController = {}
 
--- One item row on the right.
-type Row = {
+-- One SHOP / EMOTES panel.
+type CardUi = {
 	item: Cosmetics.Item,
-	frame: Frame,
+	card: Panel.Card,
+}
+type Catalog = {
+	categories: { CategoryInfo },
+	category: CategoryInfo, -- the open tab
+	picked: { [Cosmetics.Category]: string }, -- the picked item per tab
+	cards: { CardUi },
+	grid: ScrollingFrame,
 	name: TextLabel,
-	hint: TextLabel?, -- "PRESS B" (emotes only)
-	action: CanvasGroup?, -- the state on the right (fades on a change)
+	sentence: TextLabel,
+	actionHolder: Frame,
+	action: CanvasGroup?, -- the picked item's button (fades on a change)
 	key: string, -- the state the action was drawn for (see stateKey)
-	token: number, -- cancels an action swap that is no longer wanted
+	token: number,
+	wallet: ProfileMenuController.Wallet,
+	tabs: Panel.Tabs?,
 }
 
--- One category on the left.
-type RosterItem = {
-	info: CategoryInfo,
-	button: TextButton,
-	name: TextLabel,
-	status: TextLabel,
-}
-
-local selected: CategoryInfo = CATEGORIES[1]
-local rows: { Row } = {}
-local rosterItems: { RosterItem } = {}
-local rosterMarker: Frame
-local detail: CanvasGroup -- fades / slides as one when switching category
-local body: Frame -- its content (inset: the canvas cuts what sticks out)
-local wallet: ProfileMenuController.Wallet? = nil
-local walletCoins = 0 -- what the wallet shows (so it only counts on a change)
-local subtitleLabel: TextLabel? = nil
-local built = false
+local catalogs: { Catalog } = {}
+local walletCoins = 0 -- what the wallets show (so they only count on a change)
 local refreshAll: (animate: boolean) -> () -- (defined further down)
 
 -- What we just asked the server to equip, per category: shown at once,
@@ -244,237 +225,84 @@ local function itemsOf(category: Cosmetics.Category): { Cosmetics.Item }
 	return list
 end
 
--- The small line under a category in the roster: what is equipped.
-local function rosterStatus(info: CategoryInfo): string
-	local item = Cosmetics.get(equippedId(info.id))
-	if item and item.category == info.id and owns(item) then
-		return item.name
-	end
-	return "NONE EQUIPPED"
-end
-
--- "COSMETICS · 4 OF 17 OWNED".
-local function subtitle(): string
-	local owned = 0
-	for _, item in Cosmetics.ITEMS do
-		if owns(item) then
-			owned += 1
-		end
-	end
-	return `COSMETICS · {owned} OF {#Cosmetics.ITEMS} OWNED`
-end
-
 ------------------------------------------------------------------------------
--- Small pieces
+-- The actions (right of the bar under the grid)
 ------------------------------------------------------------------------------
 
-local function caption(text: string, props: { [string]: any }): TextLabel
-	local base: { [string]: any } = {
-		TextSize = 10,
-		TextColor3 = C.Ink3,
-		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
-	}
-	for key, value in props do
-		base[key] = value
-	end
-	return Theme.text(base) :: TextLabel
-end
+-- Where an action button sits: right of the bar, vertically centred, far
+-- enough from the layer's edge that it can grow under the mouse uncut.
+local ACTION_ANCHOR = Vector2.new(1, 0.5)
+local ACTION_POSITION = UDim2.new(1, -7, 0.5, 0)
 
-local function hairline(parent: Instance, y: UDim, transparency: number)
-	Theme.make("Frame", {
-		Name = "Hairline",
-		Position = UDim2.new(UDim.new(0, 0), y),
-		Size = UDim2.new(1, 0, 0, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = transparency,
-		Parent = parent,
+-- Locked / not enough coins: a greyed button that says why (not clickable).
+local function blockedButton(parent: Instance, icon: Button.IconName, text: string)
+	local button = Button.new({
+		name = "Blocked",
+		text = text,
+		icon = icon,
+		size = "small",
+		anchorPoint = ACTION_ANCHOR,
+		position = ACTION_POSITION,
+		parent = parent,
 	})
+	button.setEnabled(false)
 end
 
--- A section head: label on the left, a faint hairline under it.
-local function sectionHead(parent: Instance, y: number, title: string)
-	local head = Theme.make("Frame", {
-		Name = `{title}Head`,
-		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.new(1, 0, 0, 18),
-		BackgroundTransparency = 1,
-		Parent = parent,
-	})
-	caption(title, { Size = UDim2.new(1, 0, 0, 12), Parent = head })
-	hairline(head, UDim.new(1, 0), 0.9)
-end
-
--- A small square of colour (outfit rows), with a faint outline so a black
--- top still shows on the dark backdrop. Square corners, like everything.
-local function swatch(parent: Instance, name: string, color: Color3, y: number)
-	Theme.make("Frame", {
-		Name = name,
-		Position = UDim2.fromOffset(0, y),
-		Size = UDim2.fromOffset(12, 12),
-		BackgroundColor3 = color,
-		Parent = parent,
-	}, {
-		Theme.make("UIStroke", {
-			Thickness = 1,
-			Color = C.Ink,
-			Transparency = 0.78,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		}),
-	})
-end
-
-------------------------------------------------------------------------------
--- The actions (right side of a row)
-------------------------------------------------------------------------------
-
--- "LEVEL 10" / "NEED 120 MORE": said in words, not a button.
-local function stateLabel(parent: Instance, text: string)
-	Theme.text({
-		Name = "StateLabel",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 6),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		TextColor3 = C.Ink2,
-		TextStrokeTransparency = 1,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Text = Theme.track(text, "four"),
-		Parent = parent,
-	})
-end
-
--- "— BUY · 250": the same "line + word" button as MENU / EQUIP. Two presses:
--- the first turns the word into CONFIRM for a few seconds, the second asks
--- the server (Remotes.BuyCosmetic).
+-- BUY · 250 (accent). Two presses: the first turns it into CONFIRM for a
+-- few seconds, the second asks the server (Remotes.BuyCosmetic).
 local function buyButton(parent: Instance, item: Cosmetics.Item)
-	local button = Theme.make("TextButton", {
-		Name = "BuyButton",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 6),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		BackgroundTransparency = 1,
-		AutoButtonColor = false,
-		Text = "",
-		Parent = parent,
-	}, {
-		Theme.make("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Right,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 10),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	}) :: TextButton
-	local line = Theme.make("Frame", {
-		Name = "Line",
-		LayoutOrder = 1,
-		Size = UDim2.fromOffset(18, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.15,
-		Parent = button,
-	}) :: Frame
-	local group = Theme.make("Frame", {
-		Name = "Label",
-		LayoutOrder = 2,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		BackgroundTransparency = 1,
-		Parent = button,
-	}, {
-		Theme.make("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 6),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	})
-	local word = Theme.text({
-		Name = "Word",
-		LayoutOrder = 1,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		TextTransparency = 0.15,
-		TextStrokeTransparency = 1,
-		Text = Theme.track("BUY ·", "four"),
-		Parent = group,
-	}) :: TextLabel
-	local price = Theme.text({
-		Name = "Price",
-		LayoutOrder = 2,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		-- (A free item that needs a level first reads "BUY · FREE".)
-		FontFace = if item.price == 0 then Theme.Fonts.Label else Theme.Fonts.Number,
-		TextTransparency = 0.15,
-		TextStrokeTransparency = 1,
-		Text = if item.price == 0 then Theme.track("FREE", "four") else formatNumber(item.price),
-		Parent = group,
-	}) :: TextLabel
-
-	local hovered = false
+	-- (A free item that needs a level first reads "BUY · FREE".)
+	local priceText = if item.price == 0 then "FREE" else formatNumber(item.price)
 	local confirmUntil = 0 -- os.clock() before which a press buys
 	local pending = false -- asked the server, waiting for the save
-
-	local function brightness(): number
-		return if hovered then 0 else 0.15
-	end
-	-- Crossfades the word ("BUY ·" ↔ "CONFIRM ·") in 0.1 s.
-	local function setWord(text: string)
-		Theme.tween(word, 0.05, { TextTransparency = 1 })
-		task.delay(0.05, function()
-			word.Text = Theme.track(text, "four")
-			Theme.tween(word, 0.05, { TextTransparency = brightness() })
-		end)
-	end
-
-	button.MouseEnter:Connect(function()
-		hovered = true
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1), BackgroundTransparency = 0 })
-		Theme.tween(word, 0.15, { TextTransparency = 0 })
-		Theme.tween(price, 0.15, { TextTransparency = 0 })
-	end)
-	button.MouseLeave:Connect(function()
-		hovered = false
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1), BackgroundTransparency = 0.15 })
-		Theme.tween(word, 0.15, { TextTransparency = 0.15 })
-		Theme.tween(price, 0.15, { TextTransparency = 0.15 })
-	end)
-	button.Activated:Connect(function()
-		if pending then
-			return
-		end
-		local now = os.clock()
-		if now < confirmUntil then
-			-- Second press: buy. The server checks level, price and coins.
-			confirmUntil = 0
-			pending = true
-			Remotes.BuyCosmetic:FireServer(item.id)
-			-- Bought: the new save replaces this button (EQUIP). Still here
-			-- after a moment = refused: the price flashes red, back to BUY.
-			task.delay(REFUSED_AFTER, function()
-				if button.Parent == nil then
-					return
-				end
-				pending = false
-				price.TextColor3 = C.BloodHi
-				Theme.tween(price, 0.4, { TextColor3 = C.Ink })
-				setWord("BUY ·")
-			end)
-			return
-		end
-		-- First press: ask to confirm.
-		confirmUntil = now + CONFIRM_SECONDS
-		local stamp = confirmUntil
-		setWord("CONFIRM ·")
-		task.delay(CONFIRM_SECONDS, function()
-			if confirmUntil == stamp and not pending and button.Parent ~= nil then
-				confirmUntil = 0
-				setWord("BUY ·")
+	local button: Button.Button
+	button = Button.new({
+		name = "BuyButton",
+		text = `BUY · {priceText}`,
+		variant = "primary",
+		icon = "coin",
+		size = "small",
+		minWidth = 96,
+		anchorPoint = ACTION_ANCHOR,
+		position = ACTION_POSITION,
+		parent = parent,
+		onActivated = function()
+			if pending then
+				return
 			end
-		end)
-	end)
+			local now = os.clock()
+			if now < confirmUntil then
+				-- Second press: buy. The server checks level, price and coins.
+				confirmUntil = 0
+				pending = true
+				button.setEnabled(false)
+				button.setText("BUYING…")
+				Remotes.BuyCosmetic:FireServer(item.id)
+				-- Bought: the new save replaces this button (EQUIP). Still
+				-- here after a moment = refused: red outline, back to BUY.
+				task.delay(REFUSED_AFTER, function()
+					if button.instance.Parent == nil then
+						return
+					end
+					pending = false
+					button.setEnabled(true)
+					button.setText(`BUY · {priceText}`)
+					button.flash()
+				end)
+				return
+			end
+			-- First press: ask to confirm.
+			confirmUntil = now + CONFIRM_SECONDS
+			local stamp = confirmUntil
+			button.setText(`CONFIRM · {priceText}`)
+			task.delay(CONFIRM_SECONDS, function()
+				if confirmUntil == stamp and not pending and button.instance.Parent ~= nil then
+					confirmUntil = 0
+					button.setText(`BUY · {priceText}`)
+				end
+			end)
+		end,
+	})
 end
 
 -- Asks the server to equip `itemId` in `category` ("" = take it off) and
@@ -487,543 +315,344 @@ local function requestEquip(category: Cosmetics.Category, itemId: string)
 	task.delay(EQUIP_SETTLE + 0.05, refreshAll, true)
 end
 
--- EQUIP: the same "line + word" button as MENU / CLOSE (no boxes).
+-- EQUIP (main button).
 local function equipButton(parent: Instance, item: Cosmetics.Item)
-	local button = Theme.make("TextButton", {
-		Name = "EquipButton",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 6),
-		Size = UDim2.fromOffset(90, 14),
-		BackgroundTransparency = 1,
-		AutoButtonColor = false,
-		Text = "",
-		Parent = parent,
-	}) :: TextButton
-	local line = Theme.make("Frame", {
-		Name = "Line",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -62, 0.5, 0),
-		Size = UDim2.fromOffset(18, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.15,
-		Parent = button,
-	}) :: Frame
-	local word = Theme.text({
-		Name = "Label",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.new(0, 52, 1, 0),
-		TextTransparency = 0.15,
-		TextStrokeTransparency = 1,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Text = Theme.track("EQUIP", "four"),
-		Parent = button,
-	}) :: TextLabel
-	button.MouseEnter:Connect(function()
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1) })
-		Theme.tween(word, 0.15, { TextTransparency = 0 })
-	end)
-	button.MouseLeave:Connect(function()
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1) })
-		Theme.tween(word, 0.15, { TextTransparency = 0.15 })
-	end)
-	local pressed = false -- one request per button
-	button.Activated:Connect(function()
-		if pressed then
-			return
-		end
-		pressed = true
-		Theme.tween(
-			word,
-			0.1,
-			{ TextTransparency = 1 },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-		Theme.tween(
-			line,
-			0.1,
-			{ Size = UDim2.fromOffset(0, 1) },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-		requestEquip(item.category, item.id)
-	end)
+	local button: Button.Button
+	button = Button.new({
+		name = "EquipButton",
+		text = "EQUIP",
+		variant = "primary",
+		size = "small",
+		minWidth = 84,
+		anchorPoint = ACTION_ANCHOR,
+		position = ACTION_POSITION,
+		parent = parent,
+		onActivated = function()
+			button.setEnabled(false) -- one request per button
+			requestEquip(item.category, item.id)
+		end,
+	})
 end
 
--- The EQUIPPED mark (underlined). `clickable`: it is also a button —
--- hover reads TAKE OFF, a click takes the item off.
-local function equippedMark(parent: Instance, item: Cosmetics.Item, clickable: boolean)
-	-- A TextButton when clickable, else a TextLabel (both show text the same).
-	local instance = Theme.text({
-		ClassName = if clickable then "TextButton" else "TextLabel",
-		Name = "Equipped",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 4),
-		-- A fixed width (not sized to the text): "TAKE OFF" is narrower than
-		-- "EQUIPPED", and a button that shrank under the mouse would get a
-		-- MouseLeave, grow back, get a MouseEnter... and flicker.
-		Size = UDim2.fromOffset(90, 22),
-		TextStrokeTransparency = 1,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		Text = Theme.track("EQUIPPED", "four"),
-		Parent = parent,
-	})
-	local mark = instance :: TextLabel
-	local underline = Theme.make("Frame", {
-		Name = "Underline",
-		-- Anchored on the right, like the (right-aligned) word.
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 20),
-		Size = UDim2.fromOffset(0, 2),
-		BackgroundColor3 = C.Ink,
-		Parent = mark,
-	}) :: Frame
-	-- The underline grows to the word's width (and follows it when the
-	-- word changes to TAKE OFF and back).
-	local function fitUnderline()
-		Theme.tween(
-			underline,
-			0.18,
-			{ Size = UDim2.fromOffset(math.max(mark.TextBounds.X - 3, 10), 2) },
-			Enum.EasingStyle.Quart
-		)
-	end
-	mark:GetPropertyChangedSignal("TextBounds"):Connect(fitUnderline)
-	task.defer(fitUnderline)
-	if not clickable then
+-- The item you wear: TAKE OFF (titles, outfits, kill effects), PLAY
+-- (emotes: the same as the emote key), or a plain EQUIPPED badge.
+local function wornAction(parent: Instance, item: Cosmetics.Item)
+	if item.category == "Emote" then
+		Button.new({
+			name = "PlayButton",
+			text = "PLAY",
+			variant = "primary",
+			size = "small",
+			keyHint = EMOTE_KEY,
+			minWidth = 84,
+			anchorPoint = ACTION_ANCHOR,
+			position = ACTION_POSITION,
+			parent = parent,
+			onActivated = function()
+				-- The server checks you can (not mid-fight) and plays it.
+				Remotes.Emote:FireServer()
+			end,
+		})
 		return
 	end
-	local button = instance :: TextButton
-	button.AutoButtonColor = false
-	local pressed = false -- one request per button
-	-- Crossfades the word in 0.1 s.
-	local function setWord(text: string)
-		if pressed then
-			return
-		end
-		Theme.tween(button, 0.05, { TextTransparency = 1 })
-		task.delay(0.05, function()
-			if pressed then
-				return
-			end
-			button.Text = Theme.track(text, "four")
-			Theme.tween(button, 0.05, { TextTransparency = 0 })
-		end)
+	if not canTakeOff(item.category) then
+		Button.badge({
+			name = "Equipped",
+			text = "EQUIPPED",
+			icon = "check",
+			size = "small",
+			anchorPoint = ACTION_ANCHOR,
+			position = ACTION_POSITION,
+			parent = parent,
+		})
+		return
 	end
-	button.MouseEnter:Connect(function()
-		setWord("TAKE OFF")
-	end)
-	button.MouseLeave:Connect(function()
-		setWord("EQUIPPED")
-	end)
-	button.Activated:Connect(function()
-		if pressed then
-			return
-		end
-		pressed = true
-		Theme.tween(
-			button,
-			0.1,
-			{ TextTransparency = 1 },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-		Theme.tween(
-			underline,
-			0.1,
-			{ Size = UDim2.fromOffset(0, 2) },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-		requestEquip(item.category, "")
-	end)
+	local button: Button.Button
+	button = Button.new({
+		name = "TakeOff",
+		text = "TAKE OFF",
+		variant = "secondary",
+		size = "small",
+		minWidth = 84,
+		anchorPoint = ACTION_ANCHOR,
+		position = ACTION_POSITION,
+		parent = parent,
+		onActivated = function()
+			button.setEnabled(false) -- one request per button
+			button.setText("TAKING OFF")
+			requestEquip(item.category, "")
+		end,
+	})
 end
 
--- Builds the action of a row for its current state. `fade`: it fades in
--- (its state just changed).
-local function fillAction(row: Row, fade: boolean)
-	local old = row.action
+------------------------------------------------------------------------------
+-- Cards
+------------------------------------------------------------------------------
+
+-- The small caps line under a card's name.
+local function cardLine(item: Cosmetics.Item): (string, Color3)
+	local state = itemState(item)
+	if state == "Equipped" then
+		return "Equipped", C.Gold
+	elseif state == "Owned" then
+		return "Owned", C.Ink2
+	elseif state == "Locked" then
+		return `Level {item.unlockLevel or 1}`, C.Ink3
+	elseif state == "Buyable" then
+		return if item.price == 0 then "Free" else `{formatNumber(item.price)} coins`, C.Ink2
+	end
+	return `{formatNumber(item.price)} coins`, C.Ink3
+end
+
+-- What a card shows in its middle (the REWARDS track uses it too).
+local function fillArt(art: Frame, item: Cosmetics.Item)
+	if item.category == "Title" then
+		Theme.text({
+			Name = "Words",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.new(1, -16, 1, -8),
+			FontFace = Theme.Fonts.Display,
+			TextSize = 17,
+			TextColor3 = C.Ink,
+			TextStrokeTransparency = 1,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			TextWrapped = true,
+			Text = item.title or item.name,
+			Parent = art,
+		})
+	elseif item.category == "Outfit" then
+		Panel.figure(art, {
+			pose = { leftArm = Vector2.new(5, 8), rightArm = Vector2.new(5, 8) },
+			top = item.top,
+			bottom = item.trousers,
+			skin = SKIN,
+		})
+	elseif item.category == "KillEffect" then
+		local icon = Icons.draw("effect", art, 46)
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
+		Icons.paint(icon, C.Ink)
+	else
+		Panel.figure(art, { pose = EMOTE_POSES[item.id] })
+	end
+end
+
+local function categoryOf(id: Cosmetics.Category): CategoryInfo
+	for _, info in CATEGORIES do
+		if info.id == id then
+			return info
+		end
+	end
+	return CATEGORIES[1]
+end
+
+------------------------------------------------------------------------------
+-- A catalog (one panel)
+------------------------------------------------------------------------------
+
+-- The picked item of the open tab (the equipped one, else the first).
+local function pickedItem(catalog: Catalog): Cosmetics.Item?
+	local id = catalog.picked[catalog.category.id] or equippedId(catalog.category.id)
+	local item = Cosmetics.get(id)
+	if item and item.category == catalog.category.id then
+		return item
+	end
+	return itemsOf(catalog.category.id)[1]
+end
+
+-- Builds the bar's button for the picked item. `fade`: it fades in.
+local function fillAction(catalog: Catalog, fade: boolean)
+	local old = catalog.action
 	if old then
 		old:Destroy()
 	end
-	local item = row.item
-	local state = itemState(item)
-	row.key = stateKey(item)
-	-- Its own layer (right part of the row) so it can fade on its own.
+	catalog.action = nil
+	local item = pickedItem(catalog)
+	if item == nil then
+		catalog.key = ""
+		return
+	end
+	catalog.key = item.id .. stateKey(item)
 	local group = Theme.make("CanvasGroup", {
 		Name = "Action",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.fromOffset(170, 28),
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
-		Parent = row.frame,
+		Parent = catalog.actionHolder,
 	}) :: CanvasGroup
-	row.action = group
+	catalog.action = group
+	local state = itemState(item)
 	if state == "Equipped" then
-		equippedMark(group, item, canTakeOff(item.category))
+		wornAction(group, item)
 	elseif state == "Owned" then
 		equipButton(group, item)
 	elseif state == "Locked" then
-		stateLabel(group, `LEVEL {item.unlockLevel or 1}`)
+		blockedButton(group, "lock", `LEVEL {item.unlockLevel or 1}`)
 	elseif state == "Buyable" then
 		buyButton(group, item)
 	else
-		stateLabel(group, `NEED {formatNumber(item.price - playerCoins())} MORE`)
+		blockedButton(group, "coin", `NEED {formatNumber(item.price - playerCoins())} MORE`)
 	end
 	if fade then
 		group.GroupTransparency = 1
 		Theme.tween(group, 0.15, { GroupTransparency = 0 })
 	end
-	-- A locked item is one step quieter (like a locked kit).
-	row.name.TextColor3 = if state == "Locked" then C.Ink2 else C.Ink
-	local hint = row.hint
-	if hint then
-		hint.TextColor3 = if state == "Equipped" then C.Ink2 else C.Ink3
-	end
 end
 
--- The row's state changed: the old action fades out (0.1 s), the new one
--- fades in (0.15 s).
-local function swapAction(row: Row)
-	row.token += 1
-	local token = row.token
-	local old = row.action
-	if old then
-		Theme.tween(
-			old,
-			0.1,
-			{ GroupTransparency = 1 },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
+-- Cards (state lines, outlines) and the bar, from the save.
+local function paintCatalog(catalog: Catalog, animate: boolean)
+	local picked = pickedItem(catalog)
+	for _, entry in catalog.cards do
+		local state = itemState(entry.item)
+		local text, color = cardLine(entry.item)
+		entry.card.setSub(text, color)
+		entry.card.setEquipped(state == "Equipped")
+		entry.card.setSelected(picked ~= nil and entry.item.id == picked.id)
+		entry.card.setDim(state == "Locked" or state == "Short")
 	end
-	task.delay(if old then 0.1 else 0, function()
-		if token == row.token and row.frame.Parent ~= nil then
-			fillAction(row, true)
+	catalog.name.Text = if picked then picked.name else ""
+	catalog.sentence.Text = if picked then picked.description else ""
+	local key = if picked then picked.id .. stateKey(picked) else ""
+	if key ~= catalog.key then
+		catalog.token += 1
+		local token = catalog.token
+		local old = catalog.action
+		if animate and old then
+			Theme.tween(
+				old,
+				0.1,
+				{ GroupTransparency = 1 },
+				Enum.EasingStyle.Quad,
+				Enum.EasingDirection.In
+			)
+			task.delay(0.1, function()
+				if token == catalog.token then
+					fillAction(catalog, true)
+				end
+			end)
+		else
+			fillAction(catalog, false)
 		end
-	end)
+	end
 end
 
-------------------------------------------------------------------------------
--- Detail (right column)
-------------------------------------------------------------------------------
-
-local function itemRow(parent: Instance, order: number, item: Cosmetics.Item): Row
-	local frame = Theme.make("Frame", {
-		Name = item.id,
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
-		BackgroundTransparency = 1,
-		Parent = parent,
-	}) :: Frame
-	hairline(frame, UDim.new(1, -1), 0.93)
-	local indent = 0
-	if item.category == "Outfit" then
-		-- Top above, trousers below: a tiny outfit.
-		indent = OUTFIT_INDENT
-		swatch(frame, "Top", item.top or C.Ink3, 7)
-		swatch(frame, "Trousers", item.trousers or C.Ink3, 21)
+-- Fills the grid with the open tab's items.
+local function fillGrid(catalog: Catalog)
+	for _, entry in catalog.cards do
+		entry.card.instance:Destroy()
 	end
+	table.clear(catalog.cards)
+	local info = catalog.category
+	for order, item in itemsOf(info.id) do
+		local card = Panel.card({
+			parent = catalog.grid,
+			name = item.name,
+			tag = info.tag,
+			layoutOrder = order,
+			onActivated = function()
+				catalog.picked[item.category] = item.id
+				paintCatalog(catalog, true)
+			end,
+		})
+		fillArt(card.art, item)
+		table.insert(catalog.cards, { item = item, card = card })
+	end
+	catalog.grid.CanvasPosition = Vector2.zero
+	paintCatalog(catalog, false)
+end
+
+local function buildCatalog(content: Frame, host: MenuController.Host, categories: { CategoryInfo })
+	-- Header (the panel around the content): the wallet top right.
+	local wallet = ProfileMenuController.createWallet(host.header)
+	walletCoins = playerCoins()
+	wallet.set(walletCoins, false)
+
+	local grid = Panel.grid(
+		content,
+		CARD,
+		CARD_GAP,
+		UDim2.fromOffset(0, 0),
+		UDim2.fromOffset(GRID_SIZE.X, GRID_SIZE.Y)
+	)
+	local barFrame = Theme.make("Frame", {
+		Name = "PickedBar",
+		Position = UDim2.fromOffset(0, GRID_SIZE.Y + 10),
+		Size = UDim2.new(1, 0, 0, ACTION_BAR),
+		BackgroundColor3 = C.Card,
+		BackgroundTransparency = 0.4,
+		Parent = content,
+	})
 	local name = Theme.text({
-		Name = "Name",
-		Position = UDim2.fromOffset(indent, 6),
-		Size = UDim2.fromOffset(200, 13),
+		Name = "ItemName",
+		Position = UDim2.fromOffset(12, 9),
+		Size = UDim2.new(1, -230, 0, 18),
+		FontFace = Theme.Fonts.Display,
+		TextSize = 15,
+		TextColor3 = C.InkHi,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(item.name, "four"),
-		Parent = frame,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		Parent = barFrame,
 	}) :: TextLabel
-	Theme.text({
+	local sentence = Theme.text({
 		Name = "Sentence",
-		Position = UDim2.fromOffset(indent, 22),
-		-- Stops before the action column; a long one ends with "…".
-		Size = UDim2.new(1, -indent - 120, 0, 14),
+		Position = UDim2.fromOffset(12, 28),
+		Size = UDim2.new(1, -230, 0, 15),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
 		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		Text = item.description,
-		Parent = frame,
-	})
-	local hint: TextLabel? = nil
-	if item.category == "Emote" then
-		-- Under the action (below the EQUIPPED underline): how to play it.
-		hint = caption(`PRESS {EMOTE_KEY}`, {
-			Name = "Hint",
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, 0, 0, 28),
-			Size = UDim2.fromOffset(100, 11),
-			TextSize = 9,
-			TextXAlignment = Enum.TextXAlignment.Right,
-			Parent = frame,
-		})
-	end
-	local row: Row = {
-		item = item,
-		frame = frame,
+		Parent = barFrame,
+	}) :: TextLabel
+	local actionHolder = Theme.make("Frame", {
+		Name = "ActionHolder",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -4, 0, 0),
+		Size = UDim2.new(0, 220, 1, 0),
+		BackgroundTransparency = 1,
+		Parent = barFrame,
+	}) :: Frame
+
+	local catalog: Catalog = {
+		categories = categories,
+		category = categories[1],
+		picked = {},
+		cards = {},
+		grid = grid,
 		name = name,
-		hint = hint,
+		sentence = sentence,
+		actionHolder = actionHolder,
 		action = nil,
 		key = "",
 		token = 0,
+		wallet = wallet,
+		tabs = host.tabs,
 	}
-	fillAction(row, false)
-	return row
-end
-
-local function fillDetail(info: CategoryInfo)
-	for _, child in body:GetChildren() do
-		child:Destroy()
-	end
-	table.clear(rows)
-	Theme.text({
-		Name = "CategoryName",
-		Position = UDim2.fromOffset(0, -4),
-		Size = UDim2.fromOffset(280, 30),
-		FontFace = Theme.Fonts.Display,
-		TextSize = 26,
-		TextStrokeTransparency = 1,
-		Text = Theme.track(info.label, "thin"),
-		Parent = body,
-	})
-	Theme.text({
-		Name = "Desc",
-		Position = UDim2.fromOffset(0, 36),
-		Size = UDim2.new(1, 0, 0, 40),
-		FontFace = Theme.Fonts.Body,
-		TextSize = 15,
-		TextStrokeTransparency = 1,
-		TextWrapped = true,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		Text = info.description,
-		Parent = body,
-	})
-	sectionHead(body, 80, "CATALOG")
-	local items = itemsOf(info.id)
-	local list = Theme.make("Frame", {
-		Name = "Items",
-		Position = UDim2.fromOffset(0, ROWS_TOP),
-		Size = UDim2.new(1, 0, 0, #items * ROW_HEIGHT),
-		BackgroundTransparency = 1,
-		Parent = body,
-	}, {
-		Theme.make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }),
-	})
-	for order, item in items do
-		table.insert(rows, itemRow(list, order, item))
-	end
-end
-
--- Shows the selected category. `animate`: the old content slides out, the
--- new one in (like switching kits).
-local function renderDetail(animate: boolean)
-	local info = selected
-	if not animate then
-		fillDetail(info)
-		return
-	end
-	Theme.tween(
-		detail,
-		0.1,
-		{ GroupTransparency = 1, Position = UDim2.fromOffset(DETAIL_X - 6, DETAIL_Y) },
-		Enum.EasingStyle.Quad,
-		Enum.EasingDirection.In
-	)
-	task.delay(0.1, function()
-		if selected ~= info then
-			return -- another category was picked meanwhile: its own call draws it
-		end
-		fillDetail(info)
-		detail.Position = UDim2.fromOffset(DETAIL_X + 8, DETAIL_Y)
-		Theme.tween(
-			detail,
-			0.2,
-			{ GroupTransparency = 0, Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y) },
-			Enum.EasingStyle.Quart
-		)
-	end)
-end
-
-------------------------------------------------------------------------------
--- Roster (left column)
-------------------------------------------------------------------------------
-
--- `animate`: a status line whose text changed crossfades (0.15 s).
-local function refreshRoster(animate: boolean)
-	for _, entry in rosterItems do
-		local isSelected = entry.info == selected
-		Theme.tween(entry.name, Theme.FAST, { TextColor3 = if isSelected then C.Ink else C.Ink3 })
-		local statusColor = if isSelected then C.Ink2 else C.Ink3
-		local text = Theme.track(rosterStatus(entry.info), "three")
-		local status = entry.status
-		if animate and status.Text ~= text then
-			Theme.tween(status, 0.075, { TextTransparency = 1 })
-			task.delay(0.075, function()
-				-- Read again: the selection or the save may have changed.
-				status.Text = Theme.track(rosterStatus(entry.info), "three")
-				Theme.tween(status, 0.075, {
-					TextColor3 = if entry.info == selected then C.Ink2 else C.Ink3,
-					TextTransparency = 0,
-				})
-			end)
-		else
-			status.Text = text
-			Theme.tween(status, Theme.FAST, { TextColor3 = statusColor })
-		end
-		if isSelected then
-			rosterMarker.Parent = entry.button
-			rosterMarker.Position = UDim2.fromOffset(-14, 12)
-		end
-	end
-end
-
-local function selectCategory(info: CategoryInfo)
-	if info == selected then
-		return
-	end
-	selected = info
-	refreshRoster(false)
-	renderDetail(true)
-end
-
-------------------------------------------------------------------------------
--- Building
-------------------------------------------------------------------------------
-
-local function build(content: Frame)
-	-- Header (the panel around the content): the wallet top right, and the
-	-- subtitle we keep up to date ("4 OF 17 OWNED").
-	local panel = content.Parent :: Instance
-	local newWallet = ProfileMenuController.createWallet(panel)
-	walletCoins = playerCoins()
-	newWallet.set(walletCoins, false)
-	wallet = newWallet
-	local label = panel:FindFirstChild("Subtitle")
-	if label and label:IsA("TextLabel") then
-		subtitleLabel = label
-		label.Text = Theme.track(subtitle(), "three")
-	end
-
-	local roster = Theme.make("Frame", {
-		Name = "Roster",
-		Size = UDim2.fromOffset(150, 16 + #CATEGORIES * 50),
-		BackgroundTransparency = 1,
-		Parent = content,
-	})
-	caption("CATEGORY", { Size = UDim2.new(1, 0, 0, 12), Parent = roster })
-	local list = Theme.make("Frame", {
-		Name = "Items",
-		Position = UDim2.fromOffset(0, 16),
-		Size = UDim2.new(1, 0, 1, -16),
-		BackgroundTransparency = 1,
-		Parent = roster,
-	}, {
-		Theme.make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }),
-	})
-	rosterMarker = Theme.make("Frame", {
-		Name = "RosterMarker",
-		Size = UDim2.fromOffset(2, 12),
-		BackgroundColor3 = C.Ink,
-	})
-	for order, info in CATEGORIES do
-		local button = Theme.make("TextButton", {
-			Name = info.id,
-			LayoutOrder = order,
-			Size = UDim2.new(1, 0, 0, 50),
-			BackgroundTransparency = 1,
-			AutoButtonColor = false,
-			Text = "",
-			Parent = list,
-		}) :: TextButton
-		local name = Theme.text({
-			Name = "Name",
-			Position = UDim2.fromOffset(0, 10),
-			Size = UDim2.new(1, 0, 0, 16),
-			TextSize = 13,
-			TextColor3 = C.Ink3,
-			TextStrokeTransparency = 1,
-			Text = Theme.track(info.label, "four"),
-			Parent = button,
-		}) :: TextLabel
-		local status = caption(rosterStatus(info), {
-			Name = "Status",
-			Position = UDim2.fromOffset(0, 31),
-			Size = UDim2.new(1, 0, 0, 11),
-			TextSize = 9,
-			Parent = button,
-		})
-		table.insert(rosterItems, { info = info, button = button, name = name, status = status })
-		button.MouseEnter:Connect(function()
-			if info ~= selected then
-				Theme.tween(name, 0.1, { TextColor3 = C.Ink2 })
+	table.insert(catalogs, catalog)
+	local tabs = host.tabs
+	if tabs then
+		tabs.bind(function(index: number)
+			local info = categories[index]
+			if info and info ~= catalog.category then
+				catalog.category = info
+				fillGrid(catalog)
 			end
 		end)
-		button.MouseLeave:Connect(function()
-			if info ~= selected then
-				Theme.tween(name, 0.1, { TextColor3 = C.Ink3 })
-			end
-		end)
-		button.Activated:Connect(function()
-			selectCategory(info)
-		end)
 	end
-
-	Theme.make("Frame", {
-		Name = "Divider2",
-		Position = UDim2.fromOffset(170, 0),
-		Size = UDim2.fromOffset(1, 360),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.88,
-		Parent = content,
-	})
-	detail = Theme.make("CanvasGroup", {
-		Name = "Detail",
-		Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y),
-		Size = UDim2.fromOffset(DETAIL_SIZE.X + DETAIL_INSET.X + 2, DETAIL_SIZE.Y + DETAIL_INSET.Y),
-		BackgroundTransparency = 1,
-		Parent = content,
-	})
-	body = Theme.make("Frame", {
-		Name = "Body",
-		Position = UDim2.fromOffset(DETAIL_INSET.X, DETAIL_INSET.Y),
-		Size = UDim2.fromOffset(DETAIL_SIZE.X, DETAIL_SIZE.Y),
-		BackgroundTransparency = 1,
-		Parent = detail,
-	})
-	built = true
-	refreshRoster(false)
-	renderDetail(false)
+	fillGrid(catalog)
 end
 
 -- A new save arrived (coins, XP, an item bought or equipped...), or the
--- level changed: update the wallet, the subtitle, the roster lines and
--- every row whose state changed.
+-- level changed: update the wallets, the cards and the bars.
 refreshAll = function(animate: boolean)
-	if not built then
-		return
-	end
-	local currentWallet = wallet
 	local coins = playerCoins()
-	if currentWallet and coins ~= walletCoins then
-		currentWallet.set(coins, animate)
-		walletCoins = coins
-	end
-	local label = subtitleLabel
-	if label then
-		label.Text = Theme.track(subtitle(), "three")
-	end
-	refreshRoster(animate)
-	for _, row in rows do
-		if stateKey(row.item) ~= row.key then
-			if animate then
-				swapAction(row)
-			else
-				row.token += 1
-				fillAction(row, false)
-			end
+	local changed = coins ~= walletCoins
+	walletCoins = coins
+	for _, catalog in catalogs do
+		if changed then
+			catalog.wallet.set(coins, animate)
 		end
+		paintCatalog(catalog, animate)
 	end
 end
 
@@ -1031,56 +660,101 @@ end
 -- Public API
 ------------------------------------------------------------------------------
 
--- Opens the menu on the SHOP section with `category` already selected in the
--- roster. Used by the shop counters in the city (ShopFrontController): the
--- clothes shop opens OUTFITS, the emote shop opens EMOTES. The menu opens
--- with its normal animation; the SHOP entry in the menu list stays as it is.
+-- Opens the panel that sells `category` (SHOP, or EMOTES for "Emote") with
+-- that category's tab already selected. Used by the shop counters in the city
+-- (ShopFrontController): the clothes shop opens OUTFITS, the emote shop opens
+-- EMOTES. Nothing happens for an unknown category.
 function ShopMenuController.openAt(category: Cosmetics.Category)
-	-- Find the roster entry of this category (nothing happens for an unknown one).
-	local info: CategoryInfo? = nil
+	local known = false
 	for _, candidate in CATEGORIES do
 		if candidate.id == category then
-			info = candidate
+			known = true
 			break
 		end
 	end
-	if info == nil then
+	if not known then
 		return
 	end
-
-	if MenuController.getOpen() == "Shop" then
-		-- The shop is already on screen: switch like a click on the roster
-		-- (the old items slide out, the new ones in).
-		selectCategory(info)
-		return
-	end
-
-	-- The shop is not on screen: select the category first, so the panel is
-	-- already right when the menu fades in (no slide needed).
-	if info ~= selected then
-		selected = info
-		if built then
-			refreshRoster(false)
-			renderDetail(false)
+	MenuController.open(if category == "Emote" then "Emotes" else "Shop")
+	-- (Like show(), without picking an item: the panel is built by now.)
+	for _, catalog in catalogs do
+		for index, info in catalog.categories do
+			if info.id == category and catalog.category ~= info then
+				local tabs = catalog.tabs
+				if tabs then
+					tabs.set(index) -- (its callback fills the grid)
+				else
+					catalog.category = info
+					fillGrid(catalog)
+				end
+			end
 		end
-		-- (Not built yet: build() draws `selected` the first time it opens.)
 	end
-	MenuController.open("Shop")
 end
 
 ------------------------------------------------------------------------------
 -- Lifecycle
 ------------------------------------------------------------------------------
 
+ShopMenuController.fillArt = fillArt
+
+-- Opens SHOP (or EMOTES) on `itemId` (the REWARDS track's cards).
+function ShopMenuController.show(itemId: string)
+	local item = Cosmetics.get(itemId)
+	if item == nil then
+		return
+	end
+	local panelId = if item.category == "Emote" then "Emotes" else "Shop"
+	MenuController.open(panelId)
+	for _, catalog in catalogs do
+		for index, info in catalog.categories do
+			if info.id == item.category then
+				catalog.picked[item.category] = item.id
+				local tabs = catalog.tabs
+				if catalog.category ~= info and tabs then
+					tabs.set(index) -- (its callback fills the grid)
+				elseif catalog.category ~= info then
+					catalog.category = info
+					fillGrid(catalog)
+				else
+					paintCatalog(catalog, true)
+				end
+			end
+		end
+	end
+end
+
 function ShopMenuController.start()
+	local shopCategories = { CATEGORIES[1], CATEGORIES[2], CATEGORIES[3] }
+	local tabLabels = {}
+	for _, info in shopCategories do
+		table.insert(tabLabels, info.label)
+	end
 	MenuController.register({
 		id = "Shop",
 		label = "SHOP",
-		subtitle = subtitle(),
-		order = 60, -- between PROFILE (50) and SETTINGS (100)
-		size = Vector2.new(560, 480),
-		scrimWidth = 1100,
-		build = build,
+		icon = "shop",
+		hint = "Shop",
+		tabs = tabLabels,
+		order = 60,
+		size = CONTENT_SIZE,
+		build = function(content, host)
+			buildCatalog(content, host, shopCategories)
+		end,
+	})
+	MenuController.register({
+		id = "Emotes",
+		label = "EMOTES",
+		icon = "emotes",
+		hint = "Emotes",
+		subtitle = if Theme.isTouch()
+			then "Equip one, then tap EMOTE on the screen to play it"
+			else `Equip one, then press {EMOTE_KEY} to play it`,
+		order = 45,
+		size = CONTENT_SIZE,
+		build = function(content, host)
+			buildCatalog(content, host, { categoryOf("Emote") })
+		end,
 	})
 	PlayerDataController.onChanged(function(profile)
 		-- The save caught up with what we asked: no need to keep our copy.

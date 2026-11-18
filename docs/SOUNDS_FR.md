@@ -49,6 +49,10 @@ Rojo synchronise, *Play*.
 | `Slide` | Début d'une glissade |
 | `Vault` | Passage par-dessus un obstacle bas |
 | `Mantle` | Attraper un rebord |
+| `BloodDrip` | Une goutte de sang qui tombe d'un blessé (doux, discret) |
+| `BloodSplat` | Une giclée de sang sur un coup lourd qui saigne |
+| `ArterialSpurt` | Chaque jet d'une artère coupée (finishers) |
+| `BloodGurgle` | Le sang dans la gorge ouverte (finisher de la batte) |
 
 Les sons sont joués **en 3D** sur le personnage : on les entend plus fort de près, et du bon côté.
 Ils sont tous téléchargés au lancement du jeu, pour que le premier coup ne soit pas muet.

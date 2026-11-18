@@ -9,7 +9,8 @@ Writes:
   src/shared/WoundShapes.luau          the outline of each insert (the game
                                        cuts the skin along it) - generated, do
                                        not edit by hand
-  <out_dir>/preview_*.png              pictures (with --preview)
+  <out_dir>/preview_*.png              pictures (with --preview): each insert, and the
+                                       newest gore pieces (GORE_VIEWS)
 
 What a real glass wound looks like (forensic sources, see docs/WOUNDS_FR.md):
   - bottle SMASHED on someone ("Lac"): a laceration - ragged, irregular,
@@ -29,6 +30,22 @@ Each insert = a few meshes, one per material (Roblox colours them):
   Muscle  dark red muscle at the bottom of deep slashes
   Bone    the skull at the bottom of a deep head slash
   Blood   blood pooled in the wound and running down the skin
+The Sentinel's heat vision (Burn, Bore) adds, with no blood at all:
+  Char      the black charred crust (and seared black patches inside)
+  Eschar    the burnt, leathery skin and seared tissue (tan-brown)
+  Cartilage the costal cartilage of the ribs (blue-white)   (Bore only)
+  Lung      the lung's edge (pink-grey, spongy)              (Bore only)
+  Heart     the heart's muscle cut through (dark red)        (Bore only)
+  HeartDark the inside of its chamber (darker still)         (Bore only)
+
+The open fractures of the heavy hits (Break: BreakArm / BreakLeg, L for the
+left limbs, see BREAK_VARIANTS and fracture.py) are deep closed cups in a
+limb's front, built from the real anatomy (Z-Anatomy, limbs.npz), with the
+broken bones out of them; they add:
+  Marrow     the bone's marrow, sunk into its broken ends (dark red)
+  MuscleDark the next muscle (a darker red: one muscle from the next)
+  FleshDark  clotted blood between the muscles, where the bones were
+  Artery / Vein / Nerve   the real vessels and nerves, torn
 
 Local axes of an insert: X along the skin (its length), Y "up" along the
 skin, Z out of the skin. The skin surface is Z = 0. Head versions are bent
@@ -46,9 +63,11 @@ import sys
 import bpy  # first: it makes the other Blender modules importable
 import bmesh  # noqa: E402
 import numpy as np  # noqa: E402
-from mathutils import Vector  # noqa: E402
+from mathutils import Matrix, Vector, noise  # noqa: E402
+from mathutils.bvhtree import BVHTree  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fracture  # noqa: E402  (the open fractures)
 import gore  # noqa: E402  (the burst head of the bat finisher)
 
 OUT = sys.argv[1]
@@ -78,9 +97,39 @@ VARIANTS = {
     # torn out through it. Body only. Broken real ribs in it (gore.py's anatomy).
     ("Tear", "L"): dict(length=0.8, width=0.6, depth=0.44, lip=0.075, rag=1.7),
 }
+# The Sentinel's heat vision ("Burn"): the skin burnt through and gone - a
+# wide, round-ish hole with a black charred crust around it, the burnt skin
+# of its walls leathery and tan, and at the bottom what was under the skin:
+# cooked muscle (body) or the skull (head, where the skin is thin). No
+# blood: a burn this hot cauterizes. Last in the kit (added after the
+# others: their numbers don't move).
+BURN_VARIANTS = {
+    ("Burn", "S"): dict(length=0.3, width=0.26, depth=0.06, lip=0.06, rag=0.55),
+    ("Burn", "M"): dict(length=0.46, width=0.4, depth=0.075, lip=0.07, rag=0.55),
+    ("Burn", "L"): dict(length=0.64, width=0.54, depth=0.09, lip=0.08, rag=0.55),
+}
 # Where a "Tear" sits on the torso (torso space, the front face): the ribs
 # inside it are taken from there.
 TEAR_AT = (0.5, -0.3)
+# The Sentinel's finisher ("Bore"): the heat vision held on the chest over
+# the heart bores a deep, round, blind hole. Cauterised: no blood at all. A
+# black crust round it (Char), then the real anatomy (Z-Anatomy, torso.npz)
+# cut by the beam, seared: the skin and its fat, the pectoral muscle, the
+# ribs' cartilage and the sternum's edge, the lung's edge on the side, and at
+# the bottom the heart: its right ventricle's wall cut through, the chamber
+# open behind it. Torso only; last in the kit (the others' numbers don't
+# move). S only reaches the muscle and the ribs; M the ribs and the lung;
+# L goes into the heart.
+BORE_VARIANTS = {
+    ("Bore", "S"): dict(length=0.3, width=0.29, depth=0.2, lip=0.06, rag=0.35),
+    ("Bore", "M"): dict(length=0.42, width=0.4, depth=0.35, lip=0.07, rag=0.35),
+    ("Bore", "L"): dict(length=0.55, width=0.53, depth=0.5, lip=0.08, rag=0.35),
+}
+BORE_AT = (-0.22, 0.35)  # torso space, the front face: over the heart (the character's left)
+BORE_FAT = 0.05  # depth of the muscles' front under the skin (the skin and its fat above)
+# (see Chest: the ribs at ~0.17-0.25 under the skin - S just reaches them -,
+# the heart's front at ~0.37 - M stops before it -, its right ventricle's
+# chamber behind its wall from ~0.41 - L opens it)
 
 COLORS = {  # preview only: the game sets the real colours
     "Lip": (0.80, 0.62, 0.50),
@@ -90,7 +139,14 @@ COLORS = {  # preview only: the game sets the real colours
     "Muscle": (0.40, 0.03, 0.04),
     "Bone": (0.90, 0.86, 0.76),
     "Blood": (0.25, 0.0, 0.0),
+    "Char": (0.10, 0.07, 0.06),
+    "Eschar": (0.69, 0.55, 0.41),
+    "Cartilage": (0.80, 0.85, 0.88),
+    "Lung": (0.72, 0.52, 0.54),
+    "Heart": (0.42, 0.05, 0.06),
+    "HeartDark": (0.20, 0.02, 0.03),
     "Marker": (1, 1, 1),
+    "Marrow": (0.33, 0.03, 0.04),
     "Skin": (0.80, 0.62, 0.50),
     **{k: v for k, v in gore.COLORS.items()},
 }
@@ -114,6 +170,14 @@ def outline(kind, v, rng, with_tears=True):
     torn skin edge only)."""
     a, b = v["length"] / 2, v["width"] / 2
     pts = []
+    if kind in ("Burn", "Bore"):
+        # round-ish, wavy (the burn spreads unevenly), no splits
+        noise = smooth_noise(rng, 2.5)
+        for i in range(N):
+            t = 2 * math.pi * i / N
+            r = 1 + 0.16 * v["rag"] * noise(t) + 0.03 * rng.uniform(-1, 1)
+            pts.append(Vector((a * r * math.cos(t), b * r * math.sin(t), 0)))
+        return pts
     if kind in ("Lac", "Tear"):
         noise = smooth_noise(rng, 2.2)
         # star-shaped splits: a few sharp tears going out of the ellipse
@@ -255,6 +319,886 @@ def tear_ribs(pts, v):
             else:
                 bm.free()
     return pieces
+
+
+def bend_and_measure(b, head):
+    """How far the insert reaches (before bending), then the head version
+    bent around the head's vertical axis."""
+    reach_x = max(abs(vert.co.x) for bm in b.parts.values() for vert in bm.verts)
+    reach_low = -min(vert.co.y for bm in b.parts.values() for vert in bm.verts)
+    reach_high = max(vert.co.y for bm in b.parts.values() for vert in bm.verts)
+    meshes = {}
+    for layer, bm in b.parts.items():
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+        if head:
+            for vert in bm.verts:
+                x, y, z = vert.co
+                th = x / HEAD_RADIUS
+                r = HEAD_RADIUS + z
+                vert.co = Vector((r * math.sin(th), y, r * math.cos(th) - HEAD_RADIUS))
+        meshes[layer] = bm
+    return meshes, (reach_x, reach_low, reach_high)
+
+
+def build_burn(size, v, head, seed):
+    """A burn: the skin burnt through (see BURN_VARIANTS)."""
+    rng = random.Random(seed)
+    pts = outline("Burn", v, rng)
+    nrm = normals2d(pts)
+    c = centroid(pts)
+    b = Builder(c)
+    depth = v["depth"] * (0.7 if head else 1.0)  # (the skull is right under the skin)
+    lip = v["lip"]
+    wobble = [rng.uniform(-1, 1) for _ in range(N + 16)]
+
+    def jit(scale):
+        return lambda i: wobble[i % len(wobble)] * scale
+
+    # Char: the black crust - from the skin, a little raised and crinkled,
+    # then curling down over the edge.
+    # (its width wanders: the burn ate further into the skin here and there)
+    reach_noise = smooth_noise(rng, 3.0)
+    widths = [lip * max(0.35, 1 + 0.75 * reach_noise(2 * math.pi * i / N)) for i in range(N)]
+    outer = [pts[i] + nrm[i] * widths[i] + Vector((0, 0, 0.0015)) for i in range(N)]
+    crest = [pts[i] + nrm[i] * widths[i] * 0.45 + Vector((0, 0, 0.0028 * (1 + 0.5 * wobble[i]))) for i in range(N)]
+    edge = ring(pts, nrm, 0.0, 0.0022, jitter=jit(0.004))
+    curl = ring(pts, nrm, -0.012, -0.014)
+    b.strip("Char", outer, crest)
+    b.strip("Char", crest, edge)
+    b.strip("Char", edge, curl)
+    # a few flat flakes of crust lifting off the rim
+    for _ in range({"S": 3, "M": 5, "L": 7}[size]):
+        i = rng.randrange(N)
+        p = outer[i].lerp(crest[i], rng.uniform(0.2, 0.9))
+        r = rng.uniform(0.007, 0.013)
+        b.blob("Char", Vector((p.x, p.y, 0.0025)), (r * 1.6, r, r * 0.22), rot=rng.uniform(0, 3.14))
+    # Eschar: the burnt skin of the walls, leathery, down into the hole.
+    wall = ring(pts, nrm, -0.02, -depth * 0.45, center=c, shrink=0.88, jitter=jit(0.004))
+    b.strip("Eschar", curl, wall)
+    low = ring(pts, nrm, 0, lambda i: -depth * (0.85 + 0.06 * wobble[i]), center=c, shrink=0.72, jitter=jit(0.003))
+    if head:
+        # the skull: a dome of bone filling the bottom
+        b.strip("Eschar", wall, low)
+        b.fan("Bone", low, Vector((c.x, c.y, -depth * 0.95)))
+        b.blob("Bone", Vector((c.x, c.y, -depth * 0.9)), (v["length"] * 0.3, v["width"] * 0.3, 0.012), subdiv=2)
+    else:
+        # cooked flesh, a few lobules of fat cooked yellow-brown, and the
+        # muscle at the bottom with its fibres
+        b.strip("Flesh", wall, low)
+        b.fan("Muscle", low, Vector((c.x, c.y, -depth)))
+        for _ in range({"S": 4, "M": 7, "L": 10}[size]):
+            i = rng.randrange(N)
+            p = wall[i].lerp(low[i], rng.uniform(0.2, 0.7))
+            r = rng.uniform(0.006, 0.011)
+            b.blob("Fat", p, (r, r * 0.8, r * 0.7))
+        turn = rng.uniform(-0.5, 0.5)
+        for k in range(6):
+            off = (k - 2.5) * v["width"] * 0.11
+            at = Vector((c.x - math.sin(turn) * off, c.y + math.cos(turn) * off, -depth * 0.96))
+            b.blob("Muscle", at, (v["length"] * 0.3, 0.008, 0.006), rot=turn, subdiv=2)
+    meshes, reach = bend_and_measure(b, head)
+    return pts, meshes, reach
+
+
+class Chest:
+    """The real chest round the heart (torso.npz, torso space), read along
+    the beam: for a point of the insert, the tissue that is there.
+
+    Along each line straight into the chest (a "column"), the real tissues
+    are found in their real order (skin side first): the pectoral muscle,
+    then the ribs / their cartilage / the sternum / the muscles between the
+    ribs, the lung's edge or the fat round the heart, the heart's wall, its
+    chamber, its septum... The R6 torso is only 1 stud deep (the anatomy is
+    thin in it) and Z-Anatomy leaves out what is between the organs (fat,
+    fascia, pleura): each layer is given a real thickness in the insert
+    (1 stud ~ 16 cm), the gaps between them closed up."""
+
+    # tissue -> its groups in torso.npz; where they overlap, the first wins
+    TISSUES = (
+        ("Bone", ("sternum", "chestribs")),
+        ("Cartilage", ("cartilage",)),
+        ("Papillary", ("papillary",)),
+        ("Heart", ("rventricle", "lventricle")),
+        ("Muscle", ("pectoral",)),
+        ("Wall", ("intercostal",)),
+        ("Lung", ("lung",)),
+    )
+    WALL = ("Bone", "Cartilage", "Wall")  # the chest wall
+
+    def __init__(self):
+        groups = gore.load_anatomy(gore.TORSO_ANATOMY)
+
+        def tree(names):
+            # (bm_of: faces turned outward - the left side's meshes come
+            # inside out from Z-Anatomy; the rays tell in from out by them)
+            bm = gore.bm_join_all([gore.bm_of(vv, ff) for name in names for vv, ff in groups[name]])
+            out = BVHTree.FromBMesh(bm)
+            bm.free()
+            return out
+
+        self.trees = [(tissue, tree(names)) for tissue, names in self.TISSUES]
+        self.cache = {}
+
+    def torso_xy(self, p):
+        """Insert axes -> the torso's X, Y (the insert's X is the torso's -X)."""
+        x0, y0 = BORE_AT
+        return x0 - p.x, y0 + p.y
+
+    def spans(self, x, y):
+        """The real tissues along the column at (x, y): [(tissue, z0, z1)]
+        front to back (torso Z), overlaps settled by TISSUES' order."""
+        d = Vector((0, 0, 1))
+        cuts = set()
+        found = []
+        for rank, (tissue, t) in enumerate(self.trees):
+            o = Vector((x, y, -1.0))
+            start = None
+            for _ in range(48):
+                hit, n, _i, _dist = t.ray_cast(o, d, 1.4)
+                if hit is None:
+                    break
+                if n.dot(d) < 0:
+                    start = hit.z
+                elif start is not None:
+                    found.append((rank, tissue, start, hit.z))
+                    cuts.update((start, hit.z))
+                    start = None
+                o = hit + d * 1e-4
+        cuts = sorted(cuts)
+        out = []
+        for a, b in zip(cuts, cuts[1:]):
+            m = (a + b) / 2
+            over = [(rank, tissue) for rank, tissue, z0, z1 in found if z0 <= m <= z1]
+            tissue = min(over)[1] if over else None
+            if out and out[-1][0] == tissue:
+                out[-1] = (tissue, out[-1][1], b)
+            else:
+                out.append((tissue, a, b))
+        return out
+
+    def column(self, x, y):
+        """The layers of the column at (x, y) in the insert: [(layer, depth
+        it ends at)], from the skin down."""
+        key = (round(x / 0.004), round(y / 0.004))
+        if key in self.cache:
+            return self.cache[key]
+        spans = self.spans(x, y)
+        # (only what is between the skin and a little behind the heart)
+        layers = [("Eschar", 0.016), ("Fat", BORE_FAT)]
+        depth = BORE_FAT
+        seen_wall = seen_heart = False
+
+        def add(layer, thickness):
+            nonlocal depth
+            depth += thickness
+            if layers[-1][0] == layer:
+                layers[-1] = (layer, depth)
+            else:
+                layers.append((layer, depth))
+
+        solid = [s for s in spans if s[0] is not None]
+        if not any(s[0] == "Muscle" for s in solid[:2]):
+            add("Muscle", 0.07)  # (the pectoral's edge: a thinner muscle layer)
+        prev = None
+        for tissue, z0, z1 in solid:
+            t = z1 - z0
+            gap = z0 - prev if prev is not None else 0.0
+            prev = z1
+            if tissue == "Muscle" and not seen_wall:
+                add("Muscle", min(0.13, max(0.07, t * 2.5)))
+            elif tissue in self.WALL and not seen_heart:
+                if not seen_wall:
+                    add("Muscle", 0.012)  # (fascia, the edge of the muscles between the ribs)
+                seen_wall = True
+                add("Muscle" if tissue == "Wall" else tissue, min(0.11, max(0.06, t * 3.5)))
+            elif tissue == "Lung" and not seen_heart:
+                if not seen_wall:
+                    add("Muscle", 0.06)  # (the chest wall, even between the ribs)
+                    seen_wall = True
+                add("Fat", 0.008)
+                add("Lung", min(0.16, max(0.04, t * 1.3)))
+            elif tissue in ("Heart", "Papillary"):
+                if not seen_heart:
+                    if not seen_wall:
+                        add("Muscle", 0.06)
+                        seen_wall = True
+                    # the fat round the heart up to its front (at ~0.36)
+                    add("Fat", max(0.02, 0.36 - depth))
+                    add("Heart", min(0.06, max(0.035, t * 2.0)))
+                    seen_heart = True
+                elif gap > 0.006 and gap < 0.25 and layers[-1][0] in ("Heart", "Papillary"):
+                    # behind the heart's wall: its chamber, then the far wall
+                    add("HeartDark", min(0.2, max(0.08, gap * 1.3)))
+                    add(tissue, min(0.1, max(0.03, t * 1.5)))
+                else:
+                    add(tissue, min(0.1, max(0.03, t * 1.5)))
+            if depth > 1.0:
+                break
+        if not seen_heart:
+            add("Fat", 0.1)
+        layers.append((layers[-1][0], 9.0))  # (the last goes on)
+        self.cache[key] = layers
+        return layers
+
+    def tissue(self, p):
+        """The layer at p (insert axes): "HeartDark" for the chamber's
+        empty inside, "Heart" for the heart's muscle."""
+        x, y = self.torso_xy(p)
+        d = -p.z
+        for layer, end in self.column(x, y):
+            if d <= end:
+                return "Heart" if layer == "Papillary" else layer
+        return "Fat"
+
+    def floor(self, p):
+        """Under a point in the chamber: how deep its far wall is and what
+        it looks like ((depth, layer) or None): the chamber's inside
+        (HeartDark), or a papillary muscle standing in it (Heart)."""
+        x, y = self.torso_xy(p)
+        d = -p.z
+        layers = self.column(x, y)
+        for k, (layer, end) in enumerate(layers):
+            if d <= end:
+                if layer == "HeartDark" and k + 1 < len(layers):
+                    return end, "Heart" if layers[k + 1][0] == "Papillary" else "HeartDark"
+                return None
+        return None
+
+
+# Each tissue stands out of the bore's wall or shrinks back (studs, + = back
+# into the wall): bone and cartilage resist the heat, the lung collapses,
+# the chamber opens wider behind the heart's wall.
+BORE_RELIEF = {"Bone": -0.01, "Cartilage": -0.006, "Muscle": 0.004, "Fat": 0.007, "Heart": 0.0, "HeartDark": 0.04,
+               "Lung": 0.014, "Eschar": 0.002}
+
+
+def build_bore(size, v, seed, chest):
+    """The Sentinel's bore over the heart (see BORE_VARIANTS): a closed cup
+    from the charred rim down to the bottom; every point of its wall and of
+    its bottom shows the real tissue that is there (Chest), seared in
+    patches (Char, Eschar)."""
+    rng = random.Random(seed)
+    pts = outline("Bore", v, rng)
+    nrm = normals2d(pts)
+    c = centroid(pts)
+    b = Builder(c)
+    depth, lip = v["depth"], v["lip"]
+    n = len(pts)
+    wobble = [rng.uniform(-1, 1) for _ in range(n + 16)]
+    noise.seed_set(seed % 100000)
+    grain = Vector((rng.uniform(0, 50), rng.uniform(0, 50), rng.uniform(0, 50)))
+
+    def jit(scale):
+        return lambda i: wobble[i % len(wobble)] * scale
+
+    # Char: the black crust on the skin round the hole, raised, crinkled,
+    # curling down over the edge (as a burn's), with flakes lifting off.
+    reach_noise = smooth_noise(rng, 3.0)
+    widths = [lip * max(0.4, 1 + 0.6 * reach_noise(2 * math.pi * i / n)) for i in range(n)]
+    outer = [pts[i] + nrm[i] * widths[i] + Vector((0, 0, 0.0015)) for i in range(n)]
+    crest = [pts[i] + nrm[i] * widths[i] * 0.4 + Vector((0, 0, 0.004 * (1 + 0.5 * wobble[i]))) for i in range(n)]
+    edge = ring(pts, nrm, 0.0, 0.003, jitter=jit(0.004))
+    curl = ring(pts, nrm, -0.012, -0.016)
+    b.strip("Char", outer, crest)
+    b.strip("Char", crest, edge)
+    b.strip("Char", edge, curl)
+    for _ in range({"S": 4, "M": 6, "L": 8}[size]):
+        i = rng.randrange(n)
+        p = outer[i].lerp(crest[i], rng.uniform(0.2, 0.9))
+        r = rng.uniform(0.008, 0.015)
+        b.blob("Char", Vector((p.x, p.y, 0.003)), (r * 1.6, r, r * 0.22), rot=rng.uniform(0, 3.14))
+
+    def seared(tissue, p, k):
+        """The tissue at p, or the char / the eschar the beam left on it in
+        patches (`k`: how much of it was burnt, 0..1)."""
+        g = noise.noise(p * 9 + grain) + 0.25 * noise.noise(p * 23 + grain)
+        if g < -1.1 + 2.2 * k:
+            return "Char"
+        if g < -0.8 + 2.2 * k:
+            return "Eschar"
+        return tissue
+
+    def burnt(z):
+        """How burnt the wall is at depth z: seared all over near the top,
+        in patches below."""
+        return 0.15 + 0.5 * max(0.0, 1 + z / 0.1)
+
+    def classify(p):
+        # (the layers' edges a little uneven)
+        return chest.tissue(p + Vector((0, 0, 0.012 * noise.noise(p * 17 + grain))))
+
+    # The wall: rows from the curl down to the bottom, narrowing a little
+    # (the beam's cone). Each point gets its tissue (and its relief), then
+    # what it looks like (the tissue, or seared); the faces are cut between
+    # different looks (split).
+    rows = max(8, round((depth - 0.016) / 0.015))
+    zs = [-0.016 - (depth - 0.016) * r / rows for r in range(rows + 1)]
+    grid, looks = [], []
+    for r, z in enumerate(zs):
+        t = 1 - 0.16 * (-z) / depth
+        row, look_row = [], []
+        for i in range(n):
+            base = c + (curl[i] - c) * t
+            base = Vector((base.x, base.y, z))
+            if r == 0:
+                row.append(curl[i].copy())
+                look_row.append("Eschar")
+                continue
+            tissue = classify(base)
+            out = Vector((base.x - c.x, base.y - c.y, 0))
+            out = out.normalized() if out.length > 1e-6 else Vector()
+            relief = BORE_RELIEF.get(tissue, 0.0) + 0.004 * noise.noise(base * 40 + grain)
+            if tissue == "HeartDark":
+                relief += 0.012 * noise.noise(Vector((base.x * 30, base.y * 90, base.z * 30)) + grain)  # its ridges
+            p = base + out * relief
+            row.append(p)
+            # (the cut skin, cooked: a band right under the crust)
+            look_row.append("Eschar" if z > -0.03 else seared(tissue, p, burnt(z)))
+        grid.append(row)
+        looks.append(look_row)
+
+    def piece(layer, points):
+        bm = b.bm(layer)
+        bm.faces.new([bm.verts.new(p) for p in points])
+
+    def split(a, bb, cc, ka, kb, kc):
+        """A triangle whose corners look different, cut between them along
+        its edges' middles (the edges between tissues run smoothly, not in
+        steps; the middles are shared with the next triangles: no cracks)."""
+        if ka == kb == kc:
+            piece(ka, (a, bb, cc))
+            return
+        if kb == kc:  # (the odd one first, the turning kept)
+            pass
+        elif ka == kc:
+            a, bb, cc, ka, kb, kc = bb, cc, a, kb, kc, ka
+        elif ka == kb:
+            a, bb, cc, ka, kb, kc = cc, a, bb, kc, ka, kb
+        else:  # three looks: a quad each round the middle
+            g = (a + bb + cc) / 3
+            mab, mbc, mca = (a + bb) / 2, (bb + cc) / 2, (cc + a) / 2
+            piece(ka, (a, mab, g, mca))
+            piece(kb, (bb, mbc, g, mab))
+            piece(kc, (cc, mca, g, mbc))
+            return
+        mab, mca = (a + bb) / 2, (cc + a) / 2
+        piece(ka, (a, mab, mca))
+        piece(kb, (mab, bb, cc, mca))
+
+    def quad(points, kinds):
+        """Two triangles, split between looks (see split)."""
+        a, bb, cc, d = points
+        ka, kb, kc, kd = kinds
+        split(a, bb, cc, ka, kb, kc)
+        split(a, cc, d, ka, kc, kd)
+
+    for r in range(rows):
+        for i in range(n):
+            j = (i + 1) % n
+            # (this order faces the hole's middle)
+            quad((grid[r][i], grid[r][j], grid[r + 1][j], grid[r + 1][i]),
+                 (looks[r][i], looks[r][j], looks[r + 1][j], looks[r + 1][i]))
+
+    # The bottom: a bowl where the beam stopped, rings from the wall's last
+    # row to the middle. In the heart's chamber it is the chamber's far wall
+    # (the septum, the papillary muscles), deeper. The beam's last spot (the
+    # middle) is burnt black, then brown round it; the chamber's far wall
+    # less (the beam just reached it).
+    def floor_look(tissue, p, s, i):
+        # (by ring, wavy round the middle: its edges follow the rings)
+        a = 2 * math.pi * i / n
+        rr = 0.88 * s + 0.12 * noise.noise(Vector((math.cos(a) * 1.5, math.sin(a) * 1.5, 0)) + grain)
+        if p.z < -depth - 0.03:
+            rr *= 1.6
+        if rr < 0.22:
+            return "Char"
+        if rr < 0.4:
+            return "Eschar"
+        return seared(tissue, p, 0.2)
+
+    bottom = grid[-1]
+    rings = 8
+    floor_pts, floor_looks = [bottom], [looks[-1]]
+    for k in range(1, rings + 2):
+        s = 1 - k / (rings + 1) if k <= rings else 0.0
+        row, look_row = [], []
+        for i in range(n if k <= rings else 1):
+            q = c + (bottom[i] - c) * s
+            z = -depth * (1 + 0.05 * (1 - s * s)) + 0.004 * noise.noise(q * 30 + grain)
+            p = Vector((q.x, q.y, z))
+            tissue = classify(p)
+            if tissue == "HeartDark":
+                far = chest.floor(p)
+                if far is not None:
+                    # (its ridges of muscle: the trabeculae)
+                    ridges = 0.014 * noise.noise(Vector((q.x * 25, q.y * 80, 0)) + grain)
+                    p = Vector((q.x, q.y, -far[0] + ridges))
+                    tissue = far[1]
+                else:
+                    p = Vector((q.x, q.y, z - 0.15))
+            else:
+                p.z -= BORE_RELIEF.get(tissue, 0.0) * 0.6
+            row.append(p)
+            look_row.append(floor_look(tissue, p, s, i))
+        floor_pts.append(row)
+        floor_looks.append(look_row)
+    for k in range(rings):
+        for i in range(n):
+            j = (i + 1) % n
+            # (this order faces out of the skin)
+            quad((floor_pts[k][i], floor_pts[k][j], floor_pts[k + 1][j], floor_pts[k + 1][i]),
+                 (floor_looks[k][i], floor_looks[k][j], floor_looks[k + 1][j], floor_looks[k + 1][i]))
+    middle, middle_look = floor_pts[-1][0], floor_looks[-1][0]
+    for i in range(n):
+        j = (i + 1) % n
+        split(floor_pts[rings][i], floor_pts[rings][j], middle,
+              floor_looks[rings][i], floor_looks[rings][j], middle_look)
+
+    meshes, reach = bend_and_measure(b, False)
+    for bm in meshes.values():
+        bm.normal_update()
+    lowest = min(vert.co.z for bm in meshes.values() for vert in bm.verts)
+    return pts, meshes, reach, -lowest
+
+
+# --- The open fractures ("Break": heavy hits, Client/Combat/HeavyGore) -------
+# A huge blow at the end of a big combo snaps the forearm / the shin: the
+# real bones (Z-Anatomy, limbs.npz) broken obliquely, jagged, each broken
+# end a thick solid cortex round the sunk dark marrow; one fragment
+# angulated so that a short length of it, its broken end facing out, has
+# gone out through the front of the limb, through a torn hole in the skin
+# (the forearm: the radius' upper fragment, pointing down; the shin: the
+# tibia's lower fragment, pointing up - seen end on from above); in the hole
+# the real muscles torn, the fat, torn vessels and nerves, clotted blood,
+# splinters of bone. One insert per limb (the left ones
+# mirrored), body only, size "L", at fracture.BREAK_AT. Last in the kit (the
+# others' numbers don't move).
+#   hole      its length (along the limb) and width on the skin
+#   depth     how deep the torn hole goes
+#   bones     each bone (limbs.npz order): where it breaks (insert Y), the
+#             fracture's slope, the cortex (share of its half width), `thin`
+#             (its width scaled: the blocky limb's bones were widened); its
+#             upper fragment's broken end: how far out of the skin (studs;
+#             < 0: still in the hole), how high, the shaft's tilt; the
+#             lower fragment's the same (None: it stays as it is)
+BREAK_VARIANTS = {
+    "BreakArm": dict(limb="arm", length=0.62, width=0.4, depth=0.44, lip=0.06, rag=1.5,
+                     bones=(dict(y=0.0, slope=0.5, cortex=0.36, out=0.22, tip=-0.2, tilt=math.radians(64),
+                                 low=-0.3, tip_low=-0.02, tilt_low=math.radians(14)),
+                            dict(y=0.07, slope=0.6, cortex=0.38, out=-0.1, tip=-0.12, tilt=math.radians(30),
+                                 low=-0.36, tip_low=0.0, tilt_low=math.radians(10)))),
+    "BreakLeg": dict(limb="leg", length=0.52, width=0.42, depth=0.3, lip=0.06, rag=1.5,
+                     bones=(dict(y=0.0, slope=0.35, cortex=0.34, thin=0.78, out=-0.12, tip=0.1,
+                                 tilt=math.radians(10), low=0.3, tip_low=0.02, tilt_low=math.radians(66)),
+                            dict(y=0.16, slope=0.8, cortex=0.36, out=None, low=None))),
+}
+BREAK_LOOK_LAYERS = ("Lip", "Dermis", "Fat", "Flesh", "FleshDark", "Muscle", "MuscleDark", "Bone", "Marrow",
+                     "Blood", "Artery", "Vein", "Nerve")
+
+
+class LimbTissue:
+    """What is where inside the forearm / the shin (insert axes): the real
+    muscles (each its own, Muscle or MuscleDark in turn), with the skin and
+    its fat over them. The bones are left out (they are drawn for real,
+    broken): where they were, clotted blood (FleshDark)."""
+
+    def __init__(self, parts):
+        self.trees = []
+        for index, bm in enumerate(parts["muscle"]):
+            self.trees.append(("Muscle" if index % 2 == 0 else "MuscleDark", BVHTree.FromBMesh(bm)))
+        for bm in parts["bone"]:
+            self.trees.append(("FleshDark", BVHTree.FromBMesh(bm)))
+        self.cache = {}
+
+    def spans(self, x, y):
+        """[(tissue, depth in, depth out)] along the column at (x, y), from
+        the skin in (depth = -Z)."""
+        d = Vector((0, 0, -1))
+        found = []
+        for rank, (tissue, tree) in enumerate(self.trees):
+            o = Vector((x, y, 0.2))
+            start = None
+            for _ in range(32):
+                hit = tree.ray_cast(o, d, 2.0)
+                if hit[0] is None:
+                    break
+                if hit[1].dot(d) < 0:
+                    start = -hit[0].z
+                elif start is not None:
+                    found.append((start, -hit[0].z, rank, tissue))
+                    start = None
+                o = hit[0] + d * 1e-4
+        found.sort()
+        return found
+
+    def column(self, x, y):
+        """[(layer, the depth it ends at)] from the skin down."""
+        key = (round(x / 0.004), round(y / 0.004))
+        if key in self.cache:
+            return self.cache[key]
+        spans = self.spans(x, y)
+        first = spans[0][0] if spans else 0.2
+        fat_end = min(0.075, max(0.035, first - 0.004))
+        layers = [("Dermis", 0.014), ("Fat", fat_end)]
+        depth = fat_end
+        if first > depth + 0.01:
+            layers.append(("Flesh", first))  # (loose tissue, soaked: red)
+            depth = first
+        for start, end, _rank, tissue in spans:
+            if end <= depth:
+                continue
+            if start > depth + 0.008:
+                layers.append(("FleshDark", start))  # (between the muscles)
+            layers.append((tissue, end))
+            depth = end
+        layers.append(("FleshDark", 9.0))
+        self.cache[key] = layers
+        return layers
+
+    def tissue(self, p):
+        d = -p.z
+        for layer, end in self.column(p.x, p.y):
+            if d <= end:
+                return layer
+        return "FleshDark"
+
+
+# Each tissue stands out of the hole's wall or sinks back (studs, + = back
+# into the wall): torn muscle bulges, the fat swells in lobules, the clots
+# lie back.
+BREAK_RELIEF = {"Muscle": -0.012, "MuscleDark": -0.008, "Fat": -0.004, "Dermis": 0.0, "Flesh": 0.004,
+                "FleshDark": 0.012}
+
+
+def place_fragment(rng, bm, extra, tilt, tip, upper):
+    """Moves a bone's fragment (and what goes with it: `extra`): its shaft
+    tilted `tilt` radians off the limb's axis, its broken end toward the
+    front (out of the skin), turned a little about itself; then moved so
+    that its broken end's point (the farthest out) is at `tip`."""
+    centre = sum((v.co for v in bm.verts), Vector()) / max(1, len(bm.verts))
+    twist = Matrix.Rotation(rng.uniform(-0.5, 0.5), 4, "Y")
+    turn = Matrix.Rotation(-tilt if upper else tilt, 4, "X") @ Matrix.Rotation(rng.uniform(-0.12, 0.12), 4, "Z")
+    m = Matrix.Translation(centre) @ turn @ twist @ Matrix.Translation(-centre)
+    for item in [bm] + extra:
+        bmesh.ops.transform(item, matrix=m, verts=item.verts)
+    point = max((v.co for v in bm.verts), key=lambda co: co.z).copy()
+    shift = Vector(tip) - point
+    for item in [bm] + extra:
+        bmesh.ops.translate(item, vec=shift, verts=item.verts)
+        item.normal_update()
+
+
+def build_break(name, v, seed):
+    """An open fracture (see BREAK_VARIANTS): a closed cup in the limb's
+    front face, the broken real bones through it. (outline, meshes, reach,
+    depth)"""
+    rng = random.Random(seed)
+    noise.seed_set(seed % 100000)
+    grain = Vector((rng.uniform(0, 50), rng.uniform(0, 50), rng.uniform(0, 50)))
+    limb = v["limb"]
+    parts = fracture.load(limb)
+    tissue = LimbTissue(parts)
+    # the torn hole: long along the limb (outline makes it along X: turned)
+    flat = dict(length=v["length"], width=v["width"], rag=v["rag"])
+    pts = [Vector((-p.y, p.x, 0)) for p in outline("Lac", flat, rng)]
+    hole = [Vector((-p.y, p.x, 0)) for p in outline("Lac", flat, random.Random(seed), with_tears=False)]
+    n = len(pts)
+    nrm = normals2d(pts)
+    c = centroid(pts)
+    b = Builder(c)
+    depth, lip = v["depth"], v["lip"]
+    wobble = [rng.uniform(-1, 1) for _ in range(n + 16)]
+
+    def jit(scale):
+        return lambda i: wobble[i % len(wobble)] * scale
+
+    # ---- the skin's torn edge: raised, swollen, rolling into the hole
+    outer = ring(pts, nrm, lip, 0.002)
+    crest = ring(pts, nrm, lip * 0.45, lambda i: 0.012 * (1 + 0.6 * wobble[i]))
+    edge = ring(pts, nrm, 0.0, 0.006)
+    curl = ring(pts, nrm, -0.012, -0.012, jitter=jit(0.004))
+    b.strip("Lip", outer, crest)
+    b.strip("Lip", crest, edge)
+    b.strip("Lip", edge, curl)
+
+    # ---- the hole's wall and floor: what is really there at each point
+    def piece(layer, points):
+        bm = b.bm(layer)
+        bm.faces.new([bm.verts.new(p) for p in points])
+
+    def split(a, bb, cc, ka, kb, kc):
+        if ka == kb == kc:
+            piece(ka, (a, bb, cc))
+            return
+        if kb == kc:
+            pass
+        elif ka == kc:
+            a, bb, cc, ka, kb, kc = bb, cc, a, kb, kc, ka
+        elif ka == kb:
+            a, bb, cc, ka, kb, kc = cc, a, bb, kc, ka, kb
+        else:
+            g = (a + bb + cc) / 3
+            mab, mbc, mca = (a + bb) / 2, (bb + cc) / 2, (cc + a) / 2
+            piece(ka, (a, mab, g, mca))
+            piece(kb, (bb, mbc, g, mab))
+            piece(kc, (cc, mca, g, mbc))
+            return
+        mab, mca = (a + bb) / 2, (cc + a) / 2
+        piece(ka, (a, mab, mca))
+        piece(kb, (mab, bb, cc, mca))
+
+    def quad(points, kinds):
+        a, bb, cc, d = points
+        ka, kb, kc, kd = kinds
+        split(a, bb, cc, ka, kb, kc)
+        split(a, cc, d, ka, kc, kd)
+
+    def classify(p):
+        return tissue.tissue(p + Vector((0, 0, 0.01 * noise.noise(p * 19 + grain))))
+
+    rows = max(10, round((depth - 0.012) / 0.014))
+    zs = [-0.012 - (depth - 0.012) * r / rows for r in range(rows + 1)]
+    grid, looks = [], []
+    for r, z in enumerate(zs):
+        # (a torn hole: wider under the skin than at it in places, ragged)
+        t = 1 - 0.3 * (-z) / depth
+        row, look_row = [], []
+        for i in range(n):
+            if r == 0:
+                row.append(curl[i].copy())
+                look_row.append("Dermis")
+                continue
+            base = c + (curl[i] - c) * t
+            base = Vector((base.x, base.y, z))
+            layer = classify(base)
+            out = Vector((base.x - c.x, base.y - c.y, 0))
+            out = out.normalized() if out.length > 1e-6 else Vector()
+            relief = BREAK_RELIEF.get(layer, 0.0)
+            relief += 0.012 * noise.noise(base * 24 + grain) + 0.003 * noise.noise(base * 60 + grain)
+            if layer in ("Muscle", "MuscleDark"):
+                # torn fibres: ridges along the limb
+                relief += 0.006 * noise.noise(Vector((base.x * 70, base.y * 12, base.z * 70)) + grain)
+            row.append(base + out * relief)
+            look_row.append(layer)
+        grid.append(row)
+        looks.append(look_row)
+    for r in range(rows):
+        for i in range(n):
+            j = (i + 1) % n
+            quad((grid[r][i], grid[r][j], grid[r + 1][j], grid[r + 1][i]),
+                 (looks[r][i], looks[r][j], looks[r + 1][j], looks[r + 1][i]))
+    # the floor: torn tissue, lumpy, down to the middle
+    bottom = grid[-1]
+    rings = 6
+    floor_pts, floor_looks = [bottom], [looks[-1]]
+    for k in range(1, rings + 2):
+        s = 1 - k / (rings + 1) if k <= rings else 0.0
+        row, look_row = [], []
+        for i in range(n if k <= rings else 1):
+            q = c + (bottom[i] - c) * s
+            z = -depth * (1 + 0.08 * (1 - s * s)) + 0.02 * noise.noise(q * 14 + grain)
+            p = Vector((q.x, q.y, z))
+            layer = classify(p)
+            p.z -= BREAK_RELIEF.get(layer, 0.0) * 0.8
+            row.append(p)
+            look_row.append(layer)
+        floor_pts.append(row)
+        floor_looks.append(look_row)
+    for k in range(rings):
+        for i in range(n):
+            j = (i + 1) % n
+            quad((floor_pts[k][i], floor_pts[k][j], floor_pts[k + 1][j], floor_pts[k + 1][i]),
+                 (floor_looks[k][i], floor_looks[k][j], floor_looks[k + 1][j], floor_looks[k + 1][i]))
+    middle, middle_look = floor_pts[-1][0], floor_looks[-1][0]
+    for i in range(n):
+        j = (i + 1) % n
+        split(floor_pts[rings][i], floor_pts[rings][j], middle, floor_looks[rings][i], floor_looks[rings][j],
+              middle_look)
+    # (the walls face the hole's middle; the floor faces out)
+    for layer, bm in b.parts.items():
+        if layer in BREAK_LOOK_LAYERS:
+            bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    cup_lowest = min(vert.co.z for bm in b.parts.values() for vert in bm.verts)
+
+    # fat lobules in the fat under the skin
+    for _ in range(18):
+        i = rng.randrange(n)
+        p = grid[min(2, rows)][i].lerp(grid[min(4, rows)][i], rng.uniform(0, 1))
+        if classify(p) != "Fat":
+            continue
+        inward = Vector((c.x - p.x, c.y - p.y, 0))
+        inward = inward.normalized() if inward.length > 1e-6 else Vector()
+        r = rng.uniform(0.008, 0.016)
+        b.blob("Fat", p + inward * r * 0.3, (r, r * rng.uniform(0.7, 1.1), r * 0.8))
+
+    # ---- the bones, broken
+    x0, _y0 = fracture.BREAK_AT[limb]
+    # (only round the hole: the rest of them is hidden inside the limb)
+    keep_planes = [
+        ((min(x0 + 0.47, c.x + v["width"] * 0.8), 0, 0), (1, 0, 0)),
+        ((max(x0 - 0.47, c.x - v["width"] * 0.8), 0, 0), (-1, 0, 0)),
+        ((0, 0, -0.97), (0, 0, -1)),  # (the limb's back)
+        ((0, c.y + v["length"] * 0.8, 0), (0, 1, 0)), ((0, c.y - v["length"] * 0.85, 0), (0, -1, 0)),
+    ]
+    bones, marrow, chips, film, shreds = [], [], [], [], []
+    for bone, spec in zip(parts["bone"], v["bones"]):
+        bone = fracture.solid(bone)
+        if spec.get("thin"):
+            # (the blocky limb's bones were widened to fill it: the one that
+            # comes out a little less, or it fills the whole hole)
+            middle = fracture.section(bone, spec["y"], 0.04)[0]
+            for vert in bone.verts:
+                vert.co.x = middle.x + (vert.co.x - middle.x) * spec["thin"]
+                vert.co.z = middle.z + (vert.co.z - middle.z) * spec["thin"]
+            bone.normal_update()
+        toward = Vector((rng.uniform(-0.3, 0.3), 0, 1))  # (the fracture rises toward the front)
+        upper, upper_m, lower, lower_m, fr = fracture.break_bone(
+            bone, rng, spec["y"], spec["slope"], toward, spec["cortex"], fr_sink(spec), 0.012)
+        centre = fr.centre
+        with_upper, with_lower = [upper_m], [lower_m]
+        # the fragment whose broken end came out of the skin (if one did)
+        out_upper = spec["out"] is not None and spec["out"] > 0
+        out_lower = spec["low"] is not None and spec["low"] > 0
+        # a shred of real muscle torn off with it, stuck near its end
+        if out_upper or out_lower:
+            # (down its shaft, by the skin: its broken end left clear)
+            reach = fr.radius * (2.5 if out_upper else -4.5)
+            near = Vector((centre.x, spec["y"] + reach, centre.z + fr.radius))
+            for m in sorted(parts["muscle"], key=lambda mb: min((vv.co - near).length for vv in mb.verts))[:2]:
+                ball = bmesh.new()
+                bmesh.ops.create_icosphere(ball, subdivisions=2, radius=rng.uniform(0.06, 0.085))
+                along = rng.uniform(0, 0.1) * (1 if out_upper else -1)
+                bmesh.ops.translate(ball, vec=near + Vector((rng.uniform(-0.03, 0.03), along, 0)), verts=ball.verts)
+                gore.lumpy(ball, rng, 0.02, 40.0)
+                chunk, _cut = fracture.boolean(m.copy(), ball)
+                ball.free()
+                if len(chunk.faces):
+                    gore.lumpy(chunk, rng, 0.006, 60.0)
+                    shreds.append(chunk)
+                    (with_upper if out_upper else with_lower).append(chunk)
+        # (the one that comes out: through the middle of the hole)
+        x = min(c.x + v["width"] * 0.22, max(c.x - v["width"] * 0.22, centre.x))
+        if spec["out"] is not None:
+            at = c.x if out_upper else x
+            place_fragment(rng, upper, with_upper, spec["tilt"], (at, spec["tip"], spec["out"]), True)
+        if spec["low"] is not None:
+            at = c.x if out_lower else x
+            place_fragment(rng, lower, with_lower, spec["tilt_low"], (at, spec["tip_low"], spec["low"]), False)
+        for bm in [upper, upper_m, lower, lower_m]:
+            gore.cut(bm, keep_planes, fill=bm in (upper, lower))
+        if out_upper or out_lower:
+            # blood on the end that came out: a collar where it left the
+            # skin (the rest of it clean ivory: it reads as bone)
+            piece = upper if out_upper else lower
+            film.append(fracture.blood_film(piece, rng, lambda p: -0.04 < p.z < 0.016, 0.004, -0.6))
+            # splinters of its wall in the hole
+            for _ in range(3):
+                shard = fracture.splinter(bone, rng, Vector((centre.x, spec["y"] + rng.uniform(-0.05, 0.05),
+                                                             centre.z)), fr.radius * rng.uniform(0.3, 0.45))
+                if len(shard.faces):
+                    sc = sum((vv.co for vv in shard.verts), Vector()) / len(shard.verts)
+                    a = rng.uniform(0, 2 * math.pi)
+                    to = Vector((c.x + math.cos(a) * v["width"] * 0.28, c.y + math.sin(a) * v["length"] * 0.28,
+                                 -depth * rng.uniform(0.5, 0.85)))
+                    m = (Matrix.Translation(to) @ Matrix.Rotation(rng.uniform(0, 6.3), 4, "Y")
+                         @ Matrix.Rotation(rng.uniform(0, 6.3), 4, "X") @ Matrix.Translation(-sc))
+                    bmesh.ops.transform(shard, matrix=m, verts=shard.verts)
+                    chips.append(shard)
+        bone.free()
+        bones += [upper, lower]
+        marrow += [upper_m, lower_m]
+    # (nothing of the bones may come out of the skin anywhere but the hole)
+    for bm in bones:
+        for vert in bm.verts:
+            if -0.004 < vert.co.z < 0.015 and not fracture.polygon_contains(hole, vert.co.x, vert.co.y):
+                print(f"[break] {name}: bone out of the skin at {tuple(round(x, 3) for x in vert.co)}")
+                break
+
+    # ---- the vessels and nerves: torn across the hole, an end hanging out
+    for index, vessel in enumerate(parts["vessel"]):
+        y_tear = c.y + rng.uniform(-0.25, 0.25) * v["length"]
+        keep_up = rng.random() < 0.5
+        gore.cut(vessel, [((0, y_tear, 0), (0, -1 if keep_up else 1, 0)),
+                          ((0, c.y + v["length"] * 0.55, 0), (0, 1, 0)), ((0, c.y - v["length"] * 0.55, 0), (0, -1, 0)),
+                          ((c.x + v["width"] * 0.6, 0, 0), (1, 0, 0)), ((c.x - v["width"] * 0.6, 0, 0), (-1, 0, 0)),
+                          ((0, 0, -0.03), (0, 0, 1))], fill=True)
+        if not len(vessel.faces):
+            continue
+        gore.tear(vessel, rng, y_tear, 0.02)
+        # (out of the wall into the hole: drooping toward the floor)
+        for vert in vessel.verts:
+            reach = max(0.0, 0.15 - abs(vert.co.y - y_tear)) / 0.15
+            vert.co.z += 0.03 * reach
+        names = ("Artery", "Artery", "Nerve", "Nerve", "Vein", "Vein") if limb == "arm" else \
+            ("Artery", "Artery", "Nerve", "Vein", "Nerve")
+        b.parts.setdefault(names[index % len(names)], bmesh.new())
+        mesh = bpy.data.meshes.new("tmp")
+        vessel.to_mesh(mesh)
+        b.parts[names[index % len(names)]].from_mesh(mesh)
+        bpy.data.meshes.remove(mesh)
+        vessel.free()
+    for bm in parts["muscle"]:
+        bm.free()
+
+    def add(layer, items):
+        b.parts.setdefault(layer, bmesh.new())
+        for bm in items:
+            mesh = bpy.data.meshes.new("tmp")
+            bm.to_mesh(mesh)
+            b.parts[layer].from_mesh(mesh)
+            bpy.data.meshes.remove(mesh)
+            bm.free()
+
+    add("Bone", [gore.decimate(gore.bm_join_all(bones), 5200)] + chips)
+    for bm in bones:
+        bm.free()
+    add("Marrow", marrow)
+    add("Muscle", shreds)
+
+    # ---- blood: pooled low in the hole, a clot, running down the skin
+    pool = []
+    for i in range(n):
+        p = floor_pts[1][i]
+        q = Vector((p.x, min(p.y, c.y - v["length"] * 0.05), 0))
+        pool.append(Vector((q.x, q.y, -depth * 0.9)))
+    b.fan("Blood", pool, Vector((c.x, c.y - v["length"] * 0.18, -depth * 0.88)))
+    lowest = sorted(range(n), key=lambda i: outer[i].y)[: n // 4]
+    for k in range(6):
+        i = rng.choice(lowest)
+        start = outer[i]
+        length = rng.uniform(0.16, 0.36) if k < 3 else rng.uniform(0.04, 0.12)
+        w = rng.uniform(0.007, 0.014)
+        steps = 12
+        phase = rng.uniform(0, 6.3)
+        bm = b.bm("Blood")
+        prev = None
+        x = start.x
+        y = start.y
+        for s in range(steps + 1):
+            f = s / steps
+            y = start.y + 0.015 - length * f
+            x = start.x + 0.008 * math.sin(phase + f * 5)
+            ww = w * (1 - 0.35 * f + 0.25 * math.sin(phase * 2 + f * 9))
+            l_ = bm.verts.new((x - ww, y, 0.003))
+            m_ = bm.verts.new((x, y, 0.003 + ww * 0.25))
+            r_ = bm.verts.new((x + ww, y, 0.003))
+            if prev:
+                pl, pm, pr = prev
+                b.face_up(bm, (pl, l_, m_, pm))
+                b.face_up(bm, (pm, m_, r_, pr))
+            prev = (l_, m_, r_)
+        b.blob("Blood", Vector((x, y - 0.004, 0.0035)), (w * 1.1, w * 1.4, w * 0.35))
+    add("Blood", film)
+
+    meshes, reach = bend_and_measure(b, False)
+    for bm in meshes.values():
+        bm.normal_update()
+    return hole, meshes, reach, -cup_lowest
+
+
+def fr_sink(spec):
+    """How deep the marrow cavity shows at a broken end (studs)."""
+    return 0.03 + 0.05 * spec["cortex"]
 
 
 def build_insert(kind, size, v, head, seed):
@@ -713,6 +1657,45 @@ def main():
                 objects.append(add_object(f"{name}_{layer}", bm, offset, layer))
             shapes.append((name, index, kind, size, head, v, pts, reach))
             index += 1
+    # The burns, last (the numbers of the others don't move).
+    for head in (False, True):
+        for (kind, size), v in BURN_VARIANTS.items():
+            name = f"{kind}{size}" + ("_Head" if head else "")
+            seed = sum(map(ord, name)) * 7919
+            pts, meshes, reach = build_burn(size, v, head, seed)
+            offset = Vector((index * SPACING, 0, 0))
+            for layer, bm in meshes.items():
+                objects.append(add_object(f"{name}_{layer}", bm, offset, layer))
+            shapes.append((name, index, kind, size, head, v, pts, reach))
+            index += 1
+    # The Sentinel's bore over the heart (torso only), after the burns.
+    chest = Chest()
+    for (kind, size), v in BORE_VARIANTS.items():
+        name = f"{kind}{size}"
+        seed = sum(map(ord, name)) * 7919
+        pts, meshes, reach, deep = build_bore(size, v, seed, chest)
+        offset = Vector((index * SPACING, 0, 0))
+        for layer, bm in meshes.items():
+            objects.append(add_object(f"{name}_{layer}", bm, offset, layer))
+        shapes.append((name, index, kind, size, False, dict(v, reach_depth=deep), pts, reach))
+        index += 1
+    bore_seed = seed
+    # The open fractures (heavy hits), after the bores: the right limbs'
+    # inserts, then the left ones (the same, mirrored: X -> -X).
+    for name, v in BREAK_VARIANTS.items():
+        seed = sum(map(ord, name)) * 7919
+        pts, meshes, reach, deep = build_break(name, v, seed)
+        for side in ("", "L"):
+            if side:
+                pts = [Vector((-p.x, p.y, 0)) for p in reversed(pts)]
+                meshes = gore.mirrored(meshes)
+            offset = Vector((index * SPACING, 0, 0))
+            for layer, bm in (meshes.items() if side else list((k, b.copy()) for k, b in meshes.items())):
+                objects.append(add_object(f"{name}{side}_{layer}", bm, offset, layer))
+            shapes.append((name + side, index, "Break", "L", False, dict(v, reach_depth=deep), pts, reach))
+            index += 1
+    # (the noise as the bores left it: what is built after keeps its shapes)
+    noise.seed_set(bore_seed % 100000)
     # The head shell pieces.
     for name, mesh in build_head_shell().items():
         ob = bpy.data.objects.new(name, mesh)
@@ -777,6 +1760,7 @@ def main():
         "\textent: Vector2, -- half size of the whole insert on the skin (X, Y)",
         "\tlow: number, -- how far it reaches below its centre (blood drips)",
         "\thigh: number, -- how far it reaches above its centre",
+        "\tdepth: number?, -- how deep it goes under the skin, when it is deep (Bore: a closed cup)",
         "\tpoints: { Vector2 }, -- the hole cut in the skin (the edge without its thin splits)",
         "}",
         "",
@@ -806,6 +1790,8 @@ def main():
         lines.append(f"\t\t\textent = Vector2.new({lua_number(ex)}, {lua_number(ey)}),")
         lines.append(f"\t\t\tlow = {lua_number(low)},")
         lines.append(f"\t\t\thigh = {lua_number(high)},")
+        if "reach_depth" in v:
+            lines.append(f"\t\t\tdepth = {lua_number(v['reach_depth'])},")
         lines.append("\t\t\tpoints = {")
         for p in pts:
             lines.append(f"\t\t\t\tVector2.new({lua_number(p.x)}, {lua_number(p.y)}),")
@@ -820,12 +1806,16 @@ def main():
 
     if PREVIEW:
         render_preview(shapes)
+        render_gore_preview(gore_slots)
+        render_break_preview(shapes)
 
 
 def render_preview(shapes):
     """Each insert in a skin plate with its hole, lit, seen from the front."""
     scene = bpy.context.scene
     for idx, (name, i, kind, size, head, v, pts, _reach) in enumerate(shapes):
+        if kind == "Break":
+            continue  # (render_break_preview: in the whole limb)
         x0 = i * SPACING
         # skin plate with the hole (a grid, cells whose center is inside removed)
         bm = bmesh.new()
@@ -879,7 +1869,19 @@ def render_preview(shapes):
     scene.collection.objects.link(cam)
     scene.camera = cam
     scene.render.resolution_x, scene.render.resolution_y = 420, 320
-    for name, i, *_ in shapes:  # noqa: B007
+    # (a deep hole: a light from the camera too, or its inside is all shadow)
+    fill = bpy.data.objects.new("fill", bpy.data.lights.new("fill", "SUN"))
+    fill.data.energy = 1.2
+    fill.rotation_euler = (math.radians(15), 0, 0)
+    scene.collection.objects.link(fill)
+    shown = scene.view_settings.view_transform
+    for name, i, kind, *_ in shapes:  # noqa: B007
+        if kind == "Break":
+            continue
+        fill.hide_render = kind != "Bore"
+        # (and its colours as they are: the char black, not washed out)
+        scene.view_settings.view_transform = "Standard" if kind == "Bore" else shown
+        scene.view_settings.exposure = -1.3 if kind == "Bore" else 0.0
         cam.location = (i * SPACING, -0.55, 2.0)  # a little below, looking up at the cut
         cam.rotation_euler = (math.radians(15), 0, 0)
         cam.data.ortho_scale = 0.85
@@ -887,4 +1889,133 @@ def render_preview(shapes):
         bpy.ops.render.render(write_still=True)
 
 
-main()
+# The new gore pieces' pictures (preview_<Piece>.png): (where the camera
+# is from the point it looks at, that point, the view's width), from the
+# piece's slot. Waist / Hips with a plain torso / legs round them.
+GORE_VIEWS = {
+    "Waist": (Vector((1.6, -2.0, -2.6)), Vector((0, -1.1, 0)), 2.6),
+    "Hips": (Vector((1.4, 2.2, -2.6)), Vector((0, -1.0, 0)), 2.6),
+    "GutPile": (Vector((0.9, 1.3, -1.6)), Vector((0, 0.12, 0)), 1.3),
+    "Gut1": (Vector((0.6, 0.6, -1.6)), Vector((0, 0, 0)), 0.8),
+    # the heavy hits ("<piece>@<view>": another view of the same piece)
+    "LegEnd": (Vector((1.4, 2.2, -2.4)), Vector((0, 0.7, 0)), 1.9),
+    "Hip": (Vector((1.8, -1.4, -2.6)), Vector((0.4, -1.1, 0)), 2.4),
+    "ArmEndR": (Vector((1.4, 2.2, -2.4)), Vector((0, 0.7, 0)), 1.9),
+    "ShoulderR": (Vector((2.8, 0.5, -1.4)), Vector((1.0, 0.4, 0)), 2.0),
+    "ShoulderL": (Vector((-2.8, 0.5, -1.4)), Vector((-1.0, 0.4, 0)), 2.0),
+}
+# (what is drawn round them: (where, size, the face left open) boxes, or
+# "head": the round head)
+GORE_CONTEXT = {
+    "Waist": [((0, 0, 0), (2, 2, 1), "bottom")],
+    "Hips": [((-0.5, -2, 0), (1, 2, 1), "top"), ((0.5, -2, 0), (1, 2, 1), "top")],
+    "LegEnd": [((0, 0, 0), (1, 2, 1), "top")],
+    "ArmEndR": [((0, 0, 0), (1, 2, 1), "top")],
+    "Hip": [((0, 0, 0), (2, 2, 1), None), ((-0.5, -2, 0), (1, 2, 1), None)],
+    "ShoulderR": [((0, 0, 0), (2, 2, 1), None)],
+    "ShoulderL": [((0, 0, 0), (2, 2, 1), None)],
+}
+
+
+# The open fractures' pictures (preview_<Insert>_<view>.png): the insert in
+# the whole limb (its skin with the hole, the block round it), from the
+# front and a little to the side, from below, and from above (as a third
+# person camera sees it).
+BREAK_VIEWS = {
+    "q": (Vector((1.3, -0.4, 1.6)), Vector((0, -0.15, 0)), 1.5),
+    "low": (Vector((0.5, -1.0, 1.6)), Vector((0, -0.05, 0)), 0.9),
+    "top": (Vector((0.3, 2.0, 1.4)), Vector((0, -0.05, 0)), 1.0),
+}
+
+
+def render_break_preview(shapes):
+    """Pictures of the open fractures' inserts (after render_preview)."""
+    scene = bpy.context.scene
+    cam = scene.camera
+    fill = scene.objects.get("fill")
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.exposure = -1.0
+    for name, i, kind, _size, _head, v, pts, _reach in shapes:
+        if kind != "Break" or name.endswith("L"):
+            continue
+        origin = Vector((i * SPACING, 0, 0))
+        x0, y0 = fracture.BREAK_AT[v["limb"]]
+        # (insert axes: the limb's X is -X, its front face at Z = 0)
+        skin = bmesh.new()
+        cell = 0.02
+        for gx in range(50):
+            for gy in range(100):
+                x = x0 - 0.5 + (gx + 0.5) * cell
+                y = -1 - y0 + (gy + 0.5) * cell
+                if fracture.polygon_contains(pts, x, y):
+                    continue
+                skin.faces.new([skin.verts.new((x + dx * cell / 2, y + dy * cell / 2, 0))
+                                for dx, dy in ((-1, -1), (1, -1), (1, 1), (-1, 1))])
+        block = bmesh.new()
+        bmesh.ops.create_cube(block, size=1.0)
+        for vert in block.verts:
+            vert.co = Vector((x0 + vert.co.x * 0.999, -y0 + vert.co.y * 1.998, -0.5 + vert.co.z * 0.999))
+        bmesh.ops.delete(block, geom=[f for f in block.faces if f.normal.z > 0.9], context="FACES")
+        context = [add_object(f"ctx_{name}", skin, origin, "Skin"), add_object(f"ctx2_{name}", block, origin, "Skin")]
+        for view, (eye, target, width) in BREAK_VIEWS.items():
+            at = origin + target
+            cam.location = at + eye
+            back = eye.normalized()
+            right = Vector((0, 1, 0)).cross(back).normalized()
+            cam.rotation_euler = Matrix((right, back.cross(right), back)).transposed().to_euler()
+            cam.data.ortho_scale = width
+            if fill:
+                fill.hide_render = False
+                fill.rotation_euler = cam.rotation_euler
+            scene.render.filepath = f"{OUT}/preview_{name}_{view}.png"
+            bpy.ops.render.render(write_still=True)
+        for ob in context:
+            mesh = ob.data
+            bpy.data.objects.remove(ob)
+            bpy.data.meshes.remove(mesh)
+
+
+def render_gore_preview(slots):
+    """Pictures of the new gore pieces (after render_preview: its lights)."""
+    scene = bpy.context.scene
+    cam = scene.camera
+    scene.view_settings.view_transform = "Standard"
+    scene.view_settings.exposure = -1.0
+    for name, (eye, target, width) in GORE_VIEWS.items():
+        piece = name.split("@")[0]
+        if piece not in slots:
+            continue
+        slot = slots[piece]
+        boxes = GORE_CONTEXT.get(piece, [])
+        context = []
+        if boxes == "head":
+            context.append(add_object(f"ctx_{name}", gore.head_surface(), slot, "Skin"))
+            boxes = []
+        for at, size, opened in boxes:
+            bm = bmesh.new()
+            bmesh.ops.create_cube(bm, size=1.0)
+            bmesh.ops.scale(bm, vec=size, verts=bm.verts)
+            gone = [f for f in bm.faces if opened and (f.normal.y < -0.9 if opened == "bottom" else f.normal.y > 0.9)]
+            bmesh.ops.delete(bm, geom=gone, context="FACES")
+            context.append(add_object(f"ctx_{name}", bm, slot + Vector(at), "Skin"))
+        at = slot + target
+        cam.location = at + eye
+        # (looking at it, the kit's up (+Y) up in the picture)
+        back = eye.normalized()
+        right = Vector((0, 1, 0)).cross(back).normalized()
+        cam.rotation_euler = Matrix((right, back.cross(right), back)).transposed().to_euler()
+        cam.data.ortho_scale = width
+        fill = scene.objects.get("fill")
+        if fill:  # (lit from the camera too)
+            fill.hide_render = False
+            fill.rotation_euler = cam.rotation_euler
+        scene.render.filepath = f"{OUT}/preview_{name.replace('@', '_')}.png"
+        bpy.ops.render.render(write_still=True)
+        for ob in context:
+            mesh = ob.data
+            bpy.data.objects.remove(ob)
+            bpy.data.meshes.remove(mesh)
+
+
+if __name__ == "__main__":
+    main()

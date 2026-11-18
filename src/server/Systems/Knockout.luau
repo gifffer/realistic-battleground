@@ -19,6 +19,8 @@
 --   • Any other death (fell off the map...) gives the kill to the last
 --     attacker if there was one recently.
 --   • Every elimination is announced to everyone (Remotes.KillFeed).
+--   • A player finished off leaves their body on the floor for
+--     FINISHER_BODY_TIME seconds, even after they respawn (Corpses).
 --
 -- Replicated to clients (attributes on the fighter's model):
 --   "KnockedOut" (boolean), "KOEndsAt" (server time, workspace:GetServerTimeNow()),
@@ -31,7 +33,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Corpses = require(script.Parent.Corpses)
 local PlayerData = require(script.Parent.PlayerData)
 local Ragdoll = require(script.Parent.Ragdoll)
 
@@ -97,19 +101,36 @@ local function levelOf(player: Player?): number?
 	return if typeof(level) == "number" then level else nil
 end
 
+-- The kit id a fighter fights with ("Kit" attribute, set by Kits), or nil.
+local function kitOf(model: Model?): string?
+	local id = if model then model:GetAttribute("Kit") else nil
+	return if typeof(id) == "string" and Kits.get(id) then id else nil
+end
+
+-- `finisher`: the model finishing the victim (its kit's finisher is named
+-- in the line), nil for any other death.
 local function feed(
 	kind: Types.KillFeedKind,
 	victim: string,
 	killer: string?,
 	victimPlayer: Player?,
-	killerPlayer: Player?
+	killerPlayer: Player?,
+	killerModel: Model?,
+	finisher: Model?
 )
+	local details: Types.KillFeedDetails = {
+		finisher = if finisher then Kits.finisher(kitOf(finisher)).name else nil,
+		killerKit = kitOf(killerModel),
+		victimId = if victimPlayer then victimPlayer.UserId else nil,
+		killerId = if killerPlayer then killerPlayer.UserId else nil,
+	}
 	Remotes.KillFeed:FireAllClients(
 		kind,
 		victim,
 		killer,
 		levelOf(victimPlayer),
-		levelOf(killerPlayer)
+		levelOf(killerPlayer),
+		details
 	)
 end
 
@@ -290,7 +311,15 @@ local function onDied(info: FighterInfo)
 	local kind: Types.KillFeedKind = if info.finishedBy
 		then "Finished"
 		else info.deathCause or "Died"
-	feed(kind, displayName(info.model), killerName(killer, killerPlayer), info.player, killerPlayer)
+	feed(
+		kind,
+		displayName(info.model),
+		killerName(killer, killerPlayer),
+		info.player,
+		killerPlayer,
+		killer,
+		info.finishedBy
+	)
 	rewardKill(killer, killerPlayer, info, kind)
 end
 
@@ -487,6 +516,9 @@ function Knockout.finish(victim: Model, attacker: Model)
 	if info == nil or not info.knockedOut or info.finishedBy ~= attacker then
 		return
 	end
+	if info.player then
+		Corpses.track(victim) -- (their body stays after they respawn)
+	end
 	info.humanoid.Health = 0 -- → Humanoid.Died → onDied (kill credit, feed)
 end
 
@@ -559,7 +591,15 @@ local function onLeaving(player: Player)
 	end
 	local killer, killerPlayer = creditedKiller(info)
 	info.dead = true
-	feed("Fled", displayName(info.model), killerName(killer, killerPlayer), player, killerPlayer)
+	feed(
+		"Fled",
+		displayName(info.model),
+		killerName(killer, killerPlayer),
+		player,
+		killerPlayer,
+		killer,
+		nil
+	)
 	rewardKill(killer, killerPlayer, info, "Fled")
 end
 

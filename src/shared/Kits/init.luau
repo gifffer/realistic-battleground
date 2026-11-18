@@ -27,6 +27,14 @@ export type AwakeningDef = KitTypes.AwakeningDef
 export type KitDef = KitTypes.KitDef
 export type FinisherDef = KitTypes.FinisherDef
 export type GrabDef = KitTypes.GrabDef
+export type BurnDef = KitTypes.BurnDef
+export type GadgetDef = KitTypes.GadgetDef
+export type FlaskDef = KitTypes.FlaskDef
+export type RayDef = KitTypes.RayDef
+export type PortalDef = KitTypes.PortalDef
+export type WaveDef = KitTypes.WaveDef
+export type SwarmDef = KitTypes.SwarmDef
+export type ClonesDef = KitTypes.ClonesDef
 
 local Kits = {}
 
@@ -45,7 +53,9 @@ end
 
 add(require(script.StreetBrawler))
 add(require(script.Boxer))
+add(require(script.Sentinel))
 add(require(script.Bouncer))
+add(require(script.Rift))
 
 function Kits.get(id: string?): KitDef?
 	return if id then registry[id] else nil
@@ -71,6 +81,8 @@ end
 -- How a fighter with kit `id` finishes a knocked-out opponent: the kit's
 -- own finisher, or the default one (kneel and strike, Config.Knockout).
 local DEFAULT_FINISHER: FinisherDef = table.freeze({
+	name = "FINAL BLOW",
+	description = "Kneels over them and ends it.",
 	animation = "Finisher",
 	impact = Config.Knockout.FINISH_IMPACT,
 	duration = Config.Knockout.FINISH_DURATION,

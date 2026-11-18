@@ -1,30 +1,33 @@
 --!strict
--- KitsMenuController: the KITS section of the menu (01 KITS, above SETTINGS).
+-- KitsMenuController: the KITS panel (the "Kits" button, first in the top bar).
 --
---   ROSTER              STREET BRAWLER                       EQUIPPED
---   | STREET BRAWLER    Fights dirty and close. Hits hard...
---     EQUIPPED          MOVES                  STAMINA   COOLDOWN
---   BOXER               [1] BOTTLE SMASH            15        8 s
---   NOT AVAILABLE YET       Breaks a bottle...      — BROKEN BOTTLE
---                       ...
---                       AWAKENING                          LASTS
---                     | [G] STREET FURY                     10 s
+--   [ fighter ][ fighter ]   STREET BRAWLER                   [ EQUIP ]
+--   STREET BRAWLER  BOXER    Fights dirty and close. Hits hard...
+--    EQUIPPED       OWNED    Moves                  Stamina   Cooldown
+--   [ fighter ][ fighter ]   1  BOTTLE SMASH             15        8 s
+--   ...                      ...  Awakening, Finisher
 --
--- Left: every kit (Shared/Kits). Right: the selected kit's moves, read
--- from its data (so the numbers are always the real ones), each with its
--- Street Fury version under the cooldown (the red dash = "fury version").
+-- Left: one card per kit (Shared/Kits): a posed R6 silhouette, the kit's
+-- name, where it stands (small caps). The kit you wear has a thin gold
+-- outline, the one you look at a lighter card with a white outline.
+-- Right: the selected kit's moves, read from its data (so the numbers are
+-- always the real ones), each with its Street Fury version under the
+-- cooldown (the red dash = "fury version"), then its Awakening and its
+-- finisher (M1 on a knocked-out fighter; the kill feed and the death
+-- screen name it too). The action top right is a real button.
 -- EQUIP asks the server (Remotes.EquipKit); the saved profile says which
 -- one is equipped (PlayerDataController).
---
 -- Kits you have to earn (KitDef.unlockLevel / price) go through these
 -- states, worked out from the save (level from its total XP, coins, owned
 -- kits) — the server checks everything again when you buy:
---   Locked     level too low       roster "LOCKED · LEVEL 10"     detail "UNLOCKS AT LEVEL 10"
---   Buyable    enough coins        roster "500 COINS"             detail "— BUY · 500"
---   Short      not enough coins    roster "NEED 160 MORE COINS"   detail "— BUY · 500" (disabled)
---   Owned      bought              roster "AVAILABLE"             detail "— EQUIP"
--- BUY takes two presses (the word turns to CONFIRM for 3 s) and then asks
+--   Locked     level too low       card "Level 10"           detail [lock] UNLOCKS AT LV 10 (greyed)
+--   Buyable    enough coins        card "500 coins"          detail [coin] BUY · 500 (main)
+--   Short      not enough coins    card "Need 160 more"      detail [coin] NEED 160 MORE (greyed)
+--   Owned      bought              card "Owned"              detail EQUIP (main)
+--   Equipped                       card "Equipped" (gold)    detail [check] EQUIPPED badge (not a button)
+-- BUY takes two presses (the button turns to CONFIRM for 3 s) and then asks
 -- the server (Remotes.BuyKit). The coin count (the wallet) sits top right.
+-- The top bar button shows how many kits you can buy right now.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,7 +35,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local ProgressionCurve = require(ReplicatedStorage.Shared.Progression)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
+local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Panel = require(script.Parent.Parent.UI.Panel)
 local MenuController = require(script.Parent.MenuController)
 local PlayerDataController = require(script.Parent.PlayerDataController)
 local ProfileMenuController = require(script.Parent.ProfileMenuController)
@@ -41,12 +46,63 @@ local player = Players.LocalPlayer
 local formatNumber = ProfileMenuController.formatNumber
 
 local C = Theme.Colors
--- The detail column starts at x 200 of the content. Its canvas starts a bit
--- before (16 px left for the red rail, 8 px up for the kit name), with the
--- content inset by the same amount, so nothing gets cut.
+-- The cards on the left, two per row.
+local CARD = Vector2.new(112, 120)
+local CARD_GAP = 8
+local GRID_WIDTH = 2 * CARD.X + CARD_GAP + 4
+-- The detail column starts right of the cards. Its canvas starts a bit
+-- before (16 px left, 8 px up for the kit name), with the content inset by
+-- the same amount, so nothing gets cut.
 local DETAIL_INSET = Vector2.new(16, 8)
-local DETAIL_X = 200 - DETAIL_INSET.X
+local DETAIL_X = GRID_WIDTH + 16 - DETAIL_INSET.X
 local DETAIL_Y = -DETAIL_INSET.Y
+-- On a touch screen the action button's hit area is taller: everything
+-- under the kit's name moves down by the difference.
+local TOP_SHIFT = Button.height("small") - 24
+local DETAIL_HEIGHT = 386 + TOP_SHIFT -- moves, awakening, finisher
+local MOVE_ROW = 34
+local DETAIL_WIDTH = 360
+
+-- Each kit's pose on its card (UI/Panel figure: arms and legs swing
+-- forward / out, in degrees).
+local POSES: { [string]: Panel.Pose } = {
+	StreetBrawler = {
+		rightArm = Vector2.new(150, 10),
+		leftArm = Vector2.new(35, 10),
+		leftLeg = Vector2.new(-10, 6),
+		rightLeg = Vector2.new(12, 6),
+	},
+	Boxer = {
+		leftArm = Vector2.new(95, -28),
+		rightArm = Vector2.new(80, -22),
+		leftLeg = Vector2.new(-12, 8),
+		rightLeg = Vector2.new(10, 8),
+	},
+	Sentinel = {
+		rightArm = Vector2.new(170, 0),
+		leftArm = Vector2.new(0, 14),
+		leftLeg = Vector2.new(0, 4),
+		rightLeg = Vector2.new(0, 4),
+	},
+	Bouncer = {
+		leftArm = Vector2.new(80, -55),
+		rightArm = Vector2.new(70, -55),
+		leftLeg = Vector2.new(0, 10),
+		rightLeg = Vector2.new(0, 10),
+	},
+	Rift = {
+		rightArm = Vector2.new(90, 5),
+		leftArm = Vector2.new(25, 12),
+		leftLeg = Vector2.new(-8, 5),
+		rightLeg = Vector2.new(8, 5),
+	},
+}
+local DEFAULT_POSE: Panel.Pose = {
+	leftArm = Vector2.new(10, 10),
+	rightArm = Vector2.new(10, 10),
+	leftLeg = Vector2.new(0, 5),
+	rightLeg = Vector2.new(0, 5),
+}
 
 -- Second press on BUY must come within this many seconds of the first.
 local CONFIRM_SECONDS = 3
@@ -64,17 +120,13 @@ local shownState: KitState? = nil -- the state the detail was drawn for
 local actionGroup: CanvasGroup? = nil -- the top-right action (fades on a change)
 local swapToken = 0
 local wallet: ProfileMenuController.Wallet? = nil
-local subtitleLabel: TextLabel? = nil
 
 type RosterItem = {
 	kit: Kits.KitDef,
-	button: TextButton,
-	name: TextLabel,
-	status: TextLabel,
+	card: Panel.Card,
 }
 
 local rosterItems: { RosterItem } = {}
-local rosterMarker: Frame
 local detail: CanvasGroup -- fades / slides as one when switching kits
 local body: Frame -- its content (inset: the canvas cuts what sticks out)
 local renderDetail: (animate: boolean) -> ()
@@ -123,32 +175,32 @@ local function kitState(kit: Kits.KitDef): KitState
 	return "Short"
 end
 
--- The small line under a kit's name in the roster.
+-- The small line under a kit's name on its card.
 local function statusText(kit: Kits.KitDef): string
 	local state = kitState(kit)
 	if state == "Unavailable" then
-		return "NOT AVAILABLE YET"
+		return "Coming soon"
 	elseif state == "Equipped" then
-		return "EQUIPPED"
+		return "Equipped"
 	elseif state == "Owned" then
-		return "AVAILABLE"
+		return "Owned"
 	elseif state == "Locked" then
-		return `LOCKED · LEVEL {kit.unlockLevel or 1}`
+		return `Level {kit.unlockLevel or 1}`
 	elseif state == "Buyable" then
-		return `{formatNumber(kit.price or 0)} COINS`
+		return `{formatNumber(kit.price or 0)} coins`
 	end
-	return `NEED {formatNumber((kit.price or 0) - playerCoins())} MORE COINS`
+	return `Need {formatNumber((kit.price or 0) - playerCoins())} more`
 end
 
--- "FIGHTING STYLES · 1 OF 3 AVAILABLE" (kits you can actually equip).
-local function subtitle(): string
-	local owned = 0
+-- How many kits can be bought right now (the count on the top bar button).
+local function buyableCount(): number
+	local count = 0
 	for _, kit in Kits.list() do
-		if kit.available and ownsKit(kit) then
-			owned += 1
+		if kitState(kit) == "Buyable" then
+			count += 1
 		end
 	end
-	return `FIGHTING STYLES · {owned} OF {#Kits.list()} AVAILABLE`
+	return count
 end
 
 ------------------------------------------------------------------------------
@@ -157,10 +209,11 @@ end
 
 local function caption(text: string, props: { [string]: any }): TextLabel
 	local base: { [string]: any } = {
-		TextSize = 10,
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink3,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(text, "three"),
+		Text = text,
 	}
 	for key, value in props do
 		base[key] = value
@@ -193,7 +246,7 @@ local function keyCap(parent: Instance, text: string, filled: boolean, dim: bool
 		Theme.make("UIStroke", {
 			Thickness = 1,
 			Color = C.Ink,
-			Transparency = if dim then 0.78 else 0.45,
+			Transparency = if dim then 0.85 else 0.7,
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Parent = frame,
 		})
@@ -203,7 +256,7 @@ local function keyCap(parent: Instance, text: string, filled: boolean, dim: bool
 		Size = UDim2.fromScale(1, 1),
 		FontFace = Theme.Fonts.NumberMedium,
 		TextSize = 10,
-		TextColor3 = if filled then C.Scrim elseif dim then C.Ink2 else C.Ink,
+		TextColor3 = if filled then C.Scrim elseif dim then C.Ink3 else C.Ink2,
 		TextStrokeTransparency = 1,
 		TextXAlignment = Enum.TextXAlignment.Center,
 		Text = text,
@@ -256,7 +309,7 @@ local function moveRow(
 	local row = Theme.make("Frame", {
 		Name = `Move{index}`,
 		LayoutOrder = index,
-		Size = UDim2.new(1, 0, 0, 42),
+		Size = UDim2.new(1, 0, 0, MOVE_ROW),
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
@@ -266,14 +319,15 @@ local function moveRow(
 		Name = "Name",
 		Position = UDim2.fromOffset(34, 6),
 		Size = UDim2.fromOffset(200, 13),
+		TextSize = 12,
 		TextColor3 = if dim then C.Ink2 else C.Ink,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(move.name, "four"),
+		Text = move.name,
 		Parent = row,
 	})
 	local sentence = Theme.text({
 		Name = "Sentence",
-		Position = UDim2.fromOffset(34, 22),
+		Position = UDim2.fromOffset(34, 19),
 		Size = UDim2.fromOffset(230, 14),
 		FontFace = Theme.Fonts.Body,
 		TextSize = 12,
@@ -300,7 +354,7 @@ local function moveRow(
 		local furyLine = Theme.make("Frame", {
 			Name = "FuryVersion",
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, 0, 0, 24),
+			Position = UDim2.new(1, 0, 0, 21),
 			Size = UDim2.fromOffset(0, 11),
 			AutomaticSize = Enum.AutomaticSize.X,
 			BackgroundTransparency = 1,
@@ -323,7 +377,7 @@ local function moveRow(
 				LayoutOrder = 2,
 				AutomaticSize = Enum.AutomaticSize.X,
 				Size = UDim2.fromOffset(0, 11),
-				TextSize = 9,
+				TextSize = 10,
 				TextColor3 = C.Ink2,
 				TextTransparency = 0.2,
 			}),
@@ -333,8 +387,12 @@ local function moveRow(
 		-- "— RISING UPPERCUT" line by ~18 px), so that sentence alone is
 		-- set a size smaller until it ends 8 px before the line.
 		local function fitSentence()
-			local room = furyLine.AbsolutePosition.X - 8 - sentence.AbsolutePosition.X
-			local width = sentence.TextBounds.X
+			-- (screen pixels, back to layout pixels: the menu can be scaled)
+			local room = Theme.unscaled(
+				sentence,
+				furyLine.AbsolutePosition.X - sentence.AbsolutePosition.X
+			) - 8
+			local width = Theme.unscaled(sentence, sentence.TextBounds.X)
 			if room > 0 and width > room and sentence.TextSize > 10 then
 				sentence.TextSize = math.max(10, math.floor(sentence.TextSize * room / width))
 			end
@@ -355,7 +413,13 @@ local function sectionHead(parent: Instance, y: number, title: string, columns: 
 		BackgroundTransparency = 1,
 		Parent = parent,
 	})
-	caption(title, { Size = UDim2.new(1, 0, 0, 12), Parent = head })
+	caption(title, {
+		Size = UDim2.new(1, 0, 0, 14),
+		FontFace = Theme.Fonts.Label,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
+		Parent = head,
+	})
 	local rightEdge = { 0, -82 }
 	local widths = { 82, 64 }
 	for position, text in columns do
@@ -363,270 +427,140 @@ local function sectionHead(parent: Instance, y: number, title: string, columns: 
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, rightEdge[position], 0, 4),
 			Size = UDim2.fromOffset(widths[position], 11),
-			TextSize = 9,
+			TextSize = 10,
 			TextXAlignment = Enum.TextXAlignment.Right,
 			Parent = head,
 		})
 	end
-	hairline(head, UDim.new(1, 0), 0.9)
+	hairline(head, UDim.new(1, 0), 0.92)
 end
 
--- "UNLOCKS AT LEVEL 10": said in words (no padlock), not a button.
-local function lockedLabel(parent: Instance, kit: Kits.KitDef)
-	Theme.text({
-		Name = "LockedLabel",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 6),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		TextColor3 = C.Ink2,
-		TextStrokeTransparency = 1,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Text = Theme.track(`UNLOCKS AT LEVEL {kit.unlockLevel or 1}`, "four"),
-		Parent = parent,
-	})
+-- Where the action button sits (top right of the detail, inside its layer,
+-- far enough from its edge that it can grow under the mouse uncut).
+local function actionProps(name: string): (Vector2, UDim2, string)
+	return Vector2.new(1, 0), UDim2.new(1, -7, 0, 4), name
 end
 
--- "— BUY · 500": the same "line + word" button as MENU / EQUIP. Two presses:
--- the first turns the word into CONFIRM for a few seconds, the second asks
--- the server (Remotes.BuyKit). `enabled` = false when coins are short.
-local function buyButton(parent: Instance, kit: Kits.KitDef, enabled: boolean)
-	local idle = if enabled then 0.15 else 0.6
-	local button = Theme.make("TextButton", {
-		Name = "BuyButton",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 6),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		BackgroundTransparency = 1,
-		AutoButtonColor = false,
-		Active = enabled,
-		Text = "",
-		Parent = parent,
-	}, {
-		Theme.make("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Right,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 10),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
-	}) :: TextButton
-	local line = Theme.make("Frame", {
-		Name = "Line",
-		LayoutOrder = 1,
-		Size = UDim2.fromOffset(18, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = idle,
-		Parent = button,
-	}) :: Frame
-	local group = Theme.make("Frame", {
-		Name = "Label",
-		LayoutOrder = 2,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		BackgroundTransparency = 1,
-		Parent = button,
-	}, {
-		Theme.make("UIListLayout", {
-			FillDirection = Enum.FillDirection.Horizontal,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, 6),
-			SortOrder = Enum.SortOrder.LayoutOrder,
-		}),
+-- Locked / not enough coins: a greyed button that says why (not clickable).
+local function blockedButton(parent: Instance, icon: Button.IconName, text: string)
+	local anchor, position, name = actionProps("Blocked")
+	local button = Button.new({
+		name = name,
+		text = text,
+		icon = icon,
+		size = "small",
+		anchorPoint = anchor,
+		position = position,
+		parent = parent,
 	})
-	local word = Theme.text({
-		Name = "Word",
-		LayoutOrder = 1,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		TextTransparency = idle,
-		TextStrokeTransparency = 1,
-		Text = Theme.track("BUY ·", "four"),
-		Parent = group,
-	}) :: TextLabel
-	local price = Theme.text({
-		Name = "Price",
-		LayoutOrder = 2,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 14),
-		FontFace = Theme.Fonts.Number,
-		TextTransparency = idle,
-		TextStrokeTransparency = 1,
-		Text = formatNumber(kit.price or 0),
-		Parent = group,
-	}) :: TextLabel
-	if not enabled then
-		return -- disabled: no hover, no press
-	end
+	button.setEnabled(false)
+end
 
-	local hovered = false
+-- BUY · 500 (accent). Two presses: the first turns it into CONFIRM for a
+-- few seconds, the second asks the server (Remotes.BuyKit).
+local function buyButton(parent: Instance, kit: Kits.KitDef)
+	local priceText = formatNumber(kit.price or 0)
 	local confirmUntil = 0 -- os.clock() before which a press buys
 	local pending = false -- asked the server, waiting for the save
-
-	local function brightness(): number
-		return if hovered then 0 else 0.15
-	end
-	-- Crossfades the word ("BUY ·" ↔ "CONFIRM ·") in 0.1 s.
-	local function setWord(text: string)
-		Theme.tween(word, 0.05, { TextTransparency = 1 })
-		task.delay(0.05, function()
-			word.Text = Theme.track(text, "four")
-			Theme.tween(word, 0.05, { TextTransparency = brightness() })
-		end)
-	end
-
-	button.MouseEnter:Connect(function()
-		hovered = true
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1), BackgroundTransparency = 0 })
-		Theme.tween(word, 0.15, { TextTransparency = 0 })
-		Theme.tween(price, 0.15, { TextTransparency = 0 })
-	end)
-	button.MouseLeave:Connect(function()
-		hovered = false
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1), BackgroundTransparency = 0.15 })
-		Theme.tween(word, 0.15, { TextTransparency = 0.15 })
-		Theme.tween(price, 0.15, { TextTransparency = 0.15 })
-	end)
-	button.Activated:Connect(function()
-		if pending then
-			return
-		end
-		local now = os.clock()
-		if now < confirmUntil then
-			-- Second press: buy. The server checks level, price and coins.
-			confirmUntil = 0
-			pending = true
-			Remotes.BuyKit:FireServer(kit.id)
-			-- Bought: the new save replaces this button (EQUIP). Still here
-			-- after a moment = refused: the price flashes red, back to BUY.
-			task.delay(REFUSED_AFTER, function()
-				if button.Parent == nil then
-					return
-				end
-				pending = false
-				price.TextColor3 = C.BloodHi
-				Theme.tween(price, 0.4, { TextColor3 = C.Ink })
-				setWord("BUY ·")
-			end)
-			return
-		end
-		-- First press: ask to confirm.
-		confirmUntil = now + CONFIRM_SECONDS
-		local stamp = confirmUntil
-		setWord("CONFIRM ·")
-		task.delay(CONFIRM_SECONDS, function()
-			if confirmUntil == stamp and not pending and button.Parent ~= nil then
+	local anchor, position, name = actionProps("BuyButton")
+	local button: Button.Button
+	button = Button.new({
+		name = name,
+		text = `BUY · {priceText}`,
+		variant = "primary",
+		icon = "coin",
+		size = "small",
+		minWidth = 96,
+		anchorPoint = anchor,
+		position = position,
+		parent = parent,
+		onActivated = function()
+			if pending then
+				return
+			end
+			local now = os.clock()
+			if now < confirmUntil then
+				-- Second press: buy. The server checks level, price and coins.
 				confirmUntil = 0
-				setWord("BUY ·")
+				pending = true
+				button.setEnabled(false)
+				button.setText("BUYING…")
+				Remotes.BuyKit:FireServer(kit.id)
+				-- Bought: the new save replaces this button (EQUIP). Still
+				-- here after a moment = refused: red outline, back to BUY.
+				task.delay(REFUSED_AFTER, function()
+					if button.instance.Parent == nil then
+						return
+					end
+					pending = false
+					button.setEnabled(true)
+					button.setText(`BUY · {priceText}`)
+					button.flash()
+				end)
+				return
 			end
-		end)
-	end)
-end
-
--- The EQUIPPED mark (underlined) at the top right.
-local function equippedMark(parent: Instance)
-	local mark = Theme.text({
-		Name = "Equipped",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 4),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 22),
-		TextStrokeTransparency = 1,
-		TextYAlignment = Enum.TextYAlignment.Top,
-		Text = Theme.track("EQUIPPED", "four"),
-		Parent = parent,
-	}) :: TextLabel
-	local underline = Theme.make("Frame", {
-		Name = "Underline",
-		Position = UDim2.fromOffset(0, 20),
-		Size = UDim2.fromOffset(0, 2),
-		BackgroundColor3 = C.Ink,
-		Parent = mark,
+			-- First press: ask to confirm.
+			confirmUntil = now + CONFIRM_SECONDS
+			local stamp = confirmUntil
+			button.setText(`CONFIRM · {priceText}`)
+			task.delay(CONFIRM_SECONDS, function()
+				if confirmUntil == stamp and not pending and button.instance.Parent ~= nil then
+					confirmUntil = 0
+					button.setText(`BUY · {priceText}`)
+				end
+			end)
+		end,
 	})
-	task.defer(function()
-		Theme.tween(
-			underline,
-			0.18,
-			{ Size = UDim2.fromOffset(math.max(mark.TextBounds.X - 3, 10), 2) },
-			Enum.EasingStyle.Quart
-		)
-	end)
 end
 
--- EQUIP: the same "line + word" button as MENU / CLOSE (no boxes).
+-- The EQUIPPED badge (a state, not a button).
+local function equippedMark(parent: Instance)
+	local anchor, position, name = actionProps("Equipped")
+	Button.badge({
+		name = name,
+		text = "EQUIPPED",
+		icon = "check",
+		size = "small",
+		anchorPoint = anchor,
+		position = position,
+		parent = parent,
+	})
+end
+
+-- EQUIP (accent).
 local function equipButton(parent: Instance, kit: Kits.KitDef)
-	local button = Theme.make("TextButton", {
-		Name = "EquipButton",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 6),
-		Size = UDim2.fromOffset(90, 14),
-		BackgroundTransparency = 1,
-		AutoButtonColor = false,
-		Text = "",
-		Parent = parent,
-	}) :: TextButton
-	local line = Theme.make("Frame", {
-		Name = "Line",
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.new(1, -62, 0.5, 0),
-		Size = UDim2.fromOffset(18, 1),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.15,
-		Parent = button,
-	}) :: Frame
-	local word = Theme.text({
-		Name = "Label",
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.fromScale(1, 0),
-		Size = UDim2.new(0, 52, 1, 0),
-		TextTransparency = 0.15,
-		TextStrokeTransparency = 1,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Text = Theme.track("EQUIP", "four"),
-		Parent = button,
-	}) :: TextLabel
-	button.MouseEnter:Connect(function()
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(28, 1) })
-		Theme.tween(word, 0.15, { TextTransparency = 0 })
-	end)
-	button.MouseLeave:Connect(function()
-		Theme.tween(line, 0.15, { Size = UDim2.fromOffset(18, 1) })
-		Theme.tween(word, 0.15, { TextTransparency = 0.15 })
-	end)
-	button.Activated:Connect(function()
-		Theme.tween(
-			word,
-			0.1,
-			{ TextTransparency = 1 },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-		Theme.tween(
-			line,
-			0.1,
-			{ Size = UDim2.fromOffset(0, 1) },
-			Enum.EasingStyle.Quad,
-			Enum.EasingDirection.In
-		)
-		Remotes.EquipKit:FireServer(kit.id)
-		-- Shown at once; the saved profile confirms it (or puts it back).
-		-- If the server doesn't save it (refused, too fast...), the saved
-		-- profile wins again after a moment.
-		task.delay(2, function()
-			local profile = PlayerDataController.get()
-			if profile and profile.equippedKit ~= equippedId then
-				equippedId = profile.equippedKit
-				refreshRoster()
+	local anchor, position, name = actionProps("EquipButton")
+	local button: Button.Button
+	button = Button.new({
+		name = name,
+		text = "EQUIP",
+		variant = "primary",
+		size = "small",
+		minWidth = 84,
+		anchorPoint = anchor,
+		position = position,
+		parent = parent,
+		onActivated = function()
+			button.setEnabled(false) -- one request per button
+			Remotes.EquipKit:FireServer(kit.id)
+			-- Shown at once; the saved profile confirms it (or puts it back).
+			-- If the server doesn't save it (refused, too fast...), the saved
+			-- profile wins again after a moment.
+			task.delay(2, function()
+				local profile = PlayerDataController.get()
+				if profile and profile.equippedKit ~= equippedId then
+					equippedId = profile.equippedKit
+					refreshRoster()
+					renderDetail(false)
+				end
+			end)
+			task.delay(0.1, function()
+				equippedId = kit.id
 				renderDetail(false)
-			end
-		end)
-		task.delay(0.1, function()
-			equippedId = kit.id
-			renderDetail(false)
-			refreshRoster(true)
-		end)
-	end)
+				refreshRoster(true)
+			end)
+		end,
+	})
 end
 
 -- The action at the top right of the detail, for this kit's state.
@@ -636,9 +570,11 @@ local function actionArea(parent: Instance, kit: Kits.KitDef, state: KitState)
 	elseif state == "Owned" then
 		equipButton(parent, kit)
 	elseif state == "Locked" then
-		lockedLabel(parent, kit)
-	elseif state == "Buyable" or state == "Short" then
-		buyButton(parent, kit, state == "Buyable")
+		blockedButton(parent, "lock", `UNLOCKS AT LV {kit.unlockLevel or 1}`)
+	elseif state == "Buyable" then
+		buyButton(parent, kit)
+	elseif state == "Short" then
+		blockedButton(parent, "coin", `NEED {formatNumber((kit.price or 0) - playerCoins())} MORE`)
 	end
 	-- "Unavailable": nothing.
 end
@@ -655,18 +591,21 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 	local dim = state == "Locked"
 	Theme.text({
 		Name = "KitName",
-		Position = UDim2.fromOffset(0, -4),
-		Size = UDim2.fromOffset(280, 30),
+		Position = UDim2.fromOffset(0, -2),
+		Size = UDim2.fromOffset(240, 26),
 		FontFace = Theme.Fonts.Display,
-		TextSize = 26,
+		TextSize = 17,
 		TextStrokeTransparency = 1,
-		Text = Theme.track(kit.name, "thin"),
+		Text = kit.name,
 		Parent = body,
 	})
-	-- The action lives in its own layer so it can fade on its own.
+	-- The action lives in its own layer so it can fade on its own (a few
+	-- pixels bigger than the button: the canvas cuts what sticks out, and
+	-- the button grows a little under the mouse).
 	local group = Theme.make("CanvasGroup", {
 		Name = "Action",
-		Size = UDim2.new(1, 0, 0, 30),
+		Position = UDim2.fromOffset(0, -4),
+		Size = UDim2.new(1, 0, 0, Button.height("small") + 8),
 		BackgroundTransparency = 1,
 		Parent = body,
 	}) :: CanvasGroup
@@ -678,12 +617,13 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 	end
 	Theme.text({
 		Name = "Desc",
-		Position = UDim2.fromOffset(0, 36),
+		Position = UDim2.fromOffset(0, 36 + TOP_SHIFT),
 		-- Room for a second line (a long description no longer fits on one
 		-- at the bigger size, and the canvas would cut it).
 		Size = UDim2.new(1, 0, 0, 40),
 		FontFace = Theme.Fonts.Body,
-		TextSize = 15,
+		TextSize = Theme.TEXT,
+		TextColor3 = C.Ink2,
 		TextStrokeTransparency = 1,
 		TextWrapped = true,
 		TextYAlignment = Enum.TextYAlignment.Top,
@@ -691,19 +631,19 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		Parent = body,
 	})
 	if #kit.moves == 0 then
-		caption("THIS FIGHTING STYLE IS NOT AVAILABLE YET", {
-			Position = UDim2.fromOffset(0, 84),
+		caption("This fighting style is not available yet.", {
+			Position = UDim2.fromOffset(0, 84 + TOP_SHIFT),
 			Size = UDim2.new(1, 0, 0, 12),
 			Parent = body,
 		})
 		return
 	end
 
-	sectionHead(body, 80, "MOVES", { "COOLDOWN", "STAMINA" })
+	sectionHead(body, 78 + TOP_SHIFT, "Moves", { "Cooldown", "Stamina" })
 	local list = Theme.make("Frame", {
 		Name = "Moves",
-		Position = UDim2.fromOffset(0, 99),
-		Size = UDim2.new(1, 0, 0, 4 * 42),
+		Position = UDim2.fromOffset(0, 96 + TOP_SHIFT),
+		Size = UDim2.new(1, 0, 0, 4 * MOVE_ROW),
 		BackgroundTransparency = 1,
 		Parent = body,
 	}, {
@@ -715,35 +655,29 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 	end
 
 	if awakening then
-		sectionHead(body, 291, "AWAKENING", { "LASTS" })
+		sectionHead(body, 240 + TOP_SHIFT, "Awakening", { "Lasts" })
 		local row = Theme.make("Frame", {
 			Name = "AwakeningRow",
-			Position = UDim2.fromOffset(0, 309),
-			Size = UDim2.new(1, 0, 0, 60),
+			Position = UDim2.fromOffset(0, 258 + TOP_SHIFT),
+			Size = UDim2.new(1, 0, 0, 56),
 			BackgroundTransparency = 1,
 			Parent = body,
 		})
-		Theme.make("Frame", {
-			Name = "Rail",
-			Position = UDim2.fromOffset(-14, 6),
-			Size = UDim2.fromOffset(2, 18),
-			BackgroundColor3 = C.BloodHi,
-			Parent = row,
-		})
-		keyCap(row, "G", false, dim) -- the red rail is what marks it
+		keyCap(row, "G", false, dim)
 		Theme.text({
 			Name = "Name",
 			Position = UDim2.fromOffset(34, 6),
 			Size = UDim2.fromOffset(200, 13),
+			TextSize = 12,
 			TextColor3 = if dim then C.Ink2 else C.Ink,
 			TextStrokeTransparency = 1,
-			Text = Theme.track(awakening.name, "four"),
+			Text = awakening.name,
 			Parent = row,
 		})
 		Theme.text({
 			Name = "Sentence",
 			Position = UDim2.fromOffset(34, 22),
-			Size = UDim2.new(1, -34, 0, 40), -- two lines at most (the canvas ends at 380)
+			Size = UDim2.new(1, -34, 0, 34), -- two lines at most (the finisher follows)
 			FontFace = Theme.Fonts.Body,
 			TextSize = 12,
 			TextColor3 = C.Ink2,
@@ -756,6 +690,42 @@ local function fillDetail(kit: Kits.KitDef, fadeAction: boolean?)
 		})
 		seconds(row, awakening.duration)
 	end
+
+	-- The finisher: M1 on a knocked-out fighter (the kit's own, or the
+	-- default one). Under the Awakening (or where it would be).
+	local finisher = Kits.finisher(kit.id)
+	sectionHead(body, 314 + TOP_SHIFT, "Finisher", { "On a KO" })
+	local finisherRow = Theme.make("Frame", {
+		Name = "FinisherRow",
+		Position = UDim2.fromOffset(0, 332 + TOP_SHIFT),
+		Size = UDim2.new(1, 0, 0, 52),
+		BackgroundTransparency = 1,
+		Parent = body,
+	})
+	keyCap(finisherRow, "M1", false, dim)
+	Theme.text({
+		Name = "Name",
+		Position = UDim2.fromOffset(34, 6),
+		Size = UDim2.fromOffset(200, 13),
+		TextSize = 12,
+		TextColor3 = if dim then C.Ink2 else C.Ink,
+		TextStrokeTransparency = 1,
+		Text = finisher.name,
+		Parent = finisherRow,
+	})
+	Theme.text({
+		Name = "Sentence",
+		Position = UDim2.fromOffset(34, 22),
+		Size = UDim2.new(1, -34, 0, 30),
+		FontFace = Theme.Fonts.Body,
+		TextSize = 12,
+		TextColor3 = C.Ink2,
+		TextStrokeTransparency = 1,
+		TextWrapped = true,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Text = finisher.description,
+		Parent = finisherRow,
+	})
 end
 
 -- Shows the selected kit. `animate`: the old content slides out, the new in.
@@ -820,51 +790,29 @@ end
 -- Roster (left column)
 ------------------------------------------------------------------------------
 
--- The colours of a roster item right now: name colour, status colour, and
--- transparency. Only "not available yet" is dimmed; locked / short kits use
--- the normal idle colours.
-local function rosterStyle(item: RosterItem): (Color3, Color3, number)
-	local selected = item.kit.id == selectedId
-	local dimmed = if item.kit.available then 0 else 0.4
-	return if selected then C.Ink else C.Ink3,
-		if selected then C.Ink2 else C.Ink3,
-		if selected then 0 else dimmed
+-- The colour of a kit's card line: the equipped kit in gold, what you
+-- can't use yet a step darker.
+local function statusColor(kit: Kits.KitDef): Color3
+	local state = kitState(kit)
+	if state == "Equipped" then
+		return C.Gold
+	elseif state == "Owned" or state == "Buyable" then
+		return C.Ink2
+	end
+	return C.Ink3
 end
 
--- `animate`: a status line whose text changed crossfades (0.15 s).
-refreshRoster = function(animate: boolean?)
+-- Updates every card (selected, equipped, status line).
+refreshRoster = function(_animate: boolean?)
 	for _, item in rosterItems do
-		local nameColor, statusColor, transparency = rosterStyle(item)
-		Theme.tween(item.name, Theme.FAST, {
-			TextColor3 = nameColor,
-			TextTransparency = transparency,
-		})
-		local text = Theme.track(statusText(item.kit), "three")
-		local status = item.status
-		if animate and status.Text ~= text then
-			Theme.tween(status, 0.075, { TextTransparency = 1 })
-			task.delay(0.075, function()
-				-- Read everything again: the selection or the state may have
-				-- changed during the fade.
-				local _, newColor, newTransparency = rosterStyle(item)
-				status.Text = Theme.track(statusText(item.kit), "three")
-				Theme.tween(status, 0.075, {
-					TextColor3 = newColor,
-					TextTransparency = newTransparency,
-				})
-			end)
-		else
-			status.Text = text
-			Theme.tween(status, Theme.FAST, {
-				TextColor3 = statusColor,
-				TextTransparency = transparency,
-			})
-		end
-		if item.kit.id == selectedId then
-			rosterMarker.Parent = item.button
-			rosterMarker.Position = UDim2.fromOffset(-14, 12)
-		end
+		local state = kitState(item.kit)
+		item.card.setSelected(item.kit.id == selectedId)
+		item.card.setEquipped(state == "Equipped")
+		item.card.setDim(state == "Locked" or state == "Short" or state == "Unavailable")
+		item.card.setSub(statusText(item.kit), statusColor(item.kit))
+		item.card.setTag(if state == "Locked" then "LOCKED" else "")
 	end
+	MenuController.setBadge("Kits", buyableCount())
 end
 
 local function selectKit(kitId: string)
@@ -878,102 +826,44 @@ end
 
 local built = false
 
-local function build(content: Frame)
-	-- Header (the panel around the content): the wallet top right, and the
-	-- subtitle we keep up to date ("1 OF 3 AVAILABLE").
-	local panel = content.Parent :: Instance
-	local newWallet = ProfileMenuController.createWallet(panel)
+local function build(content: Frame, host: MenuController.Host)
+	-- The wallet sits on the title row (top right), outside the scrolling content.
+	local newWallet = ProfileMenuController.createWallet(host.header)
 	newWallet.set(playerCoins(), false)
 	wallet = newWallet
-	local label = panel:FindFirstChild("Subtitle")
-	if label and label:IsA("TextLabel") then
-		subtitleLabel = label
-		label.Text = Theme.track(subtitle(), "three")
-	end
 
-	local roster = Theme.make("Frame", {
-		Name = "Roster",
-		Size = UDim2.fromOffset(150, 200),
-		BackgroundTransparency = 1,
-		Parent = content,
-	})
-	caption("ROSTER", { Size = UDim2.new(1, 0, 0, 12), Parent = roster })
-	local items = Theme.make("Frame", {
-		Name = "Items",
-		Position = UDim2.fromOffset(0, 16),
-		Size = UDim2.new(1, 0, 1, -16),
-		BackgroundTransparency = 1,
-		Parent = roster,
-	}, {
-		Theme.make("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }),
-	})
-	rosterMarker = Theme.make("Frame", {
-		Name = "RosterMarker",
-		Size = UDim2.fromOffset(2, 12),
-		BackgroundColor3 = C.Ink,
-	})
+	local grid = Panel.grid(
+		content,
+		CARD,
+		CARD_GAP,
+		UDim2.fromOffset(0, 0),
+		UDim2.fromOffset(GRID_WIDTH, DETAIL_HEIGHT - 4)
+	)
 	for order, kit in Kits.list() do
-		local button = Theme.make("TextButton", {
-			Name = kit.id,
-			LayoutOrder = order,
-			Size = UDim2.new(1, 0, 0, 50),
-			BackgroundTransparency = 1,
-			AutoButtonColor = false,
-			Text = "",
-			Parent = items,
-		}) :: TextButton
-		local name = Theme.text({
-			Name = "Name",
-			Position = UDim2.fromOffset(0, 10),
-			Size = UDim2.new(1, 0, 0, 16),
-			TextSize = 13,
-			TextStrokeTransparency = 1,
-			Text = Theme.track(kit.name, "four"),
-			Parent = button,
-		}) :: TextLabel
-		local status = caption(statusText(kit), {
-			Name = "Status",
-			Position = UDim2.fromOffset(0, 31),
-			Size = UDim2.new(1, 0, 0, 11),
-			TextSize = 9,
-			Parent = button,
+		local card = Panel.card({
+			parent = grid,
+			name = kit.name,
+			sub = statusText(kit),
+			layoutOrder = order,
+			onActivated = function()
+				selectKit(kit.id)
+			end,
 		})
-		local item: RosterItem = { kit = kit, button = button, name = name, status = status }
-		table.insert(rosterItems, item)
-		button.MouseEnter:Connect(function()
-			if kit.id ~= selectedId then
-				Theme.tween(name, 0.1, { TextColor3 = C.Ink2 })
-			end
-		end)
-		button.MouseLeave:Connect(function()
-			if kit.id ~= selectedId then
-				Theme.tween(name, 0.1, { TextColor3 = C.Ink3 })
-			end
-		end)
-		button.Activated:Connect(function()
-			selectKit(kit.id)
-		end)
+		Panel.figure(card.art, { pose = KitsMenuController.poseOf(kit.id) })
+		table.insert(rosterItems, { kit = kit, card = card })
 	end
 
-	Theme.make("Frame", {
-		Name = "Divider2",
-		Position = UDim2.fromOffset(170, 0),
-		Size = UDim2.fromOffset(1, 360),
-		BackgroundColor3 = C.Ink,
-		BackgroundTransparency = 0.88,
-		Parent = content,
-	})
 	detail = Theme.make("CanvasGroup", {
 		Name = "Detail",
 		Position = UDim2.fromOffset(DETAIL_X, DETAIL_Y),
-		Size = UDim2.fromOffset(360 + DETAIL_INSET.X + 2, 380 + DETAIL_INSET.Y),
+		Size = UDim2.fromOffset(DETAIL_WIDTH + DETAIL_INSET.X + 2, DETAIL_HEIGHT + DETAIL_INSET.Y),
 		BackgroundTransparency = 1,
 		Parent = content,
 	})
 	body = Theme.make("Frame", {
 		Name = "Body",
 		Position = UDim2.fromOffset(DETAIL_INSET.X, DETAIL_INSET.Y),
-		Size = UDim2.fromOffset(360, 380),
+		Size = UDim2.fromOffset(DETAIL_WIDTH, DETAIL_HEIGHT),
 		BackgroundTransparency = 1,
 		Parent = detail,
 	})
@@ -983,7 +873,7 @@ local function build(content: Frame)
 end
 
 -- A new save arrived (coins, XP, a kit bought, equipped...): update the
--- wallet, the subtitle, the roster lines and, if its state changed, the
+-- wallet, the roster lines and, if its state changed, the
 -- selected kit's action.
 local function onDataChanged()
 	if not built then
@@ -992,10 +882,6 @@ local function onDataChanged()
 	local currentWallet = wallet
 	if currentWallet then
 		currentWallet.set(playerCoins(), true)
-	end
-	local label = subtitleLabel
-	if label then
-		label.Text = Theme.track(subtitle(), "three")
 	end
 	refreshRoster(true)
 	local kit = Kits.get(selectedId)
@@ -1008,14 +894,32 @@ end
 -- Lifecycle
 ------------------------------------------------------------------------------
 
+-- The pose a kit's figure takes on its card (the REWARDS track uses it too).
+function KitsMenuController.poseOf(kitId: string): Panel.Pose
+	return POSES[kitId] or DEFAULT_POSE
+end
+
+-- Opens the KITS panel on `kitId` (the REWARDS track's cards).
+function KitsMenuController.show(kitId: string)
+	if Kits.get(kitId) == nil then
+		MenuController.open("Kits")
+	elseif built then
+		MenuController.open("Kits")
+		selectKit(kitId)
+	else
+		selectedId = kitId -- (the first build shows it)
+		MenuController.open("Kits")
+	end
+end
+
 function KitsMenuController.start()
 	MenuController.register({
 		id = "Kits",
 		label = "KITS",
-		subtitle = subtitle(),
-		order = 10, -- first in the list, above PROFILE and SETTINGS
-		size = Vector2.new(560, 480),
-		scrimWidth = 1100,
+		icon = "kits",
+		buttonText = "Kits",
+		order = 10, -- first in the bar
+		size = Vector2.new(DETAIL_X + DETAIL_INSET.X + DETAIL_WIDTH, DETAIL_HEIGHT),
 		build = build,
 	})
 	-- The saved profile says which kit is equipped, which kits are owned,
@@ -1026,6 +930,9 @@ function KitsMenuController.start()
 			equippedId = id
 		end
 		onDataChanged()
+		if not built then
+			MenuController.setBadge("Kits", buyableCount())
+		end
 	end)
 	-- The level can also arrive as the "Level" attribute (before the save).
 	player:GetAttributeChangedSignal("Level"):Connect(onDataChanged)

@@ -8,7 +8,14 @@
 -- <Part>  "Head" / "Torso" / "LeftLeg" / "RightLeg" (/ "LeftArm" / "RightArm")
 -- <kind>  "Lac" = laceration (a bottle smashed on them), "Slash" = a cut
 --         from a broken bottle, "Tear" = torn open by a hand (the Boxer's
---         finisher: the liver torn out, only "L", torso only)
+--         finisher: the liver torn out, only "L", torso only), "Burn" =
+--         burnt through by the Sentinel's heat vision (the skin gone, charred
+--         at the edge, what's under it shows: the skull on the head, cooked
+--         muscle on the body; no bleeding: cauterized), "Bore" = the
+--         Sentinel's finisher: the beam burnt a deep hole into the chest,
+--         over the heart (torso only, its front; the ribs cut, the lung's
+--         edge, the heart burnt through at the bottom of a deep "L"; no
+--         blood at all: cauterized. Drawn only at Gash.HEART, angle 0)
 -- <size>  "S" / "M" / "L" (grows when the same spot is hit again)
 -- x y z   where on the part (studs, in the part's space; the head: its
 --         round visible shape, radius ~0.6)
@@ -17,7 +24,7 @@
 
 local Gash = {}
 
-export type Kind = "Lac" | "Slash" | "Tear"
+export type Kind = "Lac" | "Slash" | "Tear" | "Burn" | "Bore"
 export type Size = "S" | "M" | "L"
 export type Data = {
 	kind: Kind,
@@ -30,6 +37,11 @@ export type Data = {
 Gash.PREFIX = "Gash_"
 Gash.MAX_PER_PART = 3
 Gash.SIZES = table.freeze({ "S", "M", "L" })
+-- Where a "Bore" is (Torso space: its front face, over the heart, on the
+-- character's LEFT = -X). The bore inserts of the wound kit are made for
+-- exactly this spot (tools/wounds/build_wound_kit.py BORE_AT): what shows
+-- inside (ribs, lung, heart) is the anatomy right there.
+Gash.HEART = Vector3.new(-0.22, 0.35, -0.5)
 
 -- R6 part name <-> the name used in the attributes.
 Gash.KEY_OF = table.freeze({
@@ -77,7 +89,13 @@ function Gash.decode(text: unknown): Data?
 		return nil
 	end
 	local kind, size = fields[1], fields[2]
-	if kind ~= "Lac" and kind ~= "Slash" and kind ~= "Tear" then
+	if
+		kind ~= "Lac"
+		and kind ~= "Slash"
+		and kind ~= "Tear"
+		and kind ~= "Burn"
+		and kind ~= "Bore"
+	then
 		return nil
 	end
 	if size ~= "S" and size ~= "M" and size ~= "L" then

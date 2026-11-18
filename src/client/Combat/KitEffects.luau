@@ -23,7 +23,6 @@
 --   KitEffects.keepsPose(moveId, victim)     no reaction clip (grabs, holds)
 --   KitEffects.watch(model)                  bleeding / fury visuals
 
-local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -32,7 +31,14 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
+local KitVFX = require(script.Parent.KitVFX)
 local Blood = require(script.Parent.Blood)
+local BloodBody = require(script.Parent.BloodBody)
+local BloodFace = require(script.Parent.BloodFace)
+local BloodPool = require(script.Parent.BloodPool)
+local BloodRivulet = require(script.Parent.BloodRivulet)
+local BloodStain = require(script.Parent.BloodStain)
+local RiftFx = require(script.Parent.RiftFx)
 
 local KitEffects = {}
 
@@ -40,14 +46,12 @@ local KitEffects = {}
 local GLASS_COLOR = Color3.fromRGB(74, 92, 58) -- green-brown beer bottle
 local GLASS_SHINE = Color3.fromRGB(150, 172, 128) -- thin bits: lighter, they catch the light
 local LABEL_COLOR = Color3.fromRGB(150, 128, 92) -- the paper label
-local BLOOD_COLOR = Color3.fromRGB(92, 12, 10)
 local FURY_LIGHT = Color3.fromRGB(150, 36, 28)
 
--- Bleeding: one drop this often (seconds), stains on the floor live this long.
-local DRIP_INTERVAL = 0.22
-local STAIN_LIFETIME = 30
--- Never more than this many stains in the world (16 players bleeding...).
-local MAX_STAINS = 60
+-- Bleeding: one drop this often (seconds).
+local DRIP_INTERVAL = 0.14
+-- A bleeder standing still / lying down feeds the pool under him this often.
+local POOL_FEED_INTERVAL = 0.3
 
 ------------------------------------------------------------------------------
 -- Moves by animation name (built from the kits' data)
@@ -92,6 +96,10 @@ local HEAVY_MOVES = table.freeze({
 	KnockoutCombo = true,
 	Slip_Counter = true,
 	SlipPlus_Counter = true,
+	Haymaker = true,
+	Skyfall = true,
+	GoreCharge = true,
+	HornHook = true,
 	Shove = true,
 	HammerFist = true,
 	DoubleHammer = true,
@@ -100,12 +108,18 @@ local HEAVY_MOVES = table.freeze({
 	Powerbomb_Hold = true,
 	ThrowOut_Hold = true,
 	BoneThrow = true, -- (a bone thrown into them, Shared/Weapons)
+	-- Dr. Rift
+	GravityGlove = true,
+	GravitySlam = true,
+	ExplosiveFlask = true,
+	OverchargedRay = true,
+	RiftSwarm = true,
 })
 -- Moves with their own victim reaction (instead of the usual one by zone).
 local REACTIONS: { [string]: string } = {
 	LiverShot = "HitLiver",
 }
--- Sound when the move LANDS.
+-- Sound when the move LANDS ("" = none).
 local HIT_SOUNDS: { [string]: string } = {
 	BottleSmash = "BottleBreak",
 	Headbutt = "Headbutt",
@@ -120,6 +134,14 @@ local HIT_SOUNDS: { [string]: string } = {
 	UppercutPlus = "HeavyHit",
 	KnockoutCombo = "HeavyHit",
 	SlipPlus_Counter = "HeavyHit",
+	HeatVision = "", -- (no sound: the skin just chars where it touches)
+	ThunderClap = "HeavyHit",
+	Skyfall = "HeavyHit",
+	Haymaker = "HeavyHit",
+	GoreCharge = "Tackle",
+	HornHook = "HeavyHit",
+	Stampede = "KickLow",
+	BullToss = "Tackle",
 	Shove = "BodyShot",
 	HammerFist = "HeavyHit",
 	DoubleHammer = "HeavyHit",
@@ -134,8 +156,16 @@ local HIT_SOUNDS: { [string]: string } = {
 	BodySlam_Hold = "BodySlam",
 	Powerbomb_Hold = "BodySlam",
 	ThrowOut_Hold = "Tackle",
+	-- Dr. Rift
+	AcidFlask = "AcidSizzle",
+	ExplosiveFlask = "HeavyHit",
+	RayGun = "Burn",
+	OverchargedRay = "Burn",
+	GravityGlove = "HeavyHit", -- (the blast itself: from the move start, RiftFx)
+	GravitySlam = "GloveBlast",
+	RiftSwarm = "Hit",
 }
--- Sound when the move STARTS (the swing).
+-- Sound when the move STARTS (the swing; "" = none).
 local START_SOUNDS: { [string]: string } = {
 	Brawler_Bottle = "HeavySwing",
 	Brawler_BrokenBottle = "Slash",
@@ -153,11 +183,25 @@ local START_SOUNDS: { [string]: string } = {
 	Boxer_LiverShot = "Swing",
 	Boxer_KnockoutCombo = "HeavySwing",
 	Boxer_Awaken = "Awaken",
+	-- (the Sentinel and Bull moves play their own sounds at the right
+	-- moment: KitVFX)
+	Sentinel_HeatVision = "",
+	Sentinel_ThunderClap = "",
+	Sentinel_Skyfall = "",
+	Sentinel_Haymaker = "",
+	Bull_GoreCharge = "",
+	Bull_HornHook = "HeavySwing",
+	Bull_Stampede = "",
+	Bull_Toss = "",
 	Bouncer_Shove = "HeavySwing",
 	Bouncer_Grab = "Swing",
 	Bouncer_HammerFist = "HeavySwing",
 	Bouncer_DoubleHammer = "HeavySwing",
 	Bouncer_Awaken = "Awaken",
+	Rift_Glove = "HeavySwing",
+	Rift_Slam = "HeavySwing",
+	Rift_Swarm = "Swing",
+	Rift_Awaken = "Awaken",
 }
 
 -- (a hold's clips are silent: the catch and its hits make the sounds)
@@ -265,7 +309,15 @@ local function buildBottle(broken: boolean): Model
 	return model
 end
 
+-- The bat's wrists: what turns it in the fist every frame (see holdProp).
+local wristLinks: { [Model]: RBXScriptConnection } = {}
+
 local function removeProp(model: Model)
+	local link = wristLinks[model]
+	if link then
+		wristLinks[model] = nil
+		link:Disconnect()
+	end
 	local prop = props[model]
 	if prop then
 		props[model] = nil
@@ -274,79 +326,162 @@ local function removeProp(model: Model)
 end
 
 -- A wooden baseball bat held by its handle (finisher). Same layout as the
--- bottle: pivot = the grip, its length along -Y.
-local BAT_WOOD = Color3.fromRGB(168, 118, 70)
-local BAT_TILT = 32 -- degrees
+-- bottle: pivot = the right fist (the grip), its length along -Y.
+-- Real size: 0.85 m (34 in) = 2.8 studs at the R6 scale (a 2-stud arm is a
+-- 0.6 m arm), from the knob 0.95 studs above the right fist (the left fist
+-- is on the handle between them) to the end 1.85 studs below it. Turned
+-- like a real maple bat: a flared knob, a thin taped handle, a long taper,
+-- the barrel and a rounded end cap. A little thicker than true scale (R6
+-- fists are big), barrel / handle as on a real bat.
+local BAT_WOOD = Color3.fromRGB(201, 160, 108) -- light maple
+local BAT_WOOD_DARK = Color3.fromRGB(176, 134, 86) -- the knob, a little darker
+local BAT_TAPE = Color3.fromRGB(30, 30, 33)
+local BAT_TILT = 32 -- degrees: the bat across the fist when no clip turns it
+local BAT_GRIP = CFrame.new(0, -0.85, 0) -- the right fist, in the arm
+local BAT_KNOB = 0.95 -- studs from the right fist to the knob's end
+local BAT_LENGTH = 2.8
+local BAT_HANDLE = 0.115 -- diameters
+local BAT_BARREL = 0.27
+local function batPart(
+	model: Model,
+	name: string,
+	from: number, -- studs from the knob's end
+	length: number,
+	diameter: number,
+	color: Color3,
+	material: Enum.Material
+): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = Enum.PartType.Cylinder -- (a cylinder's axis is its X)
+	part.Size = Vector3.new(length, diameter, diameter)
+	part.Material = material
+	part.Color = color
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Massless = true
+	part.CastShadow = diameter > 0.1
+	-- (turned so its X runs along the bat, +X toward the knob)
+	part.CFrame = CFrame.new(0, BAT_KNOB - from - length / 2, 0) * CFrame.Angles(0, 0, math.rad(90))
+	part.Parent = model
+	return part
+end
 local function buildBat(): Model
 	local model = Instance.new("Model")
 	model.Name = "Bat"
-	local alongY = CFrame.Angles(0, 0, math.rad(90))
-	local function piece(
-		name: string,
-		length: number,
-		diameter: number,
-		center: number,
-		color: Color3,
-		material: Enum.Material
-	)
-		local part = Instance.new("Part")
-		part.Name = name
-		part.Shape = Enum.PartType.Cylinder
-		part.Size = Vector3.new(length, diameter, diameter)
-		part.Material = material
-		part.Color = color
-		part.CanCollide = false
-		part.CanQuery = false
-		part.CanTouch = false
-		part.Massless = true
-		part.CFrame = CFrame.new(0, -center, 0) * alongY
-		part.Parent = model
+	local wood, fabric = Enum.Material.Wood, Enum.Material.Fabric
+	-- The knob: a flat disc, then flaring into the handle.
+	batPart(model, "Knob", 0, 0.05, 0.2, BAT_WOOD_DARK, wood)
+	batPart(model, "KnobFlare", 0.05, 0.04, 0.16, BAT_WOOD_DARK, wood)
+	batPart(model, "KnobNeck", 0.09, 0.03, 0.13, BAT_WOOD, wood)
+	-- The handle (the bat's root part: the one welded to the fist).
+	batPart(model, "Handle", 0.1, 1.0, BAT_HANDLE, BAT_WOOD, wood)
+	-- Grip tape over the hands' part of the handle, its spiral wraps a little
+	-- proud of it, a finishing band at its end.
+	batPart(model, "Tape", 0.1, 0.84, BAT_HANDLE + 0.018, BAT_TAPE, fabric)
+	for index = 0, 8 do
+		local wrap = batPart(
+			model,
+			"TapeWrap",
+			0.13 + index * 0.09,
+			0.016,
+			BAT_HANDLE + 0.03,
+			BAT_TAPE,
+			fabric
+		)
+		wrap.CFrame *= CFrame.Angles(0, 0, math.rad(12)) -- (the wraps go round at a slant)
 	end
-	-- A big bat, ~4.2 studs (the finisher's poses were solved with these
-	-- lengths: the barrel lands on the head, both hands on the handle).
-	-- (a long handle: room for both fists, the left one under the right)
-	piece("Knob", 0.1, 0.3, -0.92, BAT_WOOD, Enum.Material.Wood)
-	piece("Grip", 1.7, 0.17, -0.02, Color3.fromRGB(28, 28, 30), Enum.Material.Fabric) -- tape
-	piece("Handle", 0.55, 0.19, 1.05, BAT_WOOD, Enum.Material.Wood)
-	piece("Taper", 0.65, 0.28, 1.62, BAT_WOOD, Enum.Material.Wood)
-	piece("Barrel", 1.3, 0.42, 2.6, BAT_WOOD, Enum.Material.Wood)
-	local tip = Instance.new("Part")
-	tip.Name = "Tip"
-	tip.Shape = Enum.PartType.Ball
-	tip.Size = Vector3.new(0.42, 0.42, 0.42)
-	tip.Material = Enum.Material.Wood
-	tip.Color = BAT_WOOD
-	tip.CanCollide = false
-	tip.CanQuery = false
-	tip.CanTouch = false
-	tip.Massless = true
-	tip.CFrame = CFrame.new(0, -3.25, 0)
-	tip.Parent = model
+	batPart(model, "TapeEnd", 0.92, 0.035, BAT_HANDLE + 0.036, BAT_TAPE, fabric)
+	-- The taper: the handle swelling into the barrel (short overlapping
+	-- steps, each a little thicker).
+	local steps = 10
+	local taperFrom, taperTo = 1.07, 1.81
+	local step = (taperTo - taperFrom) / steps
+	for index = 1, steps do
+		local share = (index - 0.5) / steps
+		local eased = share * share * (3 - 2 * share) -- (slow at both ends, like a turned bat)
+		local diameter = BAT_HANDLE + (BAT_BARREL - BAT_HANDLE) * eased
+		batPart(
+			model,
+			`Taper{index}`,
+			taperFrom + (index - 1) * step,
+			step + 0.01,
+			diameter,
+			BAT_WOOD,
+			wood
+		)
+	end
+	-- The barrel and its rounded end cap (a squashed ball).
+	local barrel =
+		batPart(model, "Barrel", taperTo, BAT_LENGTH - 0.05 - taperTo, BAT_BARREL, BAT_WOOD, wood)
+	local cap = Instance.new("Part")
+	cap.Name = "Tip"
+	cap.Size = Vector3.new(0.1, BAT_BARREL, BAT_BARREL)
+	cap.Material = wood
+	cap.Color = BAT_WOOD
+	cap.CanCollide = false
+	cap.CanQuery = false
+	cap.CanTouch = false
+	cap.Massless = true
+	local dome = Instance.new("SpecialMesh")
+	dome.MeshType = Enum.MeshType.Sphere
+	dome.Parent = cap
+	cap.CFrame = barrel.CFrame * CFrame.new(-barrel.Size.X / 2, 0, 0)
+	cap.Parent = model
+	model.PrimaryPart = model:FindFirstChild("Handle") :: BasePart
 	model.WorldPivot = CFrame.new()
 	return model
 end
 
--- Puts the prop in `model`'s right hand for `duration` seconds.
-local function holdProp(model: Model, kind: string, duration: number)
+-- Puts the prop in `model`'s right hand for `duration` seconds. The bat:
+-- `grip` gives its angle in the fist this frame (the wrists: the finisher's
+-- clip, CombatClips "Grip"), nil = BAT_TILT.
+local function holdProp(model: Model, kind: string, duration: number, grip: (() -> CFrame?)?)
 	removeProp(model)
 	local arm = model:FindFirstChild("Right Arm")
 	if arm == nil or not arm:IsA("BasePart") then
 		return
 	end
-	local prop = if kind == "Bat" then buildBat() else buildBottle(kind == "BrokenBottle")
+	local isBat = kind == "Bat"
+	local prop = if isBat then buildBat() else buildBottle(kind == "BrokenBottle")
 	-- The grip is at the bottom of the arm (the fist), the bottle sticks out.
-	-- The bat leans back across the fist, so both hands can hold it (the
-	-- finisher's poses were solved with this angle: BAT_TILT).
-	local grip = arm.CFrame
-		* CFrame.new(0, -0.85, 0)
-		* CFrame.Angles(0, 0, if kind == "Bat" then math.rad(BAT_TILT) else 0)
-	prop:PivotTo(grip)
-	for _, part in prop:GetChildren() do
-		if part:IsA("BasePart") then
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = arm
-			weld.Part1 = part
-			weld.Parent = part
+	-- The bat leans across the fist, so both hands can hold it.
+	local rest = BAT_GRIP * CFrame.Angles(0, 0, math.rad(if isBat then BAT_TILT else 0))
+	prop:PivotTo(arm.CFrame * rest)
+	local root = prop.PrimaryPart
+	if isBat and root then
+		-- The handle on a weld the wrists turn; the rest of the bat on it.
+		local wrist = Instance.new("Weld")
+		wrist.Name = "Wrist"
+		wrist.Part0 = arm
+		wrist.Part1 = root
+		wrist.C0 = rest
+		-- (Part1 = Part0 * C0 * C1:Inverse(): C1 = the fist's frame seen from the handle)
+		wrist.C1 = root.CFrame:ToObjectSpace(arm.CFrame * rest)
+		wrist.Parent = root
+		for _, part in prop:GetChildren() do
+			if part:IsA("BasePart") and part ~= root then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = root
+				weld.Part1 = part
+				weld.Parent = part
+			end
+		end
+		if grip then
+			wristLinks[model] = RunService.RenderStepped:Connect(function()
+				local angle = grip()
+				wrist.C0 = if angle then BAT_GRIP * angle else rest
+			end)
+		end
+	else
+		for _, part in prop:GetChildren() do
+			if part:IsA("BasePart") then
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = arm
+				weld.Part1 = part
+				weld.Parent = part
+			end
 		end
 	end
 	prop.Parent = model
@@ -406,59 +541,24 @@ local function burst(
 	end
 end
 
-local stains: { BasePart } = {}
-
--- A flat dark stain where a drop lands, fading out slowly.
-local function stain(position: Vector3, size: number)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	-- Through every fighter (the bleeding one first of all): only the floor.
-	params.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
-	params.RespectCanCollide = true
-	local hit = workspace:Raycast(position, Vector3.new(0, -12, 0), params)
-	if
-		hit == nil
-		or hit.Instance.Parent and hit.Instance.Parent:FindFirstChildOfClass("Humanoid")
-	then
+-- A mark where a drop of the fresh cut lands on the floor below `position`
+-- (through every fighter, the bleeding one first of all), the same on
+-- every client (`random` is seeded).
+local function stain(position: Vector3, size: number, random: Random)
+	local hit = workspace:Raycast(position, Vector3.new(0, -12, 0), BloodStain.ground())
+	if hit == nil then
 		return
 	end
-	local mark = Instance.new("Part")
-	mark.Name = "BloodStain"
-	mark.Shape = Enum.PartType.Cylinder
-	mark.Size = Vector3.new(0.02, size, size)
-	mark.Anchored = true
-	mark.CanCollide = false
-	mark.CanQuery = false
-	mark.CanTouch = false
-	mark.CastShadow = false
-	mark.Material = Enum.Material.SmoothPlastic
-	mark.Color = BLOOD_COLOR
-	mark.Transparency = 0.15
-	-- Lay the disc flat on the surface it hit.
-	mark.CFrame = CFrame.lookAt(hit.Position + hit.Normal * 0.02, hit.Position + hit.Normal * 2)
-		* CFrame.Angles(0, math.rad(90), 0)
-	mark.Parent = workspace
-	table.insert(stains, mark)
-	if #stains > MAX_STAINS then
-		local oldest = table.remove(stains, 1)
-		if oldest then
-			oldest:Destroy()
-		end
-	end
-	task.delay(STAIN_LIFETIME * 0.6, function()
-		if mark.Parent then
-			local fade = game:GetService("TweenService")
-				:Create(mark, TweenInfo.new(STAIN_LIFETIME * 0.4), { Transparency = 1 })
-			fade:Play()
-			fade.Completed:Connect(function()
-				local index = table.find(stains, mark)
-				if index then
-					table.remove(stains, index)
-				end
-				mark:Destroy()
-			end)
-		end
-	end)
+	local flat = Vector3.new(random:NextNumber(-1, 1), 0, random:NextNumber(-1, 1))
+	BloodStain.stain(
+		if size > 1 then "spatterRound" else "drip",
+		hit.Position,
+		hit.Normal,
+		flat,
+		size * 0.5,
+		size * 0.5 * random:NextNumber(1, 1.2),
+		{ random = random, start = Blood.PALETTE.VENOUS, material = hit.Material }
+	)
 end
 
 -- One drop of blood falling from the wound: a glass cut (Gash_*), else the
@@ -474,6 +574,9 @@ local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
 				or string.match(name, "^" .. Gash.SHARD_PREFIX .. "(%a+)_%d+$")
 			local partName = if key then Gash.PART_OF[key] else nil
 			local cut = Gash.decode(value)
+			if cut and cut.kind == "Bore" then
+				cut = nil -- (the finisher's bore doesn't bleed: cauterized)
+			end
 			local shard = if cut then nil else Gash.decodeShard(value)
 			local point = if cut then cut.point elseif shard then shard.point else nil
 			local part = if partName then model:FindFirstChild(partName) else nil
@@ -503,19 +606,56 @@ local function dripStart(model: Model, random: Random): (Vector3?, BasePart?)
 	if part == nil or not part:IsA("BasePart") then
 		return nil, nil
 	end
-	local depth = if part.Name == "Head" then 0.8 else part.Size.Z / 2 + 0.06
-	local y = if part.Name == "Head" then -0.2 else random:NextNumber(-0.5, 0.5)
-	return (part.CFrame * CFrame.new(random:NextNumber(-0.3, 0.3), y, -depth)).Position, part
+	-- (the SAME spot for the whole bleed: one wound, one run from it - the
+	-- seed changes with each new bleed the server starts)
+	local bleedUntil = model:GetAttribute("BleedUntil")
+	local spot = Random.new(
+		Blood.seed(model.Name, part.Name, if typeof(bleedUntil) == "number" then bleedUntil else 0)
+	)
+	local depth = if part.Name == "Head" then 0.6 else part.Size.Z / 2 + 0.06
+	local y = if part.Name == "Head" then -0.2 else spot:NextNumber(-0.5, 0.5)
+	return (part.CFrame * CFrame.new(spot:NextNumber(-0.3, 0.3), y, -depth)).Position, part
 end
 
-local function drip(model: Model)
+-- The wound keeps bleeding: its run (BloodRivulet) is fed again. The blood
+-- runs down the skin first; once the run reaches a drip point (the bottom
+-- of the torso, the chin...) a drop hangs there, swells and falls by itself
+-- (or a thin stream pours, for a heavy bleed). Returns where it drips from.
+local function drip(model: Model): Vector3?
 	local random = Random.new()
 	local start, part = dripStart(model, random)
 	if start == nil or part == nil then
-		return
+		return nil
 	end
-	-- (a real drop: it falls, stretches, splashes where it lands)
-	Blood.drop(start, part.AssemblyLinearVelocity * 0.5, random:NextNumber(0.05, 0.1))
+	local run = BloodBody.woundRun(model, part, start, random)
+	local from = (if run then BloodRivulet.dripPoint(run) or BloodRivulet.tip(run) else nil)
+		or start
+	if run and not BloodRivulet.stopped(run) then
+		return from -- (still running down, or dripping by itself)
+	end
+	-- no run (too many at once) or it stopped: a plain drop off its end.
+	-- (a dripping drop falls slower than a thrown one: passive gravity)
+	Blood.drop(
+		from,
+		part.AssemblyLinearVelocity * 0.5,
+		random:NextNumber(0.05, 0.08),
+		random,
+		BloodRivulet.passiveScale()
+	)
+	return from
+end
+
+-- Has `model` a cut / glass in it (it bleeds when it lies there)?
+local function hasWounds(model: Model): boolean
+	for name in model:GetAttributes() do
+		if
+			string.match(name, "^" .. Gash.PREFIX)
+			or string.match(name, "^" .. Gash.SHARD_PREFIX)
+		then
+			return true
+		end
+	end
+	return false
 end
 
 ------------------------------------------------------------------------------
@@ -525,6 +665,9 @@ end
 type Watched = {
 	model: Model,
 	nextDrip: number,
+	nextFeed: number,
+	dripAt: Vector3?, -- where its last drop fell from
+	dripSoundAt: number,
 	fury: { Instance }?, -- the Street Fury visuals while awakened
 }
 
@@ -594,12 +737,44 @@ function KitEffects.watch(model: Model)
 	if watched[model] then
 		return
 	end
-	local entry: Watched = { model = model, nextDrip = 0, fury = nil }
+	local entry: Watched =
+		{ model = model, nextDrip = 0, nextFeed = 0, dripAt = nil, dripSoundAt = 0, fury = nil }
 	watched[model] = entry
+	-- Knocked out with open cuts: the body bleeds into a pool for a while.
+	model:GetAttributeChangedSignal("KnockedOut"):Connect(function()
+		if model:GetAttribute("KnockedOut") ~= true or not Config.Blood.ENABLED then
+			return
+		end
+		if model:GetAttribute("Bleeding") == true or hasWounds(model) then
+			local torso = model:FindFirstChild("Torso")
+			if torso and torso:IsA("BasePart") then
+				local random =
+					Random.new(Blood.seed(model.Name, "KO", math.floor(torso.Position.X)))
+				task.delay(random:NextNumber(0.6, 1.2), function()
+					if torso.Parent then
+						-- (fed at the NECK end of the body: a pool shows from the
+						-- head's side, it isn't hidden under the torso)
+						local neck = (torso.CFrame * CFrame.new(0, 1, 0)).Position
+						BloodPool.feed(model, neck, 0.35, random:NextNumber(6, 10), 1.6)
+					end
+				end)
+			end
+		end
+	end)
 	model:GetAttributeChangedSignal("Awakened"):Connect(function()
 		setFury(entry, model:GetAttribute("Awakened") == true)
 	end)
+	BloodFace.watch(model) -- (knocked out: sideways face runs, a pool under the head)
 	setFury(entry, model:GetAttribute("Awakened") == true)
+	-- The server cuts a move when its fighter is stunned / knocked down /
+	-- out: its effects (heat vision beam, landing...) stop with it.
+	for _, attribute in { "Stunned", "KnockedOut", "Ragdolled" } do
+		model:GetAttributeChangedSignal(attribute):Connect(function()
+			if model:GetAttribute(attribute) == true then
+				KitVFX.stop(model)
+			end
+		end)
+	end
 	model.AncestryChanged:Connect(function()
 		if model.Parent == nil then
 			watched[model] = nil
@@ -611,9 +786,37 @@ end
 RunService.Heartbeat:Connect(function()
 	local time = os.clock()
 	for model, entry in watched do
-		if model:GetAttribute("Bleeding") == true and time >= entry.nextDrip then
+		if model:GetAttribute("Bleeding") ~= true then
+			continue
+		end
+		if time >= entry.nextDrip then
 			entry.nextDrip = time + DRIP_INTERVAL * Random.new():NextNumber(0.7, 1.4)
-			drip(model)
+			entry.dripAt = drip(model) or entry.dripAt
+			if time - entry.dripSoundAt > 0.35 then
+				-- (a soft patter, not every drop: 3 a second at most)
+				entry.dripSoundAt = time
+				SoundController.play("BloodDrip", model)
+			end
+		end
+		-- standing still / lying there: the drops gather into a pool under it
+		local root = model:FindFirstChild("HumanoidRootPart")
+		local dripAt = entry.dripAt
+		if time >= entry.nextFeed and dripAt and root and root:IsA("BasePart") then
+			entry.nextFeed = time + POOL_FEED_INTERVAL
+			local velocity = root.AssemblyLinearVelocity
+			local still = Vector3.new(velocity.X, 0, velocity.Z).Magnitude < 2
+				or model:GetAttribute("KnockedOut") == true
+				or model:GetAttribute("Ragdolled") == true
+			local perSecond = model:GetAttribute("BleedPerSecond")
+			if still then
+				BloodPool.feed(
+					model,
+					dripAt,
+					(if typeof(perSecond) == "number" then perSecond else 1)
+						* Config.Blood.FEED_SCALE,
+					POOL_FEED_INTERVAL * 1.5
+				)
+			end
 		end
 	end
 end)
@@ -630,14 +833,18 @@ local swingToken: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: an
 
 function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local move = moveByAnimation[animation]
+	RiftFx.onAction(model, animation) -- (Dr. Rift's flask, guns, glove)
 	local prop = if move then move.prop else nil
 	if move and prop then
 		holdProp(model, prop, move.duration)
 	end
 	local token = (swingToken[model] or 0) + 1
 	swingToken[model] = token
+	BloodBody.onSwing(model) -- (a bloody fist flicks blood off)
+	BloodFace.noteAction(model) -- (not standing idle: no spit / wipe now)
+	KitVFX.onAction(model, animation, move)
 	local sound = START_SOUNDS[animation]
-	if sound and not silent then
+	if sound and sound ~= "" and not silent then
 		SoundController.play(sound, model)
 		-- A flurry (jab rush, kick combo...): every blow whooshes, not just
 		-- the first one.
@@ -655,20 +862,174 @@ function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	end
 end
 
--- The finisher's bat in `model`'s hand for `duration` seconds.
-function KitEffects.showBat(model: Model, duration: number)
-	holdProp(model, "Bat", duration)
+-- The seed of a hit's blood: the same numbers on every client (the attack's
+-- id comes from the server), so everyone sees the same spray land.
+function KitEffects.bloodSeed(attackId: unknown, victim: Model, zone: string): number
+	local id = victim:GetAttribute("Id")
+	return Blood.seed(
+		if typeof(attackId) == "number" or typeof(attackId) == "string" then attackId else 0,
+		if id ~= nil then id else victim.Name,
+		zone
+	)
+end
+
+-- A swing (an M1, a kit move): a bloody fist flicks blood off in a line.
+function KitEffects.onSwing(model: Model)
+	BloodBody.onSwing(model)
+	BloodFace.noteAction(model)
+end
+
+-- A punch landed on `victim` (every Hit, bloody or not): the fist that did
+-- it counts it (after many, its knuckles split).
+function KitEffects.punchLanded(victim: Model, attacker: Model)
+	local root = victim:FindFirstChild("HumanoidRootPart") or victim:FindFirstChild("Torso")
+	if root == nil or not root:IsA("BasePart") then
+		return
+	end
+	local best: BasePart? = nil
+	local bestDistance = 3.5
+	for _, name in { "Right Arm", "Left Arm" } do
+		local arm = attacker:FindFirstChild(name)
+		if arm and arm:IsA("BasePart") then
+			local tip = (arm.CFrame * CFrame.new(0, -arm.Size.Y / 2, 0)).Position
+			local distance = (tip - root.Position).Magnitude
+			if distance < bestDistance then
+				best, bestDistance = arm, distance
+			end
+		end
+	end
+	if best then
+		BloodBody.countPunch(attacker, best)
+	end
+end
+
+-- The finisher's bat in `model`'s hand for `duration` seconds. `grip`:
+-- its angle in the fist this frame (the wrists), nil = held still.
+function KitEffects.showBat(model: Model, duration: number, grip: (() -> CFrame?)?)
+	holdProp(model, "Bat", duration, grip)
+end
+
+-- The bat just went through a head: its barrel coated red (thick at the
+-- tip, thinning toward the handle, a few spots up the taper) and dripping
+-- real drops on the floor for a while. Goes with the bat.
+local BAT_BLOOD = Blood.PALETTE.VENOUS -- (fresh on the wood, it darkens as it runs)
+local BAT_DRIP_TIME = 1.6 -- seconds it drips
+local BAT_DRIP_EVERY = 0.11
+function KitEffects.bloodyBat(model: Model)
+	local held: Model? = props[model]
+	if held == nil or held.Name ~= "Bat" then
+		return
+	end
+	local prop: Model = held
+	local barrel = prop:FindFirstChild("Barrel")
+	local tip = prop:FindFirstChild("Tip")
+	if not (barrel and barrel:IsA("BasePart") and tip and tip:IsA("BasePart")) then
+		return
+	end
+	local function coat(
+		name: string,
+		on: BasePart,
+		shape: Enum.PartType,
+		size: Vector3,
+		at: CFrame
+	): Part
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Shape = shape
+		part.Size = size
+		part.Material = Enum.Material.SmoothPlastic
+		part.Color = BAT_BLOOD
+		part.Reflectance = 0.08 -- (wet)
+		part.CanCollide = false
+		part.CanQuery = false
+		part.CanTouch = false
+		part.Massless = true
+		part.CastShadow = false
+		part.CFrame = on.CFrame * at
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = on
+		weld.Part1 = part
+		weld.Parent = part
+		part.Parent = prop
+		return part
+	end
+	-- (a cylinder's axis is its X; along the barrel, -X goes toward the tip)
+	local width = barrel.Size.Y + 0.02
+	coat(
+		"BloodCoat",
+		barrel,
+		Enum.PartType.Cylinder,
+		Vector3.new(barrel.Size.X * 0.55, width, width),
+		CFrame.new(-barrel.Size.X * 0.225, 0, 0)
+	)
+	coat(
+		"BloodRing",
+		barrel,
+		Enum.PartType.Cylinder,
+		Vector3.new(0.12, width, width),
+		CFrame.new(barrel.Size.X * 0.12, 0, 0)
+	)
+	-- (the end cap: a squashed ball, like the cap itself)
+	local capCoat = coat(
+		"BloodTip",
+		tip,
+		Enum.PartType.Block,
+		tip.Size + Vector3.new(0.02, 0.02, 0.02),
+		CFrame.new()
+	)
+	local dome = Instance.new("SpecialMesh")
+	dome.MeshType = Enum.MeshType.Sphere
+	dome.Parent = capCoat
+	local taper = prop:FindFirstChild("Taper8")
+	if taper and taper:IsA("BasePart") then
+		local random = Random.new(17) -- (the same spots on every client)
+		for index = 1, 4 do
+			local angle = index * 1.7
+			local radius = taper.Size.Y / 2
+			coat(
+				"BloodSpot",
+				taper,
+				Enum.PartType.Block,
+				Vector3.new(random:NextNumber(0.06, 0.16), 0.02, random:NextNumber(0.05, 0.1)),
+				CFrame.new(random:NextNumber(-0.04, 0.04), 0, 0)
+					* CFrame.Angles(angle, 0, 0)
+					* CFrame.new(0, radius, 0)
+			)
+		end
+	end
+	-- Drops falling off the tip (Blood: they splash where they land), flung
+	-- a little the way the bat moves.
+	task.spawn(function()
+		local started = os.clock()
+		local last = tip.Position
+		while os.clock() - started < BAT_DRIP_TIME do
+			local waited = task.wait(BAT_DRIP_EVERY)
+			if props[model] ~= prop or tip.Parent == nil then
+				return
+			end
+			local now = tip.Position
+			local fling = (now - last) / math.max(waited, 1e-3) * 0.35
+			last = now
+			Blood.drop(now - Vector3.new(0, tip.Size.Y / 2, 0), fling, 0.05)
+		end
+	end)
 end
 
 -- Our move was refused by the server: take the prop back.
 function KitEffects.stopAction(model: Model)
 	swingToken[model] = (swingToken[model] or 0) + 1 -- (no more swings of it)
+	KitVFX.stop(model)
 	removeProp(model)
+	RiftFx.stopAction(model)
 end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
-	SoundController.play(HIT_SOUNDS[moveId] or "Hit", victim)
+	local hitSound = HIT_SOUNDS[moveId] or "Hit"
+	if hitSound ~= "" then
+		SoundController.play(hitSound, victim)
+	end
+	KitVFX.onHit(victim, attacker, moveId)
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
 	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil
@@ -730,8 +1091,20 @@ end
 -- the wound away from the blow (a little back at the attacker too), the
 -- wound itself bloody, the attacker's fist bloody, the drops splashing
 -- where they land (floor, walls, bodies). `amount`: 1 a punch, more for
--- heavy blows (2-3).
-function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amount: number?)
+-- heavy blows (2-3). `seed` (from the attack: Blood.seed) makes it the same
+-- on every client; without it, it's random. `info` = { strong, moveId,
+-- side } of the hit: what face wound it opens (BloodFace).
+function KitEffects.bloodSpray(
+	victim: Model,
+	attacker: Model,
+	zone: string,
+	amount: number?,
+	seed: number?,
+	info: BloodFace.HitInfo?
+)
+	if not Config.Blood.ENABLED then
+		return
+	end
 	local partName = if zone == "Head"
 		then "Head"
 		elseif zone == "Legs" then "Right Leg"
@@ -742,6 +1115,14 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 	end
 	local _, toward = impactPoint(part, attacker)
 	local much = (amount or 1) * (if zone == "Head" then 1.25 else 1)
+	local heavy = much >= 2
+	if zone == "Head" and not heavy and BloodFace.isFresh(victim) then
+		-- the first punch on an intact face: a few drops, not a spray
+		much *= 0.45
+	elseif zone == "Head" then
+		-- (a blow on an already open wound sprays more: up to ×1.9)
+		much *= math.min(1 + 0.3 * BloodFace.openWounds(victim), 1.9)
+	end
 	-- The wound, on the real skin facing the blow (the classic head is
 	-- round, 0.6 across; its part is a wider box).
 	local point: Vector3
@@ -773,15 +1154,17 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 			normal = look * facing
 		end
 	end
-	local random = Random.new()
-	local side = toward:Cross(Vector3.yAxis)
+	local random = if seed then Random.new(seed) else Random.new()
+	local side = toward:Cross(Vector3.new(0, 1, 0))
 	local out = point + normal * 0.08 -- (just outside the skin, not inside the body)
 	-- most of it thrown back out of the struck skin, up and fanned sideways
 	Blood.spray(
 		out,
 		normal + side * random:NextNumber(-1, 1) + Vector3.new(0, 0.6, 0),
 		much * 0.8,
-		victim
+		victim,
+		nil,
+		random
 	)
 	-- some carried along the blow, along the skin
 	Blood.spray(
@@ -789,10 +1172,20 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 		side * (if random:NextNumber() < 0.5 then 1 else -1) - toward * 0.3 + Vector3.new(0, 0.4, 0),
 		much * 0.35,
 		victim,
-		true
+		true,
+		random
 	)
-	-- the wound itself: blood on the skin / clothes there
-	Blood.splat(point, normal, 0.22 + 0.06 * much, Vector3.new(0, -3, 0), part)
+	if much >= 2 then
+		SoundController.play("BloodSplat", victim)
+	end
+	-- the wound itself: blood on the skin, soaking into the clothes there
+	Blood.splat(point, normal, 0.22 + 0.06 * much, Vector3.new(0, -3, 0), part, random)
+	if part.Name == "Head" then
+		-- a face that bleeds: the nose, a split lip (runs, drops off the chin)
+		BloodBody.face(victim, attacker, heavy, random, info)
+	else
+		BloodBody.soak(victim, part, point, math.min(much * 0.5, 1.2))
+	end
 	-- the fist (or foot) that did it, bloody: its end, if it's close
 	local best: BasePart? = nil
 	local bestDistance = math.huge
@@ -813,7 +1206,11 @@ function KitEffects.bloodSpray(victim: Model, attacker: Model, zone: string, amo
 			then (best.CFrame * CFrame.new(0, -best.Size.Y / 2 + 0.3, -best.Size.Z / 2)).Position
 			else (best.CFrame * CFrame.new(0, -best.Size.Y / 2, 0)).Position
 		local face = if isLeg then best.CFrame.LookVector else -best.CFrame.UpVector
-		Blood.splat(tip, face, 0.16 + 0.04 * much, Vector3.zero, best)
+		Blood.splat(tip, face, 0.16 + 0.04 * much, Vector3.zero, best, random)
+	end
+	if best and bestDistance < 3.5 then
+		-- (the knuckles keep it: the next swings flick it off)
+		BloodBody.bloodyLimb(attacker, best, 0.35)
 	end
 end
 
@@ -882,10 +1279,16 @@ function KitEffects.skinTear(victim: Model, attacker: Model, seed: number, zone:
 		end)
 	end
 
-	-- Bleeding from the fresh cut (same drops on every client).
-	burst(point, 9, BLOOD_COLOR, Enum.Material.SmoothPlastic, 0.1, 9, 1.4, random)
-	stain(point + away * 0.8, 1.3)
-	stain(point + away * 1.6 + Vector3.new(random:NextNumber(-0.4, 0.4), 0, 0), 0.7)
+	if not Config.Blood.ENABLED then
+		return
+	end
+	-- Bleeding from the fresh cut (same drops on every client): real drops
+	-- flicked off by the glass, where they land they leave their marks.
+	Blood.spray(point - toward * 0.05, away + Vector3.new(0, 0.5, 0), 0.6, victim, true, random)
+	stain(point + away * 0.8, 1.3, random)
+	stain(point + away * 1.6 + Vector3.new(random:NextNumber(-0.4, 0.4), 0, 0), 0.7, random)
+	-- the cut wets the clothes / skin around it
+	BloodBody.soak(victim, head, point, 0.8)
 end
 
 return table.freeze(KitEffects)

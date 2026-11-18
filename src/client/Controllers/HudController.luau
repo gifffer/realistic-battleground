@@ -2,31 +2,34 @@
 -- HudController: your health and stamina, bottom-left (display only),
 -- plus your level, XP line and the rewards you just earned above them.
 --
---   FINISHER  +75 XP · +15 COINS      rewards (newest at the bottom, max 3)
---   LV 8      ────────────────────    level + XP hairline (1 px, faint)
---   82  HEALTH                /100
+--   Finisher  +75 XP · +15 coins      rewards (newest at the bottom, max 3)
+--   Lv 8      ────────────────────    level + XP hairline (1 px, faint)
+--   82  Health                /100
 --   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   health: 2 px hairline (+ a red "ghost"
 --   ─────────────────────────────     that drains after a hit)
---   STAMINA                           stamina: 1 px hairline
+--   Stamina                           stamina: 1 px hairline
 --
 -- • Damage: the bar drops at once, a red sliver shows what you just lost and
 --   drains away a moment later; the number flashes red.
 -- • Low health (≤ 30): the bar and the number stay red.
 -- • Out of stamina: the stamina line turns red and pulses, its label reads
---   WINDED. While blocking it reads GUARD, while limping LIMPING.
+--   Winded. While blocking it reads Guard, while limping Limping.
 -- • Full health and stamina for a few seconds: the whole block fades back,
 --   any change brings it back.
--- • Bleeding (a bottle cut...): the label reads BLEEDING, the part of
+-- • Bleeding (a bottle cut...): the label reads Bleeding, the part of
 --   the bar the cut will still take is drawn red and shrinks with each tick,
 --   and the left edge of the screen darkens a little at each tick.
 -- • Soft dark gradients at the screen edges keep text readable on bright
 --   scenes. Everything hides while you're knocked out or a menu is open.
+-- • Screen size: the block shrinks on a phone / small window and grows a
+--   little on a large screen, from its corner (Theme.autoScale). On a
+--   touch screen it sits top left, clear of the thumbstick.
 --
 -- • XP: when you earn XP the line grows and the bit you just earned shows
 --   bright for a moment; on a level up it fills to the end, the level
 --   number changes and it starts again from 0 (the big "LEVEL 10" title is
 --   LevelUpController's job).
--- • Rewards ("KILL +50 XP · +10 COINS"): slide in from the left, older
+-- • Rewards ("Kill +50 XP · +10 coins"): slide in from the left, older
 --   lines dim and move up, each fades out after a few seconds.
 --
 -- Health comes from the Humanoid, stamina from the "Stamina" /
@@ -182,48 +185,63 @@ local function build()
 		Name = "Vitals",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 48, 1, -44),
-		Size = UDim2.fromOffset(240, 72),
+		Size = UDim2.fromOffset(220, 58),
 		BackgroundTransparency = 1,
 		Parent = gui,
 	})
+	-- Follows the screen size from its corner (smaller on a phone).
+	Theme.autoScale(vitals, 0.75)
+	-- On a touch screen the bottom left is Roblox's thumbstick (and the
+	-- thumb on it): the block goes to the top left, under the top bar.
+	Theme.onViewportChanged(function(viewport)
+		if Theme.isTouch() then
+			vitals.AnchorPoint = Vector2.zero
+			vitals.Position = UDim2.fromOffset(24, Theme.topInset("left", viewport) + 12)
+		else
+			vitals.AnchorPoint = Vector2.new(0, 1)
+			vitals.Position = UDim2.new(0, 48, 1, -44)
+		end
+	end)
 	hpNum = label({
 		Name = "HpNum",
-		-- 66 × 34: "100" in this font (bold, ×1.12) is ≈ 63 × 34 px.
-		Size = UDim2.fromOffset(66, 34),
+		-- 50 × 26: "100" in this font is ≈ 38 × 24 px.
+		Size = UDim2.fromOffset(50, 26),
 		FontFace = Theme.Fonts.NumberLight,
-		TextSize = 30,
+		TextSize = 22,
 		TextYAlignment = Enum.TextYAlignment.Top,
 		Text = "100",
 	})
 	hpLabel = label({
 		Name = "HpLabel",
-		-- y 18: sits on the numeral's baseline.
-		Position = UDim2.fromOffset(56, 18),
+		-- y 11: sits on the numeral's baseline.
+		Position = UDim2.fromOffset(44, 11),
 		Size = UDim2.fromOffset(120, 12),
-		TextSize = 10,
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink2,
-		Text = Theme.track("HEALTH", "three"),
+		Text = "Health",
 	})
-	-- HEALTH follows the numeral: never closer than 6 px to its last digit.
+	-- "Health" follows the numeral: never closer than 6 px to its last digit.
 	local function placeHpLabel()
-		hpLabel.Position = UDim2.fromOffset(math.max(56, hpNum.TextBounds.X + 6), 18)
+		local width = Theme.unscaled(hpNum, hpNum.TextBounds.X)
+		hpLabel.Position = UDim2.fromOffset(math.max(30, width + 6), 11)
 	end
 	hpNum:GetPropertyChangedSignal("TextBounds"):Connect(placeHpLabel)
 	placeHpLabel()
 	label({
 		Name = "HpMax",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.new(1, 0, 0, 11),
 		Size = UDim2.fromOffset(40, 12),
 		FontFace = Theme.Fonts.Number,
-		TextSize = 10,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink2,
 		TextXAlignment = Enum.TextXAlignment.Right,
 		Text = `/{Config.Character.MAX_HEALTH}`,
 	})
 	local hpTrack = Theme.make("Frame", {
 		Name = "HpTrack",
-		Position = UDim2.fromOffset(0, 40),
+		Position = UDim2.fromOffset(0, 30),
 		Size = UDim2.new(1, 0, 0, 2),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.78,
@@ -272,7 +290,7 @@ local function build()
 	}, { Theme.gradient(0, { { 0, 0.72 }, { 1, 1 } }) })
 	local stTrack = Theme.make("Frame", {
 		Name = "StTrack",
-		Position = UDim2.fromOffset(0, 48),
+		Position = UDim2.fromOffset(0, 37),
 		Size = UDim2.new(1, 0, 0, 1),
 		BackgroundColor3 = C.Ink,
 		BackgroundTransparency = 0.78,
@@ -287,17 +305,18 @@ local function build()
 	})
 	stLabel = label({
 		Name = "StLabel",
-		Position = UDim2.fromOffset(0, 56),
-		Size = UDim2.fromOffset(120, 11),
-		TextSize = 9,
+		Position = UDim2.fromOffset(0, 43),
+		Size = UDim2.fromOffset(120, 12),
+		FontFace = Theme.Fonts.Body,
+		TextSize = Theme.SMALL,
 		TextColor3 = C.Ink2,
-		Text = Theme.track("STAMINA", "three"),
+		Text = "Stamina",
 	})
 
-	-- Level row, 22 px above the HP numeral: "LV 8 ──────".
+	-- Level row, 20 px above the HP numeral: "Lv 8 ──────".
 	levelRow = Theme.make("Frame", {
 		Name = "LevelRow",
-		Position = UDim2.fromOffset(0, -22),
+		Position = UDim2.fromOffset(0, -20),
 		Size = UDim2.new(1, 0, 0, 12),
 		BackgroundTransparency = 1,
 		Visible = false, -- shown once the save has arrived
@@ -307,9 +326,10 @@ local function build()
 		Name = "LvKey",
 		Position = UDim2.fromOffset(0, 1),
 		Size = UDim2.fromOffset(16, 11),
-		TextSize = 9,
+		FontFace = Theme.Fonts.Body,
+		TextSize = 10,
 		TextColor3 = C.Ink2,
-		Text = Theme.track("LV", "three"),
+		Text = "Lv",
 		Parent = levelRow,
 	}) :: TextLabel
 	table.insert(texts, lvKey)
@@ -434,13 +454,13 @@ local function updateBleeding(tick: boolean)
 		if now then
 			-- Brighter, not red (small red caps don't read on a light floor):
 			-- the red is in the bar and at the edge.
-			hpLabel.Text = Theme.track("BLEEDING", "three")
+			hpLabel.Text = "Bleeding"
 			hpLabel.TextColor3 = C.Ink
 			bleedSeg.Visible = true
 			bleedEdge.BackgroundTransparency = 0.15
 			Theme.tween(bleedShade, 0.2, { BackgroundTransparency = 0 })
 		else
-			hpLabel.Text = Theme.track("HEALTH", "three")
+			hpLabel.Text = "Health"
 			Theme.tween(hpLabel, 0.3, { TextColor3 = C.Ink2 })
 			bleedSeg.Visible = false
 			task.delay(0.4, function()
@@ -519,14 +539,11 @@ local function refreshStamina()
 		stLabel.TextColor3 = C.Ink2
 	end
 	local limping = character ~= nil and character:GetAttribute("Limping") == true
-	stLabel.Text = Theme.track(
-		if exhausted
-			then "WINDED"
-			elseif blocking then "GUARD"
-			elseif limping then "LIMPING" -- legs injured: slower, no sprint
-			else "STAMINA",
-		"three"
-	)
+	stLabel.Text = if exhausted
+		then "Winded"
+		elseif blocking then "Guard"
+		elseif limping then "Limping" -- legs injured: slower, no sprint
+		else "Stamina"
 end
 
 -- Fades the block back after a while at full health and stamina.
@@ -808,9 +825,10 @@ local function buildRewardRow(kind: Types.RewardKind, xp: number, coins: number)
 		Name = "Why",
 		Size = UDim2.new(0, 72, 1, 0),
 		AutomaticSize = Enum.AutomaticSize.None,
-		TextSize = if major then 10 else 9,
+		FontFace = Theme.Fonts.Body,
+		TextSize = if major then 11 else 10,
 		TextColor3 = if major then C.Ink else C.Ink2,
-		Text = Theme.track(reasonWord(kind, xp), "three"),
+		Text = Theme.sentence(reasonWord(kind, xp)),
 	})
 	local xpNum = part(2, {
 		Name = "XpNum",
@@ -843,7 +861,7 @@ local function buildRewardRow(kind: Types.RewardKind, xp: number, coins: number)
 		FontFace = Theme.Fonts.Number,
 		TextSize = 10,
 		TextColor3 = C.Ink2,
-		Text = "COINS",
+		Text = "coins",
 	}, 4)
 
 	local row: RewardRow = {
