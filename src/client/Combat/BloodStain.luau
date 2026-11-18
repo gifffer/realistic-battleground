@@ -30,6 +30,8 @@
 --       never silently skipped, except tiny satellites after 0.5 s)
 --   BloodStain.place(...) same, now, returns its BloodAge record (or nil)
 --   BloodStain.rescale(record, kAlong, kAcross)  grows a mark (pools, soaks)
+--   BloodStain.fit(record, at, along, kAlong, kAcross)  moves and grows a
+--       mark on the ground (a pool's tongues creeping outward)
 --   BloodStain.image(kind, random, index?)  an uploaded picture id, or 0
 --   BloodStain.resolve(kind)   the kind actually drawn (a picture not uploaded
 --       yet borrows a close kind's, Config.Blood.IMAGE_FALLBACK) and its id
@@ -195,6 +197,20 @@ function BloodStain.image(kind: string, random: Random?, index: number?): number
 	return uploaded[pick]
 end
 
+-- A pool picture's "clean" twin (same outline, no drops drawn around it),
+-- if it is uploaded: pool -> poolClean, poolRim -> poolRimClean, serumHalo ->
+-- serumHaloClean, matched by number. Otherwise the picture itself.
+local function clean(kind: string, id: number): number
+	local list = (IMAGES :: any)[kind]
+	local twins = (IMAGES :: any)[kind .. "Clean"]
+	if id == 0 or typeof(list) ~= "table" or typeof(twins) ~= "table" then
+		return id
+	end
+	local index = table.find(list, id)
+	local twin = if index then twins[index] else nil
+	return if typeof(twin) == "number" and twin ~= 0 then twin else id
+end
+
 -- Does this exact kind have its own uploaded picture? (no stand-in)
 function BloodStain.hasImage(kind: string): boolean
 	return BloodStain.image(kind, nil) ~= 0
@@ -233,12 +249,32 @@ local function ground(): RaycastParams
 	if now - paramsAt > 1 then
 		paramsAt = now
 		local ignore: { Instance } = CollectionService:GetTagged(Config.Combat.TAG)
+		-- (the frozen bodies the finishers leave are bodies too: the floor
+		-- is under them, a pool never lands on one)
+		for _, corpse in CollectionService:GetTagged(Config.Combat.CORPSE_TAG) do
+			table.insert(ignore, corpse)
+		end
 		table.insert(ignore, folder)
 		groundParams.FilterDescendantsInstances = ignore
 	end
 	return groundParams
 end
 BloodStain.ground = ground
+-- A new fighter or a new frozen body (a finisher's body swapped for its
+-- copy): the list above is made again at once, not up to a second later -
+-- else for that second blood would land ON the new body, or a pool's ray
+-- would take it for a wall.
+for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do
+	CollectionService:GetInstanceAddedSignal(tag):Connect(function()
+		paramsAt = 0
+	end)
+end
+-- When the list was last made (os.clock): a copy of it is out of date if this
+-- changed since.
+function BloodStain.groundStamp(): number
+	ground()
+	return paramsAt
+end
 
 -- Rough ground: blood soaks in (dries faster, lets the ground show through).
 local POROUS: { [Enum.Material]: boolean } = {
@@ -436,6 +472,38 @@ function BloodStain.rescale(record: BloodAge.Record, kAlong: number, kAcross: nu
 	if shape == nil or record.dead then
 		return
 	end
+	shape.kAlong, shape.kAcross = kAlong, kAcross
+	for _, piece in shape.pieces do
+		if piece.inst.Parent then
+			setPiece(shape, piece)
+		end
+	end
+end
+
+-- Moves AND grows a mark on the ground in one go (a pool's tongues of blood
+-- creeping outward): its centre goes to `at`, it points `along` (kept on its
+-- surface; nil = same direction), ×kAlong / ×kAcross its size when made.
+-- Only for a mark on the ground (one stuck to a body doesn't move).
+function BloodStain.fit(
+	record: BloodAge.Record,
+	at: Vector3,
+	along: Vector3?,
+	kAlong: number,
+	kAcross: number
+)
+	local shape = shapes[record]
+	if shape == nil or record.dead or shape.stuck then
+		return
+	end
+	local normal = shape.frame.YVector
+	local forward = shape.frame.XVector
+	if along then
+		local flat = along - normal * along:Dot(normal)
+		if flat.Magnitude > 1e-3 then
+			forward = flat.Unit
+		end
+	end
+	shape.frame = CFrame.fromMatrix(at, forward, normal)
 	shape.kAlong, shape.kAcross = kAlong, kAcross
 	for _, piece in shape.pieces do
 		if piece.inst.Parent then
@@ -704,6 +772,9 @@ export type Options = {
 	upright: boolean?, -- (a picture drawn upright: its top = along)
 	turn: number?, -- (a picture turned around its centre, radians)
 	noEdge: boolean?, -- (skip the ledge check)
+	-- (which of the 12 heights above the ground it sits at, 0-11: a pool's
+	-- pieces choose theirs, so two that overlap never share one and flicker)
+	layer: number?,
 	owner: Model?,
 	life: number?,
 }
@@ -851,11 +922,12 @@ function BloodStain.place(
 	-- (each new mark a hair higher than the last: no flicker where they
 	-- overlap; a bit more far from the camera, where depth is less precise)
 	layerCount = (layerCount + 1) % 10
+	local liftLayer = if opts.layer then math.clamp(opts.layer, 0, 11) else layerCount
 	local camera = workspace.CurrentCamera
 	local distance = if camera then (camera.CFrame.Position - at).Magnitude else 0
 	local baseLift = if stuck and model
-		then MIN_LIFT + layerCount * MARK_STEP * 0.5
-		else MIN_LIFT + layerCount * MARK_STEP + math.min(distance * 0.0001, 0.015)
+		then MIN_LIFT + liftLayer * MARK_STEP * 0.5
+		else MIN_LIFT + liftLayer * MARK_STEP + math.min(distance * 0.0001, 0.015)
 	local topLift = baseLift -- (the highest piece: the wet film goes over it)
 	local frame = CFrame.fromMatrix(at, forward, normal)
 	if stuck then
@@ -878,7 +950,7 @@ function BloodStain.place(
 	if image ~= 0 then
 		local carrier = newCarrier()
 		local decal = carrier:FindFirstChild("Main") :: Decal
-		decal.Texture = "rbxassetid://" .. image
+		decal.Texture = "rbxassetid://" .. clean(kind, image)
 		decal.ZIndex = 1
 		local piece: Piece = {
 			inst = carrier,
@@ -906,7 +978,7 @@ function BloodStain.place(
 				local rim = Instance.new("Decal")
 				rim.Name = "Rim"
 				rim.Face = Enum.NormalId.Top
-				rim.Texture = "rbxassetid://" .. rimId
+				rim.Texture = "rbxassetid://" .. clean("poolRim", rimId)
 				rim.ZIndex = 2
 				rim.Parent = carrier
 				table.insert(layers, BloodAge.layer(rim, 0.3, 0, true))
@@ -919,7 +991,7 @@ function BloodStain.place(
 				local serum = Instance.new("Decal")
 				serum.Name = "Serum"
 				serum.Face = Enum.NormalId.Top
-				serum.Texture = "rbxassetid://" .. serumId
+				serum.Texture = "rbxassetid://" .. clean("serumHalo", serumId)
 				serum.ZIndex = 0 -- (under the pool: it only shows outside its edge)
 				serum.Parent = carrier
 				local layer = BloodAge.layer(serum, 0, 0.45)

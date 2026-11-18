@@ -51,6 +51,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local GoreKit = require(script.Parent.GoreKit)
 local Blood = require(script.Parent.Blood)
 local BloodGush = require(script.Parent.BloodGush)
+local POOLS = Config.Blood.FINISHER_POOLS
 local Squish = require(script.Parent.Squish)
 
 local WaistCut = {}
@@ -896,6 +897,15 @@ local function sear(faces: { Face }, plane: CFrame, seed: number)
 	end
 end
 
+-- Where the big pools pour: the middle of the torso's cut face, the top of
+-- a leg (in their own space).
+local function torsoEnd(torso: BasePart): Vector3
+	return Vector3.new(0, -torso.Size.Y / 2 - 0.05, 0)
+end
+local function legEnd(leg: BasePart): Vector3
+	return Vector3.new(0, leg.Size.Y / 2 + 0.05, 0)
+end
+
 -- The burst of the cut, the arteries pumping, the gut falling out.
 local function bleed(
 	model: Model,
@@ -921,7 +931,7 @@ local function bleed(
 			beat = 0.35,
 			speed = random:NextNumber(16, 20),
 			size = 0.14,
-			pool = if index == 1 then 3 else 0,
+			pool = 0, -- (the big pools: BloodGush.stump, below)
 			seed = seed + index * 7,
 			ignore = ignore,
 		})
@@ -947,13 +957,19 @@ local function bleed(
 			beat = 0.38,
 			speed = random:NextNumber(11, 13),
 			size = 0.15,
-			pool = if index == 1 then 4 else 0,
+			pool = 0,
 			seed = seed + 3 + index * 11,
 			ignore = ignore,
 		})
 	end
 	drip(torso)
 	spill(torso, model, random)
+	-- the big pools: the upper body's (aorta, vena cava: the most blood)
+	-- where it falls and lies, the legs' under them (standing, then folded)
+	BloodGush.stump(torso, torsoEnd(torso), POOLS.WAIST_TORSO, seed + 101, { ignore = ignore })
+	if legs[1] then
+		BloodGush.stump(legs[1], legEnd(legs[1]), POOLS.WAIST_LEGS, seed + 102, { ignore = ignore })
+	end
 end
 
 function WaistCut.isApplied(model: Model): boolean
@@ -1002,6 +1018,12 @@ function WaistCut.apply(model: Model, live: boolean)
 		local plane = CFrame.new((torso.CFrame * CUT).Position) * torso.CFrame.Rotation
 		sear(faces, plane, seed)
 		bleed(model, torso, legs, seed, random)
+	else
+		-- (a body we only see now, or its frozen copy: the pools are there)
+		BloodGush.lay(torso, torsoEnd(torso), POOLS.WAIST_TORSO, seed + 101)
+		if legs[1] then
+			BloodGush.lay(legs[1], legEnd(legs[1]), POOLS.WAIST_LEGS, seed + 102)
+		end
 	end
 end
 
