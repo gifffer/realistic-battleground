@@ -26,6 +26,8 @@ local kit: KitTypes.KitDef = {
 
 	-- Cinematic kill (Shared/Finishers "Incinerate").
 	finisher = {
+		name = "INCINERATE",
+		description = "Lifted by the throat. Heat vision, point blank, into the heart.",
 		animation = "Sentinel_Finisher",
 		impact = 4.05,
 		duration = 5.6,

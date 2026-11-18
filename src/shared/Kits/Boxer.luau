@@ -112,6 +112,8 @@ local kit: KitTypes.KitDef = {
 	-- up, body shots, hooks, cross, then the left hand into their side: the
 	-- liver torn out. (`impact` = the timeline's kill, `duration` its length.)
 	finisher = {
+		name = "LIVER RIP",
+		description = "Hauled up by the collar. The last hook goes in under the ribs.",
 		animation = "Boxer_FinisherCombo",
 		impact = 2.62,
 		duration = 4.1,

@@ -113,6 +113,8 @@ local kit: KitTypes.KitDef = {
 	-- back, tapped on the face of the opponent lying there, then swung
 	-- through their head. (impact / duration = the cinematic's kill / duration)
 	finisher = {
+		name = "HOME RUN",
+		description = "A baseball bat from behind his back. One swing at the head.",
 		animation = "Brawler_FinisherBat",
 		impact = 2.62,
 		duration = 4.5,

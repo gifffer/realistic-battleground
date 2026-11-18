@@ -58,6 +58,8 @@ return table.freeze({
 		CAMERA_TOGGLE = Enum.KeyCode.Z,
 		-- Play the equipped emote (Shop). Not while fighting.
 		EMOTE = Enum.KeyCode.B,
+		-- Open / close the menu (the MENU button on the left does the same).
+		MENU = Enum.KeyCode.M,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,

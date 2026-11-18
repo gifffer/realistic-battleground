@@ -139,7 +139,7 @@ dernier qui l'a frappé gagne le kill.
 | U2 | Prendre un coup | La ligne de vie baisse, un petit morceau rouge s'efface juste après, le chiffre flashe rouge, l'image perd ses couleurs un instant. |
 | U3 | Courir jusqu'à 0 | La ligne d'endurance devient rouge et pulse, le texte dit **WINDED**. En garde (F) il dit **GUARD**. |
 | U4 | Parer / se faire briser la garde | Petit mot espacé à côté de l'épaule avec un trait (PARRY, GUARD BREAK en rouge si c'est ta garde). Plus de contours bleus/jaunes. |
-| U5 | Cliquer « — MENU » à gauche | Le monde se floute et se désature, liste « 01 SETTINGS », panneau avec grand titre, OFF / ON souligné, touche LEFT CTRL. « — CLOSE » referme. |
+| U5 | Cliquer le bouton **MENU** à gauche | Le monde se floute et se désature, liste « 01 KITS »…, panneau avec grand titre, boutons OFF / ON, touche LEFT CTRL. **CLOSE** referme. |
 | U6 | Kill feed | Lignes de texte simples en haut à droite sur un léger fond sombre, ton nom en gras blanc avec un petit trait, l'âge de la ligne à droite. |
 
 ## Réactions aux coups (`feature/hit-reactions`)
@@ -202,7 +202,7 @@ Les touches **1 2 3 4** lancent les attaques du kit, **G** l'Awakening quand la 
 ### Menu Kits
 | # | Test | Résultat attendu |
 |---|---|---|
-| M1 | « — MENU » | La liste montre **01 KITS**, **02 SETTINGS** ; le menu s'ouvre sur KITS. |
+| M1 | Bouton **MENU** | La liste montre **01 KITS**, **02 SETTINGS** ; le menu s'ouvre sur KITS. |
 | M2 | KITS | À gauche **STREET BRAWLER** (EQUIPPED) et **BOXER** (NOT AVAILABLE YET). À droite : les 4 moves avec endurance, recharge et leur version Street Fury (petit tiret rouge), puis la ligne **G STREET FURY 10 s**. |
 | M3 | Cliquer BOXER | Sa fiche s'affiche (pas encore jouable, pas de bouton EQUIP). |
 | M4 | Cliquer une ligne de la barre de moves (curseur libre : Ctrl gauche) | Le move part, comme avec la touche. |
@@ -680,3 +680,57 @@ Place-toi au spawn et regarde vers la **gauche** (le parcours de test est à dro
 
 Si une démo ne démarre pas, l'Output affiche une ligne jaune `[TestTools] <kit> : ...` :
 copie-la moi. Un nouveau kit avec un finisher aura **automatiquement** son plot.
+## Interface : menu Kits, HUD, kill feed, écran de mort, écrans mobiles (`feature/ui-overhaul`)
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| U1 | Menu → **KITS**, choisir chaque kit | Sous MOVES et AWAKENING, une nouvelle section **FINISHER · ON A KO** : touche **[M1]**, le nom (**HOME RUN**, **LIVER RIP**, **ARM RIP**, **INCINERATE**) et une phrase. Le panneau est un peu plus haut, **CLOSE** reste en dessous, rien n'est coupé. |
+| U2 | Kit verrouillé (niveau trop bas / pas assez de pièces) | Tout est visible mais plus terne (touches et noms), y compris le finisher ; l'action en haut à droite (LEVEL / BUY / NEED…) fonctionne comme avant (achat en deux clics, vérifié par le serveur). |
+| U3 | Finisher sur le **Dummy** avec chaque kit | Kill feed en haut à droite : `TonNom finished Dummy — LIVER RIP` (tiret **rouge**, nom du finisher en petites capitales). |
+| U4 | Tuer sans finisher (2 joueurs, l'autre tombe de la carte après un coup) | Ligne `X eliminated Y`, **sans** nom de finisher. |
+| U5 | 2 joueurs : se faire **finir** | La cinématique joue d'abord **en entier**, puis en bas au centre : **FINISHED BY**, le nom du tueur, `LV 12  BOXER — LIVER RIP`, une ligne qui se vide et **RESPAWN 2.3** qui descend ; le monde perd ses couleurs. Au respawn tout disparaît en fondu. |
+| U6 | Se faire tuer normalement | **ELIMINATED BY** + nom + niveau + kit, pas de tiret rouge. |
+| U7 | Mourir seul (tomber de la carte, personne ne t'a frappé) | **ELIMINATED / YOU DIED**, pas de nom ni de kit. |
+| U8 | En **duel** | Aucun écran de mort (l'écran de fin de duel reste le seul). |
+| U9 | Deux joueurs avec le **même nom d'affichage** | Ta ligne du kill feed est la tienne (nom en gras blanc + petit trait) uniquement quand c'est vraiment toi (comparé par UserId). |
+| U10 | *Test → Device* : **iPhone** (paysage), puis une petite fenêtre | HUD (vie à gauche, kit à droite), kill feed et tableau des joueurs plus petits mais lisibles, toujours dans leur coin. Le bloc du kit est **au-dessus du bouton de saut**. |
+| U11 | Sur iPhone : **toucher** un move de la barre du kit | Le move part (comme la touche 1-4). Jauge pleine : toucher **[G] AWAKEN** lance l'Awakening. |
+| U12 | Sur iPhone (paysage) / petite fenêtre : ouvrir le **MENU** (chaque section, surtout **KITS**) | Le menu commence **sous la barre Roblox** (boutons menu / chat / sac en haut à gauche) : **01, 02… et KITS se touchent** sans ouvrir le menu Roblox. La liste est plus près du bord gauche, le texte reste lisible (jamais plus petit que ×0.8). Si la section est trop haute, le panneau **défile** (glisser du doigt / molette, fine barre à droite) et **CLOSE** reste visible dessous ; changer de section repart en haut. La section choisie est entourée en ambre ; redimensionner la fenêtre recale tout. |
+| U13 | Écran 1080p normal | Tout est **exactement comme avant** (mêmes tailles, mêmes places). En 1440p / 4K : un peu plus grand. |
+| U14 | Shop / Profile après un achat | Pièces, niveau/XP, cosmétiques et stats se mettent à jour comme avant ; les soulignés (EQUIPPED, réglages ON/OFF) ont la bonne largeur, même sur iPhone. |
+| U15 | Sur iPhone : le **HUD** pendant un combat | Le bloc de vie (chiffre, barres, XP) est **en haut à gauche, sous la barre Roblox**, plus en bas à gauche sous le joystick et le pouce. Sur PC il reste en bas à gauche. |
+| U16 | Sur iPhone : kill feed et tableau des joueurs (Tab / bouton) | La première ligne du kill feed et le titre PLAYERS ne passent **jamais sous les boutons Roblox** en haut à droite (s'il y en a) ; sur PC 1080p ils restent à leur place. |
+| U17 | Écran de mort (U5 / U6) | La **bande sombre** du bas apparaît **en fondu** avec le texte, et disparaît en fondu au respawn (plus de coupure sèche). |
+| U18 | Finir le **Dummy** puis quitter le jeu pendant le finisher (ou finisher sans tueur crédité) | Si le kill feed n'a pas de tueur : `Dummy died` **sans** `— NOM DU FINISHER` derrière. |
+
+## Interface : tout ce qui se clique ressemble à un bouton (`feature/ui-overhaul`)
+
+Tout ce qu'on peut cliquer / toucher est maintenant un **vrai bouton** (un seul modèle,
+`src/client/UI/Button.luau`) : fond plein, coins arrondis, contour ; il **s'éclaire et grossit un
+peu** sous la souris, **s'enfonce** quand on appuie. L'action principale d'un écran est **ambre**
+(EQUIP, BUY, FIND MATCH, CHALLENGE, ACCEPT, ON). Grisé = pas cliquable (avec la raison écrite
+dessus). Sur téléphone les boutons sont plus hauts (doigt).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| V1 | Arriver en jeu (PC) | À gauche au milieu : un bouton **MENU** bien visible (icône ☰, le mot MENU, la touche **M** dessinée dessus), **toujours entouré d'ambre avec l'icône ambre** (même après la première ouverture). Un **anneau ambre** en sort régulièrement tant que le menu n'a jamais été ouvert ; il s'arrête après la première ouverture. |
+| V2 | Survoler / cliquer **MENU** | Le bouton s'éclaire et grossit un peu au survol, s'enfonce au clic ; le menu s'ouvre. |
+| V3 | Touche **M** (hors chat) | Ouvre le menu sur la dernière section vue (pendant une recherche ranked / l'attente d'arène : sur **DUEL**, comme un clic sur MENU) ; **M** à nouveau (ou **CLOSE**, qui affiche aussi « M ») le ferme. Taper « m » dans le chat ne fait **rien**. Pendant l'écran de fin de duel (bouton MENU caché) : rien. |
+| V4 | Liste des sections (01 KITS, 02 DUEL…) | Chaque section est un **bouton-onglet** (plaque légère). Survol : plus clair. La section ouverte : **contour ambre + barre ambre à gauche**, numéro ambre. |
+| V5 | **KITS** → colonne ROSTER | Chaque kit est une **carte** (nom + ligne d'état). Le kit choisi a le contour ambre ; le kit équipé dit **EQUIPPED en ambre**. |
+| V6 | KITS → **BOXER** (possédé, pas équipé) | En haut à droite un gros bouton **ambre EQUIP**. Clic → il devient le badge **✓ EQUIPPED** (contour ambre, pas de fond plein : on voit que ce n'est plus un bouton) et la carte BOXER dit EQUIPPED. Le serveur vérifie toujours. |
+| V7 | KITS → kit pas encore acheté / verrouillé | Assez de pièces : bouton ambre **(pièce) BUY · 500** → 1er clic **CONFIRM · 500** (3 s), 2e clic **BUYING…** puis EQUIP. Refusé par le serveur : contour **rouge** un instant et retour à BUY. Pas assez de pièces : bouton **gris** « NEED 160 MORE » (rien ne se passe au clic). Niveau trop bas : bouton gris avec **cadenas** « UNLOCKS AT LV 10 ». |
+| V8 | **SHOP** | Catégories en cartes (comme les kits), l'article équipé de chaque catégorie écrit en ambre. Chaque article : bouton **EQUIP** ambre / **BUY · 250** ambre (CONFIRM au 2e clic) / gris « LEVEL 10 » (cadenas) / gris « NEED 120 MORE ». L'article porté : **✓ EQUIPPED** avec contour ambre ; sur PC le survol affiche **TAKE OFF** et un clic l'enlève. Émotes : badge EQUIPPED (on ne peut pas l'enlever). |
+| V9 | **SETTINGS** | Chaque réglage a deux boutons **OFF / ON** côte à côte : le choisi est plein (ON = ambre, OFF = sombre avec contour ambre), l'autre est une plaque légère qui s'éclaire au survol. Cliquer le côté déjà choisi ne change rien. Le réglage est toujours sauvegardé (rejoindre → même valeur). |
+| V10 | **DUEL** | **FIND MATCH** = bouton ambre ; pendant la recherche **CANCEL** = bouton sombre. Chaque joueur de la liste : bouton ambre **CHALLENGE** (gris quand tu es en duel / en attente). |
+| V11 | Recevoir un défi (2 joueurs) | Deux boutons : **✓ ACCEPT** (ambre, touche Y dessinée) et **✕ DECLINE** (sombre, touche N). Répondre avec Y / N fait aussi « enfoncer » le bouton. La barre de temps est juste en dessous, rien ne se chevauche. Recherche ranked en cours : la ligne « RANKED · SEARCHING » est **sous** le bouton MENU. |
+| V12 | Jauge Street Fury pleine | **[G] AWAKEN** est sur une plaque ambre (et reste cliquable / touchable). |
+| V13 | *Test → Device* : **iPhone** (paysage) | Boutons plus hauts (faciles à toucher), pas de touche dessinée (M / Y / N cachées). Pas d'effet de survol bloqué après un toucher. La barre de moves du kit a une plaque sombre arrondie par move. |
+| V14 | iPhone, une émote équipée (SHOP → EMOTES) | Un bouton **EMOTE** au-dessus du bouton MENU ; le toucher joue l'émote (hors combat, vérifié par le serveur). Il disparaît quand le menu est ouvert, et n'existe pas sur PC (touche B). Dans SHOP → EMOTES, l'indice dit « TAP EMOTE ON THE SCREEN » (PC : « PRESS B »). |
+| V15 | Manette (si dispo) | Sélectionner un bouton avec la manette l'éclaire comme le survol souris. |
+| V16 | KITS ou SHOP : acheter avec un achat **refusé** (ex. Studio, retirer des pièces entre les 2 clics) | Après « BUYING… », le bouton revient à BUY avec un **contour rouge bien visible ~0,35 s**, puis repasse ambre. |
+| V17 | Cliquer (plusieurs fois) un bouton **gris** (« NEED 160 MORE », « LEVEL 10 », « BUYING… ») ou double-cliquer EQUIP, avec un joueur / PNJ devant soi | **Aucun coup de poing** n'est donné. Plus généralement, aucun clic dans le menu ouvert ne lance de M1. |
+| V18 | Cliquer **MENU** à la souris, puis fermer avec **M** (ou CLOSE) sans bouger la souris | Le bouton MENU revient **normal** (pas resté éclairé / grossi). Pareil pour les onglets 01, 02… à la réouverture. |
+| V19 | Survoler EQUIP / BUY (KITS, SHOP), FIND MATCH / CANCEL / CHALLENGE (DUEL) | Le bouton grossit sans que son **contour soit coupé** à droite (ni en haut / bas). |
+| V20 | *Test → Device* : **iPhone** paysage (844 × 390) : MENU, onglets, EQUIP / BUY, OFF / ON, FIND MATCH, CHALLENGE, CLOSE, ACCEPT / DECLINE | Chaque bouton fait **au moins ~44 px** de haut à l'écran (facile à toucher). La liste des sections **défile** au doigt si elle ne tient pas (fine barre à droite), rien ne passe sous l'écran. Dans SETTINGS / SHOP le texte d'une ligne reste centré sur son bouton ; dans DUEL, « ON THIS SERVER » est sous FIND MATCH sans chevauchement ; dans le défi, la barre de temps et son chiffre ne sont pas coupés. |
+

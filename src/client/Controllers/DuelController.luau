@@ -56,6 +56,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local DuelRanks = require(ReplicatedStorage.Shared.DuelRanks)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local Button = require(script.Parent.Parent.UI.Button)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local HudController = require(script.Parent.HudController)
 local MenuController = require(script.Parent.MenuController)
@@ -174,10 +175,8 @@ local lineLv: TextLabel
 local lineName: TextLabel
 local lineRest: TextLabel
 local keysRow: Frame
-local acceptButton: TextButton
-local declineButton: TextButton
-local acceptCap: TextLabel
-local declineCap: TextLabel
+local acceptButton: Button.Button
+local declineButton: Button.Button
 local timerTrack: Frame
 local timerFill: Frame
 local timerNum: TextLabel
@@ -398,30 +397,6 @@ local function hairline(parent: Instance, props: { [string]: any }): Frame
 	return Theme.make("Frame", props) :: Frame
 end
 
--- The small "S" key cap of the prompt: 22 × 18, outlined.
-local function keyCapS(parent: Instance, order: number, text: string, outline: number): TextLabel
-	return Theme.text({
-		Name = "KeyCap",
-		LayoutOrder = order,
-		Size = UDim2.fromOffset(22, 18),
-		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = 0.65,
-		FontFace = F.NumberMedium,
-		TextSize = 10,
-		TextStrokeTransparency = 1,
-		TextXAlignment = Enum.TextXAlignment.Center,
-		Text = text,
-		Parent = parent,
-	}, {
-		Theme.make("UIStroke", {
-			Thickness = 1,
-			Color = C.Ink,
-			Transparency = outline,
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		}),
-	}) :: TextLabel
-end
-
 ------------------------------------------------------------------------------
 -- Rank ladder (BRONZE · SILVER · GOLD · PLATINUM · DIAMOND)
 ------------------------------------------------------------------------------
@@ -546,7 +521,8 @@ local function buildPrompt()
 	prompt = Theme.make("CanvasGroup", {
 		Name = "Prompt",
 		Position = UDim2.new(0, PROMPT_X, 0.5, PROMPT_Y),
-		Size = UDim2.fromOffset(480, 100),
+		-- (taller on touch: its buttons are; the timer stays inside)
+		Size = UDim2.fromOffset(480, math.max(116, 76 + Button.height("small"))),
 		BackgroundTransparency = 1,
 		GroupTransparency = 1,
 		Visible = false,
@@ -587,46 +563,41 @@ local function buildPrompt()
 		Size = UDim2.fromOffset(0, 20),
 	})
 
+	-- Two real buttons (the keys Y / N show on them on a PC).
+	local keysHeight = Button.height("small")
 	keysRow = hRow("Frame", {
 		Name = "Keys",
-		Position = UDim2.fromOffset(0, 50),
+		Position = UDim2.fromOffset(2, 46),
 		AutomaticSize = Enum.AutomaticSize.X,
-		Size = UDim2.fromOffset(0, 18),
+		Size = UDim2.fromOffset(0, keysHeight),
 		Parent = prompt,
-	}, 24, nil, Enum.VerticalAlignment.Center) :: Frame
-	local function keyButton(
-		order: number,
-		key: string,
-		word: string,
-		outline: number,
-		color: Color3
-	)
-		local button = hRow("TextButton", {
-			Name = word,
-			LayoutOrder = order,
-			AutomaticSize = Enum.AutomaticSize.X,
-			Size = UDim2.fromOffset(0, 18),
-			Text = "",
-			AutoButtonColor = false,
-			Parent = keysRow,
-		}, 10, nil, Enum.VerticalAlignment.Center) :: TextButton
-		local cap = keyCapS(button, 1, key, outline)
-		piece(button, 2, {
-			Name = "Word",
-			TextSize = 11,
-			TextColor3 = color,
-			Size = UDim2.fromOffset(0, 18),
-			Text = Theme.track(word, "four"),
-		})
-		return button, cap
-	end
-	-- ACCEPT is the only ink key: the eye lands on the default answer.
-	acceptButton, acceptCap = keyButton(1, "Y", "ACCEPT", 0.4, C.Ink)
-	declineButton, declineCap = keyButton(2, "N", "DECLINE", 0.6, C.Ink2)
+	}, 12, nil, Enum.VerticalAlignment.Center) :: Frame
+	-- ACCEPT is the accent button: the eye lands on the default answer.
+	acceptButton = Button.new({
+		name = "ACCEPT",
+		text = "ACCEPT",
+		variant = "primary",
+		size = "small",
+		icon = "check",
+		keyHint = "Y",
+		layoutOrder = 1,
+		parent = keysRow,
+	})
+	declineButton = Button.new({
+		name = "DECLINE",
+		text = "DECLINE",
+		variant = "secondary",
+		size = "small",
+		icon = "close",
+		keyHint = "N",
+		layoutOrder = 2,
+		parent = keysRow,
+	})
 
+	local timerY = 46 + keysHeight + 10
 	timerTrack = hairline(prompt, {
 		Name = "Timer",
-		Position = UDim2.fromOffset(0, 86),
+		Position = UDim2.fromOffset(0, timerY),
 		Size = UDim2.fromOffset(TIMER_WIDTH, 1),
 		BackgroundTransparency = 0.82,
 	})
@@ -638,7 +609,7 @@ local function buildPrompt()
 	-- Stays ink to the end: a request running out is not danger.
 	timerNum = Theme.text({
 		Name = "TimerNum",
-		Position = UDim2.fromOffset(TIMER_WIDTH + 12, 80),
+		Position = UDim2.fromOffset(TIMER_WIDTH + 12, timerY - 6),
 		Size = UDim2.fromOffset(30, 12),
 		FontFace = F.Number,
 		TextSize = 10,
@@ -646,11 +617,11 @@ local function buildPrompt()
 	}) :: TextLabel
 end
 
--- "RANKED · SEARCHING 0:23" under the word MENU, while the menu is closed.
+-- "RANKED · SEARCHING 0:23" under the MENU button, while the menu is closed.
 local function buildStatus()
 	statusGroup = hRow("CanvasGroup", {
 		Name = "DuelStatus",
-		Position = UDim2.new(0, 76, 0.5, -8),
+		Position = UDim2.new(0, 20, 0.5, MenuController.BUTTON_Y + 40),
 		Size = UDim2.fromOffset(300, 13),
 		GroupTransparency = 1,
 		Visible = false,
@@ -1319,17 +1290,6 @@ local function showNotice(userId: number, name: string, reason: string)
 end
 
 -- The chosen key blinks (the kit "Use" blink), then the prompt leaves.
-local function flashKey(cap: TextLabel)
-	cap.BackgroundColor3 = C.Ink
-	cap.BackgroundTransparency = 0
-	cap.TextColor3 = C.Scrim
-	Theme.tween(cap, 0.2, {
-		BackgroundColor3 = C.Scrim,
-		BackgroundTransparency = 0.65,
-		TextColor3 = C.Ink,
-	})
-end
-
 answer = function(accept: boolean)
 	local from = challengeFrom
 	if promptMode ~= "challenge" or from == nil then
@@ -1338,7 +1298,9 @@ answer = function(accept: boolean)
 	challengeFrom = nil
 	setKeysBound(false)
 	Remotes.DuelRespond:FireServer(from, accept)
-	flashKey(if accept then acceptCap else declineCap)
+	-- (answered with Y / N: the button shows the press too)
+	local pressed = if accept then acceptButton else declineButton
+	pressed.press()
 	after(0.2, "prompt", function()
 		leavePrompt(0.2)
 	end)
@@ -2375,10 +2337,11 @@ function DuelController.init()
 end
 
 function DuelController.start()
-	acceptButton.Activated:Connect(function()
+	-- (answer is defined after the prompt is built: connected here)
+	acceptButton.instance.Activated:Connect(function()
 		answer(true)
 	end)
-	declineButton.Activated:Connect(function()
+	declineButton.instance.Activated:Connect(function()
 		answer(false)
 	end)
 
@@ -2414,29 +2377,15 @@ function DuelController.start()
 		end
 	end)
 
-	-- The status line: clicking MENU while it shows opens the DUEL section.
+	-- While the status line shows (searching / waiting, menu closed), MENU
+	-- and the M key open the DUEL section.
+	MenuController.setDefaultOverride(function(): string?
+		return if state == "Searching" or state == "Waiting" then "Duel" else nil
+	end)
 	local menuGui = player:WaitForChild("PlayerGui"):WaitForChild("Menu", 10)
 	local found = if menuGui then menuGui:FindFirstChild("MenuButton") else nil
 	if found and found:IsA("GuiButton") then
 		menuButton = found
-		-- Read at the press (InputBegan comes before Activated): MenuController's
-		-- own Activated handler may run first and open the menu, which hides
-		-- the status line before ours runs.
-		local statusAtPress = false
-		found.InputBegan:Connect(function(input)
-			if
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch
-			then
-				statusAtPress = statusShown
-			end
-		end)
-		found.Activated:Connect(function()
-			if statusAtPress or statusShown then
-				statusAtPress = false
-				task.defer(MenuController.open, "Duel")
-			end
-		end)
 	end
 
 	MenuController.onOpenChanged(function()

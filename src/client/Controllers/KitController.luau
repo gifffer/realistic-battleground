@@ -3,6 +3,7 @@
 --
 --   1 2 3 4  → the 4 moves of our kit         → Remotes.UseMove(slot, aim)
 --   G        → Awakening, when the gauge is full → Remotes.Awaken
+--   (the HUD calls KitController.use(slot) / awaken() on a click or a tap)
 --
 -- Like the M1, the client never decides anything: it checks the same rules
 -- as the server (so it doesn't send requests that would be refused) and
@@ -352,6 +353,11 @@ local function tryAwaken()
 			roar:Destroy()
 		end
 	end)
+end
+
+-- Awakens, like the G key (a tap on the HUD's AWAKEN on a phone).
+function KitController.awaken()
+	tryAwaken()
 end
 
 -- The server refused our move: undo what we showed. Only if it's the move
