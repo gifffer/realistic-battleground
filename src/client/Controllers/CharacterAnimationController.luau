@@ -178,6 +178,11 @@ type Tracked = {
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
+	-- Hit shake during a hit-stop: the body shakes along this world vector
+	-- (its length = the amplitude in studs), every other frame, fading out.
+	jitter: Vector3,
+	jitterFrom: number,
+	jitterFrame: number,
 	lastAction: string?, -- last one-shot clip played (which punch was thrown)
 	flinch: Vector3, -- spring position: extra head rotation, degrees
 	flinchSpeed: Vector3, -- spring speed, degrees per second
@@ -187,6 +192,9 @@ type Tracked = {
 }
 
 local CharacterAnimationController = {}
+
+-- Called each time a one-shot clip starts on a fighter (see onActionPlayed).
+local actionListeners: { (model: Model, name: string) -> () } = {}
 
 local tracked: { [Model]: Tracked } = {}
 -- We pressed block: show it before the server's "Blocking" attribute arrives.
@@ -641,6 +649,23 @@ local function compose(entry: Tracked)
 		end
 		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched
+		-- Hit shake (hit-stop): the torso pushed back and forth along the
+		-- blow, every other frame, fading to 0 by the end of the stop.
+		-- (torso = root · C0 · Transform · C1⁻¹: a world offset w becomes
+		-- CFrame.new(v) · Transform with v = w in the joint's space)
+		if joint == "Root" and entry.jitter ~= Vector3.zero then
+			local length = entry.freezeUntil - entry.jitterFrom
+			local left = if length > 0 then (entry.freezeUntil - os.clock()) / length else 0
+			if left > 0 then
+				local sign = if entry.jitterFrame % 4 < 2 then 1 else -1
+				local offset = entry.jitter * (sign * left)
+				local joint0 = entry.root.CFrame * motor.C0
+				result = CFrame.new(joint0:VectorToObjectSpace(offset)) * result
+				any = true
+			else
+				entry.jitter = Vector3.zero
+			end
+		end
 		-- Flinch: added on top of everything, on the head and (less) the torso.
 		if entry.flinch ~= Vector3.zero and (joint == "Neck" or joint == "Root") then
 			local share = if joint == "Neck" then 1 else FLINCH_TORSO_SHARE
@@ -775,6 +800,7 @@ local function onPreSimulation(dt: number)
 			entry.flinchSpeed = Vector3.zero
 			entry.sprintWeight = 0
 			entry.freezeUntil = 0
+			entry.jitter = Vector3.zero
 			table.clear(entry.movement)
 			table.clear(entry.stance)
 			table.clear(entry.action)
@@ -801,9 +827,15 @@ local function onPreSimulation(dt: number)
 		advanceChannel(entry, entry.action, dt, true)
 		updateSprintWeight(entry, state, dt)
 		updateFlinch(entry, dt)
+		if entry.jitter ~= Vector3.zero then
+			entry.jitterFrame += 1
+		end
 
 		local busy = #entry.movement > 0 or #entry.stance > 0 or #entry.action > 0
-		local extras = entry.sprintWeight > 0 or entry.flinch ~= Vector3.zero or pins[model] ~= nil
+		local extras = entry.sprintWeight > 0
+			or entry.flinch ~= Vector3.zero
+			or entry.jitter ~= Vector3.zero
+			or pins[model] ~= nil
 		if busy or extras or next(entry.lastWritten) ~= nil then
 			compose(entry)
 		end
@@ -853,6 +885,20 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	if string.sub(name, 1, 6) ~= "Emote_" then
 		entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
 	end
+	-- Tell the listeners (the combat VFX time their swings from here).
+	for _, listener in actionListeners do
+		local ok, err = pcall(listener :: any, model, name)
+		if not ok then
+			warn("[CharacterAnimationController] onActionPlayed: ", err)
+		end
+	end
+end
+
+-- `callback(model, name)` runs right after any one-shot clip starts on any
+-- fighter (our punches, other players' moves, reactions, follow-ups...),
+-- on this client. Used by Combat/Vfx (HitFx.onAction). Must not yield.
+function CharacterAnimationController.onActionPlayed(callback: (model: Model, name: string) -> ())
+	table.insert(actionListeners, callback)
 end
 
 -- Stops the action `name` on `model` (our move, refused by the server).
@@ -924,6 +970,7 @@ function CharacterAnimationController.cancelReaction(model: Model)
 		end
 	end
 	entry.freezeUntil = 0
+	entry.jitter = Vector3.zero
 	entry.flinch = Vector3.zero
 	entry.flinchSpeed = Vector3.zero
 end
@@ -934,14 +981,22 @@ function CharacterAnimationController.clearHitStop(model: Model)
 	local entry = tracked[model]
 	if entry then
 		entry.freezeUntil = 0
+		entry.jitter = Vector3.zero
 	end
 end
 
 -- Hit-stop: pauses the model's punch / reaction clip for `duration` seconds.
-function CharacterAnimationController.hitStop(model: Model, duration: number)
+-- `jitter` (optional, the victim): the body shakes along this world vector
+-- meanwhile (its length = how far, in studs: 0.06 light, 0.1 heavy).
+function CharacterAnimationController.hitStop(model: Model, duration: number, jitter: Vector3?)
 	local entry = tracked[model]
 	if entry then
 		entry.freezeUntil = math.max(entry.freezeUntil, os.clock() + duration)
+		if jitter and jitter.Magnitude > 0 then
+			entry.jitter = jitter
+			entry.jitterFrom = os.clock()
+			entry.jitterFrame = 0
+		end
 	end
 end
 
@@ -1006,6 +1061,9 @@ local function track(model: Model, owner: Player?)
 		walkLean = Vector2.zero,
 		combatUntil = 0,
 		freezeUntil = 0,
+		jitter = Vector3.zero,
+		jitterFrom = 0,
+		jitterFrame = 0,
 		lastAction = nil,
 		flinch = Vector3.zero,
 		flinchSpeed = Vector3.zero,

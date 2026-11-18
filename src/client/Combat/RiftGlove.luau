@@ -1135,7 +1135,6 @@ function RiftGlove.onHit(victim: Model, attacker: Model, moveId: string)
 	end)
 	Debris:AddItem(folder, 0.45)
 	-- Rings of bent air through them, along the blast.
-	local first = along(push)
 	for index = 0, 1 do
 		local ring = disc("CrushAir", RIFT_GLOW, 0.1)
 		ring.Material = Enum.Material.ForceField
@@ -1151,18 +1150,8 @@ function RiftGlove.onHit(victim: Model, attacker: Model, moveId: string)
 			),
 		})
 	end
-	ringOut(
-		CFrame.fromMatrix(position, first, push),
-		0.5,
-		3.2,
-		0.25,
-		12,
-		RIFT_GLOW,
-		Enum.Material.Neon,
-		0.12,
-		0.06,
-		0.1
-	)
+	-- (no third ring: two rings of bent air are enough - the shared
+	-- impact stack adds the flash, sparks and hit-stop, Vfx/Moves/Rift)
 	-- Sparks crawling over the torso, arcs over the body.
 	local crawl = emitter(torso, {
 		Name = "RiftCrushSparks",
@@ -1190,9 +1179,8 @@ function RiftGlove.onHit(victim: Model, attacker: Model, moveId: string)
 			end)
 		end
 	end
-	impactFrame(position, 1.2)
-	RiftPortal.flash(position, 0.7)
-	shakeNear(position, 3, 0.3)
+	-- (the contact flash, its light, the hit-stop and the camera push-in:
+	-- Vfx's impact stack, spec "GravityGlove" in Vfx/Moves/Rift)
 end
 
 ------------------------------------------------------------------------------

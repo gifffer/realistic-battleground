@@ -3,13 +3,17 @@
 -- gameplay: the server decides, see Server/Systems/Combat).
 --
 -- Kept quiet on purpose (no coloured outlines, no big floating texts):
---   • Hit: a quick pale flick on the character. Stunned: it darkens a little.
+--   • Hit: the impact VFX (Combat/Vfx: flash + light at the contact point,
+--     sparks, air ring, dust, hit-stop, camera push-in; one "tier" per hit,
+--     the killing hit looks different). Blocked / guard break: a quick
+--     pale flick on the character too. Stunned: it darkens a little.
 --     Blocking: nothing (the guard pose says it).
 --   • Words beside the shoulder, small spaced caps with a hairline:
 --     PARRY, GUARD BREAK, DODGE, PROTECTED — shown only to the two fighters
 --     concerned. GUARD BREAK is red when it's YOUR guard.
 --   • You get hit: the colours drain for an instant; a head hit blurs.
---   • Small camera shake when you hit or get hit.
+--   • Camera shake / push-in when you hit or get hit (Vfx/Camera).
+--   • Blood comes ≈0.1 s AFTER the flash (README: the flash first).
 --   • Reaction animations + hit-stop + flinch on every fighter, and the
 --     sounds; other fighters' punches / dashes (Remotes.CombatAction).
 --     The reaction depends on WHERE the hit lands (head or body) and from
@@ -23,7 +27,8 @@
 --     back (that looked like the punch went through the body). Each M1 has
 --     a number echoed by the server: if the server's result differs
 --     (dodged, blocked, another zone...), its version replaces ours.
---     Damage, sound and flash always wait for the server.
+--     Our own M1's impact VFX shows then too (Vfx.HitFx.onPredictedHit);
+--     damage and blood always wait for the server.
 --
 -- Data: the Config.Combat.TAG tag + "Stunned" attribute on each fighter,
 -- Remotes.CombatEvent and Remotes.CombatAction.
@@ -31,7 +36,6 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -54,6 +58,7 @@ local RiftFx = require(script.Parent.Parent.Combat.RiftFx)
 local WeaponFx = require(script.Parent.Parent.Combat.WeaponFx)
 local Wounds = require(script.Parent.Parent.Combat.Wounds)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Vfx = require(script.Parent.Parent.Combat.Vfx)
 
 local player = Players.LocalPlayer
 
@@ -114,9 +119,8 @@ local ATTACKER_CANCEL_ATTRIBUTES = table.freeze({ "Stunned", "KnockedOut", "Ragd
 -- we let the server decide (block, parry, KO, spawn protection).
 local NO_PREDICTION_ATTRIBUTES =
 	table.freeze({ "Blocking", "KnockedOut", "Ragdolled", "Protected" })
--- Hit-stop: both fighters freeze this long when a punch lands (seconds).
-local HIT_STOP = 0.055
-local HEAVY_HIT_STOP = 0.11
+-- Hit-stop: both fighters freeze when a punch lands. How long depends on
+-- the hit's VFX tier (Vfx/Tiers: Light 0.05 s ... Last 0.14 s).
 local BLOCK_HIT_STOP = 0.035
 local PARRY_HIT_STOP = 0.09
 -- Flinch: how hard a hit kicks the head's spring (degrees per second; see
@@ -152,9 +156,8 @@ local dashedAt: { [Model]: number } = {}
 -- combo would otherwise stack them).
 local GRUNT_INTERVAL = 0.6
 local nextGruntAt: { [Model]: number } = {}
-local random = Random.new()
-local shakeUntil = 0
-local shakeStrength = 0
+local HitFx = Vfx.HitFx
+local VfxCamera = Vfx.Camera
 
 ------------------------------------------------------------------------------
 -- Outline (blocking / stunned) and flashes
@@ -207,6 +210,7 @@ local function onCombatantAdded(instance: Instance)
 
 	local visual: Visual = { model = model, highlight = highlight, flickUntil = 0, word = nil }
 	visuals[model] = visual
+	HitFx.watch(model) -- a stun / KO cancels its pending swing VFX
 	KitEffects.watch(model) -- bleeding drips, Street Fury
 	WeaponFx.watch(model) -- a bone (to throw) in the hand
 	RiftFx.watch(model) -- Dr. Rift's gear, burns (acid / fire)
@@ -330,39 +334,15 @@ local function word(model: Model, text: string, color: Color3)
 end
 
 -- You got hit: the colours drain for an instant.
-local hitGrade: ColorCorrectionEffect? = nil
 local function drainColour()
-	local grade = hitGrade
-	if grade == nil then
-		local created = Instance.new("ColorCorrectionEffect")
-		created.Name = "HitGrade"
-		created.Parent = game:GetService("Lighting")
-		grade = created
-		hitGrade = created
-	end
-	local effect = grade :: ColorCorrectionEffect
-	effect.Saturation = -0.25
-	Theme.tween(effect, 0.18, { Saturation = 0 })
+	VfxCamera.drain(0.25, 0.18)
 end
 
-local function shake(strength: number, duration: number)
-	shakeStrength = math.max(if os.clock() < shakeUntil then shakeStrength else 0, strength)
-	shakeUntil = os.clock() + duration
-end
-
--- Runs right after the camera scripts: moves the camera a tiny bit sideways
--- / up-down. (Only the POSITION: Roblox's camera reads back its rotation
--- every frame, so a shaking rotation would slowly shift where you aim.)
-local function updateShake()
-	if os.clock() >= shakeUntil then
-		return
-	end
-	local camera = workspace.CurrentCamera
-	if camera then
-		local s = shakeStrength * 0.1 -- strength 1 = up to 0.1 stud
-		local offset = Vector3.new(random:NextNumber(-s, s), random:NextNumber(-s, s), 0)
-		camera.CFrame += camera.CFrame:VectorToWorldSpace(offset)
-	end
+-- Camera shake (kept with its old shape: BouncerFx / RiftFx are given it).
+-- Vfx/Camera owns the camera now: this adds "trauma" to its shake.
+-- (`duration` is no longer needed: trauma decays by itself.)
+local function shake(strength: number, _duration: number)
+	VfxCamera.trauma(strength * 0.5)
 end
 
 ------------------------------------------------------------------------------
@@ -448,6 +428,7 @@ local function playHitReaction(
 	strong: boolean,
 	zone: Types.HitZone,
 	side: Types.HitSide,
+	stop: number,
 	moveId: string?
 )
 	-- Some kit moves have their own reaction (a liver shot folds the body).
@@ -460,7 +441,6 @@ local function playHitReaction(
 		)
 	end
 	CharacterAnimationController.flinch(victim, flinchKick(strong, zone, side, attacker))
-	local stop = if strong then HEAVY_HIT_STOP else HIT_STOP
 	CharacterAnimationController.hitStop(victim, stop)
 	CharacterAnimationController.hitStop(attacker, stop)
 end
@@ -565,6 +545,13 @@ local function predictHit(info: CombatController.AttackInfo)
 	end
 	forgetOldPredictions()
 
+	-- Which M1 of the combo this is (the clip we're playing: Brawler_M1_n).
+	local punch = CharacterAnimationController.getLastAction(character)
+	local combo = tonumber(if punch then string.match(punch, "^Brawler_M1_(%d+)$") else nil)
+		or (if info.strong then #Config.Combat.M1_DAMAGE else 1)
+	local stop =
+		Vfx.Tiers.get(HitFx.tierFor(if info.strong then "Finisher" else "Hit", character)).hitstop
+
 	-- Same aim rule and same rest-pose bodies as the server (HitPrediction).
 	local aim = AimRule.validate(info.aim, root.CFrame.LookVector)
 	for model, parts in HitPrediction.findVictims(character, root) do
@@ -578,7 +565,9 @@ local function predictHit(info: CombatController.AttackInfo)
 				predictions[model] = byId
 			end
 			byId[info.id] = { time = os.clock(), strong = info.strong, zone = zone, side = side }
-			playHitReaction(model, character, info.strong, zone, side)
+			playHitReaction(model, character, info.strong, zone, side, stop)
+			-- The impact VFX on the same frame (flash, sparks, ring...).
+			HitFx.onPredictedHit(model, character, combo, zone, side)
 			-- The thud with the reaction, right away (the server's message
 			-- comes a round trip later: then it doesn't play it again).
 			SoundController.play(if info.strong then "HeavyHit" else "Hit", model)
@@ -641,11 +630,12 @@ local function onCombatEvent(
 	-- A kit move (Bottle Smash...) rather than an M1.
 	local moveId: string? = if typeof(moveIdArg) == "string" then moveIdArg else nil
 
+	local zone: Types.HitZone = resolveZone(zoneArg)
+	local side: Types.HitSide = resolveSide(sideArg, victim, attacker)
 	if kind == "Hit" or kind == "Finisher" then
-		flick(victim)
+		-- (no flick: the contact light does that job, and particles are
+		-- drawn behind a Highlight)
 		local strong = kind == "Finisher" or (moveId ~= nil and KitEffects.isHeavy(moveId))
-		local zone: Types.HitZone = resolveZone(zoneArg)
-		local side: Types.HitSide = resolveSide(sideArg, victim, attacker)
 		-- Already shown exactly like this by our prediction? Otherwise the
 		-- server's version wins (it replaces a wrong guess).
 		local alreadyShown = prediction ~= nil
@@ -653,8 +643,21 @@ local function onCombatEvent(
 			and prediction.zone == zone
 			and prediction.side == side
 		if not alreadyShown then
-			playHitReaction(victim, attacker, strong, zone, side, moveId)
+			local stop = Vfx.Tiers.get(HitFx.tierFor(kind, attacker, moveId)).hitstop
+			playHitReaction(victim, attacker, strong, zone, side, stop, moveId)
 		end
+		-- The impact VFX (our prediction already flashed it: then only the
+		-- knockout check runs).
+		HitFx.onCombatEvent(
+			kind,
+			victim,
+			attacker,
+			zone,
+			side,
+			moveId,
+			prediction ~= nil,
+			bloodArg == true
+		)
 		if iAmVictim and zone == "Head" then
 			headBlur()
 		end
@@ -690,28 +693,38 @@ local function onCombatEvent(
 			-- (bare-fist M1s only - not a kick, a bottle, a bat: split knuckles)
 			KitEffects.punchLanded(victim, attacker)
 		end
+		-- The blood comes ≈0.1 s after the flash (README), not on its frame.
+		local bloodDelay = HitFx.bloodDelay(if prediction then prediction.time else nil)
 		if bloodArg == true then
 			-- (more for the heavy blows and the kits' moves)
 			local amount = if strong then 3.8 elseif moveId then 2.5 else 1.6
-			KitEffects.bloodSpray(
-				victim,
-				attacker,
-				zone,
-				amount,
-				KitEffects.bloodSeed(attackIdArg, victim, zone),
-				-- (which face wound it opens: nose, lip, brow cut...)
-				{ strong = strong, moveId = moveId, side = side :: string }
-			)
+			local seed = KitEffects.bloodSeed(attackIdArg, victim, zone)
+			task.delay(bloodDelay, function()
+				if victim.Parent == nil then
+					return
+				end
+				KitEffects.bloodSpray(
+					victim,
+					attacker,
+					zone,
+					amount,
+					seed,
+					-- (which face wound it opens: nose, lip, brow cut...)
+					{ strong = strong, moveId = moveId, side = side :: string }
+				)
+			end)
 		end
 		if typeof(skinTearSeedArg) == "number" then
-			KitEffects.skinTear(victim, attacker, skinTearSeedArg, zone)
+			task.delay(bloodDelay, function()
+				if victim.Parent ~= nil then
+					KitEffects.skinTear(victim, attacker, skinTearSeedArg, zone)
+				end
+			end)
 		end
 		if iAmVictim then
 			drainColour()
-			shake(if strong then 1.6 else 0.8, if strong then 0.25 else 0.15)
-		elseif iAmAttacker then
-			shake(if strong then 0.8 else 0.35, 0.1)
 		end
+		-- (the camera shake / push-in of the hit: Vfx, with its tier)
 	elseif kind == "Blocked" then
 		flick(victim)
 		CharacterAnimationController.playAction(victim, "BlockHit")
@@ -719,9 +732,7 @@ local function onCombatEvent(
 		CharacterAnimationController.hitStop(victim, BLOCK_HIT_STOP)
 		CharacterAnimationController.hitStop(attacker, BLOCK_HIT_STOP)
 		SoundController.play("Block", victim)
-		if iAmVictim then
-			shake(0.3, 0.1)
-		end
+		HitFx.onCombatEvent(kind, victim, attacker, zone, side, moveId, false, false)
 	elseif kind == "Parried" then
 		if iAmVictim or iAmAttacker then
 			word(victim, "PARRY", C.Ink)
@@ -730,9 +741,7 @@ local function onCombatEvent(
 		CharacterAnimationController.hitStop(victim, PARRY_HIT_STOP)
 		CharacterAnimationController.hitStop(attacker, PARRY_HIT_STOP)
 		SoundController.play("Parry", victim)
-		if iAmVictim or iAmAttacker then
-			shake(0.6, 0.15)
-		end
+		HitFx.onCombatEvent(kind, victim, attacker, zone, side, moveId, false, false)
 	elseif kind == "GuardBreak" then
 		flick(victim)
 		if iAmVictim or iAmAttacker then
@@ -740,14 +749,13 @@ local function onCombatEvent(
 		end
 		CharacterAnimationController.playAction(victim, "GuardBreak")
 		SoundController.play("GuardBreak", victim)
-		if iAmVictim then
-			shake(1.2, 0.2)
-		end
+		HitFx.onCombatEvent(kind, victim, attacker, zone, side, moveId, false, false)
 	elseif kind == "Dodged" then
 		if iAmVictim or iAmAttacker then
 			word(victim, "DODGE", C.Ink)
 		end
 		SoundController.play("Dodge", victim)
+		HitFx.onCombatEvent(kind, victim, attacker, zone, side, moveId, false, false)
 	elseif kind == "Protected" then
 		if iAmAttacker then
 			word(victim, "PROTECTED", C.Ink2)
@@ -871,6 +879,10 @@ local function onKillEffect(effect: unknown, position: unknown)
 end
 
 function CombatEffectsController.start()
+	-- The combat VFX library: pools, camera layer; and the swings' VFX
+	-- timed from each action clip that starts (every fighter).
+	Vfx.start()
+	CharacterAnimationController.onActionPlayed(HitFx.onAction)
 	KitLooks.start() -- bull horns, sentinel cape
 	KitVFX.start() -- smashed walls, the Bull's strides
 	Remotes.KillEffect.OnClientEvent:Connect(onKillEffect)
@@ -941,7 +953,6 @@ function CombatEffectsController.start()
 			predictHit(info)
 		end)
 	end)
-	RunService:BindToRenderStep("CombatShake", Enum.RenderPriority.Camera.Value + 2, updateShake)
 end
 
 return CombatEffectsController

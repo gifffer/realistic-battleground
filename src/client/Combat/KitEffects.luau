@@ -507,9 +507,12 @@ local function burst(
 	size: number,
 	speed: number,
 	lifetime: number,
-	seeded: Random?
+	seeded: Random?,
+	along: Vector3?
 )
 	-- `seeded`: same random numbers on every client (pieces land the same).
+	-- `along`: the way the blow was going (unit): the pieces fly mostly that
+	-- way (out the far side and to the sides), not in a perfect sphere.
 	local random = seeded or Random.new()
 	for _ = 1, count do
 		local piece = Instance.new("Part")
@@ -530,6 +533,9 @@ local function burst(
 		piece.CFrame = CFrame.new(position)
 			* CFrame.Angles(random:NextNumber(0, 6.3), random:NextNumber(0, 6.3), 0)
 		local direction = random:NextUnitVector()
+		if along then
+			direction = (direction + along * 1.3).Unit
+		end
 		piece.AssemblyLinearVelocity = Vector3.new(
 			direction.X,
 			math.abs(direction.Y) + 0.4,
@@ -1033,6 +1039,15 @@ function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: 
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
 	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil
+	-- The blow's direction (attacker → victim, flat), so the debris flies
+	-- the same way as the contact flash's sparks (Vfx).
+	local attackerRoot = attacker:FindFirstChild("HumanoidRootPart")
+	local blowFlat = if headPosition
+			and attackerRoot
+			and attackerRoot:IsA("BasePart")
+		then (headPosition - attackerRoot.Position) * Vector3.new(1, 0, 1)
+		else Vector3.zero
+	local blow: Vector3? = if blowFlat.Magnitude > 1e-3 then blowFlat.Unit else nil
 	local move = moveById[moveId]
 	local breaks = false
 	if move then
@@ -1055,15 +1070,23 @@ function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: 
 		end
 		if headPosition then
 			-- Big pieces, then a spray of small glittering bits that stay on
-			-- the floor a while.
-			burst(headPosition, 12, GLASS_COLOR, Enum.Material.Glass, 0.16, 16, 4)
-			burst(headPosition, 22, GLASS_SHINE, Enum.Material.Glass, 0.06, 20, 6)
+			-- the floor a while. They burst from where the bottle met the
+			-- head (its side facing the attacker, where Vfx draws the flash)
+			-- and carry on the way the bottle was going.
+			local contact = if blow then headPosition - blow * 0.5 else headPosition
+			burst(contact, 12, GLASS_COLOR, Enum.Material.Glass, 0.16, 16, 4, nil, blow)
+			burst(contact, 22, GLASS_SHINE, Enum.Material.Glass, 0.06, 20, 6, nil, blow)
 		end
 	end
 	if zone == "Legs" then
 		local leg = victim:FindFirstChild("Right Leg")
 		if leg and leg:IsA("BasePart") then
-			burst(leg.Position, 3, Color3.fromRGB(90, 84, 76), Enum.Material.Sand, 0.12, 5, 0.8)
+			-- (grit knocked off the shoe / trouser leg, low, at the shin,
+			-- kicked on the way the leg was struck)
+			local shin = (leg.CFrame * CFrame.new(0, -0.4, 0)).Position
+			local kick = (leg.Position - attacker:GetPivot().Position) * Vector3.new(1, 0, 1)
+			local along: Vector3? = if kick.Magnitude > 1e-3 then kick.Unit else nil
+			burst(shin, 3, Color3.fromRGB(90, 84, 76), Enum.Material.Sand, 0.12, 5, 0.8, nil, along)
 		end
 	end
 end
