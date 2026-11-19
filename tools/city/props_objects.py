@@ -30,7 +30,7 @@ volume of a prop collides: one or a few parts, the detail never).
 Only built-in Materials and colours (no textures, no meshes).
 
 NO BOTTLES of any kind (glass or plastic, decoration or litter): there is none in here, keep it so.
-(The gas cylinders and the stove's cartridge are named GasCylinder / GasCartridge.)
+(No gas cylinders either: the camp stove's squat cartridge is named GasCartridge.)
 
 CATALOGUE lists every prop with a few option sets for tools/city/preview_props_objects.py.
 """
@@ -195,7 +195,7 @@ def _bar(f, name, p0, p1, w, th, color, mat, flags=DECOR, extend=0.0, roll=0.0, 
 # front faces are SKIN_STEP apart and there is an air gap between slots. A mark that would need
 # more than SKIN_MAX slots is dropped (None): nobody sees a fourth layer of grime.
 SKIN_TH = 0.035  # a mark's thickness (studs)
-SKIN_STEP = 0.055  # slot spacing: front faces 0.055 apart, a 0.02 air gap between slots
+SKIN_STEP = 0.062  # slot spacing: front faces 0.062 apart, a 0.027 air gap between slots
 SKIN_MAX = 3  # slots per spot on a face
 
 
@@ -213,7 +213,7 @@ def _skin_slot(f, c, corners, n_local):
     planes = f.D.__dict__.setdefault("_po_skins", [])
     marks = None
     for pn, poff, lst in planes:
-        if pn @ n > 0.9995 and abs(poff - off) < 0.015:
+        if pn @ n > 0.9995 and abs(poff - off) < 0.06:  # (a mark asked a little off the face counts too)
             marks = lst
             break
     if marks is None:
@@ -405,51 +405,43 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
     H = rng.uniform(3.2, 3.5)
     H2 = H + rng.uniform(0.35, 0.55)
     mat = "Metal"
-    # the shell: floor, four walls, the sloped tops of the side walls
-    f.box("Dumpster", (-L / 2, y0, -W / 2), (L / 2, y0 + t, W / 2), dark, mat, flags=PROP)
+    # the shell, butt-jointed (no two plates overlap): the front and back walls full length, the
+    # ends fitted between them with their sloped tops (wedges) butting the taller back wall, the
+    # floor fitted inside the four walls
     f.box("Dumpster", (-L / 2, y0, -W / 2), (L / 2, y0 + H, -W / 2 + t), col, mat, flags=PROP)
     f.box("Dumpster", (-L / 2, y0, W / 2 - t), (L / 2, y0 + H2, W / 2), _tone(col, rng, 3), mat, flags=PROP)
+    f.box("Dumpster", (-L / 2 + t, y0, -W / 2 + t), (L / 2 - t, y0 + t, W / 2 - t), dark, mat, flags=PROP)
     for s in (-1, 1):
         x0 = s * L / 2 - (t if s > 0 else 0)
         f.box("Dumpster", (x0, y0, -W / 2 + t), (x0 + t, y0 + H, W / 2 - t), _tone(col, rng, 3), mat, flags=PROP)
-        f.part(
-            "Dumpster",
-            (s * (L / 2 - t / 2), y0 + H + (H2 - H) / 2, 0),
-            (t, H2 - H, W),
-            col,
-            mat,
-            shape=WEDGE,
-            flags=PROP,
-        )
-    # rolled rim along the front, stamped ribs, corner posts
-    f.box("DumpsterRim", (-L / 2 - 0.05, y0 + H - 0.25, -W / 2 - 0.13), (L / 2 + 0.05, y0 + H, -W / 2), dark, mat)
-    for x in (-L / 3, 0, L / 3):
-        x += rng.uniform(-0.1, 0.1)
-        f.box(
-            "DumpsterRib", (x - 0.17, y0 + 0.2, -W / 2 - 0.1), (x + 0.17, y0 + H - 0.3, -W / 2), _tone(col, rng, 5), mat
-        )
+        f.part("Dumpster", (s * (L / 2 - t / 2), y0 + H + (H2 - H) / 2, -t / 2), (t, H2 - H, W - t), col, mat,
+               shape=WEDGE, flags=PROP)
+    # corner posts wrapping the corners (their inner quarter hidden in the walls, their tops 6 cm
+    # under the wall tops, their feet 6 cm below the shell), the rolled rim between the front
+    # posts, stiffener channels 20 cm proud on the front
+    pc = 0.1  # how far a post reaches into the walls
     for sx in (-1, 1):
         for sz in (-1, 1):
-            x, z = sx * (L / 2 + 0.02), sz * (W / 2 + 0.02)
-            f.box(
-                "DumpsterPost",
-                (x - 0.13, y0, z - 0.13),
-                (x + 0.13, y0 + (H if sz < 0 else H2) - 0.05, z + 0.13),
-                _tone(dark, rng, 4),
-                mat,
-            )
-    # fork pockets on the sides, their dark mouths at the front
+            x0 = sx * L / 2 - (pc if sx > 0 else 0.18)
+            z0 = sz * W / 2 - (pc if sz > 0 else 0.18)
+            top = y0 + (H if sz < 0 else H2) - 0.06
+            f.box("DumpsterPost", (x0, y0 - 0.06, z0), (x0 + 0.28, top, z0 + 0.28), _tone(dark, rng, 4), mat)
+    f.box("DumpsterRim", (-L / 2 + pc, y0 + H - 0.25, -W / 2 - 0.18), (L / 2 - pc, y0 + H, -W / 2), dark, mat)
+    ribs = []
+    for x in (-L / 3, 0, L / 3):
+        x += rng.uniform(-0.1, 0.1)
+        ribs.append(x)
+        f.box("DumpsterRib", (x - 0.17, y0 + 0.2, -W / 2 - 0.2), (x + 0.17, y0 + H - 0.3, -W / 2), _tone(col, rng, 5),
+              mat)
+    # fork pockets on the sides: open steel channels (top, bottom, outer plate) welded to the ends
     yp = y0 + H * rng.uniform(0.4, 0.48)
     for s in (-1, 1):
         x0, x1 = (L / 2, L / 2 + 0.38) if s > 0 else (-L / 2 - 0.38, -L / 2)
-        f.box("ForkPocket", (x0, yp, -W * 0.42), (x1, yp + 0.55, W * 0.42), _tone(dark, rng, 4), mat)
-        f.box(
-            "ForkPocketMouth",
-            (x0 + 0.05, yp + 0.06, -W * 0.42 - 0.02),
-            (x1 - 0.05, yp + 0.49, -W * 0.42 + 0.03),
-            SOOT,
-            "SmoothPlastic",
-        )
+        pcol = _tone(dark, rng, 4)
+        f.box("ForkPocket", (x0, yp + 0.47, -W * 0.42), (x1, yp + 0.55, W * 0.42), pcol, mat)
+        f.box("ForkPocket", (x0, yp, -W * 0.42), (x1, yp + 0.08, W * 0.42), pcol, mat)
+        xo = x1 - 0.08 if s > 0 else x0
+        f.box("ForkPocket", (xo, yp + 0.08, -W * 0.42), (xo + 0.08, yp + 0.47, W * 0.42), pcol, mat)
     # the two lids, hinged at the back; closed they follow the slope
     slope = math.degrees(math.atan2(H2 - H, W))
     LL = math.hypot(W, H2 - H) + 0.22
@@ -478,19 +470,22 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
                 _tone(c, rng, 3),
                 "Plastic",
             )
-        g.box("LidLip", (-lw / 2, -0.28, -LL), (lw / 2, 0.06, -LL + 0.12), _tone(c, rng, 3, 0.1), "Plastic")
+        g.box("LidLip", (-lw / 2, -0.28, -LL), (lw / 2, -0.08, -LL + 0.12), _tone(c, rng, 3, 0.1), "Plastic")
         _cyl(f, "Hinge", (s * L / 4, y0 + H2 + 0.06, W / 2 + 0.06), lw * 0.8, 0.2, IRON, "Metal")
     # four casters
     for sx in (-1, 1):
         for sz in (-1, 1):
             x, z = sx * (L / 2 - 0.5), sz * (W / 2 - 0.5)
             f.box("Caster", (x - 0.16, 0.36, z - 0.16), (x + 0.16, y0, z + 0.16), IRON, "Metal")
-            _cyl(f, "CasterWheel", (x, 0.21, z), 0.22, 0.42, RUBBER, "Rubber", rot=(0, rng.uniform(0, 180), 0))
-    # wear: grime up the front, rust at the rim and corners, drips, dents, the plate, a tag
-    _grime(f, -L / 2, L / 2, y0, rng.uniform(0.5, 0.9), -W / 2 - 0.135, "-z", col, rng)
-    _rust(f, rng, (rng.choice((-1, 1)) * L * 0.38, y0 + H - 0.5, -W / 2), "-z", 1.0, rng.randint(1, 2))
+            _cyl(f, "CasterWheel", (x, 0.21, z), 0.18, 0.42, RUBBER, "Rubber", rot=(0, rng.uniform(0, 180), 0))
+    # wear on the front wall's face (its marks take depth slots, the ribs stand 20 cm proud):
+    # grime up from the ground between the posts, rust at the rim and corners, drips, dents, the
+    # faded info plate between two ribs, a sprayed tag
+    _grime(f, -L / 2 + pc + 0.02, L / 2 - pc - 0.02, y0, rng.uniform(0.5, 0.9), -W / 2, "-z", col, rng)
+    _rust(f, rng, (rng.choice((-1, 1)) * L * 0.36, y0 + H - 0.5, -W / 2), "-z", 0.9, rng.randint(1, 2))
     _rust(f, rng, (rng.uniform(-L, L) * 0.3, y0 + rng.uniform(0.6, 1.4), -W / 2), "-z", 0.9, 1)
-    _rust(f, rng, (rng.choice((-1, 1)) * (L / 2 + 0.38), yp + 0.3, rng.uniform(-0.6, 0.6)), "-x", 0.8, 1)
+    sx = rng.choice((-1, 1))  # (on the outer plate of a fork pocket)
+    _rust(f, rng, (sx * (L / 2 + 0.38), yp + 0.275, rng.uniform(-0.6, 0.6)), "-x" if sx < 0 else "+x", 0.4, 1)
     for _ in range(rng.randint(1, 3)):
         _streak(f, rng, rng.uniform(-L / 2 + 0.4, L / 2 - 0.4), y0 + H - 0.25, -W / 2, "-z")
     for _ in range(rng.randint(1, 2)):
@@ -500,32 +495,17 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
             (rng.uniform(0.6, 1.1), rng.uniform(0.5, 0.8), 0.06),
             _tone(col, rng, 4, 0.15),
             mat,
-            rot=(rng.uniform(-14, 14), rng.uniform(-14, 14), rng.uniform(0, 90)),
+            rot=(rng.uniform(5, 14) * rng.choice((-1, 1)), rng.uniform(5, 14) * rng.choice((-1, 1)), rng.uniform(0, 90)),
         )
-    _skin(
-        f,
-        "InfoPlate",
-        (rng.uniform(-0.8, 0.8), y0 + H - 0.75, -W / 2 - 0.1),
-        1.1,
-        0.55,
-        "-z",
-        _tone((118, 116, 108), rng, 8, rng.uniform(0.2, 0.4)),
-        spin=rng.uniform(-3, 3),
-    )
+    k = rng.randrange(2)
+    _skin(f, "InfoPlate", ((ribs[k] + ribs[k + 1]) / 2 + rng.uniform(-0.15, 0.15), y0 + H - 0.75, -W / 2), 1.0, 0.55,
+          "-z", _tone((118, 116, 108), rng, 8, rng.uniform(0.2, 0.4)), "Metal", spin=rng.uniform(-3, 3))
     if rng.random() < 0.6:
         tag = _tone(_pick(rng, [(170, 170, 166), (150, 50, 50), (60, 110, 160), (40, 40, 42)]), rng, 8)
         x, y = rng.uniform(-L / 2 + 1, L / 2 - 1), y0 + rng.uniform(1.0, 1.8)
         for k in range(2):
-            _skin(
-                f,
-                "Tag",
-                (x + k * 0.35, y + rng.uniform(-0.15, 0.15), -W / 2 - 0.1),
-                rng.uniform(0.6, 1.1),
-                0.09,
-                "-z",
-                tag,
-                spin=rng.uniform(-50, 50),
-            )
+            _skin(f, "Tag", (x + k * 0.35, y + rng.uniform(-0.15, 0.15), -W / 2), rng.uniform(0.6, 1.1), 0.09, "-z", tag,
+                  spin=rng.uniform(-50, 50))
     # what bulges over the rim when a lid is up
     if full and open_sides:
         for s, st in open_sides:
@@ -560,81 +540,49 @@ def recycling_bin(D, folder, origin, ry, rng, kind=None, lid=None):
     body = _tone(GALVANISED, rng, 8, darken=rng.uniform(0.1, 0.3))
     lc = _tone(_pick(rng, RECYCLE[:3]) if kind == "paper" else RECYCLE[3], rng, 8, darken=rng.uniform(0.1, 0.35))
     f.box("RecyclingBin", (-L / 2, y0, -W / 2), (L / 2, y0 + H, W / 2), body, "Metal", flags=PROP)
-    f.box(
-        "BinBand",
-        (-L / 2 - 0.06, y0 + H * 0.62, -W / 2 - 0.06),
-        (L / 2 + 0.06, y0 + H * 0.62 + 0.25, W / 2 + 0.06),
-        _tone(body, rng, 5, 0.1),
-        "Metal",
-    )
-    f.box(
-        "BinRim",
-        (-L / 2 - 0.1, y0 + H - 0.18, -W / 2 - 0.1),
-        (L / 2 + 0.1, y0 + H, W / 2 + 0.1),
-        _tone(body, rng, 4, 0.15),
-        "Metal",
-    )
-    # the domed lid: half a cylinder along X above the rim, hinged at the back
+    f.box("BinBand", (-L / 2 - 0.07, y0 + H * 0.62, -W / 2 - 0.07), (L / 2 + 0.07, y0 + H * 0.62 + 0.25, W / 2 + 0.07),
+          _tone(body, rng, 5, 0.1), "Metal")  # (7 cm proud: never near-coplanar with the body)
+    # the rim: a collar round the top, butt-jointed, standing 7 cm above the body's top
+    rim, rc = 0.1, _tone(body, rng, 4, 0.15)
+    yr0, yr1 = y0 + H - 0.18, y0 + H + 0.07
+    for s in (-1, 1):
+        z0 = -W / 2 - rim if s < 0 else W / 2
+        f.box("BinRim", (-L / 2 - rim, yr0, z0), (L / 2 + rim, yr1, z0 + rim), rc, "Metal")
+        x0 = -L / 2 - rim if s < 0 else L / 2
+        f.box("BinRim", (x0, yr0, -W / 2), (x0 + rim, yr1, W / 2), rc, "Metal")
+    # the domed lid, hinged at the back on the rim: a flat skirt, three curved plates on an arc
+    # over it, the two gable ends butting the plates' ends
     ang = 0.0 if lid == "closed" else rng.uniform(70, 100)
-    g = f.sub((0, y0 + H, W / 2), rx=ang)
-    hd = 0.75  # the dome: three curved plates on an arc over the mouth
-    r = (W * W / 4 + hd * hd) / (2 * hd)
-    th = math.asin(min(1.0, (W / 2 + 0.05) / r))
+    Wl = W + 2 * rim
+    g = f.sub((0, yr1, W / 2 + rim), rx=ang)
+    g.box("BinLidSkirt", (-L / 2 - rim, 0, -Wl), (L / 2 + rim, 0.12, 0), _tone(lc, rng, 4, 0.2), "Plastic", flags=PROP)
+    hd = 0.7
+    r = (Wl * Wl / 4 + hd * hd) / (2 * hd)
+    th = math.asin(min(1.0, (Wl / 2 - 0.05) / r))
+    plates = []
     for i in range(3):
         phi = -th + (2 * i + 1) * th / 3
-        g.part(
-            "BinLid",
-            (0, -r + hd + r * math.cos(phi) - 0.03, -W / 2 + r * math.sin(phi)),
-            (L + 0.12, 0.1, 2 * r * math.sin(th / 3) + 0.06),
-            _tone(lc, rng, 3),
-            "Plastic",
-            rot=(math.degrees(phi), 0, 0),
-            flags=PROP,
-        )
+        p = g.sub((0, 0.12 - r + hd + r * math.cos(phi) - 0.05, -Wl / 2 + r * math.sin(phi)), rx=math.degrees(phi))
+        p.part("BinLid", (0, 0, 0), (L, 0.1, 2 * r * math.sin(th / 3) + 0.06), _tone(lc, rng, 2), "Plastic", flags=PROP)
+        plates.append(p)
     for e in (-1, 1):
-        g.box(
-            "BinLidEnd",
-            (e * (L / 2 + 0.02) - 0.04, 0.0, -W + 0.3),
-            (e * (L / 2 + 0.02) + 0.04, hd * 0.75, -0.3),
-            _tone(lc, rng, 3, 0.1),
-            "Plastic",
-        )
-    g.box(
-        "BinLidSkirt", (-L / 2 - 0.08, -0.02, -W - 0.08), (L / 2 + 0.08, 0.12, 0.04), _tone(lc, rng, 4, 0.2), "Plastic"
-    )
-    if lid == "closed" and kind == "paper":
-        g.part(
-            "PaperSlot",
-            (0, hd * 0.55, -W * 0.82),
-            (L * 0.55, 0.32, 0.12),
-            SOOT,
-            "SmoothPlastic",
-            rot=(math.degrees(th) * 0.67, 0, 0),
-        )
-    if lid != "closed":  # the mouth, the rubbish in it
-        f.box(
-            "BinMouth",
-            (-L / 2 + 0.12, y0 + H - 0.05, -W / 2 + 0.12),
-            (L / 2 - 0.12, y0 + H + 0.01, W / 2 - 0.12),
-            SOOT,
-            "SmoothPlastic",
-        )
+        x0 = e * L / 2 - (0 if e > 0 else 0.06)
+        g.box("BinLidEnd", (x0, 0.12, -Wl + 0.35), (x0 + 0.06, 0.12 + hd * 0.7, -0.35), _tone(lc, rng, 3, 0.1), "Plastic")
+    if lid == "closed" and kind == "paper":  # the paper slot in the front plate
+        _skin(plates[0], "PaperSlot", (0, 0.05, 0.05), L * 0.55, 0.14, "y", SOOT)
+    if lid != "closed":  # the dark mouth level with the rim, the rubbish in it
+        f.box("BinMouth", (-L / 2, y0 + H, -W / 2), (L / 2, y0 + H + 0.065, W / 2), SOOT, "SmoothPlastic")
         for _ in range(rng.randint(1, 3)):
-            f.part(
-                "Cardboard",
-                (rng.uniform(-1.2, 1.2), y0 + H + 0.1, rng.uniform(-0.8, 0.8)),
-                (rng.uniform(0.9, 1.5), 0.6, rng.uniform(0.9, 1.4)),
-                _tone(CARDBOARD, rng, 8, 0.15),
-                CARDBOARD_MAT,
-                rot=(rng.uniform(-25, 25), rng.uniform(0, 90), rng.uniform(-25, 25)),
-            )
+            f.part("Cardboard", (rng.uniform(-1.2, 1.2), y0 + H + 0.2, rng.uniform(-0.8, 0.8)),
+                   (rng.uniform(0.9, 1.5), 0.6, rng.uniform(0.9, 1.4)), _tone(CARDBOARD, rng, 8, 0.15), CARDBOARD_MAT,
+                   rot=(rng.uniform(-25, 25), rng.uniform(0, 90), rng.uniform(-25, 25)))
     # the sticker (pale, half peeled), push handles, pedal, casters
     sc = mix(lc, (200, 200, 196), rng.uniform(0.3, 0.5))
     _skin(f, "Sticker", (rng.uniform(-0.4, 0.4), y0 + H * 0.4, -W / 2), 1.4, 1.0, "-z", sc, spin=rng.uniform(-2, 2))
     _skin(
         f,
         "StickerPeel",
-        (rng.uniform(-0.5, 0.5), y0 + H * 0.4 + 0.4, -W / 2 - 0.04),
+        (rng.uniform(-0.5, 0.5), y0 + H * 0.4 + 0.4, -W / 2),
         0.5,
         0.3,
         "-z",
@@ -666,9 +614,9 @@ def recycling_bin(D, folder, origin, ry, rng, kind=None, lid=None):
         for sz in (-1, 1):
             x, z = sx * (L / 2 - 0.45), sz * (W / 2 - 0.45)
             _cyl(f, "CasterWheel", (x, 0.22, z), 0.22, 0.44, RUBBER, "Rubber", rot=(0, rng.uniform(0, 180), 0))
-    _grime(f, -L / 2, L / 2, y0, rng.uniform(0.4, 0.8), -W / 2 - 0.01, "-z", body, rng)
+    _grime(f, -L / 2, L / 2, y0, rng.uniform(0.4, 0.8), -W / 2, "-z", body, rng)
     _rust(f, rng, (rng.choice((-1, 1)) * (L / 2 - 0.5), y0 + 0.5, -W / 2), "-z", 0.8, 1)
-    _streak(f, rng, rng.uniform(-L / 2 + 0.5, L / 2 - 0.5), y0 + H * 0.62, -W / 2 - 0.06, "-z")
+    _streak(f, rng, rng.uniform(-L / 2 + 0.5, L / 2 - 0.5), y0 + H * 0.62, -W / 2, "-z")
 
 
 @prop({"state": "closed"}, {"state": "open"}, {"state": "ajar"}, {"state": "tipped"})
@@ -771,12 +719,19 @@ def wheelie_bin(D, folder, origin, ry, rng, state=None, color=None):
 
 @prop({"doors": "closed"}, {"doors": "ajar"}, {"doors": "closed", "color": (40, 56, 78)})
 def shipping_container(D, folder, origin, ry, rng, doors=None, color=None, length=None):
-    """A 20 ft shipping container, years past its last voyage: corrugated long walls (raised
-    panels), corner posts with their castings, top and bottom rails, the doors at the +X end with
-    four lock bars, handles and the seal plate (closed, or one door swung open on a dark inside),
-    a dented roof; rust eating the bottom rail and the corners, drips under the roof rail, the
-    owner's band of faded white "letters" and its number plate, paint patches over old tags.
-    Footprint 20 x 8 studs (doors ajar: +4 on +X), 8.5 tall. 60-73 parts; the core is SOLID
+    """A 20 ft shipping container (ISO 668: 20.2 x 8.1 x 8.6 studs), years past its last voyage:
+      • the frame: eight corner castings (0.6 x 0.5 x 0.4, rusty, the oval holes), corner posts
+        between them, top and bottom side rails and the end header / sill, all BUTTED: each
+        member stops where the next begins, so their outer faces meet edge to edge;
+      • the long walls: the core's face is the valley, with trapezoid-pitch corrugation crests
+        0.13 proud every 0.92 (real: 0.9 st pitch, 0.12-0.15 deep); the blank end corrugated
+        horizontally the same way; the roof sits 0.1 below the rails;
+      • the doors (+X end): two leaves with four pressed bands, two lock bars each, handles, the
+        CSC plate and the box number; closed, or the right leaf swung open on the dark inside;
+      • wear in the paint's depth slots, on the crests (never floating over a valley): the owner's
+        faded letters one per crest, rust and roller-painted patches over old tags, drips from
+        the roof rail, rust along the bottom rail, a puddle in the dented roof.
+    Footprint L (20) x 8 studs (doors ajar: +4 on +X), 8.5 tall. 95-115 parts; the core is SOLID
     (stand on it), the rest DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     doors = doors or _pick(rng, ["closed", "closed", "ajar"])
@@ -784,148 +739,107 @@ def shipping_container(D, folder, origin, ry, rng, doors=None, color=None, lengt
     W, H = 8.0, 8.5
     col = _tone(color or _pick(rng, CONTAINER), rng, 6, darken=rng.uniform(0.05, 0.3))
     frame = _tone(col, rng, 4, 0.25)
-    f.box(
-        "Container", (-L / 2 + 0.2, 0.2, -W / 2 + 0.15), (L / 2 - 0.2, H - 0.2, W / 2 - 0.15), col, "Metal", flags=SOLID
-    )
-    # corner posts, castings, rails
+    cast = _tone(RUST_DARK, rng, 5)
+    cx, cz, ch = 0.6, 0.5, 0.4  # casting size (along X, Z, Y)
+    pw = 0.45  # corner post section
+    vz = W / 2 - 0.15  # the long walls' valley face
+    f.box("Container", (-L / 2 + 0.15, 0.2, -vz), (L / 2 - 0.36, H - 0.1, vz), col, "Metal", flags=SOLID)
     for sx in (-1, 1):
         for sz in (-1, 1):
-            x, z = sx * (L / 2 - 0.22), sz * (W / 2 - 0.22)
-            f.box("ContainerPost", (x - 0.24, 0, z - 0.24), (x + 0.24, H, z + 0.24), frame, "Metal")
-            f.box(
-                "CornerCasting",
-                (x - 0.28, H - 0.4, z - 0.28),
-                (x + 0.28, H + 0.02, z + 0.28),
-                _tone(RUST_DARK, rng, 5),
-                "CorrodedMetal",
-            )
+            x0 = sx * L / 2 - (cx if sx > 0 else 0)
+            z0 = sz * W / 2 - (cz if sz > 0 else 0)
+            for y0 in (0.0, H - ch):
+                f.box("CornerCasting", (x0, y0, z0), (x0 + cx, y0 + ch, z0 + cz), _tone(cast, rng, 4), "CorrodedMetal")
+            xp = sx * L / 2 - (pw if sx > 0 else 0)
+            zp = sz * W / 2 - (pw if sz > 0 else 0)
+            f.box("ContainerPost", (xp, ch, zp), (xp + pw, H - ch, zp + pw), frame, "Metal")
+            # the casting's oval holes, on its side and end
+            _skin(f, "CastingHole", (sx * (L / 2 - cx / 2), H - ch / 2, sz * W / 2), 0.26, 0.14, "-z" if sz < 0 else "+z",
+                  SOOT)
+            _skin(f, "CastingHole", (sx * L / 2, H - ch / 2, sz * (W / 2 - cz / 2)), 0.22, 0.14, "-x" if sx < 0 else "+x",
+                  SOOT)
+    for sz in (-1, 1):  # the side rails between the castings, flush with them
+        z0 = sz * W / 2 - (0.3 if sz > 0 else 0)
+        f.box("ContainerRail", (-L / 2 + cx, H - 0.4, z0), (L / 2 - cx, H - 0.05, z0 + 0.3), frame, "Metal")
+        f.box("ContainerRail", (-L / 2 + cx, 0.05, z0), (L / 2 - cx, 0.45, z0 + 0.3), mix(frame, RUST, rng.uniform(0.3, 0.7)),
+              "CorrodedMetal")
+    # corrugation crests on both long walls, between the posts and the rails
+    pitch, crest = 0.92, 0.42
+    n = int((L - 2 * pw - 0.3) / pitch)
+    xs = [-(n - 1) * pitch / 2 + i * pitch for i in range(n)]
     for sz in (-1, 1):
-        z = sz * (W / 2 - 0.08)
-        f.box("ContainerRail", (-L / 2 + 0.4, H - 0.4, z - 0.12), (L / 2 - 0.4, H, z + 0.12), frame, "Metal")
-        f.box(
-            "ContainerRail",
-            (-L / 2 + 0.4, 0, z - 0.14),
-            (L / 2 - 0.4, 0.45, z + 0.14),
-            mix(frame, RUST, rng.uniform(0.3, 0.7)),
-            "CorrodedMetal",
-        )
-    # corrugation: raised panels on both long walls
-    pitch = 1.75
-    n = int((L - 1.2) / pitch)
-    x0 = -(n - 1) * pitch / 2
-    for sz in (-1, 1):
-        for i in range(n):
-            x = x0 + i * pitch
-            c = _tone(col, rng, 4, 0.0 if sz < 0 else 0.05)
-            f.box(
-                "Corrugation",
-                (x - 0.34, 0.5, sz * (W / 2 - 0.15) - 0.1),
-                (x + 0.34, H - 0.45, sz * (W / 2 - 0.15) + 0.1),
-                c,
-                "Metal",
-            )
-    # the doors (+X end) and the blank end (-X)
-    xd = L / 2 - 0.1
-    f.box(
-        "ContainerEnd",
-        (-L / 2 + 0.05, 0.45, -W / 2 + 0.45),
-        (-L / 2 + 0.2, H - 0.4, W / 2 - 0.45),
-        _tone(col, rng, 4, 0.05),
-        "Metal",
-    )
-    f.box("DoorHeader", (xd - 0.15, H - 0.65, -W / 2 + 0.4), (xd + 0.1, H - 0.2, W / 2 - 0.4), frame, "Metal")
-    f.box(
-        "DoorSill", (xd - 0.15, 0.1, -W / 2 + 0.4), (xd + 0.1, 0.5, W / 2 - 0.4), mix(frame, RUST, 0.6), "CorrodedMetal"
-    )
-    dw = (W - 0.9) / 2
+        z0 = sz * vz if sz > 0 else -W / 2 + 0.02
+        for x in xs:
+            f.box("Corrugation", (x - crest / 2, 0.45, z0), (x + crest / 2, H - 0.4, z0 + 0.13),
+                  _tone(col, rng, 3, 0.0 if sz < 0 else 0.05), "Metal")
+    # the blank end (-X): end rails, horizontal crests on the core's end face
+    for y0, y1 in ((0.05, 0.45), (H - 0.45, H - 0.05)):
+        f.box("ContainerRail", (-L / 2 + 0.02, y0, -W / 2 + cz), (-L / 2 + 0.32, y1, W / 2 - cz), frame, "Metal")
+    ny = int((H - 1.0) / pitch)
+    for i in range(ny):
+        y = 0.5 + pitch / 2 + i * (H - 1.0 - pitch) / max(1, ny - 1)
+        f.box("Corrugation", (-L / 2 + 0.02, y - crest / 2, -W / 2 + pw), (-L / 2 + 0.15, y + crest / 2, W / 2 - pw),
+              _tone(col, rng, 3, 0.05), "Metal")
+    # the door end (+X): header and sill between the castings, the two leaves between the posts
+    xd = L / 2 - 0.2
+    f.box("DoorHeader", (L / 2 - 0.35, H - 0.6, -W / 2 + cz), (L / 2 - 0.02, H - 0.05, W / 2 - cz), frame, "Metal")
+    f.box("DoorSill", (L / 2 - 0.35, 0.05, -W / 2 + cz), (L / 2 - 0.02, 0.5, W / 2 - cz), mix(frame, RUST, 0.6),
+          "CorrodedMetal")
+    if doors == "ajar":  # the dark inside, 6 cm in front of the core's end
+        f.box("ContainerInside", (L / 2 - 0.36, 0.5, -W / 2 + pw), (L / 2 - 0.3, H - 0.6, W / 2 - pw), SOOT,
+              "SmoothPlastic")
+    dw = W / 2 - pw
+    dh0, dh1 = 0.5, H - 0.6
+    bands = [dh0 + (dh1 - dh0) * u for u in (0.12, 0.42, 0.62, 0.88)]
     for k, s in enumerate((-1, 1)):
-        hinge_z = s * (W / 2 - 0.45)
+        hinge_z = s * (W / 2 - pw)
         swing = rng.uniform(55, 110) if (doors == "ajar" and k == 1) else 0.0
-        g = f.sub((xd, 0, hinge_z), ry=s * swing)
+        g = f.sub((xd, 0, hinge_z), ry=-s * swing)  # (both leaves swing outwards)
         c = _tone(col, rng, 4)
         z0, z1 = (0.0, dw) if s < 0 else (-dw, 0.0)
-        g.box("ContainerDoor", (0, 0.5, z0), (0.12, H - 0.65, z1), c, "Metal", flags=PROP)
+        g.box("ContainerDoor", (0, dh0, z0), (0.12, dh1, z1), c, "Metal", flags=PROP)
+        for y in bands:  # the pressed bands, 6 cm proud
+            g.box("DoorBand", (0.12, y - 0.18, z0 + 0.08), (0.18, y + 0.18, z1 - 0.08), _tone(c, rng, 3, 0.04), "Metal")
         for u in (0.3, 0.7):
             zz = z0 + (z1 - z0) * u
-            _vcyl(g, "LockBar", 0.2, 0.35, zz, H - 0.75, 0.12, _tone(GALVANISED, rng, 8, 0.3), "Metal")
-            g.box(
-                "LockHandle", (0.16, 3.4, zz - 0.06), (0.32, 3.55, zz + (0.9 if s < 0 else -0.9) * 0.5), IRON, "Metal"
-            )
+            _vcyl(g, "LockBar", 0.26, dh0 + 0.15, zz, dh1 - dh0 - 0.3, 0.11, _tone(GALVANISED, rng, 8, 0.3), "Metal")
+            for y in (dh0 + 0.08, dh1 - 0.2):  # cam keepers
+                g.box("CamKeeper", (0.12, y, zz - 0.1), (0.36, y + 0.12, zz + 0.1), IRON, "Metal")
+            g.box("LockHandle", (0.3, 3.0, zz - 0.05), (0.38, 3.12, zz + (0.9 if s < 0 else -0.9) * 0.5), IRON, "Metal")
         if k == 0:
-            _skin(g, "SealPlate", (0.12, 5.0, (z0 + z1) / 2), 1.2, 0.8, "+x", _tone((150, 150, 144), rng, 8, 0.25))
-        _rust(g, rng, (0.12, rng.uniform(0.9, 1.6), (z0 + z1) / 2), "+x", 1.0, 1)
-    if doors == "ajar":
-        f.box(
-            "ContainerInside", (xd - 0.25, 0.5, -dw + 0.45), (xd - 0.05, H - 0.65, W / 2 - 0.45), SOOT, "SmoothPlastic"
-        )
-    # roof dent, rust at the bottom and corners, drips, the owner's band and number
-    f.part(
-        "RoofDent",
-        (rng.uniform(-L / 4, L / 4), H - 0.17, rng.uniform(-1.5, 1.5)),
-        (rng.uniform(2, 4), 0.06, 2.5),
-        _tone(col, rng, 4, 0.2),
-        "Metal",
-        rot=(rng.uniform(-4, 4), rng.uniform(0, 90), rng.uniform(-4, 4)),
-    )
-    face_z = -W / 2 + 0.05 - 0.02
-    for _ in range(rng.randint(2, 3)):
-        _rust(f, rng, (rng.uniform(-L / 2 + 1, L / 2 - 1), rng.uniform(0.7, 1.5), face_z), "-z", 1.6, 1)
-    _rust(f, rng, (rng.choice((-1, 1)) * (L / 2 - 1.2), H - 1.0, face_z), "-z", 1.3, 1)
-    for _ in range(rng.randint(2, 3)):
-        _streak(f, rng, rng.uniform(-L / 2 + 1, L / 2 - 1), H - 0.45, face_z, "-z", length=rng.uniform(1.5, 3.5))
-    band_y = H * rng.uniform(0.62, 0.72)
-    letters = rng.randint(4, 6)
-    lx = rng.uniform(-L / 2 + 2.5, -1)
+            _skin(g, "SealPlate", (0.12, 4.35, z0 + (z1 - z0) * 0.5), 0.9, 0.6, "+x", _tone((150, 150, 144), rng, 8, 0.25),
+                  "Metal")
+        else:
+            _skin(g, "ContainerNumber", (0.12, 6.0, z0 + (z1 - z0) * 0.5), 2.4, 0.4, "+x",
+                  _tone((176, 174, 166), rng, 8, 0.3))
+        _rust(g, rng, (0.12, rng.uniform(0.85, 1.0), (z0 + z1) / 2), "+x", 0.35, 1)
+    # wear, on the crests of the -Z wall (the side the alleys show), in their depth slots
+    face = -W / 2 + 0.02
     lc = mix(_tone((176, 174, 166), rng, 8), col, rng.uniform(0.35, 0.55))
-    for i in range(letters):  # the owner's name: tall narrow letters, faded into the paint, some flaked off
-        if rng.random() < 0.2:
+    band_y = H * rng.uniform(0.6, 0.7)
+    k0 = rng.randrange(1, max(2, n // 3))
+    for i in range(rng.randint(4, 6)):  # the owner's name: one faded letter per crest, some flaked off
+        if k0 + i >= n or rng.random() < 0.2:
             continue
-        _skin(
-            f,
-            "Lettering",
-            (lx + i * 0.8, band_y, face_z - 0.12),
-            0.5,
-            rng.uniform(1.25, 1.4),
-            "-z",
-            lc,
-            th=0.03,
-            spin=rng.uniform(-1, 1),
-            transparency=0.25,
-        )
-        if rng.random() < 0.5:  # the letter's bar
-            _skin(
-                f,
-                "Lettering",
-                (lx + i * 0.8 + 0.12, band_y + rng.uniform(-0.3, 0.3), face_z - 0.13),
-                0.55,
-                0.2,
-                "-z",
-                lc,
-                th=0.03,
-                transparency=0.25,
-            )
-    _skin(
-        f,
-        "ContainerNumber",
-        (L / 2 - 3.2, H - 1.2, face_z - 0.02),
-        2.6,
-        0.45,
-        "-z",
-        _tone((170, 168, 160), rng, 8, 0.3),
-    )
-    for _ in range(rng.randint(0, 1)):  # rollered paint over old graffiti
-        _skin(
-            f,
-            "PaintPatch",
-            (rng.uniform(-L / 2 + 2, L / 2 - 2), rng.uniform(1.5, 3.5), face_z - 0.03),
-            rng.uniform(2, 3.5),
-            rng.uniform(1.2, 2.0),
-            "-z",
-            _tone(col, rng, 6, -0.15),
-            th=0.03,
-            spin=rng.uniform(-3, 3),
-        )
-    _grime(f, -L / 2 + 0.4, L / 2 - 0.4, 0.45, rng.uniform(0.5, 1.0), face_z - 0.05, "-z", col, rng)
+        _skin(f, "Lettering", (xs[k0 + i], band_y, face), crest - 0.06, rng.uniform(1.2, 1.35), "-z", lc)
+    for _ in range(rng.randint(2, 4)):  # rust on the crests low down, and under the roof rail
+        x = _pick(rng, xs)
+        _skin(f, "Rust", (x, rng.uniform(0.7, 1.4), face), crest - 0.04, rng.uniform(0.3, 0.8), "-z",
+              _tone(_pick(rng, [RUST, RUST_DARK]), rng, 6, 0.15), "CorrodedMetal")
+    for _ in range(rng.randint(2, 3)):
+        x = _pick(rng, xs)
+        _streak(f, rng, x + rng.uniform(-0.1, 0.1), H - 0.45, face, "-z", length=rng.uniform(1.5, 3.5))
+    if rng.random() < 0.6:  # rollered paint over old graffiti, across a few crests
+        k = rng.randrange(0, max(1, n - 4))
+        y, h = rng.uniform(2.0, 3.5), rng.uniform(1.2, 2.0)
+        pc = _tone(col, rng, 6, -0.15)
+        for i in range(rng.randint(3, 4)):
+            _skin(f, "PaintPatch", (xs[k + i], y + rng.uniform(-0.05, 0.05), face), crest - 0.02, h, "-z", pc)
+    # the bottom rail's own rust bloom, a puddle where the roof is dented
+    _skin(f, "Rust", (rng.uniform(-L / 4, L / 4), 0.25, -W / 2), rng.uniform(3, 6), 0.3, "-z", _tone(RUST, rng, 6, 0.1),
+          "CorrodedMetal")
+    _skin(f, "RoofPool", (rng.uniform(-L / 4, L / 4), H - 0.1, rng.uniform(-1.5, 1.5)), rng.uniform(1.8, 3.0),
+          rng.uniform(1.4, 2.2), "y", mix(col, (12, 14, 16), 0.6), reflectance=0.15, disk=True)
 
 
 @prop({"state": "upright"}, {"state": "tipped"}, {"state": "fire"}, {"state": "upright", "color": (118, 40, 32)})
@@ -1108,7 +1022,7 @@ def _wood_crate(f, rng, w, h, d, col, lid="on", broken=False, flags=PROP):
         for s in (-1, 1):
             z0 = -d / 2 if s < 0 else d / 2 - t
             if i * 2 + (s > 0) == split:  # a split board: half of it hanging off one nail
-                g = f.sub((-w / 4, y0 + bh, z0 + t / 2), rz=rng.uniform(8, 20))
+                g = f.sub((-w / 4, y0 + bh, z0 + t / 2), ry=rng.choice((-1, 1)) * rng.uniform(4, 8), rz=rng.uniform(8, 20))
                 g.box("CrateBoard", (0, -bh, -t / 2), (w * 0.5, 0, t / 2), _tone(col, rng, 8, 0.1), "WoodPlanks")
             else:
                 f.box("CrateBoard", (-w / 2, y0, z0), (w / 2, y0 + bh, z0 + t), _tone(col, rng, 8), "WoodPlanks")
@@ -1174,7 +1088,7 @@ def wooden_crates(D, folder, origin, ry, rng, count=None, wet=None):
         _wood_crate(g, rng, w, h, d, _tone(base, rng, 6), lid=lid, broken=rng.random() < 0.3)
         tops.append((h + 0.08, x))
         if wet:
-            _grime(g, -w / 2, w / 2, 0.0, 0.5, -d / 2, "-z", base, rng)
+            _grime(g, -w / 2 + 0.17, w / 2 - 0.17, 0.0, 0.5, -d / 2, "-z", base, rng)  # (between the cleats)
     if count >= 3:  # on the taller one's lid, turned
         top, x = max(tops)
         g = f.sub((x * 0.6, top, rng.uniform(-0.2, 0.2)), ry=rng.uniform(-25, 25))
@@ -1230,7 +1144,7 @@ def plastic_crates(D, folder, origin, ry, rng, count=None, color=None):
                   (24, 24, 26), spin=rng.uniform(-8, 8))
         y += h
     if stack < count:
-        g = f.sub((rng.choice((-1, 1)) * rng.uniform(2.1, 2.4), d / 2, rng.uniform(-0.6, 0.4)), ry=rng.uniform(-40, 40),
+        g = f.sub((rng.choice((-1, 1)) * rng.uniform(2.6, 2.8), d / 2, rng.uniform(-0.4, 0.3)), ry=rng.uniform(-25, 25),
                   rx=90)
         _plastic_crate(g, rng, _tone(base, rng, 8, 0.2), w, d, h)
 
@@ -1430,13 +1344,13 @@ def market_canopy(D, folder, origin, ry, rng, w=None, d=None, light=True, torn=N
         _skin(under, "TarpHole", (-x, 0, z), tw, td, "y", (12, 12, 14))
     # the ragged front valance: flaps hanging from the strips' front edges
     for g, ln, xc0 in strips:
-        if rng.random() < 0.25:
+        if rng.random() < 0.15:
             continue
-        fw = ln * rng.uniform(0.6, 0.95)
-        hang = rng.uniform(0.3, 1.0)
+        fw = ln * rng.uniform(0.85, 0.98)
+        hang = rng.uniform(0.25, 0.8)
         hp = g.world((rng.uniform(-(ln - fw) / 2, (ln - fw) / 2), -0.03, -Dt / 2 + 0.05))
         hinge = Frame(D, folder, hp, matrix=f.m @ yxz_matrix(rng.uniform(-8, 4), 0, rng.uniform(-5, 5)))
-        hinge.box("TarpFlap", (-fw / 2, -hang, -0.04), (fw / 2, 0, 0), _tone(tc, rng, 4, 0.12), "Fabric")
+        hinge.box("TarpFlap", (-fw / 2, -hang, -0.04), (fw / 2, 0, 0), _tone(tc, rng, 2, 0.04), "Fabric")
     # guy ropes to pegs at the front corners
     for sx in (-1, 1):
         x, h, z = corners[(sx, -1)]
@@ -1539,7 +1453,7 @@ def watch_case(D, folder, origin, ry, rng, open=True, count=None):
     f = Frame(D, folder, origin, ry=ry)
     count = min(8, count or rng.randint(5, 7))
     w, d, hb, t = 1.5, 1.1, 0.28, 0.05
-    shell = _tone((150, 150, 146), rng, 10, darken=rng.uniform(0.15, 0.35))
+    shell = _tone((176, 176, 172), rng, 10, darken=rng.uniform(0.05, 0.25))
     for s in (-1, 1):  # four butted walls on the ground; the floor fits inside them
         z0 = -d / 2 if s < 0 else d / 2 - t
         f.box("WatchCase", (-w / 2, 0, z0), (w / 2, hb, z0 + t), _tone(shell, rng, 4), "Metal")
@@ -1549,7 +1463,7 @@ def watch_case(D, folder, origin, ry, rng, open=True, count=None):
     for sx in (-1, 1):
         for sz in (-1, 1):
             for y in (0.06, hb - 0.04):
-                _ball(f, "CaseCorner", (sx * w / 2, y, sz * d / 2), 0.12, chrome, "Metal")
+                _ball(f, "CaseCorner", (sx * (w / 2 - 0.015), y, sz * (d / 2 - 0.015)), 0.085, chrome, "Metal")
     for s in (-1, 1):  # catches (6.5 cm proud) and the handle on its posts
         f.box("CaseCatch", (s * w / 3 - 0.08, hb - 0.15, -d / 2 - 0.065), (s * w / 3 + 0.08, hb - 0.02, -d / 2), IRON,
               "Metal")
@@ -1560,9 +1474,9 @@ def watch_case(D, folder, origin, ry, rng, open=True, count=None):
         f.box("CaseLid", (-w / 2, hb, -d / 2), (w / 2, hb + 0.1, d / 2), _tone(shell, rng, 4), "Metal")
         for sx in (-1, 1):
             for sz in (-1, 1):
-                _ball(f, "CaseCorner", (sx * w / 2, hb + 0.06, sz * d / 2), 0.12, chrome, "Metal")
-        _skin(f, "Scuff", (rng.uniform(-0.4, 0.4), hb + 0.1, rng.uniform(-0.2, 0.2)), 0.5, 0.06, "y",
-              mix(shell, (200, 200, 196), 0.4), spin=rng.uniform(0, 180))
+                _ball(f, "CaseCorner", (sx * (w / 2 - 0.015), hb + 0.06, sz * (d / 2 - 0.015)), 0.085, chrome, "Metal")
+        _skin(f, "Scuff", (rng.uniform(-0.4, 0.4), hb + 0.1, rng.uniform(-0.2, 0.2)), 0.3, 0.2, "y",
+              mix(shell, (60, 60, 58), 0.2), spin=rng.uniform(0, 180))
         return
     felt = _tone((96, 30, 34), rng, 8, darken=rng.uniform(0.1, 0.3))
     iw, idp = w - 2 * t, d - 2 * t
@@ -1571,8 +1485,8 @@ def watch_case(D, folder, origin, ry, rng, open=True, count=None):
     g.box("CaseLid", (-w / 2, 0, -d), (w / 2, 0.1, 0), _tone(shell, rng, 4), "Metal")
     g.box("CaseFelt", (-iw / 2, -0.03, -d + t), (iw / 2, 0.0, -t), _tone(felt, rng, 4, 0.1), "Fabric")
     for sx in (-1, 1):
-        for z in (-0.02, -d + 0.02):
-            _ball(g, "CaseCorner", (sx * w / 2, 0.05, z), 0.12, chrome, "Metal")
+        for z in (-0.035, -d + 0.035):
+            _ball(g, "CaseCorner", (sx * (w / 2 - 0.015), 0.05, z), 0.085, chrome, "Metal")
     # two foam rolls lying on the felt, end to end between the walls; the watches strapped on them
     r = 0.09
     slots = [(i, j) for j in range(2) for i in range(4)]
@@ -1598,7 +1512,7 @@ def watch_case(D, folder, origin, ry, rng, open=True, count=None):
          "Leather")
     _bar(f, "WatchStrap", (x + 0.02, hb + 0.03, -d / 2 - 0.04), (x + 0.06, hb - 0.26, -d / 2 - 0.09), 0.1, 0.03,
          (40, 30, 24), "Leather")
-    _skin(g, "Scuff", (rng.uniform(-0.4, 0.4), 0.1, -d / 2), 0.5, 0.06, "y", mix(shell, (200, 200, 196), 0.4),
+    _skin(g, "Scuff", (rng.uniform(-0.4, 0.4), 0.1, -d / 2), 0.3, 0.2, "y", mix(shell, (60, 60, 58), 0.2),
           spin=rng.uniform(0, 180))
 
 
@@ -1636,8 +1550,9 @@ def shoe_boxes(D, folder, origin, ry, rng, count=None, open=None):
                        (bw * rng.uniform(0.45, 0.65), 0.03, bd * rng.uniform(0.5, 0.7)),
                        _tone((205, 202, 194), rng, 6), "Fabric", rot=(rng.uniform(-12, 12), rng.uniform(-20, 20),
                                                                        rng.uniform(-12, 12)))
-            lid = g.sub((0, 0.0, bd / 2 + 0.2), rx=-rng.uniform(70, 78))
-            lid.box("ShoeBoxLid", (-bw / 2 - ov, 0.03, 0), (bw / 2 + ov, bd + 2 * ov + 0.03, lh), lc, CARDBOARD_MAT)
+            a = rng.uniform(12, 20)  # its lid stood on edge, leaning back, behind it
+            lid = g.sub((0, lh * math.sin(math.radians(a)) + 0.01, bd / 2 + 0.04), rx=a)
+            lid.box("ShoeBoxLid", (-bw / 2 - ov, 0, 0), (bw / 2 + ov, bd + 2 * ov, lh), lc, CARDBOARD_MAT)
         else:
             g.box("ShoeBox", (-bw / 2, 0, -bd / 2), (bw / 2, bh - lh, bd / 2), col, CARDBOARD_MAT, flags=fl)
             g.box("ShoeBoxLid", (-bw / 2 - ov, bh - lh, -bd / 2 - ov), (bw / 2 + ov, bh, bd / 2 + ov), lc,
@@ -1728,7 +1643,7 @@ def tv(D, folder, origin, ry, rng, kind=None, state=None):
         col = _tone(_pick(rng, [(46, 44, 42), (110, 104, 92), (70, 60, 50)]), rng, 6, darken=rng.uniform(0, 0.2))
         W, H, Dp, fd = 2.0, 1.55, 1.6, 0.55
         if state == "ground":
-            _disk(f, "Shards", 0, -0.8, 2.0, 0.03, (120, 130, 136), "Glass", reflectance=0.2)
+            _disk(f, "Shards", 0, -1.6, 1.4, 0.03, (120, 130, 136), "Glass", reflectance=0.2)  # (in front, clear of it)
             if rng.random() < 0.6:  # on its back, the smashed screen to the sky
                 f = f.sub((0, Dp / 2 + 0.02, 0), rx=90 + rng.uniform(-5, 5), rz=rng.uniform(-6, 6))
             else:  # on its side
@@ -2000,8 +1915,9 @@ def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=Fal
     if compact:
         return
     # the stock, behind the table, clear of the TV / radio / rail and of the back poles' feet
-    wooden_crates(D, folder, _w(f, -3.25, 1.9), yaw + rng.uniform(-6, 6), rng, count=1)
-    plastic_crates(D, folder, _w(f, 3.2, 1.9), yaw + rng.uniform(-10, 10), rng, count=rng.randint(2, 3))
+    if goods == "electronics":
+        wooden_crates(D, folder, _w(f, -3.3, 1.9), yaw + rng.uniform(-6, 6), rng, count=1)
+    plastic_crates(D, folder, _w(f, 3.6, 1.6), yaw + 90 + rng.uniform(-6, 6), rng, count=2)
 
 
 # =============================================================================================
@@ -3030,75 +2946,6 @@ def backpack(D, folder, origin, ry, rng, state=None, mat=None, color=None):
     )
 
 
-@prop({}, {"cup": True}, {"lines": 4})
-def cardboard_sign(D, folder, origin, ry, rng, lines=None, cup=None):
-    """A begging sign: a torn piece of box leaning against the wall (+Z) or a crate, with
-    hand-written lines in black marker (short strokes of uneven length, words), a corner torn off,
-    a wet stain; maybe a paper cup with a few coins in front of it (`cup`). Footprint 2.2 x 0.8
-    studs, 1.4 tall. 7-17 parts, DECOR_SHADOW."""
-    f = Frame(D, folder, origin, ry=ry)
-    lines = lines or rng.randint(2, 4)
-    cup = (rng.random() < 0.5) if cup is None else cup
-    w, h = rng.uniform(1.9, 2.4), rng.uniform(1.3, 1.6)
-    g = f.sub((0, 0, 0.3), rx=rng.uniform(10, 18), rz=rng.uniform(-3, 3))
-    col = _tone(CARDBOARD, rng, 10, darken=rng.uniform(0, 0.2))
-    g.box("Sign", (-w / 2, 0, -0.03), (w / 2, h, 0.03), col, CARDBOARD_MAT, flags=DECOR_SHADOW)
-    s = rng.choice((-1, 1))
-    g.part(
-        "SignTear",
-        (s * (w / 2 - 0.2), h - 0.2, -0.035),
-        (0.04, 0.42, 0.42),
-        _tone(col, rng, 6, 0.3),
-        CARDBOARD_MAT,
-        rot=(0, 90 * s, 0),
-        shape=WEDGE,
-    )
-    for i in range(lines):
-        y = h - 0.35 - i * (h - 0.5) / max(1, lines - 1) * 0.9
-        x = -w / 2 + 0.2 + rng.uniform(0, 0.1)
-        for _ in range(rng.randint(2, 3)):
-            ln = rng.uniform(0.25, 0.6)
-            if x + ln > w / 2 - 0.15:
-                break
-            _skin(
-                g,
-                "SignText",
-                (x + ln / 2, y + rng.uniform(-0.03, 0.03), -0.03),
-                ln,
-                rng.uniform(0.09, 0.13),
-                "-z",
-                INK,
-                th=0.01,
-                spin=rng.uniform(-4, 4),
-            )
-            x += ln + rng.uniform(0.1, 0.18)
-    _skin(
-        g,
-        "Stain",
-        (rng.uniform(-0.5, 0.5), 0.3, -0.03),
-        rng.uniform(0.5, 0.9),
-        0.4,
-        "-z",
-        CARDBOARD_WET,
-        CARDBOARD_MAT,
-        th=0.01,
-        transparency=0.3,
-    )
-    if cup:
-        _vcyl(
-            f,
-            "PaperCup",
-            rng.uniform(-0.4, 0.4),
-            0,
-            -0.45,
-            0.5,
-            0.36,
-            _tone((200, 196, 186), rng, 10, 0.15),
-            "SmoothPlastic",
-        )
-        _disk(f, "Coins", rng.uniform(-0.8, 0.8), -0.75, 0.16, 0.04, (150, 130, 80), "Metal")
-
-
 # =============================================================================================
 # Building-site leftovers
 # =============================================================================================
@@ -3393,257 +3240,6 @@ def scaffolding(D, folder, origin, ry, rng, bays=None, levels=None, netting=None
             "Fabric",
             transparency=0.4,
             rot=(rng.uniform(-35, -20), rng.uniform(-10, 10), rng.uniform(-8, 8)),
-        )
-
-
-@prop({"state": "leaning"}, {"state": "lying"}, {"state": "leaning", "kind": "wood"})
-def ladder(D, folder, origin, ry, rng, state=None, kind=None, length=None):
-    """A ladder: aluminium (box-section stiles, round rungs, rubber feet, dented and grey-black
-    with handling) or old wooden (stiles, flat rungs, paint drips), a rung missing or one snapped;
-    `leaning` against the wall (+Z) at a working angle, or `lying` flat on the ground.
-    Footprint 1.6 x 9-11 studs (leaning: 1.6 x ~3), 9-11 long. 13-16 parts; stiles SMALL."""
-    f = Frame(D, folder, origin, ry=ry)
-    state = state or _pick(rng, ["leaning", "lying"])
-    kind = kind or _pick(rng, ["alu", "alu", "wood"])
-    L = length or rng.uniform(9, 11)
-    W = 1.5
-    if state == "leaning":
-        ang = rng.uniform(14, 20)
-        g = f.sub((0, 0, -L * math.sin(math.radians(ang)) / 2), rx=ang)
-    else:
-        g = f.sub((0, 0.14, L / 2), rx=-90, rz=rng.uniform(-2, 2))
-    col = _tone((150, 152, 150) if kind == "alu" else WOOD, rng, 8, darken=rng.uniform(0.1, 0.35))
-    mat = "Metal" if kind == "alu" else "Wood"
-    for s in (-1, 1):
-        g.box(
-            "LadderStile", (s * W / 2 - 0.1, 0, -0.14), (s * W / 2 + 0.1, L, 0.14), _tone(col, rng, 4), mat, flags=SMALL
-        )
-        g.box("LadderFoot", (s * W / 2 - 0.13, 0, -0.17), (s * W / 2 + 0.13, 0.3, 0.17), RUBBER, "Rubber")
-    n = int(L / 1.0)
-    gone = rng.randrange(1, n - 1)
-    for i in range(1, n):
-        y = i * L / n
-        if i == gone:
-            if kind == "wood" and rng.random() < 0.5:
-                g.part(
-                    "LadderRung",
-                    (-W / 4, y - 0.1, 0),
-                    (W / 2, 0.14, 0.24),
-                    _tone(col, rng, 6),
-                    mat,
-                    rot=(0, 0, rng.uniform(-30, -15)),
-                )
-            continue
-        if kind == "alu":
-            _cyl(g, "LadderRung", (0, y, 0), W, 0.16, _tone(col, rng, 4), mat)
-        else:
-            g.box("LadderRung", (-W / 2, y - 0.07, -0.12), (W / 2, y + 0.07, 0.12), _tone(col, rng, 6), mat)
-    for s in (-1, 1):  # handling grime: the stiles black where hands hold them
-        _skin(g, "Grime", (s * W / 2, L * 0.45, -0.14), 0.22, L * 0.35, "-z", mix(col, GRIME, 0.6), th=0.02)
-    if kind == "wood":
-        _skin(
-            g,
-            "PaintDrip",
-            (rng.choice((-1, 1)) * W / 2, L * rng.uniform(0.3, 0.7), -0.15),
-            0.18,
-            0.7,
-            "-z",
-            _tone((190, 186, 176), rng, 8, 0.1),
-            th=0.02,
-            spin=rng.uniform(-5, 5),
-        )
-
-
-@prop({"count": 1}, {"count": 3}, {"count": 4, "chain": True})
-def gas_canisters(D, folder, origin, ry, rng, count=None, chain=None):
-    """Industrial gas cylinders (propane, oxygen, acetylene) standing against the wall (+Z): each a
-    tall steel body with a rounded shoulder, the valve under its guard ring, a foot ring, a coloured
-    shoulder band over faded paint, scrapes down to the metal, rust at the foot; chained to the wall
-    (`chain`) or one fallen on its side. NAMED GasCylinder (never anything bottle-like).
-    Footprint ~1 x 1 stud each, 3 in a row ~3.2 x 1.2; 4 tall. 7-30 parts; bodies PROP."""
-    f = Frame(D, folder, origin, ry=ry)
-    count = count or rng.randint(1, 4)
-    chain = (count > 1 and rng.random() < 0.5) if chain is None else chain
-    base = _tone(
-        _pick(rng, [(60, 70, 64), (120, 40, 34), (40, 46, 56), (150, 130, 60), (90, 90, 92)]),
-        rng,
-        6,
-        darken=rng.uniform(0.15, 0.35),
-    )
-    fallen = count >= 3 and not chain and rng.random() < 0.6
-    for i in range(count):
-        d, h = rng.uniform(0.9, 1.05), rng.uniform(3.2, 3.6)
-        if fallen and i == count - 1:
-            g = f.sub((rng.uniform(-0.5, 0.5), d / 2, -1.6), rz=90, ry=rng.uniform(-20, 20))
-            g = g.sub((0, -h / 2, 0))
-        else:
-            g = f.sub(
-                (-(count - 1) * 0.55 + i * 1.1 + rng.uniform(-0.05, 0.05), 0, rng.uniform(-0.1, 0.1)),
-                rx=rng.uniform(-1.5, 1.5),
-                rz=rng.uniform(-1.5, 1.5),
-            )
-        c = _tone(base, rng, 6)
-        _vcyl(g, "GasCylinder", 0, 0.15, 0, h - 0.15, d, c, "Metal", flags=PROP)
-        _ball(g, "GasCylinder", (0, h, 0), d, c, "Metal")
-        _vcyl(g, "CylinderFoot", 0, 0, 0, 0.2, d + 0.06, _tone(mix(c, RUST, 0.6), rng, 6), "CorrodedMetal")
-        _vcyl(
-            g,
-            "ShoulderBand",
-            0,
-            h - 0.5,
-            0,
-            0.35,
-            d + 0.02,
-            _tone(_pick(rng, [(170, 160, 150), (60, 80, 140), (150, 120, 50), (40, 40, 40)]), rng, 8, 0.2),
-            "Metal",
-        )
-        _vcyl(g, "Valve", 0, h + d * 0.35, 0, 0.35, 0.22, _tone((150, 130, 80), rng, 8, 0.3), "Metal")
-        _vcyl(g, "ValveGuard", 0, h + d * 0.4, 0, 0.3, 0.62, _tone(IRON, rng, 6), "Metal")
-        _skin(
-            g,
-            "Scrape",
-            (rng.uniform(-0.15, 0.15), rng.uniform(1.0, 2.4), -d / 2 + 0.03),
-            0.14,
-            rng.uniform(0.5, 1.0),
-            "-z",
-            _tone(STEEL, rng, 8, 0.2),
-            th=0.02,
-            spin=rng.uniform(-10, 10),
-        )
-    if chain:
-        _rod(
-            f,
-            "Chain",
-            (-(count - 1) * 0.55 - 0.7, 2.6, 0.55),
-            ((count - 1) * 0.55 + 0.7, 2.6, 0.55),
-            0.08,
-            _tone(IRON, rng, 6),
-            "Metal",
-        )
-        _rod(
-            f,
-            "Chain",
-            (-(count - 1) * 0.55, 2.62, -0.55),
-            ((count - 1) * 0.55, 2.62, -0.55),
-            0.08,
-            _tone(IRON, rng, 6),
-            "Metal",
-        )
-
-
-@prop({"kind": "draped"}, {"kind": "pile"}, {"kind": "hanging"}, {"kind": "draped", "color": (60, 90, 140)})
-def plastic_sheeting(D, folder, origin, ry, rng, kind=None, color=None):
-    """Builders' polythene, dirty and half see-through: `draped` over a low heap of something (the
-    sheet's top, its sloped sides, a skirt with a torn corner and a brick on it), `pile` (crumpled
-    in a heap: tilted folds and bulges) or `hanging` down the wall (+Z) from a batten, in strips of
-    different lengths, one torn and lifted. Footprint 3-4.5 x 2.5-3.5 studs (hanging 4 x 0.6, 6
-    tall). 5-8 parts; DECOR_SHADOW (the draped heap SMALL)."""
-    f = Frame(D, folder, origin, ry=ry)
-    kind = kind or _pick(rng, ["draped", "pile", "hanging"])
-    col = _tone(
-        color or _pick(rng, [(190, 192, 188), (170, 176, 172), (120, 140, 160)]), rng, 8, darken=rng.uniform(0.05, 0.25)
-    )
-    tr = rng.uniform(0.3, 0.45)
-    kw = {"transparency": tr, "reflectance": 0.1}
-    if kind == "draped":
-        W, Dp, H = rng.uniform(3.2, 4.2), rng.uniform(2.4, 3.2), rng.uniform(1.2, 1.8)
-        f.box(
-            "SheetedHeap",
-            (-W / 2 + 0.4, 0, -Dp / 2 + 0.4),
-            (W / 2 - 0.4, H - 0.1, Dp / 2 - 0.4),
-            (40, 36, 30),
-            "Wood",
-            flags=SMALL,
-        )
-        f.part(
-            "PlasticSheet",
-            (0, H, 0),
-            (W - 0.6, 0.05, Dp - 0.6),
-            col,
-            "Plastic",
-            flags=DECOR_SHADOW,
-            rot=(rng.uniform(-3, 3), rng.uniform(-5, 5), 0),
-            **kw,
-        )
-        for s in (-1, 1):
-            a = math.degrees(math.atan2(H, 0.6))
-            f.part(
-                "PlasticSheet",
-                (s * (W / 2 - 0.15), H / 2, 0),
-                (math.hypot(0.6, H), 0.05, Dp - 0.4),
-                _tone(col, rng, 4),
-                "Plastic",
-                rot=(0, 0, -s * a),
-                flags=DECOR_SHADOW,
-                **kw,
-            )
-            f.part(
-                "PlasticSheet",
-                (0, H / 2, s * (Dp / 2 - 0.15)),
-                (W - 0.4, 0.05, math.hypot(0.6, H)),
-                _tone(col, rng, 4),
-                "Plastic",
-                rot=(s * a, 0, 0),
-                flags=DECOR_SHADOW,
-                **kw,
-            )
-        f.part(
-            "PlasticSheet",
-            (W / 2 + 0.4, 0.03, -Dp / 2 - 0.2),
-            (1.2, 0.04, 0.9),
-            col,
-            "Plastic",
-            rot=(0, rng.uniform(0, 60), 0),
-            **kw,
-        )
-        f.box(
-            "Brick",
-            (-W / 2 - 0.2, 0, -0.2),
-            (-W / 2 + 0.6, 0.4, 0.2),
-            _tone((96, 64, 52), rng, 8),
-            "Brick",
-            rot=(0, rng.uniform(-30, 30), 0),
-        )
-    elif kind == "pile":
-        for i in range(rng.randint(4, 6)):
-            f.part(
-                "PlasticSheet",
-                (rng.uniform(-0.7, 0.7), 0.15 + i * 0.1, rng.uniform(-0.6, 0.6)),
-                (rng.uniform(1.4, 2.6), 0.05, rng.uniform(1.0, 2.0)),
-                _tone(col, rng, 5),
-                "Plastic",
-                rot=(rng.uniform(-35, 35), rng.uniform(0, 180), rng.uniform(-35, 35)),
-                flags=DECOR_SHADOW,
-                **kw,
-            )
-        _ball(f, "PlasticSheet", (0, 0.3, 0), 1.0, col, "Plastic", **kw)
-    else:
-        H = rng.uniform(5.5, 6.5)
-        f.box("Batten", (-2.2, H - 0.2, 0.2), (2.2, H + 0.1, 0.4), _tone(WOOD_OLD, rng, 6), "Wood")
-        x = -2.0
-        while x < 2.0:
-            w = rng.uniform(0.9, 1.6)
-            hang = rng.uniform(H * 0.45, H - 0.1)
-            xc = min(x + w / 2, 2.0 - w / 2)
-            f.part(
-                "PlasticSheet",
-                (xc, H - hang / 2, 0.12),
-                (w, hang, 0.04),
-                _tone(col, rng, 5),
-                "Plastic",
-                rot=(rng.uniform(-6, -1), 0, rng.uniform(-3, 3)),
-                flags=DECOR_SHADOW,
-                **kw,
-            )
-            x += w - 0.1
-        f.part(
-            "PlasticFlap",
-            (rng.uniform(-1, 1), H * 0.35, -0.2),
-            (1.0, 1.2, 0.04),
-            col,
-            "Plastic",
-            rot=(rng.uniform(-50, -30), rng.uniform(-20, 20), rng.uniform(-10, 10)),
-            **kw,
         )
 
 
