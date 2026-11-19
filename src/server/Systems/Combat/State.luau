@@ -22,6 +22,9 @@ export type CombatState = {
 	-- The fighters our last M1 stunned: our next M1 keeps them stunned
 	-- until it lands (Config.Combat.COMBO_HOLD_MARGIN).
 	comboVictims: { CombatState },
+	-- When our M1 that is winding up lands (0 = none). A dash before then
+	-- cancels that punch.
+	m1DueAt: number,
 
 	blocking: boolean,
 	blockStartedAt: number,

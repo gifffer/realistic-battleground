@@ -55,6 +55,9 @@ local lastAttackAt = -math.huge
 local nextAttackAt = 0
 -- No block until then (same rule as the server's attackingUntil).
 local attackingUntil = 0
+-- When our M1 that is winding up lands (0 = none): a dash before then
+-- cancels it (the server does the same, Combat tryDash).
+local m1DueAt = 0
 -- After something that isn't an M1 (KO finisher, throw, kit move): no
 -- block for as long as after a jab, as before.
 local NON_M1_NO_BLOCK = C.M1_INTERVAL[1]
@@ -209,6 +212,7 @@ local function tryAttack()
 	lastAttackAt = time
 	nextAttackAt = time + interval
 	attackingUntil = time + math.min(interval, C.M1_HIT_DELAY[combo] + C.M1_COMMIT_AFTER_HIT)
+	m1DueAt = time + C.M1_HIT_DELAY[combo]
 
 	-- (The whoosh is played by CombatEffectsController when the strike
 	-- starts: a charged punch is silent while the arm goes back.)
@@ -285,6 +289,13 @@ local function tryDash()
 	end
 
 	nextDashAt = time + C.DASH_COOLDOWN
+	if time < m1DueAt then
+		-- Dashing out of a punch's wind-up cancels it: no hit shown
+		-- (CombatEffectsController sees the dash as our last action), and
+		-- we may block again.
+		m1DueAt = 0
+		attackingUntil = math.min(attackingUntil, time)
+	end
 	local direction, animation = getDashDirection(humanoid, root)
 	Push.apply(root, direction * (C.DASH_DISTANCE / C.DASH_TIME), C.DASH_TIME)
 	CharacterAnimationController.playAction(character, animation)
@@ -436,6 +447,7 @@ function CombatController.start()
 		combo = 0
 		nextAttackAt = 0
 		attackingUntil = 0
+		m1DueAt = 0
 		nextDashAt = 0
 	end)
 end

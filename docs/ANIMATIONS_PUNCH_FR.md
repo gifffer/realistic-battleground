@@ -88,8 +88,11 @@ réactions, les VFX, les sons, les dégâts, les hitbox et les timings de `Confi
 (à l'époque `HIT_DELAY` 0,15 s, `M1_INTERVAL` 0,38 s). Seuls les 4 blocs `Brawler_M1_N` ont été remplacés.
 
 ## Coups chargés (direct du droit et coup final)
-Les deux coups du bras droit prennent un grand élan (le bras part vers le dos), donc ils touchent
-plus tard. Les timings sont maintenant **par coup** dans `Config.Combat` :
+Les deux coups du bras droit (le **direct**, coup 2, et le **coup final**, coup 4) prennent un grand
+élan (le bras part vers le dos), donc ils **touchent plus tard** : 0,28 s et 0,38 s après le clic au lieu
+de 0,15 s. C'est voulu : l'élan doit avoir le temps de se voir. Le jab et le crochet (coups 1 et 3)
+touchent toujours à 0,15 s. Les dégâts et la hitbox arrivent au moment de l'impact, c'est toujours le
+serveur qui décide. Les timings sont maintenant **par coup** dans `Config.Combat` :
 
 | Coup | Impact (`M1_HIT_DELAY`) | Coup suivant possible (`M1_INTERVAL` / `FINISHER_RECOVERY`) |
 |---|---|---|
@@ -98,10 +101,18 @@ plus tard. Les timings sont maintenant **par coup** dans `Config.Combat` :
 | 3 crochet (gauche) | 0,15 s | 0,38 s |
 | 4 coup final (droit, chargé) | 0,38 s | 1,23 s (toujours 0,85 s après l'impact) |
 
-- Le « whoosh » du coup part 0,15 s avant l'impact (`M1_SWING_LEAD`) : tout de suite pour le jab et
-  le crochet, après l'élan pour les coups chargés.
+- Le « whoosh » : tout de suite au clic pour le jab et le crochet ; pour les coups chargés, rien
+  pendant l'élan, puis il part 0,1 s avant l'impact (`M1_SWING_LEAD`), quand le bras frappe
+  (0,18 s pour le direct, 0,28 s pour le coup final).
 - Le combo reste inévitable : quand tu lances le coup suivant, la victime du coup d'avant reste
-  sonnée jusqu'à l'impact + 0,1 s (`COMBO_HOLD_MARGIN`).
+  sonnée jusqu'à l'impact + 0,1 s (`COMBO_HOLD_MARGIN`). Si ce coup ne la touche **pas** (raté,
+  annulé parce que l'attaquant s'est fait frapper, ou dash), ce temps de sonné en plus lui est
+  **rendu** tout de suite : on ne peut pas s'en servir pour bloquer quelqu'un sans le toucher.
+- **Dash pendant l'élan = coup annulé** : avant, un coup lancé puis suivi d'un dash touchait quand
+  même depuis l'endroit d'arrivée du dash (jusqu'à 18 studs plus loin). Maintenant le dash annule le
+  coup qui n'a pas encore touché (sur le serveur et à l'écran), et on peut de nouveau bloquer. Ça
+  permet aussi de feinter un coup chargé avec un dash. Si tu préfères « pas de dash tant que le poing
+  n'a pas touché », c'est un petit changement dans `tryDash` (serveur et client).
 - Hors combo, un coup chargé se voit venir : l'adversaire peut le couper avec un jab, l'esquiver
   (dash) ou le bloquer / parer (surtout le coup final).
 
@@ -113,24 +124,27 @@ n'ont pas changé (leurs blocs sont identiques à l'octet près).
 
 | | Direct (M1_2) | Coup final (M1_4) |
 |---|---|---|
-| Où part le poing | le bras descend le long de la hanche puis part en arrière : poing **derrière le dos**, à hauteur de la taille | le bras monte sur le côté puis en arrière : poing **derrière la tête** |
-| Torse enroulé (Garde −12°) | −66° (54° plus loin que la Garde) | −76° (64°), penché en arrière |
+| Où part le poing | le bras s'ouvre sur le côté puis part en arrière **à hauteur d'épaule** : poing à 2,5 studs derrière le corps, il dépasse de la silhouette à droite | le bras monte sur le côté puis en arrière : poing **derrière la tête** |
+| Torse enroulé (Garde −12°) | −64° (52° plus loin que la Garde) | −76° (64°), penché en arrière |
 | Poids | descend de 0,24 stud sur la jambe arrière pliée | descend de 0,17 stud, en arrière |
 | Main avant | reste devant le visage | vise l'adversaire (comme un lanceur), puis revient à la poitrine |
-| Élan (bras en arrière) | 0 → 0,15 s | 0 → 0,20 s |
-| Charge tenue | 0,15 → 0,18 s (2 images, le corps s'enroule encore un peu) | 0,20 → 0,263 s (4 images) |
-| Frappe | 0,18 → **0,28 s** : jambes et poids, puis torse, puis bras | 0,263 → **0,38 s** : le bras fait une boucle sur le côté puis tombe sur la cible |
-| Vitesse du poing, 5 dernières images (studs/s) | 28 → 55 → 92 → 141 → 146 | 34 → 62 → 102 → 154 → 155 |
+| Élan (bras en arrière) | 0 → 0,13 s | 0 → 0,20 s |
+| Charge tenue | 0,13 → 0,18 s (5 images, le corps s'enroule encore un peu) | 0,20 → 0,263 s (4 images) |
+| Frappe | 0,18 → **0,28 s** : jambes et poids, puis torse, puis le bras fait le tour par le côté à hauteur d'épaule | 0,263 → **0,38 s** : le bras passe sur le côté, haut, puis arrive sur la cible |
+| Vitesse du poing, 5 dernières images (studs/s) | 21 → 36 → 64 → 130 → 170 | 37 → 62 → 105 → 146 → 146 |
 | Retour en Garde | ~0,45 s (le crochet part à 0,48 s) | ~0,9 s |
 | Durée du clip | 0,6 s | 1,08 s |
 
 - La frappe **accélère jusqu'au contact** (jamais de ralenti avant l'impact). Les 2 dernières images
   sont très rapides (le bras tourne de 60 à 78° par image) : c'est le côté « animé », l'œil le lit comme
   un flou de mouvement. Une traînée VFX sur ces 2 images marcherait bien.
-- Tout le reste reste humain : pendant l'élan le bras tourne de 30 à 40° par image au plus, la charge
-  tenue bouge de moins de 4 studs/s, les pieds restent au sol (le pied arrière pivote pendant la frappe).
-- Sur le coup final, quand le bras est armé derrière la tête, le haut du bras passe un peu dans le coin
-  arrière du torse (limite des épaules R6) : on le voit comme un bras derrière l'épaule.
+- Tout le reste reste humain : pendant l'élan le bras tourne de 35 à 44° par image au plus (surtout
+  quand il quitte la Garde), la charge tenue bouge de moins de 6 studs/s, les pieds restent au sol (le
+  pied arrière pivote pendant la frappe, il glisse un peu : ~0,27 stud par image sur 2-3 images).
+- Le poing ne passe jamais sous la hanche : pendant la frappe il reste entre la poitrine et l'épaule
+  (direct) ou à hauteur d'épaule et plus haut (coup final), comme un vrai coup de puissance.
+- Sur le coup final, l'épaule est poussée vers l'extérieur pendant la charge, pour que le bras ne
+  rentre presque plus dans le coin arrière du torse (0,09 stud au plus, contre 0,18 avant).
 - Réglages : `CROSS_CHARGE` et `FINISHER_CHARGE` en haut de `tools/anim/motifect_retarget.py`
   (les poses clés de l'élan, le chemin du bras pendant la frappe, l'ordre de départ de chaque partie
   du corps). Relance le script avec `--write`, puis `stylua src`.

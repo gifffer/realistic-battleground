@@ -86,11 +86,11 @@ land at 0.28 / 0.38 s, see "Charged punches" below). So:
     the level of the back, like a big run-up. Their Motifect clip (made as
     above, impact at 0.15 s) is moved later so its impact lands at 0.28 /
     0.38 s, and the time before that is an authored wind-up: the arm swept
-    back (cross: down past the hip and back, fist behind the back; finisher:
-    out, up and back, fist behind the head), the torso coiled 54-64 degrees
+    back (cross: out to the side and back at shoulder height, fist well
+    behind the body; finisher: out, up and back, fist behind the head), the torso coiled 54-64 degrees
     past the Guard, the weight down on the bent rear leg, the head on the
     target, the lead hand up (cross) or aiming at the target (finisher); a
-    short held charge (2 / 4 frames, a "flat" key); then the strike: legs and
+    short held charge (5 / 4 frames, a "flat" key); then the strike: legs and
     weight first, the torso, the arm last, each faster every frame into the
     impact (the arm's last frames are a 140-155 stud/s "smear").
   • Keys: the dense 60 fps result is reduced to a few keys (greedy, error
@@ -201,18 +201,20 @@ GUARD = {
 CROSS_CHARGE = {
     "hit": 0.28,
     "keys": [
-        # leave Guard: the torso starts to coil, the arm drops toward the hip
-        (0.05, (-6, -25, -2), (0.04, -0.06, 0.04), (78, 0, 2), (0, 0, 0.04), (117, 0, 28)),
-        # swing back: the arm swings past the hip (a pendulum), weight sits back
-        (0.1, (-4, -49, -5), (0.12, -0.17, 0.15), (-14, 0, 23), (0, 0.01, 0.15), (120, 0, 10)),
-        # loaded: arm swept back behind the hip, torso coiled ~50 deg past the
+        # leave Guard: the torso starts to coil, the arm opens out to the side
+        (0.05, (-6, -25, -2), (0.04, -0.06, 0.04), (104, 0, 4), (0, 0, 0.04), (117, 0, 28)),
+        # swing back: the arm, raised to the side, sweeps back; weight sits back
+        (0.1, (-4, -50, -5), (0.12, -0.17, 0.15), (30, 0, 72), (0, 0.01, 0.15), (120, 0, 10)),
+        # loaded: arm swept back at shoulder height (the fist sticks out of the
+        # silhouette, well behind the body), torso coiled ~50 deg past the
         # Guard, weight down on the bent rear leg, lead hand up in front
-        (0.15, (-2, -62, -6), (0.16, -0.22, 0.2), (-67, 0, 33), (0, 0.01, 0.2), (125, 0, -3)),
-        # end of the held charge (still coiling a little)
-        (0.18, (-1, -66, -7), (0.18, -0.24, 0.22), (-72, 0, 35), (0, 0.01, 0.22), (126, 0, -9)),
+        (0.13, (-2, -60, -6), (0.16, -0.22, 0.2), (-20, 0, 86), (0, 0.01, 0.2), (125, 0, -3)),
+        # end of the held charge (5 frames, still coiling a little)
+        (0.18, (-1, -64, -7), (0.18, -0.24, 0.22), (-30, 0, 88), (0, 0.01, 0.22), (126, 0, -9)),
     ],
-    "via": [(30, 0, 22)],
-    "chain": {"pos": (0.18, 1.0), "yaw": (0.188, 1.6), "tilt": (0.197, 1.3), "off": (0.197, 1.5), "arm": (0.188, 2.15)},
+    # the strike stays around shoulder height: back -> side -> front
+    "via": [(40, 0, 88), (105, 0, 62), (116, 0, 28)],
+    "chain": {"pos": (0.18, 1.0), "yaw": (0.188, 1.6), "tilt": (0.197, 1.3), "off": (0.197, 1.5), "arm": (0.188, 1.8)},
     "smooth": 20,
     "tuck": 3,
 }
@@ -222,14 +224,17 @@ FINISHER_CHARGE = {
         # leave Guard: the arm lifts out to the side, the lead arm reaches out
         (0.067, (-6, -32, -3), (0.06, -0.1, 0.07), (106, 0, 28), (0.02, 0, 0.08), (104, 0, -30)),
         # the arm rises up and back, the torso coils and leans back
-        (0.133, (0, -59, -6), (0.08, -0.15, 0.1), (74, 0, 106), (0.06, 0.01, 0.18), (108, 0, -62)),
+        (0.133, (0, -59, -6), (0.08, -0.15, 0.1), (74, 0, 106), (0.16, 0.01, 0.18), (108, 0, -62)),
         # loaded: fist cocked behind the head, torso coiled ~60 deg, leaning
-        # back, weight on the rear leg, lead arm pointing at the target
-        (0.2, (3, -72, -4), (0.1, -0.16, 0.12), (44, 0, 146), (0.12, 0.01, 0.22), (112, 0, -76)),
+        # back, weight on the rear leg, lead arm pointing at the target; the
+        # shoulder is pushed out (pos x 0.3) so the arm block stays out of
+        # the torso's upper-back corner
+        (0.2, (3, -72, -4), (0.1, -0.16, 0.12), (42, 0, 136), (0.3, 0.01, 0.22), (112, 0, -76)),
         # end of the held charge (4 frames, still coiling a little)
-        (0.263, (4, -76, -5), (0.11, -0.17, 0.13), (40, 0, 151), (0.14, 0.01, 0.24), (116, 0, -80)),
+        (0.263, (4, -76, -5), (0.11, -0.17, 0.13), (38, 0, 140), (0.3, 0.01, 0.24), (116, 0, -80)),
     ],
-    "via": [(120, 0, 100)],
+    # the strike stays high: up behind -> out by the side -> over to the front
+    "via": [(45, 0, 130), (82, 0, 115), (118, 0, 50)],
     "chain": {"pos": (0.263, 1.0), "yaw": (0.272, 1.6), "tilt": (0.28, 1.3), "off": (0.28, 1.5), "arm": (0.272, 2.15)},
     "smooth": 20,
     "tuck": 4,
@@ -343,8 +348,8 @@ SPECS = {
         },
         "charge": CROSS_CHARGE,
         "length": 0.6,
-        "about": "Right cross (combo hit 2), CHARGED: the arm swings down past the hip and back, fist behind the back, the torso\n"
-        "\t-- coils hard on the bent rear leg and holds the charge, then hips, chest, shoulder and the arm\n"
+        "about": "Right cross (combo hit 2), CHARGED: the arm swings out and back at shoulder height, fist well behind the body,\n"
+        "\t-- the torso coils hard on the bent rear leg and holds the charge, then hips, chest, shoulder and the arm\n"
         "\t-- explode through the centre line (fastest at the impact, 0.28 s).",
     },
     "Brawler_M1_3": {
@@ -455,7 +460,7 @@ SPECS = {
         "length": 1.08,
         "about": "Overhand right (combo FINISHER), CHARGED: the biggest wind-up (arm raised out and back until\n"
         "\t-- the fist is behind the head, torso coiled and leaning back, lead arm aiming), a long held charge,\n"
-        "\t-- then the arm loops out by the side, over and down with the whole body diving in (impact 0.38 s);\n"
+        "\t-- then the arm swings out by the side and over with the whole body diving in (impact 0.38 s);\n"
         "\t-- heavy recovery. Longer than the others: see Config.Combat.FINISHER_RECOVERY.",
     },
 }
@@ -1157,9 +1162,10 @@ def charged(dump_dir, name):
          the Motifect impact pose, one after the other (kinetic chain: the
          weight and legs, then the torso turn, the lean, the arm last), each
          FASTER and faster until the impact (`let_go`). The punching arm
-         follows a path through the `via` angles (under the hip for the
-         cross, out by the side and over for the overhand), covered as u^accel
-         of its length: its last frames are the fastest (the "smear").
+         follows a path through the `via` angles (around the side at shoulder
+         height for the cross; up, out by the side and over for the
+         overhand), covered as u^accel of its length: its last frames are
+         the fastest (the "smear").
     The legs are aimed at their (Guard) foot spots every frame, the head
     undoes the torso's turn (eyes on the target)."""
     spec = SPECS[name]
@@ -1394,7 +1400,7 @@ def luau(name, keys, length):
         k = int(name[-1])
         at = f"at {num(spec['charge']['hit'])} s = Config.Combat.M1_HIT_DELAY[{k}] (after the charge)."
     else:
-        at = "at 0.15 s = Config.Combat.HIT_DELAY."
+        at = f"at 0.15 s = Config.Combat.M1_HIT_DELAY[{int(name[-1])}]."
     lines = [
         f"\t-- {spec['about']}",
         f"\t-- Source: Motifect Combat Motion Pack `{spec['src']}` frames {first}-{last}{side}; its frame",

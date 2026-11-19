@@ -150,9 +150,11 @@ return table.freeze({
 		-- (Client/Animation/CombatClips) put their contact keyframe exactly
 		-- at these times. Read it with the SERVER's combo number.
 		M1_HIT_DELAY = table.freeze({ 0.15, 0.28, 0.15, 0.38 }),
-		-- The punch's whoosh starts this long before the fist lands (when the
-		-- strike starts). A charged punch is silent while the arm goes back.
-		M1_SWING_LEAD = 0.15,
+		-- A charged punch (cross, finisher) is silent while the arm goes back;
+		-- its whoosh starts this long before the fist lands (when the arm
+		-- strikes: 0.18 s / 0.28 s after the click). Jab and hook whoosh at
+		-- the click.
+		M1_SWING_LEAD = 0.1,
 		-- The attacker can't block and walks slower until this long after his
 		-- fist lands (or until his next M1 is allowed, if that's sooner).
 		M1_COMMIT_AFTER_HIT = 0.23,

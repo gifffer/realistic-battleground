@@ -510,10 +510,21 @@ local function takePrediction(victim: Model, attackId: unknown): Prediction?
 	return nil
 end
 
+-- Our M1s the server already finished (AttackResolved), by id -> when.
+-- If its answer comes BEFORE our fist lands on our screen (the server
+-- threw a different hit of the combo, e.g. after it refused one of our
+-- clicks), we must not show a hit for it afterwards.
+local resolvedAttacks: { [number]: number } = {}
+
 -- Drops predictions the server never answered (our punch missed on the
 -- server, or was cancelled).
 local function forgetOldPredictions()
 	local limit = os.clock() - predictionMemory()
+	for id, at in resolvedAttacks do
+		if at < limit then
+			resolvedAttacks[id] = nil
+		end
+	end
 	for victim, byId in predictions do
 		for id, prediction in byId do
 			if prediction.time < limit then
@@ -563,7 +574,15 @@ local function predictHit(info: CombatController.AttackInfo)
 			return
 		end
 	end
+	-- ...and of one who dashed (or did anything else) during the wind-up.
+	if CharacterAnimationController.getLastAction(character) ~= `Brawler_M1_{info.combo}` then
+		return
+	end
 	forgetOldPredictions()
+	-- The server already finished this punch: its real result is shown.
+	if resolvedAttacks[info.id] then
+		return
+	end
 
 	-- Same aim rule and same rest-pose bodies as the server (HitPrediction).
 	local aim = AimRule.validate(info.aim, root.CFrame.LookVector)
@@ -593,6 +612,7 @@ local function onAttackResolved(attackId: unknown)
 	if typeof(attackId) ~= "number" then
 		return
 	end
+	resolvedAttacks[attackId] = os.clock()
 	local character = player.Character
 	for victim, byId in predictions do
 		if byId[attackId] then
@@ -787,17 +807,20 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 })
 
 -- The whoosh of an M1 (and a bloody fist flicking blood off) when its
--- strike starts: Config.Combat.M1_SWING_LEAD before the fist lands. The jab
--- and the hook strike right away; the charged cross and finisher are silent
--- while the arm goes back. Skipped if the punch was cut meanwhile (stunned,
--- or another action started).
+-- strike starts. The jab and the hook strike right away (at the click); the
+-- charged cross and finisher (a longer M1_HIT_DELAY) are silent while the
+-- arm goes back, then whoosh Config.Combat.M1_SWING_LEAD before the fist
+-- lands. Skipped if the punch was cut meanwhile (stunned, or another
+-- action started).
 local function swingWhenStriking(model: Model, combo: number)
 	local heavy = combo == #Config.Combat.M1_DAMAGE -- the finisher
 	local function play()
 		SoundController.play(if heavy then "HeavySwing" else "Swing", model)
 		KitEffects.onSwing(model)
 	end
-	local startIn = math.max(0, Config.Combat.M1_HIT_DELAY[combo] - Config.Combat.M1_SWING_LEAD)
+	local hitDelay = Config.Combat.M1_HIT_DELAY[combo]
+	local charged = hitDelay > Config.Combat.M1_HIT_DELAY[1]
+	local startIn = if charged then math.max(0, hitDelay - Config.Combat.M1_SWING_LEAD) else 0
 	if startIn <= 0 then
 		play()
 		return
