@@ -1,17 +1,20 @@
 # Les 4 coups de base (M1) : Motifect → R6
 
 Les 4 coups du combo M1 (`Brawler_M1_1` à `Brawler_M1_4` dans
-`src/client/Animation/CombatClips.luau`, communs à tous les kits) viennent maintenant du
-**Motifect Combat Motion Pack** (40 animations FBX faites pour Unreal), adaptées au R6.
+`src/client/Animation/CombatClips.luau`, communs à tous les kits) sont générés par
+`tools/anim/motifect_retarget.py`. Le **jab** et le **crochet** (main gauche) viennent du
+**Motifect Combat Motion Pack** (40 animations FBX faites pour Unreal), adaptées au R6. Le **direct**
+et le **coup final** (main droite) sont maintenant **posés à la main**, image clé par image clé
+(voir « Direct et coup final : un vrai coup de poing, pas une claque » à la fin).
 
 ## Les animations choisies
 
 | Coup | Animation Motifect | Images | Pourquoi |
 |---|---|---|---|
 | M1_1 jab gauche | `jab_right` **en miroir** (la garde du pack est inversée) | 5 → 23,5, impact 11,2 | Le jab le plus droit et le plus rapide du pack, il part presque dans l'axe. Testé contre `jab_left` : même rendu, mais plus lent à l'impact. |
-| M1_2 direct droit | `combo_punch_kick`, 2e direct (haut du corps seulement) | 52 → 74,5, impact 65,7 | Le seul vrai direct du bras arrière : trajet droit, au centre, à hauteur de tête, les hanches lancent le torse. `cross_left` faisait une boucle (lu comme un crochet en R6). |
+| M1_2 direct droit | aucune : posé à la main (voir la fin) | — | Les versions Motifect puis « bras lancé en arrière » ne marchaient pas (claque). |
 | M1_3 crochet gauche | `hook_left` (haut du corps seulement) | 14 → 29,7, impact 28,6 | Le crochet le plus rapide : le poing sort puis balaie à hauteur de tête. On coupe le suivi qui s'enroule derrière la tête et on revient en garde. |
-| M1_4 finisher | `cross_right` (overhand / haymaker) | 9 → 40, impact 23,7 | Le coup le plus lourd : le bras arrière boucle par le côté, tout le corps tourne, le talon arrière pivote. Même famille que l'ancien M1_4. |
+| M1_4 finisher | aucune : posé à la main (voir la fin) | — | `cross_right` est un swing bras tendu (lu comme une claque en R6). |
 
 L'ordre des mains reste gauche-droite-gauche-droite : les réactions (`HitJab`, `HitCross`,
 `HitHook`, `HitHeavy`) et le côté où la tête part n'ont pas changé.
@@ -37,9 +40,7 @@ crochet, **0,28 s** et **0,38 s** pour le direct et le coup final, qui sont char
 Les boxeurs du pack Motifect ne « télégraphient » presque pas (7° de contre-rotation au plus, le poing
 ne recule jamais) : en 0,15 s le bras partait directement. Le script ajoute donc, **par-dessus** la mocap
 (réglages `windup` de chaque coup dans `SPECS`) une petite prise d'élan réaliste. C'est ce que font le
-**jab et le crochet**. Le direct et le coup final ont maintenant un **grand élan chargé** à la place
-(voir « L'élan des coups chargés » plus bas) ; leur impact, leur suivi et leur récupération restent
-ceux décrits ici, juste décalés à 0,28 s / 0,38 s.
+**jab et le crochet**. Le direct et le coup final sont posés à la main (voir la dernière partie).
 
 1. **Préparation (0 → 0,067 s, 4 images)** : le torse tourne à l'envers du coup, le poids descend et
    recule vers la jambe qui charge (les genoux plient), l'épaule recule, le poing revient vers le menton
@@ -49,7 +50,7 @@ ceux décrits ici, juste décalés à 0,28 s / 0,38 s.
    d'abord, puis la rotation du torse, l'épaule, et le bras en dernier. Un bras R6 est un seul bloc : le
    poing ne peut pas « rester derrière » pendant que l'épaule avance (le bras glisserait dans l'épaule).
    Le bras, encore plié, est donc d'abord **porté par le corps qui tourne**, puis il se déplie : pour le
-   jab, le direct et l'overhand, le poing est calculé depuis l'épaule (le bras pivote vers la cible et
+   jab, le poing est calculé depuis l'épaule (le bras pivote vers la cible et
    s'allonge, de plus en plus vite). La vitesse du poing = celle du corps + celle du bras : elle
    **augmente à chaque image** jusqu'à l'impact, et l'épaule ne glisse pas plus d'environ 0,3 stud par image.
    Le crochet garde son trajet « dehors, puis en travers ».
@@ -64,9 +65,9 @@ ceux décrits ici, juste décalés à 0,28 s / 0,38 s.
 | Coup | Préparation (pose chargée à 0,05–0,067 s) | Vitesse du poing, 5 dernières images (studs/s) |
 |---|---|---|
 | Jab (M1_1) | torse 13° à l'envers, épaule avant qui plonge, poing 0,38 stud en arrière, le poids recule vers la jambe arrière | 5 → 12 → 23 → 25 → 29 |
-| Direct (M1_2) | remplacé par l'élan chargé (plus bas) | — |
+| Direct (M1_2) | posé à la main (voir la fin) | — |
 | Crochet (M1_3) | torse enroulé 15° à droite sur la jambe avant, coude et poing écartés et bas | 4 → 8 → 21 → 24 → 39 |
-| Finisher (M1_4) | remplacé par l'élan chargé (plus bas) | — |
+| Finisher (M1_4) | posé à la main (voir la fin) | — |
 
 Tout reste réaliste (amplitudes 1,5 à 2× les vraies, bien en dessous d'un style cartoon). Ce qui ne
 change pas pour le jab et le crochet : impact à 0,15 s, durées, ordre des mains, poing au même point
@@ -88,8 +89,8 @@ réactions, les VFX, les sons, les dégâts, les hitbox et les timings de `Confi
 (à l'époque `HIT_DELAY` 0,15 s, `M1_INTERVAL` 0,38 s). Seuls les 4 blocs `Brawler_M1_N` ont été remplacés.
 
 ## Coups chargés (direct du droit et coup final)
-Les deux coups du bras droit (le **direct**, coup 2, et le **coup final**, coup 4) prennent un grand
-élan (le bras part vers le dos), donc ils **touchent plus tard** : 0,28 s et 0,38 s après le clic au lieu
+Les deux coups du bras droit (le **direct**, coup 2, et le **coup final**, coup 4) prennent de
+l'élan (le corps se charge avant de frapper), donc ils **touchent plus tard** : 0,28 s et 0,38 s après le clic au lieu
 de 0,15 s. C'est voulu : l'élan doit avoir le temps de se voir. Le jab et le crochet (coups 1 et 3)
 touchent toujours à 0,15 s. Les dégâts et la hitbox arrivent au moment de l'impact, c'est toujours le
 serveur qui décide. Les timings sont maintenant **par coup** dans `Config.Combat` :
@@ -116,35 +117,82 @@ serveur qui décide. Les timings sont maintenant **par coup** dans `Config.Comba
 - Hors combo, un coup chargé se voit venir : l'adversaire peut le couper avec un jab, l'esquiver
   (dash) ou le bloquer / parer (surtout le coup final).
 
-## L'élan des coups chargés (animation)
-Tu voulais qu'il **charge** son coup : le bras part presque derrière, au niveau du dos, comme une grosse
-prise d'élan, mais animé. C'est fait sur les deux coups du bras droit, par-dessus la mocap Motifect
-(l'impact, le suivi et la récupération restent ceux de Motifect, décalés plus tard). Le jab et le crochet
-n'ont pas changé (leurs blocs sont identiques à l'octet près).
+## Direct et coup final : un vrai coup de poing, pas une claque
+Tu trouvais que le bras partait beaucoup trop loin en arrière et que ça ressemblait à une **claque**.
+Les deux coups du bras droit ont été refaits entièrement (le jab et le crochet n'ont pas bougé : leurs
+blocs sont identiques à l'octet près).
 
-| | Direct (M1_2) | Coup final (M1_4) |
-|---|---|---|
-| Où part le poing | le bras s'ouvre sur le côté puis part en arrière **à hauteur d'épaule** : poing à 2,5 studs derrière le corps, il dépasse de la silhouette à droite | le bras monte sur le côté puis en arrière : poing **derrière la tête** |
-| Torse enroulé (Garde −12°) | −64° (52° plus loin que la Garde) | −76° (64°), penché en arrière |
-| Poids | descend de 0,24 stud sur la jambe arrière pliée | descend de 0,17 stud, en arrière |
-| Main avant | reste devant le visage | vise l'adversaire (comme un lanceur), puis revient à la poitrine |
-| Élan (bras en arrière) | 0 → 0,13 s | 0 → 0,20 s |
-| Charge tenue | 0,13 → 0,18 s (5 images, le corps s'enroule encore un peu) | 0,20 → 0,263 s (4 images) |
-| Frappe | 0,18 → **0,28 s** : jambes et poids, puis torse, puis le bras fait le tour par le côté à hauteur d'épaule | 0,263 → **0,38 s** : le bras passe sur le côté, haut, puis arrive sur la cible |
-| Vitesse du poing, 5 dernières images (studs/s) | 21 → 36 → 64 → 130 → 170 | 37 → 62 → 105 → 146 → 146 |
-| Retour en Garde | ~0,45 s (le crochet part à 0,48 s) | ~0,9 s |
-| Durée du clip | 0,6 s | 1,08 s |
+### Pourquoi ça faisait une claque
+Un bras R6 est un seul bloc rigide, sans coude. L'ancienne version lançait le bras tendu loin derrière
+le dos (poing à ~2,5 studs derrière le corps, ou derrière la tête), puis le ramenait en le faisant
+**tourner autour de l'épaule**. Le poing décrivait alors un grand **arc** (balayage de côté de 2,7 à
+3 studs) et il se déplaçait **perpendiculairement au bras** (70 à 120° entre le bras et la direction du
+poing) : c'est exactement la signature d'une claque ou d'un revers. Un vrai coup de poing fait
+l'inverse : le poing va **en ligne droite** vers la cible et le bras **s'aligne** sur cette ligne (il
+s'allonge dans son propre axe). En plus, tout partait en même temps (le corps et le bras sur la même
+image) et les 2 dernières images bougeaient de 73° (un « saut » de pose).
 
-- La frappe **accélère jusqu'au contact** (jamais de ralenti avant l'impact). Les 2 dernières images
-  sont très rapides (le bras tourne de 60 à 78° par image) : c'est le côté « animé », l'œil le lit comme
-  un flou de mouvement. Une traînée VFX sur ces 2 images marcherait bien.
-- Tout le reste reste humain : pendant l'élan le bras tourne de 35 à 44° par image au plus (surtout
-  quand il quitte la Garde), la charge tenue bouge de moins de 6 studs/s, les pieds restent au sol (le
-  pied arrière pivote pendant la frappe, il glisse un peu : ~0,27 stud par image sur 2-3 images).
-- Le poing ne passe jamais sous la hanche : pendant la frappe il reste entre la poitrine et l'épaule
-  (direct) ou à hauteur d'épaule et plus haut (coup final), comme un vrai coup de puissance.
-- Sur le coup final, l'épaule est poussée vers l'extérieur pendant la charge, pour que le bras ne
-  rentre presque plus dans le coin arrière du torse (0,09 stud au plus, contre 0,18 avant).
-- Réglages : `CROSS_CHARGE` et `FINISHER_CHARGE` en haut de `tools/anim/motifect_retarget.py`
-  (les poses clés de l'élan, le chemin du bras pendant la frappe, l'ordre de départ de chaque partie
-  du corps). Relance le script avec `--write`, puis `stylua src`.
+### Les principes utilisés
+- **Anticipation** : l'élan est dans le **corps**, pas dans le bras. Le torse tourne à l'envers du coup
+  (13° de plus que la Garde pour le direct, 20° pour le coup final : assez pour se lire, pas assez pour
+  « télégraphier »), le poids s'assoit sur la jambe arrière, le menton rentre, et le poing vient
+  seulement **contre la joue**. Le poing ne passe **jamais** derrière le corps.
+- **Faux coude** : comme le R6 n'a pas de coude, le bras **glisse dans son propre axe** (décalage de
+  l'épaule) : rentré pendant l'armé (coude plié), poussé vers l'avant à l'impact (bras tendu). Le
+  glissement est limité à ~0,4 stud au contact (0,3 pendant le suivi) et il se défait **en premier**
+  au retour, pour que le bras ne semble jamais sortir de la poitrine vu de profil.
+- **Timing** : armé → charge qui bouge encore un peu (le torse continue de s'enrouler et de
+  s'asseoir : jamais de pose figée) → les **hanches et le torse partent d'abord**, le poing attend
+  2 images (coude encore plié) → le poing part en **ligne droite**, de plus en plus vite, **le plus
+  rapide au contact** (on ne ralentit jamais avant de toucher).
+- **Arcs** : le corps tourne sur un arc naturel, mais le poing, lui, suit une ligne droite (rectitude
+  0,99) : c'est ça qui fait un coup de poing.
+- **Pas de toupie** : le torse s'arrête presque **face à la cible** au contact (20° de l'autre côté
+  de la Garde, 24° au maximum du suivi pour le direct ; 22 et 30° pour le coup final), au lieu de
+  tourner 40° plus loin. Une grosse rotation se lisait, depuis la caméra de jeu, comme « le perso
+  tourne et balance un bras ». L'allonge vient d'un **pas vers l'avant** (le poids passe sur la jambe
+  avant) plutôt que de la rotation.
+- **La main avant reste au menton** : elle est accrochée à la **tête** (que le cou garde tournée vers
+  la cible), pas au torse. Elle ne part plus sur le côté quand le torse tourne (balayage 0,6 / 0,9
+  stud au lieu de 1,8 / 2,1) : depuis la caméra de jeu, c'est bien le poing qui frappe qu'on voit
+  bouger, pas l'autre bras.
+- **Follow-through / chevauchement** : après l'impact, le poing pousse encore un peu dans la même
+  ligne et s'arrête en ~0,04 s (il ne reste pas figé bras tendu : le jeu ajoute déjà son hit-stop), le
+  torse continue de tourner en ralentissant, la tête se pose **2 à 3 images après** le corps, et la
+  main avant arrive au menton après le torse. Rien ne s'arrête sur la même image.
+- **Hauteur de frappe** : le haut de la poitrine, juste sous le menton de l'adversaire, un peu à
+  droite de la tête de l'attaquant (le bras reste visible depuis la caméra de jeu). Sur un R6,
+  l'épaule pivote à hauteur de poitrine : viser la tête obligerait le bras à pointer vers le haut
+  (un uppercut), et un poing qui descend pendant que le bras monte redevient un geste de balayage.
+- **Coup final différent du direct** : charge plus profonde et plus longue, assis plus bas, plus
+  grand pas en avant, le poing part de l'accroupi sur une ligne droite **légèrement montante**, le
+  corps continue de tourner et de s'enfoncer plus longtemps après l'impact, récupération plus lourde.
+
+### Les chiffres (ancien → nouveau)
+| | Direct ancien | **Direct nouveau** | Final ancien | **Final nouveau** |
+|---|---|---|---|---|
+| Angle bras / direction du poing avant l'impact (punch ≈ 0–30°, claque ≈ 70–90°) | 70–122° | **22–30°** | 59–117° | **18–29°** |
+| Trajet du poing (1 = ligne droite) | 0,76 | **0,99** | 0,57 | **0,99** |
+| Balayage de côté du poing | 2,5 studs | **0,54** | 3,2 studs | **0,74** |
+| Balayage de côté de la main avant | — | **0,64** | — | **0,91** |
+| Rotation du torse (armé → contact → fin du suivi) | — | **+25° → −20° → −24°** | — | **+33° → −22° → −30°** |
+| Poing derrière le dos | jusqu'à 2 studs | **jamais** (≥ 1,4 devant) | jusqu'à 2,3 | **jamais** (≥ 1,3 devant) |
+| Bloc du bras derrière le dos (Garde : 0,19) | 2,3 studs | **0,51** | 2,5 studs | **0,77** |
+| Glissement du bras (faux coude) au contact | — | **0,40 stud** | — | **0,31 stud** |
+| Vitesse du poing, dernières images (studs/s) | jusqu'à 170 (flou) | 12 → 21 → 30 → **39** | jusqu'à 150 | 9 → 22 → 37 → **50** |
+| Plus grand saut entre 2 images | 73° | **9°** | 73° | **13°** |
+| Retour en Garde | ~0,45 s | **0,46 s** (le crochet part à 0,48 s) | ~0,9 s | **0,81 s** |
+| Durée du clip | 0,6 s | **0,55 s** | 1,08 s | **0,95 s** |
+
+Impacts inchangés : 0,28 s et 0,38 s (`Config.Combat.M1_HIT_DELAY`). Les hitbox, dégâts, VFX, sons et
+timings ne changent pas. Dans le combo complet (clics à 0 / 0,38 / 0,86 / 1,24 s), le plus grand saut
+est maintenant celui du crochet, inchangé (20,5° par image), contre 73° avant.
+
+### Réglages
+Dans `tools/anim/motifect_retarget.py` : `CROSS_KEYS` (direct) et `FINISHER_KEYS` (coup final). Chaque
+pose clé du corps est commentée (anticipation, armé, charge, hanches d'abord, contact, suivi,
+récupération), avec le plan du poing (`fist` : armé, départ, point d'impact, accélération, poussée
+après l'impact), la main avant (`lead`, accrochée à la tête) et les retards (`lag` pour le buste,
+`head_lag` pour la tête). Relance le script avec `--write`, puis `stylua src`.
+À vérifier dans Studio, caméra libre : le glissement du bras dans l'épaule (faux coude, ~0,4 stud au
+plus au contact) doit rester caché par le torse.
