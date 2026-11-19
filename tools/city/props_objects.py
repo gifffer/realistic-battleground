@@ -193,8 +193,8 @@ def _bar(f, name, p0, p1, w, th, color, mat, flags=DECOR, extend=0.0, roll=0.0, 
 # of every mark it overlaps there: slot k spans k * SKIN_STEP .. + SKIN_TH out of the face, so the
 # front faces are SKIN_STEP apart and there is an air gap between slots. A mark that would need
 # more than SKIN_MAX slots is dropped (None): nobody sees a fourth layer of grime.
-SKIN_TH = 0.025  # a mark's thickness (studs)
-SKIN_STEP = 0.045  # slot spacing: front faces 0.045 apart, a 0.02 air gap between slots
+SKIN_TH = 0.035  # a mark's thickness (studs)
+SKIN_STEP = 0.055  # slot spacing: front faces 0.055 apart, a 0.02 air gap between slots
 SKIN_MAX = 3  # slots per spot on a face
 
 
@@ -230,16 +230,18 @@ def _skin_slot(f, c, corners, n_local):
     return slot
 
 
-def _skin(f, name, c, w, h, face, color, mat="SmoothPlastic", th=None, spin=0.0, flags=DECOR, **kw):
+def _skin(f, name, c, w, h, face, color, mat="SmoothPlastic", th=None, spin=0.0, flags=DECOR, disk=False, **kw):
     """A thin mark lying on a face (rust, grime, a label, a stain): c is the point on the surface,
     face one of "-z", "+z", "-x", "+x", "y"; w x h its size in the face's plane, spun by `spin`
     deg. Its depth comes from the face's slots (_skin_slot): never coplanar with another mark.
-    `th` is accepted for old calls but every mark is SKIN_TH thick. Returns the row or None."""
+    `th` is accepted for old calls but every mark is SKIN_TH thick. A "Stain" (or `disk`) on a
+    top is round. Returns the row or None."""
+    disk = disk or name == "Stain"
     s = -1 if face[0] == "-" else 1
     a = math.radians(spin)
     ca, sa = math.cos(a), math.sin(a)
     # the outline in the face's own 2D axes (p along w, q along h), spun
-    if name == "Stain" and face == "y":
+    if disk and face == "y":
         w = h = (w + h) / 2
     pq = [(ca * x - sa * y, sa * x + ca * y) for x, y in ((-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2))]
     if face.endswith("z"):
@@ -256,7 +258,7 @@ def _skin(f, name, c, w, h, face, color, mat="SmoothPlastic", th=None, spin=0.0,
         return None
     lift = slot * SKIN_STEP + SKIN_TH / 2  # the slab's centre out of the face
     t = SKIN_TH
-    if name == "Stain" and face == "y":  # stains on a top are round: a disk (Roblox cylinders stay round)
+    if disk and face == "y":  # stains on a top are round: a disk (Roblox cylinders stay round)
         return f.part(name, (c[0], c[1] + lift, c[2]), (t, w, w), color, mat, rot=(0, 0, 90), shape=CYLINDER,
                       flags=flags, **kw)
     if face.endswith("z"):
