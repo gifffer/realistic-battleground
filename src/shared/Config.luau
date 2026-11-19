@@ -379,15 +379,15 @@ return table.freeze({
 		-- every flame in the game (burning bodies, the Pyromaniac). 0 = not
 		-- uploaded: Roblox's own particles stand in (Client/Combat/FireLook).
 		FIRE = table.freeze({
-			flameLoop = 0, -- flame_loop.png (8 x 8 flipbook, loops)
-			flameTongue = 0, -- flame_tongue.png (4 x 4 flipbook, one shot)
-			fireball = 0, -- fireball.png (8 x 8 flipbook, one shot)
-			groundFire = 0, -- ground_fire.png (4 x 4 flipbook, loops)
-			smoke = 0, -- smoke.png (2 x 2: four puffs)
-			ember = 0, -- ember.png (2 x 2: dot, streak, flake, sparks)
-			glow = 0, -- glow.png
-			flameStrip = 0, -- flame_strip.png (Beams, Trails)
-			scorch = 0, -- scorch.png (a decal on the floor)
+			flameLoop = 109483706228130, -- flame_loop.png (8 x 8 flipbook, loops)
+			flameTongue = 91629697684434, -- flame_tongue.png (4 x 4 flipbook, one shot)
+			fireball = 86463412008232, -- fireball.png (8 x 8 flipbook, one shot)
+			groundFire = 95247180631141, -- ground_fire.png (4 x 4 flipbook, loops)
+			smoke = 105239598679749, -- smoke.png (2 x 2: four puffs)
+			ember = 107619914333799, -- ember.png (2 x 2: dot, streak, flake, sparks)
+			glow = 121132183562543, -- glow.png
+			flameStrip = 139331479680133, -- flame_strip.png (Beams, Trails)
+			scorch = 112565139364663, -- scorch.png (a decal on the floor)
 		}),
 		-- The first burn pictures (assets/burns/legacy), still used while
 		-- BURNS above is 0: acid 1..3 for acid, fire 1..3 for stages 2..4.
