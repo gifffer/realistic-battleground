@@ -44,6 +44,7 @@ local BurnCode = require(ReplicatedStorage.Shared.Util.BurnCode)
 local Config = require(ReplicatedStorage.Shared.Config)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local FireLook = require(script.Parent.FireLook)
+local SoundLayers = require(script.Parent.SoundLayers)
 
 local Burns = {}
 
@@ -182,6 +183,8 @@ type Session = {
 	seed: number,
 	animating: boolean,
 	burning: boolean,
+	fire: boolean, -- (flames on it now, not acid)
+	sound: SoundLayers.Loop?, -- the crackle while it burns
 	own: boolean,
 	connections: { RBXScriptConnection },
 }
@@ -825,6 +828,7 @@ local function readLit(session: Session)
 	local lit = BurnCode.decodeLit(model:GetAttribute(BurnCode.LIT))
 	local wasBurning = session.burning
 	local anyFire, anyAcid = false, false
+	local fireLevels = 0
 	for _, partName in BurnCode.PARTS do
 		local code = BurnCode.CODE_OF[partName]
 		local level = lit[code] or 0
@@ -838,6 +842,7 @@ local function readLit(session: Session)
 					anyAcid = true
 				else
 					anyFire = true
+					fireLevels += level
 				end
 			end
 		end
@@ -851,13 +856,36 @@ local function readLit(session: Session)
 			and humanoid.Health > 0
 			and not model:HasTag(Config.Combat.CORPSE_TAG)
 		if alive then
-			SoundController.play(if anyFire then "Burn" else "AcidSizzle", model)
+			if anyFire then
+				SoundLayers.play("CatchFire", model)
+			else
+				SoundController.play("AcidSizzle", model)
+			end
 			local now = os.clock()
 			if now >= (nextCry[model] or 0) then
 				nextCry[model] = now + CRY_INTERVAL
 				SoundController.play("BurnCry", model)
 			end
 		end
+	end
+	-- The crackle of a burning body: one loop per body (a corpse too), louder
+	-- the more of it burns; it dies down with a last sizzle when it goes out.
+	local wasFire = session.fire
+	session.fire = anyFire
+	if anyFire then
+		local scale = math.clamp(0.45 + 0.07 * fireLevels, 0.5, 1)
+		local torso = bodyPart(model, "Torso")
+		if session.sound then
+			session.sound.setVolume(scale)
+		elseif torso then
+			session.sound = SoundLayers.loopOn("BodyBurn", torso, scale, 0.6)
+		end
+	elseif wasFire then
+		if session.sound then
+			session.sound.stop(1.2)
+			session.sound = nil
+		end
+		SoundLayers.play("Extinguish", model)
 	end
 	session.animating = true
 	ensureHeartbeat()
@@ -898,6 +926,10 @@ local function wipe(session: Session)
 	end
 	if session.heart then
 		session.heart:Destroy()
+	end
+	if session.sound then
+		session.sound.stop(0.3)
+		session.sound = nil
 	end
 	sessions[session.model] = nil
 end
@@ -1050,6 +1082,8 @@ function Burns.watch(model: Model)
 		seed = hash(model.Name) % 997,
 		animating = false,
 		burning = false,
+		fire = false,
+		sound = nil,
 		own = model == Players.LocalPlayer.Character,
 		connections = {},
 	}

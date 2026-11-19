@@ -783,7 +783,7 @@ Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à *
 Le nouveau kit qui remplace le Bull : un **pyromane** avec un **Zippo**, des **cocktails Molotov** et un **jerrican** d'essence.
 Dans **Studio**, tous les kits sont débloqués ; dans le jeu publié, le Pyromane demande le **niveau 6** et **650 coins**.
 Menu **KITS** → **PYROMANIAC** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**.
-**Les sons sont muets** tant que tu n'as pas mis leurs IDs (voir `docs/SONS_PYROMANE_FR.md` : un prompt par couche à générer). Aucune erreur dans l'Output à cause d'eux.
+**Les sons** sont des effets gratuits de la boutique (Pro Sound Effects), déjà en place : `docs/SONS_PYROMANE_FR.md`. Aucune erreur dans l'Output à cause d'eux.
 Les brûlures sur le corps sont celles du système de brûlures (`docs/BURNS_FR.md`, tests B1–B10) : degrés qui s'aggravent là où le feu touche, vêtements qui se carbonisent, flammes, fumée.
 
 | # | Test | Résultat attendu |
@@ -808,7 +808,7 @@ Les brûlures sur le corps sont celles du système de brûlures (`docs/BURNS_FR.
 | P18 | Après le finisher | Le corps **brûle encore ~12 s** (flammes, **fumée noire**, une seule lumière qui vacille, le son du feu), puis **fume** (fumée grise, quelques braises ~18 s). **Pas de double flammes** sur le cadavre. |
 | P19 | Un joueur qui arrive après (ou le corps resté après la réapparition) | Le corps a les vêtements **carbonisés** et brûle / fume encore selon le temps passé. |
 | P20 | Le Pyromane est frappé / meurt / quitte **avant** « l'embrasement » | Tout s'arrête (jerrican, Zippo), la victime retombe KO, **sans essence ni feu**. |
-| P21 | Sons (après avoir mis les IDs) | Chaque son est fait de **5 couches** jouées ensemble au bon moment ; la flaque de feu et le corps qui brûle sont des **boucles** qui baissent quand le feu meurt. |
+| P21 | Sons | Voir la section **Sons du Pyromane v2** plus bas (S1-S14). |
 
 ## Grosses flaques des finishers (`feature/finisher-pools`)
 
@@ -1113,7 +1113,7 @@ Détails et import des images : `docs/BURNS_FR.md`. Tout marche **sans les nouve
 
 ## Feu v2 : flammes, flaques et effets du Pyromane (`feature/kit-pyromaniac`)
 
-Détails et import des 9 images : `docs/FIRE_FR.md`. **Faire les tests deux fois** : une fois **sans** les IDs (`Config.Injuries.FIRE` à 0 : tout doit marcher, avec l'ancien look) et une fois **avec**. Kit **Pyromane** contre le **Dummy**, puis à 2 joueurs. Les sons ne changent pas ici.
+Détails et import des 9 images : `docs/FIRE_FR.md`. **Faire les tests deux fois** : une fois **sans** les IDs (`Config.Injuries.FIRE` à 0 : tout doit marcher, avec l'ancien look) et une fois **avec**. Kit **Pyromane** contre le **Dummy**, puis à 2 joueurs. Les sons : section suivante.
 
 | # | Test | Résultat attendu |
 |---|---|---|
@@ -1130,3 +1130,24 @@ Détails et import des 9 images : `docs/FIRE_FR.md`. **Faire les tests deux fois
 | F11 | **Finisher** (Immolation) | Pendant le versement : l'essence **éclabousse** sa tête et ses épaules, une **tache d'essence** sombre et brillante s'étale sous lui. À l'embrasement : boule de feu, et **le sol prend feu autour du corps** (~0,4 s), qui brûle avec lui (~12 s) puis laisse une marque noire. |
 | F12 | *Graphics quality* 1 puis 10 | 1 : moins de particules, pas de lueur au cœur, toujours lisible. 10 : le look complet. Pas de lag dans les deux. |
 | F13 | 4 flaques + 2 corps en feu en même temps | Toujours fluide ; pas d'erreur dans l'Output. |
+
+## Sons du Pyromane v2 (`feature/kit-pyromaniac`)
+
+Tous les sons sont des effets **Pro Sound Effects** gratuits de la boutique, choisis et réglés **par mesure** (liste, mesures et réglages : `docs/SONS_PYROMANE_FR.md`). Rien à importer. Kit **Pyromane** contre le **Dummy**, casque ou bonnes enceintes, puis une fois sur **téléphone** (ou haut-parleurs de portable). Volume du jeu normal.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| S1 | **1** (Zippo Flare) cinq fois de suite | Le « clink » du couvercle, la molette puis un petit « fff » quand la mèche prend, le **« pouf »** de la boule de feu **pile sur l'impact** (pas avant, pas un quart de seconde après), quelques crépitements, le « clac » de fermeture. Le pouf n'est **jamais deux fois le même** d'affilée et n'a plus de gros écarts de volume. Le briquet reste **discret**. |
+| S2 | **2** (Molotov) plusieurs fois | Le chiffon prend avec un souffle court ; au lancer, une **torche qui passe** ; à l'impact le **verre** puis, juste après, la **boule de feu qui part d'un coup** (plus de montée lente qui arrive 1 s trop tard). Ensuite la flaque **entre en fondu** sous la fin de l'explosion (pas de coupure entre les deux) : un ronflement de kérosène avec du crépitement. |
+| S3 | Rester ~1 min près d'une grosse flaque (Firebomb en Awakening) puis la laisser mourir | **Pas de clic** ni de saut de volume dans la boucle ; le son **baisse** avec les flammes et s'éteint en ~1,5 s à la fin. Deux flaques côte à côte ne « respirent » pas pareil. |
+| S4 | **3** (Fire Breath) puis **3** en Awakening (Inferno) | La gorgée, le Zippo, puis un **souffle de lance-flammes** qui démarre avec le jet, dure **autant que le jet** (plus long pour Inferno) et retombe en fondu, avec une petite queue douce. |
+| S5 | **4** (Douse) | Un **ballottement** dans le jerrican à l'élan, puis l'éclaboussure au jet (0,42 s). |
+| S6 | **G** (BURNING MAN) | Le briquet, puis un **souffle de feu à 0,55 s** (quand le poignet prend, audible même sur téléphone) et le **« boum »** grave quand il écarte les bras (0,75 s). Ensuite un crépitement léger sur ses bras ; à la fin de l'Awakening, un **grésillement** qui s'éteint. |
+| S7 | **1** et **4** en Awakening (Burning Fist / Rush) | Une **torche qui fend l'air** dont le pic tombe sur le coup ; si ça touche : un « pouf » de flamme et la peau qui **grésille**, au moment exact du contact. Raté : pas de bruit d'impact. Pas deux fois le même son d'affilée. |
+| S8 | Mettre le Dummy en feu (Molotov sur lui), le laisser brûler puis s'éteindre | Quand il prend feu : un **souffle** et un grésillement (plus le sifflement acide d'avant). Tant qu'il brûle : un **crépitement** en boucle, plus fort quand plus de membres brûlent. Quand le feu s'éteint : le crépitement baisse et un **grésillement qui retombe**. |
+| S9 | **Finisher** (Immolation) | Pas de bruit au bouchon (0,15 s) ; l'**essence versée** s'entend quand le liquide sort (0,4 s), pas trop fort ; le bidon jeté sonne creux sans saturer ; le briquet ; le Zippo qui tombe ; à 3,05 s une **grosse boule de feu** qui claque (pas un grondement plat), puis le **grondement** du corps qui entre en fondu et dure ~12 s avec le crépitement ; le cri est à un volume normal quelle que soit la variante. |
+| S10 | Molotov **sur** le Dummy + flaque + cris en même temps | Tout reste **lisible** : pas de saturation, pas de son qui en écrase un autre d'un coup. |
+| S11 | Écouter de **loin** (~60-100 studs) une flaque et un corps en feu | On les entend encore, faiblement ; rien ne s'arrête net en s'éloignant. |
+| S12 | Sur **téléphone** : S1, S2, S6 | Les sons graves (« boum » de l'Awakening, boule de feu) ont toujours une partie qu'on **entend** (souffle, crépitement), pas seulement un grave inaudible. |
+| S13 | Lancer 10 Molotov d'affilée (Studio) | Les sons varient (4 bouteilles, 4 boules de feu, 4 lancers), pas de répétition gênante, pas d'erreur dans l'Output. |
+| S14 | Output (F9) pendant tous ces tests | Aucun `[SoundLayers] unknown cue` ni `[SoundController] unknown sound`, aucun son qui ne charge pas. |

@@ -1,18 +1,28 @@
 """The Pyromaniac's layered sounds: ONE source for three generated files.
 
-Each sound of the kit (a "cue") is designed in five layers (transient,
-mechanism, body, sub, tail), following the player's brief. This script
-writes:
-  * the Sounds.luau block (one entry per layer, ids = {} until the player
-    gives them): printed between markers, pasted at the end of
-    src/shared/Sounds.luau by --write;
+Each sound of the kit (a "cue") is up to five layers (transient, mechanism,
+body, sub, tail). The ids are free Pro Sound Effects sounds from the Creator
+Store (STOCK), picked and levelled by measurement (tools/sounds/ears.py):
+each file's leading blank is cut, its level matched to its variants, and
+each layer set to a target loudness. This script writes:
+  * the Sounds.luau block (one entry per layer), pasted at the end of
+    src/shared/Sounds.luau;
   * src/shared/SoundCues.luau (which layers make a cue, when each starts);
-  * docs/SONS_PYROMANE_FR.md (the design, the prompts to paste, the mix).
+  * docs/SONS_PYROMANE_FR.md (the sounds and their measurements, the
+    five-layer designs and generation prompts for later).
 
-Run from the repo root:  python3 tools/sounds/pyro_sounds.py --write
+Run from the repo root (needs numpy and ffmpeg for --measure):
+  python3 tools/sounds/pyro_sounds.py --measure --cache /some/dir   (download + measure)
+  python3 tools/sounds/pyro_sounds.py --verify                      (store details API)
+  python3 tools/sounds/pyro_sounds.py --write && stylua src
 """
 
+import gzip
+import json
+import math
+import os
 import re
+import subprocess
 import sys
 
 BRIEF = (
@@ -305,7 +315,7 @@ CUES = [
         "name": "FuelPour",
         "thing": "petrol being poured from a jerrycan over a body lying on the ground",
         "fr": "L'essence versée du jerrican sur le corps (finisher).",
-        "when": "IMMOLATION, de 0,4 s à 1,45 s.",
+        "when": "IMMOLATION, de 0,4 s à 1,45 s (quand le liquide sort).",
         "gain": -2,
         "layers": [
             ("Le bouchon du jerrican qui saute", "500 Hz-6 kHz", "« clonk » métallique et « pop » d'air", 0, 120, -4,
@@ -398,100 +408,343 @@ CUES = [
     },
 ]
 
-# Free sounds from the Roblox Creator Store, in place of the generated ones
-# (the player did not want to make and upload them). Mostly Pro Sound Effects
-# (Roblox's licensed library, free for every experience). One entry per filled
-# layer: cue -> [(layer, ids, volume, pitch, start, length)]. The other layers of
-# the cue stay empty (silent). volume is set by ear from each file's loudness;
-# start skips the blank at the head of a file, length cuts a long one short.
-# THIS is the source of the ids of these layers (Sounds.luau is rewritten from it).
+# Cues with no five-layer design: their layers are only the ones in STOCK.
+EXTRA_CUES = [
+    {
+        "name": "InfernoBreath",
+        "thing": "the Inferno Breath's longer jet of fire",
+        "fr": "Le jet de feu de l'INFERNO BREATH : le même que FIRE BREATH, plus long.",
+        "when": "INFERNO BREATH (0,55 s → 1,15 s).",
+    },
+    {
+        "name": "CanSlosh",
+        "thing": "petrol sloshing in a jerrycan swung back",
+        "fr": "L'essence qui ballotte dans le jerrican quand il le balance.",
+        "when": "DOUSE, à l'élan (0,16 s), avant le jet.",
+    },
+    {
+        "name": "FireSwing",
+        "thing": "a burning fist swung past like a torch",
+        "fr": "Le poing ou le bras en feu qui fend l'air : une torche qui passe.",
+        "when": "BURNING FIST et BURNING RUSH (0,1 s) : le pic tombe sur le coup (0,22 s).",
+    },
+    {
+        "name": "FireImpact",
+        "thing": "a burning fist landing: a puff of flame and searing skin",
+        "fr": "Le poing en feu qui touche : un « pouf » de flamme et la peau qui grésille.",
+        "when": "BURNING FIST / BURNING RUSH, au coup confirmé par le serveur.",
+    },
+    {
+        "name": "CatchFire",
+        "thing": "someone catching fire: a whoosh of flame wrapping round them, a sizzle",
+        "fr": "Quelqu'un qui prend feu : un souffle de flamme qui l'enveloppe, un grésillement.",
+        "when": "Le premier instant où un corps brûle (Molotov, souffle, flaque, finisher).",
+    },
+    {
+        "name": "Extinguish",
+        "thing": "the last flames on a body going out: a sizzle that dies down",
+        "fr": "Le feu qui s'éteint sur un corps : un grésillement qui retombe.",
+        "when": "Quand les dernières flammes d'un corps s'éteignent, et à la fin de l'Awakening.",
+    },
+    {
+        "name": "PyreRoar",
+        "thing": "the roar of a whole body burning (loop)",
+        "looped": True,
+        "fr": "Le grondement du corps qui brûle en entier (BOUCLE).",
+        "when": "IMMOLATION, de l'embrasement (3,05 s) à la fin du feu (12 s), par-dessus le crépitement du corps.",
+    },
+]
+ALL_CUES = CUES + EXTRA_CUES
+
+
+class L:
+    """One filled layer of a cue (free Creator Store sounds).
+
+    ids     the variants (one at random each time, never twice in a row)
+    target  the level it should have: loudest momentary loudness (LUFS) for a
+            one-shot, integrated loudness for a loop. The volume and each id's
+            gain are worked out from the measurements (pyro_measure.json).
+    at      seconds after the cue starts
+    start   "onset" (cut the blank: 10 ms before the file's onset), "peak-X"
+            (start X seconds before its loudest point: the peak lands X s after
+            the cue), or seconds; the same for every id
+    length  seconds played (then faded out over `fade`)
+    """
+
+    def __init__(self, layer, ids, target, at=0.0, pitch=1.0, start="onset", length=None, fade=None,
+                 pv=None, vv=1.5):
+        self.layer, self.ids, self.target, self.at = layer, ids, target, at
+        self.pitch, self.start, self.length, self.fade = pitch, start, length, fade
+        self.pv, self.vv = pv, vv
+
+
+# THE SOURCE of the ids (Sounds.luau is rewritten from it). Every id is a
+# public, free ProSoundEffects sound effect (Roblox's licensed library,
+# verified creator), downloaded and measured by --measure.
 STOCK = {
-    "ZippoOpen": [("Body", [9121005566], 1.2, 1, None, None)],
-    "ZippoStrike": [("Body", [9121005779], 1.5, 1, None, None)],
-    "ZippoClose": [("Body", [9121005783], 0.7, 1, None, None)],
-    "FlameFlare": [("Body", [9125616655, 9125615451, 9125616715], 2.2, 1, None, None)],
-    "MolotovLight": [("Body", [9114442370, 9114446852], 1.4, 0.9, 0.05, None)],
-    "MolotovThrow": [("Body", [9114463219, 9114463410, 9114463016], 1.25, 1, 0.15, None)],
-    "MolotovShatter": [
-        ("Transient", [9113553645, 9113552246], 1.6, 1, 0.2, 2.2),
-        ("Mechanism", [9125702439, 9125702803], 1.5, 0.9, None, None),
+    "ZippoOpen": [L("Body", [9121005566], -26, pv=0.07)],
+    "ZippoStrike": [
+        L("Body", [9121005779], -24, pv=0.06),
+        # (the flame catching: a soft puff under the wheel, two kinds)
+        L("Tail", [9114446183, 9114445526], -33, at=0.12, pv=0.08),
     ],
+    "ZippoClose": [L("Body", [9121005783], -27, pv=0.07)],
+    # (punchy kerosene poofs: the peak lands 30 ms after the cue, on the hit)
+    "FlameFlare": [
+        L("Body", [9114442751, 9114444052, 9114443884, 9114444008], -15, start="peak-0.03", length=1.0, fade=0.3),
+        L("Tail", [9125616715, 9125616655], -24, at=0.1, length=1.0, fade=0.3),
+    ],
+    "MolotovLight": [L("Body", [9114446852, 9114447022, 9114446802], -21)],
+    "MolotovThrow": [L("Body", [9114463219, 9114463410, 9114463208, 9114463016], -21, length=1.4, fade=0.3)],
+    "MolotovShatter": [
+        L("Transient", [9113552392, 9113552215, 9113552246, 9113553645], -16, length=2.2, fade=0.4),
+        L("Mechanism", [9125702439, 9125702803], -21, pv=0.08),
+    ],
+    # (the fireball pops 0.06 s after the glass; its tail fades over 1 s while
+    # the pool's loop fades in: one sound turning into the other)
     "FuelIgnite": [
-        ("Body", [9114430091, 9114432358], 0.9, 1, 0.15, 3.0),
-        ("Sub", [9114554567], 0.35, 0.8, None, 1.5),
+        L("Body", [9114429507, 9114429835, 9114429958, 9114429740], -13, length=2.2, fade=1.0),
+        L("Sub", [9114554567], -21, pitch=0.8, length=1.5, fade=0.5, pv=0.03),
     ],
     "PoolFire": [
-        ("Body", [82555625627924], 0.8, 1, None, None),
-        ("Mechanism", [516449725], 0.3, 1, None, None),
+        L("Body", [9112780561], -25),
+        L("Mechanism", [9112780462], -31),
     ],
-    "FuelSwig": [("Body", [9114171960, 9114172109], 2.5, 1, 0.05, None)],
-    "FireBreath": [("Body", [9114446277, 9117987278], 1.6, 1, 0.15, None)],
+    "FuelSwig": [L("Body", [9114171960, 9114172109], -25)],
+    "FireBreath": [
+        L("Transient", [9114446277, 9114441555], -19, start="peak-0.08"),
+        L("Body", [9117984812, 9117985848, 9117985933], -15, at=0.05, length=0.75, fade=0.3),
+        L("Tail", [9114445526], -29, at=0.6, length=1.0, fade=0.3),
+    ],
+    "InfernoBreath": [
+        L("Transient", [9114446277, 9114441555], -18, start="peak-0.08"),
+        L("Body", [9117984812, 9117985848, 9117985933], -14, at=0.05, length=0.95, fade=0.35),
+        L("Tail", [9114445526], -28, at=0.8, length=1.0, fade=0.3),
+    ],
+    "CanSlosh": [L("Body", [9114190682], -28, length=0.9, fade=0.2)],
     "FuelSplash": [
-        ("Body", [9125702439, 9125702803], 2.2, 1, None, None),
-        ("Mechanism", [9126173160], 1.2, 1, None, 1.0),
+        L("Body", [9125702439, 9125702803], -20, pv=0.08),
+        L("Mechanism", [9126173160], -22, length=1.0, fade=0.3),
     ],
-    "BodyBurn": [
-        ("Body", [140718666763137], 0.8, 1, None, None),
-        ("Mechanism", [9079463756], 0.3, 1, None, None),
+    "BodyBurn": [L("Body", [9112780438, 9112780212, 9112780193], -29)],
+    "PyreRoar": [L("Body", [9112780691], -28)],
+    # (the boom's peak lands on the arms flung out, 0.2 s after the cue)
+    "SelfIgnite": [
+        # (the left wrist catching at 0.55, the right arm at 0.63)
+        L("Mechanism", [9114446277, 9114441555], -20, start="peak-0.1"),
+        L("Body", [9117983605, 9117983322, 9117986652], -16, start="peak-0.2", pv=0.04),
     ],
-    "SelfIgnite": [("Body", [9117987278, 9117983605], 1.6, 1, 0.2, None)],
-    "FuelPour": [("Body", [9120575856], 2.5, 1, 0.05, 1.2)],
-    "CanThrow": [("Body", [9116536883], 0.6, 1, None, 2.0)],
-    "ZippoDrop": [("Body", [9114462912], 0.9, 1.15, 0.15, None)],
+    "FuelPour": [L("Body", [9120575856], -23, length=1.1, fade=0.25)],
+    "CanThrow": [L("Body", [9116536883], -19, length=2.0, fade=0.3)],
+    "ZippoDrop": [L("Body", [9114462912], -25, pitch=1.15)],
     "BodyIgnite": [
-        ("Body", [9114554766], 0.75, 1, None, 2.5),
-        ("Tail", [9119165650], 1.0, 1, 0.15, None),
+        L("Body", [9114429835, 9114429507], -12, start="peak-0.04", length=3.0, fade=1.2),
+        L("Sub", [9114554567], -20, pitch=0.8, length=1.5, fade=0.5, pv=0.03),
+        L("Tail", [9119165650, 9119166424], -22, at=0.15),
     ],
-    "BurnScream": [("Body", [9116454870, 9125652466, 9125652432], 1.3, 1, 0.05, 1.4)],
+    "BurnScream": [L("Body", [9116454870, 9125652466, 9125652432], -15, length=1.4, fade=0.15, pv=0.04)],
+    "FireSwing": [L("Body", [9114462915, 9114462930, 9114463010, 9114463022], -20, start="peak-0.12", length=1.0, fade=0.3)],
+    "FireImpact": [
+        L("Body", [9114443884, 9114444052], -18, start="peak-0.02", length=0.8, fade=0.2),
+        L("Tail", [9119166424, 9119166217, 9119165644, 9119166425], -22, at=0.02, length=1.2, fade=0.3),
+    ],
+    "CatchFire": [
+        L("Body", [9114446183, 9114445526, 9114462912], -22),
+        L("Tail", [9119165912, 9119165930], -30, at=0.1),
+    ],
+    "Extinguish": [L("Body", [9119166199, 9119165933], -30, pitch=0.9, length=1.2, fade=0.4)],
 }
 
-# The files (for the doc): id -> (name in the store, creator, seconds, why, in French)
-PSE = "ProSoundEffects (vérifié)"
-STOCK_INFO = {
-    9121005566: ("Zippo Lighter 1 (SFX)", PSE, 0.45, "le « clink » du couvercle qui s'ouvre, avec son petit tintement"),
-    9121005779: ("Zippo Lighter 3 (SFX)", PSE, 0.7, "la molette puis le « fff » de la mèche qui prend"),
-    9121005783: ("Zippo Lighter 5 (SFX)", PSE, 0.7, "un « clac » sec, sans tintement : le couvercle refermé"),
-    9125616655: ("Kerosene Explosion Whooshing Poofs Crackling", PSE, 1.1, "un « pouf » de kérosène qui s'embrase : la boule de feu courte"),
-    9125615451: ("Kerosene Explosion Whooshing Poofs Crackling", PSE, 1.05, "variante"),
-    9125616715: ("Kerosene Explosion Whooshing Poofs Crackling", PSE, 1.2, "variante, un peu plus longue"),
-    9114442370: ("Fire Whoosh 13 (SFX)", PSE, 0.8, "petit souffle de feu (torche à kérosène) : le chiffon qui prend, joué un peu plus grave"),
-    9114446852: ("Fire Whoosh 15 (SFX)", PSE, 0.8, "variante"),
-    9114463219: ("Flame Licks 8 (SFX)", PSE, 1.7, "une torche agitée qui passe : la flamme du chiffon qui file"),
-    9114463410: ("Flame Licks 10 (SFX)", PSE, 1.9, "variante"),
-    9114463016: ("Flame Licks 4 (SFX)", PSE, 1.9, "variante"),
-    9113553645: ("Bottle Breaks 1 (SFX)", PSE, 4.5, "une grande bouteille en verre (1,2 l) jetée sur du béton (coupée à 2,2 s)"),
-    9113552246: ("Bottle Breaks 3 (SFX)", PSE, 3.2, "variante"),
-    9125702439: ("Mud Puddle Splash Shallow Water Impacts", PSE, 0.9, "liquide qui gicle sur le sol"),
-    9125702803: ("Mud Puddle Splash Shallow Water Impacts", PSE, 0.8, "variante"),
-    9114430091: ("Fire Burst 2 (SFX)", PSE, 5.8, "une vague de flammes qui gronde (coupée à 3 s, la flaque prend le relais)"),
-    9114432358: ("Fire Burst 11 (SFX)", PSE, 5.9, "variante, plus sourde"),
-    9114554567: ("Gas Fire Explosion 3 (SFX)", PSE, 4.0, "le « whoump » grave de l'essence, joué plus bas et court"),
-    82555625627924: ("Fire burning SFX 1", "Obamacaremathlab", 5, "feu qui brûle, publié « Loopable » (BOUCLE)"),
-    516449725: ("Fire Crackling", "KittyNebulaPlays", 8, "crépitement de feu, très bas : du grain sous la flaque (BOUCLE)"),
-    9114171960: ("Drinking Cu Gulping 5 (SFX)", PSE, 0.9, "une gorgée bue de près"),
-    9114172109: ("Drinking Cu Gulping 6 (SFX)", PSE, 1.2, "variante"),
-    9114446277: ("Fire Whoosh 6 (SFX)", PSE, 1.5, "jet de kérosène à travers une torche (« usage : lance-flammes ») : c'est ce que fait un cracheur de feu"),
-    9117987278: ("Pyro Fire Ball Burst 12 (SFX)", PSE, 1.2, "jet de feu court (effets pyrotechniques de cinéma)"),
-    9126173160: ("Water Burst Movement Out Of Liquid Splashing", PSE, 6.6, "le liquide qui part d'un coup (coupé à 1 s)"),
-    140718666763137: ("fire_burning1", "Loyalist6283", 5, "feu qui brûle de près (BOUCLE)"),
-    9079463756: ("Fire Crackling", "Vults_x", 8, "crépitement enregistré dans une cheminée : les vêtements qui crépitent (BOUCLE)"),
-    9117983605: ("Pyro Fire Ball Burst 9 (SFX)", PSE, 1.5, "variante, plus forte"),
-    9120575856: ("Water Pour 1 (SFX)", PSE, 3.6, "un liquide versé qui éclabousse du béton (coupé à 1,2 s)"),
-    9116536883: ("Metal Can Large Sized Hit Drop 1 (SFX)", PSE, 3.1, "un grand bidon de métal vide qui tombe et sonne creux (coupé à 2 s)"),
-    9114462912: ("Flame Licks 2 (SFX)", PSE, 1.6, "une petite flamme qui passe : le Zippo allumé qui tombe, joué plus aigu"),
-    9114554766: ("Gas Fire Explosion 4 (SFX)", PSE, 4.2, "l'essence qui s'embrase d'un coup, rugissante (coupée à 2,5 s)"),
-    9119165650: ("Sizzle Short And Explosive Sear 4 (SFX)", PSE, 1.4, "une saisie qui grésille : la chair et le tissu qui brûlent"),
-    9116454870: ("Male Screams In Pain Injury Yells Agony 1 (SFX)", PSE, 2.4, "un homme qui hurle de douleur (coupé à 1,4 s)"),
-    9125652466: ("Male Scream Short Yelling Bursts Death Cries", PSE, 1.4, "cri d'agonie bref"),
-    9125652432: ("Male Scream Short Yelling Bursts Death Cries", PSE, 1.1, "variante"),
+# Why each file was picked (French, for the doc). Name and creator come from the
+# store's details API (--verify), the numbers from --measure.
+WHY = {
+    9121005566: "le « clink » du couvercle, net, sans blanc",
+    9121005779: "la molette puis le « fff » de la mèche",
+    9114446183: "petit souffle doux : la mèche qui prend",
+    9114445526: "souffle doux et long : la flamme qui flotte, qui retombe",
+    9121005783: "un « clac » sec : le couvercle refermé",
+    9114442751: "« pouf » de kérosène très court et franc",
+    9114444052: "variante, plus ronde",
+    9114443884: "variante, plus grave",
+    9114444008: "variante, plus sèche",
+    9125616715: "les gouttes qui crépitent après le pouf",
+    9125616655: "variante",
+    9114446852: "le chiffon qui s'embrase, court",
+    9114447022: "variante qui gonfle plus lentement",
+    9114446802: "variante",
+    9114463219: "torche qui passe : la flamme du chiffon qui file",
+    9114463410: "variante",
+    9114463208: "variante",
+    9114463016: "variante, plus grave",
+    9113552392: "bouteille qui éclate sur du béton",
+    9113552215: "variante",
+    9113552246: "variante",
+    9113553645: "variante, plus grosse",
+    9125702439: "l'essence qui gicle au sol",
+    9125702803: "variante",
+    9114429507: "boule de feu qui part d'un coup (pas une montée lente)",
+    9114429835: "variante, plus grave",
+    9114429958: "variante, plus claire",
+    9114429740: "variante",
+    9114554567: "le « whoump » grave de l'essence",
+    9112780561: "kérosène qui brûle au sol, 49 s, niveau stable, sans crépitement fort",
+    9112780462: "crépitement de feu de bois, 43 s : le grain sous la flaque",
+    9114171960: "une gorgée bue de près",
+    9114172109: "variante",
+    9114446277: "jet de kérosène à travers une torche (« lance-flammes »)",
+    9114441555: "variante, plus courte",
+    9117984812: "long jet de feu (pyrotechnie de cinéma)",
+    9117985848: "variante",
+    9117985933: "variante, plus sèche",
+    9114190682: "liquide qui ballotte dans un fût",
+    9126173160: "le liquide qui part d'un coup",
+    9112780438: "feu qui brûle, régulier, 36 s (une boucle choisie par corps)",
+    9112780212: "variante, plus de crépitements",
+    9112780193: "variante, plus sourde",
+    9112780691: "grondement de feu de kérosène, 56 s",
+    9117983605: "boule de feu courte et grave",
+    9117983322: "variante",
+    9117986652: "variante",
+    9120575856: "liquide versé qui éclabousse",
+    9116536883: "grand bidon de métal qui tombe (le fichier sature : joué bas)",
+    9114462912: "petite flamme qui passe, jouée plus aiguë",
+    9119165650: "saisie qui grésille : la chair qui brûle",
+    9119166424: "grésillement court",
+    9119166217: "variante",
+    9119165644: "variante",
+    9119166425: "variante",
+    9116454870: "homme qui hurle de douleur",
+    9125652466: "cri d'agonie bref",
+    9125652432: "variante",
+    9114462915: "torche agitée qui passe",
+    9114462930: "variante",
+    9114463010: "variante",
+    9114463022: "variante",
+    9119165912: "grésillement doux qui monte",
+    9119165930: "variante",
+    9119166199: "grésillement qui retombe",
+    9119165933: "variante",
 }
+
+MEASURE_PATH = "tools/sounds/pyro_measure.json"
+
+
+def looped(name):
+    for cue in ALL_CUES:
+        if cue["name"] == name:
+            return bool(cue.get("looped"))
+    raise KeyError(name)
+
+
+def load_measure():
+    try:
+        return json.load(open(MEASURE_PATH))
+    except FileNotFoundError:
+        return {"files": {}, "segments": {}, "details": {}}
+
+
+def start_of(spec, whole):
+    if isinstance(spec.start, (int, float)):
+        return float(spec.start)
+    if spec.start == "onset":
+        return max(0.0, round(whole["onset"] - 0.01, 2))
+    if spec.start.startswith("peak-"):
+        return max(0.0, round(whole["peak"] - float(spec.start[5:]), 2))
+    raise ValueError(spec.start)
+
+
+def seg_key(i, start, length):
+    return f"{i}@{start:g}+{length:g}" if length else f"{i}@{start:g}"
+
+
+def mix(name, spec, measure):
+    """-> volume, {id: (start, gain, measured, final level)}"""
+    loop = looped(name)
+    rows = {}
+    for i in spec.ids:
+        whole = measure["files"][str(i)]
+        start = 0.0 if loop else start_of(spec, whole)
+        seg = whole if loop else measure["segments"][seg_key(i, start, spec.length)]
+        level = seg["I"] if loop else seg["Mmax"]
+        rows[i] = [start, 1.0, level, seg]
+    mean = sum(r[2] for r in rows.values()) / len(rows)
+    vol = min(10.0, round(10 ** ((spec.target - mean) / 20), 2))
+    for i, r in rows.items():
+        r[1] = 1.0 if len(rows) == 1 else round(10 ** ((mean - r[2]) / 20), 2)
+    return vol, rows
+
+
+def measure(cache):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ears  # noqa
+
+    os.makedirs(cache, exist_ok=True)
+    data = load_measure()
+    used = set()
+    for name, specs in STOCK.items():
+        for spec in specs:
+            for i in spec.ids:
+                path = os.path.join(cache, f"{i}.ogg")
+                if not os.path.exists(path):
+                    raw = subprocess.run(["curl", "-sSL", f"https://assetdelivery.roblox.com/v1/asset/?id={i}"],
+                                         capture_output=True).stdout
+                    if raw[:2] == b"\x1f\x8b":
+                        raw = gzip.decompress(raw)
+                    assert raw[:4] == b"OggS", f"{i}: not a public sound file"
+                    open(path, "wb").write(raw)
+                if str(i) not in data["files"]:
+                    data["files"][str(i)] = ears.analyse(path)
+                if looped(name):
+                    continue
+                start = start_of(spec, data["files"][str(i)])
+                key = seg_key(i, start, spec.length)
+                if key not in data["segments"]:
+                    data["segments"][key] = ears.analyse(path, start, spec.length)
+                used.add(key)
+                print(name, spec.layer, key, data["segments"][key]["Mmax"])
+    # (only what STOCK uses now)
+    ids = {str(i) for specs in STOCK.values() for spec in specs for i in spec.ids}
+    data["files"] = {k: v for k, v in data["files"].items() if k in ids}
+    data["segments"] = {k: v for k, v in data["segments"].items() if k in used}
+    data["details"] = {k: v for k, v in data["details"].items() if k in ids}
+    json.dump(data, open(MEASURE_PATH, "w"), indent=1, sort_keys=True, default=float)
+
+
+def verify():
+    """Every id through the Creator Store details API: public, audio, creator."""
+    data = load_measure()
+    ids = sorted({i for specs in STOCK.values() for spec in specs for i in spec.ids})
+    for k in range(0, len(ids), 30):
+        chunk = ",".join(str(i) for i in ids[k:k + 30])
+        out = subprocess.run(["curl", "-sS", f"https://apis.roblox.com/toolbox-service/v1/items/details?assetIds={chunk}"],
+                             capture_output=True, text=True).stdout
+        for item in json.loads(out).get("data", []):
+            a, c = item.get("asset", {}), item.get("creator", {})
+            data["details"][str(a.get("id"))] = {
+                "name": a.get("name"), "creator": c.get("name"), "verified": c.get("isVerifiedCreator"),
+                "type": (a.get("audioDetails") or {}).get("audioType"), "visible": a.get("visibilityStatus") == 0,
+                "free": (item.get("fiatProduct") or {}).get("isFree"),
+            }
+    missing = [i for i in ids if str(i) not in data["details"]]
+    bad = [i for i in ids if str(i) in data["details"] and (
+        # (the long Pro Sound Effects files are typed "Unknown", not "SoundEffect")
+        data["details"][str(i)]["type"] not in ("SoundEffect", "Unknown") or not data["details"][str(i)]["verified"]
+        or not data["details"][str(i)]["visible"] or not data["details"][str(i)]["free"])]
+    for i in ids:
+        d = data["details"].get(str(i))
+        print(i, d)
+    json.dump(data, open(MEASURE_PATH, "w"), indent=1, sort_keys=True, default=float)
+    assert not missing, f"not found in the store: {missing}"
+    assert not bad, f"not a free public sound effect from a verified creator: {bad}"
+
 
 LUA_HEADER_COMMENT = """\t-- Pyromaniac (Shared/Kits/Pyromaniac) --------------------------------------------------
-\t-- Every sound of the kit is FIVE layers played together (Shared/SoundCues: when each one
-\t-- starts): _Transient, _Mechanism, _Body, _Sub, _Tail. Their volumes are the mix levels.
-\t-- The ids are free Creator Store sounds (mostly Pro Sound Effects): docs/SONS_PYROMANE_FR.md.
-\t-- A layer with ids = {} is silent. Generated by tools/sounds/pyro_sounds.py (edit there,
-\t-- STOCK, then --write; ids typed here in a layer that is not in STOCK are kept).
+\t-- A kit sound is a cue of up to FIVE layers played together (Shared/SoundCues: when each
+\t-- starts): _Transient, _Mechanism, _Body, _Sub, _Tail. A layer with ids = {} is silent.
+\t-- The ids are free Pro Sound Effects sounds, picked and levelled by measurement
+\t-- (docs/SONS_PYROMANE_FR.md): `trims` cuts each file's blank and evens out its level.
+\t-- Generated by tools/sounds/pyro_sounds.py (edit STOCK there, then --write; ids typed
+\t-- here in a layer that is not in STOCK are kept).
 """
 BEGIN = "\t-- >>> Pyromaniac sounds (generated)\n"
 END = "\t-- <<< Pyromaniac sounds (generated)\n"
@@ -501,52 +754,85 @@ def volume(cue, db):
     return round(10 ** ((cue["gain"] + db) / 20), 2)
 
 
-def entry_name(cue, layer):
-    return f"{cue['name']}_{layer}"
+def entry_name(name, layer):
+    return f"{name}_{layer}"
 
 
-def stock_layer(cue, layer):
-    for entry in STOCK.get(cue["name"], []):
-        if entry[0] == layer:
-            return entry
+def stock_layer(name, layer):
+    for spec in STOCK.get(name, []):
+        if spec.layer == layer:
+            return spec
     return None
 
 
-def lua_sounds(existing_ids):
+def layer_names(cue):
+    if "layers" in cue:
+        return LAYERS
+    return [s.layer for s in STOCK.get(cue["name"], [])]
+
+
+def lua_entry(name, ids, vol, pitch, pv, extra):
+    fields = [f"ids = {{{ids}}}", f"volume = {vol:g}", f"pitch = {pitch:g}", f"pitchVariation = {pv:g}"] + extra
+    line = f"\t{name} = {{ {', '.join(fields)} }},\n"
+    if "\n" not in "".join(extra) and len(line.expandtabs(4)) - 1 <= 100:  # (StyLua's column width)
+        return line
+    lines = [f"\t{name} = {{\n", f"\t\tids = {{{ids}}},\n", f"\t\tvolume = {vol:g},\n",
+             f"\t\tpitch = {pitch:g},\n", f"\t\tpitchVariation = {pv:g},\n"]
+    lines += [f"\t\t{e},\n" for e in extra]
+    lines.append("\t},\n")
+    return "".join(lines)
+
+
+def lua_sounds(existing_ids, measure):
     out = [BEGIN, LUA_HEADER_COMMENT]
-    for cue in CUES:
-        out.append(f"\t-- {cue['name']}: {cue['thing']}\n")
-        for layer, data in zip(LAYERS, cue["layers"]):
-            name = entry_name(cue, layer)
-            ids = existing_ids.get(name, "")
-            vol = volume(cue, data[5])
-            pitch, extra = 1, ""
-            stock = stock_layer(cue, layer)
-            if stock:
-                _, stock_ids, vol, pitch, start, length = stock
-                ids = " " + ", ".join(str(i) for i in stock_ids) + " "
-                if start:
-                    extra += f", start = {start}"
-                if length:
-                    extra += f", length = {length}"
-            variation = 0 if cue.get("looped") else (0.03 if layer in ("Sub", "Body") else 0.06)
-            looped = ", looped = true" if cue.get("looped") else ""
-            fields = f"ids = {{{ids}}}, volume = {vol}, pitch = {pitch}, pitchVariation = {variation}{extra}{looped}"
-            line = f"\t{name} = {{ {fields} }},\n"
-            if len(line.expandtabs(4)) - 1 > 100:  # (StyLua's column width: one field per line)
-                parts = [f"ids = {{{ids}}}"] + fields[len(f"ids = {{{ids}}}, ") :].split(", ")
-                line = f"\t{name} = {{\n" + "".join(f"\t\t{part},\n" for part in parts) + "\t},\n"
-            out.append(line)
+    for cue in ALL_CUES:
+        name = cue["name"]
+        out.append(f"\t-- {name}: {cue.get('thing') or cue['fr']}\n")
+        for index, layer in enumerate(layer_names(cue)):
+            entry = entry_name(name, layer)
+            spec = stock_layer(name, layer)
+            loop = looped(name)
+            extra = []
+            if spec:
+                vol, rows = mix(name, spec, measure)
+                ids = " " + ", ".join(str(i) for i in spec.ids) + " "
+                pitch = spec.pitch
+                pv = 0 if loop else (spec.pv if spec.pv is not None else 0.06)
+                if not loop and spec.vv:
+                    extra.append(f"volumeVariation = {spec.vv:g}")
+                if spec.length:
+                    extra.append(f"length = {spec.length:g}")
+                if spec.fade:
+                    extra.append(f"fadeOut = {spec.fade:g}")
+                trims = []
+                for i, (start, gain, _, _) in rows.items():
+                    fields = []
+                    if start:
+                        fields.append(f"start = {start:g}")
+                    if gain != 1:
+                        fields.append(f"gain = {gain:g}")
+                    if fields:
+                        trims.append(f"\t\t\t[{i}] = {{ {', '.join(fields)} }},\n")
+                if trims:
+                    extra.append("trims = {\n" + "".join(trims) + "\t\t}")
+            else:
+                ids = existing_ids.get(entry, "")
+                vol = volume(cue, cue["layers"][index][5])
+                pitch = 1
+                pv = 0 if loop else (0.03 if layer in ("Sub", "Body") else 0.06)
+            if loop:
+                extra.append("looped = true")
+            out.append(lua_entry(entry, ids, vol, pitch, pv, extra))
     out.append(END)
     return "".join(out)
 
 
-def lua_cues():
+def lua_cues(existing_ids):
     lines = [
         "--!strict\n",
         "-- Layered sounds: one cue = several Shared/Sounds entries played together, each\n",
-        "-- starting `at` seconds after the cue (its timing in the design). Played by\n",
-        "-- Client/Combat/SoundLayers. A layer with no id yet is silent.\n",
+        "-- starting `at` seconds after the cue (synced to the clip and the VFX). Played by\n",
+        "-- Client/Combat/SoundLayers. Only the layers that have ids are listed.\n",
         "-- Generated by tools/sounds/pyro_sounds.py (edit there): the Pyromaniac's sounds,\n",
         "-- docs/SONS_PYROMANE_FR.md.\n",
         "\n",
@@ -555,121 +841,162 @@ def lua_cues():
         "\n",
         "local cues: { [string]: Cue } = {\n",
     ]
-    for cue in CUES:
-        lines.append(f"\t{cue['name']} = {{\n")
+    for cue in ALL_CUES:
+        name = cue["name"]
+        lines.append(f"\t{name} = {{\n")
         lines.append(f"\t\tlooped = {'true' if cue.get('looped') else 'false'},\n")
         lines.append("\t\tlayers = {\n")
-        for layer, data in zip(LAYERS, cue["layers"]):
-            at = data[3] / 1000
-            lines.append(f"\t\t\t{{ sound = \"{entry_name(cue, layer)}\", at = {at:g} }},\n")
+        for index, layer in enumerate(layer_names(cue)):
+            spec = stock_layer(name, layer)
+            if spec:
+                at = spec.at
+            elif existing_ids.get(entry_name(name, layer), "").strip():
+                at = cue["layers"][index][3] / 1000
+            else:
+                continue
+            lines.append(f"\t\t\t{{ sound = \"{entry_name(name, layer)}\", at = {at:g} }},\n")
         lines.append("\t\t},\n")
         lines.append("\t},\n")
     lines.append("}\n\nreturn table.freeze(cues)\n")
     return "".join(lines)
 
 
-def fmt_s(value):
-    return f"{value:g}".replace(".", ",")
+def fmt(value, digits=1):
+    if value is None:
+        return "–"
+    return f"{value:.{digits}f}".replace(".", ",").replace("-", "−")
 
 
-def stock_doc():
-    o = ["## Sons de la boutique Roblox (en place)\n\n"]
+def stock_doc(measure):
+    o = ["## Les sons en place (boutique Roblox, mesurés)\n\n"]
     o.append(
-        "Tu ne veux pas générer ni importer les sons toi-même : chaque son du Pyromane utilise donc "
-        "des **effets sonores gratuits et publics** du *Creator Store* de Roblox (*Toolbox → Audio*), "
-        "déjà mis dans `src/shared/Sounds.luau`. Il n'y a **rien à faire** : Rojo synchronise, *Play*.\n\n"
-        "- Presque tous viennent de **Pro Sound Effects** (`ProSoundEffects`, créateur vérifié) : la "
-        "bibliothèque sous licence que Roblox offre à toutes les expériences. Ce sont des "
-        "enregistrements réalistes, pas des bruitages de dessin animé.\n"
-        "- Seules les **boucles** de feu (`PoolFire`, `BodyBurn`) viennent de membres de la "
-        "communauté : Pro Sound Effects n'a pas de feu qui dure sur la boutique. Si l'une d'elles "
-        "clique au bouclage ou disparaît (modération), remplace son ID dans `STOCK` "
-        "(`tools/sounds/pyro_sounds.py`).\n"
-        "- En général, un seul son par effet, dans la couche `_Body` ; une deuxième couche seulement "
-        "quand un second son aide vraiment (le verre **et** l'essence qui gicle pour le Molotov, le "
-        "grésillement de la chair sous le « whoump » du corps). Les autres couches restent vides "
-        "(muettes). Plusieurs IDs dans une couche = une variante au hasard à chaque fois.\n"
-        "- `volume` est réglé d'après le niveau de chaque fichier ; *Début coupé* saute le blanc au "
-        "début du fichier (`start`), *Coupé à* arrête un son trop long avec un fondu rapide "
-        "(`length`).\n\n"
-        "| Son | Couche | ID | Nom sur la boutique | Créateur | Durée | Pourquoi | Réglage |\n"
-        "|---|---|---|---|---|---|---|---|\n"
+        "Chaque son du Pyromane utilise des **effets sonores gratuits et publics** du *Creator Store* "
+        "de Roblox, tous de **Pro Sound Effects** (`ProSoundEffects`, créateur vérifié : la bibliothèque "
+        "sous licence que Roblox offre à toutes les expériences). Il n'y a **rien à faire** : Rojo "
+        "synchronise, *Play*.\n\n"
+        "**Comment ils ont été choisis.** Chaque candidat a été téléchargé et **mesuré** "
+        "(`tools/sounds/ears.py`) : sonie (LUFS), crête, blanc au début, montée, brillance, part de "
+        "2-5 kHz (ce qui « pique »), part de grave sous 150 Hz (inaudible sur téléphone), et pour les "
+        "boucles la stabilité du niveau et la soudure fin → début. On garde ceux qui partent net, ne "
+        "saturent pas et ne piquent pas, puis :\n\n"
+        "- **le blanc au début est coupé** pour chaque fichier (`start`), et pour les sons calés sur un "
+        "coup, le début est réglé pour que **le pic tombe sur l'image du coup** (« pic à +0,03 s ») ;\n"
+        "- **chaque fichier est ramené au même niveau** que ses variantes (`gain`) : plus de variante "
+        "12 dB plus forte qu'une autre ;\n"
+        "- **chaque son a son niveau cible** (colonne *Cible*) : le briquet discret, le lancer moyen, "
+        "le Molotov et l'embrasement les plus forts, les boucles en dessous ;\n"
+        "- **2 à 4 variantes** pour les sons fréquents, jamais la même deux fois de suite, avec une "
+        "petite variation de hauteur (± 3-8 %) et de volume (± 1,5 dB) ;\n"
+        "- **les boucles** sont longues (36-56 s), stables, et passent d'un tour au suivant **en fondu "
+        "enchaîné** (pas de clic) ; elles démarrent à un endroit au hasard et **entrent en fondu** "
+        "pendant que l'explosion qui les lance s'éteint ;\n"
+        "- tous les sons du Pyromane passent dans un **groupe de mix** (compresseur doux + aigus un "
+        "peu baissés) : quand le verre, l'explosion, la flaque et les cris tombent ensemble, ça reste "
+        "lisible et ça ne sature pas.\n\n"
+        "Colonnes : *Durée* du fichier ; *I* sonie moyenne (LUFS) ; *Max* sonie maximale sur 0,4 s du "
+        "morceau joué ; *Crête* (dBFS) ; *Blanc* coupé au début (s) ; *Montée* jusqu'au pic (s) ; "
+        "*Brillance* (Hz) ; *2-5k* et *<150* les parts d'énergie ; *Gain* le volume propre au fichier ; "
+        "*Niveau* final (Max + volume + gain). Pour une boucle, *Max* est remplacé par la stabilité "
+        "(écart-type du niveau, dB) et la soudure (saut de niveau fin → début, dB).\n\n"
+        "| Son | Couche | À | ID | Nom sur la boutique | Pourquoi | Durée | I | Max | Crête | Blanc | Montée "
+        "| Brillance | 2-5k | <150 | Gain | Niveau | Cible | Réglage |\n"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n"
     )
-    for cue in CUES:
-        cue_cell = f"[`{cue['name']}`](#{cue['name'].lower()})"
-        for layer, ids, vol, pitch, start, length in STOCK.get(cue["name"], []):
-            setting = [f"`volume` {fmt_s(vol)}"]
-            if pitch != 1:
-                setting.append(f"`pitch` {fmt_s(pitch)}")
-            if start:
-                setting.append(f"début coupé {fmt_s(start)} s")
-            if length:
-                setting.append(f"coupé à {fmt_s(length)} s")
-            layer_cell, setting_cell = f"`_{layer}`", ", ".join(setting)
-            for i in ids:
-                title, creator, seconds, why = STOCK_INFO[i]
+    for cue in ALL_CUES:
+        name = cue["name"]
+        loop = looped(name)
+        cue_cell = f"[`{name}`](#{name.lower()})"
+        for spec in STOCK.get(name, []):
+            vol, rows = mix(name, spec, measure)
+            setting = [f"`volume` {fmt(vol, 2)}"]
+            if spec.pitch != 1:
+                setting.append(f"`pitch` {fmt(spec.pitch, 2)}")
+            if spec.length:
+                setting.append(f"coupé à {fmt(spec.length, 2)} s")
+            if spec.fade:
+                setting.append(f"fondu {fmt(spec.fade, 2)} s")
+            if isinstance(spec.start, str) and spec.start.startswith("peak-"):
+                setting.append(f"pic à +{fmt(float(spec.start[5:]), 2)} s")
+            layer_cell, at_cell = f"`_{spec.layer}`", f"{fmt(spec.at, 2)} s"
+            setting_cell = ", ".join(setting)
+            target = f"{fmt(spec.target, 0)} {'I' if loop else 'Max'}"
+            for i, (start, gain, level, seg) in rows.items():
+                whole = measure["files"][str(i)]
+                d = measure["details"].get(str(i), {})
+                title = d.get("name") or "?"
+                final = level + 20 * math.log10(vol * gain)
+                if loop:
+                    mcell = f"σ {fmt(whole.get('stability'))} / soudure {fmt(whole.get('seam_dB'))}"
+                else:
+                    mcell = fmt(seg["Mmax"])
                 o.append(
-                    f"| {cue_cell} | {layer_cell} | `{i}` | {title} | {creator} | {fmt_s(seconds)} s "
-                    f"| {why} | {setting_cell} |\n"
+                    f"| {cue_cell} | {layer_cell} | {at_cell} | `{i}` | {title} | {WHY.get(i, '')} "
+                    f"| {fmt(whole['dur'], 2)} s | {fmt(whole['I'])} | {mcell} | {fmt(whole['truePeak'])} "
+                    f"| {fmt(start, 2)} | {fmt(seg['attack'], 2)} | {whole['centroid']} | {fmt(whole['harsh'], 2)} "
+                    f"| {fmt(whole['sub'], 2)} | {fmt(gain, 2)} | {fmt(final)} | {target} | {setting_cell} |\n"
                 )
-                cue_cell, layer_cell, setting_cell = "", "", ""
+                cue_cell, layer_cell, at_cell, setting_cell, target = "", "", "", "", ""
     o.append(
-        "\n> Les sons de la communauté ont été choisis sur leur nom et leur description (on ne peut "
-        "pas les télécharger sans compte) ; ceux de Pro Sound Effects ont été vérifiés sur leur "
-        "forme d'onde (durée, attaque, blanc au début, niveau). Si un son ne te plaît pas en jeu, dis-le : on en prend un autre.\n\n"
+        "\n**Écartés après mesure** : *Zippo Lighter 2/4/6* (presque muets : un clic de 20 ms puis "
+        "rien), *Fire Burst 2* et *11* (une montée lente : le pic arrive 1,3 s après la boule de feu), "
+        "*Gas Fire Explosion 4* (un grondement plat et saturé, sans attaque), *Fire Whoosh 13* "
+        "(9114442370 : trop de 2-5 kHz, il pique), *Fry Or Sizzle 1* (trop sifflant pour une boucle), "
+        "les briquets à pipe (*Lighter Flicking…* : un briquet jetable puis quelqu'un qui aspire), et les "
+        "boucles de la communauté utilisées avant (impossibles à télécharger sans compte, donc "
+        "impossibles à vérifier).\n\n"
+        "**Le jerrican du finisher** n'a pas de bruit de bouchon : aucun son de la boutique ne "
+        "convient (que des couvercles de casserole ou de boîte de tennis). L'essence versée part "
+        "maintenant **quand le liquide sort** (0,4 s) et non au bouchon (0,15 s).\n\n"
     )
     return "".join(o)
 
 
-def doc():
+def doc(measure):
     o = []
     o.append("# Sons du Pyromane\n\n")
     o.append(
-        "Chaque son du kit **Pyromane** est fait de **cinq couches** jouées ensemble, chacune avec "
-        "son propre son dans `src/shared/Sounds.luau` (section *Pyromaniac*, à la fin du fichier) :\n\n"
+        "Chaque son du kit **Pyromane** (un *cue*) est fait de **une à cinq couches** jouées ensemble, "
+        "chacune avec son propre son dans `src/shared/Sounds.luau` (section *Pyromaniac*, à la fin "
+        "du fichier) et son moment de départ dans `src/shared/SoundCues.luau` (colonne *À*) :\n\n"
         "| Couche | Rôle |\n|---|---|\n"
         "| `_Transient` | l'attaque : le tout premier instant, sec et court |\n"
         "| `_Mechanism` | ce qui bouge : charnière, molette, liquide, verre |\n"
         "| `_Body` | le cœur du son, ce qu'on reconnaît |\n"
         "| `_Sub` | le grave, le poids (on le sent plus qu'on ne l'entend) |\n"
         "| `_Tail` | la fin qui s'éteint |\n\n"
-        "Une couche dont les `ids` sont vides (`{}`) est **muette** (aucune erreur). Le jeu joue "
-        "toutes les couches **au bon moment** (colonne *Début* plus bas).\n\n"
+        "Une couche dont les `ids` sont vides (`{}`) est **muette** (aucune erreur).\n\n"
     )
-    o.append(stock_doc())
+    o.append(stock_doc(measure))
     o.append(
+        "## Changer un son\n\n"
+        "1. Mets son ID dans `STOCK` (`tools/sounds/pyro_sounds.py`) avec un niveau *cible*.\n"
+        "2. `python3 tools/sounds/pyro_sounds.py --measure --cache <dossier>` : télécharge et mesure "
+        "(numpy + ffmpeg ; seuls les sons publics se téléchargent sans compte).\n"
+        "3. `python3 tools/sounds/pyro_sounds.py --verify` : vérifie chaque ID sur la boutique.\n"
+        "4. `python3 tools/sounds/pyro_sounds.py --write` puis `stylua src` : réécrit `Sounds.luau`, "
+        "`SoundCues.luau` et ce document.\n\n"
         "## Plus tard (optionnel) : générer ses propres sons\n\n"
-        "Pas nécessaire : les sons de la boutique ci-dessus suffisent. Mais pour un son encore plus "
-        "précis, chaque fiche plus bas donne un design en cinq couches et un **prompt** prêt à coller "
-        "dans un générateur audio.\n\n"
-        "1. Pour chaque son, copie le **prompt** de chaque couche (en anglais) dans ton générateur "
-        "audio. Un fichier par couche.\n"
-        "2. Coupe le silence au début du fichier (sinon la couche arrive en retard).\n"
-        "3. Les sons marqués **BOUCLE** doivent boucler sans clic : coupe-les sur un passage à zéro et "
-        "fais un fondu enchaîné début / fin.\n"
-        "4. Importe-les (*Creator Hub → Creations → Audio → Upload*), copie chaque ID et mets-le dans "
-        "`STOCK` (`tools/sounds/pyro_sounds.py`) à la place de celui de la boutique, puis lance "
-        "`python3 tools/sounds/pyro_sounds.py --write`.\n"
-        "5. Rojo synchronise, *Play*. Si une couche est trop forte ou faible, change seulement son "
-        "`volume`.\n\n"
-        "> Le texte de départ de chaque fiche est exactement ta demande (le *brief*) ; la suite en est "
-        "la réponse. Ces fichiers (`Sounds.luau` section Pyromane, `SoundCues.luau`, ce document) sont "
-        "générés par `tools/sounds/pyro_sounds.py` : pour changer un design ou un ID, change-le là puis "
-        "lance `python3 tools/sounds/pyro_sounds.py --write`.\n\n"
+        "Pas nécessaire. Mais pour un son encore plus précis, chaque fiche plus bas donne un design en "
+        "cinq couches et un **prompt** prêt à coller dans un générateur audio. Coupe le silence au "
+        "début du fichier, fais boucler sans clic les sons marqués **BOUCLE**, importe-les (*Creator "
+        "Hub → Creations → Audio → Upload*) et mets leurs IDs dans `STOCK`.\n\n"
     )
     o.append("## La liste\n\n| Son | Ce que c'est | Quand |\n|---|---|---|\n")
-    for cue in CUES:
+    for cue in ALL_CUES:
         loop = " **BOUCLE**" if cue.get("looped") else ""
         o.append(f"| [`{cue['name']}`](#{cue['name'].lower()}) | {cue['fr']}{loop} | {cue['when']} |\n")
     o.append("\n")
-    for cue in CUES:
+    for cue in ALL_CUES:
         o.append(f"## {cue['name']}\n\n")
         o.append(f"{cue['fr']} **Quand :** {cue['when']}")
         if cue.get("looped"):
-            o.append(" C'est une **BOUCLE** : toutes les couches bouclent ensemble (le *Début* est 0).")
+            o.append(" C'est une **BOUCLE**.")
         o.append("\n\n")
+        if "layers" not in cue:
+            o.append("Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.\n\n")
+            continue
         o.append(f"> *Brief :* {BRIEF.format(thing=cue['thing'])}\n\n")
-        o.append("### Les couches\n\n")
+        o.append("### Les couches (design)\n\n")
         o.append("| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |\n|---|---|---|---|---|---|\n")
         for layer, data in zip(LAYERS, cue["layers"]):
             src, pitch, texture, start, length, db, _ = data
@@ -677,20 +1004,13 @@ def doc():
             o.append(f"| {LAYERS_FR[layer]} | {src} | {pitch} | {texture} | {start} ms | {dur} |\n")
         o.append("\n### Les prompts (à coller)\n\n")
         for layer, data in zip(LAYERS, cue["layers"]):
-            o.append(f"**`{entry_name(cue, layer)}`**\n```\n{data[6]}\n```\n")
-        o.append("\n### Le mix\n\n| Couche | Niveau | `volume` |\n|---|---|---|\n")
-        for layer, data in zip(LAYERS, cue["layers"]):
-            stock = stock_layer(cue, layer)
-            real = f"{stock[2]} (boutique)" if stock else f"{volume(cue, data[5])} (vide : muette)"
-            o.append(f"| `{entry_name(cue, layer)}` | {cue['gain'] + data[5]:+d} dB | {real} |\n")
-        o.append(
-            f"\nLe son entier est à {cue['gain']:+d} dB ; chaque couche est réglée par rapport à la plus forte du son (0 dB). "
-            "Le *Sub* reste bas : il doit donner du poids, pas du bruit.\n\n"
-        )
+            o.append(f"**`{entry_name(cue['name'], layer)}`**\n```\n{data[6]}\n```\n")
+        o.append("\n")
     return "".join(o)
 
 
 def write():
+    measure = load_measure()
     path = "src/shared/Sounds.luau"
     text = open(path).read()
     existing = {}
@@ -700,20 +1020,27 @@ def write():
         for match in re.finditer(r"\t(\w+) = \{\s*ids = \{([^}]*)\}", text[start:end]):
             existing[match.group(1)] = match.group(2)
         text = text[:start] + text[end:]
-    block = lua_sounds(existing)
+    block = lua_sounds(existing, measure)
     marker = "}\n\nreturn table.freeze(sounds)\n"
     assert marker in text
     text = text.replace(marker, "\n" + block + marker)
     text = text.replace("\n\n\n" + BEGIN, "\n\n" + BEGIN)
     open(path, "w").write(text)
-    open("src/shared/SoundCues.luau", "w").write(lua_cues())
-    open("docs/SONS_PYROMANE_FR.md", "w").write(doc())
+    open("src/shared/SoundCues.luau", "w").write(lua_cues(existing))
+    open("docs/SONS_PYROMANE_FR.md", "w").write(doc(measure))
 
 
 if __name__ == "__main__":
     for cue in CUES:
         assert len(cue["layers"]) == 5, cue["name"]
+    for name, specs in STOCK.items():
+        looped(name)
+        for spec in specs:
+            for i in spec.ids:
+                assert i in WHY, i
+    if "--measure" in sys.argv:
+        measure(sys.argv[sys.argv.index("--cache") + 1])
+    if "--verify" in sys.argv:
+        verify()
     if "--write" in sys.argv:
         write()
-    else:
-        print(lua_sounds({}))

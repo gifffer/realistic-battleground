@@ -31,15 +31,20 @@ Block = { ids = { 1234567890, 2345678901 }, volume = 0.6, pitch = 1, pitchVariat
 - `pitch` : 1 = normal ; 0.8 = plus grave et plus lourd ; 1.2 = plus aigu.
 - `pitchVariation` : chaque fois, le son est un peu plus aigu ou grave au hasard (0.1 = ±10 %),
   pour qu'un même coup ne sonne jamais exactement pareil.
+- Facultatif : `volumeVariation` (± dB au hasard à chaque fois), `start` (secondes sautées au
+  début du fichier), `length` (secondes jouées) et `fadeOut` (le fondu à ce moment-là), et
+  `trims = { [id] = { start = 0.2, gain = 0.8 } }` : le début et le volume **propres à un ID**,
+  pour que des variantes enregistrées à des niveaux différents sonnent pareil.
 
 Rojo synchronise, *Play*.
 
 ## Sons en couches (Pyromane)
-Les sons du kit **Pyromane** sont faits de **5 couches** chacun (`_Transient`, `_Mechanism`,
+Les sons du kit **Pyromane** sont faits de **1 à 5 couches** chacun (`_Transient`, `_Mechanism`,
 `_Body`, `_Sub`, `_Tail`), chaque couche étant une entrée à part dans `Sounds.luau` (section
 *Pyromaniac*, à la fin du fichier) jouée ensemble au bon moment (`src/shared/SoundCues.luau`).
-Le design de chaque son, **le prompt à coller pour générer chaque couche** et le mix sont dans
-**[`SONS_PYROMANE_FR.md`](SONS_PYROMANE_FR.md)**. Tant qu'une couche n'a pas d'ID, elle est muette.
+Ce sont des sons gratuits de Pro Sound Effects, choisis et réglés par mesure ; la liste, les
+mesures et les réglages sont dans **[`SONS_PYROMANE_FR.md`](SONS_PYROMANE_FR.md)**. Tant
+qu'une couche n'a pas d'ID, elle est muette.
 
 ## Les sons et quand ils jouent
 | Nom | Quand |

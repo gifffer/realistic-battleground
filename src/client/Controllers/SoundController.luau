@@ -5,7 +5,8 @@
 --
 -- • Sounds are played in 3D on the model's HumanoidRootPart.
 -- • A sound with several ids picks one at random, never the same twice in a
---   row; pitch and volume come from Shared/Sounds.
+--   row; pitch and volume come from Shared/Sounds, with each id's own trim
+--   (start, gain) and a little random pitch / volume.
 -- • A sound with no id yet uses its `fallback` (with its OWN pitch / volume),
 --   or is silently skipped: the game works before sounds are chosen.
 -- • All ids are preloaded when the game starts, so the first punch isn't
@@ -71,19 +72,35 @@ local function pickId(name: string, ids: { number }): number
 	return id
 end
 
--- A sound with a `length` (Shared/Sounds): faded out and stopped there.
-local function cutShort(sound: Sound, length: number?)
+-- Where `id` starts and how loud it plays: its own trim (Shared/Sounds
+-- `trims`: its blank cut, its level matched to the other variants) and a
+-- random ±`volumeVariation` dB. Capped at 10 (Roblox's maximum).
+local function startAndVolume(info: Sounds.SoundInfo, id: number, scale: number): (number, number)
+	local trim = if info.trims then info.trims[id] else nil
+	local start = (if trim then trim.start else nil) or info.start or 0
+	local gain = (if trim then trim.gain else nil) or 1
+	local spread = info.volumeVariation or 0
+	if spread > 0 then
+		gain *= 10 ^ (random:NextNumber(-spread, spread) / 20)
+	end
+	return start, math.min(info.volume * gain * scale, 10)
+end
+
+-- A sound with a `length` (Shared/Sounds): faded out (over `fadeOut`) and stopped there.
+local function cutShort(sound: Sound, length: number?, fade: number?)
 	if length == nil then
 		return
 	end
-	task.delay(length, function()
+	local time = fade or 0.15
+	local steps = math.max(6, math.ceil(time / 0.03))
+	task.delay(math.max(0, length - time * 0.5), function()
 		if sound.Parent == nil then
 			return
 		end
 		local start = sound.Volume
-		for step = 1, 6 do
-			sound.Volume = start * (1 - step / 6)
-			task.wait(0.025)
+		for step = 1, steps do
+			sound.Volume = start * (1 - step / steps) ^ 2
+			task.wait(time / steps)
 		end
 		sound:Stop()
 		sound:Destroy()
@@ -106,18 +123,20 @@ function SoundController.play(name: string, model: Model?): Sound?
 		return nil
 	end
 
+	local id = pickId(name, ids)
+	local start, volume = startAndVolume(info, id, 1)
 	local sound = Instance.new("Sound")
 	sound.Name = name
-	sound.SoundId = assetUrl(pickId(name, ids))
-	sound.Volume = info.volume
+	sound.SoundId = assetUrl(id)
+	sound.Volume = volume
 	sound.PlaybackSpeed = info.pitch
 		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMaxDistance = MAX_HEARING_DISTANCE
 	sound.Parent = root
-	sound.TimePosition = info.start or 0
+	sound.TimePosition = start
 	sound:Play()
-	cutShort(sound, info.length)
+	cutShort(sound, info.length, info.fadeOut)
 	-- Removed once finished (TimeLength is 0 until the file is loaded, hence
 	-- the safe minimum).
 	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, MIN_LIFETIME) + 0.5)
@@ -160,14 +179,18 @@ function SoundController.play2D(name: string, volumeScale: number?): Sound?
 	if #ids == 0 then
 		return nil
 	end
+	local id = pickId(name, ids)
+	local start, volume = startAndVolume(info, id, volumeScale or 1)
 	local sound = Instance.new("Sound")
 	sound.Name = name
-	sound.SoundId = assetUrl(pickId(name, ids))
-	sound.Volume = info.volume * (volumeScale or 1)
+	sound.SoundId = assetUrl(id)
+	sound.Volume = volume
 	sound.PlaybackSpeed = info.pitch
 		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
 	sound.Parent = game:GetService("SoundService")
+	sound.TimePosition = start
 	sound:Play()
+	cutShort(sound, info.length, info.fadeOut)
 	Debris:AddItem(sound, math.max(sound.TimeLength / sound.PlaybackSpeed, 12) + 0.5)
 	return sound
 end
@@ -204,19 +227,21 @@ function SoundController.playAt(
 		holder = attachment
 		anchor = attachment
 	end
+	local id = pickId(name, ids)
+	local start, volume = startAndVolume(info, id, 1)
 	local sound = Instance.new("Sound")
 	sound.Name = name
-	sound.SoundId = assetUrl(pickId(name, ids))
-	sound.Volume = info.volume
+	sound.SoundId = assetUrl(id)
+	sound.Volume = volume
 	sound.PlaybackSpeed = info.pitch
 		* (1 + random:NextNumber(-info.pitchVariation, info.pitchVariation))
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMinDistance = 10
 	sound.RollOffMaxDistance = maxDistance or MAX_HEARING_DISTANCE
 	sound.Parent = holder
-	sound.TimePosition = info.start or 0
+	sound.TimePosition = start
 	sound:Play()
-	cutShort(sound, info.length)
+	cutShort(sound, info.length, info.fadeOut)
 	local lifetime = math.max(sound.TimeLength / sound.PlaybackSpeed, 8) + 0.5
 	Debris:AddItem(anchor or sound, lifetime)
 	return sound

@@ -20,8 +20,8 @@
 -- Every flame is built from Combat/FireLook's layers (looping flame
 -- clusters, tongues, core glow, soot, embers, fireballs, a burning film on
 -- the floor), each beat on the clip's keyframe (Animation/PyroClips).
--- Sounds: layered cues (Shared/SoundCues, Combat/SoundLayers), silent until
--- their ids are filled in.
+-- Sounds: layered cues (Shared/SoundCues, Combat/SoundLayers), each timed to
+-- the same beat as its effect (docs/SONS_PYROMANE_FR.md).
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
@@ -812,6 +812,10 @@ function PyroFx.onAction(model: Model, animation: string)
 		if arm then
 			run.spout = buildCan(run.folder, arm, HAND_HANG)
 		end
+		-- (the petrol sloshing in the can on the backswing)
+		beat(model, run, 0.16, function()
+			SoundLayers.play("CanSlosh", model)
+		end)
 	elseif animation == "Pyro_Awaken" then
 		local zippo = zippoIn(model, run, "Right Arm")
 		beat(model, run, 0.15, function()
@@ -829,10 +833,12 @@ function PyroFx.onAction(model: Model, animation: string)
 		beat(model, run, 0.55, function()
 			SoundLayers.play("SelfIgnite", model)
 		end)
-	elseif animation == "Pyro_FirePunch" then
-		SoundController.play("HeavySwing", model)
-	elseif animation == "Pyro_Rush" then
-		SoundController.play("Dash", model)
+	elseif animation == "Pyro_FirePunch" or animation == "Pyro_Rush" then
+		SoundController.play(if animation == "Pyro_Rush" then "Dash" else "HeavySwing", model)
+		-- (a torch swung past: its peak lands on the hit, 0.24 s)
+		beat(model, run, 0.1, function()
+			SoundLayers.play("FireSwing", model)
+		end)
 	end
 end
 
@@ -1359,7 +1365,8 @@ local function firePool(data: { [string]: any }, quiet: boolean?)
 		smoke = smoke,
 		embers = embers,
 		light = light,
-		sound = if quiet then nil else SoundLayers.loopOn("PoolFire", centre),
+		-- (fades in under the fireball's tail: one sound turning into the other)
+		sound = if quiet then nil else SoundLayers.loopOn("PoolFire", centre, 1, 1),
 		marks = {},
 		holders = {},
 		floor = floor,
@@ -1512,7 +1519,8 @@ local function cone(data: { [string]: any })
 		return
 	end
 	if kind == "Flame" then
-		SoundLayers.play("FireBreath", model)
+		-- (Inferno's gout lasts longer: its own, longer cut of the jet)
+		SoundLayers.play(if seconds > 0.7 then "InfernoBreath" else "FireBreath", model)
 		-- (in the head's space: its front is -Z)
 		local mouthAt = Vector3.new(0, -0.25, -0.65)
 		local mouth = Instance.new("Attachment")
@@ -1789,7 +1797,7 @@ local function igniteArm(model: Model, arms: Arms, name: string)
 	tongue:Emit(3)
 	table.insert(arms.fires, fire)
 	if arms.sound == nil then
-		arms.sound = SoundLayers.loopOn("BodyBurn", arm, 0.35)
+		arms.sound = SoundLayers.loopOn("BodyBurn", arm, 0.35, 0.4)
 	end
 	if arms.light == nil then
 		local torso = bodyPart(model, "Torso")
@@ -1881,7 +1889,8 @@ local function refreshArms(model: Model)
 		burningArms[model] = nil
 		arms.over = true
 		if arms.sound then
-			arms.sound.stop(0.5)
+			arms.sound.stop(0.8)
+			SoundLayers.play("Extinguish", model)
 		end
 		for _, fire in arms.fires do
 			for _, e in fire.emitters do
@@ -1964,11 +1973,13 @@ function PyroFx.onHit(victim: Model, attacker: Model, moveId: string)
 	sparks(anchor, 12, 14, 80)
 	flash(at, 4, 10, 0.2)
 	Debris:AddItem(anchor, 1.5)
+	SoundLayers.playAt("FireImpact", at, torso)
 end
 
--- A body burning (the finisher): the fire's roar while it burns. Its burns,
--- charred clothes, flames, smoke and light are Client/Combat/Burns (the
--- server's burn attributes, a corpse copy too).
+-- A body burning (the finisher): the fire's roar while it burns, over the
+-- crackle every burning body has. Its burns, charred clothes, flames, smoke,
+-- light and crackle are Client/Combat/Burns (the server's burn attributes, a
+-- corpse copy too).
 type Pyre = { sound: SoundLayers.Loop, endsAt: number }
 local pyres: { [Model]: Pyre } = setmetatable({}, { __mode = "k" }) :: any
 
@@ -1976,7 +1987,7 @@ local function stopPyre(model: Model)
 	local pyre = pyres[model]
 	pyres[model] = nil
 	if pyre then
-		pyre.sound.stop(1.2)
+		pyre.sound.stop(1.5)
 	end
 end
 
@@ -1991,7 +2002,8 @@ local function startPyre(model: Model, burnLeft: number)
 	if pyre then
 		pyre.endsAt = endsAt
 	else
-		pyres[model] = { sound = SoundLayers.loopOn("BodyBurn", torso), endsAt = endsAt }
+		-- (fades in under the ignition's tail)
+		pyres[model] = { sound = SoundLayers.loopOn("PyreRoar", torso, 1, 1.5), endsAt = endsAt }
 	end
 	task.delay(burnLeft, function()
 		local current = pyres[model]
@@ -2179,9 +2191,9 @@ end
 
 local function finisherEvent(show: Show, kind: string, attacker: Model, victim: Model)
 	local run = show.run
-	if kind == "Uncap" then
+	if kind == "Douse" then
+		-- (the pour is heard when the petrol comes out, not at the cap)
 		SoundLayers.play("FuelPour", attacker)
-	elseif kind == "Douse" then
 		-- It splashes off his head and shoulders all the while it pours,
 		-- and soaks the floor under him.
 		show.pouring = true
