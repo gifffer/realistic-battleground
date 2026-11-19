@@ -80,6 +80,14 @@
    "verified": true,
    "visible": true
   },
+  "9113704875": {
+   "creator": "ProSoundEffects",
+   "free": true,
+   "name": "Canister Drop Canister Impact 3 (SFX)",
+   "type": "SoundEffect",
+   "verified": true,
+   "visible": true
+  },
   "9114171960": {
    "creator": "ProSoundEffects",
    "free": true,
@@ -308,14 +316,6 @@
    "creator": "ProSoundEffects",
    "free": true,
    "name": "Male Screams In Pain Injury Yells Agony 1 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9116536883": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Metal Can Large Sized Hit Drop 1 (SFX)",
    "type": "SoundEffect",
    "verified": true,
    "visible": true
@@ -683,6 +683,19 @@
    "peak": 0.26,
    "sub": 0.001,
    "truePeak": -2.5
+  },
+  "9113704875": {
+   "I": -25.3,
+   "Mmax": -21.4,
+   "attack": 0.02,
+   "centroid": 1627,
+   "dur": 3.23,
+   "end40": 2.53,
+   "harsh": 0.127,
+   "onset": 0.09,
+   "peak": 0.11,
+   "sub": 0.003,
+   "truePeak": -4.3
   },
   "9114171960": {
    "I": -35.7,
@@ -1077,19 +1090,6 @@
    "sub": 0.0,
    "truePeak": -11.8
   },
-  "9116536883": {
-   "I": -14.8,
-   "Mmax": -9.3,
-   "attack": 0.09,
-   "centroid": 1752,
-   "dur": 3.09,
-   "end40": 2.62,
-   "harsh": 0.126,
-   "onset": 0.08,
-   "peak": 0.17,
-   "sub": 0.042,
-   "truePeak": 0.7
-  },
   "9117983322": {
    "I": -20.2,
    "Mmax": -18.5,
@@ -1481,6 +1481,19 @@
    "peak": 0.02,
    "sub": 0.0,
    "truePeak": -2.5
+  },
+  "9113704875@0.08+2": {
+   "I": -26.2,
+   "Mmax": -21.4,
+   "attack": 0.02,
+   "centroid": 1532,
+   "dur": 2.0,
+   "end40": 1.73,
+   "harsh": 0.12,
+   "onset": 0.01,
+   "peak": 0.03,
+   "sub": 0.002,
+   "truePeak": -4.3
   },
   "9114171960@0.09": {
    "I": -35.0,
@@ -1949,19 +1962,6 @@
    "peak": 0.28,
    "sub": 0.0,
    "truePeak": -11.8
-  },
-  "9116536883@0.07+2": {
-   "I": -14.5,
-   "Mmax": -8.9,
-   "attack": 0.09,
-   "centroid": 1461,
-   "dur": 2.01,
-   "end40": 1.99,
-   "harsh": 0.117,
-   "onset": 0.02,
-   "peak": 0.11,
-   "sub": 0.071,
-   "truePeak": 0.7
   },
   "9117983322@0.21": {
    "I": -19.9,

@@ -535,7 +535,8 @@ STOCK = {
         L("Body", [9117983605, 9117983322, 9117986652], -16, start="peak-0.2", pv=0.04),
     ],
     "FuelPour": [L("Body", [9120575856], -23, length=1.1, fade=0.25)],
-    "CanThrow": [L("Body", [9116536883], -19, length=2.0, fade=0.3)],
+    # (a clean canister drop: the "large can" files are mastered into clipping)
+    "CanThrow": [L("Body", [9113704875], -19, length=2.0, fade=0.3)],
     "ZippoDrop": [L("Body", [9114462912], -25, pitch=1.15)],
     "BodyIgnite": [
         L("Body", [9114429835, 9114429507], -12, start="peak-0.04", length=3.0, fade=1.2),
@@ -606,7 +607,7 @@ WHY = {
     9117983322: "variante",
     9117986652: "variante",
     9120575856: "liquide versé qui éclabousse",
-    9116536883: "grand bidon de métal qui tombe (le fichier sature : joué bas)",
+    9113704875: "bidon de métal lâché qui rebondit : net, creux, sans saturation (crête -4,3 dBFS)",
     9114462912: "petite flamme qui passe, jouée plus aiguë",
     9119165650: "saisie qui grésille : la chair qui brûle",
     9119166424: "grésillement court",

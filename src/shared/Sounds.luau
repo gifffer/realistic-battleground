@@ -896,15 +896,15 @@ local sounds: { [string]: SoundInfo } = {
 	CanThrow_Transient = { ids = {}, volume = 0.63, pitch = 1, pitchVariation = 0.06 },
 	CanThrow_Mechanism = { ids = {}, volume = 0.32, pitch = 1, pitchVariation = 0.06 },
 	CanThrow_Body = {
-		ids = { 9116536883 },
-		volume = 0.31,
+		ids = { 9113704875 },
+		volume = 1.32,
 		pitch = 1,
 		pitchVariation = 0.06,
 		volumeVariation = 1.5,
 		length = 2,
 		fadeOut = 0.3,
 		trims = {
-			[9116536883] = { start = 0.07 },
+			[9113704875] = { start = 0.08 },
 		},
 	},
 	CanThrow_Sub = { ids = {}, volume = 0.16, pitch = 1, pitchVariation = 0.03 },

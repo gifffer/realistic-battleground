@@ -42,6 +42,7 @@ local RunService = game:GetService("RunService")
 
 local BurnCode = require(ReplicatedStorage.Shared.Util.BurnCode)
 local Config = require(ReplicatedStorage.Shared.Config)
+local PyroConfig = require(ReplicatedStorage.Shared.PyroConfig)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local FireLook = require(script.Parent.FireLook)
 local SoundLayers = require(script.Parent.SoundLayers)
@@ -56,6 +57,7 @@ local SHOW_UP = 1.4 -- degrees / s the drawn burn catches up
 local SHOW_DOWN = 2.5 -- and goes (healed)
 local TEXTURE_STEP = 1 / 15
 local CRY_INTERVAL = 2.5
+local COVER_DELAY = 0.1 -- seconds before a catch-fire sound (see readLit)
 
 local FIRE_LIGHT = FireLook.LIGHT
 local CATCH_SPEED = 6 -- levels / s a part's fire grows (catching)
@@ -856,16 +858,29 @@ local function readLit(session: Session)
 			and humanoid.Health > 0
 			and not model:HasTag(Config.Combat.CORPSE_TAG)
 		if alive then
-			if anyFire then
-				SoundLayers.play("CatchFire", model)
-			else
-				SoundController.play("AcidSizzle", model)
-			end
-			local now = os.clock()
-			if now >= (nextCry[model] or 0) then
-				nextCry[model] = now + CRY_INTERVAL
-				SoundController.play("BurnCry", model)
-			end
+			-- (a beat later: a Pyro hit or blast sent at the same moment
+			-- may land just after the attribute, and it already voices this)
+			task.delay(COVER_DELAY, function()
+				if model.Parent == nil or (anyFire and SoundLayers.ignitionHeard(model)) then
+					return
+				end
+				if anyFire then
+					SoundLayers.play("CatchFire", model)
+				else
+					SoundController.play("AcidSizzle", model)
+				end
+				-- (soaked in petrol: no cry; in the Immolation, its Writhe scream
+				-- comes 0.15 s later)
+				local doused = model:GetAttribute(PyroConfig.DOUSED_ATTRIBUTE)
+				if typeof(doused) == "number" and doused > workspace:GetServerTimeNow() then
+					return
+				end
+				local now = os.clock()
+				if now >= (nextCry[model] or 0) then
+					nextCry[model] = now + CRY_INTERVAL
+					SoundController.play("BurnCry", model)
+				end
+			end)
 		end
 	end
 	-- The crackle of a burning body: one loop per body (a corpse too), louder

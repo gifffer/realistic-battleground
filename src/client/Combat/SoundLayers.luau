@@ -8,6 +8,8 @@
 --   SoundLayers.loopOn(cue, part, volume?, fadeIn?)
 --                                           a looped cue on a part (3D): returns
 --                                           a handle to change its volume / stop it
+--   SoundLayers.ignitionHeard(model)        a Pyro cue just voiced this body
+--                                           catching fire (Burns stays quiet)
 --
 -- Every sound goes through one mix group ("PyroFx": a gentle compressor and a
 -- little less top end), so the glass, the fireball, the pool and the screams
@@ -38,6 +40,56 @@ export type Loop = {
 
 local random = Random.new()
 local nextVariant: { [string]: number } = {}
+
+-- Cues that already sound like a body catching fire (a whoosh and a sizzle,
+-- or a fireball): Burns skips its own catch-fire sound and cry under them.
+local IGNITION_CUES = {
+	FireImpact = true,
+	BodyIgnite = true,
+	MolotovShatter = true, -- (its fireball, FuelIgnite, follows 0.06 s later)
+	FuelIgnite = true,
+}
+local IGNITION_WINDOW = 0.5 -- seconds a cue covers a body catching fire
+local IGNITION_REACH = 10 -- studs round a blast (a Molotov's whole splash)
+local ignitedAt: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+local blasts: { { position: Vector3, at: number } } = {}
+
+local function noteIgnition(name: string, model: Model?, position: Vector3?)
+	if not IGNITION_CUES[name] then
+		return
+	end
+	local now = os.clock()
+	if model then
+		ignitedAt[model] = now
+	elseif position then
+		for index = #blasts, 1, -1 do
+			if now - blasts[index].at > IGNITION_WINDOW then
+				table.remove(blasts, index)
+			end
+		end
+		table.insert(blasts, { position = position, at = now })
+	end
+end
+
+function SoundLayers.ignitionHeard(model: Model): boolean
+	local now = os.clock()
+	local at = ignitedAt[model]
+	if at and now - at <= IGNITION_WINDOW then
+		return true
+	end
+	local root = model:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		for _, blast in blasts do
+			if
+				now - blast.at <= IGNITION_WINDOW
+				and (root.Position - blast.position).Magnitude <= IGNITION_REACH
+			then
+				return true
+			end
+		end
+	end
+	return false
+end
 
 local group: SoundGroup? = nil
 local function mixGroup(): SoundGroup
@@ -91,6 +143,7 @@ function SoundLayers.play(name: string, model: Model)
 	if cue == nil then
 		return
 	end
+	noteIgnition(name, model, nil)
 	for _, layer in cue.layers do
 		later(layer.at, function()
 			if model.Parent then
@@ -105,6 +158,8 @@ function SoundLayers.playAt(name: string, position: Vector3, part: BasePart?)
 	if cue == nil then
 		return
 	end
+	local owner = if part then part:FindFirstAncestorOfClass("Model") else nil
+	noteIgnition(name, owner, if owner then nil else position)
 	for _, layer in cue.layers do
 		later(layer.at, function()
 			if part == nil or part.Parent then
