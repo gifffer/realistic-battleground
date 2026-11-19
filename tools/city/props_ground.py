@@ -44,6 +44,7 @@ from citykit import (  # noqa: E402
     Frame,
     mix,
 )
+import zlayers  # noqa: E402
 
 CARDBOARD_MAT = "Cardboard"
 CARPET_MAT = "Carpet"
@@ -114,6 +115,7 @@ def prop(*variants):
         @functools.wraps(fn)
         def inner(D, folder, origin, ry, rng, **opts):
             n0 = len(D.parts)
+            zlayers.new_instance(D)  # (its floor decals stack over earlier props')
             fn(D, folder, origin, ry, rng, **opts)
             return len(D.parts) - n0
 
@@ -134,15 +136,45 @@ def _cyl(f, name, c, length, d, color, mat, rot=(0, 0, 0), flags=DECOR, **kw):
     return f.part(name, c, (length, d, d), color, mat, rot=rot, shape=CYLINDER, flags=flags, **kw)
 
 
+def _decal(f, th, flags, kw):
+    """Whether a flat part is a floor DECAL for zlayers (stain, puddle, moss, paper...): thin,
+    no collision, lying on a level frame, no parent / extra. Those go through
+    zlayers.floor_layer, which gives each one its own height (overlapping decals of every prop
+    stack at least 0.03 apart, never coplanar, at most 3 in one place) and makes a
+    translucent one opaque with the blended colour when it lies on one opaque surface."""
+    return (th <= zlayers.FLOOR_DECAL_MAX_TH and flags == DECOR and abs(f.m[1, 1]) > 0.9995
+            and not kw.get("extra") and not kw.get("parent"))
+
+
 def _disk(f, name, x, z, d, th, color, mat, y=0.0, flags=DECOR, **kw):
-    """A flat disk lying on the floor (a cylinder turned upright)."""
-    return f.part(name, (x, y + th / 2, z), (th, d, d), color, mat, rot=(0, 0, 90), shape=CYLINDER, flags=flags,
-                  **kw)
+    """A flat disk lying on the floor (a cylinder turned upright). A thin DECOR one is a floor
+    decal (see _decal): it may be lifted over decals under it, made opaque, or dropped (None)
+    where 3 decals already overlap."""
+    if not _decal(f, th, flags, kw):
+        return f.part(name, (x, y + th / 2, z), (th, d, d), color, mat, rot=(0, 0, 90), shape=CYLINDER,
+                      flags=flags, flush=(0, 1), **kw)
+    tr0 = kw.pop("transparency", 0.0)
+
+    def make(yc, t, col, tr, m):
+        return f.part(name, (x, yc, z), (t, d, d), col, m, rot=(0, 0, 90), shape=CYLINDER, flags=flags,
+                      transparency=tr, flush=(0, 1), **kw)
+
+    r = d * 0.85  # (a disk's square bounds overstate it: count only clear overlaps)
+    return zlayers.floor_layer(f, name, x, y, z, r, r, th, 0.0, make, color, tr0, mat)
 
 
 def _flat(f, name, x, z, w, d, th, color, mat, yaw=0.0, y=0.0, flags=DECOR, **kw):
-    """A flat plate lying on the floor."""
-    return f.part(name, (x, y + th / 2, z), (w, th, d), color, mat, rot=(0, yaw, 0), flags=flags, **kw)
+    """A flat plate lying on the floor. A thin DECOR one is a floor decal (see _decal)."""
+    if not _decal(f, th, flags, kw):
+        return f.part(name, (x, y + th / 2, z), (w, th, d), color, mat, rot=(0, yaw, 0), flags=flags, flush=(1, 1),
+                      **kw)
+    tr0 = kw.pop("transparency", 0.0)
+
+    def make(yc, t, col, tr, m):
+        return f.part(name, (x, yc, z), (w, t, d), col, m, rot=(0, yaw, 0), flags=flags, transparency=tr,
+                      flush=(1, 1), **kw)
+
+    return zlayers.floor_layer(f, name, x, y, z, w, d, th, yaw, make, color, tr0, mat)
 
 
 def _tri(f, name, x, z, w, d, th, color, mat, yaw=0.0, y=0.0, flags=DECOR, **kw):

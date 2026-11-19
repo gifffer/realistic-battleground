@@ -14,8 +14,9 @@ Every builder has the same signature:
     rng      a random.Random: sizes, tilts, wear and colours vary with it.
 
 Local frame (citykit.Frame): +X along the wall (seen from the alley, facing the wall, +X is
-on your LEFT), +Y up, -Z out of the wall. Overlays (grime, stains, posters...) are thin DECOR parts a few
-hundredths of a stud in front of the face, stacked in layers (_ov(k)).
+on your LEFT), +Y up, -Z out of the wall. Overlays (grime, stains, posters...) are thin DECOR parts
+in front of the face, in depth slots shared by every prop on that wall (zlayers: no two layers on
+one plane, opaque blended colours where possible, at most 5 layers in one place).
 
 Scale: a character is ~5 studs tall; a floor ~10 studs; a door ~4 x 7.5; 1 stud ~ 0.3 m.
 Only built-in materials and colours, no textures / meshes. NO BOTTLES anywhere.
@@ -50,6 +51,7 @@ from citykit import (  # noqa: E402
     mix,
     yxz_angles,
 )
+import zlayers  # noqa: E402
 
 # ------------------------------------------------------------------ palette (dirty, desaturated)
 BRICK = [(84, 60, 50), (96, 64, 52), (68, 49, 42), (80, 44, 36)]
@@ -138,39 +140,55 @@ def rod(f, name, p0, p1, d, color, material, shape=CYLINDER, **kw):
 
 
 def _ov(k=0):
-    """Z centre of overlay layer k (in front of the wall face, layer 0 nearest)."""
-    return -(0.035 + 0.022 * k)
+    """Local z centre of a 0.05-thick part meant to sit in front of overlay layer k: half a slot
+    in front of slot k (zlayers.WALL_* depths), so it never shares a plane with an overlay.
+    Used for invisible text carriers (their SurfaceGui draws on the front face) and crack lines."""
+    return zlayers.wall_text_depth(k)
 
 
 def overlay(f, name, x0, x1, y0, y1, color, k=0, tr=0.5, material="Concrete", rz=0.0, **kw):
     """A thin stain / paint / paper layer flat on the wall face. Matte by default (Concrete):
-    a glossy translucent layer reads as a grey film, a matte one as a stain soaked in."""
-    return f.part(name, ((x0 + x1) / 2, (y0 + y1) / 2, _ov(k)), (abs(x1 - x0), abs(y1 - y0), 0.05),
-                  color, material, rot=(0, 0, rz), flags=kw.pop("flags", DECOR), transparency=tr, **kw)
+    a glossy translucent layer reads as a grey film, a matte one as a stain soaked in.
+
+    The depth comes from zlayers.wall_layer: the next free slot of this wall plane, one slot in
+    front of every overlay it overlaps (from any prop), each slot WALL_TH thick with an air gap,
+    so no two layers share a plane or intersect. k is the order hint inside the prop (higher =
+    in front). A translucent layer lying wholly over one opaque surface is made OPAQUE with the
+    blended colour (nothing left to depth-sort). Returns the part index, or None when that place
+    already has zlayers.WALL_MAX layers (the layer is dropped, never squeezed in)."""
+    flags = kw.pop("flags", DECOR)
+    return zlayers.wall_layer(f, name, (x0 + x1) / 2, (y0 + y1) / 2, abs(x1 - x0), abs(y1 - y0), rz, color, k, tr,
+                              material, flags, **kw)
 
 
 def streak(f, rng, name, x, y_top, length, width, color, k=1, tr=0.55, taper=3):
-    """A run-off stain hanging down from (x, y_top): `taper` overlapping layers, each one
-    narrower and shorter (darkest at the source), slightly wavy."""
+    """A run-off stain hanging down from (x, y_top): up to 2 overlapping layers (darkest and
+    narrowest at the source), slightly wavy. More layers bought nothing once they are opaque
+    blends, and each one takes a wall slot. Returns the number of parts made."""
+    taper = max(1, min(taper, 2))
     n = 0
     for i in range(taper):
         t = i / max(1, taper - 1)
         w = width * (1 - 0.55 * t) * rng.uniform(0.85, 1.1)
         ln = length * (1 - 0.45 * t) * rng.uniform(0.85, 1.05)
         xo = x + rng.uniform(-0.06, 0.06) * width
-        overlay(f, name, xo - w / 2, xo + w / 2, y_top - ln, y_top, jitter(color, rng, 5, 0.1 * i), k=k + i,
-                tr=min(0.9, tr + 0.12 * (taper - 1 - i)), rz=rng.uniform(-1.2, 1.2))
-        n += 1
+        if overlay(f, name, xo - w / 2, xo + w / 2, y_top - ln, y_top, jitter(color, rng, 5, 0.1 * i), k=k + i,
+                   tr=min(0.9, tr + 0.12 * (taper - 1 - i)), rz=rng.uniform(-1.2, 1.2)) is not None:
+            n += 1
     return n
 
 
 def soft(f, rng, name, x0, x1, y0, y1, color, opacity=0.5, layers=3, k=0, anchor="center", material="Concrete",
          ragged=0.25):
-    """A soft-edged stain: `layers` nested translucent rectangles shrinking toward the centre
-    (or toward the bottom / top edge for anchor = "bottom" / "top"), so the colour builds
-    up gradually instead of ending on one hard edge. opacity = at the core. Parts: layers."""
+    """A soft-edged stain: up to 2 nested layers shrinking toward the centre (or toward the
+    bottom / top edge for anchor = "bottom" / "top"), so the colour builds up toward the core
+    instead of ending on one hard edge. opacity = at the core. Each layer takes a wall slot,
+    and the layers are made opaque blends where they lie on one surface. So the gradient is 2
+    steps, not 3. Returns the number of parts made."""
+    layers = max(1, min(layers, 2))
     a = 1 - (1 - opacity) ** (1 / layers)
     w, h = x1 - x0, y1 - y0
+    n = 0
     for i in range(layers):
         s = 1 - 0.6 * i / max(1, layers - 1) if layers > 1 else 1.0
         sw = w * (1 - (1 - s) * 0.6) * rng.uniform(1 - ragged * 0.3, 1.0)
@@ -182,12 +200,16 @@ def soft(f, rng, name, x0, x1, y0, y1, color, opacity=0.5, layers=3, k=0, anchor
             cy = y1 - sh / 2
         else:
             cy = (y0 + y1) / 2 + rng.uniform(-ragged, ragged) * (h - sh) * 0.5
-        overlay(f, name, cx - sw / 2, cx + sw / 2, cy - sh / 2, cy + sh / 2, jitter(color, rng, 3), k=k + i,
-                tr=1 - a, material=material, rz=rng.uniform(-0.8, 0.8))
-    return layers
+        if overlay(f, name, cx - sw / 2, cx + sw / 2, cy - sh / 2, cy + sh / 2, jitter(color, rng, 3), k=k + i,
+                   tr=1 - a, material=material, rz=rng.uniform(-0.8, 0.8)) is not None:
+            n += 1
+    return n
 
 
 def frame_at(D, folder, origin, ry):
+    """The prop's frame. Also starts a new zlayers instance: this prop's overlays go in front of
+    those of every prop placed before it on the same wall."""
+    zlayers.new_instance(D)
     return Frame(D, folder, origin=origin, ry=ry)
 
 

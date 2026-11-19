@@ -1,0 +1,54 @@
+{
+ "TrafficCone": {
+  "layers": [
+   "Plastic",
+   "Reflective",
+   "Rubber"
+  ],
+  "markers": [],
+  "max": [
+   0.7,
+   2.768,
+   0.7
+  ],
+  "min": [
+   -0.7,
+   0.0,
+   -0.7
+  ],
+  "tint": {
+   "Plastic": [
+    204,
+    84,
+    32
+   ]
+  },
+  "tris": 2848
+ },
+ "TrafficConeWorn": {
+  "layers": [
+   "Plastic",
+   "Reflective",
+   "Rubber"
+  ],
+  "markers": [],
+  "max": [
+   0.7,
+   2.768,
+   0.7
+  ],
+  "min": [
+   -0.7,
+   0.0,
+   -0.7
+  ],
+  "tint": {
+   "Plastic": [
+    204,
+    84,
+    32
+   ]
+  },
+  "tris": 3184
+ }
+}

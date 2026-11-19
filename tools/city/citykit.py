@@ -55,14 +55,37 @@ class Data:
             self._index[kind][key] = found
         return found
 
+    # Smallest size written on any axis. Roblox accepts down to 0.001; 0.02 keeps thin layers
+    # (stains, labels, paper) about as thin as asked, which the old 0.05 floor did not.
+    MIN_SIZE = 0.02
+
     def part(self, folder, name, center, size, color, material, flags=SOLID, rot=(0, 0, 0), shape=BLOCK,
-             transparency=0.0, reflectance=0.0, extra=None, parent=0):
+             transparency=0.0, reflectance=0.0, extra=None, parent=0, flush=None):
+        """Adds a part row and returns its index (1-based).
+
+        Every size is at least MIN_SIZE. A thinner axis is grown to it. By default the part
+        grows evenly about its centre. `flush=(axis, sign)` says this part LIES ON a surface
+        through its face on the -sign side of local axis 0/1/2 (X/Y/Z). The part then grows
+        only towards +sign, so that face stays where it was asked and the part stays flush on
+        its host instead of sinking into it. For example, (1, 1) is a plate on a floor and
+        (2, -1) a layer on a wall whose outside is local -Z. Helpers that centre a thin part at
+        surface + th/2 (_disk, _flat, _skin, overlay) pass it, so their thin offsets survive."""
         color = tuple(int(max(0, min(255, round(c)))) for c in color)
+        size = [float(v) for v in size]
+        if flush is not None:
+            axis, sign = flush
+            grow = self.MIN_SIZE - size[axis]
+            if grow > 0:
+                local = [0.0, 0.0, 0.0]
+                local[axis] = sign * grow / 2
+                shift = yxz_matrix(*rot) @ np.array(local)
+                center = (center[0] + shift[0], center[1] + shift[1], center[2] + shift[2])
+        size = [max(v, self.MIN_SIZE) for v in size]
         row = [
             shape,
             round(center[0], 3), round(center[1], 3), round(center[2], 3),
             round(rot[0], 2), round(rot[1], 2), round(rot[2], 2),
-            round(max(size[0], 0.05), 3), round(max(size[1], 0.05), 3), round(max(size[2], 0.05), 3),
+            round(size[0], 3), round(size[1], 3), round(size[2], 3),
             self._idx("c", self.colors, color),
             self._idx("m", self.materials, material),
             transparency, reflectance, flags,
@@ -81,6 +104,42 @@ class Data:
         """An axis-aligned block from its bounds."""
         return self.part(folder, name, ((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2),
                          (x1 - x0, y1 - y0, z1 - z0), color, material, **kw)
+
+    def under(self, marker):
+        """A context manager: every part made inside it (D.part, D.box, any Frame) gets
+        parent=marker (the 1-based row index of a part made before) unless it names its own
+        parent. City/init then parents those parts UNDER the marker part. Used by
+        tools/city/meshprop.py: a prop's old primitive parts hang under its "MeshProp" marker,
+        so the game (City/PropKit.luau) can swap them for the mesh. Nests (the innermost wins).
+
+            with D.under(marker):
+                props_objects.traffic_cone(D, folder, origin, ry, rng)
+        """
+        data = self
+
+        class _Under:
+            def __enter__(self):
+                stack = data.__dict__.setdefault("_under", [])
+                stack.append(marker)
+                if len(stack) == 1:
+                    plain = type(data).part
+
+                    def part(*args, **kw):
+                        # (positional parent is the 13th argument after self; keyword otherwise)
+                        if len(args) < 13 and not kw.get("parent"):
+                            kw["parent"] = data._under[-1]
+                        return plain(data, *args, **kw)
+
+                    data.part = part  # (an instance attribute: Data.part itself is untouched)
+                return marker
+
+            def __exit__(self, *exc):
+                data._under.pop()
+                if not data._under:
+                    del data.part
+                return False
+
+        return _Under()
 
     def to_json(self):
         return {

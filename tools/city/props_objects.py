@@ -40,6 +40,8 @@ import math
 import os
 import sys
 
+import numpy as np
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from citykit import (  # noqa: E402
@@ -55,6 +57,7 @@ from citykit import (  # noqa: E402
     mix,
     yxz_matrix,
 )
+import zlayers  # noqa: E402
 
 CARDBOARD_MAT = "Cardboard"  # the 2024 material; "SmoothPlastic" if a build ever lacks it
 
@@ -142,8 +145,22 @@ def _vcyl(f, name, x, y0, z, h, d, color, mat, flags=DECOR, **kw):
 
 
 def _disk(f, name, x, z, d, th, color, mat, y=0.0, flags=DECOR, **kw):
-    """A flat disk lying on y (a cylinder turned upright)."""
-    return f.part(name, (x, y + th / 2, z), (th, d, d), color, mat, rot=(0, 0, 90), shape=CYLINDER, flags=flags, **kw)
+    """A flat disk lying on y (a cylinder turned upright). Its bottom stays on y even when the
+    citykit size floor thickens it (flush). A thin DECOR disk on a level frame is a floor decal
+    and goes through zlayers.floor_layer, like props_ground._disk: its own height over other
+    decals, opaque blend where possible, None where 3 decals already overlap."""
+    decal = (th <= zlayers.FLOOR_DECAL_MAX_TH and flags == DECOR and abs(f.m[1, 1]) > 0.9995
+             and not kw.get("extra") and not kw.get("parent"))
+    if not decal:
+        return f.part(name, (x, y + th / 2, z), (th, d, d), color, mat, rot=(0, 0, 90), shape=CYLINDER, flags=flags,
+                      flush=(0, 1), **kw)
+    tr0 = kw.pop("transparency", 0.0)
+
+    def make(yc, t, col, tr, m):
+        return f.part(name, (x, yc, z), (t, d, d), col, m, rot=(0, 0, 90), shape=CYLINDER, flags=flags,
+                      transparency=tr, flush=(0, 1), **kw)
+
+    return zlayers.floor_layer(f, name, x, y, z, d * 0.85, d * 0.85, th, 0.0, make, color, tr0, mat)
 
 
 def _seg_rot(p0, p1):
@@ -168,24 +185,85 @@ def _bar(f, name, p0, p1, w, th, color, mat, flags=DECOR, extend=0.0, roll=0.0, 
     return g.part(name, (0, 0, 0), (length + extend, th, w), color, mat, rot=(roll, ry, rz), flags=flags, **kw)
 
 
-def _skin(f, name, c, w, h, face, color, mat="SmoothPlastic", th=0.04, spin=0.0, flags=DECOR, **kw):
-    """A thin patch lying on a face (rust, grime, a label, a stain): c is the point on the surface,
-    face one of "-z", "+z", "-x", "+x", "y"; w x h its size in the face's plane, spun by `spin` deg."""
+# -- surface marks (rust, grime, labels, scuffs, stains) on a prop's faces ------------------------
+# Every mark is a thin slab lying on a face. Two marks that overlap on the same face must not
+# share a depth, or Roblox can't tell which is in front (z-fighting: stripes that swap as the
+# camera moves), and two translucent ones must not intersect (their draw order flips). So each
+# face plane of the world keeps a list of the marks on it, and a new mark goes one SLOT in front
+# of every mark it overlaps there: slot k spans k * SKIN_STEP .. + SKIN_TH out of the face, so the
+# front faces are SKIN_STEP apart and there is an air gap between slots. A mark that would need
+# more than SKIN_MAX slots is dropped (None): nobody sees a fourth layer of grime.
+SKIN_TH = 0.025  # a mark's thickness (studs)
+SKIN_STEP = 0.045  # slot spacing: front faces 0.045 apart, a 0.02 air gap between slots
+SKIN_MAX = 3  # slots per spot on a face
+
+
+def _skin_slot(f, c, corners, n_local):
+    """Finds the slot for a mark whose outline (local points `corners`) lies on the face through
+    local point c with local normal n_local; registers it. Returns the slot or None (full)."""
+    n = f.m @ np.array(n_local, float)
+    off = float(n @ f.world(c))
+    u = np.cross(n, (0.0, 1.0, 0.0) if abs(n[1]) < 0.9 else (1.0, 0.0, 0.0))
+    u /= np.linalg.norm(u)
+    v = np.cross(n, u)
+    pts = np.array([f.world(p) for p in corners])
+    pu, pv = pts @ u, pts @ v
+    rect = (pu.min(), pu.max(), pv.min(), pv.max())
+    planes = f.D.__dict__.setdefault("_po_skins", [])
+    marks = None
+    for pn, poff, lst in planes:
+        if pn @ n > 0.9995 and abs(poff - off) < 0.015:
+            marks = lst
+            break
+    if marks is None:
+        marks = []
+        planes.append((n, off, marks))
+    # (rect in the plane's own u/v: recompute against the stored plane's basis is not needed,
+    # u/v depend on n only and n matches to 0.03 deg)
+    slot = 0
+    for r, k in marks:
+        if r[0] < rect[1] - 0.01 and rect[0] < r[1] - 0.01 and r[2] < rect[3] - 0.01 and rect[2] < r[3] - 0.01:
+            slot = max(slot, k + 1)
+    if slot >= SKIN_MAX:
+        return None
+    marks.append((rect, slot))
+    return slot
+
+
+def _skin(f, name, c, w, h, face, color, mat="SmoothPlastic", th=None, spin=0.0, flags=DECOR, **kw):
+    """A thin mark lying on a face (rust, grime, a label, a stain): c is the point on the surface,
+    face one of "-z", "+z", "-x", "+x", "y"; w x h its size in the face's plane, spun by `spin`
+    deg. Its depth comes from the face's slots (_skin_slot): never coplanar with another mark.
+    `th` is accepted for old calls but every mark is SKIN_TH thick. Returns the row or None."""
     s = -1 if face[0] == "-" else 1
-    if name == "Stain" and face == "y":  # stains on a top are round: a disk (Roblox cylinders stay round)
-        d = (w + h) / 2
-        return f.part(
-            name, (c[0], c[1] + th / 2, c[2]), (th, d, d), color, mat, rot=(0, 0, 90), shape=CYLINDER, flags=flags, **kw
-        )
+    a = math.radians(spin)
+    ca, sa = math.cos(a), math.sin(a)
+    # the outline in the face's own 2D axes (p along w, q along h), spun
+    if name == "Stain" and face == "y":
+        w = h = (w + h) / 2
+    pq = [(ca * x - sa * y, sa * x + ca * y) for x, y in ((-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2))]
     if face.endswith("z"):
-        return f.part(
-            name, (c[0], c[1], c[2] + s * th / 2), (w, h, th), color, mat, rot=(0, 0, spin), flags=flags, **kw
-        )
+        corners = [(c[0] + p, c[1] + q, c[2]) for p, q in pq]
+        n_local = (0, 0, s)
+    elif face.endswith("x"):
+        corners = [(c[0], c[1] + q, c[2] + p) for p, q in pq]
+        n_local = (s, 0, 0)
+    else:
+        corners = [(c[0] + p, c[1], c[2] + q) for p, q in pq]
+        n_local = (0, 1, 0)
+    slot = _skin_slot(f, c, corners, n_local)
+    if slot is None:
+        return None
+    lift = slot * SKIN_STEP + SKIN_TH / 2  # the slab's centre out of the face
+    t = SKIN_TH
+    if name == "Stain" and face == "y":  # stains on a top are round: a disk (Roblox cylinders stay round)
+        return f.part(name, (c[0], c[1] + lift, c[2]), (t, w, w), color, mat, rot=(0, 0, 90), shape=CYLINDER,
+                      flags=flags, **kw)
+    if face.endswith("z"):
+        return f.part(name, (c[0], c[1], c[2] + s * lift), (w, h, t), color, mat, rot=(0, 0, spin), flags=flags, **kw)
     if face.endswith("x"):
-        return f.part(
-            name, (c[0] + s * th / 2, c[1], c[2]), (th, h, w), color, mat, rot=(spin, 0, 0), flags=flags, **kw
-        )
-    return f.part(name, (c[0], c[1] + th / 2, c[2]), (w, th, h), color, mat, rot=(0, spin, 0), flags=flags, **kw)
+        return f.part(name, (c[0] + s * lift, c[1], c[2]), (t, h, w), color, mat, rot=(spin, 0, 0), flags=flags, **kw)
+    return f.part(name, (c[0], c[1] + lift, c[2]), (w, t, h), color, mat, rot=(0, spin, 0), flags=flags, **kw)
 
 
 def _tone(color, rng, amount=8, darken=0.0):
@@ -245,24 +323,13 @@ def _on_plate(f, name, center, rot, u, v, size, color, mat="Fabric", lift=0.04, 
 
 
 def _grime(f, x0, x1, y0, h, z, face, col, rng, w_axis="x"):
-    """Grime rising from the ground on a face: a dark band and a paler, higher, more transparent
-    one over it (a gradient in two parts)."""
+    """Grime rising from the ground on a face: a pale high band and a darker low band in front of
+    it (a gradient in two steps). Both opaque, the face's own colour mixed with GRIME, so nothing
+    needs depth sorting; their depths come from the face's mark slots."""
     span = x1 - x0
     c = ((x0 + x1) / 2, 0, z) if w_axis == "x" else (z, 0, (x0 + x1) / 2)
-    for k, (hh, tr) in enumerate(((h, 0.4), (h * rng.uniform(1.3, 1.6), 0.75))):
-        cc = (c[0], y0 + hh / 2, c[2])
-        _skin(
-            f,
-            "Grime",
-            cc,
-            span - 0.02,
-            hh,
-            face,
-            mix(col, GRIME, 0.75 if k == 0 else 0.55),
-            "SmoothPlastic",
-            th=0.03 + 0.01 * k,
-            transparency=tr,
-        )
+    for hh, k in ((h * rng.uniform(1.3, 1.6), 0.2), (h, 0.42)):
+        _skin(f, "Grime", (c[0], y0 + hh / 2, c[2]), span - 0.02, hh, face, mix(col, GRIME, k), "SmoothPlastic")
 
 
 def _rust(f, rng, c, face, size=1.0, n=1):

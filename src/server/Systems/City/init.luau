@@ -110,6 +110,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CityZones = require(ReplicatedStorage.Shared.Util.CityZones)
 
+local PropKit = require(script.PropKit)
+
 local City = {}
 
 -- How many parts we create before letting the server breathe.
@@ -665,6 +667,8 @@ local function build(city: Folder, data: CityData)
 			CollectionService:AddTag(descendant, SPEZCOLA_TAG)
 		end
 	end
+	-- The props marked "MeshProp" get their real mesh from the city prop kit (no kit: no change).
+	PropKit.apply(city)
 	mirrorZones(city)
 	city:SetAttribute("Built", true)
 	city:SetAttribute("PartCount", count)
