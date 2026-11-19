@@ -19,6 +19,9 @@ export type CombatState = {
 	nextAttackAt: number, -- can't M1 / use a move before this time
 	attackingUntil: number, -- slowed while attacking
 	attackToken: number, -- +1 cancels the attack that is winding up
+	-- The fighters our last M1 stunned: our next M1 keeps them stunned
+	-- until it lands (Config.Combat.COMBO_HOLD_MARGIN).
+	comboVictims: { CombatState },
 
 	blocking: boolean,
 	blockStartedAt: number,

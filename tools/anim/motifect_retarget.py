@@ -10,7 +10,9 @@ src/client/Animation/CombatClips.luau (R6Pose format).
    then format with `stylua src`.
 
 Why it is not a plain bone-by-bone copy: R6 has 6 rigid parts and no elbows
-or knees, and gameplay fixes the timing (impact at 0.15 s). So:
+or knees, and gameplay fixes the timing (impact at Config.Combat.M1_HIT_DELAY:
+0.15 s for the jab and the hook; the cross and the finisher are CHARGED and
+land at 0.28 / 0.38 s, see "Charged punches" below). So:
 
   • Axes: the dump is Blender world space (X = character's left, -Y =
     forward, Z = up, metres). Roblox: X = right, Y = up, -Z = forward, studs.
@@ -79,9 +81,21 @@ or knees, and gameplay fixes the timing (impact at 0.15 s). So:
     next punch's load continues that way, so the torso never turns back and
     forth around a click. The clip is the exact Guard pose by its end (the
     controller's 0.12 s fade-out covers the last few degrees).
+  • Charged punches (M1_2 cross, M1_4 finisher; spec "charge", see
+    charged()): the player wanted these two to CHARGE: the arm goes back to
+    the level of the back, like a big run-up. Their Motifect clip (made as
+    above, impact at 0.15 s) is moved later so its impact lands at 0.28 /
+    0.38 s, and the time before that is an authored wind-up: the arm swept
+    back (cross: down past the hip and back, fist behind the back; finisher:
+    out, up and back, fist behind the head), the torso coiled 54-64 degrees
+    past the Guard, the weight down on the bent rear leg, the head on the
+    target, the lead hand up (cross) or aiming at the target (finisher); a
+    short held charge (2 / 4 frames, a "flat" key); then the strike: legs and
+    weight first, the torso, the arm last, each faster every frame into the
+    impact (the arm's last frames are a 140-155 stud/s "smear").
   • Keys: the dense 60 fps result is reduced to a few keys (greedy, error
-    bounded, using the game's own Hermite spline), the impact key at 0.15 s
-    is always kept.
+    bounded, using the game's own Hermite spline), the impact key is always
+    kept.
 """
 
 import argparse
@@ -174,6 +188,53 @@ GUARD = {
 #     and faster into the impact); bump / bump_at: the overhand's lift;
 #     without arm_space (the hook) the fist follows its re-timed path, its
 #     distance covered growing as u^accel, corners rounded by `smooth`.
+# charge: a CHARGED punch (see charged()): the Motifect impact, drive and
+#   recovery come later (at `hit`, seconds) after a big authored wind-up.
+#   keys: the wind-up, as (time, Root rot, Root pos, punching shoulder rot,
+#     punching shoulder pos, other shoulder rot) (degrees / studs, R6Pose
+#     values, Guard at 0 s). The last key is the end of the held charge (a
+#     "flat" key); the one before it is the loaded pose.
+#   via: shoulder angles the punching arm passes through during the strike.
+#   chain: when each part leaves the charged pose (seconds) and its speed at
+#     the impact (see let_go; the arm: its path is covered as u^this).
+#   smooth: rounds the arm path's corners (degrees). tuck: chin down (deg).
+CROSS_CHARGE = {
+    "hit": 0.28,
+    "keys": [
+        # leave Guard: the torso starts to coil, the arm drops toward the hip
+        (0.05, (-6, -25, -2), (0.04, -0.06, 0.04), (78, 0, 2), (0, 0, 0.04), (117, 0, 28)),
+        # swing back: the arm swings past the hip (a pendulum), weight sits back
+        (0.1, (-4, -49, -5), (0.12, -0.17, 0.15), (-14, 0, 23), (0, 0.01, 0.15), (120, 0, 10)),
+        # loaded: arm swept back behind the hip, torso coiled ~50 deg past the
+        # Guard, weight down on the bent rear leg, lead hand up in front
+        (0.15, (-2, -62, -6), (0.16, -0.22, 0.2), (-67, 0, 33), (0, 0.01, 0.2), (125, 0, -3)),
+        # end of the held charge (still coiling a little)
+        (0.18, (-1, -66, -7), (0.18, -0.24, 0.22), (-72, 0, 35), (0, 0.01, 0.22), (126, 0, -9)),
+    ],
+    "via": [(30, 0, 22)],
+    "chain": {"pos": (0.18, 1.0), "yaw": (0.188, 1.6), "tilt": (0.197, 1.3), "off": (0.197, 1.5), "arm": (0.188, 2.15)},
+    "smooth": 20,
+    "tuck": 3,
+}
+FINISHER_CHARGE = {
+    "hit": 0.38,
+    "keys": [
+        # leave Guard: the arm lifts out to the side, the lead arm reaches out
+        (0.067, (-6, -32, -3), (0.06, -0.1, 0.07), (106, 0, 28), (0.02, 0, 0.08), (104, 0, -30)),
+        # the arm rises up and back, the torso coils and leans back
+        (0.133, (0, -59, -6), (0.08, -0.15, 0.1), (74, 0, 106), (0.06, 0.01, 0.18), (108, 0, -62)),
+        # loaded: fist cocked behind the head, torso coiled ~60 deg, leaning
+        # back, weight on the rear leg, lead arm pointing at the target
+        (0.2, (3, -72, -4), (0.1, -0.16, 0.12), (44, 0, 146), (0.12, 0.01, 0.22), (112, 0, -76)),
+        # end of the held charge (4 frames, still coiling a little)
+        (0.263, (4, -76, -5), (0.11, -0.17, 0.13), (40, 0, 151), (0.14, 0.01, 0.24), (116, 0, -80)),
+    ],
+    "via": [(120, 0, 100)],
+    "chain": {"pos": (0.263, 1.0), "yaw": (0.272, 1.6), "tilt": (0.28, 1.3), "off": (0.28, 1.5), "arm": (0.272, 2.15)},
+    "smooth": 20,
+    "tuck": 4,
+}
+
 SPECS = {
     "Brawler_M1_1": {
         "src": "jab_right",
@@ -240,7 +301,7 @@ SPECS = {
         "hold": 0.22,
         "yaw": 40,
         "yaw_max": 45,
-        "drive": 4.5,
+        "drive": 9,
         "drive_end": 0.2,
         "sink": 0.02,
         "lunge": (-0.06, -0.12, -0.34),
@@ -250,10 +311,11 @@ SPECS = {
         "lean": 0,
         "tilt": 0.3,
         "hips": 0.15,
-        "back": (0.2, 0.37),
+        "back": (0.19, 0.3),
         "back_lag": 0.03,
-        "yaw_back": (0.19, 0.31),
+        "yaw_back": (0.19, 0.3),
         "yaw_hold": 7,
+        "yaw_hold_at": (0.295, 0.36),
         "windup": {
             "peak": 0.067,
             "yaw": 8,
@@ -279,9 +341,11 @@ SPECS = {
             "accel": 2.5,
             "len_accel": 2.2,
         },
-        "length": 0.5,
-        "about": "Right cross (combo hit 2): loads on the rear leg (torso coiled right, fist back by the\n"
-        "\t-- chin), then hips, chest, shoulder and the rear arm drive straight through the centre line.",
+        "charge": CROSS_CHARGE,
+        "length": 0.6,
+        "about": "Right cross (combo hit 2), CHARGED: the arm swings down past the hip and back, fist behind the back, the torso\n"
+        "\t-- coils hard on the bent rear leg and holds the charge, then hips, chest, shoulder and the arm\n"
+        "\t-- explode through the centre line (fastest at the impact, 0.28 s).",
     },
     "Brawler_M1_3": {
         "src": "hook_left",
@@ -348,7 +412,7 @@ SPECS = {
         "hold": 0.22,
         "yaw": 50,
         "yaw_max": 70,
-        "drive": 14,
+        "drive": 16,
         "drive_end": 0.3,
         "sink": 0.03,
         "lunge": (-0.12, -0.12, -0.5),
@@ -387,9 +451,11 @@ SPECS = {
             "bump": 0.08,
             "bump_at": 0.4,
         },
-        "length": 0.85,
-        "about": "Overhand right (combo FINISHER): the biggest load (weight down and back, torso coiled,\n"
-        "\t-- fist cocked by the ear), then the rear arm comes up, over and down with the whole body turning in;\n"
+        "charge": FINISHER_CHARGE,
+        "length": 1.08,
+        "about": "Overhand right (combo FINISHER), CHARGED: the biggest wind-up (arm raised out and back until\n"
+        "\t-- the fist is behind the head, torso coiled and leaning back, lead arm aiming), a long held charge,\n"
+        "\t-- then the arm loops out by the side, over and down with the whole body diving in (impact 0.38 s);\n"
         "\t-- heavy recovery. Longer than the others: see Config.Combat.FINISHER_RECOVERY.",
     },
 }
@@ -689,7 +755,9 @@ def retimer(fn, t0, t1, profile, smooth=0.0, samples=240):
 
 
 # ---------------------------------------------------------------- one clip, dense
-def retarget(dump_dir, name):
+def retarget(dump_dir, name, length=None):
+    """The Motifect clip on its own timeline (impact at 0.15 s), `length`
+    seconds long (default: the spec's length)."""
     spec = SPECS[name]
     src = Source(os.path.join(dump_dir, spec["src"] + ".json"), spec["mirror"])
     warp = Warp(spec["warp"])
@@ -895,7 +963,7 @@ def retarget(dump_dir, name):
         "RightHip": np.zeros(2),
         "LeftHip": np.zeros(2),
     }
-    n = int(round(spec["length"] * FPS))
+    n = int(round((spec["length"] if length is None else length) * FPS))
     for i in range(n + 1):
         t = i / FPS
         f = warp(t)
@@ -1005,7 +1073,8 @@ def retarget(dump_dir, name):
         # the cross's load, the cross's is the hook's...), so the torso never
         # turns back and forth around the click. The head keeps undoing the turn.
         g_yaw = GUARD["Root"][0][1]
-        rest = g_yaw + spec.get("yaw_hold", 0.0) * turn_sign * (1 - smoothstep(0.38, 0.48, t))
+        h0, h1 = spec.get("yaw_hold_at", (0.38, 0.48))
+        rest = g_yaw + spec.get("yaw_hold", 0.0) * turn_sign * (1 - smoothstep(h0, h1, t))
         a_yaw = 1 - smoothstep(yb0, yb1, t)
         y1 = float(pose["Root"][0][1] - err0["Root"][0][1] * fix)
         r = out["Root"][0].copy()
@@ -1028,6 +1097,198 @@ def retarget(dump_dir, name):
                 out[j] = (out[j][0], out[j][1] + np.array([0.0, err, 0.0]))
         out_frames.append(out)
     return out_frames
+
+
+# ---------------------------------------------------------------- charged punches (M1_2, M1_4)
+def key_curve(times, values):
+    """A smooth curve through keys (one curve per number of `values`), with
+    speed 0 on the first and last key (both are holds) and, in between,
+    slopes that never overshoot a key (Fritsch-Carlson, like a "monotone"
+    spline): the coil slows down INTO the loaded pose instead of going past
+    it and coming back."""
+    times = np.asarray(times, dtype=float)
+    values = np.asarray(values, dtype=float)
+    d = np.diff(values, axis=0) / np.diff(times)[:, None]
+    m = np.zeros_like(values)
+    for i in range(1, len(times) - 1):
+        h0, h1 = times[i] - times[i - 1], times[i + 1] - times[i]
+        w0, w1 = 2 * h1 + h0, h1 + 2 * h0
+        for k in range(values.shape[1]):
+            a, b = d[i - 1, k], d[i, k]
+            # a key where the curve turns back (or stops) gets speed 0
+            m[i, k] = (w0 + w1) / (w0 / a + w1 / b) if a * b > 0 else 0.0
+
+    def at(t):
+        if t <= times[0]:
+            return values[0].copy()
+        if t >= times[-1]:
+            return values[-1].copy()
+        i = int(np.searchsorted(times, t, side="right")) - 1
+        h = times[i + 1] - times[i]
+        u = (t - times[i]) / h
+        h00, h10, h01, h11 = 2 * u**3 - 3 * u**2 + 1, u**3 - 2 * u**2 + u, -2 * u**3 + 3 * u**2, u**3 - u**2
+        return h00 * values[i] + h10 * h * m[i] + h01 * values[i + 1] + h11 * h * m[i + 1]
+
+    return at
+
+
+def let_go(t, start, end, speed):
+    """How far (0 to 1) a body part has gone from its charged pose toward the
+    impact pose at time t: it starts still at `start` and arrives at `end`
+    (the impact) still moving. `speed` = its speed at the impact, relative to
+    a constant-speed move (1 = constant at the end, 2 = curve u^2, 3 = u^3):
+    the higher, the more of the move happens in the last frames."""
+    u = min(1.0, max(0.0, (t - start) / (end - start)))
+    return -2 * u**3 + 3 * u**2 + speed * (u**3 - u**2)
+
+
+def charged(dump_dir, name):
+    """A CHARGED punch (spec "charge"): the Motifect clip's impact, drive and
+    recovery, after a big authored wind-up. Returns (times, frames).
+
+    The Motifect clip is made on its own timeline (impact at 0.15 s, see
+    retarget) and moved later so its impact lands at `hit`. Before that:
+      1. wind-up (0 -> the last key): the authored keys, joined by a smooth
+         curve that slows down into each pose and stops on the last one: arm
+         swept back, torso coiled away, weight sat down on the rear leg;
+      2. the held charge: the last two keys are close together, so the body
+         keeps coiling a little, slower and slower (alive, but "charging");
+      3. strike (last key -> `hit`): each part goes from the charged pose to
+         the Motifect impact pose, one after the other (kinetic chain: the
+         weight and legs, then the torso turn, the lean, the arm last), each
+         FASTER and faster until the impact (`let_go`). The punching arm
+         follows a path through the `via` angles (under the hip for the
+         cross, out by the side and over for the overhand), covered as u^accel
+         of its length: its last frames are the fastest (the "smear").
+    The legs are aimed at their (Guard) foot spots every frame, the head
+    undoes the torso's turn (eyes on the target)."""
+    spec = SPECS[name]
+    ch = spec["charge"]
+    hand = spec["hand"]
+    other = "Right" if hand == "Left" else "Left"
+    hit = ch["hit"]
+    shift = hit - 0.15
+    # the dense frames: every 1/60 s counted back from the impact (so the
+    # impact is a frame), plus frame 0 at 0 s
+    n_pre = int(math.floor(hit * FPS + 1e-6))
+    times = [hit - k / FPS for k in range(n_pre, 0, -1)]
+    if times[0] > 1e-6:
+        times = [0.0] + times
+    base = retarget(dump_dir, name, spec["length"] - shift)
+    base = base[int(round(0.15 * FPS)) :]
+    times += [hit + k / FPS for k in range(len(base))]
+    contact = base[0]
+
+    def pack(root, pos, arm, arm_pos, off, off_pos=(0, 0, 0)):
+        return np.array([*root, *pos, *arm, *arm_pos, *off, *off_pos], dtype=float)
+
+    def guard(j):
+        return GUARD[j][0], GUARD[j][1]
+
+    g = pack(*guard("Root"), *guard(hand + "Shoulder"), *guard(other + "Shoulder"))
+    keys_t = [0.0] + [k[0] for k in ch["keys"]]
+    keys_v = [g] + [pack(*k[1:]) for k in ch["keys"]]
+    wind = key_curve(keys_t, keys_v)
+    t_hold = keys_t[-1]
+    held = keys_v[-1]
+    c = pack(
+        *(contact["Root"][k] for k in (0, 1)),
+        *(contact[hand + "Shoulder"][k] for k in (0, 1)),
+        *(contact[other + "Shoulder"][k] for k in (0, 1)),
+    )
+    chain = ch["chain"]
+
+    # the punching arm's strike path, in shoulder angles: charged -> via -> impact
+    # (piecewise straight in angle space, corners rounded, then re-timed so
+    # its covered length grows as u^accel: fastest into the impact)
+    arm_pts = [held[6:12]] + [np.array([*v, *held[9:12]], dtype=float) for v in ch.get("via", ())] + [c[6:12]]
+    for k, v in enumerate(ch.get("via", ())):
+        # the shoulder's push/pull goes from charged to impact along the way
+        a = (k + 1) / (len(arm_pts) - 1)
+        arm_pts[k + 1][3:] = held[9:12] + a * (c[9:12] - held[9:12])
+    seg = np.concatenate([[0.0], np.cumsum([np.linalg.norm(b[:3] - a[:3]) for a, b in zip(arm_pts, arm_pts[1:])])])
+    a0 = chain["arm"][0]
+
+    def arm_line(t):
+        d = (t - a0) / (hit - a0) * seg[-1]
+        k = int(np.clip(np.searchsorted(seg, d) - 1, 0, len(seg) - 2))
+        w = (d - seg[k]) / max(1e-9, seg[k + 1] - seg[k])
+        return arm_pts[k] + w * (arm_pts[k + 1] - arm_pts[k])
+
+    arm_strike = retimer(arm_line, a0, hit, lambda u: u ** chain["arm"][1], smooth=ch.get("smooth", 0.0))
+
+    def channels(t):
+        """Root rot/pos and both shoulders (packed) at time t (before `hit`)."""
+        if t <= t_hold:
+            return wind(t)
+        v = held.copy()
+        parts = (("pos", slice(3, 6)), ("off", slice(12, 18)))
+        for part, sl in parts:
+            start, speed = chain[part]
+            v[sl] = held[sl] + let_go(t, start, hit, speed) * (c[sl] - held[sl])
+        for part, k in (("tilt", 0), ("yaw", 1), ("tilt", 2)):
+            start, speed = chain[part]
+            v[k] = held[k] + let_go(t, start, hit, speed) * (c[k] - held[k])
+        v[6:12] = arm_strike(t)[0] if t > a0 else held[6:12]
+        return v
+
+    g_rot = GUARD["Root"][0]
+    yaw_h = held[1]
+    frames = []
+    guess = {"RightHip": np.zeros(2), "LeftHip": np.zeros(2)}
+    # where the feet are at the impact (the Motifect step, if the clip keeps
+    # its legs): during the strike they move there from the Guard spots
+    w_c = solve(contact)
+    foot_c = {s: (w_c[s + " Leg"] @ np.array([0, -1.0, 0, 1]))[:3] for s in ("Left", "Right")}
+    for t in times:
+        if t >= hit - 1e-9:
+            break
+        v = channels(t)
+        nxt = channels(min(t + 1 / FPS, hit - 1e-6))
+        pose = dict(GUARD)
+        rot = tuple(v[0:3])
+        pose["Root"] = (rot, tuple(v[3:6]))
+        # head: undoes the torso's lean / turn / roll (eyes on the target),
+        # chin tucked while the torso is coiled
+        coil = float(np.clip((v[1] - g_rot[1]) / (yaw_h - g_rot[1]), 0.0, 1.0))
+        pose["Neck"] = (
+            (
+                6 - 0.75 * (rot[0] - g_rot[0]) + ch.get("tuck", 0.0) * coil,
+                10 - 0.83 * (rot[1] - g_rot[1]),
+                -0.8 * (rot[2] - g_rot[2]),
+            ),
+            (0.0, 0.0, 0.0),
+        )
+        pose[hand + "Shoulder"] = (tuple(v[6:9]), tuple(v[9:12]))
+        pose[other + "Shoulder"] = (tuple(v[12:15]), tuple(v[15:18]))
+        # legs: on their foot spots, turned with the hips one frame AHEAD of
+        # the torso (the hips lead the turn, see retarget)
+        hip_yaw = -0.35 * (nxt[1] - g_rot[1])
+        step = let_go(t, chain["pos"][0], hit, 1.0) if t > t_hold else 0.0
+        for s in ("Left", "Right"):
+            foot = GUARD_FOOT[s] + step * (foot_c[s] - GUARD_FOOT[s])
+            j = s + "Hip"
+            guess[j] = solve_leg(pose, j, s, (foot[0], foot[2]), hip_yaw, guess[j])
+        frames.append({jn: tuple(np.array(x, dtype=float) for x in pose[jn]) for jn in JOINTS})
+
+    # start exactly in Guard: remove the leg solver's tiny error at frame 0
+    # over the first 0.1 s, and keep the soles on the floor (at the start the
+    # Guard's own sole height, see retarget)
+    err0 = {jn: [frames[0][jn][k] - np.array(GUARD[jn][k], dtype=float) for k in (0, 1)] for jn in JOINTS}
+    out = []
+    for t, pose in zip(times, frames):
+        fix = 1 - smoothstep(0.0, 0.1, t)
+        o = {jn: tuple(pose[jn][k] - err0[jn][k] * fix for k in (0, 1)) for jn in JOINTS}
+        for s in ("Left", "Right"):
+            j = s + "Hip"
+            floor = GUARD_LOW[s] + (FLOOR - GUARD_LOW[s]) * (1 - fix)
+            for _ in range(30):
+                err = floor - lowest(solve(o), s + " Leg")
+                if abs(err) < 1e-4:
+                    break
+                o[j] = (o[j][0], o[j][1] + np.array([0.0, err, 0.0]))
+        out.append(o)
+    return times, out + base
 
 
 # ---------------------------------------------------------------- R6Pose spline (as in the game)
@@ -1069,16 +1330,20 @@ def rounded(pose):
     }
 
 
-def reduce_keys(frames, contact_index, max_keys=14, force=()):
+def reduce_keys(frames, contact_index, max_keys=14, force=(), times=None, flat=()):
     """Keep the fewest frames as keys so the game's spline through them stays
     within ~1.5 degrees / 0.02 stud of every joint and 0.04 stud of both fists
-    (greedy: add the worst frame until it fits). The impact frame is a key."""
+    (greedy: add the worst frame until it fits). The impact frame is a key.
+    times: each frame's time (default: every 1/60 s); flat: frames that are
+    keys with tangent "flat" (the motion stops on them: a held charge)."""
     n = len(frames)
+    if times is None:
+        times = [i / FPS for i in range(n)]
     dense = [rounded(p) for p in frames]
     fists = [{s: fist(p, s) for s in ("Left", "Right")} for p in dense]
     # the frame just before the impact is a key too, so the spline keeps the
     # fist's full speed into the impact (it would round it off otherwise)
-    chosen = {0, contact_index - 1, contact_index, n - 1} | set(force)
+    chosen = {0, contact_index - 1, contact_index, n - 1} | set(force) | set(flat)
     # the end of the clip is the plain Guard: one key where the blend finishes
     for i in range(n - 1, 0, -1):
         if any(np.abs(dense[i][jn][0] - dense[-1][jn][0]).max() > 0.05 for jn in JOINTS):
@@ -1086,12 +1351,12 @@ def reduce_keys(frames, contact_index, max_keys=14, force=()):
             break
     while True:
         idx = sorted(chosen)
-        keys = [(i / FPS, dense[i], "smooth") for i in idx]
+        keys = [(times[i], dense[i], "flat" if i in flat else "smooth") for i in idx]
         worst, at = 0.0, None
         for i in range(n):
             if i in chosen:
                 continue
-            p = sample(keys, i / FPS)
+            p = sample(keys, times[i])
             err = 0.0
             for jn in JOINTS:
                 err = max(err, np.abs(np.array(p[jn][0]) - dense[i][jn][0]).max() / 1.5)
@@ -1125,10 +1390,15 @@ def luau(name, keys, length):
     last = spec["warp"][-1][1]
     impact = Warp(spec["warp"])(0.15)
     side = ", mirrored (left and right swapped)" if spec["mirror"] else ""
+    if "charge" in spec:
+        k = int(name[-1])
+        at = f"at {num(spec['charge']['hit'])} s = Config.Combat.M1_HIT_DELAY[{k}] (after the charge)."
+    else:
+        at = "at 0.15 s = Config.Combat.HIT_DELAY."
     lines = [
         f"\t-- {spec['about']}",
         f"\t-- Source: Motifect Combat Motion Pack `{spec['src']}` frames {first}-{last}{side}; its frame",
-        f"\t-- {num(impact, 1)} is the impact, at 0.15 s = Config.Combat.HIT_DELAY.",
+        f"\t-- {num(impact, 1)} is the impact, {at}",
         "\t-- Generated by tools/anim/motifect_retarget.py (edit the script, not these keys).",
         f"\t{name} = {{",
         f"\t\tlength = {num(length)},",
@@ -1169,6 +1439,23 @@ def replace_block(text, name, block):
 def build(dump_dir):
     out = {}
     for name, spec in SPECS.items():
+        if "charge" in spec:
+            # charged punch: the loaded pose and the end of the held charge are
+            # keys (the last one "flat": the charge stops there, then the
+            # strike explodes out of it)
+            ch = spec["charge"]
+            times, frames = charged(dump_dir, name)
+
+            def index(t, times=times):
+                return int(np.argmin([abs(x - t) for x in times]))
+
+            force = [index(k[0]) for k in ch["keys"][:-1]]
+            flat = [index(ch["keys"][-1][0])]
+            keys, err = reduce_keys(
+                frames, index(ch["hit"]), 20 + int(spec["length"] * 8), force, times=times, flat=flat
+            )
+            out[name] = {"length": spec["length"], "keys": keys, "dense": frames, "times": times, "fit": err}
+            continue
         frames = retarget(dump_dir, name)
         # the loaded pose is a key, so the spline can't round the load away
         force = [int(round(spec["windup"]["peak"] * FPS))]
@@ -1186,8 +1473,9 @@ def main():
     clips = build(args.dump_dir)
     for name, c in clips.items():
         k = c["keys"]
-        p = sample(k, 0.15)
-        print(f"{name}: {len(k)} keys, fit error {c['fit']:.2f}, fist at 0.15 s {np.round(fist(p, SPECS[name]['hand']), 2)}")
+        hit = SPECS[name].get("charge", {}).get("hit", 0.15)
+        p = sample(k, hit)
+        print(f"{name}: {len(k)} keys, fit error {c['fit']:.2f}, fist at {hit} s {np.round(fist(p, SPECS[name]['hand']), 2)}")
     if args.json:
         js = {}
         for name, c in clips.items():

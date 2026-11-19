@@ -17,7 +17,8 @@ L'ordre des mains reste gauche-droite-gauche-droite : les réactions (`HitJab`, 
 `HitHook`, `HitHeavy`) et le côté où la tête part n'ont pas changé.
 
 ## Comment c'est adapté au R6
-Le R6 n'a ni coude ni genou, et le jeu impose l'impact à **0,15 s**. Le script :
+Le R6 n'a ni coude ni genou, et le jeu impose le moment de l'impact (**0,15 s** pour le jab et le
+crochet, **0,28 s** et **0,38 s** pour le direct et le coup final, qui sont chargés). Le script :
 - vise le **poing** (pas l'os du bras) : le trajet du poing Motifect est recalé pour partir du poing
   de la Garde et arriver au même point d'impact que les anciens coups (dans la hitbox) ;
 - reprend la rotation du torse (mise à l'échelle : jab −35°, direct +40°, crochet −49°, finisher +50°),
@@ -29,13 +30,16 @@ Le R6 n'a ni coude ni genou, et le jeu impose l'impact à **0,15 s**. Le script 
 - ajoute une vraie **prise d'élan** avant chaque coup (voir plus bas), puis fait partir le coup en chaîne,
   du bas vers le poing, de plus en plus vite jusqu'au contact ;
 - arrête le poing net sur la cible (le hit-stop fige une pose propre), puis le ramène en douceur ;
-- commence et finit **exactement** en pose de Garde (le combo s'enchaîne toutes les 0,38 s ; voir
-  plus bas la rotation du torse gardée jusqu'au clic suivant).
+- commence et finit **exactement** en pose de Garde (le combo s'enchaîne 0,38 s après le jab et le
+  crochet, 0,48 s après le direct ; voir plus bas la rotation du torse gardée jusqu'au clic suivant).
 
 ## Préparation et transfert de poids
 Les boxeurs du pack Motifect ne « télégraphient » presque pas (7° de contre-rotation au plus, le poing
 ne recule jamais) : en 0,15 s le bras partait directement. Le script ajoute donc, **par-dessus** la mocap
-(réglages `windup` de chaque coup dans `SPECS`) :
+(réglages `windup` de chaque coup dans `SPECS`) une petite prise d'élan réaliste. C'est ce que font le
+**jab et le crochet**. Le direct et le coup final ont maintenant un **grand élan chargé** à la place
+(voir « L'élan des coups chargés » plus bas) ; leur impact, leur suivi et leur récupération restent
+ceux décrits ici, juste décalés à 0,28 s / 0,38 s.
 
 1. **Préparation (0 → 0,067 s, 4 images)** : le torse tourne à l'envers du coup, le poids descend et
    recule vers la jambe qui charge (les genoux plient), l'épaule recule, le poing revient vers le menton
@@ -60,12 +64,13 @@ ne recule jamais) : en 0,15 s le bras partait directement. Le script ajoute donc
 | Coup | Préparation (pose chargée à 0,05–0,067 s) | Vitesse du poing, 5 dernières images (studs/s) |
 |---|---|---|
 | Jab (M1_1) | torse 13° à l'envers, épaule avant qui plonge, poing 0,38 stud en arrière, le poids recule vers la jambe arrière | 5 → 12 → 23 → 25 → 29 |
-| Direct (M1_2) | torse 16° à l'envers, poing 0,5 en arrière près du menton, poids au centre puis rotation complète | 13 → 19 → 26 → 33 → 36 |
+| Direct (M1_2) | remplacé par l'élan chargé (plus bas) | — |
 | Crochet (M1_3) | torse enroulé 15° à droite sur la jambe avant, coude et poing écartés et bas | 4 → 8 → 21 → 24 → 39 |
-| Finisher (M1_4) | la plus grosse charge : torse 21° à l'envers, poids bas et en arrière, poing armé près de l'oreille, puis le bras passe par-dessus et redescend sur la cible | 13 → 21 → 30 → 33 → 35 |
+| Finisher (M1_4) | remplacé par l'élan chargé (plus bas) | — |
 
 Tout reste réaliste (amplitudes 1,5 à 2× les vraies, bien en dessous d'un style cartoon). Ce qui ne
-change pas : impact à 0,15 s, durées, ordre des mains, poing au même point d'impact, pieds au sol.
+change pas pour le jab et le crochet : impact à 0,15 s, durées, ordre des mains, poing au même point
+d'impact, pieds au sol.
 
 ## Régénérer
 ```
@@ -80,4 +85,52 @@ de `tools/anim/motifect_retarget.py`. Ne modifie pas les images clés à la main
 ## Ce qui n'a PAS changé
 Les coups des kits (Street Brawler, Boxer, Bouncer, Sentinel, Rift), la Garde, le blocage, les
 réactions, les VFX, les sons, les dégâts, les hitbox et les timings de `Config`
-(`HIT_DELAY` 0,15 s, `M1_INTERVAL` 0,38 s). Seuls les 4 blocs `Brawler_M1_N` ont été remplacés.
+(à l'époque `HIT_DELAY` 0,15 s, `M1_INTERVAL` 0,38 s). Seuls les 4 blocs `Brawler_M1_N` ont été remplacés.
+
+## Coups chargés (direct du droit et coup final)
+Les deux coups du bras droit prennent un grand élan (le bras part vers le dos), donc ils touchent
+plus tard. Les timings sont maintenant **par coup** dans `Config.Combat` :
+
+| Coup | Impact (`M1_HIT_DELAY`) | Coup suivant possible (`M1_INTERVAL` / `FINISHER_RECOVERY`) |
+|---|---|---|
+| 1 jab (gauche) | 0,15 s | 0,38 s |
+| 2 direct (droit, chargé) | 0,28 s | 0,48 s |
+| 3 crochet (gauche) | 0,15 s | 0,38 s |
+| 4 coup final (droit, chargé) | 0,38 s | 1,23 s (toujours 0,85 s après l'impact) |
+
+- Le « whoosh » du coup part 0,15 s avant l'impact (`M1_SWING_LEAD`) : tout de suite pour le jab et
+  le crochet, après l'élan pour les coups chargés.
+- Le combo reste inévitable : quand tu lances le coup suivant, la victime du coup d'avant reste
+  sonnée jusqu'à l'impact + 0,1 s (`COMBO_HOLD_MARGIN`).
+- Hors combo, un coup chargé se voit venir : l'adversaire peut le couper avec un jab, l'esquiver
+  (dash) ou le bloquer / parer (surtout le coup final).
+
+## L'élan des coups chargés (animation)
+Tu voulais qu'il **charge** son coup : le bras part presque derrière, au niveau du dos, comme une grosse
+prise d'élan, mais animé. C'est fait sur les deux coups du bras droit, par-dessus la mocap Motifect
+(l'impact, le suivi et la récupération restent ceux de Motifect, décalés plus tard). Le jab et le crochet
+n'ont pas changé (leurs blocs sont identiques à l'octet près).
+
+| | Direct (M1_2) | Coup final (M1_4) |
+|---|---|---|
+| Où part le poing | le bras descend le long de la hanche puis part en arrière : poing **derrière le dos**, à hauteur de la taille | le bras monte sur le côté puis en arrière : poing **derrière la tête** |
+| Torse enroulé (Garde −12°) | −66° (54° plus loin que la Garde) | −76° (64°), penché en arrière |
+| Poids | descend de 0,24 stud sur la jambe arrière pliée | descend de 0,17 stud, en arrière |
+| Main avant | reste devant le visage | vise l'adversaire (comme un lanceur), puis revient à la poitrine |
+| Élan (bras en arrière) | 0 → 0,15 s | 0 → 0,20 s |
+| Charge tenue | 0,15 → 0,18 s (2 images, le corps s'enroule encore un peu) | 0,20 → 0,263 s (4 images) |
+| Frappe | 0,18 → **0,28 s** : jambes et poids, puis torse, puis bras | 0,263 → **0,38 s** : le bras fait une boucle sur le côté puis tombe sur la cible |
+| Vitesse du poing, 5 dernières images (studs/s) | 28 → 55 → 92 → 141 → 146 | 34 → 62 → 102 → 154 → 155 |
+| Retour en Garde | ~0,45 s (le crochet part à 0,48 s) | ~0,9 s |
+| Durée du clip | 0,6 s | 1,08 s |
+
+- La frappe **accélère jusqu'au contact** (jamais de ralenti avant l'impact). Les 2 dernières images
+  sont très rapides (le bras tourne de 60 à 78° par image) : c'est le côté « animé », l'œil le lit comme
+  un flou de mouvement. Une traînée VFX sur ces 2 images marcherait bien.
+- Tout le reste reste humain : pendant l'élan le bras tourne de 30 à 40° par image au plus, la charge
+  tenue bouge de moins de 4 studs/s, les pieds restent au sol (le pied arrière pivote pendant la frappe).
+- Sur le coup final, quand le bras est armé derrière la tête, le haut du bras passe un peu dans le coin
+  arrière du torse (limite des épaules R6) : on le voit comme un bras derrière l'épaule.
+- Réglages : `CROSS_CHARGE` et `FINISHER_CHARGE` en haut de `tools/anim/motifect_retarget.py`
+  (les poses clés de l'élan, le chemin du bras pendant la frappe, l'ordre de départ de chaque partie
+  du corps). Relance le script avec `--write`, puis `stylua src`.

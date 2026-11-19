@@ -53,6 +53,11 @@ local BLOCK_CONFIRM_TIME = 0.3
 local combo = 0
 local lastAttackAt = -math.huge
 local nextAttackAt = 0
+-- No block until then (same rule as the server's attackingUntil).
+local attackingUntil = 0
+-- After something that isn't an M1 (KO finisher, throw, kit move): no
+-- block for as long as after a jab, as before.
+local NON_M1_NO_BLOCK = C.M1_INTERVAL[1]
 local nextDashAt = 0
 -- When we last PREDICTED a finisher (to reconcile with the server's choice).
 local predictedFinisherAt = -math.huge
@@ -69,6 +74,9 @@ export type AttackInfo = {
 	strong: boolean, -- the 4th hit of the combo
 	aim: Vector3?, -- AimController.getAimDirection(), sent to the server
 	id: number, -- this M1's number, echoed back in Remotes.CombatEvent
+	-- Which hit of the combo (1 jab, 2 cross, 3 hook, 4 finisher): picks
+	-- its wind-up, Config.Combat.M1_HIT_DELAY[combo].
+	combo: number,
 }
 local attackStarted = Signal.new() :: Signal.Signal<AttackInfo>
 -- The server answers within this long (else it's an old action).
@@ -162,6 +170,7 @@ local function tryAttack()
 		local finisher = myFinisher(character)
 		combo = 0
 		lastAttackAt = time
+		attackingUntil = time + NON_M1_NO_BLOCK
 		if finisher.cinematic then
 			-- A cutscene: nothing predicted, it starts when the server says so
 			-- (CinematicController holds our attacks for its length).
@@ -182,6 +191,7 @@ local function tryAttack()
 	if weapon then
 		combo = 0
 		lastAttackAt = time
+		attackingUntil = time + NON_M1_NO_BLOCK
 		nextAttackAt = time + weapon.recovery
 		CharacterAnimationController.playAction(character, "Bone_Throw")
 		SoundController.play("HeavySwing", character)
@@ -194,18 +204,22 @@ local function tryAttack()
 	end
 	combo = combo % #C.M1_DAMAGE + 1
 	local isFinisher = combo == #C.M1_DAMAGE
+	-- Same timing rules as the server (Combat.tryAttack).
+	local interval = if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL[combo]
 	lastAttackAt = time
-	nextAttackAt = time + (if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL)
+	nextAttackAt = time + interval
+	attackingUntil = time + math.min(interval, C.M1_HIT_DELAY[combo] + C.M1_COMMIT_AFTER_HIT)
 
+	-- (The whoosh is played by CombatEffectsController when the strike
+	-- starts: a charged punch is silent while the arm goes back.)
 	CharacterAnimationController.playAction(character, `Brawler_M1_{combo}`)
-	SoundController.play(if isFinisher then "HeavySwing" else "Swing", character)
 	-- Each M1 gets a number, sent to the server and echoed back with its
 	-- result, so our prediction below is matched with THIS punch only.
 	attackSeq += 1
 	local seq = attackSeq
 	local aim = AimController.getAimDirection()
 	Remotes.Attack:FireServer(aim, seq)
-	attackStarted.fire({ strong = isFinisher, aim = aim, id = seq })
+	attackStarted.fire({ strong = isFinisher, aim = aim, id = seq, combo = combo })
 end
 
 local function setBlocking(value: boolean)
@@ -220,7 +234,7 @@ local function setBlocking(value: boolean)
 			or isStunned(character)
 			or inCinematic(character)
 			or isBusyMoving()
-			or os.clock() < lastAttackAt + C.M1_INTERVAL
+			or os.clock() < attackingUntil
 		then
 			return
 		end
@@ -300,14 +314,17 @@ function CombatController.onServerAction(action: string)
 		predictedFinisherAt = -math.huge
 		CharacterAnimationController.playAction(character, action)
 		combo = tonumber(string.sub(action, 12)) or 1
-		nextAttackAt = lastAttackAt + C.M1_INTERVAL
+		local interval = if combo == #C.M1_DAMAGE then C.FINISHER_RECOVERY else C.M1_INTERVAL[combo]
+		nextAttackAt = lastAttackAt + interval
 	elseif string.sub(action, 1, 11) == "Brawler_M1_" then
 		-- Follow the server's count of the combo (a punch it refused would
 		-- otherwise put us one ahead: our "4th" being its 3rd...).
 		local serverCombo = tonumber(string.sub(action, 12))
 		if serverCombo and serverCombo ~= combo then
 			combo = serverCombo
-			local pause = if serverCombo == #C.M1_DAMAGE then C.FINISHER_RECOVERY else C.M1_INTERVAL
+			local pause = if serverCombo == #C.M1_DAMAGE
+				then C.FINISHER_RECOVERY
+				else C.M1_INTERVAL[serverCombo]
 			nextAttackAt = math.max(nextAttackAt, lastAttackAt + pause)
 		end
 	end
@@ -333,6 +350,7 @@ function CombatController.holdAttacks(seconds: number)
 	local time = os.clock()
 	nextAttackAt = math.max(nextAttackAt, time + seconds)
 	lastAttackAt = time
+	attackingUntil = math.max(attackingUntil, time + NON_M1_NO_BLOCK)
 	combo = 0
 end
 
@@ -417,6 +435,7 @@ function CombatController.start()
 		CharacterAnimationController.setPredictedBlock(false)
 		combo = 0
 		nextAttackAt = 0
+		attackingUntil = 0
 		nextDashAt = 0
 	end)
 end
