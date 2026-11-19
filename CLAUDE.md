@@ -30,5 +30,18 @@ Reference videos the player sends: extract them at about 15 fps and look at ever
 - Fetch the latest `main` before coding. One branch per feature; never push to `main`; never merge or delete a branch without the player asking.
 - Never change a branch you didn't create, or code synced from Studio.
 
+## Skills and plugins approved by the player
+The player has approved these, and every session must have them and use them whenever they fit the task:
+- Plugin `roblox-agent-skills` (marketplace `afrxo/roblox-agent-skills`): Luau, Roblox runtime, Rojo/Wally toolchain and UI.
+- Plugin `obsidian` (marketplace `kepano/obsidian-skills`): Obsidian Markdown, Bases, Canvas, Defuddle (clean web pages to Markdown when researching).
+- Skill `find-skills` (from `vercel-labs/skills`, in `.claude/skills/`): search skills.sh for a skill before starting an unfamiliar task.
+
+They are declared in `.claude/settings.json` and `.claude/skills/`, so they load on their own. If one is missing in a session that started before this was merged, install it (approved by the player):
+- `claude plugin marketplace add afrxo/roblox-agent-skills` then `claude plugin install roblox-agent-skills@roblox-agent-skills`
+- `claude plugin marketplace add kepano/obsidian-skills` then `claude plugin install obsidian@obsidian-skills`
+- `npx -y skills add vercel-labs/skills --skill find-skills -a claude-code -g -y`
+
+Any OTHER skill or plugin (including ones `find-skills` suggests) needs the player's own OK first.
+
 ## Still to do (only when the player asks)
 - Make the punch (M1) animations better, and polish some other animations.

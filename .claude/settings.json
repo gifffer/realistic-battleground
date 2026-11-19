@@ -5,9 +5,16 @@
         "source": "github",
         "repo": "afrxo/roblox-agent-skills"
       }
+    },
+    "obsidian-skills": {
+      "source": {
+        "source": "github",
+        "repo": "kepano/obsidian-skills"
+      }
     }
   },
   "enabledPlugins": {
-    "roblox-agent-skills@roblox-agent-skills": true
+    "roblox-agent-skills@roblox-agent-skills": true,
+    "obsidian@obsidian-skills": true
   }
 }
