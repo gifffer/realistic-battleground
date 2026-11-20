@@ -426,7 +426,7 @@ def cement_bag(ctx):
     """25 kg paper cement sack lying flat, set hard: block-bottom ends with pasted flaps, pointed
     corners, the valve, faded print bands, creases, one corner torn open and the powder spilt
     in a low drift with hard lumps (1.95 x 1.25, 0.45 tall; the drift reaches 0.6 further)."""
-    ctx.budget = 3000
+    ctx.budget = 3500
     ctx.smooth_angle = 48
     rng, noise = ctx.rng, ctx.noise
     angs = [2 * math.pi * k / 30 + math.pi / 30 for k in range(30)]  # (no point exactly on the floor line)
@@ -616,7 +616,7 @@ def backpack(ctx):
     """Worn top-loading rucksack standing slumped: soft bulging body, lid with two straps and
     buckles, zipped front pocket, mesh side pockets, padded S-curved shoulder straps, grab loop,
     grime on the base (1.25 x 0.75 + straps, 2.05 tall)."""
-    ctx.budget = 4000
+    ctx.budget = 4300
     ctx.smooth_angle = 50
     ctx.tint("Fabric", (66, 72, 54))  # faded olive Cordura (the data can pick navy, maroon, black)
     rng, noise = ctx.rng, ctx.noise
@@ -1074,8 +1074,8 @@ def sleeping_bag(ctx):
     ctx.smooth_angle = 70
     ctx.tint("Fabric", (44, 58, 86))  # faded navy ripstop (the data picks red, olive, grey...)
     noise = ctx.noise
-    L, W, t = 6.6, 2.5, 0.22
-    nu, nv = 42, 15
+    L, W, t = 6.6, 2.5, 0.3
+    nu, nv = 48, 15
     baffle = 0.55
 
     def width(u):
@@ -1100,12 +1100,12 @@ def sleeping_bag(ctx):
     nrm = _sheet_normals(pts, nu, nv)
 
     def puff(k):
-        # each baffle swells between its sewn lines (pinched to 45 % on the line)
+        # each baffle swells between its sewn lines (pinched to 30 % on the line, thinner at the side seams)
         u = (k // nv) / (nu - 1) * L
         d = abs(((u + baffle / 2) % baffle) - baffle / 2) / (baffle / 2)
         j = k % nv
         edge = min(j, nv - 1 - j) / 2.0
-        return t / 2 * (0.45 + 0.55 * smoothstep(0.0, 0.9, d)) * (0.75 + 0.25 * min(1.0, edge))
+        return t / 2 * (0.3 + 0.7 * smoothstep(0.0, 0.9, d) ** 0.7) * (0.6 + 0.4 * min(1.0, edge))
 
     ctx.add("Fabric", _slab(pts, nrm, nu, nv, puff, lambda k: -puff(k)))
     # the coil zip with its draft tube, down the +side edge from the hood to near the foot
@@ -1139,7 +1139,7 @@ def sleeping_bag(ctx):
     bands = []
     for b in range(1, int(L / baffle)):
         u = b * baffle / L
-        bands.append((u - 0.006, u + 0.006, 0.7))
+        bands.append((u - 0.008, u + 0.008, 0.62))
     # grime at the head end (the hood, where the face and hair were)
     wear = _uv_wear(pts, nu, nv, shell, bands=bands + [(0.88, 1.01, 0.72)])
     ctx.wear("Fabric", wear)
