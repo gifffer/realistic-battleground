@@ -19,13 +19,28 @@ in front of the face, in depth slots shared by every prop on that wall (zlayers:
 one plane, opaque blended colours where possible, at most 5 layers in one place).
 
 Scale: a character is ~5 studs tall; a floor ~10 studs; a door ~4 x 7.5; 1 stud ~ 0.3 m.
-Only built-in materials and colours, no textures / meshes. NO BOTTLES anywhere.
+Only built-in materials and colours, no textures / meshes. NO BOTTLES anywhere (nothing that
+reads as one either: no tall gas cylinders, no flasks).
 
 Art direction (from environment-art breakdowns and DevForum building advice): never a clean
 box; wear follows logic (water runs down from sills, joints and brackets; soot rises from
 vents and lamps; dirt and damp climb from the ground; hands grime door handles); frames and
 sills stand proud of the wall so it isn't flat; slight irregular tilts; layered, torn,
 overlapping surfaces tell that the place has been used for years.
+
+How the parts are kept from z-fighting (the player saw surfaces flicker and show two textures
+at once when the camera moves):
+  • Stains are MOSAICS, not stacks: one stain is a few pieces that BUTT edge to edge on one
+    depth slot (a band, a darker splash strip under it, a moss stretch beside it), and their
+    soft, ragged edges are right triangles (wedge parts lying flat on the wall: `tri`), never
+    a pile of nested rectangles. Pieces only stack (one slot in front) where something really
+    lies on top of something else (a poster on an older poster, a drip on a buffed patch).
+  • Assemblies (windows, doors) stand IN FRONT of every overlay slot (deeper than 0.29 out of
+    the wall) and are closed on their sides (jambs, sill, lintel), so a stain running down
+    the wall passes behind them unseen instead of cutting through their glass.
+  • Pieces of one assembly BUTT (a jamb stops under the lintel, a post stops under the rail);
+    where two parallel faces of different parts overlap, they are at least 0.06 apart.
+  • Small bumps (bolt heads, nails, staples, joints) are balls: no flat face to fight.
 """
 
 import math
@@ -50,6 +65,7 @@ from citykit import (  # noqa: E402
     jitter,
     mix,
     yxz_angles,
+    yxz_matrix,
 )
 import zlayers  # noqa: E402
 
@@ -76,11 +92,13 @@ STEEL_PAINT = [(52, 60, 56), (66, 58, 50), (70, 34, 30), (46, 50, 58), (84, 80, 
 WOOD = (104, 87, 60)
 WOOD_OLD = (78, 66, 50)
 WOOD_DARK = (58, 46, 36)
-FRAME_PAINT = [(150, 144, 128), (60, 66, 56), (88, 46, 38), (44, 40, 38)]
+WOOD_GREY = (98, 94, 86)  # weathered silver-grey timber (old water tanks)
+FRAME_PAINT = [(150, 144, 128), (60, 66, 56), (88, 46, 38), (44, 40, 38), (118, 112, 96)]
+UPVC = (186, 182, 170)  # yellowed white plastic frames
 VOID = (12, 12, 13)
 GLASS_DIRTY = [(64, 70, 66), (58, 60, 56), (72, 74, 66)]
 PAPER = [(150, 142, 120), (134, 122, 100), (118, 108, 90), (140, 128, 104), (108, 102, 88)]
-POSTER_INK = [(118, 44, 38), (40, 54, 70), (150, 120, 60), (60, 70, 52), (30, 28, 28)]
+POSTER_INK = [(118, 44, 38), (40, 54, 70), (150, 120, 60), (60, 70, 52), (30, 28, 28), (96, 58, 84)]
 CABLE = (22, 22, 24)
 PLASTIC_GREY = (120, 118, 108)
 BEIGE = (150, 142, 120)
@@ -139,14 +157,75 @@ def rod(f, name, p0, p1, d, color, material, shape=CYLINDER, **kw):
                     color, material, rot=yxz_angles(m), shape=shape, **kw)
 
 
+def bend(f, name, pts, d, color, material, joint=None, **kw):
+    """A bent tube through local points pts: a cylinder per segment and a ball of the same
+    diameter at every inner point (so each bend is round, not a kink or a gap). joint: the
+    joints' colour (a socket / bend fitting a shade different), default `color`.
+    Returns the number of parts."""
+    n = 0
+    for a, b in zip(pts, pts[1:]):
+        rod(f, name, a, b, d, color, material, **kw)
+        n += 1
+    for p in pts[1:-1]:
+        f.part(name + "Bend", p, (d * 1.04, d * 1.04, d * 1.04), joint or color, material, shape=BALL,
+               flags=kw.get("flags", DECOR))
+        n += 1
+    return n
+
+
+def bolt(f, name, p, d, color, material="Metal", flags=DECOR):
+    """A round head (bolt, rivet, nail, staple) centred on local point p: a ball, so it has no
+    flat face to fight with the surface it sits on."""
+    return f.part(name, p, (d, d, d), color, material, shape=BALL, flags=flags)
+
+
+_bolt = bolt  # (for builders whose own `bolt` option hides it)
+
+
+def _in_plane(sx, sy):
+    """Rotation (frame-local) that lays a Roblox wedge flat in the frame's XY plane as a right
+    triangle: its thickness along Z, the right angle at the corner (-sx, -sy) of its box, one leg
+    along sx * X and the other along sy * Y. (A Roblox wedge: bottom face full, back +Z face full,
+    the slope from bottom-front to top-back; so its X becomes Z, its Y becomes sy * Y and its
+    -Z becomes sx * X.)"""
+    return np.array([[0.0, 0.0, -sx], [0.0, sy, 0.0], [sx * sy, 0.0, 0.0]])
+
+
+def tri_part(f, name, px, py, a, b, z0, z1, color, material, **kw):
+    """A right-triangle plate lying in the wall plane between depths z0 and z1 out of the wall
+    (local z = -z0 .. -z1): the right angle at local (px, py), one leg a along X, one leg b along
+    Y (signed: a < 0 runs to -X, b < 0 hangs down). A wedge part: glass shards, chipped edges,
+    torn paper flaps, a cone's facets."""
+    sx, sy = (1 if a >= 0 else -1), (1 if b >= 0 else -1)
+    m = f.m @ _in_plane(sx, sy)
+    c = f.world((px + a / 2, py + b / 2, -(z0 + z1) / 2))
+    folder = kw.pop("folder", None) or f.folder
+    return f.D.part(folder, name, tuple(c), (abs(z1 - z0), abs(b), abs(a)), color, material, rot=yxz_angles(m),
+                    shape=WEDGE, **kw)
+
+
+def cone(f, name, cx, y0, cz, r, h, color, material, n=8, flags=DECOR, jit=None, rng=None):
+    """A cone (apex up) standing on local (cx, y0, cz), base radius r, height h: n wedges round
+    the vertical axis, each with its tall back face on the axis and its slope facing out (the
+    facets of a tank roof, a lamp shade). The wedges overlap near the axis, inside the cone,
+    and their bottom faces are meant to sit on something (the tank top, a disc): nothing of
+    them shows there. jit: colour jitter per facet (rng needed)."""
+    chord = 2 * r * math.tan(math.pi / n)
+    for i in range(n):
+        g = f.sub((cx, y0, cz), ry=360 * i / n)
+        c = jitter(color, rng, jit) if jit and rng else color
+        g.part(name, (0, h / 2, -r / 2), (chord, h, r), c, material, shape=WEDGE, flags=flags)
+    return n
+
+
 def _ov(k=0):
     """Local z centre of a 0.05-thick part meant to sit in front of overlay layer k: half a slot
     in front of slot k (zlayers.WALL_* depths), so it never shares a plane with an overlay.
-    Used for invisible text carriers (their SurfaceGui draws on the front face) and crack lines."""
+    Used for invisible text carriers (their SurfaceGui draws on the front face)."""
     return zlayers.wall_text_depth(k)
 
 
-def overlay(f, name, x0, x1, y0, y1, color, k=0, tr=0.5, material="Concrete", rz=0.0, **kw):
+def overlay(f, name, x0, x1, y0, y1, color, k=0, tr=0.5, material="Concrete", rz=0.0, inset=0.002, **kw):
     """A thin stain / paint / paper layer flat on the wall face. Matte by default (Concrete):
     a glossy translucent layer reads as a grey film, a matte one as a stain soaked in.
 
@@ -154,55 +233,134 @@ def overlay(f, name, x0, x1, y0, y1, color, k=0, tr=0.5, material="Concrete", rz
     front of every overlay it overlaps (from any prop), each slot WALL_TH thick with an air gap,
     so no two layers share a plane or intersect. k is the order hint inside the prop (higher =
     in front). A translucent layer lying wholly over one opaque surface is made OPAQUE with the
-    blended colour (nothing left to depth-sort). Returns the part index, or None when that place
-    already has zlayers.WALL_MAX layers (the layer is dropped, never squeezed in)."""
+    blended colour (nothing left to depth-sort). Pieces that only touch along an edge share a
+    slot: that is how the mosaics below are built. Returns the part index, or None when that
+    place already has zlayers.WALL_MAX layers (the layer is dropped, never squeezed in).
+    inset: each edge is pulled in by this much, so pieces that butt never overlap by a rounding
+    hair (the rows are written to 0.001 stud)."""
     flags = kw.pop("flags", DECOR)
-    return zlayers.wall_layer(f, name, (x0 + x1) / 2, (y0 + y1) / 2, abs(x1 - x0), abs(y1 - y0), rz, color, k, tr,
-                              material, flags, **kw)
+    w, h = abs(x1 - x0), abs(y1 - y0)
+    w, h = (w - 2 * inset if w > 4 * inset else w), (h - 2 * inset if h > 4 * inset else h)
+    return zlayers.wall_layer(f, name, (x0 + x1) / 2, (y0 + y1) / 2, w, h, rz, color, k, tr, material, flags, **kw)
+
+
+def _layer_item(D, idx):
+    """zlayers' record of the overlay made as row idx (its plane polygon and slot)."""
+    for pl in zlayers._state(D)["planes"]:
+        for it in reversed(pl["items"]):
+            if it["idx"] == idx:
+                return it
+    return None
+
+
+_CORNER = {(-1, -1): 0, (1, -1): 1, (1, 1): 2, (-1, 1): 3}  # (zlayers' order of a layer's corners)
+
+
+def tri(f, name, px, py, a, b, color, k=0, tr=0.5, material="Concrete", flags=DECOR):
+    """A right-triangle overlay: the soft, ragged edge of a stain (a tooth on a damp line, the
+    point of a run-off, a torn paper edge, a chipped render edge). Right angle at local
+    (px, py), legs a along X and b along Y (signed). It takes its slot like a rectangular overlay
+    (zlayers.wall_layer, with its box) and is then turned into a wedge lying flat in that slot,
+    and zlayers is told its true triangle, so layers next to it are not pushed forward for the
+    empty half of the box. Build a mosaic from it: a triangle sitting on the edge of a rectangle
+    of the same stain shares the rectangle's slot. Returns the part index or None."""
+    sx, sy = (1 if a >= 0 else -1), (1 if b >= 0 else -1)
+    a, b = abs(a) - 0.004, abs(b) - 0.004  # (pulled in off its neighbours, see overlay's inset)
+    if a < 0.03 or b < 0.03:
+        return None
+    px, py = px + sx * 0.002, py + sy * 0.002
+    idx = overlay(f, name, min(px, px + sx * a), max(px, px + sx * a), min(py, py + sy * b), max(py, py + sy * b),
+                  color, k=k, tr=tr, material=material, flags=flags, inset=0.0)
+    if idx is None:
+        return None
+    row = f.D.parts[idx - 1]
+    m = yxz_matrix(row[4], row[5], row[6]) @ _in_plane(sx, sy)
+    row[0] = WEDGE
+    row[4:7] = [round(v, 2) for v in yxz_angles(m)]
+    row[7:10] = [round(zlayers.WALL_TH, 3), round(b, 3), round(a, 3)]
+    it = _layer_item(f.D, idx)
+    if it is not None:
+        p = it["poly"]
+        it["poly"] = [p[_CORNER[(-sx, -sy)]], p[_CORNER[(sx, -sy)]], p[_CORNER[(-sx, sy)]]]
+    return idx
+
+
+def _ok(idx):
+    return 0 if idx is None else 1
+
+
+def ragged_top(f, rng, name, x0, x1, y, rise, color, k=0, tr=0.5, material="Concrete", peaks=1, flags=DECOR):
+    """The ragged upper edge of a stain whose body ends at height y between x0 and x1: `peaks`
+    gables side by side (two right triangles back to back each, uneven widths and heights up to
+    `rise`), so the edge is a wavering line of points, not a straight cut. rise < 0 hangs the
+    teeth down instead (a torn lower edge, the drips of a stain). Returns the parts made."""
+    n = 0
+    cuts = sorted(rng.uniform(x0, x1) for _ in range(peaks - 1))
+    edges = [x0] + cuts + [x1]
+    for a, b in zip(edges, edges[1:]):
+        if b - a < 0.12:
+            continue
+        px = a + (b - a) * rng.uniform(0.3, 0.7)
+        hh = rise * rng.uniform(0.45, 1.0)
+        n += _ok(tri(f, name, px, y, -(px - a), hh, color, k=k, tr=tr, material=material, flags=flags))
+        n += _ok(tri(f, name, px, y, b - px, hh * rng.uniform(0.6, 1.0), color, k=k, tr=tr, material=material,
+                     flags=flags))
+    return n
 
 
 def streak(f, rng, name, x, y_top, length, width, color, k=1, tr=0.55, taper=3):
-    """A run-off stain hanging down from (x, y_top): up to 2 overlapping layers (darkest and
-    narrowest at the source), slightly wavy. More layers bought nothing once they are opaque
-    blends, and each one takes a wall slot. Returns the number of parts made."""
-    taper = max(1, min(taper, 2))
+    """A run-off stain hanging down from (x, y_top): a mosaic on one slot, not a stack. taper 3:
+    a dark core at the source, the run (a little narrower, lighter) and a pointed tip (a right
+    triangle, leaning to one side) where it fades out; taper 2: run + tip; 1: the run alone.
+    The whole stain is turned a degree or so (running water never hangs quite straight).
+    Returns the number of parts made."""
+    taper = max(1, min(int(taper), 3))
+    g = f.sub((x, y_top, 0), rz=rng.uniform(-1.4, 1.4))
     n = 0
-    for i in range(taper):
-        t = i / max(1, taper - 1)
-        w = width * (1 - 0.55 * t) * rng.uniform(0.85, 1.1)
-        ln = length * (1 - 0.45 * t) * rng.uniform(0.85, 1.05)
-        xo = x + rng.uniform(-0.06, 0.06) * width
-        if overlay(f, name, xo - w / 2, xo + w / 2, y_top - ln, y_top, jitter(color, rng, 5, 0.1 * i), k=k + i,
-                   tr=min(0.9, tr + 0.12 * (taper - 1 - i)), rz=rng.uniform(-1.2, 1.2)) is not None:
-            n += 1
+    y = 0.0
+    if taper >= 3:
+        ch = min(length * rng.uniform(0.12, 0.2), 0.7)
+        n += _ok(overlay(g, name, -width / 2, width / 2, -ch, 0, jitter(mix(color, WET_DARK, 0.25), rng, 4),
+                         k=k, tr=max(0.0, tr - 0.15)))
+        y = -ch
+    bw = width * (rng.uniform(0.7, 0.85) if taper >= 3 else 1.0)
+    tip = (length + y) * (rng.uniform(0.35, 0.55) if taper >= 2 else 0.0)
+    body = length + y - tip
+    xo = rng.uniform(-0.1, 0.1) * (width - bw)
+    if body > 0.05:
+        n += _ok(overlay(g, name, xo - bw / 2, xo + bw / 2, y - body, y, jitter(color, rng, 4), k=k, tr=tr))
+        y -= body
+    if tip > 0.05:
+        side = rng.choice((-1, 1))
+        n += _ok(tri(g, name, xo + side * bw / 2, y, -side * bw, -tip, jitter(color, rng, 3), k=k,
+                     tr=min(0.92, tr + 0.08)))
     return n
 
 
 def soft(f, rng, name, x0, x1, y0, y1, color, opacity=0.5, layers=3, k=0, anchor="center", material="Concrete",
          ragged=0.25):
-    """A soft-edged stain: up to 2 nested layers shrinking toward the centre (or toward the
-    bottom / top edge for anchor = "bottom" / "top"), so the colour builds up toward the core
-    instead of ending on one hard edge. opacity = at the core. Each layer takes a wall slot,
-    and the layers are made opaque blends where they lie on one surface. So the gradient is 2
-    steps, not 3. Returns the number of parts made."""
-    layers = max(1, min(layers, 2))
-    a = 1 - (1 - opacity) ** (1 / layers)
+    """A soft-edged stain on one slot: a body with gable ends (two right triangles back to back,
+    off-centre) instead of a hard rectangle edge: on top for anchor = "bottom" (it rises from
+    something: grime on a step, moss), on top and bottom for "center", underneath for "top".
+    opacity = how strong it is. (`layers` is kept for the callers; the stain is one tone: nested
+    layers were what made the old stains read as stair-steps.) Returns the number of parts."""
+    del layers
     w, h = x1 - x0, y1 - y0
-    n = 0
-    for i in range(layers):
-        s = 1 - 0.6 * i / max(1, layers - 1) if layers > 1 else 1.0
-        sw = w * (1 - (1 - s) * 0.6) * rng.uniform(1 - ragged * 0.3, 1.0)
-        sh = h * s * rng.uniform(1 - ragged * 0.4, 1.0)
-        cx = (x0 + x1) / 2 + rng.uniform(-ragged, ragged) * (w - sw) * 0.5
-        if anchor == "bottom":
-            cy = y0 + sh / 2
-        elif anchor == "top":
-            cy = y1 - sh / 2
-        else:
-            cy = (y0 + y1) / 2 + rng.uniform(-ragged, ragged) * (h - sh) * 0.5
-        if overlay(f, name, cx - sw / 2, cx + sw / 2, cy - sh / 2, cy + sh / 2, jitter(color, rng, 3), k=k + i,
-                   tr=1 - a, material=material, rz=rng.uniform(-0.8, 0.8)) is not None:
-            n += 1
+    tr = 1 - opacity
+    g = f.sub(((x0 + x1) / 2, 0, 0), rz=rng.uniform(-0.8, 0.8))
+    hw = w / 2
+    top = h * rng.uniform(0.25, 0.4) * (1 + ragged) if anchor in ("bottom", "center") else 0.0
+    bot = h * rng.uniform(0.2, 0.35) * (1 + ragged) if anchor in ("top", "center") else 0.0
+    b0, b1 = y0 + bot, y1 - top
+    c = jitter(color, rng, 3)
+    n = _ok(overlay(g, name, -hw, hw, b0, b1, c, k=k, tr=tr, material=material))
+    if n == 0:
+        return 0
+    peaks = 2 if w > 1.5 else 1  # (two uneven points: one gable read as a house's roof)
+    if top > 0.05:
+        n += ragged_top(g, rng, name, -hw, hw, b1, top, c, k=k, tr=tr, material=material, peaks=peaks)
+    if bot > 0.05:
+        n += ragged_top(g, rng, name, -hw, hw, b0, -bot, c, k=k, tr=tr, material=material, peaks=peaks)
     return n
 
 
@@ -220,258 +378,313 @@ def light_extra(tags, light, attrs=None):
     return ex
 
 
-def sign_extra(text, color, font="PermanentMarker", lit=False, face="Front"):
+def sign_extra(text, color, font="PermanentMarker", lit=False, face="Front", bg=None):
+    """A SurfaceGui text on the carrier's face. bg: a background colour (a printed sticker or
+    label drawn flush on the carrier, no extra part)."""
     return {"g": {"text": text, "font": font, "color": [int(c) for c in color], "face": face, "lit": lit,
-                  "bg": None, "bg_tr": 1.0, "rot": 0, "align": "Center"}}
+                  "bg": [int(c) for c in bg] if bg else None, "bg_tr": 0.0 if bg else 1.0, "rot": 0,
+                  "align": "Center"}}
+
+
+def _layer_front(f, idx):
+    """Local z of the front face of overlay row idx (for things pinned on it: staples)."""
+    row = f.D.parts[idx - 1]
+    loc = f.m.T @ (np.array(row[1:4], float) - f.origin)
+    return loc[2] - zlayers.WALL_TH / 2
 
 
 # =================================================================================================
-# 1. Surfaces: grime, plaster, cracks, stains, posters, signs, graffiti
+# 1. Surfaces: grime, plaster, stains, posters, signs, graffiti
 # =================================================================================================
 
 
 def wall_grime(D, folder, origin, ry, rng, width=12.0, height=5.0, soot=True, moss=True):
-    """Damp and soot gradient at the foot of a wall: rising damp built up in overlapping
-    translucent bands (each a few pieces of different heights, so the top edge is ragged
-    and the colour deepens toward the ground), a wet splash band, moss in the corner of the
-    floor, and an optional soot haze higher up. Footprint: width x height (flat on the face).
-    Parts: 12-28."""
+    """Rising damp at the foot of a wall, as real damp looks: a wet, darker splash-back strip
+    along the ground (moss in one stretch of it), the damp band above it, and its top a ragged
+    tide line of uneven points climbing to about `height` (the wall wicks more water in some
+    places). Optionally a faint soot haze higher up. All one mosaic on the wall's first slot:
+    the pieces butt, nothing is stacked, and each is made opaque in the blended colour with the
+    wall's own material (zlayers), so the brick texture carries on through the stain.
+    Footprint: width x height (flat on the face). Parts: 4-12."""
     f = frame_at(D, folder, origin, ry)
     n = 0
-    bands = 4
-    # continuous bands (a smooth vertical gradient, darkest at the ground)...
-    for b in range(bands):
-        t = b / (bands - 1)
-        h = height * (0.85 - 0.62 * t) * rng.uniform(0.9, 1.1)
-        col = jitter(mix(DAMP, WET_DARK, t), rng, 3)
-        if b == 0:  # the tide mark: uneven runs, never one straight line
-            segs = max(3, min(7, int(width / 3)))
-            edges = sorted(rng.uniform(-width / 2, width / 2) for _ in range(segs - 1))
-            edges = [-width / 2] + edges + [width / 2]
-            for a, c in zip(edges, edges[1:]):
-                if c - a < 0.3:
-                    continue
-                overlay(f, "Damp", a - 0.15, c + 0.15, 0, h * rng.uniform(0.75, 1.15), col, k=b, tr=0.8,
-                        rz=rng.uniform(-1.2, 1.2))
-                n += 1
+    x0, x1 = -width / 2, width / 2
+    s = rng.uniform(0.32, 0.55)  # splash-back: rain bouncing off the ground
+    hb = height * rng.uniform(0.55, 0.68)  # the damp band; its tide line wavers above it
+    # the splash strip, one stretch of it moss (the corner that never dries)
+    runs = [(x0, x1, "Splash")]
+    if moss and width > 3 and rng.random() < 0.85:
+        mw = rng.uniform(0.9, min(2.6, width * 0.3))
+        mx = rng.uniform(x0 + 0.3, x1 - 0.3 - mw)
+        runs = [(x0, mx, "Splash"), (mx, mx + mw, "Moss"), (mx + mw, x1, "Splash")]
+    for a, b, nm in runs:
+        if b - a < 0.1:
             continue
-        x0 = -width / 2 + rng.uniform(0, 0.4)
-        x1 = width / 2 - rng.uniform(0, 0.4)
-        overlay(f, "Damp", x0, x1, 0, h, col, k=b, tr=0.8, rz=rng.uniform(-0.3, 0.3))
-        n += 1
-    # ...and faint tongues climbing higher where the wall wicks more water (ragged tide mark)
-    for _ in range(max(2, min(5, int(width / 4)))):
-        x = rng.uniform(-width / 2 + 1, width / 2 - 1)
-        w = rng.uniform(1.2, 3.5)
-        overlay(f, "Damp", max(-width / 2, x - w / 2), min(width / 2, x + w / 2), 0, height * rng.uniform(0.95, 1.25),
-                jitter(DAMP, rng, 3), k=bands, tr=0.86, rz=rng.uniform(-0.6, 0.6))
-        n += 1
-    overlay(f, "Splash", -width / 2, width / 2, 0, rng.uniform(0.35, 0.6), WET_DARK, k=bands + 1, tr=0.6)
+        if nm == "Moss":
+            n += _ok(overlay(f, "Moss", a, b, 0, s, jitter(MOSS, rng, 6), k=0, tr=0.3, material="Grass"))
+        else:
+            n += _ok(overlay(f, "Splash", a, b, 0, s, jitter(WET_DARK, rng, 3), k=0, tr=0.5))
+    damp = jitter(DAMP, rng, 3)
+    if overlay(f, "Damp", x0, x1, s, hb, damp, k=0, tr=0.66) is None:
+        return n
     n += 1
-    if moss:
-        for _ in range(rng.randint(1, 3)):
-            x = rng.uniform(-width / 2 + 0.6, width / 2 - 0.6)
-            w = rng.uniform(0.6, 1.8)
-            n += soft(f, rng, "Moss", x - w / 2, x + w / 2, 0, rng.uniform(0.3, 0.8), jitter(MOSS, rng, 6), opacity=0.55,
-                      layers=2, k=bands + 2, anchor="bottom", material="Grass")
-    if soot:
-        x = rng.uniform(-width / 4, width / 4)
+    # the tide line: uneven points (each a gable of two right triangles) along the whole width
+    peaks = max(1, min(6, int(width / 3.5)))
+    n += ragged_top(f, rng, "Damp", x0, x1, hb, min(1.3, (height - hb) * rng.uniform(0.7, 1.0)), damp, k=0, tr=0.66,
+                    peaks=peaks)
+    if soot and height + 2.6 < 14:  # a faint soot haze above (traffic, the kitchens' vents)
         w = rng.uniform(width * 0.35, width * 0.6)
-        y0 = height * rng.uniform(0.7, 1.0)
-        n += soft(f, rng, "Soot", x - w / 2, x + w / 2, y0, y0 + rng.uniform(2, 4), SOOT, opacity=0.3, layers=3, k=0)
+        x = rng.uniform(-width / 2 + w / 2, width / 2 - w / 2)
+        y0 = height + rng.uniform(0.4, 1.2)
+        n += soft(f, rng, "Soot", x - w / 2, x + w / 2, y0, y0 + rng.uniform(2, 3.2), SOOT, opacity=0.14, k=0)
     return n
 
 
 def plaster_patch(D, folder, origin, ry, rng, width=6.0, height=5.0, y=2.0, color=None, brick=None):
-    """A patch of old render on a brick wall, chipped away at its edges and in one hole so
-    the brick shows through: irregular rows of render (each row a few runs with jagged ends),
-    loose bricks standing proud in the hole, a darker dirt band at its foot.
-    Footprint: width x height at height y. Parts: 10-26."""
+    """A patch of old render left on a brick wall: a few large pieces of one render skin (on the
+    wall's first slot, about 2 cm thick like real render) round a hole where it fell off and the
+    brick shows, with chipped edges (right triangles biting in or sticking out, never stair-step
+    rows), loose bricks standing proud in the hole, the lower part dirtier (splashed) and a dirt
+    run under it. Footprint: width x height at height y. Parts: 8-16."""
     f = frame_at(D, folder, origin, ry)
     base = color or rng.choice(PLASTER)
     brick = brick or rng.choice(BRICK)
+    clean = jitter(mix(base, brick, 0.12), rng, 2)  # (old render takes the wall's dirt)
+    dirty = jitter(mix(base, DAMP, 0.35), rng, 2)
     n = 0
-    rows = max(4, int(height / 0.65))
-    hs = [rng.uniform(0.6, 1.4) for _ in range(rows)]
-    hs = [h * height / sum(hs) for h in hs]
-    starts = [y + sum(hs[:i]) for i in range(rows)]
-    hole_c = (rng.uniform(-width * 0.25, width * 0.25), y + rng.uniform(0.3, 0.7) * height)
-    hole_r = rng.uniform(0.18, 0.3) * min(width, height)
-    thick = rng.uniform(0.08, 0.1)
-    for r in range(rows):
-        y0 = starts[r] + rng.uniform(-0.04, 0.04)
-        y1 = y0 + hs[r] + 0.08
-        # each row is shorter at the patch's top/bottom (the patch is roughly oval)
-        t = abs((r + 0.5) / rows - 0.5) * 2
-        half = width / 2 * (1 - 0.35 * t * t) * rng.uniform(0.85, 1.0)
-        x0, x1 = -half + rng.uniform(-0.25, 0.25), half + rng.uniform(-0.25, 0.25)
-        ym = (y0 + y1) / 2
-        dy = abs(ym - hole_c[1])
-        if dy < hole_r:  # the row is cut by the hole: two runs
-            hw = math.sqrt(hole_r * hole_r - dy * dy) * rng.uniform(0.8, 1.2)
-            runs = [(x0, hole_c[0] - hw), (hole_c[0] + hw, x1)]
-        else:
-            runs = [(x0, x1)]
-        for a, b in runs:
-            if b - a < 0.3:
-                continue
-            # one even skin (same colour / thickness, overlapping runs: no seams), only its
-            # outline is jagged; the chipped edge shows as the runs' uneven ends
-            tk = thick + 0.008 * (r % 2)  # overlapping rows never coplanar (no z-fighting)
-            f.part("Render", ((a + b) / 2, (y0 + y1) / 2, -tk / 2), (b - a, y1 - y0 + 0.1, tk),
-                   jitter(base, rng, 1.5), "Plaster", rot=(0, 0, rng.uniform(-0.4, 0.4)), flags=DECOR)
-            n += 1
-    # loose / exposed bricks in the hole (proud, darker, chipped)
-    for _ in range(rng.randint(2, 4)):
-        bx = hole_c[0] + rng.uniform(-hole_r * 0.6, hole_r * 0.6)
-        by = hole_c[1] + rng.uniform(-hole_r * 0.6, hole_r * 0.6)
-        f.part("Brick", (bx, by, -0.05), (rng.uniform(0.75, 0.95), 0.36, 0.1), jitter(brick, rng, 10, 0.1), "Brick",
-               rot=(0, 0, rng.uniform(-3, 3)), flags=DECOR)
+    x0, x1, y0, y1 = -width / 2, width / 2, y, y + height
+    # the hole (brick showing): a box in the middle third, off-centre
+    hw, hh = width * rng.uniform(0.2, 0.32), height * rng.uniform(0.22, 0.34)
+    hx = rng.uniform(x0 + 0.25 * width, x1 - 0.25 * width - hw)
+    hy = rng.uniform(y0 + 0.3 * height, y1 - 0.2 * height - hh)
+    ym = hy - rng.uniform(0.1, 0.25) * (hy - y0)  # the dirty band's top (below the hole)
+    pieces = [
+        (x0, x1, y0, ym, dirty),  # dirty foot
+        (x0, x1, ym, hy, clean),
+        (x0, hx, hy, hy + hh, clean),
+        (hx + hw, x1, hy, hy + hh, clean),
+        (x0, x1, hy + hh, y1, clean),
+    ]
+    for a, b, c, d, col in pieces:
+        if b - a > 0.1 and d - c > 0.1:
+            n += _ok(overlay(f, "Render", a, b, c, d, col, k=0, tr=0.0, material="Plaster"))
+    # chipped outline: the top edge breaks up in points, the sides lose triangles
+    n += ragged_top(f, rng, "Render", x0, x1, y1, rng.uniform(0.35, 0.7), clean, k=0, tr=0.0, material="Plaster",
+                    peaks=max(2, int(width / 1.6)))
+    for sx, xe in ((-1, x0), (1, x1)):  # teeth sticking out of each side, pointing up or down
+        for i, ty in enumerate(sorted(rng.uniform(y0 + 0.5, y1 - 0.6) for _ in range(2))):
+            col = dirty if ty < ym else clean  # (the lower one hangs down, the upper one points up: apart)
+            n += _ok(tri(f, "Render", xe, ty, sx * rng.uniform(0.2, 0.45), (1 if i else -1) * rng.uniform(0.35, 0.7),
+                         col, k=0, tr=0.0, material="Plaster"))
+    n += ragged_top(f, rng, "Render", x0, x1, y0, -rng.uniform(0.2, 0.45), dirty, k=0, tr=0.0, material="Plaster",
+                    peaks=max(1, int(width / 2.5)))
+    # the hole's edge: two chips biting into the render above and below it
+    n += _ok(tri(f, "Render", hx + hw * rng.uniform(0.3, 0.7), hy + hh, rng.choice((-1, 1)) * hw * 0.3, -0.3, clean,
+                 k=0, tr=0.0, material="Plaster"))
+    # loose bricks in the hole, standing proud (each its own depth: they never share a face)
+    for i in range(rng.randint(1, 3)):
+        bx = hx + hw * rng.uniform(0.25, 0.75)
+        by = hy + hh * (0.25 + 0.25 * i)
+        dz = (0.18, 0.23, 0.13)[i]  # (fronts between the overlay slots' fronts, see SLOT_SAFE)
+        f.part("Brick", (bx, by, -dz / 2), (rng.uniform(0.7, 0.85), 0.3, dz),
+               jitter(brick, rng, 10, 0.1), "Brick", rot=(rng.uniform(-2, 2), rng.uniform(-3, 3), rng.uniform(-4, 4)),
+               flags=DECOR)
         n += 1
-    # dirt on the render (darker toward its foot) and a run-off streak
-    n += soft(f, rng, "Dirt", -width * 0.45, width * 0.45, y, y + height * 0.45, DAMP, opacity=0.35, layers=2, k=4,
-              anchor="bottom")
-    n += streak(f, rng, "Streak", rng.uniform(-width / 3, width / 3), y + height, height * 0.7, 0.5, DAMP, k=5,
-                tr=0.72, taper=2)
+    # a dirt run under the patch (from its lowest point)
+    n += streak(f, rng, "Streak", rng.uniform(x0 + 0.5, x1 - 0.5), y0 - 0.25, min(y0 - 0.3, height * 0.6), 0.45,
+                DAMP, k=1, tr=0.66, taper=2) if y0 > 1.2 else 0
     return n
 
 
 def crack(D, folder, origin, ry, rng, length=5.0, y=3.0, x=0.0, branch=True):
-    """A crack wandering down the wall from (x, y + length): a jagged polyline of thin dark
-    slivers, wider at its origin, with a side branch. Footprint: ~length tall. Parts: 3-9."""
-    f = frame_at(D, folder, origin, ry)
-    n = 0
-
-    def walk(px, py, total, width, k):
-        nonlocal n
-        made = 0
-        while total > 0 and made < 6:
-            step = min(total, rng.uniform(0.5, 1.2))
-            ang = math.radians(rng.uniform(-40, 40))
-            qx, qy = px + math.sin(ang) * step, py - math.cos(ang) * step
-            beam(f, "Crack", (px, py, _ov(k)), (qx, qy, _ov(k)), width, 0.05, jitter(WET_DARK, rng, 4), "Slate",
-                 flags=DECOR)
-            n += 1
-            made += 1
-            px, py, total, width = qx, qy, total - step, max(0.05, width * 0.8)
-        return px, py
-
-    top = y + length
-    walk(x, top, length * 0.65, rng.uniform(0.1, 0.16), 0)
-    if branch:
-        walk(x + rng.uniform(-0.3, 0.3), top - length * rng.uniform(0.2, 0.4), length * 0.35, 0.07, 1)
-    return n
+    """DROPPED (the audit's verdict): the crack was dark beams standing proud of the wall, which
+    read as wires stuck on it; a real crack is a recess following the mortar, which parts
+    can't make. Kept as a no-op so callers still run. Parts: 0."""
+    del D, folder, origin, ry, rng, length, y, x, branch
+    return 0
 
 
 def rust_streak(D, folder, origin, ry, rng, x=0.0, y=8.0, length=4.0, width=0.6, bolt=True):
-    """Rust run-off under a fixing (bolt / old bracket stub) at (x, y): tapered orange-brown
-    layers, darkest at the source. Footprint: width x length. Parts: 3-5."""
+    """Rust run-off under an old fixing at (x, y): the stub of a cut-off bracket (a plate bolted
+    to the wall, a flat bar sticking out) or just the bolt holes (bolt=False), and below it the
+    rust stain: a dark core at the source, the run, a pointed tip where it fades.
+    Footprint: width x length. Parts: 2-6."""
     f = frame_at(D, folder, origin, ry)
     n = 0
+    top = y
     if bolt:
-        f.part("Stub", (x, y, -0.08), (0.22, 0.22, 0.16), jitter(RUST_DARK, rng, 5), "CorrodedMetal", flags=DECOR)
-        n += 1
-    n += streak(f, rng, "RustStreak", x, y, length, width, jitter(RUST_STAIN, rng, 8), k=0, tr=0.62,
-                taper=rng.randint(2, 3))
+        pc = jitter(RUST_DARK, rng, 5)
+        f.box("Stub", (x - 0.16, y - 0.16, -0.08), (x + 0.16, y + 0.16, 0), pc, "CorrodedMetal", flags=DECOR)
+        f.box("Stub", (x - 0.05, y - 0.13, -0.5), (x + 0.05, y + 0.13, -0.08), jitter(RUST, rng, 6), "CorrodedMetal",
+              rot=(0, 0, rng.uniform(-6, 6)), flags=DECOR)
+        bolt_ = rng.choice((-1, 1))
+        _bolt(f, "Bolt", (x + bolt_ * 0.1, y + 0.1, -0.08), 0.08, RUST_DARK)
+        n += 3
+        top = y - 0.18
+    n += streak(f, rng, "RustStreak", x, top, length, width, jitter(RUST_STAIN, rng, 8), k=0, tr=0.5, taper=3)
     return n
 
 
 def efflorescence(D, folder, origin, ry, rng, width=4.0, y=0.4, height=1.6):
-    """White salt bloom on brick (where water evaporates: above the damp line, under sills):
-    a few chalky translucent blotches with a crisper tide line. Footprint: width x height.
-    Parts: 3-6."""
-    f = frame_at(D, folder, origin, ry)
-    n = 0
-    for _ in range(rng.randint(2, 4)):
-        cx = rng.uniform(-width / 2 + 0.5, width / 2 - 0.5)
-        w = rng.uniform(0.8, width * 0.6)
-        h = rng.uniform(0.4, height)
-        overlay(f, "Salt", cx - w / 2, cx + w / 2, y, y + h, jitter(EFFLO, rng, 6), k=rng.randint(0, 2),
-                tr=rng.uniform(0.62, 0.78), rz=rng.uniform(-3, 3))
-        n += 1
-    overlay(f, "TideLine", -width / 2, width / 2, y + height * 0.8, y + height * 0.8 + 0.12, EFFLO, k=3, tr=0.55,
-            rz=rng.uniform(-1.5, 1.5))
-    return n + 1
+    """DROPPED (the audit's verdict): a pale panel that read as a pasted sheet, on the same
+    planes as the damp. Salt bloom belongs to the damp stain itself. Kept as a no-op so callers
+    still run. Parts: 0."""
+    del D, folder, origin, ry, rng, width, y, height
+    return 0
 
 
 POSTER_TEXTS = ["MISSING", "LIVE · THE ROT", "CASH FOR GOLD", "ROOMS · NO ID", "LOST DOG", "FIGHT NIGHT",
                 "WE BUY ANYTHING", "REWARD", "CLUB HOLLOW", "VOTE NO", "EVICTION NOTICE"]
+POSTER_SUB = ["FRIDAY · 9PM", "NO QUESTIONS", "CALL 555-0143", "CASH ONLY", "ALL WELCOME", "LAST CHANCE"]
+
+
+def _sheet(f, rng, x0, x1, y0, y1, paper, k, state):
+    """One printed sheet as a mosaic on one slot: "intact", "torn" (only its top part left, the
+    lower edge ripped into points), or "corner" (a corner ripped off diagonally). Returns
+    (parts, the box of what is left (x0, x1, y0, y1), the row of its main piece)."""
+    n = 0
+    main = None
+    if state == "torn":
+        cut = y0 + (y1 - y0) * rng.uniform(0.38, 0.62)
+        main = overlay(f, "Poster", x0, x1, cut, y1, paper, k=k, tr=0.0)
+        n += _ok(main)
+        n += ragged_top(f, rng, "Poster", x0, x1, cut, -rng.uniform(0.25, 0.55), paper, k=k, tr=0.0,
+                        peaks=rng.randint(1, 2))
+        return n, (x0, x1, cut, y1), main
+    if state == "corner":
+        c = (x1 - x0) * rng.uniform(0.3, 0.5)
+        yc = y1 - (y1 - y0) * rng.uniform(0.2, 0.35)
+        right = rng.random() < 0.5
+        main = overlay(f, "Poster", x0, x1, y0, yc, paper, k=k, tr=0.0)
+        n += _ok(main)
+        if right:
+            n += _ok(overlay(f, "Poster", x0, x1 - c, yc, y1, paper, k=k, tr=0.0))
+            n += _ok(tri(f, "Poster", x1 - c, yc, c, y1 - yc, paper, k=k, tr=0.0))
+        else:
+            n += _ok(overlay(f, "Poster", x0 + c, x1, yc, y1, paper, k=k, tr=0.0))
+            n += _ok(tri(f, "Poster", x0 + c, yc, -c, y1 - yc, paper, k=k, tr=0.0))
+        return n, (x0, x1, y0, yc), main
+    main = overlay(f, "Poster", x0, x1, y0, y1, paper, k=k, tr=0.0)
+    return _ok(main), (x0, x1, y0, y1), main
 
 
 def torn_posters(D, folder, origin, ry, rng, width=3.6, height=4.2, y=3.5, text=None, layers=None):
-    """Fly-posting built up over years: several paper layers (older ones larger and paler),
-    torn so the lower layers and the wall show, a hanging peeled flap, glue stains and
-    tape. The top poster carries a faded headline. Footprint: width x height. Parts: 9-18."""
+    """Fly-posting built up over years, as it is done: a run of the same poster pasted side by
+    side (real poster proportions, A2-ish 1 : 1.41), over the torn remains of an older run in
+    other faded colours. Each sheet is a mosaic on its slot (torn ones lose their lower part
+    in a ragged edge of points, some lose a corner diagonally); the newest run is printed (a
+    faded image block and a headline, SurfaceGui) and stapled (round heads); one torn corner
+    curls off the wall. Footprint: width x height. Parts: 10-24."""
     f = frame_at(D, folder, origin, ry)
     n = 0
-    layers = layers or rng.randint(2, 4)
-    for i in range(layers):
-        w = width * rng.uniform(0.55, 0.85) * (1.15 - 0.1 * i)
-        h = height * rng.uniform(0.55, 0.85) * (1.15 - 0.1 * i)
-        cx = rng.uniform(-width / 2 + w / 2, width / 2 - w / 2) if width > w else 0.0
-        y0 = y + rng.uniform(0, max(0.01, height - h))
-        paper = jitter(rng.choice(PAPER), rng, 8, 0.05 * (layers - i))
-        rz = rng.uniform(-2.5, 2.5)
-        # the sheet: top part intact, the bottom torn into a ragged remnant
-        cut = rng.uniform(0.35, 0.65)
-        overlay(f, "Poster", cx - w / 2, cx + w / 2, y0 + h * cut, y0 + h, paper, k=i, tr=0.0, rz=rz)
-        rw = w * rng.uniform(0.4, 0.8)
-        rx = cx + rng.uniform(-(w - rw) / 2, (w - rw) / 2)
-        overlay(f, "Poster", rx - rw / 2, rx + rw / 2, y0 + h * cut * rng.uniform(0.2, 0.6), y0 + h * cut + 0.02,
-                paper, k=i, tr=0.0, rz=rz + rng.uniform(-3, 3))
-        n += 2
-        if i == layers - 1 or rng.random() < 0.4:  # a printed band (photo / headline block)
-            ink = jitter(rng.choice(POSTER_INK), rng, 8, 0.15)
-            overlay(f, "Print", cx - w * 0.38, cx + w * 0.38, y0 + h * 0.62, y0 + h * 0.9, ink, k=i + 1,
-                    tr=rng.uniform(0.25, 0.45), rz=rz)
-            n += 1
-        if i == layers - 1:
-            label = text or rng.choice(POSTER_TEXTS)
-            f.part("PosterText", (cx, y0 + h * 0.76, _ov(i + 2)), (w * 0.82, h * 0.22, 0.05), (0, 0, 0),
-                   "SmoothPlastic", rot=(0, 0, rz), transparency=1, flags=DECOR,
+    x0, x1 = -width / 2, width / 2
+    # the older layer: one or two big sheets side by side (they butt), torn high and low
+    older = rng.randint(1, 2) if layers is None else max(1, min(2, layers - 1))
+    cuts = [x0] + ([rng.uniform(x0 + width * 0.35, x1 - width * 0.35)] if older == 2 else []) + [x1]
+    for a, b in zip(cuts, cuts[1:]):
+        top = y + height * rng.uniform(0.7, 0.95)
+        low = y + height * rng.uniform(0.0, 0.25)
+        paper = jitter(mix(rng.choice(PAPER), rng.choice(POSTER_INK), rng.uniform(0.15, 0.35)), rng, 6, 0.08)
+        if overlay(f, "OldPoster", a, b, low, top, paper, k=0, tr=0.0) is None:
+            continue
+        n += 1
+        n += ragged_top(f, rng, "OldPoster", a, b, top, rng.uniform(0.25, 0.5), paper, k=0, tr=0.0, peaks=1)
+    # the new run: 1-3 copies of one poster
+    ph = min(height * rng.uniform(0.55, 0.68), 2.6)
+    pw = ph / 1.41
+    count = max(1, min(3, int((width - 0.1) / (pw + 0.06))))
+    gap = rng.uniform(0.04, 0.12)
+    span = count * pw + (count - 1) * gap
+    sx = rng.uniform(x0, x1 - span) if span < width else x0 + (width - span) / 2
+    py = y + height - ph - rng.uniform(0.05, 0.4)
+    paper = jitter(rng.choice(PAPER[:4]), rng, 6)
+    ink = jitter(mix(rng.choice(POSTER_INK), paper, rng.uniform(0.25, 0.45)), rng, 6)  # faded print
+    label = text or rng.choice(POSTER_TEXTS)
+    sub = rng.choice(POSTER_SUB)
+    states = ["intact"] * count
+    if count >= 2:
+        states[rng.randrange(count)] = "torn"
+    if rng.random() < 0.6:
+        free = [i for i, s in enumerate(states) if s == "intact"]
+        if free:
+            states[rng.choice(free)] = "corner"
+    flap_done = False
+    for i in range(count):
+        a = sx + i * (pw + gap)
+        b = a + pw
+        dy = rng.uniform(-0.06, 0.06)
+        made, (ka, kb, kc, kd), main = _sheet(f, rng, a, b, py + dy, py + ph + dy, jitter(paper, rng, 3), 1, states[i])
+        n += made
+        if main is None:
+            continue
+        # the printed image block (on the sheet: one slot in front) and the headline above it
+        ib0, ib1 = py + dy + ph * 0.3, py + dy + ph * 0.74
+        if kc < ib0 + 0.1 and kd > ib1 - 0.05:
+            n += _ok(overlay(f, "Print", a + pw * 0.1, b - pw * 0.1, max(ib0, kc + 0.05), ib1, ink, k=2, tr=0.0))
+        if kd > py + dy + ph * 0.9:
+            f.part("PosterText", ((a + b) / 2, py + dy + ph * 0.86, _ov(3)), (pw * 0.86, ph * 0.13, 0.05), (0, 0, 0),
+                   "SmoothPlastic", transparency=1, flags=DECOR,
                    extra=sign_extra(label, jitter((40, 34, 30), rng, 6), font=rng.choice(["Oswald", "Bodoni", "Arial"])))
             n += 1
-            # the peeled flap: a corner hanging off the wall
-            fx = cx + (w / 2 - 0.35) * rng.choice((-1, 1))
-            f.part("Flap", (fx, y0 + h * cut - 0.35, -0.16), (0.7, 0.7, 0.05), paper, "SmoothPlastic",
-                   rot=(rng.uniform(18, 32), 0, rng.uniform(-25, 25)), flags=DECOR)
+        if states[i] == "intact" and kc < py + dy + ph * 0.2:
+            f.part("PosterSub", ((a + b) / 2, py + dy + ph * 0.17, _ov(3)), (pw * 0.8, ph * 0.08, 0.05), (0, 0, 0),
+                   "SmoothPlastic", transparency=1, flags=DECOR, extra=sign_extra(sub, ink, font="Oswald"))
             n += 1
-    # glue tide marks and tape
-    n += soft(f, rng, "Glue", -width / 2, width / 2, y - 0.3, y + height, (104, 98, 80), opacity=0.25, layers=2, k=0)
-    for _ in range(rng.randint(1, 2)):
-        tx = rng.uniform(-width / 2, width / 2)
-        overlay(f, "Tape", tx - 0.25, tx + 0.25, y + height * rng.uniform(0.6, 0.95), y + height * rng.uniform(0.6, 0.95) + 0.12,
-                (170, 160, 120), k=layers + 2, tr=0.35, rz=rng.uniform(-30, 30))
-        n += 1
+        # staples at the top corners (round heads on the paper)
+        if i == 0 or rng.random() < 0.5:
+            zf = _layer_front(f, main)
+            for xs in (a + 0.08, b - 0.08):
+                bolt(f, "Staple", (xs, kd - 0.08, zf), 0.05, (120, 120, 116))
+                n += 1
+        # one torn sheet's corner curls off the wall
+        if states[i] == "torn" and not flap_done:
+            flap_done = True
+            fx = a if rng.random() < 0.5 else b
+            g = f.sub((fx, kc, _layer_front(f, main) - 0.01), rx=rng.uniform(22, 38))
+            tri_part(g, "Flap", 0, 0, (0.45 if fx == a else -0.45), -rng.uniform(0.35, 0.55), 0, 0.02,
+                     jitter(paper, rng, 4, 0.05), "SmoothPlastic", flags=DECOR)
+            n += 1
     return n
 
 
 def painted_sign(D, folder, origin, ry, rng, width=9.0, height=2.4, y=11.0, text="HARLAN & SONS · TANNERY",
                  color=None, ground=None):
-    """A faded 'ghost sign' painted on brick decades ago: weathered ground colour, a border,
-    the lettering half gone, bare patches where the paint flaked off, a soot wash.
-    Footprint: width x height at y. Parts: 9-16."""
+    """A faded 'ghost sign' painted on brick decades ago: the paint survives in bands between
+    the mortar courses (where water ran along the joints the paint is gone: thin gaps where the
+    brick shows), a border line top and bottom, whole flakes missing, the lettering half gone
+    (SurfaceGui), rain streaks through it. A mosaic on one slot. Footprint: width x height at y.
+    Parts: 8-18."""
     f = frame_at(D, folder, origin, ry)
     ground = ground or jitter(rng.choice([(108, 92, 64), (70, 76, 70), (96, 54, 44), (120, 116, 104)]), rng, 6)
     ink = color or jitter(rng.choice([(176, 166, 140), (150, 140, 112), (30, 30, 28)]), rng, 6)
-    overlay(f, "SignGround", -width / 2, width / 2, y, y + height, ground, k=0, tr=0.55)
-    for yy in (y + 0.12, y + height - 0.12):
-        overlay(f, "SignBorder", -width / 2 + 0.12, width / 2 - 0.12, yy - 0.05, yy + 0.05, ink, k=1, tr=0.5)
+    n = 0
+    x0, x1 = -width / 2, width / 2
+    # rows: border, ground bands, border (gaps of 0.05 between them: the lost mortar lines)
+    rows = [("SignBorder", 0.14, ink)]
+    body = height - 0.28 - 0.05 * 5
+    hs = [rng.uniform(0.8, 1.2) for _ in range(4)]
+    rows += [("SignGround", body * h_ / sum(hs), ground) for h_ in hs]
+    rows += [("SignBorder", 0.14, ink)]
+    yy = y
+    for nm, rh, col in rows:
+        # each row breaks into a few runs where flakes are missing
+        cuts = [x0]
+        for _ in range(rng.randint(0, 2) if nm == "SignGround" else rng.randint(0, 1)):
+            c = rng.uniform(cuts[-1] + 0.6, x1 - 0.6) if cuts[-1] + 1.2 < x1 else None
+            if c is None:
+                break
+            cuts += [c, c + rng.uniform(0.3, 1.1)]
+        cuts.append(x1)
+        for a, b in zip(cuts[0::2], cuts[1::2]):
+            if b - a > 0.25:
+                n += _ok(overlay(f, nm, a, b, yy, yy + rh, jitter(col, rng, 4), k=0, tr=0.42))
+        yy += rh + 0.05
     f.part("SignText", (0, y + height / 2, _ov(2)), (width * 0.92, height * 0.62, 0.05), (0, 0, 0), "SmoothPlastic",
            transparency=1, flags=DECOR, extra=sign_extra(text, mix(ink, ground, 0.35), font="Oswald"))
-    n = 4
-    for _ in range(rng.randint(2, 3)):  # flaked patches: bare (darker, sooty) brick
-        px = rng.uniform(-width / 2 + 0.8, width / 2 - 0.8)
-        pw = rng.uniform(0.7, 1.8)
-        py = rng.uniform(y, y + height * 0.7)
-        overlay(f, "Flaked", px - pw / 2, px + pw / 2, py, py + rng.uniform(0.4, 0.9), jitter(BRICK[2], rng, 6), k=3,
-                tr=0.15, rz=rng.uniform(-6, 6), material="Brick")
-        n += 1
-    n += soft(f, rng, "SootWash", -width / 2 - 0.5, width / 2 + 0.5, y - 0.8, y + height + 0.6, SOOT, opacity=0.3,
-              layers=2, k=4)
-    for _ in range(rng.randint(1, 3)):  # rain has washed streaks through the paint
-        n += streak(f, rng, "RunOff", rng.uniform(-width / 2, width / 2), y + height + 0.3, height + rng.uniform(0.5, 2),
-                    rng.uniform(0.3, 0.6), SOOT, k=6, tr=0.74, taper=2)
+    n += 1
+    for _ in range(rng.randint(1, 2)):  # rain has washed streaks through the paint
+        n += streak(f, rng, "RunOff", rng.uniform(x0 + 0.5, x1 - 0.5), y + height + 0.3, height + rng.uniform(0.5, 2),
+                    rng.uniform(0.3, 0.55), SOOT, k=6, tr=0.7, taper=2)
     return n
 
 
@@ -481,28 +694,44 @@ GRAFFITI_TAGS = ["NO COPS", "R0T", "SKUL", "MARROW", "DEAD END", "KRASH", "SLEEP
 
 def graffiti_tag(D, folder, origin, ry, rng, width=5.0, height=1.8, y=4.0, x=0.0, text=None, color=None,
                  buffed=None, drips=True):
-    """A spray-painted tag: the text (a "g" sign on an invisible part, face Front), paint
-    drips running under it, and often an older tag 'buffed' out under a mismatched grey
-    patch. Footprint: width x height. Parts: 1-6."""
+    """A spray-painted tag: the text (a "g" sign on an invisible part, face Front), paint drips
+    running from the strokes (each a thin run ending in a point, all different: where the can
+    was held too long), and often an older tag 'buffed' out under a mismatched grey roller
+    patch. Footprint: width x height. Parts: 1-12."""
     f = frame_at(D, folder, origin, ry)
     color = color or jitter(rng.choice([(180, 176, 160), (170, 60, 50), (60, 90, 120), (190, 180, 120),
                                          (30, 30, 30), (120, 150, 90)]), rng, 10)
     n = 0
     if buffed if buffed is not None else rng.random() < 0.4:
-        overlay(f, "Buff", x - width * 0.6, x + width * 0.55, y - height * 0.15, y + height * 1.1,
-                jitter((92, 88, 80), rng, 6), k=0, tr=0.1, rz=rng.uniform(-1, 1), material="Concrete")
-        n += 1
+        g = f.sub((x, 0, 0), rz=rng.uniform(-1, 1))
+        bc = jitter((92, 88, 80), rng, 6)
+        if overlay(g, "Buff", -width * 0.6, width * 0.55, y - height * 0.15, y + height * 1.1, bc, k=0, tr=0.1,
+                   material="Concrete") is not None:
+            n += 1
+            # the roller's last pass ran out of paint: a thinner strip on one side
+            n += _ok(overlay(g, "Buff", width * 0.55, width * 0.55 + rng.uniform(0.3, 0.6), y,
+                             y + height * rng.uniform(0.6, 0.95), jitter(bc, rng, 4, 0.04), k=0, tr=0.35))
     rz = rng.uniform(-6, 6)
-    f.part("Graffiti", (x, y + height / 2, _ov(1)), (width, height, 0.05), (0, 0, 0), "SmoothPlastic",
+    f.part("Graffiti", (x, y + height / 2, _ov(2)), (width, height, 0.05), (0, 0, 0), "SmoothPlastic",
            rot=(0, 0, rz), transparency=1, flags=DECOR,
            extra=sign_extra(text or rng.choice(GRAFFITI_TAGS), color, font=rng.choice(["PermanentMarker", "Kalam"])))
     n += 1
     if drips:
-        for _ in range(rng.randint(1, 4)):
-            dx = x + rng.uniform(-width * 0.4, width * 0.4)
-            ln = rng.uniform(0.3, 1.2)
-            overlay(f, "Drip", dx - 0.035, dx + 0.035, y + height * 0.25 - ln, y + height * 0.3, color, k=2, tr=0.15)
+        xs = sorted(rng.uniform(-width * 0.42, width * 0.42) for _ in range(rng.randint(1, 5)))
+        last = -1e9
+        for dx in xs:
+            if dx - last < 0.18:
+                continue
+            last = dx
+            w = rng.uniform(0.035, 0.09)
+            ln = rng.uniform(0.25, 1.5) * (0.6 if w < 0.05 else 1.0)
+            ys = y + height * rng.uniform(0.18, 0.4)
+            g = f.sub((x + dx, ys, 0), rz=rng.uniform(-2, 2))
+            if overlay(g, "Drip", -w / 2, w / 2, -ln, 0, color, k=1, tr=0.1) is None:
+                continue
             n += 1
+            side = rng.choice((-1, 1))
+            n += _ok(tri(g, "Drip", side * w / 2, -ln, -side * w, -rng.uniform(0.08, 0.22), color, k=1, tr=0.1))
     return n
 
 
@@ -510,239 +739,375 @@ def graffiti_tag(D, folder, origin, ry, rng, width=5.0, height=1.8, y=4.0, x=0.0
 # 2. Openings: windows, doors, shutters
 # =================================================================================================
 
+# Depths of a window's layers, out of the wall (studs). The whole unit stands in front of every
+# overlay slot (zlayers puts its last one at 0.23-0.255), boxed in by the jambs, sill and lintel,
+# so stains running down the wall pass behind it unseen. Parallel faces of layers that overlap
+# are >= 0.06 apart.
+W_PANEL = (0.29, 0.32)  # the room behind (dark panel, or the lit room)
+W_INNER = (0.37, 0.39)  # blind / curtain / sheet / cardboard
+W_LOWER = (0.44, 0.52)  # lower sash (inner) ...
+W_LGLASS = (0.46, 0.48)  # ... and its glass
+W_UPPER = (0.52, 0.60)  # upper sash (outer) ...
+W_UGLASS = (0.56, 0.58)  # ... and its glass
+W_BOX = (0.29, 0.62)  # the fixed box frame round the sashes
+W_SURROUND = 0.70  # jambs
+W_LINTEL = 0.76
+W_SILL = 0.92  # the sill's nose
+W_BOARD = (0.63, 0.69)  # plywood over a boarded window (inside the surround)
+# A part fixed flat on the wall (a plate, a bracket leg) keeps its front face between the overlay
+# slots' fronts (0.055 + 0.05 k): at one of SLOT_SAFE, or past them all (>= 0.315).
+SLOT_SAFE = (0.08, 0.13, 0.18, 0.23)
+
+
+def _zbox(f, name, x0, x1, y0, y1, z, color, material, **kw):
+    """A block between local x0..x1, y0..y1 and depths z = (near, far) out of the wall."""
+    return f.box(name, (x0, y0, -z[1]), (x1, y1, -z[0]), color, material, **kw)
+
 
 def window(D, folder, origin, ry, rng, width=3.4, height=5.0, y=4.0, variant="dirty", frame_color=None, x=0.0,
            kind="warm"):
-    """A sash window unit set into the wall: dark room behind (void), stone surround standing
-    proud, concrete lintel (settled, cracked), sloped stone sill with dirt streaks running
-    off its ends, painted timber frame with a meeting rail, dirty glass.
-    Variants: "dirty" (grimy panes, sagging blind), "lit" (warm room light, half-drawn
-    curtain, tag CityWindowLit + a weak light), "boarded" (plywood + nailed planks),
-    "barred" (rusted security bars on lugs), "broken" (panes smashed, shards in the frame
-    and on the sill). Footprint: (width + 1) x (height + 1.2), 0.6 deep. Parts: 18-34 (boarded ~18, barred ~33)."""
-    f = frame_at(D, folder, origin, ry)
-    f = f.sub((x, 0, 0))
-    w, h = width, height
-    n = 0
-    fc = frame_color or jitter(rng.choice(FRAME_PAINT), rng, 6)
-    surround = jitter(rng.choice([STONE, BRICK_PALE, CONCRETE]), rng, 6)
+    """A window unit standing in its surround: stone / pale brick / concrete jambs, a lintel
+    (cracked concrete, stone with a keystone, or a rusted steel beam), a stepped sill with a
+    sloped nose; inside it the fixed box frame and the sashes, the room behind (dark, or lit),
+    and what hangs in it. No two of the 20 windows of the alleys look alike: the proportions
+    vary a little, and so does the glazing (rng): a 1-over-1 or 2-over-2 sliding sash (the
+    upper sash in front of the lower, the lower one sometimes pushed up), a casement with a
+    mullion and a top light, a cheap uPVC replacement, a small frosted bathroom window; and
+    what is inside: a venetian blind (some slats broken), a sheet, cardboard taped up, nothing.
+    The glass is dirtiest low down (its colour, not a film in front of it).
+    Variants: "dirty", "lit" (warm room light, a half-drawn curtain, tag CityWindowLit + a weak
+    light on the room part), "boarded" (two plywood sheets + nailed planks, sprayed warning),
+    "barred" (rusted bars on flat bars, lugs into the wall), "broken" (one pane gone but for
+    shards, the other cracked). Stains: run-off from the sill horns, soot over the lintel.
+    Footprint: (width + 1) x (height + 1.2), 0.95 deep. Parts: 16-36."""
+    f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     lit = variant == "lit"
-    # the room behind
+    style = rng.choice(["sash11", "sash11", "sash22", "sash22", "casement", "upvc", "frosted"])
+    if variant in ("boarded", "barred") and style == "frosted":
+        style = "sash11"
+    w = width * rng.uniform(0.86, 1.03)
+    h = height * rng.uniform(0.9, 1.03)
+    if style == "frosted":  # a small bathroom window, high in its opening
+        w, h = width * rng.uniform(0.6, 0.72), height * rng.uniform(0.55, 0.65)
+    n = 0
+    fc = UPVC if style == "upvc" else (frame_color or jitter(rng.choice(FRAME_PAINT), rng, 6))
+    fmat = "SmoothPlastic" if style == "upvc" else "Wood"
+    sur_kind = rng.choice(["stone", "stone", "brick", "concrete"])
+    sur = jitter({"stone": rng.choice([STONE, (112, 106, 94)]), "brick": BRICK_PALE, "concrete": CONCRETE}[sur_kind], rng, 5)
+    smat = {"stone": "Limestone", "brick": "Brick", "concrete": "Concrete"}[sur_kind]
+    sw = rng.uniform(0.3, 0.42)  # jamb width
+    ox = w / 2 + sw  # the surround's outer edge
+    # --- surround: jambs between the sill and the lintel (they butt, never overlap)
+    for s in (-1, 1):
+        _zbox(f, "Jamb", min(s * w / 2, s * ox), max(s * w / 2, s * ox), y, y + h, (0, W_SURROUND),
+              jitter(sur, rng, 3), smat, flags=DECOR)
+        n += 1
+    # --- sill: a slab, a raised back strip and a sloped nose (weathering), its horns past the jambs
+    sx0, sx1 = -ox - 0.15, ox + 0.15
+    sc = jitter(STONE if sur_kind != "brick" else (120, 112, 98), rng, 5, 0.06)
+    _zbox(f, "Sill", sx0, sx1, y - 0.3, y - 0.07, (0, W_SILL), sc, "Slate", flags=DECOR_SHADOW)
+    _zbox(f, "Sill", sx0, sx1, y - 0.07, y, (0, W_SURROUND), sc, "Slate", flags=DECOR)
+    f.part("SillNose", ((sx0 + sx1) / 2, y - 0.035, -(W_SURROUND + W_SILL) / 2), (sx1 - sx0, 0.07, W_SILL - W_SURROUND),
+           jitter(sc, rng, 3), "Slate", shape=WEDGE, flags=DECOR)
+    n += 3
+    # --- lintel
+    lt = rng.choice(["concrete", "keystone", "steel"]) if sur_kind != "brick" else rng.choice(["steel", "concrete"])
+    lx0, lx1 = -ox - rng.uniform(0.05, 0.2), ox + rng.uniform(0.05, 0.2)
+    lh = rng.uniform(0.5, 0.66)
+    if lt == "steel":  # a rusted steel beam under brick
+        _zbox(f, "Lintel", lx0, lx1, y + h, y + h + 0.3, (0, W_SURROUND + 0.02), jitter(RUST_DARK, rng, 6),
+              "CorrodedMetal", flags=DECOR)
+        _zbox(f, "Lintel", lx0, lx1, y + h + 0.3, y + h + lh + 0.1, (0, W_LINTEL - 0.08), jitter(BRICK_PALE, rng, 6),
+              "Brick", flags=DECOR)
+        n += 2
+    elif lt == "keystone":
+        lc = jitter(sur, rng, 4)
+        kw = rng.uniform(0.45, 0.6)
+        _zbox(f, "Lintel", lx0, -kw / 2, y + h, y + h + lh, (0, W_LINTEL), lc, smat, flags=DECOR)
+        _zbox(f, "Lintel", kw / 2, lx1, y + h, y + h + lh, (0, W_LINTEL), jitter(lc, rng, 3), smat, flags=DECOR)
+        _zbox(f, "Keystone", -kw / 2, kw / 2, y + h - 0.12, y + h + lh + 0.1, (0, W_LINTEL + 0.08), jitter(lc, rng, 4),
+              smat, flags=DECOR)
+        n += 3
+    else:  # cast concrete, cracked through and settled a little on one side
+        cx = rng.uniform(-w / 4, w / 4)
+        lc = jitter(CONCRETE, rng, 6)
+        _zbox(f, "Lintel", lx0, cx - 0.025, y + h, y + h + lh, (0, W_LINTEL), lc, "Concrete", flags=DECOR)
+        f.part("Lintel", ((cx + 0.025 + lx1) / 2, y + h + lh / 2 - 0.015, -W_LINTEL / 2), (lx1 - cx - 0.05, lh, W_LINTEL),
+               jitter(lc, rng, 3), "Concrete", rot=(0, 0, rng.uniform(-0.7, -0.3) * (1 if cx > 0 else -1)), flags=DECOR)
+        n += 2
+    # --- stains: run-off from the sill horns, soot over the lintel (on the wall, in its slots)
+    for s in rng.sample((-1, 1), rng.randint(1, 2)):
+        n += streak(f, rng, "SillStain", s * (ox + rng.uniform(0.0, 0.12)), y - 0.32, rng.uniform(1.4, 3.2),
+                    rng.uniform(0.25, 0.4), DAMP, k=0, tr=0.62, taper=2)
+    if rng.random() < 0.45:
+        n += soft(f, rng, "Soot", lx0 + 0.1, lx1 - 0.1, y + h + lh + 0.12, y + h + lh + rng.uniform(1.0, 2.0), SOOT,
+                  opacity=0.2, k=0, anchor="bottom")
+    ix0, ix1 = -w / 2, w / 2  # the opening inside the surround
+    if variant == "boarded":
+        # two plywood sheets butting (one older, darker, water-stained), planks nailed across
+        split = y + h * rng.uniform(0.35, 0.6)
+        _zbox(f, "Plywood", ix0, ix1, y, split, W_BOARD, jitter((92, 80, 60), rng, 8), "WoodPlanks", flags=DECOR)
+        _zbox(f, "Plywood", ix0, ix1, split, y + h, W_BOARD, jitter((122, 104, 76), rng, 8), "WoodPlanks", flags=DECOR)
+        n += 2
+        planks = rng.randint(2, 3)
+        for i in range(planks):
+            py = y + 0.7 + (h - 1.4) * (i + rng.uniform(0.2, 0.8)) / planks
+            ln = 2 * ox + rng.uniform(0.3, 0.7)
+            ang = rng.uniform(-9, 9)
+            z0 = W_SURROUND + 0.06 + 0.07 * i  # each plank its own depth: crossing ones never share a face
+            g = f.sub((rng.uniform(-0.12, 0.12), py, -(z0 + 0.03)), rz=ang)
+            ph = rng.uniform(0.4, 0.6)
+            g.part("Plank", (0, 0, 0), (ln, ph, 0.06), jitter(rng.choice([WOOD_OLD, WOOD, WOOD_DARK]), rng, 8), "Wood",
+                   flags=DECOR)
+            n += 1
+            for e in (-1, 1):
+                bolt(g, "Nail", (e * (ox - sw / 2), rng.uniform(-0.1, 0.1), -0.03), 0.07, (60, 56, 52))
+                n += 1
+        z_spray = W_SURROUND + 0.06 + 0.07 * planks + 0.1
+        f.part("Spray", (0, y + h * 0.55, -z_spray), (w * 1.1, h * 0.3, 0.05), (0, 0, 0), "SmoothPlastic",
+               transparency=1, flags=DECOR,
+               extra=sign_extra(rng.choice(["KEEP OUT", "X", "CONDEMNED", "NO ENTRY"]), jitter((170, 60, 50), rng, 10)))
+        return n + 1
+    # --- the box frame (head and bottom full width, sides between: butt joints)
+    fw = 0.24 if style == "upvc" else 0.2
+    _zbox(f, "Frame", ix0, ix1, y + h - fw, y + h, W_BOX, fc, fmat, flags=DECOR)
+    _zbox(f, "Frame", ix0, ix1, y, y + fw, W_BOX, jitter(mix(fc, WOOD_DARK, 0.35), rng, 4), fmat, flags=DECOR)
+    for s in (-1, 1):
+        _zbox(f, "Frame", min(s * ix1, s * (ix1 - fw)), max(s * ix1, s * (ix1 - fw)), y + fw, y + h - fw, W_BOX,
+              jitter(fc, rng, 2), fmat, flags=DECOR)
+    n += 4
+    ox0, ox1, oy0, oy1 = ix0 + fw, ix1 - fw, y + fw, y + h - fw  # the clear opening
+    # --- the room behind
     if lit:
-        f.box("Room", (-w / 2, y, -0.07), (w / 2, y + h, -0.02), (30, 32, 34), "Glass", flags=DECOR,
+        _zbox(f, "Room", ox0, ox1, oy0, oy1, W_PANEL, (30, 32, 34), "Glass", flags=DECOR,
               extra={"t": ["CityWindowLit"], "a": {"Kind": kind, "Day": True},
                      "l": {"type": "Point", "color": list(WARM), "range": 12, "brightness": 0.45, "name": "Light",
                            "shadows": False}})
     else:
-        f.box("Void", (-w / 2, y, -0.07), (w / 2, y + h, -0.02), VOID, "SmoothPlastic", flags=DECOR)
+        _zbox(f, "Void", ox0, ox1, oy0, oy1, W_PANEL, VOID, "SmoothPlastic", flags=DECOR)
     n += 1
-    # surround, lintel, sill
-    for s in (-1, 1):
-        f.box("Jamb", (s * w / 2, y - 0.05, -0.26), (s * (w / 2 + 0.38), y + h, 0.0), jitter(surround, rng, 4), "Concrete",
-              flags=DECOR)
-        n += 1
-    f.part("Lintel", (rng.uniform(-0.05, 0.05), y + h + 0.32, -0.15), (w + 1.0 + rng.uniform(0, 0.2), 0.64, 0.32),
-           jitter(CONCRETE, rng, 6), "Concrete", rot=(0, 0, rng.uniform(-0.8, 0.8)), flags=DECOR)
-    f.part("Sill", (0, y - 0.18, -0.26), (w + 0.9, 0.34, 0.6), jitter(STONE, rng, 6, 0.08), "Slate",
-           rot=(-4, 0, rng.uniform(-1.2, 1.2)), flags=DECOR_SHADOW)
-    n += 2
-    # crack through the lintel, dirt run-off from the sill ends and soot above the lintel
-    beam(f, "Crack", (rng.uniform(-w / 4, w / 4), y + h + 0.62, -0.32), (rng.uniform(-w / 4, w / 4), y + h + 0.02, -0.32),
-         0.06, 0.03, WET_DARK, "Slate", flags=DECOR)
-    n += 1
-    for s in (-1, 1):
-        n += streak(f, rng, "SillStain", s * (w / 2 + rng.uniform(0.1, 0.3)), y - 0.3, rng.uniform(1.4, 3.2),
-                    rng.uniform(0.25, 0.4), DAMP, k=0, tr=0.68, taper=2)
-    overlay(f, "Soot", -w / 2 - 0.4, w / 2 + 0.4, y + h + 0.64, y + h + rng.uniform(1.2, 2.2), SOOT, k=0, tr=0.8)
-    n += 1
-    if variant == "boarded":
-        f.box("Plywood", (-w / 2 - 0.1, y - 0.05, -0.36), (w / 2 + 0.1, y + h + 0.05, -0.28),
-              jitter((112, 96, 70), rng, 8, 0.1), "WoodPlanks", flags=DECOR)
-        n += 1
-        for i in range(rng.randint(2, 4)):
-            py = y + h * (0.15 + 0.7 * i / 3) + rng.uniform(-0.2, 0.2)
-            f.part("Plank", (rng.uniform(-0.1, 0.1), py, -0.44), (w + rng.uniform(0.6, 1.2), rng.uniform(0.45, 0.7), 0.14),
-                   jitter(rng.choice([WOOD_OLD, WOOD, WOOD_DARK]), rng, 8), "Wood", rot=(0, 0, rng.uniform(-14, 14)),
-                   flags=DECOR)
-            n += 1
-        overlay(f, "Water", -w / 2, w / 2, y, y + h * 0.4, WET_DARK, k=0, tr=0.7)
-        f.part("Spray", (0, y + h * 0.55, -0.53), (w * 0.9, h * 0.3, 0.05), (0, 0, 0), "SmoothPlastic", transparency=1,
-               flags=DECOR, extra=sign_extra(rng.choice(["KEEP OUT", "X", "CONDEMNED", "NO ENTRY"]),
-                                              jitter((170, 60, 50), rng, 10)))
-        return n + 2
-    # timber frame and sashes
-    fw = 0.2
-    for s in (-1, 1):
-        f.box("Frame", (s * w / 2, y, -0.22), (s * (w / 2 - fw), y + h, -0.05), fc, "Wood", flags=DECOR)
-    f.box("Frame", (-w / 2, y + h - fw, -0.22), (w / 2, y + h, -0.05), fc, "Wood", flags=DECOR)
-    f.box("Frame", (-w / 2, y, -0.22), (w / 2, y + fw, -0.05), jitter(fc, rng, 4, 0.15), "Wood", flags=DECOR)
-    mid = y + h * rng.uniform(0.48, 0.55)
-    f.box("MeetingRail", (-w / 2 + fw, mid - 0.09, -0.24), (w / 2 - fw, mid + 0.09, -0.08), fc, "Wood", flags=DECOR)
-    n += 5
-    # peeled paint on the bottom rail (the timber shows)
-    overlay(f, "Peel", -w / 4, w / 4, y + 0.02, y + fw - 0.02, WOOD_DARK, k=0, tr=0.1)
-    f.part("Peel", (rng.uniform(-w / 3, w / 3), y + 0.1, -0.235), (rng.uniform(0.3, 0.8), 0.14, 0.03), WOOD_DARK,
-           "Wood", flags=DECOR)
-    n += 1
-    panes = [(y + fw, mid - 0.09), (mid + 0.09, y + h - fw)]
     gc = jitter(rng.choice(GLASS_DIRTY), rng, 4)
-    if variant == "broken":
-        missing = rng.randrange(2)
-        for i, (a, b) in enumerate(panes):
-            if i != missing and rng.random() < 0.7:
-                f.box("Glass", (-w / 2 + fw, a, -0.15), (w / 2 - fw, b, -0.13), gc, "Glass", transparency=0.25,
-                      flags=DECOR)
-                beam(f, "GlassCrack", (rng.uniform(-w / 3, 0), b - 0.1, -0.17), (rng.uniform(0, w / 3), a + 0.1, -0.17),
-                     0.05, 0.02, (150, 156, 150), "SmoothPlastic", flags=DECOR, transparency=0.3)
-                n += 2
-                continue
-            # jagged shards left in the corners (wedges in the wall plane)
-            pw, ph = w - 2 * fw, b - a
-            for corner in rng.sample([(0, -1, -1), (90, -1, 1), (180, 1, 1), (270, 1, -1)], rng.randint(1, 3)):
-                ang, sx, sy = corner
-                sw = rng.uniform(0.3, 0.6) * min(pw, ph)
-                cx = sx * (pw / 2 - sw / 2)
-                cy = (a + b) / 2 + sy * (ph / 2 - sw / 2)
-                f.part("Shard", (cx, cy, -0.14), (0.04, sw, sw * rng.uniform(0.7, 1.3)), gc, "Glass",
-                       rot=(ang, 90, 0), shape=WEDGE, transparency=0.25, flags=DECOR)
+    if style == "frosted":
+        gc = jitter((150, 154, 148), rng, 6)
+    low_gc = jitter(mix(gc, (52, 46, 36), 0.35), rng, 3)  # grime crusted low down: in the colour
+    gtr = 0.15 if style == "frosted" else (0.45 if lit else 0.3)
+    # --- glazing: [(x0, x1, y0, y1, glass depths, colour)] panes, built with their bars / rails
+    panes = []
+    mid = oy0 + (oy1 - oy0) * rng.uniform(0.47, 0.55)
+    raise_ = 0.0
+    if style.startswith("sash") or style == "frosted":
+        mr = 0.09  # half a meeting rail
+        if variant == "dirty" and rng.random() < 0.35:
+            raise_ = rng.uniform(0.3, (mid - oy0) * 0.5)  # the lower sash pushed up a little
+        # upper sash (outer): top rail + meeting rail
+        _zbox(f, "Sash", ox0, ox1, oy1 - 0.12, oy1, W_UPPER, jitter(fc, rng, 3), fmat, flags=DECOR)
+        _zbox(f, "Sash", ox0, ox1, mid, mid + 2 * mr, W_UPPER, jitter(fc, rng, 3), fmat, flags=DECOR)
+        # lower sash (inner): meeting rail + bottom rail, moved up by raise_
+        _zbox(f, "Sash", ox0, ox1, mid - 2 * mr + raise_ + 0.0, mid + raise_, W_LOWER, jitter(fc, rng, 3), fmat,
+              flags=DECOR)
+        _zbox(f, "Sash", ox0, ox1, oy0 + raise_, oy0 + 0.18 + raise_, W_LOWER, jitter(mix(fc, WOOD_DARK, 0.2), rng, 3),
+              fmat, flags=DECOR)
+        n += 4
+        bars = 1 if style == "sash22" else 0
+        for (a, b, z, sash_z, col) in ((mid + 2 * mr, oy1 - 0.12, W_UGLASS, W_UPPER, gc),
+                                       (oy0 + 0.18 + raise_, mid - 2 * mr + raise_, W_LGLASS, W_LOWER, low_gc)):
+            if bars:
+                _zbox(f, "GlazingBar", -0.04, 0.04, a, b, sash_z, jitter(fc, rng, 3), fmat, flags=DECOR)
                 n += 1
-        for _ in range(rng.randint(1, 3)):
-            f.part("Shard", (rng.uniform(-w / 2, w / 2), y + 0.01, -0.35), (rng.uniform(0.15, 0.4), 0.04, rng.uniform(0.1, 0.3)),
-                   gc, "Glass", rot=(0, rng.uniform(0, 180), 0), transparency=0.2, flags=DECOR)
+                panes += [(ox0, -0.04, a, b, z, col), (0.04, ox1, a, b, z, col)]
+            else:
+                panes.append((ox0, ox1, a, b, z, col))
+    else:  # casement / uPVC: one frame plane, a transom (and a mullion for the casement)
+        tr_y = oy0 + (oy1 - oy0) * rng.uniform(0.7, 0.78)
+        zc = (W_LOWER[0], W_UPPER[1])
+        _zbox(f, "Transom", ox0, ox1, tr_y, tr_y + 0.16, zc, jitter(fc, rng, 3), fmat, flags=DECOR)
+        n += 1
+        panes.append((ox0, ox1, tr_y + 0.16, oy1, W_UGLASS, gc))
+        if style == "casement":
+            _zbox(f, "Mullion", -0.08, 0.08, oy0, tr_y, zc, jitter(fc, rng, 3), fmat, flags=DECOR)
             n += 1
-        return n
-    for (a, b) in panes:
-        f.box("Glass", (-w / 2 + fw, a, -0.15), (w / 2 - fw, b, -0.13), jitter(gc, rng, 3), "Glass",
-              transparency=0.45 if lit else 0.3, flags=DECOR)
-        n += 1
-    # grime crusted in the bottom of each pane
-    f.box("Grime", (-w / 2 + fw, y + fw, -0.165), (w / 2 - fw, y + fw + rng.uniform(0.35, 0.7), -0.155),
-          (52, 48, 40), "SmoothPlastic", transparency=0.45, flags=DECOR)
-    n += 1
-    if lit:  # a half-drawn curtain (inside: between the room light and the glass)
-        cw = w * rng.uniform(0.35, 0.6)
-        side = rng.choice((-1, 1))
-        f.box("Curtain", (side * (w / 2 - fw) - side * cw, y + fw, -0.11), (side * (w / 2 - fw), y + h - fw, -0.09),
-              jitter(rng.choice([(110, 52, 44), (60, 70, 60), (120, 108, 84)]), rng, 8), "Fabric", flags=DECOR,
-              transparency=0.15)
-        n += 1
-    elif variant == "dirty":  # a sagging, broken venetian blind / a sheet
-        if rng.random() < 0.5:
-            for i in range(rng.randint(3, 5)):
-                yy = y + h - fw - 0.25 - i * 0.28
-                f.part("Blind", (0, yy, -0.1), (w - 2 * fw - 0.05, 0.06, 0.04), (150, 146, 128), "SmoothPlastic",
-                       rot=(0, 0, rng.uniform(-4, 4) * (i + 1) * 0.5), flags=DECOR)
-                n += 1
+            panes += [(ox0, -0.08, oy0, tr_y, W_UGLASS, low_gc), (0.08, ox1, oy0, tr_y, W_UGLASS, low_gc)]
         else:
-            f.box("Sheet", (-w / 2 + fw, mid - h * 0.15, -0.11), (w / 2 - fw, y + h - fw, -0.09),
-                  jitter((96, 92, 80), rng, 8), "Fabric", flags=DECOR)
+            panes.append((ox0, ox1, oy0, tr_y, W_UGLASS, low_gc))
+    # --- what hangs inside (between the room and the glass)
+    inner = "none"
+    if lit:
+        inner = rng.choice(["curtain", "curtain", "blind"])
+    elif variant in ("dirty", "broken", "barred") and style != "frosted":
+        inner = rng.choice(["blind", "blind", "sheet", "cardboard", "none"])
+    if inner == "curtain":
+        cc = jitter(rng.choice([(110, 52, 44), (60, 70, 60), (120, 108, 84), (70, 60, 84)]), rng, 8)
+        for s in (-1, 1):
+            if s == 1 and rng.random() < 0.4:
+                continue  # one side drawn back fully
+            cw = (ox1 - ox0) * rng.uniform(0.18, 0.38)
+            _zbox(f, "Curtain", min(s * ox1, s * (ox1 - cw)), max(s * ox1, s * (ox1 - cw)), oy0 + rng.uniform(0, 0.4),
+                  oy1, W_INNER, jitter(cc, rng, 4), "Fabric", flags=DECOR)
+            n += 1
+    elif inner == "blind":
+        stop = oy1 - (oy1 - oy0) * rng.uniform(0.35, 0.85)
+        slat = 0.17
+        yy = oy1 - 0.02
+        i = 0
+        bc = jitter((150, 146, 128), rng, 6)
+        while yy - slat > stop and i < 9:
+            _zbox(f, "Blind", ox0, ox1, yy - slat, yy, W_INNER, jitter(bc, rng, 2, 0.04 * (i % 2)), "SmoothPlastic",
+                  flags=DECOR)
+            n += 1
+            yy -= slat + 0.055
+            i += 1
+        # the bottom rail hangs askew from one broken cord (clear of the slats and the frame)
+        hl = (ox1 - ox0) * 0.42
+        cy_ = yy - 0.32
+        if cy_ - 0.3 > oy0:
+            tilt = math.degrees(math.asin(min(0.2, 0.18 / hl))) * rng.choice((-1, 1))
+            g = f.sub(((ox0 + ox1) / 2 + rng.uniform(-0.1, 0.1), cy_, -(W_INNER[0] + W_INNER[1]) / 2), rz=tilt)
+            g.part("Blind", (0, 0, 0), (2 * hl, 0.12, 0.02), jitter(bc, rng, 3, 0.1), "SmoothPlastic", flags=DECOR)
+            n += 1
+    elif inner == "sheet":
+        sh0 = oy0 + (oy1 - oy0) * rng.uniform(0.1, 0.4)
+        g = f.sub(((ox0 + ox1) / 2, (sh0 + oy1) / 2, -(W_INNER[0] + W_INNER[1]) / 2), rz=rng.uniform(-2, 2))
+        g.part("Sheet", (0, 0, 0), ((ox1 - ox0) * 0.94, (oy1 - sh0) * 0.96, 0.02), jitter((96, 92, 80), rng, 8),
+               "Fabric", flags=DECOR)
+        n += 1
+    elif inner == "cardboard":  # taped over the lower pane
+        _zbox(f, "Cardboard", ox0 + 0.04, ox1 - 0.04, oy0 + 0.05, mid - 0.05, W_INNER, jitter((120, 96, 64), rng, 8),
+              "Cardboard", flags=DECOR)
+        n += 1
+    # --- the glass
+    if variant == "broken":
+        gone = rng.randrange(len(panes))
+        for i, (a, b, c, d, z, col) in enumerate(panes):
+            if i != gone:
+                _zbox(f, "Glass", a, b, c, d, z, col, "Glass", transparency=gtr, flags=DECOR)
+                n += 1
+                if i == (gone + 1) % len(panes) and d - c > 0.6:  # cracked: two light lines
+                    zc_ = (z[1] + 0.07, z[1] + 0.09)  # (in front of its glass, clear of the rails)
+                    for _ in range(2):
+                        p0 = (rng.uniform(a + 0.1, b - 0.1), rng.uniform(c + 0.1, d - 0.1))
+                        p1 = (min(b - 0.05, max(a + 0.05, p0[0] + rng.uniform(-0.6, 0.6))),
+                              min(d - 0.05, max(c + 0.05, p0[1] + rng.uniform(-0.6, 0.6))))
+                        if math.dist(p0, p1) > 0.2:
+                            beam(f, "GlassCrack", (p0[0], p0[1], -(zc_[0] + zc_[1]) / 2),
+                                 (p1[0], p1[1], -(zc_[0] + zc_[1]) / 2), 0.03, zc_[1] - zc_[0], (150, 156, 150),
+                                 "SmoothPlastic", flags=DECOR)
+                            n += 1
+                continue
+            # shards left in the frame: triangles in the pane's own plane, in its corners
+            pw, ph = b - a, d - c
+            for cx_, cy_ in rng.sample([(-1, -1), (1, -1), (1, 1), (-1, 1)], rng.randint(2, 3)):
+                px = a if cx_ < 0 else b
+                py = c if cy_ < 0 else d
+                tri_part(f, "Shard", px, py, -cx_ * rng.uniform(0.22, 0.45) * pw, -cy_ * rng.uniform(0.25, 0.45) * ph,
+                         z[0], z[1], col, "Glass", transparency=gtr, flags=DECOR)
+                n += 1
+    else:
+        for (a, b, c, d, z, col) in panes:
+            _zbox(f, "Glass", a, b, c, d, z, jitter(col, rng, 2), "Glass", transparency=gtr, flags=DECOR)
             n += 1
     if variant == "barred":
-        bars = max(3, int(w / 0.7))
+        # flat bars on lugs into the wall, round bars through them, rust running from the lugs
+        fz = (W_SILL, W_SILL + 0.14)
+        lugx = ox + 0.22
+        for yy in (y + 0.45, y + h - 0.45):
+            _zbox(f, "FlatBar", -lugx - 0.1, lugx + 0.1, yy - 0.09, yy + 0.09, fz, jitter(RUST, rng, 6), "CorrodedMetal",
+                  flags=DECOR_SHADOW)
+            n += 1
+            for s in (-1, 1):
+                _zbox(f, "Lug", s * lugx - 0.08, s * lugx + 0.08, yy - 0.09, yy + 0.09, (0, W_SILL), RUST_DARK,
+                      "CorrodedMetal", flags=DECOR)
+                n += 1
+        bars = max(3, int(w / 0.62))
+        bz = -(fz[0] + fz[1]) / 2
         for i in range(bars):
             bx = -w / 2 + (i + 0.5) * w / bars
-            rod(f, "Bar", (bx, y - 0.02, -0.5), (bx + rng.uniform(-0.04, 0.04), y + h + 0.02, -0.5), 0.14,
+            rod(f, "Bar", (bx, y + 0.15, bz), (bx + rng.uniform(-0.03, 0.03), y + h - 0.15, bz), 0.12,
                 jitter(RUST_DARK, rng, 6), "CorrodedMetal", flags=DECOR_SHADOW)
             n += 1
-        for yy in (y + 0.4, y + h - 0.4):
-            f.box("FlatBar", (-w / 2 - 0.3, yy - 0.08, -0.6), (w / 2 + 0.3, yy + 0.08, -0.4), jitter(RUST, rng, 6),
-                  "CorrodedMetal", flags=DECOR_SHADOW)
-            for s in (-1, 1):
-                f.box("Lug", (s * (w / 2 + 0.12) - 0.08, yy - 0.08, -0.5), (s * (w / 2 + 0.12) + 0.08, yy + 0.08, 0),
-                      RUST_DARK, "CorrodedMetal", flags=DECOR)
-            n += 3
-        n += streak(f, rng, "RustStreak", rng.uniform(-w / 2, w / 2), y + 0.3, rng.uniform(1.5, 2.5), 0.4, RUST_STAIN,
-                    k=1, taper=2)
+        s = rng.choice((-1, 1))
+        n += streak(f, rng, "RustStreak", s * lugx, y + 0.45 - 0.12, rng.uniform(1.2, 2.4), 0.3, RUST_STAIN, k=1,
+                    taper=2)
     return n
 
 
 def back_door(D, folder, origin, ry, rng, width=4.0, height=7.6, variant="closed", light=True, x=0.0,
               stencil=None, color=None, dead_light=False):
-    """A steel service door: concrete step (chipped, dirty), steel channel frame, painted
-    leaf with diamond-plate kick plate, pull handle and deadlock, hinges, a closer arm,
-    primer showing where paint flaked, hand grime round the handle, rust along the foot,
-    stencilled warning, and a caged bulkhead light above (optional).
+    """A steel service door set in a deep pressed-steel frame: concrete step (chipped, its back
+    half wet and darker), the frame standing out of the wall (the door sits 0.36 back in it, in
+    front of every stain slot), painted leaf with a worn, rusty free edge where hands and kicks
+    hit it, diamond-plate kick plate, pull handle, deadlock, hinges, a closer with its arm,
+    stencilled warning, grime on the wall either side (hands, shoulders), rust run from the
+    frame, and a caged bulkhead light above (optional).
     Variants: "closed", "ajar" (swung out 12-25 deg, dark corridor behind), "chained"
     (a chain and padlock across the handle and a hasp). Footprint: (width + 1.2) x 1.4 deep,
-    (height + 2.5) tall with the light. Parts: 38-48."""
+    (height + 2.5) tall with the light. Parts: 26-40."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     w, h = width, height
     paint = color or jitter(rng.choice(STEEL_PAINT), rng, 6)
     n = 0
-    # step
-    f.part("Step", (rng.uniform(-0.1, 0.1), 0.22, -0.68), (w + 1.2, 0.45, 1.36), jitter(CONCRETE, rng, 6),
-           "Concrete", rot=(0, rng.uniform(-1.5, 1.5), 0), flags=SOLID)
-    f.part("StepChip", ((w / 2 + 0.45) * rng.choice((-1, 1)), 0.33, -1.3), (0.5, 0.3, 0.3), jitter(CONCRETE_DARK, rng, 6),
+    # step: two halves (the back one wet, darker), a chipped corner
+    st = f.sub((rng.uniform(-0.1, 0.1), 0, 0))  # (square to the wall: its back face lies on it)
+    sc = jitter(CONCRETE, rng, 6)
+    st.box("Step", (-(w + 1.2) / 2, 0, -0.62), ((w + 1.2) / 2, 0.45, 0), jitter(mix(sc, WET_DARK, 0.3), rng, 3),
+           "Concrete", flags=SOLID)
+    st.box("Step", (-(w + 1.2) / 2, 0, -1.36), ((w + 1.2) / 2, 0.45, -0.62), sc, "Concrete", flags=SOLID)
+    f.part("StepChip", ((w / 2 + 0.45) * rng.choice((-1, 1)), 0.33, -1.33), (0.5, 0.3, 0.3), jitter(CONCRETE_DARK, rng, 6),
            "Concrete", rot=(rng.uniform(-20, 20), rng.uniform(0, 90), rng.uniform(-15, 15)), flags=DECOR)
-    f.box("StepDirt", (-w / 2 - 0.5, 0.45, -1.3), (w / 2 + 0.5, 0.48, -0.05), WET_DARK, "SmoothPlastic",
-          transparency=0.55, flags=DECOR)
     n += 3
-    # opening, frame
-    f.box("Void", (-w / 2, 0.45, -0.05), (w / 2, h, -0.02), VOID, "SmoothPlastic", flags=DECOR)
+    # the opening (dark corridor), the frame: jambs and head butt, 0.46 deep (the leaf sits inside
+    # it, in front of every overlay slot; a dumpster can still stand against the wall beside it)
+    fd = 0.46
+    _zbox(f, "Void", -w / 2, w / 2, 0.45, h, (0.29, 0.32), VOID, "SmoothPlastic", flags=DECOR)
+    fcol = jitter(METAL_DARK, rng, 6)
     for s in (-1, 1):
-        f.box("DoorFrame", (s * w / 2, 0.45, -0.28), (s * (w / 2 + 0.32), h + 0.32, 0.0), jitter(METAL_DARK, rng, 6),
-              "Metal", flags=DECOR)
-    f.box("DoorFrame", (-w / 2 - 0.32, h, -0.28), (w / 2 + 0.32, h + 0.32, 0.0), jitter(METAL_DARK, rng, 6), "Metal",
-          flags=DECOR)
+        _zbox(f, "DoorFrame", min(s * w / 2, s * (w / 2 + 0.32)), max(s * w / 2, s * (w / 2 + 0.32)), 0.45, h, (0, fd),
+              jitter(fcol, rng, 3), "Metal", flags=DECOR)
+    _zbox(f, "DoorFrame", -w / 2 - 0.32, w / 2 + 0.32, h, h + 0.32, (0, fd), jitter(fcol, rng, 3), "Metal", flags=DECOR)
     n += 4
-    # the leaf (in its own frame about the hinge, left side)
+    # the leaf (in its own frame about the hinge, left side; its front face at the frame's z 0)
     angle = rng.uniform(12, 25) if variant == "ajar" else 0.0
-    g = f.sub((-w / 2 + 0.04, 0.47, -0.06), ry=angle)
+    g = f.sub((-w / 2 + 0.04, 0.47, -0.43), ry=angle)
     lw, lh = w - 0.1, h - 0.52
-    g.box("DoorLeaf", (0, 0, -0.22), (lw, lh, 0), paint, "Metal", flags=SOLID)
-    g.box("KickPlate", (0.1, 0.05, -0.27), (lw - 0.1, 1.25, -0.22), jitter(GALV, rng, 6, 0.2), "DiamondPlate",
-          flags=DECOR)
-    n += 2
-    # paint wear: primer patches, grime from boots at the foot and hands round the handle
-    # paint lost where the door is hit and kicked: the free edge, the bottom corners, round the lock
-    spots = [(lw - rng.uniform(0.1, 0.3), rng.uniform(1.4, lh - 1)), (rng.uniform(0.15, 0.6), rng.uniform(1.3, 1.8)),
-             (lw - 0.55 + rng.uniform(-0.3, 0.3), rng.uniform(4.9, 5.4))]
-    for px, py in spots[:rng.randint(2, 3)]:
-        g.part("PaintLoss", (px, py, -0.232), (rng.uniform(0.15, 0.45), rng.uniform(0.25, 0.8), 0.03),
-               jitter(mix(paint, RUST_DARK, 0.6), rng, 6), "CorrodedMetal", rot=(0, 0, rng.uniform(-35, 35)), flags=DECOR)
-        n += 1
-    for _ in range(2):  # key scratches round the lock (bare steel)
-        sx, sy = lw - 0.55 + rng.uniform(-0.25, 0.25), 4.6 + rng.uniform(-0.35, 0.35)
-        beam(g, "Scratch", (sx, sy, -0.24), (sx + rng.uniform(-0.3, 0.3), sy + rng.uniform(-0.3, 0.3), -0.24), 0.03, 0.02,
-             (120, 122, 118), "Metal", flags=DECOR)
-        n += 1
-    g.box("HandGrime", (lw - 0.95, 2.9, -0.245), (lw - 0.15, 4.3, -0.225), WET_DARK, "SmoothPlastic", transparency=0.75,
-          flags=DECOR)
-    g.box("FootGrime", (0, 1.25, -0.245), (lw, 1.9, -0.225), WET_DARK, "SmoothPlastic", transparency=0.8,
-          flags=DECOR)
-    g.box("RustFoot", (0, 0, -0.235), (lw, 0.12, -0.215), RUST_DARK, "CorrodedMetal", flags=DECOR)
+    edge = rng.uniform(0.18, 0.28)  # the free edge: paint worn off, rust, hand grime
+    g.box("DoorLeaf", (0, 0, 0), (lw - edge, lh, 0.08), paint, "Metal", flags=SOLID)
+    g.box("DoorLeaf", (lw - edge, 0, 0), (lw, lh, 0.08), jitter(mix(paint, RUST_DARK, 0.45), rng, 4), "CorrodedMetal",
+          flags=SOLID)
+    g.box("KickPlate", (0.1, 0.05, -0.08), (lw - 0.1, 1.25, 0), jitter(mix(GALV, RUST_DARK, 0.25), rng, 6, 0.1),
+          "DiamondPlate", flags=DECOR)
     n += 3
-    # hardware: pull handle, deadlock, hinges, closer
-    rod(g, "Handle", (lw - 0.55, 3.0, -0.42), (lw - 0.55, 4.0, -0.42), 0.1, jitter(GALV, rng, 6, 0.1), "Metal",
+    # hardware: pull handle, deadlock, hinges, closer (round rods)
+    rod(g, "Handle", (lw - 0.55, 3.0, -0.2), (lw - 0.55, 4.0, -0.2), 0.1, jitter(GALV, rng, 6, 0.1), "Metal",
         flags=DECOR)
     for yy in (3.05, 3.95):
-        rod(g, "HandleMount", (lw - 0.55, yy, -0.22), (lw - 0.55, yy, -0.44), 0.08, METAL_DARK, "Metal", flags=DECOR)
-    g.part("Lock", (lw - 0.55, 4.6, -0.25), (0.28, 0.42, 0.08), jitter(GALV, rng, 6), "Metal", flags=DECOR)
+        rod(g, "HandleMount", (lw - 0.55, yy, 0), (lw - 0.55, yy, -0.2), 0.08, METAL_DARK, "Metal", flags=DECOR)
+    g.box("Lock", (lw - 0.69, 4.39, -0.08), (lw - 0.41, 4.81, 0), jitter(GALV, rng, 6), "Metal", flags=DECOR)
     n += 4
     for yy in (0.6, lh / 2, lh - 0.6):
-        rod(g, "Hinge", (-0.06, yy - 0.3, -0.22), (-0.06, yy + 0.3, -0.22), 0.16, METAL_DARK, "Metal", flags=DECOR)
+        rod(g, "Hinge", (-0.06, yy - 0.3, 0.0), (-0.06, yy + 0.3, 0.0), 0.16, METAL_DARK, "Metal", flags=DECOR)
         n += 1
-    g.part("Closer", (0.9, lh - 0.35, -0.33), (1.0, 0.28, 0.22), jitter(METAL, rng, 6), "Metal", flags=DECOR)
-    beam(g, "CloserArm", (1.35, lh - 0.35, -0.42), (1.55, lh + 0.1, -0.3), 0.08, 0.06, METAL_DARK, "Metal",
+    g.box("Closer", (0.4, lh - 0.49, -0.22), (1.4, lh - 0.21, 0), jitter(METAL, rng, 6), "Metal", flags=DECOR)
+    beam(g, "CloserArm", (1.35, lh - 0.35, -0.28), (1.6, lh + 0.05, -0.28), 0.08, 0.06, METAL_DARK, "Metal",
          side=(0, 0, 1), flags=DECOR)
     n += 2
-    g.part("Stencil", (lw / 2, lh * 0.62, -0.24), (lw * 0.85, 0.8, 0.05), (0, 0, 0), "SmoothPlastic", transparency=1,
+    g.part("Stencil", (lw / 2, lh * 0.62, -0.06), (lw * 0.85, 0.8, 0.05), (0, 0, 0), "SmoothPlastic", transparency=1,
            flags=DECOR, extra=sign_extra(stencil or rng.choice(["NO ENTRY", "FIRE EXIT · KEEP CLEAR", "PRIVATE",
                                                                   "DELIVERIES", "NO LOITERING"]),
                                          jitter((168, 160, 140), rng, 8), font="Oswald"))
     n += 1
     if variant == "chained":
-        for i in range(4):
-            a = (lw - 0.55 + 0.25 * i, 3.5 - 0.18 * i * (3 - i), -0.5)
-            b = (lw - 0.3 + 0.25 * i, 3.5 - 0.18 * (i + 1) * (2 - i), -0.5)
-            rod(g, "Chain", a, b, 0.08, jitter(GALV, rng, 4, 0.2), "Metal", flags=DECOR)
-        g.part("Padlock", (lw + 0.3, 2.9, -0.5), (0.3, 0.4, 0.14), jitter((120, 100, 50), rng, 8), "Metal", flags=DECOR)
-        f.box("Hasp", (w / 2 + 0.05, 3.3, -0.4), (w / 2 + 0.45, 3.7, -0.28), RUST_DARK, "CorrodedMetal", flags=DECOR)
-        n += 6
-    # rust bleeding from the frame foot, wall grime round the door (hands, shoulders)
-    n += streak(f, rng, "RustStreak", w / 2 + 0.16, h + 0.3, rng.uniform(1.2, 2.4), 0.5, RUST_STAIN, k=0, taper=2)
-    overlay(f, "Grime", -w / 2 - 1.0, w / 2 + 1.0, 0.45, rng.uniform(2.5, 3.6), DAMP, k=0, tr=0.7)
-    n += 1
+        pts = [(lw - 0.55, 3.6, -0.3), (lw - 0.2, 3.25, -0.34), (lw + 0.15, 3.35, -0.36), (lw + 0.45, 3.5, -0.34)]
+        n += bend(g, "Chain", pts, 0.08, jitter(GALV, rng, 4, 0.2), "Metal", flags=DECOR)
+        g.box("Padlock", (lw + 0.18, 2.75, -0.44), (lw + 0.46, 3.15, -0.3), jitter((120, 100, 50), rng, 8), "Metal",
+              flags=DECOR)
+        _zbox(f, "Hasp", w / 2 + 0.04, w / 2 + 0.3, 3.3, 3.7, (fd, fd + 0.1), RUST_DARK, "CorrodedMetal", flags=DECOR)
+        n += 2
+    # rust bleeding from the frame head, wall grime either side of the frame (hands, shoulders)
+    n += streak(f, rng, "RustStreak", (w / 2 + 0.32 + 0.12) * rng.choice((-1, 1)), h + 0.2, rng.uniform(1.2, 2.4), 0.4,
+                RUST_STAIN, k=1, taper=3)
+    for s in (-1, 1):
+        a, b = w / 2 + 0.32, w / 2 + 0.32 + rng.uniform(0.5, 1.0)
+        n += soft(f, rng, "Grime", min(s * a, s * b), max(s * a, s * b), 0.45, rng.uniform(2.6, 3.8), DAMP, opacity=0.3,
+                  k=0, anchor="bottom")
     if light:
         n += bulkhead_light(D, folder, f.world((rng.uniform(-0.3, 0.3), 0, 0)), ry_of(f), rng, y=h + 1.4,
                             dead=dead_light)
@@ -756,72 +1121,85 @@ def ry_of(f):
 
 def roller_shutter(D, folder, origin, ry, rng, width=8.0, height=7.0, open_height=0.0, x=0.0, tag=True,
                    color=None):
-    """A steel roller shutter (garage / shop back): coil housing with end plates, guide rails,
-    a curtain of slats (dented, uneven shades), bottom bar with lift handle and ground lock
-    padlock, rust and grime climbing up from the foot, often a tag. open_height > 0 leaves
-    it jammed part-open on a dark gap. Footprint: (width + 0.8) x 1.2 deep x (height + 1.4).
-    Parts: 24-30."""
+    """A steel roller shutter (garage / shop back): a coil hood with a rounded front between two
+    end plates, L-section guide rails, a curtain of curved slats (each slat two wedges back to
+    back, so the corrugation catches the light in ridges; one dented), the low slats rusted and
+    grimed (their own colours: no stain film over the ridges), bottom bar with a rubber seal,
+    lift handle, ground lock and padlock, often a tag. open_height > 0 leaves it jammed
+    part-open on a dark gap. Footprint: (width + 0.8) x 1.2 deep x (height + 1.4). Parts: 24-40."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     w, h = width, height
     base = color or jitter(rng.choice([GALV, (84, 88, 86), (70, 76, 84), (96, 70, 56)]), rng, 6)
     n = 0
-    f.box("Housing", (-w / 2 - 0.35, h, -1.15), (w / 2 + 0.35, h + 1.3, 0), jitter(base, rng, 4, 0.12), "Metal",
-          flags=DECOR_SHADOW)
+    # coil hood: a box, a half-round front (a cylinder along X) and end plates over both ends
+    hz = 0.9
+    hood = jitter(base, rng, 4, 0.12)
+    _zbox(f, "Housing", -w / 2 - 0.35, w / 2 + 0.35, h, h + 1.3, (0, hz), hood, "Metal", flags=DECOR_SHADOW)
+    f.part("Housing", (0, h + 0.65, -hz), (w + 0.7, 1.3, 1.3), jitter(hood, rng, 2), "Metal", shape=CYLINDER,
+           flags=DECOR)
     for s in (-1, 1):
-        f.box("EndPlate", (s * (w / 2 + 0.35) - 0.06, h - 0.05, -1.2), (s * (w / 2 + 0.35) + 0.06, h + 1.35, 0),
-              METAL_DARK, "Metal", flags=DECOR)
-        f.box("Guide", (s * (w / 2 + 0.05) - 0.25, 0, -0.45), (s * (w / 2 + 0.05) + 0.25, h, 0), jitter(METAL_DARK, rng, 4),
-              "Metal", flags=DECOR)
-        n += 2
-    n += 1
+        a, b = s * (w / 2 + 0.35), s * (w / 2 + 0.47)
+        _zbox(f, "EndPlate", min(a, b), max(a, b), h - 0.05, h + 1.4, (0, hz + 0.72), METAL_DARK, "Metal", flags=DECOR)
+        # guide: an L (outer flange to the wall, front lip over the slat ends)
+        _zbox(f, "Guide", min(s * (w / 2 + 0.05), s * (w / 2 + 0.17)), max(s * (w / 2 + 0.05), s * (w / 2 + 0.17)), 0,
+              h - 0.05, (0, 0.46), jitter(METAL_DARK, rng, 4), "Metal", flags=DECOR)
+        _zbox(f, "Guide", min(s * (w / 2 - 0.12), s * (w / 2 + 0.05)), max(s * (w / 2 - 0.12), s * (w / 2 + 0.05)), 0,
+              h - 0.05, (0.38, 0.46), jitter(METAL_DARK, rng, 4), "Metal", flags=DECOR)
+        n += 3
+    n += 2
     y0 = open_height
     if y0 > 0:
-        f.box("Void", (-w / 2, 0, -0.05), (w / 2, y0, -0.02), VOID, "SmoothPlastic", flags=DECOR)
+        _zbox(f, "Void", -w / 2 + 0.05, w / 2 - 0.05, 0, y0, (0.29, 0.32), VOID, "SmoothPlastic", flags=DECOR)
         n += 1
-    slat = rng.uniform(0.62, 0.78)
-    count = max(3, int((h - y0) / slat))
-    slat = (h - y0) / count
+    # bottom bar + rubber seal
+    # (its back planes sit between the overlay slots' back planes, 0.03 + 0.05 k: the wall's
+    # posters and stains run behind the curtain)
+    zb, zr = 0.105, 0.3
+    _zbox(f, "Seal", -w / 2 + 0.06, w / 2 - 0.06, y0, y0 + 0.07, (zb, 0.34), (24, 24, 24), "Rubber", flags=DECOR)
+    _zbox(f, "BottomBar", -w / 2 + 0.06, w / 2 - 0.06, y0 + 0.07, y0 + 0.32, (zb, 0.36), jitter(METAL_DARK, rng, 4),
+          "Metal", flags=SOLID)
+    n += 2
+    # the curtain: slats of two wedges (a ridge pointing out), back at zb, ridge at zr
+    slat = rng.uniform(0.6, 0.72)
+    sy0 = y0 + 0.32
+    count = max(3, int((h - 0.05 - sy0) / slat))
+    slat = (h - 0.05 - sy0) / count
     dent = rng.randrange(count)
     for i in range(count):
-        a = y0 + i * slat
-        c = jitter(base, rng, 3, 0.04 * (i % 2) + (0.18 if i < 2 else 0.0))
-        rx = rng.uniform(4, 9) if i == dent else rng.uniform(-0.6, 0.6)
-        zc = -0.28 if i % 2 else -0.24
-        f.part("Slat", (rng.uniform(-0.02, 0.02), a + slat / 2, zc - (0.06 if i == dent else 0)), (w, slat * 0.96, 0.14),
-               c, "Metal", rot=(rx, 0, rng.uniform(-0.25, 0.25)), flags=SOLID if i == 0 or i == count - 1 else SMALL)
-        n += 1
-    # bottom bar, handle, ground lock
-    f.box("BottomBar", (-w / 2, y0, -0.42), (w / 2, y0 + 0.28, -0.12), jitter(METAL_DARK, rng, 4), "Metal", flags=DECOR)
-    rod(f, "LiftHandle", (-0.5, y0 + 0.5, -0.5), (0.5, y0 + 0.5, -0.5), 0.1, GALV, "Metal", flags=DECOR)
-    n += 2
+        a = sy0 + i * slat
+        t = i / max(1, count - 1)
+        grime = max(0.0, 0.5 - t) * 0.6  # darker and rustier toward the ground
+        rusty = i < 2 and rng.random() < 0.7
+        c = jitter(mix(base, RUST if rusty else WET_DARK, grime + (0.25 if rusty else 0.0)), rng, 3, 0.03 * (i % 2))
+        mat = "CorrodedMetal" if rusty else "Metal"
+        flags = SOLID if i == 0 or i == count - 1 else SMALL
+        dz = 0.05 if i == dent else 0.0  # (the dented slat pushed in: its own planes)
+        g = f.sub((0, a + slat / 2, -zb + dz))
+        # upper half: wedge, its full face down at the ridge line, slope up to the back
+        g.part("Slat", (0, slat / 4, -(zr - zb) / 2), (w, slat / 2, zr - zb), c, mat, shape=WEDGE, flags=flags)
+        # lower half: the same flipped (upside down)
+        g.part("Slat", (0, -slat / 4, -(zr - zb) / 2), (w, slat / 2, zr - zb), jitter(c, rng, 2, 0.06), mat,
+               rot=(0, 0, 180), shape=WEDGE, flags=flags)
+        n += 2
+    # lift handle on two blocks, ground lock + padlock
+    for hx in (-0.5, 0.5):
+        _zbox(f, "HandleMount", hx - 0.05, hx + 0.05, y0 + 0.12, y0 + 0.24, (0.36, 0.5), METAL_DARK, "Metal", flags=DECOR)
+    rod(f, "LiftHandle", (-0.56, y0 + 0.18, -0.55), (0.56, y0 + 0.18, -0.55), 0.1, GALV, "Metal", flags=DECOR)
+    n += 3
     if y0 == 0:
         lx = rng.choice((-1, 1)) * w * 0.3
-        f.part("GroundLock", (lx, 0.12, -0.55), (0.3, 0.24, 0.3), METAL_DARK, "Metal", flags=DECOR)
-        f.part("Padlock", (lx, 0.36, -0.62), (0.26, 0.34, 0.12), jitter((120, 100, 50), rng, 8), "Metal", flags=DECOR)
-        n += 2
-    # wear: rust patches on the low slats, grime, streaks from the housing
-    for _ in range(rng.randint(2, 3)):
-        rx_ = rng.uniform(-w / 2 + 0.6, w / 2 - 0.6)
-        overlay(f, "Rust", rx_ - rng.uniform(0.3, 0.9), rx_ + rng.uniform(0.3, 0.9), y0, y0 + rng.uniform(0.5, 1.6),
-                jitter(RUST, rng, 8), k=11, tr=0.35, material="CorrodedMetal")
-        n += 1
-    f.box("FootGrime", (-w / 2, y0, -0.37), (w / 2, y0 + rng.uniform(1.0, 1.8), -0.35), WET_DARK, "SmoothPlastic",
-          transparency=0.62, flags=DECOR)
-    n += 1
-    for _ in range(2):  # rust bleeding from the housing's screws down the curtain
-        sx = rng.uniform(-w / 2 + 0.5, w / 2 - 0.5)
-        sl = rng.uniform(1.2, 2.6)
-        f.box("Streak", (sx - 0.12, h - sl, -0.38), (sx + 0.12, h, -0.36), RUST_STAIN, "SmoothPlastic",
-              transparency=0.7, flags=DECOR)
-        f.box("Streak", (sx - 0.06, h - sl * 0.6, -0.4), (sx + 0.06, h, -0.38), RUST_DARK, "SmoothPlastic",
-              transparency=0.6, flags=DECOR)
+        _zbox(f, "GroundLock", lx - 0.15, lx + 0.15, 0, 0.24, (0.36, 0.66), METAL_DARK, "Metal", flags=DECOR)
+        f.part("Padlock", (lx, 0.42, -0.6), (0.26, 0.34, 0.12), jitter((120, 100, 50), rng, 8), "Metal", flags=DECOR)
         n += 2
     if tag:
-        f.part("Graffiti", (rng.uniform(-w / 6, w / 6), y0 + (h - y0) * 0.55, -0.4), (w * 0.75, (h - y0) * 0.35, 0.05),
+        f.part("Graffiti", (rng.uniform(-w / 6, w / 6), y0 + (h - y0) * 0.55, -0.42), (w * 0.75, (h - y0) * 0.35, 0.05),
                (0, 0, 0), "SmoothPlastic", rot=(0, 0, rng.uniform(-5, 5)), transparency=1, flags=DECOR,
                extra=sign_extra(rng.choice(GRAFFITI_TAGS),
                                 jitter(rng.choice([(180, 176, 160), (170, 60, 50), (30, 30, 30)]), rng, 10)))
         n += 1
+    # rust run from the hood's screws onto the wall beside the guides
+    n += streak(f, rng, "RustStreak", rng.choice((-1, 1)) * (w / 2 + 0.5), h - 0.1, rng.uniform(1.0, 2.2), 0.3,
+                RUST_STAIN, k=1, taper=3)
     return n
 
 
@@ -830,20 +1208,46 @@ def roller_shutter(D, folder, origin, ry, rng, width=8.0, height=7.0, open_heigh
 # =================================================================================================
 
 
+def _blocked_below(f, x0, x1, y_top):
+    """The top of the highest window / door unit already built on this wall (frame f) under the
+    strip x0..x1 below y_top, or -inf. (Stains from higher up stop above it: the unit stands out
+    of the wall and would hide them anyway.)"""
+    best = -1e9
+    names = {"Jamb", "Lintel", "Keystone", "Sill", "DoorFrame"}
+    for row in f.D.parts:
+        if f.D.names[row[16] - 1] not in names:
+            continue
+        loc = f.m.T @ (np.array(row[1:4], float) - f.origin)
+        if abs(loc[2]) > 1.5:
+            continue
+        hx, hy = row[7] / 2 + 0.05, row[8] / 2
+        # (units are built square to their wall: the row's X / Z extent along the wall)
+        if row[5] % 180 != 0:
+            hx = row[9] / 2 + 0.05
+        if loc[0] + hx < x0 or loc[0] - hx > x1:
+            continue
+        top_ = loc[1] + hy
+        if top_ < y_top and top_ > best:
+            best = top_
+    return best
+
+
 def fire_escape(D, folder, origin, ry, rng, width=12.0, floors=3, floor_h=10.0, depth=3.6, ladder=True):
-    """A steel fire escape for a wall of `floors` floors: a grated landing at each upper floor
-    (floor_h, 2*floor_h...), each on two diagonal brackets, with posts, top and mid rails and
-    toe boards; a steep stair between landings (stringers, treads, handrail) through a hatch,
-    alternating sides; a drop ladder hooked up under the first landing. Rust runs down the
-    wall from every bracket. Landings and treads are SOLID (walkable).
-    Footprint: width x depth, floors * floor_h tall. Parts: ~30-60 (3 floors ~55)."""
+    """A steel fire escape for a wall of `floors` floors: an open slatted landing at each upper
+    floor (flat bars on edge with gaps you see through, framed by a fascia channel), on
+    diagonal brackets; a railing of posts, top and mid rails and thin balusters; a steep stair
+    between landings (channel stringers, treads, handrail) through a hatch, alternating sides;
+    a drop ladder hooked up under the first landing. Thick black paint, rust running down the
+    wall from every bracket. Slats and treads are SOLID (walkable; the gaps are too narrow to
+    fall through). Footprint: width x depth, floors * floor_h tall. Parts: ~45-110."""
     f = frame_at(D, folder, origin, ry)
     n = 0
-    steel = jitter(rng.choice([(40, 40, 40), (52, 44, 38), (46, 50, 48)]), rng, 4)
-    rail_h = 3.0
+    steel = jitter(rng.choice([(36, 36, 36), (48, 42, 36), (42, 46, 44)]), rng, 4)
+    rail_h = 3.2
     run = floor_h / math.tan(math.radians(58))
     sw = 2.0  # stair band (outer side of the landing)
     landings = list(range(1, floors))
+    pitch, slat_w = 0.36, 0.24  # flat bars 0.24 wide every 0.36 (0.12 gaps)
     for li, k in enumerate(landings):
         y = k * floor_h
         hatch = None
@@ -852,44 +1256,70 @@ def fire_escape(D, folder, origin, ry, rng, width=12.0, floors=3, floor_h=10.0, 
             x_bot = d * (width / 2 - 0.6)
             x_top = x_bot - d * run
             hatch = (min(x_bot, x_top) - 0.2, max(x_bot, x_top) + 0.2)
-        # deck: inner band full, outer band minus the hatch
-        f.box("Landing", (-width / 2, y - 0.2, -(depth - sw)), (width / 2, y, -0.05), jitter(steel, rng, 3),
-              "DiamondPlate", flags=SOLID)
-        n += 1
-        spans = [(-width / 2, width / 2)] if hatch is None else [(-width / 2, hatch[0]), (hatch[1], width / 2)]
-        for a, b in spans:
-            if b - a > 0.3:
-                f.box("Landing", (a, y - 0.2, -depth), (b, y, -(depth - sw)), jitter(steel, rng, 3), "DiamondPlate",
-                      flags=SOLID)
-                n += 1
-        f.box("Fascia", (-width / 2, y - 0.45, -depth - 0.08), (width / 2, y + 0.25, -depth), steel, "Metal",
+        # the deck: slats along X from the wall out to the fascia
+        zs = -0.46
+        i = 0
+        while zs - slat_w > -depth + 0.02:
+            z1, z0 = zs, zs - slat_w
+            outer = z0 < -(depth - sw)
+            spans = [(-width / 2, width / 2)]
+            if hatch is not None and outer:
+                spans = [(-width / 2, hatch[0]), (hatch[1], width / 2)]
+            for a, b in spans:
+                if b - a > 0.3:
+                    f.box("Landing", (a, y - 0.12, z0), (b, y, z1), jitter(steel, rng, 2, 0.04 * (i % 3 == 0)), "Metal",
+                          flags=SOLID)
+                    n += 1
+            zs -= pitch
+            i += 1
+        # the frame round it: a fascia channel in front, a wall angle behind (under the slats)
+        f.box("Fascia", (-width / 2, y - 0.45, -depth - 0.08), (width / 2, y + 0.18, -depth), steel, "Metal",
               flags=DECOR)
-        n += 1
-        # brackets (diagonal struts under the deck)
+        f.box("WallAngle", (-width / 2, y - 0.3, -0.34), (width / 2, y, 0), steel, "Metal", flags=SOLID)
+        n += 2
+        # brackets (diagonal struts under the deck) and the rust they bleed down the wall
         for bx in (-width / 2 + 0.6, width / 2 - 0.6):
-            beam(f, "Bracket", (bx, y - 0.2, -depth + 0.3), (bx, y - 2.8, -0.1), 0.18, 0.18, steel, "Metal",
+            beam(f, "Bracket", (bx, y - 0.4, -depth + 0.3), (bx, y - 2.8, -0.1), 0.18, 0.18, steel, "Metal",
                  side=(1, 0, 0), flags=DECOR_SHADOW)
             n += 1
-            n += streak(f, rng, "RustStreak", bx, y - 2.8, rng.uniform(2.5, 5), 0.5, RUST_STAIN, k=0, taper=2)
-        # railing: posts, top rail, mid rail on the front and the two ends
-        posts = [-width / 2, -width / 6, width / 6, width / 2]
+            n += streak(f, rng, "RustStreak", bx, y - 2.95, rng.uniform(2.5, 5), 0.5, RUST_STAIN, k=0, taper=3)
+        # railing: posts stop under the top rail; rails in front of the posts' faces (0.07 proud)
+        posts = [-width / 2 + 0.08, -width / 6, width / 6, width / 2 - 0.08]
         for px in posts:
-            f.box("Post", (px - 0.08, y, -depth - 0.04), (px + 0.08, y + rail_h, -depth + 0.12), steel, "Metal",
+            f.box("Post", (px - 0.08, y + 0.18, -depth), (px + 0.08, y + rail_h - 0.08, -depth + 0.12), steel, "Metal",
                   flags=DECOR_SHADOW)
             n += 1
-        for yy, nm in ((y + rail_h, "TopRail"), (y + rail_h * 0.5, "MidRail")):
-            f.box(nm, (-width / 2, yy - 0.08, -depth - 0.06), (width / 2, yy + 0.08, -depth + 0.1), steel, "Metal",
-                  flags=PROP if nm == "TopRail" else DECOR_SHADOW)
+        f.box("TopRail", (-width / 2, y + rail_h - 0.08, -depth - 0.07), (width / 2, y + rail_h + 0.08, -depth + 0.05),
+              steel, "Metal", flags=PROP)
+        f.box("MidRail", (-width / 2, y + rail_h * 0.5 - 0.06, -depth - 0.07), (width / 2, y + rail_h * 0.5 + 0.06,
+                                                                                 -depth + 0.05), steel, "Metal",
+              flags=DECOR_SHADOW)
+        n += 2
+        for s in (-1, 1):  # end rails butt against the top rail's back
+            f.box("EndRail", (s * width / 2 - 0.08, y + rail_h - 0.08, -depth + 0.05),
+                  (s * width / 2 + 0.08, y + rail_h + 0.08, -0.05), steel, "Metal", flags=PROP)
             n += 1
+        # balusters (thin round bars) along the front and the ends, from the fascia top to the top rail
+        bal = []
+        x = -width / 2 + 0.5
+        while x < width / 2 - 0.3:
+            if all(abs(x - p) > 0.2 for p in posts):
+                bal.append((x, -depth + 0.03))
+            x += rng.uniform(1.1, 1.3)
         for s in (-1, 1):
-            f.box("EndRail", (s * width / 2 - 0.08, y + rail_h - 0.08, -depth), (s * width / 2 + 0.08, y + rail_h + 0.08, -0.05),
-                  steel, "Metal", flags=PROP)
+            zz = -depth + 0.7
+            while zz < -0.4:
+                bal.append((s * width / 2, zz))
+                zz += rng.uniform(1.0, 1.2)
+        for bx, bz in bal:
+            rod(f, "Baluster", (bx, y + 0.18 if bz < -depth + 0.1 else y, bz), (bx, y + rail_h - 0.08, bz), 0.07, steel,
+                "Metal", flags=DECOR)
             n += 1
-        # junk left on the landing: a plant pot / a crate (people use these as balconies)
+        # junk left on the landing: a crate (people use these as balconies), clear of the hatch
         if rng.random() < 0.6:
             jx = rng.uniform(-width / 2 + 1, width / 2 - 1)
-            if hatch is None or not (hatch[0] - 0.5 < jx < hatch[1] + 0.5):
-                f.part("Crate", (jx, y + 0.5, -0.8), (1.2, 1.0, 1.0), jitter(WOOD_OLD, rng, 8), "WoodPlanks",
+            if hatch is None or not (hatch[0] - 0.8 < jx < hatch[1] + 0.8):
+                f.part("Crate", (jx, y + 0.5, -0.9), (1.2, 1.0, 1.0), jitter(WOOD_OLD, rng, 8), "WoodPlanks",
                        rot=(0, rng.uniform(-15, 15), 0), flags=SMALL)
                 n += 1
     # flights between landings
@@ -899,110 +1329,185 @@ def fire_escape(D, folder, origin, ry, rng, width=12.0, floors=3, floor_h=10.0, 
         x_bot = d * (width / 2 - 0.6)
         x_top = x_bot - d * run
         for zs in (-depth + 0.15, -depth + sw - 0.15):
-            beam(f, "Stringer", (x_bot, y0 - 0.1, zs), (x_top, y0 + floor_h - 0.1, zs), 0.3, 0.12, steel, "Metal",
+            beam(f, "Stringer", (x_bot, y0 - 0.1, zs), (x_top, y0 + floor_h - 0.1, zs), 0.32, 0.1, steel, "Metal",
                  side=(0, 0, 1), flags=DECOR_SHADOW)
             n += 1
         steps = 7
         for i in range(1, steps):
             t = i / steps
             tx = x_bot + (x_top - x_bot) * t
-            f.box("Tread", (tx - 0.45, y0 + floor_h * t - 0.1, -depth + 0.2), (tx + 0.45, y0 + floor_h * t, -depth + sw - 0.2),
+            f.box("Tread", (tx - 0.42, y0 + floor_h * t - 0.1, -depth + 0.2), (tx + 0.42, y0 + floor_h * t,
+                                                                               -depth + sw - 0.2),
                   jitter(steel, rng, 3), "DiamondPlate", flags=SOLID)
             n += 1
-        beam(f, "Handrail", (x_bot, y0 + rail_h, -depth + 0.05), (x_top, y0 + floor_h + rail_h, -depth + 0.05), 0.12,
+        beam(f, "Handrail", (x_bot, y0 + rail_h, -depth + 0.02), (x_top, y0 + floor_h + rail_h, -depth + 0.02), 0.12,
              0.12, steel, "Metal", side=(0, 0, 1), flags=DECOR)
         n += 1
-    # drop ladder, hooked up under the first landing
+    # drop ladder, hooked up under the first landing (round rungs between flat rails)
     if ladder and landings:
         y = landings[0] * floor_h
         lx = -(width / 2 - 0.6) if len(landings) > 1 else 0.0
         lx = lx + rng.uniform(-0.3, 0.3)
         lo, hi = y - 6.5, y + rail_h - 0.2
         for s in (-1, 1):
-            f.box("LadderRail", (lx + s * 0.75 - 0.07, lo, -depth - 0.3), (lx + s * 0.75 + 0.07, hi, -depth - 0.16), steel,
-                  "Metal", flags=DECOR_SHADOW)
+            f.box("LadderRail", (lx + s * 0.75 - 0.07, lo, -depth - 0.34), (lx + s * 0.75 + 0.07, hi, -depth - 0.18),
+                  steel, "Metal", flags=DECOR_SHADOW)
             n += 1
         for i in range(int((hi - lo) / 1.0)):
-            rod(f, "Rung", (lx - 0.75, lo + 0.5 + i, -depth - 0.23), (lx + 0.75, lo + 0.5 + i, -depth - 0.23), 0.08,
+            rod(f, "Rung", (lx - 0.68, lo + 0.5 + i, -depth - 0.26), (lx + 0.68, lo + 0.5 + i, -depth - 0.26), 0.08,
                 steel, "Metal", flags=DECOR)
             n += 1
     return n
 
 
-def building_top(D, folder, origin, ry, rng, width=16.0, top=30.0, depth=4.0, clutter="tank"):
-    """The top of a wall seen from the alley: a cornice (string course + a row of corbels)
-    with black run-off below it, a parapet, broken coping stones (one missing, others
-    shifted), weeds, and rooftop clutter set back: clutter = "tank" (wooden water tank on a
-    steel stand), "antenna" (mast + bars + guy wires), "vents" (stacks and a box vent) or None.
-    origin: wall face at floor level; the wall is `top` tall and `depth` thick (behind).
-    Footprint: width x (depth + ~8) on the roof. Parts: 20-58."""
-    f = frame_at(D, folder, origin, ry)
+def _water_tank(f, rng, cx, base, cz, r, th, legs, color=None, braces=True, far=False):
+    """A rooftop wooden water tank on a steel stand (New York style): four posts, a diagonal
+    brace on two sides, two beams and a deck, the staved tank (one cylinder: wood, weathered
+    grey-brown) with steel hoops at uneven heights, its conical roof (a cone of wedges, not
+    stacked discs) with a small finial, and the outlet pipe down to the roof.
+    (The mesh kit replaces this with a real model; these parts are the fallback.) far: the
+    lighter version for a building in the background (two hoops, six facets, no outlet).
+    Returns the parts made."""
     n = 0
-    stone = jitter(STONE, rng, 6, 0.1)
-    brick = jitter(rng.choice(BRICK), rng, 6)
-    cy = top - 1.6
-    f.box("Cornice", (-width / 2, cy, -0.55), (width / 2, cy + 0.5, depth), stone, "Limestone", flags=DECOR)
-    f.box("Cornice", (-width / 2, cy - 0.3, -0.3), (width / 2, cy, depth), jitter(stone, rng, 4, 0.1), "Limestone",
-          flags=DECOR)
-    n += 2
-    corbels = int(width / 1.4)
-    for i in range(corbels):
-        cx = -width / 2 + (i + 0.5) * width / corbels
-        if rng.random() < 0.12:  # one fallen off
-            continue
-        f.box("Corbel", (cx - 0.22, cy - 0.85, -0.3), (cx + 0.22, cy - 0.3, 0), jitter(stone, rng, 5, 0.12), "Limestone",
+    k = r * 0.68
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            f.box("TankLeg", (cx + sx * k - 0.14, base, cz + sz * k - 0.14), (cx + sx * k + 0.14, base + legs,
+                                                                              cz + sz * k + 0.14), METAL_DARK,
+                  "Metal", flags=SOLID)
+            n += 1
+    if braces:
+        for sz in (-1, 1):
+            beam(f, "Brace", (cx - k, base + 0.3, cz + sz * k), (cx + k, base + legs - 0.3, cz + sz * k), 0.1, 0.1,
+                 METAL_DARK, "Metal", side=(0, 0, 1), flags=DECOR)
+            n += 1
+    for sz in (-1, 1):  # beams across the posts
+        f.box("TankBeam", (cx - r - 0.1, base + legs, cz + sz * k - 0.16), (cx + r + 0.1, base + legs + 0.36,
+                                                                            cz + sz * k + 0.16), METAL_DARK, "Metal",
               flags=DECOR)
         n += 1
-    # black run-off down the face under the cornice
+    yb = base + legs + 0.36
+    f.box("TankBase", (cx - r - 0.15, yb, cz - r - 0.15), (cx + r + 0.15, yb + 0.2, cz + r + 0.15),
+          jitter(WOOD_DARK, rng, 6), "WoodPlanks", flags=SOLID)
+    n += 1
+    yb += 0.2
+    wood = color or jitter(rng.choice([WOOD_GREY, WOOD_OLD, (84, 76, 64)]), rng, 6)
+    th -= 0.12  # (the roof deck: a disc over the tank, under the cone's facets, hiding where they meet)
+    f.part("Tank", (cx, yb + th / 2, cz), (th, 2 * r, 2 * r), wood, "WoodPlanks", rot=(0, 0, 90), shape=CYLINDER,
+           flags=SOLID)
+    rr = 2 * (r + 0.22) * (1.16 if far else 1.09)  # (wide enough to hide where the facets meet)
+    f.part("TankRoof", (cx, yb + th + 0.06, cz), (0.12, rr, rr), jitter(WOOD_DARK, rng, 4),
+           "WoodPlanks", rot=(0, 0, 90), shape=CYLINDER, flags=DECOR)
+    n += 2
+    hs = sorted(rng.uniform(0.08, 0.92) for _ in range(2 if far else rng.randint(3, 4)))
+    for t in hs:
+        f.part("Hoop", (cx, yb + th * t, cz), (0.12, 2 * r + 0.1, 2 * r + 0.1), jitter(RUST_DARK, rng, 4),
+               "CorrodedMetal", rot=(0, 0, 90), shape=CYLINDER, flags=DECOR)
+        n += 1
+    rh = r * rng.uniform(0.45, 0.6)
+    n += cone(f, "TankRoof", cx, yb + th + 0.12, cz, r + 0.22, rh, jitter(WOOD_DARK, rng, 4), "WoodPlanks",
+              n=6 if far else 8, rng=rng, jit=3)
+    bolt(f, "Finial", (cx, yb + th + 0.12 + rh + 0.05, cz), 0.3, METAL_DARK)
+    if far:
+        return n + 1
+    rod(f, "Outlet", (cx + r * 0.4, base, cz - r * 0.3), (cx + r * 0.4, base + legs + 0.36, cz - r * 0.3), 0.3,
+        jitter(RUST_DARK, rng, 4), "CorrodedMetal", flags=DECOR)
+    return n + 2
+
+
+def building_top(D, folder, origin, ry, rng, width=16.0, top=30.0, depth=4.0, clutter="tank"):
+    """The top of a wall seen from the alley: a stepped cornice (three receding courses, the
+    profile different per building) on corbels (stepped brackets, unevenly spaced, a few
+    fallen or broken), black run-off below it, a parapet, coping stones of uneven length and
+    thickness (one missing, some shifted), weeds, and rooftop clutter set back: clutter =
+    "tank" (wooden water tank on a steel stand), "antenna" (mast + bars + guy wires), "vents"
+    (stacks and a box vent) or None. origin: wall face at floor level; the wall is `top` tall
+    and `depth` thick (behind). Footprint: width x (depth + ~8) on the roof. Parts: 25-70."""
+    f = frame_at(D, folder, origin, ry)
+    n = 0
+    # walls of one height meet at corners, where their cornices and copings cross: each building
+    # top of a height gets its own offset, so their horizontal faces are never on one plane
+    tops = D.__dict__.setdefault("_wall_tops", {})
+    key = round(float(f.world((0, top, 0))[1]), 1)
+    lift = 0.09 * (tops.get(key, 0) % 4)
+    tops[key] = tops.get(key, 0) + 1
+    stone = jitter(rng.choice([STONE, (118, 110, 98), (104, 100, 94)]), rng, 6, 0.1)
+    brick = jitter(rng.choice(BRICK), rng, 6)
+    cy = top - 1.6 - lift
+    # the cornice: courses stacked, each standing further out than the one below
+    p1, p2, p3 = rng.uniform(0.7, 0.95), rng.uniform(0.44, 0.6), rng.uniform(0.32, 0.38)
+    t1, t2, t3 = rng.uniform(0.3, 0.45), rng.uniform(0.18, 0.28), rng.uniform(0.25, 0.35)
+    courses = [(cy + t2, cy + t2 + t1, p1, 0.0), (cy, cy + t2, p2, 0.06), (cy - t3, cy, p3, 0.12)]
+    for y0, y1, p, dk in courses:
+        f.box("Cornice", (-width / 2, y0, -p), (width / 2, y1, 0), jitter(stone, rng, 3, dk), "Limestone", flags=DECOR)
+        n += 1
+    yc = cy - t3  # under the bed course
+    # corbels (one kind per building): tapered brackets (a wedge, flat on top and on the wall),
+    # plain blocks, or stepped (two blocks); uneven spacing, a few gone, some broken short
+    kind = rng.choice(["wedge", "wedge", "block", "stepped"])
+    pitch = rng.uniform(1.5, 2.1) * (1.2 if kind == "stepped" else 1.0)
+    cw = rng.uniform(0.36, 0.5)
+    ch = rng.uniform(0.5, 0.75)
+    x = -width / 2 + rng.uniform(0.4, 0.9)
+    while x < width / 2 - 0.4:
+        r_ = rng.random()
+        cc = jitter(stone, rng, 5, 0.1)
+        if r_ < 0.08:
+            pass  # fallen off
+        elif kind == "wedge":
+            hh = ch * (0.55 if r_ < 0.16 else 1.0)  # broken short
+            f.part("Corbel", (x, yc - hh / 2, -p3 / 2), (cw, hh, p3), cc, "Limestone", rot=(0, 0, 180), shape=WEDGE,
+                   flags=DECOR)
+            n += 1
+        elif kind == "block":
+            _zbox(f, "Corbel", x - cw / 2, x + cw / 2, yc - ch * 0.6, yc, (0, p3), cc, "Limestone", flags=DECOR)
+            n += 1
+        else:
+            _zbox(f, "Corbel", x - cw / 2, x + cw / 2, yc - 0.28, yc, (0, p3), cc, "Limestone", flags=DECOR)
+            n += 1
+            if r_ > 0.18:
+                _zbox(f, "Corbel", x - cw * 0.35, x + cw * 0.35, yc - 0.6, yc - 0.28, (0, SLOT_SAFE[2]), jitter(cc, rng, 3),
+                      "Limestone", flags=DECOR)
+                n += 1
+        x += pitch * rng.uniform(0.85, 1.15)
+    # black run-off down the face from under the cornice, stopping above any window or door
+    # already on this wall (it would only run behind their surrounds)
     for _ in range(rng.randint(3, 5)):
-        n += streak(f, rng, "RunOff", rng.uniform(-width / 2 + 0.5, width / 2 - 0.5), cy - 0.3, rng.uniform(3, 9),
-                    rng.uniform(0.6, 1.4), SOOT, k=0, tr=0.55, taper=2)
-    # parapet and coping
-    f.box("Parapet", (-width / 2, top, 0), (width / 2, top + 2.2, 1.0), brick, "Brick", flags=SOLID)
+        for _try in range(6):
+            sx = rng.uniform(-width / 2 + 0.5, width / 2 - 0.5)
+            w_ = rng.uniform(0.5, 1.2)
+            y_top = yc - 0.8
+            stop = _blocked_below(f, sx - w_ / 2, sx + w_ / 2, y_top)
+            ln = min(rng.uniform(2.5, 7), y_top - stop - 0.3)
+            if ln > 1.2:
+                n += streak(f, rng, "RunOff", sx, y_top, ln, w_, SOOT, k=0, tr=0.6, taper=3)
+                break
+    # parapet and coping (stones of uneven length and thickness, gaps, one missing, some shifted)
+    ph = 2.2 + lift
+    f.box("Parapet", (-width / 2, top, 0), (width / 2, top + ph, 1.0), brick, "Brick", flags=SOLID)
     n += 1
     x = -width / 2
     while x < width / 2 - 0.2:
-        ln = min(rng.uniform(1.8, 2.8), width / 2 - x)
-        if rng.random() > 0.1:
-            f.part("Coping", (x + ln / 2, top + 2.35 + rng.uniform(-0.04, 0.06), 0.5 + rng.uniform(-0.08, 0.08)),
-                   (ln - 0.06, 0.3, 1.45), jitter(STONE, rng, 2, rng.uniform(0.05, 0.3)), "Concrete",
-                   rot=(rng.uniform(-1.5, 1.5), rng.uniform(-1.5, 1.5), rng.uniform(-1.2, 1.2)), flags=SOLID)
+        ln = min(rng.uniform(1.5, 3.0), width / 2 - x)
+        if rng.random() > 0.08 and ln > 0.3:
+            th = rng.uniform(0.24, 0.36)
+            out = rng.uniform(-0.06, 0.06) + (0.18 if rng.random() < 0.1 else 0.0)  # one slid outward
+            f.part("Coping", (x + ln / 2, top + ph + th / 2 + rng.uniform(0.0, 0.03), 0.5 - out),
+                   (ln - rng.uniform(0.05, 0.1), th, 1.45 + rng.uniform(-0.05, 0.08)),
+                   jitter(stone, rng, 4, rng.uniform(0.0, 0.25)), "Concrete",
+                   rot=(rng.uniform(-1.2, 1.2), rng.uniform(-1.5, 1.5), rng.uniform(-1, 1)), flags=SOLID)
             n += 1
         x += ln
     for _ in range(rng.randint(1, 3)):  # weeds in the joints
         wx = rng.uniform(-width / 2, width / 2)
-        f.part("Weed", (wx, top + 2.6, 0.3), (rng.uniform(0.4, 0.8), rng.uniform(0.3, 0.6), 0.4),
+        f.part("Weed", (wx, top + ph + 0.45, 0.3), (rng.uniform(0.4, 0.8), rng.uniform(0.3, 0.6), 0.4),
                jitter(MOSS, rng, 10), "Grass", rot=(0, rng.uniform(0, 90), rng.uniform(-20, 20)), flags=DECOR)
         n += 1
     # rooftop clutter (behind the parapet, sits on the roof at y = top)
-    z0 = depth + rng.uniform(3, 5)
+    z0 = depth + rng.uniform(2.6, 3.4)  # (a background block may stand ~12 behind the face)
     cx = rng.uniform(-width / 4, width / 4)
     if clutter == "tank":
-        r, th, legs = rng.uniform(2.2, 2.8), rng.uniform(5, 6.5), rng.uniform(4, 6)
-        for sx in (-1, 1):
-            for sz in (-1, 1):
-                f.box("TankLeg", (cx + sx * r * 0.7 - 0.15, top, z0 + sz * r * 0.7 - 0.15),
-                      (cx + sx * r * 0.7 + 0.15, top + legs, z0 + sz * r * 0.7 + 0.15), METAL_DARK, "Metal", flags=SOLID)
-                n += 1
-        for sz in (-1, 1):
-            beam(f, "Brace", (cx - r * 0.7, top + 0.3, z0 + sz * r * 0.7), (cx + r * 0.7, top + legs - 0.3, z0 + sz * r * 0.7),
-                 0.1, 0.1, METAL_DARK, "Metal", side=(0, 0, 1), flags=DECOR)
-            n += 1
-        f.box("TankBase", (cx - r, top + legs, z0 - r), (cx + r, top + legs + 0.3, z0 + r), METAL_DARK, "Metal",
-              flags=SOLID)
-        f.part("Tank", (cx, top + legs + 0.3 + th / 2, z0), (th, 2 * r, 2 * r), jitter(WOOD_OLD, rng, 8, 0.15),
-               "WoodPlanks", rot=(0, 0, 90), shape=CYLINDER, flags=SOLID)
-        n += 2
-        for i in range(3):
-            hy = top + legs + 0.3 + th * (0.2 + 0.3 * i)
-            f.part("Hoop", (cx, hy, z0), (0.14, 2 * r + 0.08, 2 * r + 0.08), RUST_DARK, "CorrodedMetal", rot=(0, 0, 90),
-                   shape=CYLINDER, flags=DECOR)
-            n += 1
-        f.part("TankRoof", (cx, top + legs + 0.3 + th + 0.35, z0), (0.7, 2 * r + 0.3, 2 * r + 0.3), WOOD_DARK, "Wood",
-               rot=(0, 0, 90), shape=CYLINDER, flags=DECOR)
-        f.part("TankRoof", (cx, top + legs + 0.3 + th + 0.9, z0), (0.6, r * 1.1, r * 1.1), WOOD_DARK, "Wood",
-               rot=(0, 0, 90), shape=CYLINDER, flags=DECOR)
-        n += 2
+        n += _water_tank(f, rng, cx, top, z0, rng.uniform(2.2, 2.8), rng.uniform(5, 6.5), rng.uniform(4, 6))
     elif clutter == "antenna":
         mh = rng.uniform(8, 13)
         rod(f, "Mast", (cx, top, z0), (cx, top + mh, z0), 0.25, GALV, "Metal", flags=DECOR_SHADOW)
@@ -1021,11 +1526,11 @@ def building_top(D, folder, origin, ry, rng, width=16.0, top=30.0, depth=4.0, cl
             vx = cx + rng.uniform(-4, 4)
             vz = z0 + rng.uniform(-1, 2)
             vh = rng.uniform(2, 4.5)
-            rod(f, "Stack", (vx, top, vz), (vx, top + vh, vz), rng.uniform(0.6, 1.0), jitter(GALV, rng, 6, 0.25),
-                "Metal", flags=SOLID)
-            f.part("Cap", (vx, top + vh + 0.25, vz), (0.3, 1.3, 1.3), METAL_DARK, "Metal", rot=(0, 0, 90),
+            vd = rng.uniform(0.6, 1.0)
+            rod(f, "Stack", (vx, top, vz), (vx, top + vh, vz), vd, jitter(GALV, rng, 6, 0.25), "Metal", flags=SOLID)
+            f.part("Cap", (vx, top + vh + 0.25, vz), (0.06, vd * 1.76, vd * 1.76), METAL_DARK, "Metal", rot=(0, 0, 90),
                    shape=CYLINDER, flags=DECOR)
-            n += 2
+            n += 2 + cone(f, "Cap", vx, top + vh + 0.28, vz, vd * 0.75, vd * 0.4, METAL_DARK, "Metal", n=6)
         f.box("BoxVent", (cx - 2, top, z0 + 2), (cx + 1, top + 2.2, z0 + 4), jitter(GALV, rng, 6, 0.2), "Metal",
               flags=SOLID)
         n += 1
@@ -1035,12 +1540,13 @@ def building_top(D, folder, origin, ry, rng, width=16.0, top=30.0, depth=4.0, cl
 def background_facade(D, folder, origin, ry, rng, width=40.0, height=60.0, depth=12.0, floor_h=10.0, style=None,
                       lit_share=0.25, ground_floor=True):
     """A tall building BEYOND the alley walls (for depth, seen above the near roofs): a solid
-    mass with rows of recessed windows (glass bands behind brick piers and stone sill
-    lines), a few lit (warm / cold / TV; tagged CityWindowLit, some Day = always on at
-    night), a shuttered ground floor, a cornice, a water tank silhouette and a mast.
-    Cheap: windows are bands, not one part each. origin: floor point at the middle of the
-    facade's foot; the mass extends `depth` behind. Footprint: width x depth x height.
-    Parts: 25-60."""
+    mass with rows of recessed windows (a dark glass band behind brick piers, stone sill lines
+    that stop short of the corners), each bay's pane in front of the band with some blinds
+    half down, a few lit (warm / cold / TV; tagged CityWindowLit, some Day = always on at
+    night), AC boxes, a shuttered ground floor, a cornice, run-off down the piers, a water
+    tank and a mast. Cheap: windows are bands, not one part each. origin: floor point at the
+    middle of the facade's foot; the mass extends `depth` behind. Footprint: width x depth x
+    height. Parts: 30-75."""
     f = frame_at(D, folder, origin, ry)
     n = 0
     style = style or rng.choice(["brick", "concrete", "render"])
@@ -1053,23 +1559,24 @@ def background_facade(D, folder, origin, ry, rng, width=40.0, height=60.0, depth
     cols = max(2, int(width / 5.5))
     bay = width / cols
     win_w = bay * rng.uniform(0.45, 0.55)
+    pier_w = bay - win_w
     first = 1 if ground_floor else 0
     for k in range(first, floors):
         y0 = k * floor_h + floor_h * 0.3
         y1 = y0 + floor_h * 0.5
         f.box("Glass", (-width / 2 + 0.3, y0, -0.12), (width / 2 - 0.3, y1, -0.02),
               jitter((26, 28, 30), rng, 3), "Glass", flags=DECOR, reflectance=0.08)
-        f.box("SillLine", (-width / 2, y0 - 0.35, -0.75), (width / 2, y0, 0), jitter(STONE, rng, 4, 0.15), "Concrete",
-              flags=DECOR)
+        # the sill line stops short of the corners (its ends never on the edge piers' faces)
+        f.box("SillLine", (-width / 2 + 0.06, y0 - 0.35, -0.75), (width / 2 - 0.06, y0, 0), jitter(STONE, rng, 4, 0.15),
+              "Concrete", flags=DECOR)
         n += 2
     # piers between the windows (full height, in front of the glass bands)
-    pier_w = bay - win_w
     for i in range(cols + 1):
         px = -width / 2 + i * bay
         a, b = max(-width / 2, px - pier_w / 2), min(width / 2, px + pier_w / 2)
         f.box("Pier", (a, floor_h * first, -0.5), (b, height, 0), jitter(mass_c, rng, 3), mat, flags=DECOR)
         n += 1
-    # lit windows (each a pane in front of its band)
+    # lit windows (each a pane well in front of its band), blinds between pane and band
     budget = min(14, int((floors - first) * cols * lit_share))
     cells = [(k, i) for k in range(first, floors) for i in range(cols)]
     rng.shuffle(cells)
@@ -1079,49 +1586,46 @@ def background_facade(D, folder, origin, ry, rng, width=40.0, height=60.0, depth
         kind = rng.choice(["warm", "warm", "warm", "cold", "tv"])
         col = {"warm": WARM_DIM, "cold": COLD_DIM, "tv": TV_DIM}[kind]
         day = rng.random() < 0.5
-        f.box("Window", (cx - win_w / 2 + 0.1, y0 + 0.1, -0.17), (cx + win_w / 2 - 0.1, y0 + floor_h * 0.5 - 0.1, -0.13),
+        hw = win_w / 2 - 0.1
+        f.box("Window", (cx - hw, y0 + 0.1, -0.3), (cx + hw, y0 + floor_h * 0.5 - 0.1, -0.26),
               jitter(col, rng, 10, rng.uniform(0, 0.35)) if day else (30, 32, 34), "Neon" if day else "Glass",
               flags=DECOR, extra={"t": ["CityWindowLit"], "a": {"Kind": kind, "Day": day}})
         n += 1
-        if rng.random() < 0.4:  # blind / curtain half down
-            f.box("Blind", (cx - win_w / 2 + 0.1, y0 + floor_h * 0.5 * rng.uniform(0.5, 0.8), -0.2),
-                  (cx + win_w / 2 - 0.1, y0 + floor_h * 0.5 - 0.1, -0.18), jitter((70, 62, 50), rng, 8), "Fabric",
-                  flags=DECOR)
+        if rng.random() < 0.4:  # blind / curtain half down (behind the pane)
+            f.box("Blind", (cx - hw, y0 + floor_h * 0.5 * rng.uniform(0.5, 0.8), -0.2),
+                  (cx + hw, y0 + floor_h * 0.5 - 0.18, -0.18), jitter((70, 62, 50), rng, 8), "Fabric", flags=DECOR)
             n += 1
-    # AC boxes stuck under some windows
+    # AC boxes stuck under some windows (on the wall between the piers)
     for k, i in cells[budget:budget + rng.randint(2, 5)]:
-        cx = -width / 2 + (i + 0.5) * bay + rng.uniform(-1, 1)
-        y0 = k * floor_h + floor_h * 0.3 - 1.6
-        f.box("AC", (cx - 0.9, y0, -1.3), (cx + 0.9, y0 + 1.2, -0.75), jitter(BEIGE, rng, 8, 0.2), "Metal", flags=DECOR)
+        cx = -width / 2 + (i + 0.5) * bay + rng.uniform(-0.6, 0.6) * max(0.0, win_w / 2 - 1.0)
+        y0 = k * floor_h + floor_h * 0.3 - 1.7
+        f.box("AC", (cx - 0.9, y0, -0.55), (cx + 0.9, y0 + 1.2, 0), jitter(BEIGE, rng, 8, 0.2), "Metal", flags=DECOR)
         n += 1
-    if ground_floor:
+    if ground_floor:  # (hidden behind the alley walls: one shutter slab under a fascia)
         f.box("ShopShutters", (-width / 2 + 0.4, 0, -0.3), (width / 2 - 0.4, floor_h * 0.6, -0.05),
               jitter((60, 62, 62), rng, 4), "Metal", flags=SOLID)
+        n += 1
         f.box("Fascia", (-width / 2, floor_h * 0.6, -0.6), (width / 2, floor_h * 0.75, 0), jitter((40, 40, 42), rng, 4),
               "Metal", flags=DECOR)
-        n += 2
-    # cornice, run-off, roof clutter
-    f.box("Cornice", (-width / 2 - 0.3, height - 1.2, -1.0), (width / 2 + 0.3, height - 0.4, depth), jitter(STONE, rng, 4, 0.2),
-          "Concrete", flags=DECOR)
-    f.box("Parapet", (-width / 2, height, 0), (width / 2, height + 1.5, depth), jitter(mass_c, rng, 4, 0.1), mat,
+        n += 1
+    # cornice, parapet, run-off on the piers' faces, roof clutter
+    f.box("Cornice", (-width / 2 - 0.3, height - 1.2, -1.0), (width / 2 + 0.3, height - 0.4, depth - 0.3),
+          jitter(STONE, rng, 4, 0.2), "Concrete", flags=DECOR)
+    f.box("Parapet", (-width / 2, height, 0.3), (width / 2, height + 1.5, depth - 0.3), jitter(mass_c, rng, 4, 0.1), mat,
           flags=DECOR)
     n += 2
-    for _ in range(rng.randint(2, 4)):
-        sx = rng.uniform(-width / 2, width / 2)
-        overlay(f, "RunOff", sx - 0.8, sx + 0.8, height - rng.uniform(10, 25), height - 1.2, SOOT, k=10, tr=0.6)
-        n += 1
+    piers = list(range(1, cols))
+    for i in rng.sample(piers, min(len(piers), rng.randint(2, 4))):
+        px = -width / 2 + i * bay
+        g = f.sub((0, 0, -0.5))  # the pier's front face
+        n += streak(g, rng, "RunOff", px, height - 1.25, rng.uniform(8, 22), min(pier_w * 0.7, 1.4), SOOT, k=0, tr=0.6,
+                    taper=3)
     tx, tz = rng.uniform(-width / 3, width / 3), depth * 0.5
-    for sx in (-1.4, 1.4):
-        f.box("TankLeg", (tx + sx - 0.15, height, tz - 0.15), (tx + sx + 0.15, height + 4, tz + 0.15), METAL_DARK, "Metal",
-              flags=DECOR)
-    f.part("Tank", (tx, height + 6.5, tz), (5, 4.4, 4.4), jitter(WOOD_DARK, rng, 6), "WoodPlanks", rot=(0, 0, 90),
-           shape=CYLINDER, flags=DECOR)
-    f.part("TankRoof", (tx, height + 9.3, tz), (0.6, 2.6, 2.6), WOOD_DARK, "Wood", rot=(0, 0, 90), shape=CYLINDER,
-           flags=DECOR)
+    n += _water_tank(f, rng, tx, height, tz, 2.2, 4.4, 4.0, color=jitter(WOOD_DARK, rng, 6), braces=False, far=True)
     mx = rng.uniform(-width / 2 + 2, width / 2 - 2)
     rod(f, "Mast", (mx, height, depth * 0.7), (mx, height + rng.uniform(8, 14), depth * 0.7), 0.3, METAL_DARK, "Metal",
         flags=DECOR)
-    return n + 5
+    return n + 1
 
 
 def chainlink_fence(D, folder, origin, ry, rng, width=10.0, height=8.0, barbed=True, torn=True):
@@ -1196,94 +1700,122 @@ def chainlink_fence(D, folder, origin, ry, rng, width=10.0, height=8.0, barbed=T
 
 
 def ac_unit(D, folder, origin, ry, rng, y=9.0, x=0.0, scale=1.0):
-    """A wall-hung air-con condenser: yellowed casing with a round fan grille (dark,
-    two crossed guards), side louvres, on two steel angle brackets with diagonal struts,
-    a condensate pipe dribbling down the wall (dark wet streak), rust round the screws and
-    soot above the outlet. Footprint: 3 x 1.4 (x scale), 2.2 tall. Parts: 21."""
+    """A wall-hung split air-con condenser: yellowed pressed-steel casing with an overhanging
+    lid, a round fan opening on the left (dark disc in a raised rim, an X guard and a hub),
+    louvres on the right, on two L-brackets (a wall leg, an arm under the unit, a diagonal
+    brace); the insulated pipe bundle bending into the wall, a condensate pipe dribbling a dark
+    wet run down the wall, rust from the bracket screws and soot above the outlet.
+    Footprint: 2.6 x 1.35 (x scale), 1.9 tall. Parts: 22-26."""
     f = frame_at(D, folder, origin, ry).sub((x, y, 0))
-    s = scale
+    s = scale * 0.86  # (real 9-12k BTU units: ~0.75 x 0.55 x 0.28 m)
     W, H, Dp = 3.0 * s, 2.2 * s, 1.3 * s
     case = jitter(rng.choice([BEIGE, (130, 128, 118), (110, 112, 106)]), rng, 8, 0.1)
     n = 0
-    f.box("Casing", (-W / 2, 0, -Dp - 0.25), (W / 2, H, -0.25), case, "Metal", flags=SMALL)
-    f.box("CasingTop", (-W / 2 - 0.04, H - 0.06, -Dp - 0.29), (W / 2 + 0.04, H + 0.06, -0.21), jitter(case, rng, 4, 0.12),
-          "Metal", flags=DECOR)
+    zf = Dp + 0.25  # the casing's front, out of the wall
+    _zbox(f, "Casing", -W / 2, W / 2, 0, H, (0.25, zf), case, "Metal", flags=SMALL)
+    _zbox(f, "CasingTop", -W / 2 - 0.04, W / 2 + 0.04, H, H + 0.08, (0.21, zf + 0.04), jitter(case, rng, 4, 0.12), "Metal",
+          flags=DECOR)
     n += 2
-    gx = -W * 0.17
-    f.part("FanHole", (gx, H / 2, -Dp - 0.26), (0.06, H * 0.78, H * 0.78), (16, 16, 18), "Metal", rot=(0, 90, 0),
-           shape=CYLINDER, flags=DECOR)
-    f.part("FanRing", (gx, H / 2, -Dp - 0.28), (0.04, H * 0.84, H * 0.84), jitter(case, rng, 4, 0.25), "Metal", rot=(0, 90, 0),
-           shape=CYLINDER, flags=DECOR, transparency=0.55)
+    gx, gy = -W * 0.17, H / 2
+    d = H * 0.78
+
+    def disc(name, dia, z0, z1, col, mat="Metal"):
+        f.part(name, (gx, gy, -(z0 + z1) / 2), (z1 - z0, dia, dia), col, mat, rot=(0, 90, 0), shape=CYLINDER,
+               flags=DECOR)
+
+    disc("FanRim", d + 0.12, zf, zf + 0.05, jitter(case, rng, 4, 0.2))
+    disc("FanHole", d, zf, zf + 0.12, (16, 16, 18))
     n += 2
-    for a in (45, -45):
-        f.part("Guard", (gx, H / 2, -Dp - 0.32), (H * 0.78, 0.06, 0.04), (90, 90, 86), "Metal", rot=(0, 0, a), flags=DECOR)
+    for i, a in enumerate((45, -45)):  # the guard: each bar its own depth (they cross)
+        f.part("Guard", (gx, gy, -(zf + 0.2 + 0.07 * i)), (d * 0.98, 0.05, 0.04), (90, 90, 86), "Metal", rot=(0, 0, a),
+               flags=DECOR)
         n += 1
+    bolt(f, "Hub", (gx, gy, -(zf + 0.25)), 0.16, (70, 70, 66))
+    n += 1
     for i in range(4):
-        yy = H * (0.2 + 0.18 * i)
-        f.part("Louvre", (W * 0.3, yy, -Dp - 0.28), (W * 0.3, 0.08, 0.1), jitter(case, rng, 4, 0.3), "Metal",
+        yy = H * (0.22 + 0.18 * i)
+        f.part("Louvre", (W * 0.3, yy, -zf - 0.02), (W * 0.3, 0.08, 0.1), jitter(case, rng, 4, 0.3), "Metal",
                rot=(-30, 0, 0), flags=DECOR)
         n += 1
+    # L-brackets: a leg on the wall, an arm under the unit, a brace between them
     for bx in (-W / 2 + 0.3, W / 2 - 0.3):
-        f.box("Bracket", (bx - 0.08, -0.15, -Dp - 0.35), (bx + 0.08, 0.0, 0), jitter(RUST_DARK, rng, 4), "CorrodedMetal",
-              flags=DECOR)
-        beam(f, "Strut", (bx, -0.1, -Dp * 0.85), (bx, -1.3, -0.05), 0.12, 0.12, RUST_DARK, "CorrodedMetal", side=(1, 0, 0),
+        bc = jitter(RUST_DARK, rng, 4)
+        _zbox(f, "Bracket", bx - 0.07, bx + 0.07, -0.12, 0, (0.0, zf + 0.08), bc, "CorrodedMetal", flags=DECOR)
+        _zbox(f, "Bracket", bx - 0.07, bx + 0.07, -1.4, -0.12, (0.0, SLOT_SAFE[1]), bc, "CorrodedMetal", flags=DECOR)
+        beam(f, "Strut", (bx, -0.12, -(zf - 0.1)), (bx, -1.3, -0.12), 0.1, 0.1, bc, "CorrodedMetal", side=(1, 0, 0),
              flags=DECOR)
-        n += 2
-    # condensate pipe and its wet trail, rust from the bracket screws, soot above
+        n += 3
+    n += streak(f, rng, "Rust", rng.choice((-1, 1)) * (W / 2 - 0.3), -1.45, rng.uniform(0.8, 1.6), 0.24, RUST_STAIN,
+                k=0, tr=0.5, taper=2)
+    # insulated pipe bundle from the right side into the wall
+    py_ = H * 0.25
+    n += bend(f, "Lines", [(W / 2 - 0.1, py_, -0.55), (W / 2 + 0.35, py_, -0.55), (W / 2 + 0.35, py_ - 0.25, 0.0)],
+              0.18, (36, 36, 36), "Rubber", flags=DECOR)
+    # condensate pipe and its wet trail, soot above
     px = W / 2 - 0.5
     rod(f, "DrainPipe", (px, 0, -0.5), (px + 0.1, -1.0, -0.15), 0.12, (40, 40, 40), "Rubber", flags=DECOR)
     n += 1
-    n += streak(f, rng, "WetTrail", px + 0.1, -1.0, rng.uniform(3, 7), 0.5, WET_DARK, k=0, tr=0.5, taper=3)
-    for bx in (-W / 2 + 0.3, W / 2 - 0.3):
-        overlay(f, "Rust", bx - 0.15, bx + 0.15, -rng.uniform(1.2, 2.6), -1.3, RUST_STAIN, k=0, tr=0.5)
-        n += 1
-    overlay(f, "Soot", -W / 2 - 0.3, W / 2 + 0.3, H, H + rng.uniform(0.8, 1.6), SOOT, k=0, tr=0.82)
-    return n + 1
+    n += streak(f, rng, "WetTrail", px + 0.1, -1.08, rng.uniform(3, 7), 0.5, WET_DARK, k=0, tr=0.5, taper=3)
+    n += soft(f, rng, "Soot", -W / 2 - 0.3, W / 2 + 0.3, H + 0.1, H + rng.uniform(0.9, 1.6), SOOT, opacity=0.18, k=0,
+              anchor="bottom")
+    return n
 
 
 def meter_box(D, folder, origin, ry, rng, y=3.2, x=0.0, conduits=2):
-    """Electrical meter / junction cabinet: steel box with a door (seam, hinges, hasp and
-    padlock), a yellow warning label, a vent slot, conduits leaving the top (with straps)
-    and one into the ground, a loose cable looping out, rust dribbling from the bottom.
-    Footprint: 2.4 x 0.8, ~3 tall (+ conduits up to y + 8). Parts: 16-22."""
+    """Electrical meter / junction cabinet: a steel box with a rain hood, its door (gap line
+    round it, two barrel hinges, a hasp and padlock, a round meter window, a vent), a printed
+    DANGER sticker (flush: a SurfaceGui with its own background), conduits leaving the top with
+    saddle straps and an LB fitting turning into the wall, one into the ground, a loose cable
+    sagging out of the side, a dent, rust dribbling from the bottom seam.
+    Footprint: 2.4 x 1.0, ~3 tall (+ conduits up to y + 8). Parts: 20-28."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     W, H = rng.uniform(2.0, 2.6), rng.uniform(2.6, 3.2)
     body = jitter(rng.choice([(78, 86, 78), (92, 92, 86), (60, 64, 66)]), rng, 6)
     n = 0
-    f.box("Cabinet", (-W / 2, y, -0.75), (W / 2, y + H, 0), body, "Metal", flags=SMALL)
-    f.box("Door", (-W / 2 + 0.08, y + 0.08, -0.8), (W / 2 - 0.08, y + H - 0.08, -0.75), jitter(body, rng, 4, 0.06), "Metal",
-          flags=DECOR)
-    f.box("Roof", (-W / 2 - 0.1, y + H, -0.85), (W / 2 + 0.1, y + H + 0.12, 0), jitter(body, rng, 4, 0.15), "Metal",
+    _zbox(f, "Cabinet", -W / 2, W / 2, y, y + H, (0, 0.75), body, "Metal", flags=SMALL)
+    door = jitter(body, rng, 4, 0.06)
+    _zbox(f, "Door", -W / 2 + 0.08, W / 2 - 0.08, y + 0.08, y + H - 0.08, (0.75, 0.83), door, "Metal", flags=DECOR)
+    _zbox(f, "Roof", -W / 2 - 0.1, W / 2 + 0.1, y + H, y + H + 0.12, (0, 0.92), jitter(body, rng, 4, 0.15), "Metal",
           flags=DECOR)
     n += 3
-    for yy in (y + 0.5, y + H - 0.5):
-        f.box("Hinge", (-W / 2 - 0.02, yy - 0.18, -0.85), (-W / 2 + 0.1, yy + 0.18, -0.75), METAL_DARK, "Metal", flags=DECOR)
+    for yy in (y + 0.5, y + H - 0.5):  # barrel hinges
+        rod(f, "Hinge", (-W / 2 + 0.06, yy - 0.2, -0.86), (-W / 2 + 0.06, yy + 0.2, -0.86), 0.1, METAL_DARK, "Metal",
+            flags=DECOR)
         n += 1
-    f.box("Hasp", (W / 2 - 0.3, y + H / 2 - 0.15, -0.88), (W / 2 - 0.1, y + H / 2 + 0.15, -0.8), METAL_DARK, "Metal",
+    _zbox(f, "Hasp", W / 2 - 0.32, W / 2 - 0.14, y + H / 2 - 0.15, y + H / 2 + 0.15, (0.83, 0.91), METAL_DARK, "Metal",
           flags=DECOR)
-    f.part("Padlock", (W / 2 - 0.2, y + H / 2 - 0.3, -0.92), (0.22, 0.3, 0.1), jitter((120, 100, 50), rng, 8), "Metal",
-           flags=DECOR)
-    f.part("Label", (0, y + H * 0.72, -0.81), (W * 0.5, 0.45, 0.03), jitter((170, 150, 40), rng, 8, 0.15),
-           "SmoothPlastic", flags=DECOR, extra=sign_extra("DANGER · 415V", (30, 28, 24), font="Oswald"))
-    f.box("VentSlot", (-W / 4, y + 0.35, -0.81), (W / 4, y + 0.5, -0.79), (20, 20, 20), "Metal", flags=DECOR)
+    _zbox(f, "Padlock", W / 2 - 0.34, W / 2 - 0.12, y + H / 2 - 0.5, y + H / 2 - 0.18, (0.86, 0.98),
+          jitter((120, 100, 50), rng, 8), "Metal", flags=DECOR)
+    n += 2
+    # the meter window (a dark round glass in a ring) and the vent
+    f.part("MeterRing", (-W * 0.12, y + H * 0.55, -0.87), (0.08, 0.62, 0.62), METAL_DARK, "Metal", rot=(0, 90, 0),
+           shape=CYLINDER, flags=DECOR)
+    f.part("MeterGlass", (-W * 0.12, y + H * 0.55, -0.9), (0.14, 0.5, 0.5), (34, 38, 36), "Glass", rot=(0, 90, 0),
+           shape=CYLINDER, flags=DECOR)
+    _zbox(f, "VentSlot", -W / 4, W / 4, y + 0.3, y + 0.46, (0.83, 0.9), (20, 20, 20), "Metal", flags=DECOR)
+    f.part("Label", (W * 0.1, y + H * 0.8, -0.86), (W * 0.5, 0.42, 0.04), (0, 0, 0), "SmoothPlastic", transparency=1,
+           flags=DECOR, extra=sign_extra("DANGER · 415V", (30, 28, 24), font="Oswald",
+                                         bg=jitter((170, 150, 40), rng, 8, 0.15)))
     n += 4
+    # conduits up the wall: saddle straps, an LB fitting at the top turning into the wall
     for i in range(conduits):
         cx = -W / 4 + i * W / 2 / max(1, conduits - 1) if conduits > 1 else 0
-        top = y + H + rng.uniform(4, 8)
-        rod(f, "Conduit", (cx, y + H, -0.3), (cx, top, -0.3), 0.26, jitter((70, 72, 70), rng, 6), "Metal", flags=DECOR)
-        f.box("Strap", (cx - 0.22, y + H + 1.6, -0.48), (cx + 0.22, y + H + 1.75, 0), METAL_DARK, "Metal", flags=DECOR)
-        n += 2
+        top = y + H + 0.12 + rng.uniform(4, 8)
+        cc = jitter((70, 72, 70), rng, 6)
+        rod(f, "Conduit", (cx, y + H + 0.12, -0.3), (cx, top, -0.3), 0.26, cc, "Metal", flags=DECOR)
+        _zbox(f, "Strap", cx - 0.22, cx + 0.22, y + H + 1.6, y + H + 1.72, (0, 0.47), METAL_DARK, "Metal", flags=DECOR)
+        _zbox(f, "LB", cx - 0.19, cx + 0.19, top, top + 0.5, (0.0, 0.5), jitter(cc, rng, 3), "Metal", flags=DECOR)
+        n += 3
     rod(f, "Conduit", (W / 4, y, -0.3), (W / 4, 0, -0.3), 0.3, jitter((70, 72, 70), rng, 6), "Metal", flags=DECOR)
     n += 1
-    # a loose cable looping out of the side (sagging, two segments)
+    # a loose cable looping out of the side (round bends)
     drop = rng.uniform(0.6, 1.4)
-    pts = [(W / 2, y + H * 0.7, -0.4), (W / 2 + 0.35, y + H * 0.7 - drop, -0.55), (W / 2 + 0.75, y + H * 0.7 - drop * 0.8, -0.5),
-           (W / 2 + 0.95, y + H * 0.7, -0.35), (W / 2 + 1.0, y + H + 2.0, -0.2)]
-    for a, b in zip(pts, pts[1:]):
-        rod(f, "LooseCable", a, b, 0.08, CABLE, "Rubber", flags=DECOR)
-        n += 1
-    n += streak(f, rng, "RustStreak", rng.uniform(-W / 3, W / 3), y, rng.uniform(1, y - 0.2), 0.5, RUST_STAIN, k=0,
-                taper=2)
+    pts = [(W / 2, y + H * 0.7, -0.4), (W / 2 + 0.35, y + H * 0.7 - drop, -0.55),
+           (W / 2 + 0.75, y + H * 0.7 - drop * 0.8, -0.5), (W / 2 + 0.95, y + H * 0.7, -0.35),
+           (W / 2 + 1.0, y + H + 2.0, -0.2)]
+    n += bend(f, "LooseCable", pts, 0.08, CABLE, "Rubber", flags=DECOR)
+    n += streak(f, rng, "RustStreak", rng.uniform(-W / 3, W / 3), y - 0.05, rng.uniform(1, max(1.2, y - 0.4)), 0.45,
+                RUST_STAIN, k=0, taper=3)
     return n
 
 
@@ -1325,7 +1857,7 @@ def cable_sag(D, folder, origin, ry, rng, span=14.0, y=14.0, y_end=None, cables=
         for s_ in (-1, 1):
             h = g.sub((0.05 * s_, -1.1 - 0.15 * (s_ > 0), 0.3 * s_), rx=rng.uniform(60, 85) * s_, rz=rng.uniform(-10, 10))
             h.part("Trainer", (0, 0.04, 0), (0.4, 0.4, 1.0), upper, "Fabric", flags=DECOR)
-            h.part("Sole", (0, -0.2, 0.02), (0.42, 0.12, 1.08), (40, 38, 36), "Rubber", flags=DECOR)
+            h.part("Sole", (0, -0.2, 0.02), (0.54, 0.12, 1.16), (40, 38, 36), "Rubber", flags=DECOR)
             n += 2
         rod(g, "Laces", (0, 0, 0), (0, -0.7, 0.05), 0.04, (150, 150, 140), "Fabric", flags=DECOR)
         n += 1
@@ -1335,10 +1867,11 @@ def cable_sag(D, folder, origin, ry, rng, span=14.0, y=14.0, y_end=None, cables=
 def pipe_run(D, folder, origin, ry, rng, length=10.0, y=6.0, x=0.0, diameter=0.6, drop="down", valve=None,
              color=None):
     """A service pipe along the wall at height y, from x - length/2 to x + length/2: two or
-    three lengths joined by flanges, U-clamps on wall plates, a slight sag between clamps,
-    rust weeping from every joint; drop = "down" turns it down (elbow) into the ground,
-    "up" up the wall, None ends in a cap. valve adds a hand wheel. Pipes low enough to bump
-    are SMALL. Footprint: length x (diameter + 0.4). Parts: 10-22."""
+    three lengths joined by flanges (with bolt heads), clamps on wall plates, a slight sag
+    between clamps, rust weeping from every joint; drop = "down" turns it down (a bend) into
+    the ground, "up" up the wall, None ends in a cap. valve adds a gate valve with a spoked
+    hand wheel. Pipes low enough to bump are SMALL. Footprint: length x (diameter + 0.4).
+    Parts: 12-34."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     pc = color or jitter(rng.choice([RUST, METAL, (70, 70, 64), (96, 90, 60)]), rng, 6)
     mat = "CorrodedMetal" if pc[0] > pc[2] + 15 else "Metal"
@@ -1353,18 +1886,24 @@ def pipe_run(D, folder, origin, ry, rng, length=10.0, y=6.0, x=0.0, diameter=0.6
             flags=flags)
         n += 1
         if 0 < i:
-            rod(f, "Flange", (xs[i] - 0.08, y + sagy[i], zc), (xs[i] + 0.08, y + sagy[i], zc), diameter + 0.3,
-                jitter(pc, rng, 4, 0.15), mat, flags=DECOR)
-            n += 1 + streak(f, rng, "RustStreak", xs[i], y - diameter / 2, rng.uniform(1.5, 4), 0.4, RUST_STAIN, k=0,
-                            taper=2)
+            fc_ = jitter(pc, rng, 4, 0.15)
+            rod(f, "Flange", (xs[i] - 0.08, y + sagy[i], zc), (xs[i] + 0.08, y + sagy[i], zc), diameter + 0.3, fc_, mat,
+                flags=DECOR)
+            for a in (45, 135, 225, 315):  # bolt heads round the flange
+                r_ = diameter / 2 + 0.08
+                bolt(f, "Bolt", (xs[i] - 0.1, y + sagy[i] + r_ * math.sin(math.radians(a)),
+                                 zc + r_ * math.cos(math.radians(a))), 0.07, METAL_DARK)
+            n += 5 + streak(f, rng, "RustStreak", xs[i], y - diameter / 2 - 0.3, rng.uniform(1.5, 4), 0.4, RUST_STAIN,
+                            k=0, taper=3)
     clamps = max(2, int(length / 3.5))
     for i in range(clamps):
         cx = -length / 2 + (i + 0.5) * length / clamps
-        f.box("WallPlate", (cx - 0.2, y - diameter / 2 - 0.25, -0.08), (cx + 0.2, y + diameter / 2 + 0.25, 0), METAL_DARK,
+        _zbox(f, "WallPlate", cx - 0.2, cx + 0.2, y - diameter / 2 - 0.25, y + diameter / 2 + 0.25, (0, 0.08), METAL_DARK,
               "Metal", flags=DECOR)
-        f.box("Clamp", (cx - 0.08, y - diameter / 2 - 0.08, zc - diameter / 2 - 0.06), (cx + 0.08, y + diameter / 2 + 0.08, -0.08),
-              METAL_DARK, "Metal", flags=DECOR)
-        n += 2
+        f.part("Clamp", (cx, y, zc), (0.2, diameter + 0.1, diameter + 0.1), METAL_DARK, "Metal", shape=CYLINDER,
+               flags=DECOR)
+        _zbox(f, "Clamp", cx - 0.03, cx + 0.03, y - 0.06, y + 0.06, (0.08, -zc), METAL_DARK, "Metal", flags=DECOR)
+        n += 3
     end = length / 2
     if drop in ("down", "up"):
         f.part("Elbow", (end, y, zc), (diameter + 0.12, diameter + 0.12, diameter + 0.12), jitter(pc, rng, 4, 0.1), mat,
@@ -1382,120 +1921,165 @@ def pipe_run(D, folder, origin, ry, rng, length=10.0, y=6.0, x=0.0, diameter=0.6
         n += 1
     if valve if valve is not None else rng.random() < 0.4:
         vx = rng.uniform(-length / 3, length / 3)
-        rod(f, "Stem", (vx, y, zc), (vx, y + diameter / 2 + 0.6, zc), 0.12, METAL_DARK, "Metal", flags=DECOR)
-        f.part("Wheel", (vx, y + diameter / 2 + 0.62, zc), (0.08, 1.0, 1.0), jitter((110, 40, 34), rng, 8), "Metal",
-               rot=(0, 0, 90), shape=CYLINDER, flags=DECOR)
+        _zbox(f, "ValveBody", vx - 0.25, vx + 0.25, y + diameter / 2 - 0.1, y + diameter / 2 + 0.35,
+              (-zc - 0.22, -zc + 0.22), jitter(pc, rng, 4, 0.2), mat, flags=DECOR)
+        rod(f, "Stem", (vx, y + diameter / 2 + 0.35, zc), (vx, y + diameter / 2 + 0.75, zc), 0.1, METAL_DARK, "Metal",
+            flags=DECOR)
         n += 2
+        wc = jitter((110, 40, 34), rng, 8)
+        wy, wr = y + diameter / 2 + 0.75, 0.48
+        g = f.sub((vx, wy, zc), ry=rng.uniform(0, 60))
+        for i in range(6):  # the rim: a hexagon of flat bars
+            a0, a1 = math.radians(60 * i), math.radians(60 * (i + 1))
+            beam(g, "Wheel", (wr * math.cos(a0), 0, wr * math.sin(a0)), (wr * math.cos(a1), 0, wr * math.sin(a1)), 0.07,
+                 0.07, wc, "Metal", side=(0, 1, 0), flags=DECOR)
+        for a in (0, 180):  # two spokes from the hub (they don't meet: the hub covers the middle)
+            c_, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
+            beam(g, "Wheel", (0.08 * c_, 0, 0.08 * s_), (wr * c_, 0, wr * s_), 0.06, 0.06, wc, "Metal", side=(0, 1, 0),
+                 flags=DECOR)
+        bolt(g, "Wheel", (0, 0, 0), 0.18, wc)
+        n += 9
     return n
 
 
 def downpipe(D, folder, origin, ry, rng, height=24.0, x=0.0, gutter=6.0, color=None):
-    """A rain downpipe from the roof edge: a sagging gutter along the top (with a broken
-    end), an outlet and swan-neck offset, pipe lengths with collars and wall brackets, a
-    cracked joint leaking a long wet stain, a shoe at the foot (tag CityGutter: it spouts in
-    the rain) with a green slimy splash patch on the wall and floor.
-    Footprint: gutter x 1, height tall. Parts: 18-24."""
+    """A rain downpipe from the roof edge: a sagging box gutter along the top (front bead, end
+    caps, a broken length hanging off one end), the outlet and a swan neck (two round bends)
+    stepping back toward the wall, one continuous round pipe down the wall with round socket
+    collars at every joint and round pipe clips on stems into the wall, a cracked joint leaking
+    a long wet stain, a kicked-out shoe at the foot (tag CityGutter: it spouts in the rain) over
+    a green slimy patch on the wall. Footprint: gutter x 1, height tall. Parts: 22-32."""
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     pc = color or jitter(rng.choice([METAL_DARK, (60, 62, 60), (34, 34, 34), (70, 60, 52)]), rng, 6)
     n = 0
+    # gutter (in its own frame: the sag tilts the gutter, its bead and its end caps together)
     gl = gutter
     gx = rng.uniform(-gl * 0.3, gl * 0.3)
-    f.part("Gutter", (gx, height - 0.2, -0.45), (gl, 0.4, 0.6), jitter(pc, rng, 4), "Metal",
-           rot=(0, 0, rng.uniform(-1.2, 1.2)), flags=DECOR)
-    f.box("GutterLip", (gx - gl / 2, height - 0.05, -0.8), (gx + gl / 2, height + 0.05, -0.72), jitter(pc, rng, 4, 0.1),
-          "Metal", flags=DECOR)
-    # a broken bit hanging off one end
-    f.part("GutterEnd", (gx + gl / 2 + 0.6, height - 0.6, -0.5), (1.2, 0.35, 0.55), jitter(pc, rng, 4, 0.1), "Metal",
-           rot=(0, 0, -rng.uniform(15, 35)), flags=DECOR)
+    g = f.sub((gx, height - 0.2, 0), rz=rng.uniform(-1.2, 1.2))
+    gcol = jitter(pc, rng, 4)
+    _zbox(g, "Gutter", -gl / 2, gl / 2, -0.2, 0.2, (0.0, 0.75), gcol, "Metal", flags=DECOR)
+    _zbox(g, "GutterLip", -gl / 2, gl / 2, 0.2, 0.28, (0.68, 0.8), jitter(pc, rng, 4, 0.1), "Metal", flags=DECOR)
+    _zbox(g, "GutterEnd", -gl / 2 - 0.064, -gl / 2 - 0.004, -0.27, 0.35, (0.0, 0.84), jitter(gcol, rng, 3), "Metal",
+          flags=DECOR)
     n += 3
-    d = 0.5
-    zc = -0.45
-    # outlet + swan neck (out from the gutter, back to the wall)
-    rod(f, "Outlet", (0, height - 0.3, -0.45), (0, height - 0.9, -0.45), d, pc, "Metal", flags=DECOR)
-    rod(f, "SwanNeck", (0, height - 0.9, -0.45), (0, height - 1.9, zc), d, pc, "Metal", flags=DECOR)
-    n += 2
-    top = height - 1.9
-    lengths = rng.randint(3, 4)
-    leak = rng.randrange(1, lengths)
-    for i in range(lengths):
-        a = top - i * top / lengths
-        b = top - (i + 1) * top / lengths + 0.6
-        rod(f, "Downpipe", (rng.uniform(-0.02, 0.02), a, zc), (0, max(b, 0.8), zc), d, jitter(pc, rng, 3), "Metal",
-            flags=DECOR_SHADOW)
-        f.box("Collar", (-0.32, a - 0.35, zc - 0.32), (0.32, a, zc + 0.32), jitter(pc, rng, 3, 0.15), "Metal", flags=DECOR)
-        f.box("Bracket", (-0.06, a - 0.6, zc), (0.06, a - 0.45, 0), METAL_DARK, "Metal", flags=DECOR)
+    # a broken length hanging off the other end
+    f.part("GutterBroken", (gx + gl / 2 + 0.62, height - 0.62, -0.45), (1.2, 0.36, 0.56), jitter(pc, rng, 4, 0.1),
+           "Metal", rot=(0, 0, -rng.uniform(15, 35)), flags=DECOR)
+    n += 1
+    d = 0.36  # (real: 68-110 mm)
+    zc = -0.38
+    top = height - 2.1
+    # outlet + swan neck: down from the gutter, a step back toward the wall, down again
+    n += bend(f, "SwanNeck", [(0, height - 0.3, -0.45), (0, height - 0.95, -0.45), (0, height - 1.55, zc),
+                              (0, top, zc)], d, pc, "Metal", flags=DECOR)
+    # the pipe: one length from the swan neck to the shoe; socket collars and clips
+    rod(f, "Downpipe", (0, top, zc), (0, 0.9, zc), d, jitter(pc, rng, 3), "Metal", flags=DECOR_SHADOW)
+    n += 1
+    joints = rng.randint(3, 4)
+    leak = rng.randrange(joints)
+    for i in range(joints):
+        a = top - (i + 0.15) * (top - 0.9) / joints
+        f.part("Collar", (0, a, zc), (0.32, d + 0.1, d + 0.1), jitter(pc, rng, 3, 0.1), "Metal", rot=(0, 0, 90),
+               shape=CYLINDER, flags=DECOR)
+        cy_ = a - 0.55
+        f.part("Clip", (0, cy_, zc), (0.16, d + 0.07, d + 0.07), METAL_DARK, "Metal", rot=(0, 0, 90), shape=CYLINDER,
+               flags=DECOR)
+        _zbox(f, "Clip", -0.03, 0.03, cy_ - 0.02, cy_ + 0.02, (0.0, -zc), METAL_DARK, "Metal", flags=DECOR)
         n += 3
         if i == leak:
-            n += streak(f, rng, "Leak", rng.uniform(0.3, 0.6), a - 0.35, rng.uniform(4, a - 1), 0.8, WET_DARK, k=0,
-                        tr=0.5, taper=3)
-    f.part("Shoe", (0.25, 0.55, zc - 0.15), (1.0, d, d), jitter(pc, rng, 4, 0.1), "Metal", rot=(0, 90, -30),
+            n += streak(f, rng, "Leak", rng.uniform(0.35, 0.6) * rng.choice((-1, 1)), a - 0.2,
+                        rng.uniform(4, max(4.5, a - 1.5)), 0.7, WET_DARK, k=0, tr=0.5, taper=3)
+    # the shoe (kicked out at the foot): a bend and a short spout, the tagged shoe at its end
+    f.part("ShoeBend", (0, 0.9, zc), (d * 1.04, d * 1.04, d * 1.04), jitter(pc, rng, 4, 0.1), "Metal", shape=BALL,
+           flags=DECOR)
+    f.part("Shoe", (0.0, 0.66, zc - 0.22), (0.62, d, d), jitter(pc, rng, 4, 0.1), "Metal", rot=(0, 90, -40),
            shape=CYLINDER, flags=DECOR, extra={"t": ["CityGutter"]})
-    overlay(f, "Slime", -0.9, 1.2, 0, rng.uniform(1.2, 2.0), jitter(MOSS, rng, 6, 0.2), k=0, tr=0.4, material="Grass")
-    f.box("Splash", (-0.8, 0, -1.6), (1.2, 0.04, -0.05), jitter(MOSS, rng, 6, 0.35), "Slate", transparency=0.3,
-          flags=DECOR)
-    return n + 3
+    n += 2
+    # green slime on the wall round the foot (moss where the water splashes)
+    n += soft(f, rng, "Slime", -0.9, 1.1, 0, rng.uniform(1.2, 2.0), jitter(MOSS, rng, 6, 0.2), opacity=0.6, k=0,
+              anchor="bottom", material="Grass")
+    return n
 
 
 def vent_hood(D, folder, origin, ry, rng, y=8.0, x=0.0, width=None, grease=True):
-    """A kitchen / boiler exhaust through the wall: a square duct stub with a louvred hood
-    (slanted blades), a bird-mesh dark mouth, a black soot plume on the wall above it and
-    brown grease weeping below. Footprint: ~2 x 1.2. Parts: 9-14."""
+    """A kitchen / boiler exhaust through the wall: a square duct stub with a dark mouth,
+    louvred blades (slanted), a sloped rain cowl over it, a black soot plume rising and
+    spreading up the wall (a widening mosaic: a dark core, a lighter fan with slanted sides
+    and a ragged top) and brown grease weeping below. Footprint: ~2 x 1.2. Parts: 12-20."""
     f = frame_at(D, folder, origin, ry).sub((x, y, 0))
     w = width or rng.uniform(1.6, 2.4)
     h = w * rng.uniform(0.8, 1.0)
     c = jitter(rng.choice([GALV, (90, 86, 76), METAL]), rng, 6, 0.15)
     n = 0
-    f.box("Duct", (-w / 2 - 0.15, -0.15, -0.6), (w / 2 + 0.15, h + 0.15, 0), c, "Metal", flags=DECOR)
-    f.box("Mouth", (-w / 2, 0, -0.65), (w / 2, h, -0.6), (14, 14, 14), "Metal", flags=DECOR)
+    _zbox(f, "Duct", -w / 2 - 0.15, w / 2 + 0.15, -0.15, h + 0.15, (0, 0.6), c, "Metal", flags=DECOR)
+    _zbox(f, "Mouth", -w / 2, w / 2, 0, h, (0.6, 0.68), (14, 14, 14), "Metal", flags=DECOR)
     n += 2
     blades = max(3, int(h / 0.38))
     for i in range(blades):
         yy = (i + 0.5) * h / blades
-        f.part("Blade", (0, yy, -0.78), (w, h / blades * 0.95, 0.06), jitter(c, rng, 3, 0.1 + 0.05 * (i == 1)), "Metal",
-               rot=(-38 + rng.uniform(-6, 6), 0, 0), flags=DECOR)
+        f.part("Blade", (0, yy, -0.84), (w, h / blades * 0.95, 0.06), jitter(c, rng, 3, 0.1 + 0.05 * (i == 1)), "Metal",
+               rot=(-38 + rng.uniform(-4, 4), 0, 0), flags=DECOR)
         n += 1
-    # soot plume: dark at the hood, spreading and fading as it rises
-    ph = rng.uniform(3, 5)
-    for i in range(3):
-        t = i / 2
-        pw = w * (0.8 + 0.9 * (1 - t)) + 0.3
-        overlay(f, "SootPlume", -pw / 2 + rng.uniform(-0.2, 0.2), pw / 2 + rng.uniform(-0.2, 0.2), h + 0.15,
-                h + 0.15 + ph * (1 - 0.6 * t), SOOT, k=i, tr=0.8 - 0.1 * t)
-    n += 3
+    # the rain cowl: a wedge on the duct, tall at the wall, sloping out over the blades
+    f.part("Cowl", (0, h + 0.15 + 0.17, -0.5), (w + 0.5, 0.34, 1.0), jitter(c, rng, 3, 0.08), "Metal", shape=WEDGE,
+           flags=DECOR)
+    n += 1
+    # soot plume: a dark core over the hood, then a fan widening and fading as it rises
+    y0 = h + 0.5
+    core_h = rng.uniform(0.6, 1.1)
+    n += _ok(overlay(f, "SootPlume", -w / 2, w / 2, y0, y0 + core_h, jitter(SOOT, rng, 3), k=0, tr=0.55))
+    fan_h = rng.uniform(2.0, 3.4)
+    spread = rng.uniform(0.5, 1.0)
+    fy = y0 + core_h
+    col2 = jitter(SOOT, rng, 3)
+    if overlay(f, "SootPlume", -w / 2, w / 2, fy, fy + fan_h, col2, k=0, tr=0.75) is not None:
+        n += 1
+        for s in (-1, 1):  # slanted sides: the fan widens as it rises
+            n += _ok(tri(f, "SootPlume", s * w / 2, fy + fan_h, s * spread, -fan_h, col2, k=0, tr=0.75))
+        n += ragged_top(f, rng, "SootPlume", -w / 2 - spread, w / 2 + spread, fy + fan_h, rng.uniform(0.5, 1.1), col2,
+                        k=0, tr=0.75, peaks=2)
     if grease:
-        n += streak(f, rng, "Grease", rng.uniform(-w / 4, w / 4), -0.15, rng.uniform(1.5, 3.5), 0.7, (64, 44, 24), k=0,
-                    tr=0.4, taper=2)
+        n += streak(f, rng, "Grease", rng.uniform(-w / 4, w / 4), -0.2, rng.uniform(1.5, 3.5), 0.7, (64, 44, 24), k=0,
+                    tr=0.4, taper=3)
     return n
 
 
 def satellite_dish(D, folder, origin, ry, rng, y=12.0, x=0.0, size=None):
-    """An old satellite dish on a wall bracket, pointing up and sideways: wall plate, arm,
-    the dish (a flattened ball, dirty white, rust spots), LNB arm and head, the coax cable
-    clipped down the wall, a rust stain under the plate. Footprint: ~2.2 x 2.4.
-    Parts: 8-11."""
+    """An old satellite dish on a wall bracket, pointing up and sideways: a round wall plate
+    with bolt heads, the arm, the dish (a dirty white disc with a smaller back shell: Roblox
+    balls can't be flattened, they stay spheres), the LNB arm and head looking back at the
+    dish, a rust spot, the coax cable clipped down the wall, a rust stain under the plate.
+    Footprint: ~2.2 x 2.4. Parts: 10-13."""
     f = frame_at(D, folder, origin, ry).sub((x, y, 0))
     d = size or rng.uniform(1.8, 2.6)
     n = 0
-    f.box("Plate", (-0.35, -0.5, -0.1), (0.35, 0.5, 0), METAL_DARK, "Metal", flags=DECOR)
+    pz = SLOT_SAFE[1]
+    f.part("Plate", (0, 0, -pz / 2), (pz, 0.8, 0.8), METAL_DARK, "Metal", rot=(0, 90, 0), shape=CYLINDER, flags=DECOR)
+    for a in (45, 225):
+        bolt(f, "Bolt", (0.28 * math.cos(math.radians(a)), 0.28 * math.sin(math.radians(a)), -pz), 0.09, RUST_DARK)
     rod(f, "Arm", (0, 0, -0.1), (0, 0.1, -1.1), 0.16, METAL_DARK, "Metal", flags=DECOR)
-    n += 2
+    n += 4
     yaw = rng.uniform(-35, 35)
     g = f.sub((0, 0.1, -1.2), ry=yaw, rx=rng.uniform(20, 35))
-    g.part("Dish", (0, 0, -0.05), (d, d, 0.32), jitter((166, 164, 156), rng, 8, 0.15), "SmoothPlastic", shape=BALL,
-           flags=DECOR)
-    g.part("DishRim", (0, 0, 0.05), (d * 0.98, d * 0.98, 0.08), jitter((130, 128, 120), rng, 6), "SmoothPlastic",
-           shape=BALL, flags=DECOR)
-    rod(g, "LnbArm", (0, -d * 0.45, -0.1), (0, -0.1, -d * 0.55), 0.08, (90, 90, 86), "Metal", flags=DECOR)
-    g.part("Lnb", (0, -0.05, -d * 0.6), (0.22, 0.22, 0.4), (40, 40, 40), "Plastic", flags=DECOR)
+    white = jitter((166, 164, 156), rng, 8, 0.15)
+
+    def disc(name, dia, z0, z1, col, mat="SmoothPlastic"):
+        g.part(name, (0, 0, -(z0 + z1) / 2), (z1 - z0, dia, dia), col, mat, rot=(0, 90, 0), shape=CYLINDER,
+               flags=DECOR)
+
+    disc("Dish", d, 0.0, 0.07, white)
+    disc("DishBack", d * 0.55, -0.16, 0.0, jitter(white, rng, 4, 0.12))
+    rod(g, "LnbArm", (0, -d * 0.45, -0.04), (0, -0.12, -d * 0.55), 0.08, (90, 90, 86), "Metal", flags=DECOR)
+    g.part("Lnb", (0, -0.08, -d * 0.6), (0.22, 0.22, 0.4), (40, 40, 40), "Plastic", rot=(-35, 0, 0), flags=DECOR)
     n += 4
-    for _ in range(rng.randint(1, 2)):
-        g.part("RustSpot", (rng.uniform(-d / 4, d / 4), rng.uniform(-d / 4, d / 4), -0.2), (0.25, 0.2, 0.05), RUST_STAIN,
-               "CorrodedMetal", flags=DECOR)
+    for _ in range(rng.randint(1, 2)):  # rust spots: small round blooms on the dish face
+        g.part("RustSpot", (rng.uniform(-d / 4, d / 4), rng.uniform(-d / 4, d / 4), -0.07 - 0.04),
+               (0.08, 0.2, 0.2), RUST_STAIN, "CorrodedMetal", rot=(0, 90, 0), shape=CYLINDER, flags=DECOR)
         n += 1
     cy = -rng.uniform(4, 8)
-    rod(f, "Coax", (0.2, 0, -0.12), (0.25, cy, -0.12), 0.06, CABLE, "Rubber", flags=DECOR)
+    rod(f, "Coax", (0.2, -0.4, -0.12), (0.25, cy, -0.12), 0.06, CABLE, "Rubber", flags=DECOR)
     n += 1
-    n += streak(f, rng, "RustStreak", 0, -0.5, rng.uniform(1.2, 2.5), 0.4, RUST_STAIN, k=0, taper=2)
+    n += streak(f, rng, "RustStreak", 0, -0.45, rng.uniform(1.2, 2.5), 0.4, RUST_STAIN, k=0, taper=3)
     return n
 
 
@@ -1508,77 +2092,87 @@ def bulkhead_light(D, folder, origin, ry, rng, y=8.0, x=0.0, dead=False, flicker
                    brightness=0.9):
     """A caged bulkhead light: cast back plate, body, frosted globe (the bulb part, Neon,
     carries the light: tag CityBulkhead, or CityLamp with Dead / Flicker like alleys.py
-    wall_light), a wire cage, a conduit up to a junction box, soot and dead insects stain
-    above, rust under. Footprint: 0.9 x 0.8, 0.9 tall (+ conduit). Parts: 10-13."""
+    wall_light), a wire cage (the bars at two depths: they cross), a conduit up to a junction
+    box, soot and dead insects stain above, rust under. Footprint: 0.9 x 0.9, 1 tall
+    (+ conduit). Parts: 11-16."""
     f = frame_at(D, folder, origin, ry).sub((x, y, 0))
     n = 0
-    f.box("BackPlate", (-0.45, -0.5, -0.12), (0.45, 0.5, 0), jitter((50, 50, 48), rng, 6), "Metal", flags=DECOR)
-    f.box("Body", (-0.32, -0.38, -0.42), (0.32, 0.38, -0.12), jitter((66, 66, 60), rng, 6), "Metal", flags=DECOR)
-    n += 2
+    _zbox(f, "BackPlate", -0.45, 0.45, -0.5, 0.5, (0, SLOT_SAFE[1]), jitter((50, 50, 48), rng, 6), "Metal",
+          flags=DECOR)
+    _zbox(f, "Body", -0.32, 0.32, -0.38, 0.38, (SLOT_SAFE[1], 0.42), jitter((66, 66, 60), rng, 6), "Metal", flags=DECOR)
+    for bx, by in ((-0.36, 0.42), (0.36, -0.42)):
+        bolt(f, "Bolt", (bx, by, -SLOT_SAFE[1]), 0.08, (40, 40, 38))
+    n += 4
     attrs = {}
     if dead:
         attrs["Dead"] = True
     if flicker:
         attrs["Flicker"] = True
     tag = "CityLamp" if (dead or flicker) else "CityBulkhead"
-    f.part("Bulb", (0, 0, -0.55), (0.5, 0.58, 0.4), (90, 90, 86) if dead else color, "Neon" if not dead else "Glass",
+    f.part("Bulb", (0, 0, -0.55), (0.46, 0.46, 0.46), (90, 90, 86) if dead else color, "Neon" if not dead else "Glass",
            shape=BALL, flags=DECOR,
            extra=light_extra([tag], {"type": "Point", "color": list(color), "range": range_, "brightness": brightness,
                                      "name": "Light", "shadows": False}, attrs or None))
     n += 1
-    for a in (-0.2, 0.2):  # cage
-        f.box("Cage", (a - 0.03, -0.36, -0.8), (a + 0.03, 0.36, -0.74), (36, 36, 36), "Metal", flags=DECOR)
+    for a in (-0.2, 0.2):  # cage: two upright bars, then a cross bar in front of them
+        _zbox(f, "Cage", a - 0.03, a + 0.03, -0.36, 0.36, (0.74, 0.8), (36, 36, 36), "Metal", flags=DECOR)
         n += 1
-    f.box("Cage", (-0.3, -0.03, -0.82), (0.3, 0.03, -0.76), (36, 36, 36), "Metal", flags=DECOR)
-    n += 1
+    _zbox(f, "Cage", -0.3, 0.3, -0.03, 0.03, (0.8, 0.86), (36, 36, 36), "Metal", flags=DECOR)
+    for s in (-1, 1):  # the cage's side legs back to the body
+        _zbox(f, "Cage", -0.26, 0.26, s * 0.36 - 0.03, s * 0.36 + 0.03, (0.42, 0.74), (36, 36, 36), "Metal", flags=DECOR)
+    n += 3
     top = rng.uniform(2.0, 4.0)
     rod(f, "Conduit", (0, 0.5, -0.15), (0, top, -0.15), 0.14, jitter((70, 70, 66), rng, 6), "Metal", flags=DECOR)
-    f.box("JunctionBox", (-0.25, top, -0.3), (0.25, top + 0.5, 0), jitter((70, 70, 66), rng, 6), "Metal", flags=DECOR)
+    _zbox(f, "JunctionBox", -0.25, 0.25, top, top + 0.5, (0, 0.4), jitter((70, 70, 66), rng, 6), "Metal", flags=DECOR)
     n += 2
-    overlay(f, "Soot", -0.9, 0.9, 0.5, rng.uniform(1.6, 2.6), SOOT, k=0, tr=0.78)
-    n += 1
-    n += streak(f, rng, "RustStreak", rng.uniform(-0.3, 0.3), -0.5, rng.uniform(0.8, 1.8), 0.3, RUST_STAIN, k=0, taper=2)
+    n += soft(f, rng, "Soot", -0.8, 0.8, top + 0.6, top + rng.uniform(1.3, 2.0), SOOT, opacity=0.25, k=0,
+              anchor="bottom")
+    n += streak(f, rng, "RustStreak", rng.uniform(-0.3, 0.3), -0.55, rng.uniform(0.8, 1.8), 0.3, RUST_STAIN, k=0,
+                taper=3)
     return n
 
 
 def gooseneck_lamp(D, folder, origin, ry, rng, y=10.0, x=0.0, reach=2.2, dead=False, flicker=False, color=None,
                    range_=24, brightness=1.2):
-    """A gooseneck barn lamp: wall plate, a bent arm curving out and down (4 segments), an
-    enamel shade (dark outside, two stacked cylinders: crown + wide rim) with the bulb
-    under it (Neon, Spot light facing down, tag CityLamp; Dead / Flicker), rust and soot.
-    Footprint: 1.6 x (reach + 0.8), ~2 tall. Parts: 9-12."""
+    """A gooseneck barn lamp: a round wall plate, a smooth bent arm (pipe lengths joined by
+    round bends) curving out and down, a shallow enamel dish shade (a cone of wedges over a
+    white reflector disc: dark outside, white inside), the bulb under it (Neon, Spot light
+    facing down, tag CityLamp; Dead / Flicker), rust and soot. Footprint: 1.6 x (reach + 0.8),
+    ~2 tall. Parts: 16-22."""
     f = frame_at(D, folder, origin, ry).sub((x, y, 0))
     color = color or [255, 168, 96]
     shade = jitter(rng.choice([(40, 54, 46), (34, 34, 36), (70, 34, 30)]), rng, 6)
     n = 0
-    f.box("WallPlate", (-0.3, -0.4, -0.1), (0.3, 0.4, 0), METAL_DARK, "Metal", flags=DECOR)
+    f.part("WallPlate", (0, 0, -SLOT_SAFE[1] / 2), (SLOT_SAFE[1], 0.7, 0.7), METAL_DARK, "Metal", rot=(0, 90, 0),
+           shape=CYLINDER, flags=DECOR)
     n += 1
-    pts = [(0, 0.0, -0.1), (0, 0.55, -0.45), (0, 0.85, -1.0), (0, 0.85, -reach + 0.5), (0, 0.55, -reach)]
-    for i in range(4):
-        rod(f, "Arm", pts[i], pts[i + 1], 0.14, jitter(shade, rng, 4, 0.2), "Metal", flags=DECOR)
-        n += 1
-    sx, sy, sz = 0, 0.25, -reach
-    f.part("ShadeCrown", (sx, sy + 0.2, sz), (0.35, 0.5, 0.5), shade, "Metal", rot=(0, 0, 90), shape=CYLINDER,
+    r_ = reach
+    pts = [(0, 0.0, -0.12), (0, 0.45, -0.5), (0, 0.8, -1.2), (0, 0.8, -r_ + 0.3), (0, 0.5, -r_)]
+    n += bend(f, "Arm", pts, 0.12, jitter(shade, rng, 4, 0.2), "Metal", flags=DECOR)
+    sy, sz = 0.36, -r_
+    f.part("ShadeNeck", (0, sy + 0.12, sz), (0.24, 0.22, 0.22), shade, "Metal", rot=(0, 0, 90), shape=CYLINDER,
            flags=DECOR)
-    f.part("Shade", (sx, sy - 0.08, sz), (0.3, 1.5, 1.5), jitter(shade, rng, 4), "Metal", rot=(0, 0, 90), shape=CYLINDER,
-           flags=DECOR_SHADOW)
-    f.part("ShadeRim", (sx, sy - 0.24, sz), (0.06, 1.62, 1.62), jitter(shade, rng, 4, 0.2), "Metal", rot=(0, 0, 90),
+    # under the cone: the rolled rim (shade colour, a little wider than the cone: it also hides
+    # where the cone's facets meet) and the white enamel inside
+    f.part("ShadeRim", (0, sy - 0.035, sz), (0.07, 1.84, 1.84), jitter(shade, rng, 4), "Metal", rot=(0, 0, 90),
+           shape=CYLINDER, flags=DECOR)
+    f.part("Reflector", (0, sy - 0.105, sz), (0.07, 1.3, 1.3), (196, 192, 180), "SmoothPlastic", rot=(0, 0, 90),
            shape=CYLINDER, flags=DECOR)
     n += 3
+    n += cone(f, "Shade", 0, sy, sz, 0.78, 0.36, shade, "Metal", n=6, flags=DECOR_SHADOW)
     attrs = {}
     if dead:
         attrs["Dead"] = True
     if flicker:
         attrs["Flicker"] = True
-    f.part("LampHead", (sx, sy - 0.32, sz), (0.36, 0.3, 0.36), (90, 90, 86) if dead else tuple(color),
+    f.part("LampHead", (0, sy - 0.28, sz), (0.3, 0.3, 0.3), (90, 90, 86) if dead else tuple(color),
            "Glass" if dead else "Neon", shape=BALL, flags=DECOR,
            extra=light_extra(["CityLamp"], {"type": "Spot", "color": list(color), "range": range_,
                                             "brightness": brightness, "angle": 100, "face": "Bottom",
                                             "shadows": True, "name": "Light"}, attrs or None))
     n += 1
-    overlay(f, "Soot", -0.7, 0.7, 0.4, rng.uniform(1.4, 2.2), SOOT, k=0, tr=0.8)
-    n += 1
-    n += streak(f, rng, "RustStreak", 0, -0.4, rng.uniform(1, 2.2), 0.35, RUST_STAIN, k=0, taper=2)
+    n += soft(f, rng, "Soot", -0.7, 0.7, 0.45, rng.uniform(1.4, 2.2), SOOT, opacity=0.2, k=0, anchor="bottom")
+    n += streak(f, rng, "RustStreak", 0, -0.45, rng.uniform(1, 2.2), 0.35, RUST_STAIN, k=0, taper=3)
     return n
 
 
@@ -1593,6 +2187,7 @@ WALL_PROPS = {
     "bulkhead_light": bulkhead_light, "gooseneck_lamp": gooseneck_lamp,
 }
 
-__all__ = list(WALL_PROPS) + ["WALL_PROPS", "beam", "rod", "overlay", "streak"]
+__all__ = list(WALL_PROPS) + ["WALL_PROPS", "beam", "rod", "bend", "bolt", "overlay", "streak", "soft", "tri",
+                              "tri_part", "cone"]
 
 _ = (BLOCK, PROP)  # (re-exported flags kept for callers)

@@ -181,8 +181,9 @@ def _disk(f, name, x, z, d, th, color, mat, y=0.0, flags=DECOR, fit=True, **kw):
         return f.part(name, (x, y + th / 2, z), (th, d, d), color, mat, rot=(0, 0, 90), shape=CYLINDER,
                       flags=flags, flush=(0, 1), **kw)
     if fit:
-        k = _fit(f, y, lambda s: [(x, z)] + [(x + math.cos(a) * d * 0.47 * s, z + math.sin(a) * d * 0.47 * s)
-                                              for a in (i * math.pi / 4 for i in range(8))])
+        ring = [(math.cos(i * math.pi / 8) * d * 0.48, math.sin(i * math.pi / 8) * d * 0.48) for i in range(16)]
+        ring += [(math.cos(i * math.pi / 4) * d * 0.26, math.sin(i * math.pi / 4) * d * 0.26) for i in range(8)]
+        k = _fit(f, y, lambda s: [(x, z)] + [(x + u * s, z + v * s) for u, v in ring])
         if k <= 0:
             return None
         d *= k
@@ -267,9 +268,11 @@ def _rest(f, x, z):
 
 
 def _on_decals(D, folder, origin, ry):
-    """A prop's frame lifted onto the floor decals under its origin (see _rest)."""
+    """A prop's frame lifted onto the floor decals or the raised slab (a gutter) under its origin
+    (see _rest, _raised)."""
     f = Frame(D, folder, origin, ry=ry)
-    lift = _rest(f, 0, 0)
+    ring = [(0, 0)] + [(math.cos(i * math.pi / 3) * 0.42, math.sin(i * math.pi / 3) * 0.42) for i in range(6)]
+    lift = max(max(_rest(f, x, z) for x, z in ring), _raised(f, ring, reach=0.2))
     return f if lift <= 0 else Frame(D, folder, (origin[0], origin[1] + lift, origin[2]), ry=ry)
 
 
@@ -290,8 +293,17 @@ def _grid(u0, u1, v0, v1, base, inlays):
     band, a seam, a hole (look None). The detail is then IN the surface (flush, same thickness),
     not a slab over it, so no two faces share a plane. A later inlay wins where two cross.
     Returns [(a0, a1, b0, b1, look)], holes left out, neighbouring cells of one look merged."""
-    us = sorted({u0, u1} | {min(max(a, u0), u1) for il in inlays for a in il[0:2]})
-    vs = sorted({v0, v1} | {min(max(b, v0), v1) for il in inlays for b in il[2:4]})
+    def breaks(lo, hi, cuts):
+        # (a cut closer than 0.065 to the rectangle's edge snaps onto it: no sliver along an edge,
+        # whose inner face would lie a hair behind its outer one)
+        out = {lo, hi}
+        for c in cuts:
+            c = min(max(c, lo), hi)
+            out.add(lo if c - lo < 0.065 else hi if hi - c < 0.065 else c)
+        return sorted(out)
+
+    us = breaks(u0, u1, [a for il in inlays for a in il[0:2]])
+    vs = breaks(v0, v1, [b for il in inlays for b in il[2:4]])
 
     def look(u, v):
         out = base
@@ -385,7 +397,11 @@ def _line(f, name, pts, w0, w1, color, mat, th=LINE_TH, **kw):
             continue
         w = w0 + (w1 - w0) * i / max(1, m - 1)
         yaw = math.degrees(math.atan2(x1 - x0, z1 - z0))
-        idx = _flat(f, name, (x0 + x1) / 2, (z0 + z1) / 2, w, ln, th, color, mat, yaw=yaw, fit=False, **kw)
+        trim = (w * 0.12 if i > 0 else 0) + (w * 0.12 if i < m - 1 else 0)  # (bends: no corner overlap)
+        if not all(_free(f, px, 0.03, pz) for px, pz in ((x0, z0), (x1, z1), ((x0 + x1) / 2, (z0 + z1) / 2))):
+            continue  # (the crack stops at the gutter: no line cutting through it)
+        idx = _flat(f, name, (x0 + x1) / 2, (z0 + z1) / 2, w, max(0.02, ln - trim), th, color, mat, yaw=yaw, fit=False,
+                    **kw)
         if idx is not None:
             out.append(idx)
     return out
@@ -397,6 +413,12 @@ def _tone(color, rng, amount=8, darken=0.0):
     mean = max(1.0, sum(color) / 3)
     k = (1 + rng.uniform(-amount, amount) / mean) * (1 - darken)
     return tuple(max(0, min(255, c * k + rng.uniform(-2, 2))) for c in color)
+
+
+def _tilt(rng, lo, hi):
+    """A tilt of lo..hi degrees either way: never under lo, so a small thing lying on a surface is
+    never parallel to it (its top would sit a hair over the surface's and flicker)."""
+    return rng.uniform(lo, hi) * rng.choice((-1, 1))
 
 
 def _pick(rng, seq):
@@ -411,6 +433,18 @@ def _w(f, x, z, y=0.0):
 def _yaw(f):
     """The frame's own turn about Y in degrees (for sub-props)."""
     return math.degrees(math.atan2(f.m[0, 2], f.m[2, 2]))
+
+
+def _raised(f, points, reach=0.3):
+    """How high the highest raised thing (a gutter slab, a drain, a step's lip) under the local
+    floor points stands, up to `reach` (0 if none): a box set down there stands on it."""
+    top = 0.0
+    for px, pz in points:
+        for i in range(int(reach / 0.01), 0, -1):
+            if not _free(f, px, i * 0.01 - 0.005, pz):
+                top = max(top, i * 0.01)
+                break
+    return top
 
 
 def _wall_face(f, x, reach=1.6, y=0.0):
@@ -444,12 +478,12 @@ def _leaf(f, x, y, z, rng, col=None, wet=False, tilt=22, size=1.0):
     col = col or _tone(_pick(rng, LEAF), rng, 10, darken=0.3 if wet else rng.uniform(0, 0.18))
     ln = rng.uniform(0.18, 0.32) * size
     wd = ln * rng.uniform(0.45, 0.65)
-    rx, rz = rng.uniform(-tilt, tilt), rng.uniform(-tilt, tilt)
+    rx, rz = _tilt(rng, 3, max(4, tilt)), _tilt(rng, 3, max(4, tilt))
     lift = 0.5 * (ln * abs(math.sin(math.radians(rx))) + wd * abs(math.sin(math.radians(rz))))
     g = f.sub((x, y + 0.012 + lift, z), ry=rng.uniform(0, 360))
     g = g.sub((0, 0, 0), rx=rx, rz=rz)
-    if rng.random() < 0.55:
-        fold = rng.uniform(14, 32)
+    if rng.random() < 0.3:
+        fold = rng.uniform(10, 22)
         for e in (-1, 1):
             h = g.sub((0, 0, 0), rz=e * fold)
             h.part("Leaf", (e * wd / 4, 0, 0), (wd / 2, 0.02, ln), col if e < 0 else _tone(col, rng, 5), "Fabric",
@@ -474,7 +508,7 @@ def paper_ball(D, folder, origin, ry, rng, size=None, color=None):
     for _ in range(rng.randint(1, 2)):  # lumps: it is never round
         a = rng.uniform(0, 2 * math.pi)
         d = s * rng.uniform(0.55, 0.72)
-        _ball(f, "PaperBall", (math.cos(a) * s * 0.24, d * 0.46, math.sin(a) * s * 0.24), d, _tone(col, rng, 8),
+        _ball(f, "PaperBall", (math.cos(a) * s * 0.34, d * 0.46, math.sin(a) * s * 0.34), d, _tone(col, rng, 8),
               "SmoothPlastic")
     for _ in range(rng.randint(1, 2)):  # the crushed sheet's edges, poking out
         a = rng.uniform(0, 360)
@@ -503,8 +537,8 @@ def _page(f, x, z, W, Lp, col, kind, rng, decal=True):
                (-W / 2 + m, W / 2 - m, v0 + Lp * 0.3, v0 + Lp * 0.66,
                 _look(mix(col, (40, 40, 44), 0.45), "SmoothPlastic", "Print"))]
     else:
-        inl = [(-W / 2 + m * 1.4, W / 2 - m, v0 + m * 1.5, Lp / 2 - m * 2, _look(mix(col, INK, 0.1), "SmoothPlastic",
-                                                                               "Print"))]
+        text = _look(mix(col, INK, 0.1), "SmoothPlastic", "Print")
+        inl = [(-W / 2 + m * 1.4, W / 2 - m, v0 + m * 1.5, Lp / 2 - m * 2, text)]
     base = _look(col, "SmoothPlastic", "Paper")
     if decal:
         return _floor_grid(f, x, z, W, Lp, 0.0, SHEET_TH, base, inl)
@@ -538,7 +572,7 @@ def paper_sheet(D, folder, origin, ry, rng, kind="sheet", wet=None):
         # an open spread, trodden on: the left page lies flat (headline band and two columns),
         # the right page crumpled along its middle, its outer half lifted and twisted
         _page(f, -W / 2, 0, W, L, col, "newspaper", rng)
-        g = f.sub((0.03, 0, rng.uniform(-0.05, 0.05)), ry=rng.uniform(2, 7))
+        g = f.sub((0.07, 0, rng.uniform(-0.04, 0.04)), ry=rng.uniform(1, 3.5))
         top = _top(g, _flat(g, "Paper", W * 0.24, 0, W * 0.48, L, th, _tone(col, rng, 4), "SmoothPlastic", fit=False),
                    th)
         h = g.sub((W * 0.48, top, 0), rz=rng.uniform(8, 20), rx=rng.uniform(-5, 5))
@@ -567,6 +601,9 @@ def cardboard_flat(D, folder, origin, ry, rng, w=None, d=None, wet=None, torn=No
     f = Frame(D, folder, origin, ry=ry)
     W = w or rng.uniform(2.6, 3.6)
     L = d or rng.uniform(1.8, 2.6)
+    lift = _raised(f, _rect_pts(0, 0, W, L * 1.8, 0), reach=0.2)
+    if lift:  # (laid over the gutter's slab: it rests on it)
+        f = f.sub((0, lift, 0))
     fl = L * rng.uniform(0.32, 0.45)
     base = _tone(CARDBOARD, rng, 8, darken=rng.uniform(0, 0.18))
     wet = (rng.random() < 0.5) if wet is None else wet
@@ -604,8 +641,9 @@ def cardboard_flat(D, folder, origin, ry, rng, w=None, d=None, wet=None, torn=No
                 ft = fl * rng.uniform(0.25, 0.4)
                 g.part("Cardboard", (fx, th / 2, e * (L / 2 + 0.03 + ft / 2)), (W / 2 - 0.05, th, ft), fc,
                        CARDBOARD_MAT, flags=DECOR)
-                _tri(g, "Cardboard", fx + rng.uniform(-0.3, 0.3), e * (L / 2 + 0.03 + ft + fl * 0.3), W * 0.22,
-                     fl * 0.6, th, fc, CARDBOARD_MAT, yaw=90 if e > 0 else -90)
+                wt = fl * 0.6
+                _tri(g, "Cardboard", fx + rng.uniform(-0.3, 0.3), e * (L / 2 + 0.03 + ft + wt / 2 + 0.01), wt,
+                     W * 0.22, th, fc, CARDBOARD_MAT, yaw=90 if e > 0 else -90)
             elif k == bent_flap:
                 h = g.sub((fx, th, e * (L / 2 + 0.03)), rx=e * -rng.uniform(15, 35))
                 h.part("Cardboard", (0, -th / 2, e * fl / 2), (W / 2 - 0.06, th, fl), fc, CARDBOARD_MAT, flags=DECOR)
@@ -625,6 +663,9 @@ def cardboard_box(D, folder, origin, ry, rng, size=None, state=None, wet=None):
     7-22 parts; walls SMALL."""
     f = Frame(D, folder, origin, ry=ry)
     W, H, Dp = size or (rng.uniform(1.4, 1.9), rng.uniform(1.1, 1.6), rng.uniform(1.2, 1.7))
+    lift = _raised(f, _rect_pts(0, 0, W, Dp, 0))
+    if lift:  # (set down on the gutter's slab, not sunk into it)
+        f = f.sub((0, lift, 0))
     state = state or _pick(rng, ["open", "open", "closed", "crushed"])
     wet = (rng.random() < 0.5) if wet is None else wet
     col = _tone(CARDBOARD, rng, 8, darken=rng.uniform(0, 0.2))
@@ -645,14 +686,14 @@ def cardboard_box(D, folder, origin, ry, rng, size=None, state=None, wet=None):
     front_inl = [(-W / 2, W / 2, 0, wb, wetl)] if wb else []
     if rng.random() < 0.75:  # a shipping label on the front, half torn
         lx, ly = rng.uniform(-0.3, 0.3) * W, H * rng.uniform(0.45, 0.62)
-        front_inl.append((lx - 0.28, lx + 0.28, ly - 0.2, ly + 0.2, _look(_tone((176, 172, 160), rng, 8, 0.1),
-                                                                           "SmoothPlastic", "Label")))
+        label = _look(_tone((176, 172, 160), rng, 8, 0.1), "SmoothPlastic", "Label")
+        front_inl.append((lx - 0.28, lx + 0.28, ly - 0.2, ly + 0.2, label))
         front_inl.append((lx - 0.28, lx - 0.05, ly + 0.08, ly + 0.2, _look(_tone(col, rng, 4), M, "Cardboard")))
     if state == "crushed":
         cut = H * rng.uniform(0.4, 0.6)
         wall((-W / 2, 0, -Dp / 2), (W / 2, cut, -Dp / 2 + th), (0, 1), [i for i in front_inl if i[3] <= cut])
-        g = f.sub((0, cut, -Dp / 2), rx=rng.uniform(14, 26), rz=rng.uniform(-4, 4))
-        g.box("Cardboard", (-W / 2 + 0.02, 0, 0), (W / 2 - 0.02, H - cut, th), _tone(col, rng, 6, 0.04), M,
+        g = f.sub((0, cut, -Dp / 2), rx=rng.uniform(12, 18), rz=_tilt(rng, 2, 5))
+        g.box("Cardboard", (-W / 2 + th + 0.01, 0, 0), (W / 2 - th - 0.01, H - cut, th), _tone(col, rng, 6, 0.04), M,
               flags=SMALL)
     else:
         wall((-W / 2, 0, -Dp / 2), (W / 2, H, -Dp / 2 + th), (0, 1), front_inl)
@@ -672,7 +713,7 @@ def cardboard_box(D, folder, origin, ry, rng, size=None, state=None, wet=None):
               [(-W / 2, W / 2, -tw, tw, tape)], flags=SMALL)
     elif state == "crushed":
         # the lid sags into the box, toward the caved wall, its tape still on
-        g = f.sub((0, H, Dp / 2), rx=rng.uniform(14, 24), rz=rng.uniform(-6, 6))
+        g = f.sub((0, H, Dp / 2), rx=rng.uniform(24, 30), rz=rng.uniform(-6, 6))
         _slab(g, (-W / 2 + 0.03, 0, -Dp), (W / 2 - 0.03, th, 0), (0, 2), _look(_tone(col, rng, 5), M, "Cardboard"),
               [(-W / 2, W / 2, -Dp / 2 - tw, -Dp / 2 + tw, tape)], flags=SMALL)
     else:
@@ -699,60 +740,65 @@ def wrapper(D, folder, origin, ry, rng, kind=None):
     clamshell (a hollow tray with leftovers, its lid thrown back), a paper coffee cup lying on its
     side (the dark mouth, the sleeve; its lid beside it, a dried spill), a crumpled foil ball, or a
     drink can (lying, or stamped flat with a kink). Footprint 0.3-1.2 studs. 2-9 parts, DECOR."""
+    f0 = Frame(D, folder, origin, ry=ry)  # (the floor: its decals go on the floor's level)
     f = _on_decals(D, folder, origin, ry)
     kind = kind or _pick(rng, ["packet", "packet", "takeaway", "cup", "foil", "can", "can"])
     if kind == "packet":
         col = _tone(_pick(rng, FLYER), rng, 12, darken=rng.uniform(0.05, 0.3))
         tw = rng.uniform(8, 25)
         f.part("Wrapper", (-0.02, 0.06, -0.12), (0.5, 0.11, 0.3), col, "Plastic", flags=DECOR,
-               rot=(rng.uniform(-6, 6), 0, rng.uniform(-8, 8)), reflectance=0.08)
+               rot=(_tilt(rng, 3, 6), 0, _tilt(rng, 3, 7)), reflectance=0.08)
         f.part("Wrapper", (0.02, 0.065, 0.12), (0.48, 0.12, 0.3), _tone(col, rng, 8), "Plastic", flags=DECOR,
-               rot=(rng.uniform(-10, 10), tw, rng.uniform(-10, 10)), reflectance=0.08)
+               rot=(_tilt(rng, 8, 12), tw, _tilt(rng, 9, 13)), reflectance=0.08)
         for e in (-1, 1):  # crimped seals, silver
             f.part("Seal", (0, 0.04, e * 0.31), (0.54, 0.05, 0.08), (150, 150, 146), "Metal", flags=DECOR,
                    rot=(e * rng.uniform(4, 15), tw * (0.5 + e * 0.5), 0))
     elif kind == "takeaway":
         # a 0.78 x 0.5 clamshell: a hollow tray (floor and four thin walls), leftovers in it
         foam = _tone(FOAM, rng, 6, darken=rng.uniform(0.05, 0.3))
-        W, Dp, h, t = 0.78, 0.5, 0.13, 0.03
-        f.box("Takeaway", (-W / 2 + t, 0, -Dp / 2 + t), (W / 2 - t, t, Dp / 2 - t), _tone(foam, rng, 3, 0.05),
+        W, Dp, h, t, tb = 0.78, 0.5, 0.15, 0.03, 0.065
+        f.box("Takeaway", (-W / 2, 0, -Dp / 2 + t), (W / 2, tb, Dp / 2 - t), _tone(foam, rng, 3, 0.05),
               "SmoothPlastic", flags=DECOR)
-        f.box("Takeaway", (-W / 2, 0, -Dp / 2), (W / 2, h, -Dp / 2 + t), foam, "SmoothPlastic", flags=DECOR)
-        f.box("Takeaway", (-W / 2, 0, Dp / 2 - t), (W / 2, h, Dp / 2), foam, "SmoothPlastic", flags=DECOR)
+        for e in (-1, 1):  # the long walls flare out 6 deg (moulding draft: and no face of theirs is
+            # parallel to the end walls' edges hidden behind them)
+            g = f.sub((0, 0, e * (Dp / 2 - t)), rx=e * 6)
+            g.box("Takeaway", (-W / 2, 0, -t / 2 + e * t / 2), (W / 2, h, t / 2 + e * t / 2), foam, "SmoothPlastic",
+                  flags=DECOR)
         for s in (-1, 1):
             x0 = -W / 2 if s < 0 else W / 2 - t
-            f.box("Takeaway", (x0, 0, -Dp / 2 + t), (x0 + t, h, Dp / 2 - t), _tone(foam, rng, 3), "SmoothPlastic",
+            f.box("Takeaway", (x0, tb, -Dp / 2 + t), (x0 + t, h, Dp / 2 - t), _tone(foam, rng, 3), "SmoothPlastic",
                   flags=DECOR)
         for _ in range(rng.randint(1, 2)):  # cold leftovers, lumpy
-            f.part("Leftovers", (rng.uniform(-0.18, 0.18), t + 0.035, rng.uniform(-0.08, 0.08)),
+            f.part("Leftovers", (rng.uniform(-0.18, 0.18), tb + 0.03, rng.uniform(-0.08, 0.08)),
                    (rng.uniform(0.18, 0.3), 0.08, rng.uniform(0.14, 0.22)), _tone(_pick(rng, FOOD), rng, 8), "Sand",
                    flags=DECOR, rot=(rng.uniform(-12, 12), rng.uniform(0, 180), rng.uniform(-12, 12)))
         # the lid on its hinge (the back edge): thrown back past flat, its dome down
         g = f.sub((0, h, Dp / 2), rx=rng.uniform(150, 172), rz=rng.uniform(-6, 6))
         g.box("Lid", (-W / 2, 0, -Dp), (W / 2, 0.09, 0), _tone(foam, rng, 6), "SmoothPlastic", flags=DECOR)
-        _disk(f, "Grease", rng.uniform(-0.2, 0.2), -Dp / 2 - 0.3, 0.42, DECAL_TH, OIL, "SmoothPlastic",
+        _disk(f0, "Grease", rng.uniform(-0.2, 0.2), -Dp / 2 - 0.3, 0.42, DECAL_TH, OIL, "SmoothPlastic",
               transparency=0.55)
     elif kind == "cup":
-        # a paper cup (8 cm mouth, 11 cm tall) on its side: body, the dark inside at the
-        # mouth, the cardboard sleeve; the lid rolled off beside it; a dried coffee spill
+        # a takeaway coffee cup (8 cm mouth, 11 cm tall) on its side, its plastic lid still on
+        # (the lid 2 cm deep, a little wider), the cardboard sleeve; a dried coffee spill
         col = _tone((176, 170, 158), rng, 8, darken=rng.uniform(0, 0.25))
         d = 0.25
+        _disk(f0, "Spill", -0.55, rng.uniform(-0.15, 0.15), rng.uniform(0.45, 0.7), DECAL_TH, (44, 32, 22),
+              "SmoothPlastic", transparency=0.45)
         g = f.sub((0, d / 2, 0), ry=rng.uniform(-20, 20))
         _cyl(g, "Cup", (0, 0, 0), 0.36, d, col, "SmoothPlastic")
-        _cyl(g, "CupInside", (-0.19, 0, 0), 0.02, d * 0.82, (36, 30, 26), "SmoothPlastic")
+        _cyl(g, "CupLid", (-0.18 - 0.0325, 0, 0), 0.065, d + 0.02, _pick(rng, [(36, 36, 38), (196, 194, 188)]),
+             "Plastic")
         _cyl(g, "Sleeve", (0.03, 0, 0), 0.15, d + 0.02, _tone(CARDBOARD, rng, 8), CARDBOARD_MAT)
-        _disk(f, "Spill", -0.5, rng.uniform(-0.15, 0.15), rng.uniform(0.45, 0.7), DECAL_TH, (44, 32, 22),
-              "SmoothPlastic", transparency=0.45)
-        _disk(f, "CupLid", rng.uniform(0.35, 0.55), rng.uniform(-0.45, -0.3), 0.27, SHEET_TH, (40, 40, 42), "Plastic")
     elif kind == "can":
-        # a 330 ml can (6.6 x 12 cm) on its side, or stamped flat and kinked; silver ends
+        # a 330 ml can (6.6 x 12 cm) on its side, or stamped flat and kinked; its silver
+        # shoulders and ends butted to the painted body (end faces >= 0.06 apart)
         col = _tone(_pick(rng, CAN), rng, 10, darken=rng.uniform(0.05, 0.35))
         d = 0.22
         if rng.random() < 0.5:
             g = f.sub((0, d / 2, 0))
-            _cyl(g, "Can", (0, 0, 0), 0.34, d, col, "Metal", reflectance=0.08)
+            _cyl(g, "Can", (0, 0, 0), 0.28, d, col, "Metal", reflectance=0.08)
             for e in (-1, 1):
-                _cyl(g, "CanEnd", (e * 0.18, 0, 0), 0.02, d * 0.9, (150, 150, 148), "Metal")
+                _cyl(g, "CanEnd", (e * 0.1725, 0, 0), 0.065, d * 0.94, (150, 150, 148), "Metal")
         else:
             kink = rng.uniform(12, 30)
             for e in (-1, 1):
@@ -765,26 +811,30 @@ def wrapper(D, folder, origin, ry, rng, kind=None):
         for _ in range(2):
             a = rng.uniform(0, 2 * math.pi)
             dd = s * rng.uniform(0.5, 0.7)
-            _ball(f, "Foil", (math.cos(a) * s * 0.25, dd * 0.45, math.sin(a) * s * 0.25), dd, (138, 138, 136), "Metal")
+            _ball(f, "Foil", (math.cos(a) * s * 0.36, dd * 0.45, math.sin(a) * s * 0.36), dd, (138, 138, 136), "Metal")
 
 
 @prop({}, {"count": 7})
-def cigarette_butts(D, folder, origin, ry, rng, count=None, radius=0.7):
+def cigarette_butts(D, folder, origin, ry, rng, count=None, radius=0.7, ash=True):
     """Cigarette butts where someone stood and smoked, over a light grey ash smudge: real size
     (8 mm thick, 5-8 cm long: 0.03 x 0.17-0.27 studs), a cork or white filter and what is left of
     the paper, the black burnt end; some bent where they were stubbed out.
     Footprint ~1.4 studs. 5-20 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     n = count or rng.randint(3, 6)
-    ar = radius * rng.uniform(0.9, 1.2)
-    ash = _disk(f, "Ash", 0, 0, ar, DECAL_TH, (96, 94, 90), "Sand", transparency=0.55)
+    ar = radius * rng.uniform(1.3, 1.6)  # (its diameter: most butts lie on it)
+    ash = _disk(f, "Ash", 0, 0, ar, DECAL_TH, (104, 102, 98), "Sand", transparency=0.75) if ash else None
     top = _top(f, ash)
     d = 0.03
+    spots = []
     for i in range(n):
         r = radius * math.sqrt(rng.random())
         a = rng.uniform(0, 2 * math.pi)
         x, z = math.cos(a) * r, math.sin(a) * r
-        y = (top if (ash is not None and r < ar * 0.4) else _rest(f, x, z)) + d / 2
+        if any(math.hypot(x - px, z - pz) < 0.3 for px, pz in spots):
+            continue  # (two butts never lie through each other)
+        spots.append((x, z))
+        y = (top if (ash is not None and r < ar * 0.45) else _rest(f, x, z)) + d / 2
         if not _free(f, x, y, z):
             continue  # (not inside the gutter, a crate...)
         cork = rng.random() < 0.7
@@ -797,17 +847,18 @@ def cigarette_butts(D, folder, origin, ry, rng, count=None, radius=0.7):
         bent = rng.random() < 0.35
         h = g.sub((0, 0, 0), ry=rng.uniform(20, 40) * rng.choice((-1, 1))) if bent else g
         _cyl(h, "Butt", (pl / 2, 0, 0), pl, d * 0.97, paper, "SmoothPlastic")
-        if rng.random() < 0.6:  # the charred end
-            _cyl(h, "ButtAsh", (pl + 0.012, 0, 0), 0.024, d * 0.9, (34, 32, 30), "Sand")
+        if rng.random() < 0.6:  # the charred end (2 cm of ash: its face 0.065 past the paper's)
+            _cyl(h, "ButtAsh", (pl + 0.0325, 0, 0), 0.065, d * 0.9, (40, 38, 36), "Sand")
 
 
 @prop({}, {"width": 5, "depth": 2.4}, {"corner": True})
 def leaves_drift(D, folder, origin, ry, rng, width=None, depth=None, corner=False, wet=None):
     """Dead leaves blown against a wall (the wall on +Z; the prop finds its face up to 1.6 studs
-    past its own depth and builds nothing inside it): a wet dark mat of rotted leaves and silt
-    on the floor, a low heap of mulch in the corner, and loose curled leaves over it, thickest
-    against the wall and thinning out; `corner` piles them toward the -X end. Footprint width
-    2.5-5 x depth 1.4-2.6 studs. 22-48 parts, DECOR."""
+    past its own depth and builds nothing inside it, nor inside anything else there): a drift of
+    loose leaves, real size (5-13 cm), flat or curled, in every shade of brown, overlapping in
+    layers: heaped against the wall over a low core of rotted leaves (a wedge of the same brown,
+    hidden under them) and thinning out to a few strays; `corner` piles them toward the -X end.
+    Footprint width 2.5-5 x depth 1.4-2.6 studs. 30-60 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     W = width or rng.uniform(2.6, 4.2)
     Dp = depth or rng.uniform(1.4, 2.2)
@@ -815,30 +866,33 @@ def leaves_drift(D, folder, origin, ry, rng, width=None, depth=None, corner=Fals
     back = _wall_face(f, 0, reach=Dp / 2 + 1.6)
     if back is None:
         back = Dp / 2  # (free standing: the footprint centred on the origin, its back edge at +Z)
-    cx = -W * 0.15 if corner else 0.0
-    mw, md = W * (0.7 if corner else 0.85), Dp * rng.uniform(0.65, 0.8)
-    matc = _tone(mix(SOIL_DARK, LEAF[5], 0.45), rng, 4, darken=0.2 if wet else 0.0)
-    mi = _flat(f, "LeafMat", cx, back - md / 2, mw, md, DECAL_TH, matc, "Ground", transparency=0.2)
-    my = _top(f, mi)
-    hm, dm = rng.uniform(0.1, 0.17), min(md, rng.uniform(0.45, 0.7))
-    if mi is not None:
-        f.part("Mulch", (cx, my + hm / 2, back - dm / 2), (mw * 0.92, hm, dm), _tone(mix(matc, LEAF[2], 0.3), rng, 4),
-               "Ground", shape=WEDGE, flags=DECOR)
+    cx = -W * 0.18 if corner else 0.0
+    cw = W * (0.6 if corner else 0.8)
+    hm, dm = rng.uniform(0.09, 0.14), rng.uniform(0.5, 0.75)
+    core = _tone(mix(LEAF[0], LEAF[5], 0.5), rng, 4, darken=0.2 if wet else 0.05)
+    heap = all(_free(f, px, 0.05, pz) for px, pz in _rect_pts(cx, back - dm / 2, cw, dm, 0))
+    if heap:
+        f.part("Mulch", (cx, hm / 2, back - dm / 2), (cw, hm, dm), core, "Ground", shape=WEDGE, flags=DECOR)
     slope = math.degrees(math.atan2(hm, dm))
-    n = int(rng.uniform(2.6, 3.4) * W * Dp) + 6
-    n = max(14, min(n, 30))
-    for _ in range(n):
-        dz = Dp * (rng.random() ** 1.7)  # (most leaves near the wall)
-        z = back - 0.06 - dz * 0.95
-        x = (-W / 2 + (rng.random() ** 1.6) * W) if corner else rng.uniform(-W / 2, W / 2) * 0.95
-        on_mat = mi is not None and abs(x - cx) < mw / 2 - 0.1 and back - z < md - 0.1
-        y = my if on_mat else _rest(f, x, z)
-        g = f
-        if on_mat and back - z < dm and abs(x - cx) < mw * 0.44:
-            y += hm * (1 - (back - z) / dm)
-            g = f.sub((x, y, z), rx=-slope)
-            x, y, z = 0.0, 0.0, 0.0
-        _leaf(g, x, y + rng.uniform(0, 0.03), z, rng, wet=wet)
+    n = int(rng.uniform(5, 6) * W * Dp) + 10
+    n = max(30, min(n, 48))
+    for i in range(n):
+        if heap and i < n * 0.6:  # most of them heaped on the core, in layers, hiding it
+            x = cx + rng.uniform(-0.5, 0.5) * cw
+            dz = rng.uniform(0.05, dm * 1.05)
+            y = max(0.0, hm * (1 - dz / dm)) + rng.uniform(0.0, 0.03)
+            z = back - dz
+            g = f.sub((x, y, z), rx=-slope if dz < dm else 0)
+            if _free(f, x, hm + 0.05, z):  # (above the core: zlayers sees a wedge as its box)
+                _leaf(g, 0, 0, 0, rng, wet=wet, size=1.25)
+            continue
+        dz = Dp * (rng.random() ** 1.5)  # (the rest thinning out away from the wall)
+        z = back - 0.08 - dz
+        x = (-W / 2 + (rng.random() ** 1.6) * W) if corner else rng.uniform(-W / 2, W / 2)
+        y = _rest(f, x, z)
+        if not _free(f, x, y + 0.05, z):
+            continue  # (not inside a step, a wall, a crate)
+        _leaf(f, x, y, z, rng, wet=wet, size=1.25)
 
 
 @prop({}, {"length": 8})
@@ -852,14 +906,14 @@ def wall_base_grime(D, folder, origin, ry, rng, length=None):
     ~2 parts per stud, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     L = length or rng.uniform(4, 8)
-    n = max(1, round(L / rng.uniform(2.6, 3.6)))
+    n = max(1, round(L / rng.uniform(1.8, 2.6)))
     seg = L / n
     xs = [-L / 2 + seg * (i + 0.5) for i in range(n)]
     faces = [_wall_face(f, x, reach=1.2) for x in xs]
     if all(z is None for z in faces):
         faces = [0.0] * n  # (no wall: the origin is on its face)
-    hs, ds = rng.uniform(0.07, 0.1), rng.uniform(0.3, 0.42)
-    silt = _tone(mix(SOIL, DUST, rng.uniform(0.2, 0.5)), rng, 4)
+    hs, ds = rng.uniform(0.05, 0.075), rng.uniform(0.32, 0.45)
+    silt = _tone(mix(SOIL, SOIL_DARK, rng.uniform(0.2, 0.6)), rng, 4)
     d1 = rng.uniform(0.28, 0.38)
     for x, zf in zip(xs, faces):
         if zf is None:
@@ -868,9 +922,17 @@ def wall_base_grime(D, folder, origin, ry, rng, length=None):
         if rng.random() < 0.25:
             col = mix(col, _pick(rng, MOSS), 0.5)  # a mossy stretch
         f.part("Silt", (x, hs / 2, zf - ds / 2), (seg, hs, ds), col, "Ground", shape=WEDGE, flags=DECOR)
-        _flat(f, "Damp", x, zf - ds - d1 / 2, seg, d1, DECAL_TH, DAMP, "Concrete", transparency=0.5, fit=False)
-        d2 = rng.uniform(0.12, 0.45)
-        _flat(f, "Damp", x, zf - ds - d1 - d2 / 2, seg, d2, DECAL_TH, DAMP, "Concrete", transparency=0.74, fit=False)
+        d2 = rng.uniform(0.1, 0.55)  # (its outer edge ragged from one stretch to the next)
+        for zc, dd, tr in ((zf - ds - d1 / 2, d1, 0.42), (zf - ds - d1 - d2 / 2, d2, 0.7)):
+            # (a strip that would run under something standing at the wall foot is cut in three
+            # and only its free pieces are kept)
+            if all(_free(f, px, 0.03, pz) for px, pz in _rect_pts(x, zc, seg, dd, 0)):
+                _flat(f, "Damp", x, zc, seg, dd, DECAL_TH, DAMP, "Concrete", transparency=tr, fit=False)
+                continue
+            for k in (-1, 0, 1):
+                xk = x + k * seg / 3
+                if all(_free(f, px, 0.03, pz) for px, pz in _rect_pts(xk, zc, seg / 3, dd, 0)):
+                    _flat(f, "Damp", xk, zc, seg / 3, dd, DECAL_TH, DAMP, "Concrete", transparency=tr, fit=False)
     walls = [(x, zf) for x, zf in zip(xs, faces) if zf is not None]
     if not walls:
         return
@@ -879,21 +941,27 @@ def wall_base_grime(D, folder, origin, ry, rng, length=None):
         x0, zf = _pick(rng, walls)
         s = rng.uniform(0.06, 0.15)
         gx, gz = x0 + rng.uniform(-seg, seg) / 2, zf - ds - rng.uniform(0.03, d1)
+        if not _free(f, gx, 0.1, gz):
+            continue
         f.part("Grit", (gx, _rest(f, gx, gz) + s * 0.2, gz),
                (s, s * 0.6, s * 0.8), _tone(_pick(rng, [CONCRETE_OLD, DUST, CINDER]), rng, 8, 0.1), "Pebble",
-               flags=DECOR, rot=(rng.uniform(-30, 30), rng.uniform(0, 180), rng.uniform(-30, 30)))
+               flags=DECOR, rot=(_tilt(rng, 5, 30), rng.uniform(0, 180), _tilt(rng, 5, 30)))
     for _ in range(int(L * rng.uniform(0.25, 0.45))):  # leaves caught on the silt
         x0, zf = _pick(rng, walls)
         dz = rng.uniform(0.08, ds * 0.85)
-        g = f.sub((x0 + rng.uniform(-seg, seg) / 2, hs * (1 - dz / ds), zf - dz), rx=-slope)
+        lx = x0 + rng.uniform(-seg, seg) / 2
+        if not _free(f, lx, hs * (1 - dz / ds) + 0.05, zf - dz):
+            continue
+        g = f.sub((lx, hs * (1 - dz / ds), zf - dz), rx=-slope)
         _leaf(g, 0, 0, 0, rng, tilt=14, col=_tone(_pick(rng, LEAF), rng, 10, darken=0.25))
     if rng.random() < 0.5:  # a scrap of paper blown against the wall, leaning on it
         x0, zf = _pick(rng, walls)
-        lp, phi = rng.uniform(0.4, 0.55), rng.uniform(50, 70)
+        lp, phi = rng.uniform(0.32, 0.42), rng.uniform(50, 70)
         zb = zf - 0.02 - lp * math.cos(math.radians(phi))
         g = f.sub((x0 + rng.uniform(-seg, seg) * 0.4, hs * (1 - (zf - zb) / ds) + 0.01, zb), rx=-phi,
                   ry=rng.uniform(-10, 10))
-        g.part("Paper", (0, 0.013, lp / 2), (lp * 0.8, SHEET_TH, lp), _tone(_pick(rng, PAPER), rng, 8, darken=0.35),
+        g.part("Paper", (0, 0.013, lp / 2), (lp * 0.8, SHEET_TH, lp),
+               mix(_pick(rng, PAPER), SOIL, rng.uniform(0.35, 0.55)),
                "SmoothPlastic", flags=DECOR)
 
 
@@ -911,26 +979,31 @@ def litter_scatter(D, folder, origin, ry, rng, radius=None, density=1.0):
                "can": rng.uniform(0.5, 2), "cup": rng.uniform(0, 1), "butts": rng.uniform(0.5, 1.5),
                "leaf": rng.uniform(1, 3), "foil": rng.uniform(0, 0.8)}
     total = sum(weights.values())
+    reach = {"ball": 0.2, "sheet": 0.62, "packet": 0.32, "can": 0.25, "cup": 0.4, "butts": 0.45, "leaf": 0.18,
+             "foil": 0.15}  # (how far each piece spreads from its spot: no two pieces through each other)
     placed = []
     for _ in range(n):
-        for _try in range(6):
+        k = rng.uniform(0, total)
+        kind = "ball"
+        for kind, wgt in weights.items():  # noqa: B007 (the kind the draw lands on)
+            k -= wgt
+            if k <= 0:
+                break
+        for _try in range(8):
             a = rng.uniform(0, 2 * math.pi)
             r = R * math.sqrt(rng.random())
             x, z = math.cos(a) * r, math.sin(a) * r
             if z < 0 and rng.random() < 0.5:
                 z = -z  # (more toward the wall side)
-            if all(math.hypot(x - px, z - pz) > 0.55 for px, pz in placed):
+            if all(math.hypot(x - px, z - pz) > reach[kind] + pr for px, pz, pr in placed):
                 break
         else:
             continue
-        placed.append((x, z))
+        if not _free(f, x, 0.1, z):
+            continue  # (not inside a wall, a crate, a step)
+        placed.append((x, z, reach[kind]))
         o = _w(f, x, z)
         yaw = _yaw(f) + rng.uniform(0, 360)
-        k = rng.uniform(0, total)
-        for kind, wgt in weights.items():
-            k -= wgt
-            if k <= 0:
-                break
         if kind == "ball":
             paper_ball(D, folder, o, yaw, rng)
         elif kind == "sheet":
@@ -938,9 +1011,9 @@ def litter_scatter(D, folder, origin, ry, rng, radius=None, density=1.0):
         elif kind in ("packet", "can", "cup", "foil"):
             wrapper(D, folder, o, yaw, rng, kind=kind)
         elif kind == "butts":
-            cigarette_butts(D, folder, o, yaw, rng, count=rng.randint(2, 3), radius=0.3)
+            cigarette_butts(D, folder, o, yaw, rng, count=rng.randint(2, 3), radius=0.3, ash=False)
         else:
-            _leaf(f, x, _rest(f, x, z), z, rng, tilt=12)
+            _leaf(f, x, max(_rest(f, x, z), _raised(f, [(x, z)], reach=0.2)), z, rng, tilt=12)
 
 
 # =============================================================================================
@@ -985,7 +1058,7 @@ def trash_bag(D, folder, origin, ry, rng, size=None, torn=False, color=None):
     if torn:
         # the split, low on the front, and what spills out of it
         x0, _y0, z0, d = lobes[0]
-        _ball(f, "BagTear", (x0 + rng.uniform(-0.15, 0.15), d * 0.28, z0 - d * 0.36), d * 0.42, BAG_INSIDE,
+        _ball(f, "BagTear", (x0 + rng.uniform(-0.15, 0.15), d * 0.28, z0 - d * 0.44), d * 0.42, BAG_INSIDE,
               "SmoothPlastic")
         f.part("BagFlap", (x0 + 0.25, d * 0.22, z0 - d * 0.5), (0.5, 0.05, 0.4), col, "Plastic", flags=DECOR,
                rot=(rng.uniform(-50, -30), rng.uniform(-30, 30), 0), reflectance=refl)
@@ -993,7 +1066,7 @@ def trash_bag(D, folder, origin, ry, rng, size=None, torn=False, color=None):
               "SmoothPlastic", transparency=0.35, reflectance=0.1)
         for i in range(rng.randint(3, 5)):
             px, pz = rng.uniform(-0.8, 0.8), -d * 0.55 - rng.uniform(0.1, 1.2)
-            o = _w(f, px, pz, 0.05)
+            o = _w(f, px, pz)
             k = i % 4
             if k == 0:
                 paper_ball(D, folder, o, rng.uniform(0, 360), rng)
@@ -1085,14 +1158,16 @@ def wood_scraps(D, folder, origin, ry, rng, kind=None):
             col = _tone(_pick(rng, [WOOD_OLD, WOOD_GREY, WOOD, WOOD_DARK]), rng, 8)
             if i == 0:
                 col = _tone((64, 86, 70), rng, 6, 0.1)  # an offcut of old green-painted board
-            for _try in range(8):  # (lying on the floor, not through each other)
+            yaw = rng.uniform(0, 180)
+            for _try in range(8):  # (lying on the floor, not through each other nor anything there)
                 x, z = rng.uniform(-1.4, 1.4), rng.uniform(-1.0, 1.0)
-                if all(math.hypot(x - px, z - pz) > (L + pl) / 2 + 0.05 for px, pz, pl in placed):
+                if all(math.hypot(x - px, z - pz) > (L + pl) / 2 + 0.05 for px, pz, pl in placed) and \
+                        all(_free(f, px, 0.06, pz) for px, pz in _rect_pts(x, z, L * 1.05, w + 0.06, yaw)):
                     break
             else:
                 continue
             placed.append((x, z, L))
-            _plank(f, "Offcut", x, th / 2, z, L, w, th, col, yaw=rng.uniform(0, 180),
+            _plank(f, "Offcut", x, th / 2, z, L, w, th, col, yaw=yaw,
                    broken=rng.choice((-1, 0, 1)), rng=rng)
     else:
         for _ in range(rng.randint(5, 9)):
@@ -1100,7 +1175,7 @@ def wood_scraps(D, folder, origin, ry, rng, kind=None):
             col = mix(_tone(_pick(rng, [WOOD_OLD, WOOD, WOOD_GREY]), rng, 10), WOOD_FRESH, rng.uniform(0, 0.4))
             f.part("Splinter", (rng.uniform(-0.8, 0.8), 0.1, rng.uniform(-0.6, 0.6)),
                    (L, rng.uniform(0.06, 0.1), rng.uniform(0.08, 0.16)), col, "Wood", flags=DECOR,
-                   rot=(rng.uniform(-8, 8), rng.uniform(0, 180), rng.uniform(-6, 6)))
+                   rot=(_tilt(rng, 2, 8), rng.uniform(0, 180), _tilt(rng, 2, 6)))
         _disk(f, "Sawdust", 0, 0, rng.uniform(1.0, 1.5), DECAL_TH, mix(WOOD_FRESH, DUST, 0.5), "Sand",
               transparency=0.55)
 
@@ -1158,8 +1233,8 @@ def _pallet_in(f, rng, L, Wd, state):
             cut = rng.uniform(-0.35, 0.35) * L
             f.box("PalletBoard", (-L / 2, y2, zc - w / 2), (cut - 0.02, y2 + bt, zc + w / 2), col, "Wood", flags=SMALL)
             g = f.sub((cut + 0.02, y2 + bt, zc), rz=rng.uniform(12, 30), ry=rng.uniform(-6, 6))
-            g.box("PalletBoard", (0, -bt, -w / 2 + 0.02), (L / 2 - cut - 0.06, 0, w / 2 - 0.02), mix(col, WOOD_FRESH, 0.15),
-                  "Wood", flags=DECOR_SHADOW)
+            g.box("PalletBoard", (0, -bt, -w / 2 + 0.02), (L / 2 - cut - 0.06, 0, w / 2 - 0.02),
+                  mix(col, WOOD_FRESH, 0.15), "Wood", flags=DECOR_SHADOW)
         else:
             f.part("PalletBoard", (0, y2 + bt / 2, zc), (L - rng.uniform(0, 0.06), bt, w), col, "Wood", flags=SMALL,
                    rot=(0, rng.uniform(-0.8, 0.8), 0))
@@ -1207,7 +1282,7 @@ def plank_stack(D, folder, origin, ry, rng, count=None):
     f = Frame(D, folder, origin, ry=ry)
     n = count or rng.randint(6, 9)
     for e in (-1, 1):
-        f.part("Bearer", (e * 1.8, 0.15, 0), (0.3, 0.3, 2.6), _tone(WOOD_DARK, rng, 8), "Wood", flags=SMALL,
+        f.part("Bearer", (e * 1.8, 0.15, 0), (0.3, 0.3, 2.4), _tone(WOOD_DARK, rng, 8), "Wood", flags=SMALL,
                rot=(0, rng.uniform(-3, 3), 0))
 
     def col():
@@ -1230,8 +1305,13 @@ def plank_stack(D, folder, origin, ry, rng, count=None):
             break
         off = -(z - 0.05) / 2
         for zc, w in row:
-            _plank(f, "Plank", rng.uniform(-0.4, 0.4), y + th / 2, zc + off, rng.uniform(5.4, 7.2), w, th, col(),
-                   flags=SMALL, rng=rng)
+            x, L = rng.uniform(-0.4, 0.4), rng.uniform(5.4, 7.2)
+            for _try in range(6):  # (not into a bag or a heap standing at its end)
+                if all(_free(f, x + e * L / 2, y + th / 2, zc + off) for e in (-1, 1)):
+                    break
+                L *= 0.9
+                x *= 0.5
+            _plank(f, "Plank", x, y + th / 2, zc + off, L, w, th, col(), flags=SMALL, rng=rng)
         y += th
     for i in range(loose):  # thrown on top, askew; the last one snapped
         th = 0.13
@@ -1265,7 +1345,8 @@ def _cinder_in(f, rng, col, half=False, chip=False):
     f.box("CinderBlock", (-L / 2, 0, Wd / 2 - t), (-L / 2 + lb, H, Wd / 2), _tone(col, rng, 5), "Concrete", flags=SMALL)
     webs = [(-L / 2, -L / 2 + t)] if half else [(-L / 2, -L / 2 + t), (-tm / 2, tm / 2), (L / 2 - t, L / 2)]
     for x0, x1 in webs:
-        f.box("CinderBlock", (x0, 0, -Wd / 2 + t), (x1, H, Wd / 2 - t), _tone(col, rng, 5, 0.04), "Concrete", flags=SMALL)
+        f.box("CinderBlock", (x0, 0, -Wd / 2 + t), (x1, H, Wd / 2 - t), _tone(col, rng, 5, 0.04), "Concrete",
+              flags=SMALL)
     if half:  # a stub of the broken middle web, pale and jagged
         f.part("BrokenFace", (L / 2 - 0.06, H * 0.42, 0.02), (0.1, H * 0.7, Wd - 2 * t - 0.04),
                mix(col, CONCRETE_FRESH, 0.5), "Concrete", flags=DECOR,
@@ -1318,7 +1399,7 @@ def _brick(f, rng, x, y, z, half=False, rot=(0, 0, 0), col=None, mortar=False):
     if mortar:
         g.part("Mortar", (rng.uniform(-L, L) * 0.2, 0.12, rng.uniform(-0.06, 0.06)), (L * 0.5, 0.06, 0.2),
                _tone(MORTAR, rng, 6), "Concrete", flags=DECOR,
-               rot=(rng.uniform(5, 12) * rng.choice((-1, 1)), rng.uniform(-20, 20), rng.uniform(4, 10) * rng.choice((-1, 1))))
+               rot=(_tilt(rng, 5, 12), rng.uniform(-20, 20), _tilt(rng, 4, 10)))
 
 
 @prop({}, {"count": 6})
@@ -1328,10 +1409,10 @@ def loose_bricks(D, folder, origin, ry, rng, count=None):
     Footprint ~2 studs. 5-10 parts, DECOR_SHADOW."""
     f = Frame(D, folder, origin, ry=ry)
     n = count or rng.randint(3, 6)
-    dust = _disk(f, "BrickDust", 0, 0, rng.uniform(1.4, 2.0), DECAL_TH, mix(BRICK[0], DUST, 0.5), "Sand",
-                 transparency=0.6)
+    dust = _disk(f, "BrickDust", 0, 0, rng.uniform(1.3, 1.8), DECAL_TH, mix(BRICK[0], DUST, 0.4), "Sand",
+                 transparency=0.78)
     base = _top(f, dust)
-    flat = []
+    flat, spots = [], []
     for i in range(n):
         if flat and rng.random() < 0.35:
             # propped: its low end on the floor, its high end on a flat one's top edge
@@ -1346,10 +1427,11 @@ def loose_bricks(D, folder, origin, ry, rng, count=None):
             continue
         for _try in range(8):
             x, z = rng.uniform(-0.9, 0.9), rng.uniform(-0.7, 0.7)
-            if all(math.hypot(x - px, z - pz) > 0.62 for px, pz, _ in flat):
+            if all(math.hypot(x - px, z - pz) > 0.8 for px, pz in spots):
                 break
         else:
             continue
+        spots.append((x, z))
         yaw = rng.uniform(0, 180)
         half = rng.random() < 0.3
         if rng.random() < 0.25:  # on its edge
@@ -1368,8 +1450,9 @@ def _chunk(f, rng, x, y, z, s, col, flags=DECOR_SHADOW, rebar=False):
            flags=flags)
     g.part("Chunk", (s * 0.18, s * 0.08, s * 0.1), (s * 0.7, s * 0.5, s * 0.6), _tone(col, rng, 6, 0.05),
            "Concrete", flags=DECOR, rot=(rng.uniform(15, 40), rng.uniform(20, 50), rng.uniform(-30, 30)))
-    g.part("BreakFace", (-s * 0.25, s * 0.15, 0), (s * 0.5, s * 0.35, s * 0.55), mix(col, CONCRETE_FRESH, 0.45),
-           "Concrete", shape=WEDGE, flags=DECOR, rot=(0, rng.uniform(-30, 30) + 90, 0))
+    g.part("BreakFace", (-s * 0.42, s * 0.12, 0), (s * 0.5, s * 0.35, s * 0.55), mix(col, CONCRETE_FRESH, 0.45),
+           "Concrete", shape=WEDGE, flags=DECOR,
+           rot=(rng.uniform(8, 20) * rng.choice((-1, 1)), rng.uniform(-30, 30) + 90, rng.uniform(6, 16)))
     if rebar:
         _rod(g, "Rebar", (s * 0.1, 0, 0), (s * 0.5 + rng.uniform(0.3, 0.8), s * rng.uniform(0.1, 0.5), 0.05),
              0.1, RUST, "CorrodedMetal")
@@ -1401,7 +1484,7 @@ def rubble_pile(D, folder, origin, ry, rng, radius=None):
         hi = h * rng.uniform(0.8, 1.1)
         ri = R * rng.uniform(0.85, 1.1)
         heights.append(hi)
-        g = f.sub((0, 0, 0), ry=yaw)
+        g = f.sub((0, 0, 0), ry=yaw, rz=_tilt(rng, 2, 5))  # (no two sides parallel)
         g.part("Rubble", (0, hi / 2, -ri / 2), (ri * 1.2, hi, ri),
                _tone(_pick(rng, [DUST, mix(DUST, SOIL, 0.4), CONCRETE_OLD]), rng, 6),
                _pick(rng, ["Pebble", "Ground", "Pebble"]), shape=WEDGE, flags=PROP)
@@ -1514,28 +1597,29 @@ def cement_bag(D, folder, origin, ry, rng, torn=None):
     """A paper sack of cement, set hard and lumpy: rounded pillow shape, crimped ends, a faded red
     print band; torn, it spills grey powder and hardened lumps. Footprint 1.9 x 1.2 studs, 0.5 tall
     (torn: + 1.2). 6-12 parts; the body is PROP."""
-    f = Frame(D, folder, origin, ry=ry, rz=rng.uniform(-2, 2))
+    f0 = Frame(D, folder, origin, ry=ry)
+    f = Frame(D, folder, origin, ry=ry, rz=_tilt(rng, 2, 3))
     torn = (rng.random() < 0.5) if torn is None else torn
     L, Wd, h = rng.uniform(1.8, 2.0), rng.uniform(1.1, 1.25), rng.uniform(0.42, 0.52)
     col = _tone((150, 136, 108), rng, 8, darken=rng.uniform(0.05, 0.3))
     # the body with its printed band inlaid (flush), two rolls along its sides, the crimped ends
     _slab(f, (-L * 0.46, 0.0, -(Wd - h) / 2), (L * 0.46, h * 0.96, (Wd - h) / 2), (0, 2),
-          _look(col, "Fabric", "CementBag"), [(L * 0.04, L * 0.26, -Wd, Wd, _look(mix(col, (122, 56, 44), 0.6), "Fabric",
-                                                                           "Print"))], flags=PROP)
+          _look(col, "Fabric", "CementBag"),
+          [(L * 0.04, L * 0.26, -Wd, Wd, _look(mix(col, (122, 56, 44), 0.6), "Fabric", "Print"))], flags=PROP)
     for e in (-1, 1):
         _cyl(f, "CementBag", (0, h / 2, e * (Wd / 2 - h / 2)), L * 0.8, h, _tone(col, rng, 4), "Fabric")
         f.part("BagSeam", (e * L * 0.47, h * 0.35, 0), (0.12, h * 0.6, Wd * 0.95), _tone(col, rng, 6, 0.08),
                "Fabric", flags=DECOR, rot=(0, 0, e * rng.uniform(4, 12)))
     if torn:
         f.part("Tear", (-L * 0.32, h * 0.65, -Wd * 0.3), (0.5, 0.2, 0.35), (60, 56, 50), "Fabric", flags=DECOR,
-               rot=(rng.uniform(-20, 20), rng.uniform(0, 60), rng.uniform(-20, 20)))
+               rot=(rng.uniform(10, 25) * rng.choice((-1, 1)), rng.uniform(15, 60), rng.uniform(10, 25)))
         powder = _tone((166, 162, 152), rng, 6)
-        pi = _disk(f, "Powder", -L * 0.35, -Wd * 0.85, rng.uniform(1.2, 1.8), DECAL_TH, powder, "Sand")
+        pi = _disk(f0, "Powder", -L * 0.35, -Wd * 0.85, rng.uniform(1.2, 1.8), DECAL_TH, powder, "Sand")
         for _ in range(2):
             lx, lz = rng.uniform(-1.2, 0.2), -Wd * rng.uniform(0.7, 1.3)
-            f.part("Lump", (lx, _top(f, pi) if pi else 0.08, lz), (0.3, 0.2, 0.25),
-                   _tone(powder, rng, 6, 0.1), "Concrete", flags=DECOR,
-                   rot=(rng.uniform(-20, 20), rng.uniform(0, 90), rng.uniform(-20, 20)))
+            f0.part("Lump", (lx, _top(f0, pi) if pi else 0.08, lz), (0.3, 0.2, 0.25),
+                    _tone(powder, rng, 6, 0.1), "Concrete", flags=DECOR,
+                    rot=(_tilt(rng, 5, 20), rng.uniform(0, 90), _tilt(rng, 5, 20)))
 
 
 @prop({"state": "upright"}, {"state": "upside"}, {"state": "broken"})
@@ -1550,6 +1634,9 @@ def milk_crate(D, folder, origin, ry, rng, state=None):
     state = state or _pick(rng, ["upright", "upside", "broken"])
     col = _tone(_pick(rng, CRATE), rng, 8, darken=rng.uniform(0.1, 0.35))
     S, H = 1.1, 0.93
+    lift = _raised(f, _rect_pts(0, 0, S, S, 0))
+    if lift:
+        f = f.sub((0, lift, 0))
     pc = S / 2 - 0.07  # post centres
     lug = 0.065  # posts stand this much proud of the rims, top and bottom
     if state == "upside":
@@ -1571,11 +1658,11 @@ def milk_crate(D, folder, origin, ry, rng, state=None):
                 c = mix(c, (176, 176, 170), 0.3)  # the top rim scuffed pale where it was dragged
             e = -1 if side % 2 == 0 else 1
             if side < 2:
-                f.box("Crate", (-pc, y0, e * S / 2 - (t if e > 0 else 0)), (pc, y0 + hh, e * S / 2 + (0 if e > 0 else t)),
-                      c, "Plastic", flags=SMALL)
+                z0 = e * S / 2 - (t if e > 0 else 0)
+                f.box("Crate", (-pc, y0, z0), (pc, y0 + hh, z0 + t), c, "Plastic", flags=SMALL)
             else:
-                f.box("Crate", (e * S / 2 - (t if e > 0 else 0), y0, -pc), (e * S / 2 + (0 if e > 0 else t), y0 + hh, pc),
-                      c, "Plastic", flags=SMALL)
+                x0 = e * S / 2 - (t if e > 0 else 0)
+                f.box("Crate", (x0, y0, -pc), (x0 + t, y0 + hh, pc), c, "Plastic", flags=SMALL)
             k += 1
     # the lattice slats, 0.065 behind the rails' faces (>= 0.06: no depth fight)
     ya, yb = lug + 0.1, H - lug - 0.13
@@ -1593,7 +1680,7 @@ def milk_crate(D, folder, origin, ry, rng, state=None):
     # the slotted floor (between the bottom rails, its faces clear of theirs)
     for i in range(3):
         z = -S / 2 + 0.05 + 0.04 + i * 0.34
-        f.box("CrateFloor", (-S / 2 + 0.05, lug + 0.02, z), (S / 2 - 0.05, lug + 0.07, z + 0.26),
+        f.box("CrateFloor", (-S / 2 + 0.11, lug + 0.02, z), (S / 2 - 0.11, lug + 0.07, z + 0.26),
               _tone(col, rng, 5, 0.15), "Plastic", flags=SMALL)
     if state == "broken":
         f.part("CrateBit", (rng.uniform(0.95, 1.3), 0.03, rng.uniform(-0.5, 0.5)), (S * 0.6, 0.05, 0.1), col,
@@ -1617,8 +1704,8 @@ def bucket(D, folder, origin, ry, rng, state=None):
         f = f.sub((0, 0.46, 0), rx=-90 + rng.uniform(-4, 4)).sub((0, -0.5, 0))
     col = _tone(_pick(rng, [(176, 172, 160), (60, 62, 66), (140, 40, 34)]), rng, 8, darken=rng.uniform(0.1, 0.3))
     _cyl(f, "Bucket", (0, 0.25, 0), 0.5, 0.84, col, "Plastic", rot=(0, 0, 90), flags=SMALL)
-    _cyl(f, "Bucket", (0, 0.72, 0), 0.46, 0.92, _tone(col, rng, 4), "Plastic", rot=(0, 0, 90), flags=SMALL)
-    _cyl(f, "Rim", (0, 0.97, 0), 0.06, 0.98, _tone(col, rng, 4, 0.1), "Plastic", rot=(0, 0, 90))
+    _cyl(f, "Bucket", (0, 0.715, 0), 0.45, 0.92, _tone(col, rng, 4), "Plastic", rot=(0, 0, 90), flags=SMALL)
+    _cyl(f, "Rim", (0, 0.975, 0), 0.07, 0.98, _tone(col, rng, 4, 0.1), "Plastic", rot=(0, 0, 90))
     for e in (-1, 1):
         _rod(f, "Handle", (e * 0.47, 0.9, 0), (e * 0.3, 1.2, -0.1), 0.04, IRON, "Metal")
     _rod(f, "Handle", (-0.3, 1.2, -0.1), (0.3, 1.2, -0.1), 0.04, IRON, "Metal")
@@ -1649,7 +1736,7 @@ def oil_stain(D, folder, origin, ry, rng, size=None):
     s = size or rng.uniform(1.0, 1.6)
     d = s * rng.uniform(1.2, 1.6)
     ox = rng.uniform(-0.2, 0.2) * s
-    base = _disk(f, "OilStain", ox, 0, d, DECAL_TH, _tone(OIL, rng, 3), "SmoothPlastic", transparency=0.42,
+    base = _disk(f, "OilStain", ox, 0, d, DECAL_TH, _tone(OIL, rng, 3), "SmoothPlastic", transparency=0.55,
                  reflectance=0.06)
     if base is None:
         return
@@ -1711,7 +1798,7 @@ def crack(D, folder, origin, ry, rng, length=None, branches=None):
         x, z = pts[j]
         side = rng.choice((-1, 1))
         wj = w0 + (0.03 - w0) * j / max(1, n - 1)
-        bp = [(x + side * (wj / 2 + 0.03), z)]  # (starting at the main line's edge, not on it)
+        bp = [(x + side * (wj / 2 + 0.008), z)]  # (starting at the main line's edge, not on it)
         for _k in range(rng.randint(2, 3)):
             x, z = bp[-1][0] + side * rng.uniform(0.35, 0.7), bp[-1][1] + rng.uniform(-0.25, 0.45)
             bp.append((x, z))
@@ -1723,27 +1810,32 @@ def pothole(D, folder, origin, ry, rng, radius=None):
     """A pothole: a dark wet depression (the broken-down asphalt and mud, one flush layer) with
     muddy water glinting in its bottom, broken chunks of the road's edge lying around and in it,
     tilted down into the hole, short cracks running out from its rim, loose gravel kicked out.
-    Footprint 2-4 studs. 10-20 parts, DECOR."""
+    Footprint 2-4 studs. 13-23 parts, DECOR."""
     f = Frame(D, folder, origin, ry=ry)
     R = radius or rng.uniform(1.0, 1.7)
-    base = _disk(f, "Pothole", 0, 0, 2 * R, DECAL_TH, _tone((38, 35, 32), rng, 3), "Asphalt", reflectance=0.03)
+    base = _disk(f, "Pothole", 0, 0, 2 * R, DECAL_TH, _tone((40, 36, 31), rng, 3), "Ground", reflectance=0.03)
     if base is None:
         return
     R = f.D.parts[base - 1][8] / 2
     top = _top(f, base)
-    _disk(f, "PotholeWater", rng.uniform(-0.15, 0.15) * R, rng.uniform(-0.15, 0.15) * R, R * rng.uniform(1.0, 1.35),
-          DECAL_TH, _tone(WATER, rng, 4), "SmoothPlastic", reflectance=0.3, fit=False)
+    _disk(f, "PotholeWater", rng.uniform(-0.25, 0.25) * R, rng.uniform(-0.25, 0.25) * R, R * rng.uniform(0.7, 1.05),
+          DECAL_TH, _tone((30, 31, 32), rng, 3), "SmoothPlastic", reflectance=0.3, fit=False)
+    # the road's own surface (what the broken pieces are made of)
+    host = zlayers.host_at(D, tuple(float(v) for v in f.world((0, -0.05, 0))))
+    road, road_mat = (host[0], host[1]) if host else (ASPHALT_WORN, "Asphalt")
+    sides = [rng.uniform(0, 2 * math.pi) for _ in range(rng.randint(1, 2))]
     k = rng.randint(6, 9)
-    for i in range(k):  # the broken edge: chunks of the wearing course, sloping into the hole
-        a = 2 * math.pi * i / k + rng.uniform(-0.25, 0.25)
-        r = R * rng.uniform(0.82, 1.08)
-        sz = (rng.uniform(0.22, 0.42), rng.uniform(0.06, 0.1), rng.uniform(0.18, 0.32))
-        f.part("PotholeEdge", (math.cos(a) * r, top + sz[1] * 0.2, math.sin(a) * r), sz, _tone(ASPHALT_WORN, rng, 6),
-               "Asphalt", flags=DECOR, rot=(rng.uniform(-6, 6), -math.degrees(a) + rng.uniform(-20, 20),
-                                            rng.uniform(7, 18)))
+    for i in range(k):  # the broken edge: slabs of the road where it gave way (on one or two sides,
+        # straddling the rim and sloping in), a couple fallen into the hole
+        a = sides[i % len(sides)] + rng.uniform(-1.1, 1.1)
+        r = R * (rng.uniform(0.88, 1.02) if i < k - 2 else rng.uniform(0.3, 0.6))
+        sz = (rng.uniform(0.25, 0.55), rng.uniform(0.07, 0.11), rng.uniform(0.25, 0.5))
+        f.part("PotholeEdge", (math.cos(a) * r, top + sz[1] * 0.15, math.sin(a) * r), sz,
+               _tone(mix(road, (40, 36, 31), rng.uniform(0, 0.35)), rng, 6), road_mat, flags=DECOR,
+               rot=(_tilt(rng, 3, 8), -math.degrees(a) + rng.uniform(-25, 25), 7 + 2.5 * i + rng.uniform(0, 1)))
     for _ in range(rng.randint(2, 3)):  # cracks running out of the rim
         a = rng.uniform(0, 2 * math.pi)
-        r = R + 0.06
+        r = R * 1.22  # (clear of zlayers' square bounds of the hollow: on the road's level)
         pts = [(math.cos(a) * r, math.sin(a) * r)]
         for _k in range(rng.randint(1, 2)):
             a += rng.uniform(-0.3, 0.3)
@@ -1754,8 +1846,8 @@ def pothole(D, folder, origin, ry, rng, radius=None):
         a = rng.uniform(0, 2 * math.pi)
         r = R * rng.uniform(1.2, 1.8)
         x, z = math.cos(a) * r, math.sin(a) * r
-        f.part("Gravel", (x, _rest(f, x, z) + 0.03, z), (0.16, 0.1, 0.13), _tone(ASPHALT_WORN, rng, 10), "Asphalt",
-               flags=DECOR, rot=(rng.uniform(-20, 20), rng.uniform(0, 90), rng.uniform(-20, 20)))
+        f.part("Gravel", (x, _rest(f, x, z) + 0.03, z), (0.16, 0.1, 0.13), _tone(road, rng, 10), road_mat,
+               flags=DECOR, rot=(_tilt(rng, 5, 20), rng.uniform(0, 90), _tilt(rng, 5, 20)))
 
 
 @prop({}, {"w": 5, "d": 3})
@@ -1785,7 +1877,7 @@ def asphalt_patch(D, folder, origin, ry, rng, w=None, d=None):
     for _ in range(rng.randint(1, 3)):
         x, z = -cx * (W / 2 + rng.uniform(0.1, 0.4)), -cz * (L / 2 + rng.uniform(-0.6, 0.2))
         f.part("Gravel", (x, _rest(f, x, z) + 0.03, z), (0.16, 0.09, 0.13), _tone(ASPHALT_WORN, rng, 8), "Asphalt",
-               flags=DECOR, rot=(rng.uniform(-15, 15), rng.uniform(0, 90), rng.uniform(-15, 15)))
+               flags=DECOR, rot=(_tilt(rng, 5, 15), rng.uniform(0, 90), _tilt(rng, 5, 15)))
 
 
 @prop({}, {"square": True})
@@ -1877,26 +1969,29 @@ def weeds(D, folder, origin, ry, rng, kind=None, length=None):
         kind = "line"
 
     def tuft(x, z, n, hmax, root=True):
+        if not _free(f, x, 0.1, z):
+            return  # (not inside a heap of leaves, a crate...)
         if root:
             _disk(f, "WeedRoot", x, z, rng.uniform(0.22, 0.36), DECAL_TH, _tone(mix(SOIL_DARK, MOSS[0], 0.4), rng, 5),
                   "Ground")
         if rng.random() < 0.3:  # a rosette: broad leaves lying almost flat, tips curling up
-            for i in range(rng.randint(4, 6)):
-                a = i * 360 / 5 + rng.uniform(-20, 20)
+            m = rng.randint(4, 6)
+            for i in range(m):
+                a = i * 360 / m + rng.uniform(-12, 12)
                 ln = rng.uniform(0.2, 0.34)
-                g = f.sub((x, 0.07, z), ry=a, rx=rng.uniform(8, 24))
+                g = f.sub((x, 0.07, z), ry=a, rx=8 + 3.5 * i + rng.uniform(-1, 1))
                 g.part("Weed", (0, 0, -ln / 2), (ln * 0.32, 0.02, ln), _tone(_pick(rng, GRASS[:2]), rng, 8), "Grass",
                        flags=DECOR)
             return
-        for _ in range(n):  # tapered blades (a wedge: wide at the root, a point at the tip)
+        for i in range(n):  # tapered blades (a wedge: wide at the root, a point at the tip), fanning out
             h = hmax * rng.uniform(0.45, 1.0)
-            g = f.sub((x + rng.uniform(-0.08, 0.08), 0.03, z + rng.uniform(-0.08, 0.08)), ry=rng.uniform(0, 360),
-                      rz=rng.uniform(6, 34), rx=rng.uniform(-8, 8))
+            g = f.sub((x + rng.uniform(-0.06, 0.06), 0.03, z + rng.uniform(-0.06, 0.06)),
+                      ry=i * 360 / n + rng.uniform(-25, 25), rz=rng.uniform(8, 38), rx=_tilt(rng, 2, 8))
             col = _tone(_pick(rng, GRASS), rng, 8, darken=rng.uniform(0, 0.2))
-            g.part("Weed", (0, h / 2, 0), (0.02, h, rng.uniform(0.07, 0.14)), col, "Grass", shape=WEDGE, flags=DECOR)
+            g.part("Weed", (0, h / 2, 0), (0.02, h, rng.uniform(0.09, 0.17)), col, "Grass", shape=WEDGE, flags=DECOR)
 
     if kind == "tuft":
-        tuft(0, 0, rng.randint(4, 9), rng.uniform(0.5, 1.0))
+        tuft(0, 0, rng.randint(7, 11), rng.uniform(0.5, 1.0))
     elif kind == "line":
         L = length or rng.uniform(3, 7)
         n = max(1, round(L / 2.4))
@@ -1908,16 +2003,17 @@ def weeds(D, folder, origin, ry, rng, kind=None, length=None):
         for x0, zf in zip(xs, faces):
             if zf is None:
                 continue
-            _flat(f, "Moss", x0, zf - 0.13, seg, 0.26, DECAL_TH, _tone(_pick(rng, MOSS), rng, 6), "Grass", fit=False)
-            x = x0 - seg / 2 + rng.uniform(0.1, 0.6)
+            _flat(f, "Moss", x0, zf - 0.12, seg, 0.24, DECAL_TH, _tone(mix(_pick(rng, MOSS), SOIL_DARK, 0.35), rng, 6),
+                  "Grass", fit=False)
+            x = x0 - seg / 2 + rng.uniform(0.1, 0.5)
             while x < x0 + seg / 2:
-                tuft(x, zf - rng.uniform(0.1, 0.22), rng.randint(3, 5), rng.uniform(0.4, 0.85), root=False)
-                x += rng.uniform(0.9, 1.8)
+                tuft(x, zf - rng.uniform(0.1, 0.2), rng.randint(5, 8), rng.uniform(0.4, 0.85), root=False)
+                x += rng.uniform(0.6, 1.4)
     else:
         L = length or rng.uniform(3, 6)
         z = -L / 2
         while z < L / 2:
-            tuft(rng.uniform(-0.1, 0.1), z, rng.randint(2, 4), rng.uniform(0.3, 0.65))
+            tuft(rng.uniform(-0.1, 0.1), z, rng.randint(4, 6), rng.uniform(0.3, 0.65))
             z += rng.uniform(0.8, 1.6)
 
 

@@ -2,6 +2,7 @@
 group, from a few day cameras and one night view lit by a bulb, to LOOK at them.
 
     venv/bin/python -I tools/city/preview_props_ground.py OUT_DIR [group ...] [--fast] [--check] [--night]
+    venv/bin/python -I tools/city/preview_props_ground.py --close OUT_DIR prop [prop ...]   (eye-level close-ups)
 
 Groups: litter, bags, wood, masonry, objects, floor, covers, edges. Writes OUT_DIR/<group>_day_<i>.png (and
 OUT_DIR/<group>_night_0.png with --night). Renders are small (640 x 420, denoised, few samples: the machine is
@@ -62,10 +63,26 @@ def _faces(r):
     return out
 
 
+def _inside(rows, p, skip):
+    """Whether point p is inside an opaque block / cylinder row (other than those in skip)."""
+    for k, r in enumerate(rows):
+        if k in skip or r[12] > 0.05 or r[0] == citykit.BALL:
+            continue
+        loc = citykit.yxz_matrix(r[4], r[5], r[6]).T @ (p - np.array(r[1:4], float))
+        h = np.array(r[7:10], float) / 2
+        if r[0] == citykit.CYLINDER:
+            if abs(loc[0]) <= h[0] and loc[1] ** 2 + loc[2] ** 2 <= min(h[1], h[2]) ** 2:
+                return True
+        elif np.all(np.abs(loc) <= h):
+            return True
+    return False
+
+
 def coplanar_pairs(D, gap=0.06):
     """Pairs of parts of D (by row) with same-facing parallel faces less than `gap` apart that
-    overlap (by their bounding squares in the face plane, sampled): what z-fights or flickers.
-    Rough on purpose (the whole-alley detector is the reference); returns [(i, j, gap)]."""
+    overlap (by their bounding squares in the face plane, sampled) where it can be seen (points
+    just in front of the front face not inside another part): what z-fights or flickers. Rough on
+    purpose (the whole-alley detector is the reference); returns [(i, j, gap)]."""
     rows = [r for r in D.parts if r[12] < 1]
     # (a face down on the floor, y 0, is hidden by the floor: never counted)
     F = [[fc for fc in _faces(r) if not (fc[0][1] < -0.99 and abs(fc[1][1]) < 0.01)] for r in rows]
@@ -81,17 +98,21 @@ def coplanar_pairs(D, gap=0.06):
                     if n1 @ n2 < 0.9995:
                         continue
                     g = abs((c2 - c1) @ n1)
-                    if g >= gap:
+                    if g >= gap - 1e-4:
                         continue
-                    # overlap: some sample points of face 2 (inset 10 %) inside face 1
+                    # overlap: some sample points of face 2 (inset 10 %) inside face 1, seen
                     hits = 0
+                    front = max(0.0, (c2 - c1) @ n1) + 0.01
                     for u in (-0.8, 0, 0.8):
                         for v in (-0.8, 0, 0.8):
                             p = c2 + u * e2[0] * ax2[0] + v * e2[1] * ax2[1]
                             d = p - c1
                             if abs(d @ ax1[0]) < e1[0] * 0.98 and abs(d @ ax1[1]) < e1[1] * 0.98:
-                                hits += 1
-                    if hits >= 2 and (best is None or g < best):
+                                q = p - ((p - c1) @ n1) * n1 + front * n1
+                                if not _inside(rows, q, (i, j)):
+                                    hits += 1
+                    area = 4 * e2[0] * e2[1] * hits / 9
+                    if hits >= 2 and area > 0.01 and (best is None or g < best):
                         best = g
             if best is not None:
                 out.append((i, j, round(best, 4)))
@@ -136,7 +157,7 @@ def build(group, seed=1):
         reps = 2 if name in SMALL_ONES else 1
         x = 0.0
         if name in WALL_PROPS:  # a wall behind the row, 1 stud past its origins (they find its face)
-            D.box("Cat", "Wall", X0 - 6, X0 + len(variants) * reps * cell, 0, 4, Z0 + z + 1.0, Z0 + z + 1.6,
+            D.box("Cat", "Wall", X0 - 6, X0 + len(variants) * reps * cell, 0, 2.8, Z0 + z + 1.0, Z0 + z + 1.6,
                   (84, 60, 50), "Brick")
         for v in variants:
             for _ in range(reps):
@@ -170,7 +191,7 @@ def cameras(width, depth):
     cx, cz = width / 2 - 1.5, depth / 2 - 2
     span = max(width * 0.62, depth * 0.95, 8)
     cams = [
-        ((cx, span * 1.05, cz - span * 0.95), (cx, 0, cz + 0.4), 50),
+        ((cx, span * 1.5, cz - span * 0.7), (cx, 0, cz + 0.4), 50),
         ((width * 0.3, 5.0, -5.5), (width * 0.38, 0.0, depth * 0.3), 55),
         ((width * 0.7, 5.0, depth * 0.25 - 4.5), (width * 0.55, 0.0, depth * 0.75), 55),
     ]
@@ -178,9 +199,10 @@ def cameras(width, depth):
 
 
 def linear(D):
-    """A copy whose colours are linearised (Roblox colours are sRGB; the preview feeds them raw)."""
+    """A copy ready for citykit.preview: its wedges turned the way the preview's mesh expects."""
     L = copy.deepcopy(D)
-    L.colors = [[255 * (c / 255) ** 2.2 for c in col] for col in L.colors]
+    # (citykit.preview already turns the sRGB colours linear: doing it here too made every render
+    # far too dark)
     # citykit.preview builds its wedge mesh turned 180 deg about X (full face up, slope underneath):
     # pre-turn every wedge by 180 deg about its own X so the render shows it as Roblox does
     flip = citykit.yxz_matrix(180, 0, 0)
@@ -191,7 +213,40 @@ def linear(D):
     return L
 
 
+def close(name, seed=1, wall=None):
+    """One prop's variants in a row on a concrete floor (a wall behind them for the wall-foot
+    props), with two cameras at a standing player's eye (5 studs up, 6-9 studs away)."""
+    fn, variants = BY_NAME[name]
+    cell = CELL.get(name, 3.5 if name in SMALL_ONES else 4.5)
+    rng = random.Random(seed)
+    D = citykit.Data()
+    wall = name in WALL_PROPS if wall is None else wall
+    n = len(variants) * (2 if name in SMALL_ONES else 1)
+    width = n * cell
+    D.box("Cat", "Ground", X0 - 4, X0 + width + 4, -0.6, 0.0, Z0 - 8, Z0 + 4, (92, 89, 84), "Concrete")
+    if wall:
+        D.box("Cat", "Wall", X0 - 4, X0 + width + 4, 0, 6, Z0 + 0.6, Z0 + 1.6, (84, 60, 50), "Brick")
+    x = 0.0
+    for v in variants:
+        for _ in range(2 if name in SMALL_ONES else 1):
+            fn(D, "Cat", (X0 + x, 0, Z0), 0 if wall else rng.uniform(-30, 30), rng, **v)
+            x += cell
+    cx = X0 + (width - cell) / 2
+    far = max(6.0, width * 0.55)
+    cams = [((cx - width * 0.15, 5.0, Z0 - far), (cx, 0.2, Z0 + 0.2), 55),
+            ((X0 - 1.5, 3.2, Z0 - 3.5), (X0 + cell * 0.6, 0.2, Z0 + 0.3), 50)]
+    return D, cams
+
+
 def main():
+    if "--close" in sys.argv:  # --close OUT_DIR name [name ...]: eye-level close-ups of single props
+        args = [a for a in sys.argv[1:] if not a.startswith("--")]
+        os.makedirs(args[0], exist_ok=True)
+        for name in args[1:]:
+            D, cams = close(name)
+            print(name, len(D.parts), "parts")
+            small_preview(linear(D), cams, os.path.join(args[0], f"{name}"), samples=16)
+        return
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     fast = "--fast" in sys.argv
     check = "--check" in sys.argv
