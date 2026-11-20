@@ -375,11 +375,47 @@ return table.freeze({
 			rim = 0, -- bruise_rim.png
 			petechiae = 0, -- bruise_petechiae.png
 		}),
-		-- Burn pictures (Dr. Rift's acid and fire): assets/burns/*.png uploaded
-		-- to Roblox, their image ids here (docs/WOUNDS_FR.md). With them a burn
-		-- is realistic pictures spreading over the burnt limbs (raw eroded
-		-- flesh running down for acid, mottled char for fire); without (0),
-		-- simpler patches.
+		-- Burn textures (every burn: Dr. Rift's ray, acid and flasks, the
+		-- Pyromaniac's fire...): assets/burns/*.png uploaded to Roblox, their
+		-- image ids here (docs/BURNS_FR.md). Tiled on the burnt faces, one
+		-- per stage (1 redness, 2 blisters, 3 eschar, 4 char). 0 = not
+		-- uploaded: the old BURN_IMAGES below stand in (Roblox's own
+		-- particles for the flame / smoke / ember).
+		BURNS = table.freeze({
+			skin = table.freeze({
+				113128765394969,
+				131967997605329,
+				74252597997417,
+				125259548593338,
+			}), -- skin_1..4.png (bare skin)
+			cloth = table.freeze({
+				103796817123786,
+				82410079132632,
+				134218033394583,
+				129471308703785,
+			}), -- cloth_1..4.png (over a shirt / pants)
+			acid = table.freeze({ 112442746763176, 111696045453314, 92317291431094 }), -- acid_1..3.png
+			spot = 108212204997924, -- spot.png (a laser / ray burn)
+			flame = 83282802493156, -- flame.png (4 x 4 flipbook)
+			smoke = 135930341177500, -- smoke.png
+			ember = 104956583136032, -- ember.png
+		}),
+		-- Fire textures (assets/fire, tools/pyro/make_fire.py, docs/FIRE_FR.md):
+		-- every flame in the game (burning bodies, the Pyromaniac). 0 = not
+		-- uploaded: Roblox's own particles stand in (Client/Combat/FireLook).
+		FIRE = table.freeze({
+			flameLoop = 109483706228130, -- flame_loop.png (8 x 8 flipbook, loops)
+			flameTongue = 91629697684434, -- flame_tongue.png (4 x 4 flipbook, one shot)
+			fireball = 86463412008232, -- fireball.png (8 x 8 flipbook, one shot)
+			groundFire = 95247180631141, -- ground_fire.png (4 x 4 flipbook, loops)
+			smoke = 105239598679749, -- smoke.png (2 x 2: four puffs)
+			ember = 107619914333799, -- ember.png (2 x 2: dot, streak, flake, sparks)
+			glow = 121132183562543, -- glow.png
+			flameStrip = 139331479680133, -- flame_strip.png (Beams, Trails)
+			scorch = 112565139364663, -- scorch.png (a decal on the floor)
+		}),
+		-- The first burn pictures (assets/burns/legacy), still used while
+		-- BURNS above is 0: acid 1..3 for acid, fire 1..3 for stages 2..4.
 		BURN_IMAGES = table.freeze({
 			acid = table.freeze({ 131778333760722, 126361621625485, 94024882070515 }), -- acid_1..3.png
 			fire = table.freeze({ 126783746008106, 105061454734886, 79962622099236 }), -- fire_1..3.png

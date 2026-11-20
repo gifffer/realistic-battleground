@@ -409,7 +409,7 @@ Les sons `BatDraw`, `BodyShot` et `KnockoutPunch` (`src/shared/Sounds.luau`) n'o
 | S5 | En duel, mort ou KO près d'un comptoir | Aucun prompt, E ne fait rien. |
 | S6 | Mobile / émulateur tactile (Studio : Device) | Le prompt affiche **TAP** ; toucher le prompt ouvre la boutique. |
 | S7 | Mannequins de la boutique de vêtements | Chacun porte une tenue du SHOP (haut + pantalon aux couleurs de GREY SWEATS, OLIVE…). S'il n'y a pas de mannequin, rien ne casse. |
-| S8 | Le bar | On peut y entrer par l'angle (porte large de 8) ; comptoir, tabourets, billard, juke-box, lumière chaude ; pas de prompt de boutique dedans. |
+| S8 | Mettre le Dummy en feu, le laisser brûler puis s'éteindre : une fois avec un Molotov **sur lui**, une fois en le faisant **marcher dans une flaque** | Molotov sur lui : la bouteille et la boule de feu **seulement** (pas de second souffle ni de cri juste par-dessus). Dans la flaque : il prend feu avec un **souffle**, un grésillement et un **cri**. Tant qu'il brûle : un **crépitement** en boucle, plus fort quand plus de membres brûlent. Quand le feu s'éteint : le crépitement baisse et un **grésillement qui retombe**. |
 
 ### v4 : map plus grande, portes, graphismes
 
@@ -778,6 +778,42 @@ Menu **KITS** → **DR. RIFT** → **EQUIP**. Tester sur le **Dummy**, puis à *
 | R20 | Un joueur qui arrive après | Il voit le corps en deux morceaux avec les coupes, sans le sang qui gicle. |
 | R21 | Le Dr. Rift quitte le jeu (ou meurt) **avant** la coupe | Tout s'arrête (portail, pistolet), la victime retombe KO, entière. |
 
+## Kit Pyromane (`feature/kit-pyromaniac`)
+
+Un **pyromane** avec un **lance-flammes artisanal** (poignée de pistolet de pompe rouge, crosse en boucle de tube, bouteille de gaz olive sur le flanc droit, manchon perforé, bec taillé en biseau, veilleuse en cuivre) et un **Zippo** (seulement pour le finisher). Le lance-flammes est **porté en travers du dos** en permanence ; chaque attaque le **dégaine** (la main droite va chercher la poignée à la hanche, le canon passe sous le bras, la main gauche attrape la poignée avant, la veilleuse bleue s'allume) puis le **remet dans le dos** à la fin.
+Dans **Studio**, tous les kits sont débloqués ; dans le jeu publié, le Pyromane demande le **niveau 6** et **650 coins**.
+Menu **KITS** → **PYROMANIAC** → **EQUIP**. Tester sur le **Dummy**, puis à **2 joueurs**. Le modèle : `docs/FLAMETHROWER_FR.md` (FBX importé ou pièces Roblox).
+**Les sons** sont des effets gratuits de la boutique (Pro Sound Effects), déjà en place : `docs/SONS_PYROMANE_FR.md`.
+Les brûlures sur le corps sont celles du système de brûlures (`docs/BURNS_FR.md`, tests B1–B10).
+**Chaque attaque a sa propre forme de feu** : si deux attaques se ressemblent, c'est un bug.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| P1 | Menu KITS | La carte **PYROMANIAC** (pose de tir à la hanche) : **FLASH BURST, NAPALM LOB, FLAME STREAM, FUEL SPRAY**, l'Awakening **BURNING MAN** (BLOWTORCH, NAPALM MORTAR, INFERNO, TORCH CHARGE) et le finisher **IMMOLATION**. |
+| P2 | En jeu, sans attaquer (marcher, courir, M1, bloquer, dash) | Le lance-flammes reste **dans le dos** (poignée vers la hanche droite, canon derrière l'épaule gauche, bouteille vers l'extérieur) ; les coups de poing, le blocage et le dash marchent comme avant. |
+| P3 | N'importe quelle attaque, bien regarder les mains | La main droite **descend** chercher la poignée (pas de saut), l'arme **tourne sous le bras** jusqu'à la hanche, la main gauche **se pose sur la poignée en bois**, la veilleuse **bleue** s'allume (clic + petit « fwip »). Pendant le tir, le **canon pointe là où part le feu**. À la fin, l'arme repart **dans le dos** et la veilleuse s'éteint (petite bouffée). |
+| P4 | **1** (FLASH BURST) face au Dummy, de près puis à ~7 studs | Il dégaine, se ramasse (le canon plonge puis remonte vers la tête), un filet d'essence au bout, **clic de gâchette** ; à 0,42 s une **boule de feu ronde** qui **éclate pleine taille d'un coup** 3-5 studs devant le canon (anneau d'étincelles, flash), puis roule vers l'avant en suie. **Recul** : le canon saute vers le haut, il recule un peu. Touché : la cible est **sonnée** ~0,6 s et **son visage brûle**. Bloquer / parer / esquiver marchent comme un coup normal. |
+| P5 | **2** (NAPALM LOB) en visant le sol à 15-25 studs | Il lève le canon à ~35°, la main gauche **claque la vanne** (clac), l'aiguille du manomètre **monte**, sifflement qui monte, des **gouttes en feu** tombent du bec ; à 0,6 s la vanne se rouvre et à 0,62 s il **crache une boule de napalm** (gelée de feu qui tourne, ruban de flamme, gouttes qui tombent) en cloche, avec un recul. **Pas de bouteille, pas de verre.** |
+| P6 | L'impact du napalm | Un **« splash » mouillé** (gouttes d'essence ambrée projetées à ras du sol, tache sombre et brillante), une **boule de feu** qui apparaît d'un coup, puis la **flaque de feu** (s'étend en ~0,6 s, fumée noire, une lumière qui vacille, marque noire ~45 s). Directement **sur** le Dummy : il prend feu plus fort et dégouline d'essence. Jamais plus de **4 flaques** à la fois. |
+| P7 | Rester dans le feu / sauter par-dessus / parc | Brûle tant qu'on est dedans (pieds d'abord) ; en sautant : rien ; dans le parc (zone sûre) : rien. |
+| P8 | **3** (FLAME STREAM) face au Dummy à ~8 studs | Il se plante, jambes écartées, crosse contre la hanche, se penche ; clic, puis un **long jet continu** qui **sort du canon** en ~0,1 s (pas un impact), des paquets de flammes qui freinent et **montent en boule** au bout, fumée noire au-dessus, la lumière **dans** le jet. Son torse **balaie** à gauche puis à droite ; en tournant la caméra, tu balaies encore plus. À 1,0 s le jet **se détache** du canon (la queue part et s'amincit), un filet de flamme et de fumée au bec, les trous du manchon fument. Derrière un mur : rien. |
+| P9 | **4** (FUEL SPRAY) sur le Dummy | Il **coupe la veilleuse** (petit grésillement, la flamme bleue meurt), recule le torse, puis un **éventail plat d'essence crue**, froid, **sans flamme** (gouttes ambrées + brume pâle) balayé de droite à gauche ; 2-4 **taches mouillées** au sol (s'effacent en ~6 s). Touché : ralenti et **trempé** (dégouline ~8 s). À 0,66 s la **veilleuse se rallume** : « maintenant je t'allume ». |
+| P10 | FUEL SPRAY **puis** 1 / 2 / 3 | Trempée, la cible **s'embrase de partout** au premier feu, brûle plus fort et plus longtemps. |
+| P11 | Remplir la jauge, **G** (BURNING MAN) | Dégainé vite, la main gauche **tourne le volant de la bouteille** (aiguille dans le rouge), il pointe l'arme **vers le ciel** : une **colonne de feu** (~10 studs) à la **racine bleu-blanc**, flash ; le **retour de flamme** retombe sur ses avant-bras qui **prennent feu** (0,55 s), il rabat l'arme à la hanche (gerbe de feu sur chaque bras) et la range. |
+| P12 | Pendant l'Awakening, regarder l'arme dans le dos et pendant les coups | Le manchon **luit orange à travers les trous**, les trous fument, la veilleuse est **plus grosse** avec une pointe orange qui lèche, l'aiguille tremble vers 90 %. **Chaque jet** a une **racine bleu-blanc** (1,5-2 studs) avant de devenir orange. Les bras brûlent jusqu'à la fin, puis s'éteignent. |
+| P13 | **1** en Awakening (BLOWTORCH) | Dégainé vite, l'arme **armée à la hanche** (torse tourné), puis un **coup de baïonnette** en avant : une **lance** courte et dure (bleu-blanc au cœur, frange orange, **scories** orange) qui s'allume juste avant le contact. Touché : flash bleu-blanc 1 image, étincelles, anneau de flamme sur la cible, **arrêt sur image** (coup lourd), **recul**, brûlure **profonde et localisée**. La lance **se coupe** à 0,35 s (bouffée). Bloquer / parer marchent. |
+| P14 | **2** en Awakening (NAPALM MORTAR) | Arme calée **comme un mortier** (45°), des **langues de feu sortent des trous du manchon**, puis une **grosse boule** (cœur blanc, traînée épaisse) avec un **gros recul** (il est poussé en arrière, retour de flamme de ~3 studs au bec, aiguille qui claque). Impact : splash, boule de feu, une **couronne de ~12 gouttes en feu** autour qui brûlent ~2 s, et une **flaque plus large et plus longue** (~10 s). |
+| P15 | **3** en Awakening (INFERNO) face au Dummy puis vers le sol | Volant tourné (sifflement), puis un **jet énorme** (~17 studs, plus épais que FLAME STREAM, racine bleue, grosses boules qui roulent, plafond de suie), le manchon **luit plus fort** pendant le jet ; balayage large ; à la fin il **baisse le canon** et le feu **lèche le sol** ; quand il lâche, **le sol où il a léché prend feu** (petite flaque ~4 s, ~9 studs devant). |
+| P16 | **4** en Awakening (TORCH CHARGE) | Il fonce, arme basse : un jet court qui **éclabousse le sol devant lui** en **vague de feu** (racine bleue). Contact : il **enfonce le manchon** dans la poitrine (flash, gerbe de feu sur la cible), la cible est **mise au sol** et brûle, **même en bloquant** (la charge passe la garde ; la vague, elle, peut être bloquée de face). Puis il freine en dérapant et range l'arme. |
+| P17 | **Finisher** sur un KO (Dummy) | Bandes noires, le corps **couché sur le dos**. Il dégaine, **recule d'un pas**, tourne le volant, **coupe la veilleuse** (menace), puis **arrose le corps d'essence crue** (jet ambré brillant, de la tête vers les jambes ; la victime tousse ; tache mouillée au sol). Une secousse : l'essence goutte du bec. Il **redresse l'arme** dans la main droite, sort le **Zippo** de la main gauche, l'ouvre, l'allume, et **rallume la veilleuse** : gros plan **tenu** (~0,5 s) sur son visage **éclairé bleu et orange**, pendant qu'on entend la victime supplier. Il **abaisse le canon** vers son visage (seul le sifflement), puis **plein jet à bout portant** : racine bleu-blanc, flamme qui **s'écrase et coule le long du corps**, du visage aux jambes ; le **manchon et le canon rougissent** (rouge cerise) et **gouttent du feu**. Cris, se débat, puis se recroqueville et ne bouge plus (4,6 s). À 4,8 s la **soupape** lâche un sifflement blanc vers le haut, la lueur s'éteint lentement, il range l'arme. ~5,8 s. |
+| P18 | Après le finisher | Le corps **brûle encore ~12 s** (flammes, fumée noire, une lumière, le son du feu), puis **fume** (~18 s). Pas de double flammes. |
+| P19 | Un joueur qui arrive après (ou le corps resté après la réapparition) | Le corps a les vêtements **carbonisés** et brûle / fume encore selon le temps passé. |
+| P20 | Le Pyromane est frappé / meurt / quitte **avant** « l'embrasement » | Tout s'arrête (jet coupé, Zippo, arme qui retourne dans le dos), la victime retombe KO, **sans feu**. |
+| P21 | Couper une attaque : frapper / étourdir le Pyromane **pendant** FLAME STREAM ou INFERNO, ou le tuer | Le jet **se détache immédiatement** du canon (pas de feu qui continue sans lui), la gâchette se relâche, la veilleuse s'éteint et l'arme **retourne dans le dos** en ~0,15 s. Le serveur arrête aussi les dégâts au même moment. |
+| P22 | Spammer les attaques (cooldowns) et l'endurance | Mêmes règles qu'avant : cooldowns et coûts d'endurance affichés dans la barre, pas d'attaque pendant une autre. |
+| P23 | Sons | Voir la section **Sons du Pyromane v2** plus bas (S1-S14). |
+| P24 | Output (F9) | Aucune erreur ; aucun `[Flamethrower]` sauf l'avertissement attendu si le FBX n'est pas importé (alors : version en pièces). |
+
 ## Grosses flaques des finishers (`feature/finisher-pools`)
 
 Un membre arraché, une tête éclatée, un corps coupé en deux : **beaucoup** de sang (2,5 à 4 litres en
@@ -1061,3 +1097,61 @@ Pour forcer la pluie (barre de commande, côté **Server**) : `workspace:SetAttr
 | V7 | Attendre la **fin de la pluie** | L'eau arrête de couler, puis les vitres sèchent en ~25 s. Plus rien sur les vitres. Saleté légère toujours là près de toi (bas de vitre un peu plus poussiéreux, bord un peu plus sombre). |
 | V8 | Casser une vitrine avec un coup lourd (charge du **Bull**, atterrissage du **Sentinel**) | Éclats de verre **fins et transparents** qui volent puis restent au sol 16-22 s, un flash froid très court, des paillettes, le **bruit de verre brisé**. Pas de gros cubes de verre. La vitrine revient ~25 s après, en verre (et avec la pluie si il pleut). |
 | V9 | *Test → Clients and Servers → 2 Players*, regarder les vitres | Même verre et mêmes teintes chez les deux joueurs. Les gouttes ne sont dessinées que chez chacun, près de lui. |
+
+## Brûlures v2 (`feature/burns-v2`)
+
+Détails et import des images : `docs/BURNS_FR.md`. Tout marche **sans les nouvelles images** (anciennes images + particules Roblox) ; la tache du laser (B3) a besoin de `spot.png`. Prendre le kit **Rift** contre un mannequin ou un 2e joueur (*Test → Clients and Servers → 2 Players*).
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| B1 | Toucher avec la **fiole explosive** (feu) | Le membre touché rougit, puis la peau part (rouge mouillé, peau blanche qui pèle), puis escarre beige, puis noir carbonisé si ça dure. Les flammes **montent** vers le torse et la tête ; vraies langues de feu, fumée noire, braises, lumière orange qui vacille. |
+| B2 | Laisser le feu s'éteindre | Les flammes partent, le corps **fume** gris quelques secondes (braises sur le noir), puis plus rien. Les brûlures **restent**. Pas d'erreur dans l'Output. |
+| B3 | **Rayon** (pistolet laser) sur le torse, puis au même endroit | Une **tache** profonde (cratère noir, anneau blanc, peau rouge pelée autour) là où il touche, qui s'aggrave au même endroit ; à peine de flammes, presque pas de propagation. |
+| B4 | **Acide** (fiole acide, puis rester dans la flaque) | Tache jaune-brun, puis peau rongée jaune-brun / chair à vif, puis escarre brun-noir, avec des **coulures vers le bas** ; mousse, vapeur pâle, gouttes. Dans la flaque : les **pieds / jambes** d'abord. Jamais de flammes. |
+| B5 | Un personnage **avec T-shirt / pantalon** brûlé | Le tissu roussit, se carbonise, des **trous brûlés** montrent la peau brûlée ; au degré 4 le tissu est fondu dans la peau noire. |
+| B6 | Tuer quelqu'un **pendant** qu'il brûle (finisher) | Le corps brûle encore ~4 s puis fume. Après la réapparition, la **copie du cadavre** a les mêmes brûlures (et brûle encore un peu si elle était en feu). |
+| B7 | 2e joueur : regarder la même victime | Mêmes brûlures aux mêmes endroits, mêmes membres en feu. Un joueur qui rejoint après voit aussi les brûlures. |
+| B8 | Kill (la vie remonte) / nouvelle manche / réapparition | Les brûlures et les flammes partent. |
+| B9 | Brûlé en vue à la 1re personne | Pas de flammes ni de fumée devant la caméra (celles de la tête sont cachées), le reste du corps brûle normalement. |
+| B10 | Vision thermique du **Sentinel** | Le trou dans la peau comme avant ; pas de flammes. |
+
+## Feu v2 : flammes, flaques et effets du Pyromane (`feature/kit-pyromaniac`)
+
+Détails et import des 9 images : `docs/FIRE_FR.md`. **Faire les tests deux fois** : une fois **sans** les IDs (`Config.Injuries.FIRE` à 0 : tout doit marcher, avec l'ancien look) et une fois **avec**. Kit **Pyromane** contre le **Dummy**, puis à 2 joueurs. Les sons : section suivante.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| F1 | Faire brûler le Dummy (NAPALM LOB dessus) et regarder de près | Plus de petites taches orange : de **gros paquets de flammes** qui se rejoignent sur chaque membre, des **langues** qui montent et se détachent, une lueur chaude collée au corps, des braises qui flottent. **Une seule** colonne de fumée noire (chaude en bas), **une seule** lumière qui bouge un peu sur le corps. Le feu **respire** et **flambe** de temps en temps (la lumière saute). |
+| F2 | Le feu prend sur un membre / s'éteint | Il **prend** d'un coup (gerbe de langues, la lumière saute) ; il **baisse en ~1 s** puis une dernière bouffée de fumée, puis le corps fume gris. Jamais coupé net. |
+| F3 | Flaque de napalm au sol, la regarder de haut et de côté | Un **film de feu à plat** sur le sol (bords irréguliers, **jamais un rond**) + des flammes debout de hauteurs différentes ; ça part du centre (~0,6 s). La lumière orange bouge au-dessus des flammes ; seule la flaque la plus proche fait des **ombres**. |
+| F4 | Fin de la flaque | Les cellules **baissent** une par une (pas coupées net). La marque noire s'est **formée pendant le feu** : une grande tache irrégulière (avec des doigts et gouttes si `scorch.png` est importé ; sinon quelques ellipses sombres), plus quelques petites taches ; **pas de disque par cellule**. Elle s'efface après ~45 s. |
+| F5 | **1** (FLASH BURST) | Une goutte d'essence au bec au moment où il se ramasse ; à 0,40 s un **jet de liquide** court, puis à 0,42 s **la boule de feu** pleine taille tout de suite (lueur au cœur, anneau d'étincelles), qui roule en suie ; braises ; un filet de flamme au bec et de la fumée qui sort des trous du manchon. |
+| F6 | **2** (NAPALM LOB) | Pendant la pression : des **gouttes en feu** tombent du bec (la veilleuse les allume). En vol : la boule **tremble comme une gelée**, un ruban de flamme derrière (avec `flame_strip.png`), des **gouttes en feu qui tombent**, fumée fine, une lumière. Impact : **pas de verre**, gouttes d'essence en arcs, tache mouillée, boule de feu. |
+| F7 | **3** (FLAME STREAM) / INFERNO | Une **bouffée** de feu au canon au départ, puis un jet qui **freine** et **monte** au bout ; avec `flame_strip.png` un **cœur de jet continu** qui sort en ~0,09 s et **suit le canon** quand il balaie. La lumière est **dans** le jet. À la fin le jet se **détache** du canon. INFERNO : plus épais, racine bleue, et le bout **lèche le sol** à la fin. |
+| F8 | **G** (BURNING MAN) | À **0,45 s** la colonne de feu vers le ciel, à **0,5 s** des **gouttes de feu** retombent sur ses avant-bras, à **0,55 s** le feu prend au poignet gauche et **monte jusqu'au coude**, à **0,63 s** le bras droit, à **0,75 s** (l'arme rabattue) une **gerbe de feu** sur chaque bras et un flash. Ensuite les bras brûlent, **une** lumière sur la poitrine. |
+| F9 | Rejoindre / revenir près d'un Pyromane déjà en Awakening | Ses bras sont déjà en feu (pas de délai). |
+| F10 | **1** en Awakening (BLOWTORCH), **4** (TORCH CHARGE) | La poussée / la charge **attise** les flammes des bras. Touché : la flamme part **du canon** vers la cible (gerbe de feu + étincelles ; flash bleu-blanc pour la lance, flash orange pour la charge) au moment exact de l'impact. Raté : pas d'impact. |
+| F11 | **Finisher** (Immolation) | Pendant l'arrosage : l'essence **éclabousse** sa tête et ses épaules, une **tache** sombre et brillante s'étale sous lui. Au plein jet : boule de feu, **le sol prend feu autour du corps** (~0,4 s), des **gouttes en feu** tombent du canon rougi ; à la soupape, un jet de vapeur blanche. |
+| F12 | *Graphics quality* 1 puis 10 | 1 : moins de particules, pas de lueur au cœur, toujours lisible. 10 : le look complet. Pas de lag dans les deux. |
+| F13 | 4 flaques + 2 corps en feu en même temps | Toujours fluide ; pas d'erreur dans l'Output. |
+
+## Sons du Pyromane v2 (`feature/kit-pyromaniac`)
+
+Tous les sons sont des effets **Pro Sound Effects** gratuits de la boutique, choisis et réglés **par mesure** (liste, mesures et réglages : `docs/SONS_PYROMANE_FR.md`). Rien à importer. Kit **Pyromane** contre le **Dummy**, casque ou bonnes enceintes, puis une fois sur **téléphone** (ou haut-parleurs de portable). Volume du jeu normal.
+
+| # | Test | Résultat attendu |
+|---|---|---|
+| S1 | **1** (FLASH BURST) cinq fois de suite | Le **ballottement** de l'essence au dégainage, le clic de la veilleuse, le **clic de gâchette** avec un petit sifflement, le **« pouf »** de la boule de feu **pile sur l'impact**, quelques crépitements. Jamais deux fois le même pouf d'affilée. |
+| S2 | **2** (NAPALM LOB) plusieurs fois | Le **clac** de la vanne, un **sifflement qui monte**, le clac de réouverture, une **bouffée de feu** au crachat, la flamme qui passe en vol ; à l'impact un **« splash » mouillé** (pas de verre) puis la boule de feu qui part d'un coup ; la flaque entre en fondu. |
+| S3 | Rester ~1 min près d'une grosse flaque (NAPALM MORTAR en Awakening) puis la laisser mourir | **Pas de clic** ni de saut de volume dans la boucle ; le son **baisse** avec les flammes et s'éteint en ~1,5 s à la fin. Deux flaques côte à côte ne « respirent » pas pareil. |
+| S4 | **3** (FLAME STREAM) puis **3** en Awakening (INFERNO) | Le sifflement du détendeur, le clic, puis un **souffle de lance-flammes** qui dure **autant que le jet** (plus long pour INFERNO), et une **queue** douce quand il lâche. |
+| S5 | **4** (FUEL SPRAY) | Le petit **grésillement aigu** de la veilleuse coupée, l'**éclaboussure** du jet (0,4 s), puis le clic + « fwip » de la veilleuse rallumée (0,66 s). |
+| S6 | **G** (BURNING MAN) | Le clac du volant et le sifflement, un **souffle de feu** vers le ciel (0,45 s), puis le souffle + le **« boum »** du retour de flamme sur les bras (0,55 s). Ensuite un crépitement léger sur ses bras ; à la fin, un **grésillement** qui s'éteint. |
+| S7 | **1** et **4** en Awakening (BLOWTORCH / TORCH CHARGE) | BLOWTORCH : un swing lourd, une torche qui passe, la **lance** (jet court et dur) ; TORCH CHARGE : le dash et le souffle du jet. Si ça touche : un « pouf » de flamme et la peau qui grésille, **une seule fois**. |
+| S8 | Mettre le Dummy en feu (napalm sur lui), le laisser brûler puis s'éteindre | Quand il prend feu : un **souffle** et un grésillement (plus le sifflement acide d'avant). Tant qu'il brûle : un **crépitement** en boucle, plus fort quand plus de membres brûlent. Quand le feu s'éteint : le crépitement baisse et un **grésillement qui retombe**. |
+| S9 | **Finisher** (Immolation) | Le clac du volant + sifflement, la veilleuse coupée, l'**éclaboussure** du carburant versé (0,4 s), le briquet (ouverture, molette), le **« fwip »** de la veilleuse rallumée, le briquet refermé, un sifflement seul pendant le moment calme, puis à 3,05 s la **boule de feu** + le **jet** + le grondement du corps (~12 s) ; **un seul** cri (3,2 s) ; la queue du jet à 4,25 s ; le **long sifflement brûlant** de la soupape à 4,8 s. |
+| S10 | Napalm **sur** le Dummy + flaque + cris en même temps | Tout reste **lisible** : pas de saturation, pas de son qui en écrase un autre d'un coup. |
+| S11 | Écouter de **loin** (~60-100 studs) une flaque et un corps en feu | On les entend encore, faiblement ; rien ne s'arrête net en s'éloignant. |
+| S12 | Sur **téléphone** : S1, S2, S6 | Les sons graves (« boum » de l'Awakening, boule de feu) ont toujours une partie qu'on **entend** (souffle, crépitement), pas seulement un grave inaudible. |
+| S13 | Lancer 10 NAPALM LOB d'affilée (Studio) | Les sons varient, pas de répétition gênante, pas d'erreur dans l'Output. |
+| S14 | Output (F9) pendant tous ces tests | Aucun `[SoundLayers] unknown cue` ni `[SoundController] unknown sound`, aucun son qui ne charge pas. |

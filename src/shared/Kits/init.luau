@@ -35,6 +35,8 @@ export type PortalDef = KitTypes.PortalDef
 export type WaveDef = KitTypes.WaveDef
 export type SwarmDef = KitTypes.SwarmDef
 export type ClonesDef = KitTypes.ClonesDef
+export type FireDef = KitTypes.FireDef
+export type ConeDef = KitTypes.ConeDef
 
 local Kits = {}
 
@@ -56,6 +58,7 @@ add(require(script.Boxer))
 add(require(script.Sentinel))
 add(require(script.Bouncer))
 add(require(script.Rift))
+add(require(script.Pyromaniac))
 
 function Kits.get(id: string?): KitDef?
 	return if id then registry[id] else nil

@@ -78,6 +78,9 @@ local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
 local Clones = require(script.Clones)
 local Gadgets = require(script.Gadgets)
+local Burns = require(script.Burns)
+local Immolate = require(script.Immolate)
+local PyroConfig = require(ReplicatedStorage.Shared.PyroConfig)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
 local Rewind = require(script.Rewind)
@@ -302,6 +305,16 @@ local function startBurning(
 	duration: number
 )
 	local time = now()
+	-- Soaked in petrol (the Pyromaniac): fire burns them harder, longer,
+	-- and the whole body goes up.
+	local doused = victim.model:GetAttribute(PyroConfig.DOUSED_ATTRIBUTE)
+	local soaked = kind == "Fire"
+		and typeof(doused) == "number"
+		and doused > workspace:GetServerTimeNow()
+	if soaked then
+		perSecond *= PyroConfig.DOUSED_RATE
+		duration += PyroConfig.DOUSED_EXTRA
+	end
 	local burning = time < victim.burnUntil
 	victim.burnPerSecond = math.max(perSecond, if burning then victim.burnPerSecond else 0)
 	victim.burnUntil = math.max(victim.burnUntil, time + duration)
@@ -312,7 +325,11 @@ local function startBurning(
 	end
 	victim.burnSource = attacker.model
 	victim.burnKind = kind
-	-- (clients: smoke, bubbling skin, the burn marks; Client/Combat/RiftFx)
+	-- (the body's burns, the flames: Combat/Burns, Client/Combat/Burns)
+	Burns.ignite(victim.model, kind, victim.burnPerSecond, duration)
+	if soaked then
+		Burns.engulf(victim.model, "Fire")
+	end
 	setAttribute(victim.model, "Burning", kind)
 end
 
@@ -669,6 +686,9 @@ local function healInjuries(state: CombatState)
 		end
 	end
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
+	-- Burns: a new skin (and the fire out, as the bleeding).
+	state.burnUntil = 0
+	Burns.clear(state.model)
 end
 
 -- Knocked to the ground (tackle, launch): the body goes limp for `duration`
@@ -990,6 +1010,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 	local burn = spec.burn
 	if burn then
+		-- (where it burns: its own part if it has one, a splash the legs)
+		Burns.expose(victim.model, burn, burn.where or zone, from)
 		startBurning(victim, credit, burn.kind, burn.perSecond, burn.duration)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
@@ -1123,6 +1145,7 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
 	model:SetAttribute("LimpLeg", nil)
+	Burns.watch(model) -- ("Burning" set by a finisher: on fire all over)
 	-- A player fights with the kit saved in their profile.
 	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
@@ -2083,6 +2106,18 @@ local function startCinematic(
 			end
 		end)
 	end
+	if cinematic.id == "Immolate" then
+		-- petrol, then fire (Combat/Immolate: attributes put back if cut short)
+		Immolate.run(cinematic, target, woundsBefore, function(): boolean
+			return not over and state.attackToken == token and isAlive(state)
+		end, function()
+			local victimState = states[target]
+			if victimState then
+				victimState.burnPerSecond = 0 -- (its own burn ending must not put this out)
+				victimState.burnUntil = 0
+			end
+		end)
+	end
 	-- (the Boxer's: the hole opens as the hand goes in, "Gut"; cut short
 	-- before the kill, it closes again)
 	local liverAttribute: string? = nil
@@ -2168,9 +2203,11 @@ local function startCinematic(
 			elseif cinematic.id == "Gore" then
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
+			elseif cinematic.id == "Immolate" then
+				Immolate.killed(target) -- (the body burns on)
 			end
-		elseif cinematic.id == "KnockoutCombo" then
-			-- (it didn't die after all: no hole left in a living body)
+		elseif cinematic.id == "KnockoutCombo" or cinematic.id == "Immolate" then
+			-- (it didn't die after all: no hole, no fire left on a living body)
 			for attribute, previous in woundsBefore do
 				setAttribute(target, attribute, if previous == false then nil else previous)
 			end
@@ -2595,6 +2632,7 @@ function Combat.resetForRound(model: Model)
 	state.burnUntil = 0
 	state.burnKind = nil
 	setAttribute(model, "Burning", nil)
+	Burns.extinguish(model)
 	healInjuries(state)
 	state.fury = 0
 	setAttribute(model, "Fury", 0)
@@ -2779,6 +2817,7 @@ local function update(dt: number)
 				state.burnSource = nil
 				state.burnKind = nil
 				setAttribute(model, "Burning", nil)
+				Burns.extinguish(model) -- (a burning body: a few seconds more)
 			elseif
 				time >= state.nextBurnTick
 				and time >= state.cinematicUntil
@@ -3100,6 +3139,7 @@ local function onGetUp(model: Model)
 end
 
 function Combat.start()
+	Burns.start()
 	-- Kit moves get the tools they need from here (see Combat/Moves.luau).
 	Rewind.start()
 	Moves.bind({
@@ -3139,6 +3179,7 @@ function Combat.start()
 			then
 				return
 			end
+			Burns.expose(victim.model, burn, nil, nil) -- (standing in it: the feet)
 			startBurning(victim, attacker, burn.kind, burn.perSecond, burn.duration)
 		end,
 		specFor = Moves.specFor,

@@ -233,4 +233,10 @@ return table.freeze({
 	-- thing; the server already decided what it did. Kinds and data: see
 	-- Server/Systems/Combat/Gadgets.luau (top).
 	RiftFx = event("RiftFx"),
+
+	-- server → all clients  (kind: string, data: { [string]: any })
+	-- The Pyromaniac's fire, for the look only (Client/Combat/PyroFx): a
+	-- Molotov flying / breaking, a fire pool and its cells, a cone of flame
+	-- or of petrol. Kinds and data: Server/Systems/Combat/Gadgets.luau (top).
+	PyroFx = event("PyroFx"),
 })

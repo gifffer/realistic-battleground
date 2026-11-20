@@ -27,6 +27,17 @@
 --   "PortalFizzle"{ by, at: Vector3? }
 --   "Wave"        { by, position, radius }
 --   "CloneIn" / "CloneOut" { clone, at: CFrame } (Combat/Clones)
+--
+-- The Pyromaniac's (Shared/Kits/Pyromaniac) use the same flask flight (kind
+-- "Napalm": a glob out of his flamethrower's muzzle, or "Molotov") and a
+-- cone; their look goes through Remotes.PyroFx instead:
+--   "MolotovThrown" { by, id, kind, origin, velocity, gravity, size }
+--   "MolotovBurst"  { id, kind, position, radius, on: Model? } (on: the body it broke on)
+--   "FirePool"      { id, position, radius, seconds, cells: { { p, r, born, dies } } }
+--                   (born / dies: seconds after the burst; p on the floor)
+--   "PoolOut"       { id } (put out early: too many pools)
+--   "Cone"          { by, move, kind: "Flame" | "Fuel", range, angle, seconds }
+--   (a cone's `scorch`: a "FirePool" after its last tick, where it raked)
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,6 +50,8 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local Push = require(ReplicatedStorage.Shared.Util.Push)
 local Knockout = require(script.Parent.Parent.Knockout)
 local Ragdoll = require(script.Parent.Parent.Ragdoll)
+local PyroConfig = require(ReplicatedStorage.Shared.PyroConfig)
+local SafeZone = require(ReplicatedStorage.Shared.Util.SafeZone)
 local Clones = require(script.Parent.Clones)
 local MapBounds = require(script.Parent.MapBounds)
 local State = require(script.Parent.State)
@@ -130,8 +143,28 @@ local function headOf(state: CombatState): Vector3
 	return state.root.Position + Vector3.new(0, 1.5, 0)
 end
 
+-- Burning fuel that sets the floor alight (a Molotov, a glob of napalm).
+local function isFuel(kind: string): boolean
+	return kind == "Molotov" or kind == "Napalm"
+end
+
 local function fx(kind: string, data: { [string]: any })
 	Remotes.RiftFx:FireAllClients(kind, data)
+end
+
+-- (the Pyromaniac's: their own client module, PyroFx)
+local function pyroFx(kind: string, data: { [string]: any })
+	Remotes.PyroFx:FireAllClients(kind, data)
+end
+
+-- Soaked in petrol for `seconds` (PyroConfig.DOUSED_*): fire burns them worse.
+local function douse(victim: CombatState, seconds: number)
+	local attribute = PyroConfig.DOUSED_ATTRIBUTE
+	local untilTime = workspace:GetServerTimeNow() + seconds
+	local current = victim.model:GetAttribute(attribute)
+	if typeof(current) ~= "number" or current < untilTime then
+		victim.model:SetAttribute(attribute, untilTime)
+	end
 end
 
 -- The spec of a gadget hit: the move's HitDef, coming from `from` (no
@@ -189,6 +222,141 @@ local function puddle(
 	end)
 end
 
+------------------------------------------------------------------------------
+-- Fire pool (a Molotov): burning petrol on the floor
+------------------------------------------------------------------------------
+
+type Cell = { p: Vector3, r: number, born: number, dies: number }
+type Pool = { id: number, cells: { Cell }, started: number, ends: number }
+
+-- Every pool burning now (oldest first) and how many cells are alight.
+local pools: { Pool } = {}
+
+local function liveCells(): number
+	local count = 0
+	for _, pool in pools do
+		count += #pool.cells
+	end
+	return count
+end
+
+-- The cells of a pool: one where it broke, the others spread round it on
+-- the floor (a jittered spiral), each its own size and life. The petrol is
+-- thinnest at the edge: those cells catch last and go out first.
+local function poolCells(id: number, centre: Vector3, def: Kits.FireDef, count: number): { Cell }
+	local random = Random.new(id * 7919 + 17)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = fighterModels()
+	params.RespectCanCollide = true
+	local cells: { Cell } = {}
+	local golden = math.pi * (3 - math.sqrt(5))
+	for index = 0, count - 1 do
+		local share = if count > 1 then math.sqrt(index / (count - 1)) else 0
+		local reach = def.radius * share * random:NextNumber(0.8, 1.05)
+		local angle = index * golden + random:NextNumber(-0.4, 0.4)
+		local spot = centre + Vector3.new(math.cos(angle) * reach, 0, math.sin(angle) * reach)
+		local floor = workspace:Raycast(spot + Vector3.new(0, 3, 0), Vector3.new(0, -9, 0), params)
+		if floor and floor.Normal.Y > 0.6 then
+			local edge = reach / def.radius
+			table.insert(cells, {
+				p = floor.Position,
+				r = PyroConfig.CELL_RADIUS * random:NextNumber(0.8, 1.2),
+				born = PyroConfig.SPREAD_TIME * edge + random:NextNumber(0, 0.08),
+				dies = def.seconds * (1 - 0.45 * edge * random:NextNumber(0.6, 1)),
+			})
+		end
+	end
+	return cells
+end
+
+local function endPool(pool: Pool)
+	local index = table.find(pools, pool)
+	if index then
+		table.remove(pools, index)
+	end
+end
+
+local function firePool(state: CombatState, id: number, burstAt: Vector3, def: Kits.FireDef)
+	local c = context()
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = fighterModels()
+	params.RespectCanCollide = true
+	local floor =
+		workspace:Raycast(burstAt + Vector3.new(0, 0.5, 0), Vector3.new(0, -12, 0), params)
+	if floor == nil then
+		return -- (broke in the air on a wall: the petrol runs down, nothing to stand in)
+	end
+	-- The budget: too many pools, the oldest goes out; too many cells, this
+	-- one is smaller.
+	while #pools >= PyroConfig.MAX_POOLS do
+		local oldest = pools[1]
+		oldest.ends = 0
+		endPool(oldest)
+		pyroFx("PoolOut", { id = oldest.id })
+	end
+	local count = math.min(def.cells, PyroConfig.MAX_CELLS - liveCells())
+	if count < 3 then
+		return
+	end
+	local cells = poolCells(id, floor.Position, def, count)
+	if #cells == 0 then
+		return
+	end
+	local started = c.now()
+	local pool: Pool = { id = id, cells = cells, started = started, ends = started + def.seconds }
+	table.insert(pools, pool)
+	pyroFx("FirePool", {
+		id = id,
+		position = floor.Position,
+		radius = def.radius,
+		seconds = def.seconds,
+		cells = cells,
+	})
+	local nextTick = 0
+	local connection: RBXScriptConnection? = nil
+	connection = RunService.Heartbeat:Connect(function()
+		local time = c.now()
+		if time >= pool.ends then
+			if connection then
+				connection:Disconnect()
+			end
+			endPool(pool)
+			return
+		end
+		if time < nextTick then
+			return
+		end
+		nextTick = time + PyroConfig.POOL_TICK
+		local age = time - started
+		for _, other in c.allStates() do
+			if target(state, other) and not SafeZone.containsModel(other.model) then
+				local doused = other.model:GetAttribute(PyroConfig.DOUSED_ATTRIBUTE)
+				local extra = if typeof(doused) == "number"
+						and doused > workspace:GetServerTimeNow()
+					then PyroConfig.DOUSED_REACH
+					else 0
+				local feet = other.root.Position - Vector3.new(0, 3, 0)
+				for _, cell in cells do
+					if age >= cell.born and age < cell.dies then
+						local offset = feet - cell.p
+						local flat = Vector3.new(offset.X, 0, offset.Z).Magnitude
+						if
+							flat <= cell.r + extra
+							and offset.Y > -1.5
+							and offset.Y < PyroConfig.FLAME_HEIGHT
+						then
+							c.burn(state, other, def.burn)
+							break
+						end
+					end
+				end
+			end
+		end
+	end)
+end
+
 local function burst(
 	state: CombatState,
 	move: Kits.MoveDef,
@@ -198,7 +366,17 @@ local function burst(
 	direct: CombatState?
 )
 	local c = context()
-	fx("FlaskBurst", { id = id, kind = flask.kind, position = position, radius = flask.radius })
+	if isFuel(flask.kind) then
+		pyroFx("MolotovBurst", {
+			id = id,
+			kind = flask.kind,
+			position = position,
+			radius = flask.radius,
+			on = if direct then direct.model else nil,
+		})
+	else
+		fx("FlaskBurst", { id = id, kind = flask.kind, position = position, radius = flask.radius })
+	end
 	for _, other in c.allStates() do
 		if other ~= direct and target(state, other) then
 			local distance = (other.root.Position - position).Magnitude
@@ -224,6 +402,10 @@ local function burst(
 			puddle(state, floor.Position, def)
 		end
 	end
+	local fire = flask.fire
+	if fire then
+		firePool(state, id, position, fire)
+	end
 end
 
 local function throwFlask(
@@ -241,16 +423,25 @@ local function throwFlask(
 		flaskSeq += 1
 		local id = flaskSeq
 		local direction = aim or state.root.CFrame.LookVector
-		local origin = handOf(state)
+		-- (a glob leaves the gun's muzzle: his root's space; else his hand)
+		local origin = if flask.origin
+			then (state.root.CFrame * CFrame.new(flask.origin)).Position
+			else handOf(state)
 		local velocity = direction.Unit * flask.speed + Vector3.new(0, flask.lift, 0)
-		fx("FlaskThrown", {
+		local flight = {
 			by = state.model,
 			id = id,
 			kind = flask.kind,
 			origin = origin,
 			velocity = velocity,
 			gravity = flask.gravity,
-		})
+			size = flask.radius,
+		}
+		if isFuel(flask.kind) then
+			pyroFx("MolotovThrown", flight)
+		else
+			fx("FlaskThrown", flight)
+		end
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
 		local ignore: { Instance } = { state.model }
@@ -285,11 +476,15 @@ local function throwFlask(
 					local direct: CombatState? = nil
 					if other and body and target(state, other) then
 						direct = other
-						c.resolveHit(
+						local landed = c.resolveHit(
 							state,
 							other,
 							specOf(flask.hit, PART_ZONES[part.Name], move.id, a)
 						)
+						-- (the fuel splashed on them: only if it really landed)
+						if landed and isFuel(flask.kind) and other.owner == nil then
+							douse(other, 4)
+						end
 					end
 					burst(state, move, flask, id, hit.Position, direct)
 					return true
@@ -650,6 +845,84 @@ local function swarm(
 end
 
 ------------------------------------------------------------------------------
+-- Cone (the Pyromaniac's flamethrower: a jet of fire, a spray of raw fuel)
+------------------------------------------------------------------------------
+
+-- In front of his face: where a cone is measured from (its range counts
+-- from his body; the jet itself is drawn from the gun's muzzle).
+local function mouthOf(state: CombatState): Vector3
+	return headOf(state) + state.root.CFrame.LookVector * 0.6
+end
+
+-- The floor the jet raked catches (Inferno): a fire pool `at` studs ahead of
+-- him, or short of the wall in the way. Same pool budget as the globs.
+local function scorchAhead(
+	state: CombatState,
+	mouth: Vector3,
+	look: Vector3,
+	scorch: { at: number, fire: Kits.FireDef }
+)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = fighterModels()
+	params.RespectCanCollide = true
+	local reach = look * scorch.at
+	local wall = workspace:Raycast(mouth, reach, params)
+	local spot = if wall then wall.Position - look * 1.5 else mouth + reach
+	flaskSeq += 1
+	firePool(state, flaskSeq, spot, scorch.fire)
+end
+
+local function cone(state: CombatState, move: Kits.MoveDef, def: Kits.ConeDef, token: number)
+	local c = context()
+	local cosine = math.cos(math.rad(def.angle))
+	local ticks = math.max(1, math.floor((def.to - def.from) / def.tick + 1e-6) + 1)
+	for index = 1, ticks do
+		task.delay(def.from + (index - 1) * def.tick, function()
+			if state.attackToken ~= token or not c.isAlive(state) then
+				return -- (stunned: the flame / the swing stops)
+			end
+			local mouth = mouthOf(state)
+			-- (where he faces NOW: he can sweep the flame by turning)
+			local look = state.root.CFrame.LookVector
+			look = Vector3.new(look.X, 0, look.Z)
+			look = if look.Magnitude > 1e-3 then look.Unit else Vector3.new(0, 0, -1)
+			if index == 1 then
+				pyroFx("Cone", {
+					by = state.model,
+					move = move.id,
+					kind = def.kind,
+					range = def.range,
+					angle = def.angle,
+					-- (the jet runs until the last tick: the clip lets go of it there)
+					seconds = math.max(def.to - def.from, def.tick),
+				})
+			end
+			for _, other in c.allStates() do
+				if target(state, other) then
+					local offset = other.root.Position - mouth
+					local flat = Vector3.new(offset.X, 0, offset.Z)
+					local distance = flat.Magnitude
+					local inside = distance < 2.5
+						or (distance <= def.range and flat.Unit:Dot(look) >= cosine)
+					if inside and math.abs(offset.Y) < 6 and inSight(mouth, other.model) then
+						local landed =
+							c.resolveHit(state, other, specOf(def.hit, "Torso", move.id, mouth))
+						-- (soaked only if the spray landed: not blocked, dodged, protected)
+						if landed and def.douse and other.owner == nil then
+							douse(other, def.douse)
+						end
+					end
+				end
+			end
+			if index == ticks and def.scorch then
+				scorchAhead(state, mouth, look, def.scorch)
+			end
+		end)
+	end
+end
+
+------------------------------------------------------------------------------
 
 -- Runs the gadget of `move` (Moves.use, once it started). `portalExit` /
 -- `portalFace` = what Gadgets.portalTarget found before it started.
@@ -676,6 +949,9 @@ function Gadgets.run(
 	end
 	if gadget.swarm then
 		swarm(state, move, gadget.swarm, aim, token)
+	end
+	if gadget.cone then
+		cone(state, move, gadget.cone, token)
 	end
 end
 

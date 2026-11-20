@@ -96,6 +96,13 @@ local POSES: { [string]: Panel.Pose } = {
 		leftLeg = Vector2.new(-8, 5),
 		rightLeg = Vector2.new(8, 5),
 	},
+	-- (hip-firing: the right hand low on the grip, the left forward on the foregrip)
+	Pyromaniac = {
+		rightArm = Vector2.new(40, -25),
+		leftArm = Vector2.new(85, -20),
+		leftLeg = Vector2.new(14, 6),
+		rightLeg = Vector2.new(-10, 6),
+	},
 }
 local DEFAULT_POSE: Panel.Pose = {
 	leftArm = Vector2.new(10, 10),

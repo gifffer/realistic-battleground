@@ -40,10 +40,18 @@ export type HitDef = {
 -- Acid or fire eating the skin (Dr. Rift): `perSecond` damage for
 -- `duration` seconds. One burn at a time: a stronger one replaces a weaker
 -- one, any new one refreshes the time. Separate from bleeding.
+-- `spot`: a focused burn (a laser / ray): a deep spot where it lands,
+-- little around it, flames that hardly spread (Server Combat/Burns).
+-- `dose`: how deep one hit burns where it lands (degrees, default 1; a
+-- cone that hits every tick takes a small one). `where`: the part it burns
+-- if not the one the blow hit (a splash off the floor: "Legs").
 export type BurnDef = {
 	kind: "Acid" | "Fire",
 	perSecond: number,
 	duration: number,
+	spot: boolean?,
+	dose: number?,
+	where: Types.HitZone?,
 }
 
 -- A grab (Bouncer): the hands close `at` seconds into the move on the first
@@ -128,10 +136,14 @@ export type MoveDef = {
 -- it bursts on the first thing it touches (or after `lifetime`): `hit` on a
 -- body it hits directly, `splash` on everyone else within `radius` of the
 -- burst (if nothing stands between). Acid leaves a puddle that keeps
--- burning whoever stands in it.
+-- burning whoever stands in it. A Molotov or a glob of napalm (the
+-- Pyromaniac's flamethrower) sets the floor on fire there instead (`fire`).
+-- `origin`: where it leaves from, in his root's space (the gun's muzzle);
+-- nil = his hand.
 export type FlaskDef = {
-	kind: "Acid" | "Explosive",
+	kind: "Acid" | "Explosive" | "Molotov" | "Napalm",
 	release: number,
+	origin: Vector3?,
 	speed: number, -- studs/s at release, where he aims
 	lift: number, -- studs/s added upward (the arc)
 	gravity: number, -- studs/s²
@@ -140,6 +152,36 @@ export type FlaskDef = {
 	radius: number,
 	splash: HitDef, -- (zone: the torso)
 	puddle: { radius: number, seconds: number, burn: BurnDef }?,
+	fire: FireDef?,
+}
+
+-- Burning fuel on the floor (a Molotov). `cells` small fires spread out
+-- from the burst over the first moment, then die out one by one, the last
+-- after `seconds`. Whoever stands in a live cell catches `burn`.
+export type FireDef = {
+	radius: number, -- studs, the whole pool
+	seconds: number,
+	cells: number,
+	burn: BurnDef,
+}
+
+-- A cone in front of him (the Pyromaniac's flamethrower): a jet of fire,
+-- or raw fuel sprayed with the pilot off. From `from` to `to` seconds into
+-- the move, every `tick` seconds, `hit` lands on whoever is within `range`
+-- studs and `angle` degrees of where he faces (in sight). `douse`: they are
+-- soaked in fuel for that many seconds (Shared/PyroConfig: fire burns them
+-- harder). `scorch`: after the last tick, the floor `at` studs ahead of
+-- him catches fire (a pool, like a Molotov's).
+export type ConeDef = {
+	kind: "Flame" | "Fuel",
+	from: number,
+	to: number,
+	tick: number,
+	range: number,
+	angle: number,
+	hit: HitDef, -- (its hitbox / forward unused)
+	douse: number?,
+	scorch: { at: number, fire: FireDef }?,
 }
 
 -- A ray gun (Dr. Rift): `at` seconds into the move, a beam from his hand
@@ -194,6 +236,7 @@ export type GadgetDef = {
 	portal: PortalDef?,
 	wave: WaveDef?,
 	swarm: SwarmDef?,
+	cone: ConeDef?,
 }
 
 -- Dr. Rift's Awakening: `count` copies of him step out of portals and fight

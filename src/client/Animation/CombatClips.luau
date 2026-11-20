@@ -11108,5 +11108,9 @@ end
 for name, clip in require(script.Parent.RiftClips) do
 	clips[name] = clip
 end
+-- The Pyromaniac's too.
+for name, clip in require(script.Parent.PyroClips) do
+	clips[name] = clip
+end
 
 return table.freeze(clips)
