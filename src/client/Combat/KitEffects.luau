@@ -29,6 +29,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Kits = require(ReplicatedStorage.Shared.Kits)
+local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local Gash = require(ReplicatedStorage.Shared.Util.Gash)
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local KitVFX = require(script.Parent.KitVFX)
@@ -108,7 +109,10 @@ local HEAVY_MOVES = table.freeze({
 	BodySlam_Hold = true,
 	Powerbomb_Hold = true,
 	ThrowOut_Hold = true,
-	BoneThrow = true, -- (a bone thrown into them, Shared/Weapons)
+	-- Things thrown into them (Shared/Weapons; not the bottle: it bursts)
+	BoneThrow = true,
+	IronBarThrow = true,
+	PlankThrow = true,
 	-- Dr. Rift
 	GravityGlove = true,
 	GravitySlam = true,
@@ -1037,7 +1041,8 @@ end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
 function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: string)
-	local hitSound = HIT_SOUNDS[moveId] or "Hit"
+	local thrown = Weapons.byMove(moveId)
+	local hitSound = HIT_SOUNDS[moveId] or (if thrown then thrown.hitSound else nil) or "Hit"
 	if hitSound ~= "" then
 		SoundController.play(hitSound, victim)
 	end

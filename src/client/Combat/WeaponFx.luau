@@ -5,14 +5,19 @@
 --   • In the hand ("Weapon" attribute on the fighter): the real bone (Z-Anatomy
 --     humerus, WoundKit "Gore_Humerus_*") gripped round the shaft near its
 --     elbow end, the round head out in front of the fist; or a simple one
---     without the kit.
+--     without the kit. The things from the street (iron bar, bottle, plank)
+--     are built from plain parts (Weapons.build), held by their near end.
 --   • Thrown (Remotes.WeaponThrown): it flies the same arc the server flies,
 --     tumbling end over end.
---   • Broken (Remotes.WeaponBroke): where it hit, it snaps in two (the real
---     halves "Gore_HumerusA/B"), the halves bounce off, splinters and a few
---     drops of blood; they lie there a while.
+--   • Landed (Remotes.WeaponBroke): where it hit -
+--       the bone snaps in two (the real halves "Gore_HumerusA/B"), the halves
+--       bounce off, splinters and a few drops of blood;
+--       the plank cracks in two, wood splinters;
+--       the bottle bursts: its neck and a spray of glass;
+--       the iron bar doesn't break: it clangs off and rolls on the floor.
+--     They lie there a while, then go.
 --
---   WeaponFx.watch(model)                               the bone in the hand
+--   WeaponFx.watch(model)                               what is in the hand
 --   WeaponFx.thrown(thrower, id, throwId, origin, velocity)
 --   WeaponFx.broke(id, throwId?, position, velocity)
 
@@ -24,6 +29,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local GoreKit = require(script.Parent.GoreKit)
 local Blood = require(script.Parent.Blood)
+local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 
 local WeaponFx = {}
 
@@ -34,12 +40,15 @@ local TENDON = Color3.fromRGB(210, 196, 178)
 local BLOOD = Config.Blood.PALETTE.VENOUS
 local BONE_LENGTH = 1.7
 local HALF_LIFETIME = 20 -- seconds the two halves stay on the floor
+local BAR_LIFETIME = 6 -- seconds the iron bar lies there before it goes
+local GLASS = Color3.fromRGB(38, 58, 30) -- (Shared/Weapons: the bottle's glass)
+local WOOD_FRESH = Color3.fromRGB(176, 146, 104) -- (the plank's inside)
 -- In the fist (Right Arm space): the hand closed round the shaft a third of
 -- the way up from the elbow end, the bone carrying on forward from the fist
 -- and a little down - with the arm hanging, it points ahead like a club
--- held low; raised for the throw, it points back over the shoulder.
+-- held low; raised for the throw, it points back over the shoulder. Each
+-- thing's middle is `grip` studs past the fist (Shared/Weapons).
 local GRIP = CFrame.new(0, -0.9, -0.05) * CFrame.Angles(math.rad(-110), 0, 0)
-local GRIP_SHIFT = BONE_LENGTH * 0.2 -- the bone's middle, past the fist
 
 local held: { [Model]: BasePart } = setmetatable({}, { __mode = "k" }) :: any
 type Flight = { part: BasePart, connection: RBXScriptConnection }
@@ -106,6 +115,16 @@ local function newPiece(name: string, at: CFrame): BasePart
 	return shaft
 end
 
+-- The whole thing (the bone, or one built from parts) at `at`, weapon space.
+local function newWhole(weapon: Weapons.WeaponDef, at: CFrame): BasePart
+	local built = Weapons.build(weapon.id)
+	if built then
+		Weapons.pivot(built, at)
+		return built
+	end
+	return newPiece("Humerus", at)
+end
+
 ------------------------------------------------------------------------------
 -- In the hand
 ------------------------------------------------------------------------------
@@ -120,12 +139,13 @@ end
 
 local function show(model: Model, id: string)
 	remove(model)
+	local weapon = Weapons.get(id)
 	local arm = model:FindFirstChild("Right Arm")
-	if id ~= "Bone" or arm == nil or not arm:IsA("BasePart") then
+	if weapon == nil or arm == nil or not arm:IsA("BasePart") then
 		return
 	end
-	local at = arm.CFrame * GRIP * CFrame.new(0, GRIP_SHIFT, 0)
-	local bone = newPiece("Humerus", at)
+	local at = arm.CFrame * GRIP * CFrame.new(0, weapon.grip, 0)
+	local bone = newWhole(weapon, at)
 	quiet(bone)
 	bone.Anchored = false
 	local weld = Instance.new("Weld")
@@ -134,7 +154,7 @@ local function show(model: Model, id: string)
 	weld.Part1 = bone
 	weld.C0 = arm.CFrame:ToObjectSpace(bone.CFrame)
 	weld.Parent = bone
-	bone.Name = "HeldBone"
+	bone.Name = `Held{id}`
 	bone.Parent = model
 	held[model] = bone
 end
@@ -168,8 +188,8 @@ function WeaponFx.thrown(
 		return
 	end
 	remove(thrower) -- (the server clears "Weapon" too; this is just sooner)
-	local bone = newPiece(
-		"Humerus",
+	local bone = newWhole(
+		weapon,
 		CFrame.lookAt(origin, origin + velocity) * CFrame.Angles(-math.pi / 2, 0, 0)
 	)
 	quiet(bone)
@@ -201,13 +221,15 @@ end
 -- Broken
 ------------------------------------------------------------------------------
 
-local function splinters(at: Vector3, count: number)
+-- Bits flying off where it broke (bone, wood); `bloody`: and a few drops
+-- of what was still on it.
+local function splinters(at: Vector3, count: number, color: Color3, bloody: boolean)
 	for _ = 1, count do
 		local splinter = Instance.new("Part")
 		splinter.Name = "Splinter"
 		splinter.Size = Vector3.new(0.03, 0.03, math.random() * 0.12 + 0.05)
 		splinter.Material = Enum.Material.SmoothPlastic
-		splinter.Color = BONE
+		splinter.Color = color
 		splinter.CanQuery = false
 		splinter.CanTouch = false
 		splinter.CFrame = CFrame.new(at)
@@ -219,6 +241,9 @@ local function splinters(at: Vector3, count: number)
 		) * 18
 		splinter.Parent = workspace
 		Debris:AddItem(splinter, 6)
+	end
+	if not bloody then
+		return
 	end
 	-- a few drops of what was still on it
 	local point = Instance.new("Attachment")
@@ -248,8 +273,119 @@ local function splinters(at: Vector3, count: number)
 	)
 end
 
+-- A piece (or the whole thing) let go at its CFrame: falls, bounces and
+-- tumbles, collides once clear of whoever is right there, lies there
+-- `lifetime` seconds.
+local function fling(piece: BasePart, velocity: Vector3, spin: number, lifetime: number)
+	local visible: { BasePart } = {}
+	for _, item in piece:GetDescendants() do
+		if item:IsA("BasePart") then
+			item.CanCollide = false
+			item.CanQuery = false
+			item.CanTouch = false
+			item.Massless = false -- (the root is a tiny invisible pivot: these weigh)
+			table.insert(visible, item)
+		end
+	end
+	piece.Massless = #visible > 0
+	piece.CanCollide = false
+	piece.CanQuery = false
+	piece.CanTouch = false
+	piece.Anchored = false
+	piece.Parent = workspace
+	piece.AssemblyLinearVelocity = velocity
+	piece.AssemblyAngularVelocity = Vector3.new(
+		math.random() - 0.5,
+		math.random() - 0.5,
+		math.random() - 0.5
+	) * spin
+	task.delay(0.12, function()
+		if piece.Parent then
+			for _, part in visible do
+				part.CanCollide = true
+			end
+		end
+	end)
+	Debris:AddItem(piece, lifetime)
+end
+
+-- The bottle bursting: a spray of dark glass, bouncing and skittering.
+local function glassBurst(at: Vector3, moving: Vector3, count: number)
+	local push = if moving.Magnitude > 1 then -moving.Unit * 4 else Vector3.zero
+	for _ = 1, count do
+		local shard = Instance.new("WedgePart")
+		shard.Name = "Glass"
+		local size = math.random() * 0.14 + 0.05
+		shard.Size = Vector3.new(0.02, size, size * (0.5 + math.random() * 0.6))
+		shard.Material = Enum.Material.Glass
+		shard.Color = GLASS
+		shard.Transparency = 0.25
+		shard.CastShadow = false
+		shard.CanQuery = false
+		shard.CanTouch = false
+		shard.CFrame = CFrame.new(at)
+			* CFrame.Angles(math.random() * 6.3, math.random() * 6.3, math.random() * 6.3)
+		shard.AssemblyLinearVelocity = push
+			+ Vector3.new(math.random() - 0.5, math.random() * 0.8, math.random() - 0.5) * 22
+		shard.AssemblyAngularVelocity = Vector3.new(
+			math.random() - 0.5,
+			math.random() - 0.5,
+			math.random() - 0.5
+		) * 30
+		shard.Parent = workspace
+		Debris:AddItem(shard, 8 + math.random() * 4)
+	end
+end
+
+-- One built from parts (Weapons.build) landing at `at`: the bar clangs
+-- off, the plank cracks in two, the bottle bursts. `flown` = the one that
+-- was in the air (taken over or removed).
+local function landed(weapon: Weapons.WeaponDef, at: CFrame, flown: BasePart?, velocity: Vector3)
+	local position = at.Position
+	if flown == nil then
+		-- (let go from the hand: falling over, not standing on its end)
+		at *= CFrame.Angles(0, math.random() * math.pi * 2, 0) * CFrame.Angles(math.rad(70), 0, 0)
+	end
+	if weapon.breakSound then
+		SoundController.playAt(weapon.breakSound, position)
+	end
+	local back = if velocity.Magnitude > 1 then -velocity.Unit else Vector3.new(0, 1, 0)
+	if not weapon.breaks then
+		-- Bounces back off what it hit, heavy, and rolls to a stop.
+		local bar = flown or newWhole(weapon, at)
+		fling(bar, back * 7 + Vector3.new(0, 6 + math.random() * 3, 0), 10, BAR_LIFETIME)
+		return
+	end
+	if flown then
+		flown:Destroy()
+	end
+	-- The two pieces kicked apart (the bottle: only its neck is left, the
+	-- rest bursts into glass).
+	for index = 1, if weapon.cuts then 1 else 2 do
+		local name: Weapons.Piece = if index == 1 then "A" else "B"
+		local piece = Weapons.build(weapon.id, name)
+		if piece == nil then
+			continue
+		end
+		Weapons.pivot(piece, at)
+		local side = if name == "A" then -1 else 1
+		fling(
+			piece,
+			back * 5 + at.UpVector * side * 6 + Vector3.new(0, 6 + math.random() * 4, 0),
+			20,
+			HALF_LIFETIME
+		)
+	end
+	if weapon.cuts then
+		glassBurst(position, velocity, 16)
+	else
+		splinters(position, 12, WOOD_FRESH, false)
+	end
+end
+
 function WeaponFx.broke(id: string, throwId: number?, position: Vector3, velocity: Vector3)
-	if id ~= "Bone" then
+	local weapon = Weapons.get(id)
+	if weapon == nil then
 		return
 	end
 	-- Where it was (in the air: its last frame), or where it hit.
@@ -259,6 +395,12 @@ function WeaponFx.broke(id: string, throwId: number?, position: Vector3, velocit
 		flying[throwId :: number] = nil
 		flight.connection:Disconnect()
 		at = flight.part.CFrame.Rotation + position
+	end
+	if weapon.build then
+		landed(weapon, at, if flight then flight.part else nil, velocity)
+		return
+	end
+	if flight then
 		flight.part:Destroy()
 	end
 	-- Snapped in two: each half carries on a little, kicked apart, spinning.
@@ -295,7 +437,7 @@ function WeaponFx.broke(id: string, throwId: number?, position: Vector3, velocit
 		end)
 		Debris:AddItem(half, HALF_LIFETIME)
 	end
-	splinters(position, 9)
+	splinters(position, 9, BONE, true)
 end
 
 return table.freeze(WeaponFx)
