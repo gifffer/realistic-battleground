@@ -80,8 +80,10 @@ CAMS = {
     "plan_yard_south": ((187.0, 80.0, 90.0), (187.0, 0.0, 89.99), -40, 22),
     "plan_alleyA": ((147.0, 80.0, 62.0), (147.0, 0.0, 61.99), -52, 16),
     "plan_alleyB": ((147.0, 80.0, 94.0), (147.0, 0.0, 93.99), -52, 16),
-    # the CrtTv marker sits at Y 42.6 (on the rail tunnel): this shows it
+    # the rail tunnel's roof over the market (a CrtTv once landed up there: nothing must)
     "tv_check": ((171.0, 47.0, 70.0), (177.7, 42.6, 76.4), 60),
+    # the rail tunnel's east end, its north corner (the end cladding wraps the side ones)
+    "tunnel_end": ((204.0, 22.0, 66.0), (199.0, 34.5, 76.0), 64),
 }
 
 
