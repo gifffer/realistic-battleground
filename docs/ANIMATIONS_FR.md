@@ -28,5 +28,6 @@ articulations, une rotation en degrés (`rot`) et parfois un décalage en studs 
 Change les nombres dans VS Code, Rojo synchronise, *Play*. Si tu veux une pose différente,
 le plus simple est de m'envoyer une **image de référence** et une capture de ce qui ne va pas.
 
-> ⚠️ Le moment de l'impact des coups M1 est à **0,15 s** dans `CombatClips.luau` : il doit rester
-> égal à `Config.Combat.HIT_DELAY` (le moment où le serveur vérifie la hitbox).
+> ⚠️ Le moment de l'impact de chaque coup M1 dans `CombatClips.luau` doit rester égal à
+> `Config.Combat.M1_HIT_DELAY` (le moment où le serveur vérifie la hitbox) : **0,15 s** pour le jab
+> et le crochet, **0,28 s** pour le direct du droit (chargé) et **0,38 s** pour le coup final (chargé).

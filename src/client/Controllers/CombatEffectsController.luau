@@ -18,7 +18,7 @@
 --     front also depend on the punch (jab, cross, hook). The hit-stop holds
 --     the contact frame; the flinch goes the way the fist pushed.
 --   • Our OWN punches: the reaction is predicted the instant our fist lands
---     (predictHit, HIT_DELAY after CombatController's attack signal),
+--     (predictHit, M1_HIT_DELAY[combo] after CombatController's attack signal),
 --     instead of one network trip later when the fist is already coming
 --     back (that looked like the punch went through the body). Each M1 has
 --     a number echoed by the server: if the server's result differs
@@ -510,10 +510,21 @@ local function takePrediction(victim: Model, attackId: unknown): Prediction?
 	return nil
 end
 
+-- Our M1s the server already finished (AttackResolved), by id -> when.
+-- If its answer comes BEFORE our fist lands on our screen (the server
+-- threw a different hit of the combo, e.g. after it refused one of our
+-- clicks), we must not show a hit for it afterwards.
+local resolvedAttacks: { [number]: number } = {}
+
 -- Drops predictions the server never answered (our punch missed on the
 -- server, or was cancelled).
 local function forgetOldPredictions()
 	local limit = os.clock() - predictionMemory()
+	for id, at in resolvedAttacks do
+		if at < limit then
+			resolvedAttacks[id] = nil
+		end
+	end
 	for victim, byId in predictions do
 		for id, prediction in byId do
 			if prediction.time < limit then
@@ -540,7 +551,7 @@ local function canPredictHitOn(model: Model): boolean
 	return dashed == nil or os.clock() - dashed > Config.Combat.DASH_INVULNERABLE + DASH_MARGIN
 end
 
--- Runs Config.Combat.HIT_DELAY after we click, i.e. the moment our fist
+-- Runs Config.Combat.M1_HIT_DELAY[combo] after we click, i.e. the moment our fist
 -- reaches its target in the punch animation. Same box and same aim rule
 -- as the server. Purely visual: the server still decides the hit, the
 -- damage and everything else, and corrects us if it disagrees.
@@ -563,7 +574,15 @@ local function predictHit(info: CombatController.AttackInfo)
 			return
 		end
 	end
+	-- ...and of one who dashed (or did anything else) during the wind-up.
+	if CharacterAnimationController.getLastAction(character) ~= `Brawler_M1_{info.combo}` then
+		return
+	end
 	forgetOldPredictions()
+	-- The server already finished this punch: its real result is shown.
+	if resolvedAttacks[info.id] then
+		return
+	end
 
 	-- Same aim rule and same rest-pose bodies as the server (HitPrediction).
 	local aim = AimRule.validate(info.aim, root.CFrame.LookVector)
@@ -593,6 +612,7 @@ local function onAttackResolved(attackId: unknown)
 	if typeof(attackId) ~= "number" then
 		return
 	end
+	resolvedAttacks[attackId] = os.clock()
 	local character = player.Character
 	for victim, byId in predictions do
 		if byId[attackId] then
@@ -786,6 +806,38 @@ local SERVER_ONLY_ACTIONS = table.freeze({
 	-- KitEffects.grabOf)
 })
 
+-- The whoosh of an M1 (and a bloody fist flicking blood off) when its
+-- strike starts. The jab and the hook strike right away (at the click); the
+-- charged cross and finisher (a longer M1_HIT_DELAY) are silent while the
+-- arm goes back, then whoosh Config.Combat.M1_SWING_LEAD before the fist
+-- lands. Skipped if the punch was cut meanwhile (stunned, or another
+-- action started).
+local function swingWhenStriking(model: Model, combo: number)
+	local heavy = combo == #Config.Combat.M1_DAMAGE -- the finisher
+	local function play()
+		SoundController.play(if heavy then "HeavySwing" else "Swing", model)
+		KitEffects.onSwing(model)
+	end
+	local hitDelay = Config.Combat.M1_HIT_DELAY[combo]
+	local charged = hitDelay > Config.Combat.M1_HIT_DELAY[1]
+	local startIn = if charged then math.max(0, hitDelay - Config.Combat.M1_SWING_LEAD) else 0
+	if startIn <= 0 then
+		play()
+		return
+	end
+	local action = `Brawler_M1_{combo}`
+	task.delay(startIn, function()
+		if
+			model.Parent == nil
+			or model:GetAttribute("Stunned") == true
+			or CharacterAnimationController.getLastAction(model) ~= action
+		then
+			return
+		end
+		play()
+	end)
+end
+
 -- A fighter started a punch, a dash, a finisher, or got up after a KO.
 -- (Our own punches / dashes / finishers already played locally.)
 local function onCombatAction(model: Model, action: string)
@@ -828,6 +880,11 @@ local function onCombatAction(model: Model, action: string)
 		BloodTracks.onGetUp(model) -- (a bloody hand pushing on the ground)
 		BloodFace.onGetUp(model) -- (wipes his bloody face; a graze from the floor)
 	end
+	-- Which M1 of the combo this is (1..4), or nil if it isn't one.
+	local punchNumber = tonumber(string.match(action, "^Brawler_M1_(%d+)$"))
+	local punchCombo = if punchNumber and Config.Combat.M1_HIT_DELAY[punchNumber]
+		then punchNumber
+		else nil
 	if
 		action == "GetUp"
 		or string.sub(action, 1, 6) == "Emote_"
@@ -839,11 +896,14 @@ local function onCombatAction(model: Model, action: string)
 		-- played when we pressed G (KitController): don't play it twice.
 		local alreadyHeard = model == player.Character and KitEffects.isAwakening(action)
 		KitEffects.onAction(model, action, alreadyHeard)
-	elseif action == "Finisher" or action == `Brawler_M1_{#Config.Combat.M1_DAMAGE}` then
-		SoundController.play("HeavySwing", model) -- the heavy blows
+	elseif action == "Finisher" then
+		SoundController.play("HeavySwing", model) -- the heavy blow
 		KitEffects.onSwing(model) -- (a bloody fist flicks blood off)
 	elseif string.sub(action, 1, 4) == "Dash" then
 		SoundController.play("Dash", model)
+	elseif punchCombo then
+		-- A punch: its whoosh when the strike starts (after the wind-up).
+		swingWhenStriking(model, punchCombo)
 	else
 		SoundController.play("Swing", model)
 		KitEffects.onSwing(model)
@@ -931,13 +991,14 @@ function CombatEffectsController.start()
 	Remotes.CombatEvent.OnClientEvent:Connect(onCombatEvent)
 	Remotes.CombatAction.OnClientEvent:Connect(onCombatAction)
 	Remotes.AttackResolved.OnClientEvent:Connect(onAttackResolved)
-	-- Our M1: show the hit the instant the fist lands (HIT_DELAY later).
+	-- Our M1: the whoosh when the strike starts, and the hit shown the
+	-- instant the fist lands (M1_HIT_DELAY[combo] after the click).
 	CombatController.onAttackStarted(function(info)
 		local character = player.Character
 		if character then
-			KitEffects.onSwing(character) -- (our bloody fist flicks blood off)
+			swingWhenStriking(character, info.combo)
 		end
-		task.delay(Config.Combat.HIT_DELAY, function()
+		task.delay(Config.Combat.M1_HIT_DELAY[info.combo], function()
 			predictHit(info)
 		end)
 	end)

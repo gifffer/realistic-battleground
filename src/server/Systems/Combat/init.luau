@@ -10,7 +10,8 @@
 --   1. Client clicks → Remotes.Attack. (Dummies call Combat.tryAttack.)
 --   2. tryAttack checks: alive? not stunned? not blocking? not too early?
 --      Then the combo advances (hits 1 → 2 → 3 → 4 → 1...).
---   3. After HIT_DELAY (the wind-up) the server puts a hitbox in front of
+--   3. After M1_HIT_DELAY[combo] (the wind-up: longer for the charged
+--      cross and finisher) the server puts a hitbox in front of
 --      the attacker. If the attacker got stunned meanwhile, the hit is
 --      cancelled. The victims are tested where they are AND where the
 --      attacker saw them (his ping ago, bounded: lag compensation, see
@@ -217,6 +218,7 @@ end
 local function stun(state: CombatState, duration: number)
 	state.stunnedUntil = math.max(state.stunnedUntil, now() + duration)
 	state.attackToken += 1 -- a stunned fighter's wind-up is cancelled
+	state.m1DueAt = 0
 	state.slipUntil = 0 -- ...and so is a slip
 	stopBlocking(state)
 	setAttribute(state.model, "Stunned", true)
@@ -1069,6 +1071,8 @@ function Combat.register(model: Model, player: Player?)
 		nextAttackAt = 0,
 		attackingUntil = 0,
 		attackToken = 0,
+		comboVictims = {},
+		m1DueAt = 0,
 		blocking = false,
 		blockStartedAt = -math.huge,
 		blockEndedAt = -math.huge,
@@ -2379,23 +2383,66 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	local combo = state.combo
 	local isFinisher = combo == #C.M1_DAMAGE
 
+	-- Wind-up of this hit (click → fist lands). It comes from OUR combo
+	-- number, so the client never decides when the damage happens.
+	local hitDelay = C.M1_HIT_DELAY[combo]
+	local interval = if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL[combo]
 	state.lastAttackAt = time
-	state.nextAttackAt = time + (if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL)
-	state.attackingUntil = time + C.M1_INTERVAL
+	state.nextAttackAt = time + interval
+	-- Committed (no block, slower walk) until a moment after the fist lands.
+	state.attackingUntil = time + math.min(interval, hitDelay + C.M1_COMMIT_AFTER_HIT)
 	state.attackToken += 1
 	local token = state.attackToken
+	-- When the fist lands (the attacker's screen showed it `hitDelay` after
+	-- his click, which reached us one trip later).
+	local dueAt = now() + hitDelay
+	state.m1DueAt = dueAt
+
+	-- Combo hold: the fighters our previous M1 stunned stay stunned until
+	-- this one lands. Without it, a charged punch (cross, finisher) would
+	-- land after their stun ended, and they could block or dash out of the
+	-- middle of a combo. Only someone still stunned is held: a victim who
+	-- already got free stays free.
+	-- `held` remembers each one's stun before the hold: if this punch
+	-- doesn't hit them (cancelled, dashed out of, or it misses), the hold
+	-- is given back (see releaseHolds), so it is never free stun.
+	local held: { { victim: CombatState, before: number, holdUntil: number } } = {}
+	if combo > 1 then
+		local holdUntil = dueAt + C.COMBO_HOLD_MARGIN
+		for _, victim in state.comboVictims do
+			if isAlive(victim) and isStunned(victim) and victim.stunnedUntil < holdUntil then
+				table.insert(
+					held,
+					{ victim = victim, before = victim.stunnedUntil, holdUntil = holdUntil }
+				)
+				victim.stunnedUntil = holdUntil
+			end
+		end
+	end
+	table.clear(state.comboVictims)
+	-- Ends the hold of everyone this punch did NOT hit (`hitThem`), unless
+	-- something else stunned them longer meanwhile.
+	local function releaseHolds(hitThem: { [CombatState]: boolean })
+		for _, hold in held do
+			local victim = hold.victim
+			if not hitThem[victim] and victim.stunnedUntil == hold.holdUntil then
+				victim.stunnedUntil = math.max(hold.before, now())
+			end
+		end
+	end
+
 	-- Everyone plays the punch (animation + swing sound).
 	Remotes.CombatAction:FireAllClients(model, `Brawler_M1_{combo}`)
 
-	-- When the fist lands (the attacker's screen showed it HIT_DELAY after
-	-- his click, which reached us one trip later).
-	local dueAt = now() + C.HIT_DELAY
-	task.delay(C.HIT_DELAY, function()
+	task.delay(hitDelay, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
 		if state.attackToken ~= token or not isAlive(state) then
+			releaseHolds({})
 			resolved()
 			return
 		end
+		state.m1DueAt = 0
+		local hitThem: { [CombatState]: boolean } = {}
 		-- The victims are also tested where the attacker saw them (lag
 		-- compensation, Combat/Rewind). The attacker's own body is where
 		-- his client had it then already: we receive it one trip late too.
@@ -2414,7 +2461,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				resolveHit(state, victim, {
+				local landedHit = resolveHit(state, victim, {
 					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed],
 					zone = landed,
 					stun = if isFinisher then C.FINISHER_STUN else C.HIT_STUN,
@@ -2428,8 +2475,18 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					attackId = attackId,
 					rewound = ageByModel[victimModel],
 				})
+				-- Remember who this hit stunned: our next M1 holds them
+				-- (the combo hold above). Not after the finisher: it ends
+				-- the combo. Blocked, parried or dodged hits don't stun.
+				if landedHit then
+					hitThem[victim] = true
+					if not isFinisher and isStunned(victim) then
+						table.insert(state.comboVictims, victim)
+					end
+				end
 			end
 		end
+		releaseHolds(hitThem)
 		resolved()
 	end)
 	return true
@@ -2478,6 +2535,13 @@ local function tryDash(model: Model, player: Player): boolean
 	end
 	state.nextDashAt = time + C.DASH_COOLDOWN
 	state.invulnerableUntil = time + C.DASH_INVULNERABLE
+	-- Dashing during an M1's wind-up cancels that punch (it would land
+	-- from wherever the dash took us). Its combo hold is given back.
+	if time < state.m1DueAt then
+		state.m1DueAt = 0
+		state.attackToken += 1
+		state.attackingUntil = math.min(state.attackingUntil, time)
+	end
 	return true
 end
 
@@ -2543,6 +2607,8 @@ function Combat.resetForRound(model: Model)
 	state.combo = 0
 	state.nextAttackAt = 0
 	state.attackingUntil = 0
+	table.clear(state.comboVictims)
+	state.m1DueAt = 0
 	state.finishingUntil = 0
 end
 

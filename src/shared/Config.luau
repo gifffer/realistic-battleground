@@ -128,17 +128,40 @@ return table.freeze({
 
 		-- M1 combo: damage of hits 1, 2, 3 and 4 (the 4th is the "finisher").
 		M1_DAMAGE = table.freeze({ 5, 5, 5, 8 }),
-		M1_INTERVAL = 0.38, -- minimum time between two M1
+		-- Minimum time from the click of hit 1 / 2 / 3 to the next M1. Each one
+		-- is longer than that hit's M1_HIT_DELAY + hit-stop: the punch lands
+		-- and starts coming back before the next one starts (the cross needs
+		-- more: its arm is wound up, so it has further to come back).
+		M1_INTERVAL = table.freeze({ 0.38, 0.48, 0.38 }),
 		-- The server lets a punch / move in this much before its time (the
 		-- client sends it right on time, and the network adds a few ms:
 		-- without it, chained punches were refused - a swing with no hit).
 		ATTACK_GRACE = 0.08,
-		FINISHER_RECOVERY = 1.0, -- pause after the 4th hit before attacking again
+		-- Time from the click of the 4th hit to the next M1. = 0.85 s after the
+		-- 4th hit LANDS, as before: keep it moving with M1_HIT_DELAY[4], or the
+		-- next combo's jab lands while the victim is still in FINISHER_STUN
+		-- (an endless combo).
+		FINISHER_RECOVERY = 1.23,
 		COMBO_RESET = 1.0, -- no M1 for this long → the combo starts over at hit 1
-		-- Wind-up: time between the click and the moment the hit lands.
-		-- Gives the opponent a chance to block/parry. (Later synced with the
-		-- "Hit" marker of the animations.)
-		HIT_DELAY = 0.15,
+		-- Wind-up: time from the click to the moment the fist lands (the
+		-- server checks the hitbox then), per hit: jab, cross, hook, finisher.
+		-- The cross and the finisher are CHARGED (the arm goes back first),
+		-- so they land later: the opponent can see them coming. The M1 clips
+		-- (Client/Animation/CombatClips) put their contact keyframe exactly
+		-- at these times. Read it with the SERVER's combo number.
+		M1_HIT_DELAY = table.freeze({ 0.15, 0.28, 0.15, 0.38 }),
+		-- A charged punch (cross, finisher) is silent while the arm goes back;
+		-- its whoosh starts this long before the fist lands (when the arm
+		-- strikes: 0.18 s / 0.28 s after the click). Jab and hook whoosh at
+		-- the click.
+		M1_SWING_LEAD = 0.1,
+		-- The attacker can't block and walks slower until this long after his
+		-- fist lands (or until his next M1 is allowed, if that's sooner).
+		M1_COMMIT_AFTER_HIT = 0.23,
+		-- Throwing the next M1 of a combo keeps the fighters the last one
+		-- stunned stunned until it lands + this: a charged punch can't be
+		-- escaped in the middle of a combo.
+		COMBO_HOLD_MARGIN = 0.1,
 
 		-- Hitbox: a box in front of the attacker.
 		HITBOX_SIZE = Vector3.new(5, 5, 5.5),
@@ -163,7 +186,9 @@ return table.freeze({
 		REWIND_STUDIO_EXTRA_PING = 0,
 
 		-- Being hit.
-		HIT_STUN = 0.5, -- longer than M1_INTERVAL: a started combo can't be escaped
+		-- A started combo can't be escaped: the next M1 keeps this stun going
+		-- until it lands (see COMBO_HOLD_MARGIN).
+		HIT_STUN = 0.5,
 		FINISHER_STUN = 0.8,
 		KNOCKBACK_SPEED = 45, -- studs/s, 4th hit only
 		KNOCKBACK_TIME = 0.2,
