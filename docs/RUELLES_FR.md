@@ -17,7 +17,7 @@ Chaque coin raconte quelque chose, et les objets sont là pour une raison.
   - Une lampe de chantier qui grésille.
 - **Le marché noir** (cour nord, devant l'arche) : Vic, le vendeur : blouson de motard ou sweat à capuche, chaîne en or, montre, cigarette, sacoche.
   - Un stand bâché avec des téléphones, des montres, des autoradios et une caisse.
-  - Des caisses de stock et un portant de vêtements sous l'arche.
+  - Des caisses de stock (une vieille télé cathodique posée dessus) et un portant de vêtements sous l'arche.
   - Un néon rouge « BUY · ELL » qui clignote mal.
 - **Le squat** (cour sud) : Old Ray, assis par terre avec un gobelet de pièces, une pancarte, un sac et une couverture.
   - Des matelas, un duvet, un réchaud, une tente, un abri en carton, un caddie, un fauteuil défoncé.

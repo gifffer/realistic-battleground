@@ -402,7 +402,8 @@ def _streak(f, rng, x, ytop, z, face, length=None, color=RUST_DARK):
 # Bins, skips, the container, drums
 # =============================================================================================
 @prop({"lid": "closed"}, {"lid": "open"}, {"lid": "half"}, {"lid": "open", "color": (40, 54, 74), "full": True})
-def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, against_wall=False, lids=None):
+def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, against_wall=False, lids=None,
+             open_ang=None):
     """A big steel commercial dumpster (front-load skip): sloped top, the body's shell with three
     stamped ribs on the front, corner posts, a rolled rim, fork pockets on both sides, two black
     plastic lids on hinges (closed / one or both thrown back "open" / one propped up by the rubbish
@@ -411,7 +412,9 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
     bulge over the rim. Its back goes against a wall (+Z).
     Footprint ~6 x 3.6 studs (+0.4 pockets), 3.9-4.6 tall (open lids to ~7.5). 45-65 parts;
     shell and lids PROP, the rest DECOR. `lids`: force each lid's state ("c" closed, "o" open,
-    "h" half; the -X lid first), e.g. to match the kit's lid markers placed over it."""
+    "h" half; the -X lid first), e.g. to match the kit's lid markers placed over it. `open_ang`: the
+    thrown-back lids' angle (degrees about the hinge), e.g. the kit's lid marker's, so the old lid
+    (the mesh's collision proxy) lies where the mesh lid shows."""
     f = Frame(D, folder, origin, ry=ry)
     lid = lid or _pick(rng, ["closed", "closed", "open", "half"])
     full = (rng.random() < 0.7) if full is None else full
@@ -475,6 +478,7 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
     for s, st in zip((-1, 1), states):
         # against a wall the thrown-back lid rests on the bricks instead of going through them
         o_ang = rng.uniform(91, 95) if against_wall else rng.uniform(98, 116)
+        o_ang = o_ang if open_ang is None else open_ang
         ang = {"c": -slope + rng.uniform(-0.6, 0.6), "o": o_ang, "h": rng.uniform(14, 30)}[st]
         if st != "c":
             open_sides.append((s, st))
@@ -545,12 +549,14 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
 
 
 @prop({}, {"kind": "paper", "lid": "open"}, {"kind": "general"})
-def recycling_bin(D, folder, origin, ry, rng, kind=None, lid=None):
+def recycling_bin(D, folder, origin, ry, rng, kind=None, lid=None, lid_ang=None):
     """A 1100 L communal bin, galvanised steel with a domed coloured lid (green or blue for
     recycling, yellow, or a plain grey general-waste one): pressed body with a reinforcing band,
     a paper slot or a lid lifted open over a dark mouth, the colour sticker gone pale and peeling,
     side push handles, a foot-pedal bar at the front, four casters, grime and rust at the base.
-    Footprint ~4.2 x 3.5 studs, 4.6 tall. 26-30 parts; body and lid PROP."""
+    Footprint ~4.2 x 3.5 studs, 4.6 tall. 26-30 parts; body and lid PROP. `lid_ang`: the open
+    lid's angle (degrees), e.g. the kit's lid marker's, so the old lid (its collision proxy)
+    lies where the mesh lid shows."""
     f = Frame(D, folder, origin, ry=ry)
     kind = kind or _pick(rng, ["paper", "paper", "general"])
     lid = lid or _pick(rng, ["closed", "closed", "open"])
@@ -572,6 +578,7 @@ def recycling_bin(D, folder, origin, ry, rng, kind=None, lid=None):
     # the domed lid, hinged at the back on the rim: a flat skirt, three curved plates on an arc
     # over it, the two gable ends butting the plates' ends
     ang = 0.0 if lid == "closed" else rng.uniform(55, 65)  # (propped: never swung back past the hinge)
+    ang = ang if lid_ang is None or lid == "closed" else lid_ang
     Wl = W + 2 * rim
     g = f.sub((0, yr1, W / 2 + rim), rx=ang)
     g.box("BinLidSkirt", (-L / 2 - rim, 0, -Wl), (L / 2 + rim, 0.12, 0), _tone(lc, rng, 4, 0.2), "Plastic", flags=PROP)
@@ -592,9 +599,12 @@ def recycling_bin(D, folder, origin, ry, rng, kind=None, lid=None):
     if lid != "closed":  # the dark mouth level with the rim, the rubbish in it
         f.box("BinMouth", (-L / 2, y0 + H, -W / 2), (L / 2, y0 + H + 0.065, W / 2), SOOT, "SmoothPlastic")
         for _ in range(rng.randint(1, 3)):
+            # (with the kit (meshprop.LIBS) they are DECOR: the RecyclingBin piece has no cardboard, so
+            # they would stay as invisible boxes standing above its rim)
             f.part("Cardboard", (rng.uniform(-1.2, 1.2), y0 + H + 0.2, rng.uniform(-0.8, 0.8)),
                    (rng.uniform(0.9, 1.5), 0.6, rng.uniform(0.9, 1.4)), _tone(CARDBOARD, rng, 8, 0.15), CARDBOARD_MAT,
-                   rot=(rng.uniform(-25, 25), rng.uniform(0, 90), rng.uniform(-25, 25)))
+                   rot=(rng.uniform(-25, 25), rng.uniform(0, 90), rng.uniform(-25, 25)),
+                   **({"flags": DECOR_SHADOW} if MESHPROP.LIBS else {}))
     # the sticker (pale, half peeled), push handles, pedal, casters
     sc = mix(lc, (200, 200, 196), rng.uniform(0.3, 0.5))
     _skin(f, "Sticker", (rng.uniform(-0.4, 0.4), y0 + H * 0.4, -W / 2), 1.4, 1.0, "-z", sc, spin=rng.uniform(-2, 2))
@@ -1854,14 +1864,15 @@ def _lay_goods(rng, items, W, Dp, margin=0.2, gap=0.15, yaw_max=6.0):
 
 
 @prop({}, {"goods": "electronics"}, {"goods": "clothes"})
-def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=False):
+def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=False, behind="random"):
     """A whole black-market stall, composed: the canopy over a folding table laid with goods
     (phones, watches, car stereos, a cash box; a TV or a radio behind) or clothes (sneaker
     boxes and the cash box on the table, the jacket rail behind), crates of stock stacked behind.
     The goods are laid out by footprint (_lay_goods: as many as fit, never inside each other,
     turned a few degrees) in the table's own frame, standing on its real top surface + 0.01 (the
     table's top is flat). Footprint ~9 x 7 studs, 7.8 tall (`compact`: ~7 x 5.5, no stock crates
-    behind, for tight yards). 110-190 parts (the sum of its pieces)."""
+    behind, for tight yards). `behind` (electronics): "random" (a TV or a radio), "tv", "radio" or
+    None (nothing: the caller puts its own set behind). 110-190 parts (the sum of its pieces)."""
     f = Frame(D, folder, origin, ry=ry)
     goods = goods or _pick(rng, ["electronics", "electronics", "clothes"])
     yaw = _yaw(f)
@@ -1874,18 +1885,21 @@ def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=Fal
                                                     color=tarp, pin=True))
     else:
         market_canopy(D, folder, _w(f, 0, 0.5), yaw, rng, w=cw, d=cd, light=light)
-    tw = 4.8 if compact else rng.uniform(5.5, 6.2)
+    # (compact: 6.0 between the tarp's poles 6.8 apart, centred: 0.4 clear each side, room for the
+    # cash box, the phone tray, the watch case and a car stereo)
+    tw = 6.0 if compact else rng.uniform(5.5, 6.2)
     td = rng.uniform(2.4, 2.7)
     tyaw = yaw + rng.uniform(-3, 3)
-    tpos = _w(f, rng.uniform(-0.3, 0.3), -1.0)
+    tx = rng.uniform(-0.3, 0.3)
+    tpos = _w(f, 0.0 if compact else tx, -1.0)
     tf = Frame(D, folder, tpos, ry=tyaw)
     if goods == "electronics":
         n = rng.randint(2, 3)
         items = [(cash_box, {}) + GOODS_FOOT["cash_box"]]
         rest = [(phone_tray, {}) + GOODS_FOOT["phone_tray"], (watch_case, {}) + GOODS_FOOT["watch_case"]]
-        rest += [(car_stereos, {"count": k}) + _stereo_foot(k) for k in range(n, 0, -1)]
         rng.shuffle(rest)
-        items += rest
+        # (the trays first, then the most car stereos that still fit: a crammed table)
+        items += rest + [(car_stereos, {"count": k}) + _stereo_foot(k) for k in range(n, 0, -1)]
     else:
         items = [(cash_box, {}) + GOODS_FOOT["cash_box"],
                  (shoe_boxes, {"count": rng.randint(3, 4)}) + GOODS_FOOT["shoe_boxes"]]
@@ -1917,11 +1931,13 @@ def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=Fal
         else:
             goods_fn()
     if goods == "electronics":
-        if rng.random() < 0.6:
+        pick = rng.random()
+        choice = behind if behind != "random" else ("tv" if pick < 0.6 else "radio")
+        if choice == "tv":
             at, a = _w(f, rng.uniform(-0.4, 0.4), 1.75), yaw + 180 + rng.uniform(-10, 10)
             lib_meshprop(D, folder, "CrtTv", at, a, lambda: tv(D, folder, at, a, rng, kind="crt", state="ok"),
                          tint=weathered(_pick(vr, [(58, 56, 54), (112, 106, 94), (72, 62, 52)]), vr, 5))
-        else:
+        elif choice == "radio":
             at, a = _w(f, rng.uniform(-0.5, 0.5), 1.5), yaw + rng.uniform(-15, 15)
             lib_meshprop(D, folder, "Radio", at, a, lambda: radio(D, folder, at, a, rng),
                          tint=weathered(_pick(vr, [(46, 46, 48), (150, 150, 154), (70, 70, 74)]), vr, 5))
@@ -2873,17 +2889,22 @@ def backpack(D, folder, origin, ry, rng, state=None, mat=None, color=None):
 # Building-site leftovers
 # =============================================================================================
 @prop({"state": "standing"}, {"state": "fallen"}, {"state": "standing", "sandbag": True})
-def traffic_cone(D, folder, origin, ry, rng, state=None, sandbag=None):
+def traffic_cone(D, folder, origin, ry, rng, state=None, sandbag=None, pose=None):
     """A tall road cone (the 1 m kind): the square rubber base with its stepped rim, a tapering
     orange body in five sections, two dirty white reflective collars, black grime rising from the
     bottom and a cracked, split tip; a sandbag slumped over the base (`sandbag`); standing or
-    knocked over. Footprint 1.4 x 1.4 studs (fallen 1.4 x 3.6), 3.3 tall. 10-11 parts; SMALL."""
+    knocked over. Footprint 1.4 x 1.4 studs (fallen 1.4 x 3.6), 3.3 tall. 10-11 parts; SMALL.
+    `pose` (y, rx, rz): the fallen cone's frame, origin raised y and turned (rx, rz) (a kit
+    marker's, so the old parts, its collision proxies, lie where the mesh shows)."""
     f = Frame(D, folder, origin, ry=ry)
     state = state or _pick(rng, ["standing", "standing", "fallen"])
     sandbag = (rng.random() < 0.3) if sandbag is None else sandbag
     if state == "fallen":
+        f0 = f
         f = f.sub((0, 0.68, 0), rz=-76 + rng.uniform(-3, 3), rx=rng.uniform(-6, 6))
         f = f.sub((0, -0.7, 0))
+        if pose is not None:
+            f = f0.sub((0, pose[0], 0), rx=pose[1], rz=pose[2])
     col = _tone(CONE, rng, 8, darken=rng.uniform(0.05, 0.3))
     f.box("ConeBase", (-0.7, 0, -0.7), (0.7, 0.12, 0.7), _tone(RUBBER, rng, 4), "Rubber", flags=SMALL)
     f.box("ConeBase", (-0.55, 0.12, -0.55), (0.55, 0.22, 0.55), _tone(RUBBER, rng, 4), "Rubber")
@@ -3119,15 +3140,21 @@ def scaffolding(D, folder, origin, ry, rng, bays=None, levels=None, netting=None
 
 
 @prop({"state": "upright"}, {"state": "broken"}, {"state": "tipped"})
-def office_chair(D, folder, origin, ry, rng, state=None, color=None):
+def office_chair(D, folder, origin, ry, rng, state=None, color=None, pose=None, recline=None):
     """A dumped office swivel chair: five-star base (legs and castors), the gas lift column and the
     tilt mechanism, a padded seat split with its foam out, the backrest on its curved support,
     two armrests (one pad gone); faded black/grey/blue fabric stained. `broken`: the back snapped
     and flopped backwards, a castor missing, sagging to one side. `tipped`: lying on its side.
-    Footprint 2.4 x 2.4 studs (tipped 4 x 2.4), 4 tall. 20-21 parts; seat and back SMALL."""
+    Footprint 2.4 x 2.4 studs (tipped 4 x 2.4), 4 tall. 20-21 parts; seat and back SMALL.
+    `pose` (y, rx, rz): the tipped chair's frame, origin raised y and turned (rx, rz) (a kit
+    marker's, so the old parts, its collision proxies, lie where the mesh shows). `recline`
+    (lean, back): the seat's sideways sag and the back's tilt, degrees (the kit's
+    OfficeChairWorn: (4, 36))."""
     f0 = Frame(D, folder, origin, ry=ry)
     state = state or _pick(rng, ["upright", "upright", "broken", "tipped"])
     f = f0.sub((0, 1.2, 0), rz=90 + rng.uniform(-6, 6), ry=rng.uniform(-20, 20)) if state == "tipped" else f0
+    if pose is not None and state == "tipped":
+        f = f0.sub((0, pose[0], 0), rx=pose[1], rz=pose[2])
     col = _tone(
         color or _pick(rng, [(40, 40, 44), (70, 72, 76), (40, 50, 76), (70, 40, 38)]),
         rng,
@@ -3144,6 +3171,7 @@ def office_chair(D, folder, origin, ry, rng, state=None, color=None):
             _ball(f.sub((0, 0, 0), ry=k * 72), "ChairCastor", (0, 0.16, -1.1), 0.32, pc, "Plastic")
     _vcyl(f, "GasLift", 0, 0.45, 0, 1.2, 0.26, _tone(STEEL, rng, 8, 0.3), "Metal")
     lean = rng.uniform(5, 9) if state == "broken" else 0
+    lean = lean if recline is None else recline[0]
     g = f.sub((0, 1.6, 0), rz=lean)
     g.box("ChairMech", (-0.5, 0, -0.5), (0.5, 0.25, 0.5), IRON, "Metal")
     g.box("ChairSeat", (-1.0, 0.25, -1.0), (1.0, 0.65, 0.95), col, "Fabric", flags=SMALL)
@@ -3164,6 +3192,7 @@ def office_chair(D, folder, origin, ry, rng, state=None, color=None):
     )
     g.box("BackSupport", (-0.18, 0.1, 0.85), (0.18, 1.0, 1.1), pc, "Plastic")
     back = rng.uniform(4, 10) + (rng.uniform(45, 65) if state == "broken" else 0)
+    back = back if recline is None else -recline[1]  # (rx = -back: a positive back tips it forward)
     b = g.sub((0, 0.9, 1.0), rx=-back)
     b.box("ChairBack", (-0.95, 0, -0.15), (0.95, 2.1, 0.2), _tone(col, rng, 4), "Fabric", flags=SMALL)
     b.box("ChairBackShell", (-0.9, 0.1, 0.2), (0.9, 2.0, 0.3), pc, "Plastic")

@@ -22,7 +22,7 @@ front faces -Z, studs; 1 stud ~ 0.29 m, props ~15 % large like the rest of the c
 at the centre of the footprint on the floor. Every piece's lowest point sits 0.012 studs above
 the floor (never in its plane). Layers never share a surface: details laid on a body stand
 proud of it or cross it at an angle. Only ONE tintable layer per piece (the marker's Tint goes to
-every tintable layer): ropes and blankets use FabricDark. No bottles anywhere: the stove's gas
+every tintable layer): ropes use FabricDark, the armchair's blanket its own Wool layer. No bottles anywhere: the stove's gas
 cartridge is the squat screw-top kind, wider than tall.
 """
 
@@ -349,8 +349,8 @@ def _align_y(n):
 
 def _stain(cx, cz, rad, inner, rim, noise, seed):
     """A tide-mark stain on a fabric top as a wear function of (x, z): inside a lobed outline
-    the `inner` multiplier, a darker `rim` line just inside the edge (where the liquid dried),
-    a fainter second ring inside it (it was wetted twice)."""
+    the `inner` multiplier, a darker `rim` line just inside the edge (where the liquid dried);
+    dull brownish-grey multipliers (a dried stain greys the fabric, it does not dye it yellow)."""
 
     def fn(x, z):
         dx, dz = x - cx, z - cz
@@ -359,13 +359,13 @@ def _stain(cx, cz, rad, inner, rim, noise, seed):
         d = math.hypot(dx, dz) / max(rr, 1e-3)
         if d > 1.2:
             return (1.0, 1.0, 1.0)
-        body = 1 - smoothstep(0.6, 1.12, d)
-        ring = smoothstep(0.45, 0.88, d) * (1 - smoothstep(0.95, 1.2, d))
-        ring2 = smoothstep(0.3, 0.45, d) * (1 - smoothstep(0.5, 0.65, d)) * 0.5
+        # (a sharp edge and a tide line wide enough for the vertex colours to resolve it)
+        body = 1 - smoothstep(0.85, 1.0, d)
+        ring = smoothstep(0.75, 0.9, d) * (1 - smoothstep(0.97, 1.1, d))
         out = []
         for c in range(3):
             v = lerp(1.0, inner[c], body)
-            v = lerp(v, rim[c], max(ring, ring2))
+            v = lerp(v, rim[c], ring)
             out.append(v)
         return tuple(out)
 
@@ -495,8 +495,8 @@ def _mattress(ctx, torn=False, lean=False, seed=0.0):
         rest = parts.commit(ctx, lambda p: p + Vector((0, FLOOR, 0)))
 
     stains = [
-        _stain(rng.uniform(-0.7, 0.5), rng.uniform(-1.6, 0.6), rng.uniform(0.7, 1.0), (0.93, 0.83, 0.58), (0.74, 0.6, 0.4), noise, 1.0),
-        _stain(rng.uniform(-0.8, 0.8), rng.uniform(1.0, 2.2), rng.uniform(0.6, 0.75), (0.82, 0.62, 0.48), (0.66, 0.46, 0.34), noise, 2.0),
+        _stain(rng.uniform(-0.7, 0.5), rng.uniform(-1.6, 0.6), rng.uniform(0.7, 1.0), (0.90, 0.85, 0.74), (0.66, 0.56, 0.44), noise, 1.0),
+        _stain(rng.uniform(-0.8, 0.8), rng.uniform(1.0, 2.2), rng.uniform(0.6, 0.75), (0.84, 0.74, 0.64), (0.58, 0.46, 0.38), noise, 2.0),
         _stain(rng.uniform(0.2, 0.9), rng.uniform(-2.6, -1.8), rng.uniform(0.5, 0.7), (0.8, 0.78, 0.74), (0.62, 0.6, 0.56), noise, 3.0),
     ]
 
@@ -712,14 +712,15 @@ def _armchair(ctx, blanket):
         def blanket_wear(p):
             k = 0.8 + 0.2 * noise.fbm(p.co * 2.5, 2)
             k *= 1 - 0.4 * smoothstep(0.0, 0.45, -p.convex)
-            # two pale woven stripes across it (an old army blanket)
-            st = abs(math.sin((p.co.x * 0.9 + p.co.z * 0.3) * 2.2))
-            return k * (1.0 if st < 0.93 else 0.7)
+            # two pale woven stripes near its ends (an old army blanket), ~0.25 studs wide
+            u = p.co.x * 0.95 + p.co.z * 0.3
+            st = max(1 - smoothstep(0.08, 0.14, abs(u - c)) for c in (-1.05, 1.05))
+            return k * (1 + 0.35 * st)
 
-        ctx.wear("FabricDark", blanket_wear)
+        ctx.wear("Wool", blanket_wear)
     rest = parts.commit(ctx, lambda p: p + Vector((0, lift, 0)))  # noqa: F841
 
-    stain = _stain(sag_c[0] + 0.15, sag_c[1] - 0.2, 0.42, (0.86, 0.78, 0.62), (0.68, 0.58, 0.45), noise, 5.0)
+    stain = _stain(sag_c[0] + 0.15, sag_c[1] - 0.2, 0.42, (0.88, 0.83, 0.74), (0.64, 0.55, 0.45), noise, 5.0)
 
     def fabric(p):
         x, y, z = p.co
@@ -851,7 +852,7 @@ def _drape_blanket(ctx, parts, chair, noise):
         c = bm.copy()
         cols.append(c)
     pts = _cloth(nu, nv, start, 90, th, colliders=cols, bend=0.6, mass=0.3, friction=30.0)
-    parts.add("FabricDark", _sheet_slab(pts, nu, nv, th))
+    parts.add("Wool", _sheet_slab(pts, nu, nv, th))
 
 
 def armchair(ctx):

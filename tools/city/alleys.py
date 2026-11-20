@@ -309,8 +309,11 @@ arch_trim(SQUAT[0], SQUAT[1], 92, 1)
 for z0, z1 in ((74.4, 75.0), (89.0, 89.6)):
     D.box(V, "Cladding", 147, 199, 27.2, 42.4, z0, z1, BRICK[2], "Brick", flags=SOLID, extra={"a": UNBREAKABLE})
 D.box(V, "Cladding", 147, 199.7, 42.2, 42.6, 74.3, 89.7, (52, 50, 48), "Slate", flags=SOLID)
-# (the east end: under the slate cap, short of the city's TunnelEnd and inside the side cladding's faces)
-D.box(V, "Cladding", 198.4, 199.0, 27.2, 42.2, 74.45, 89.55, BRICK[2], "Brick", flags=SOLID)
+# (the east end, under the slate cap: it wraps the side claddings' ends (their end faces at x 199
+# inside it, 20 cm from its own: two textured faces in one plane flicker), its back in the city's
+# TunnelEnd, its sides 10 cm outside the side claddings' outer faces, its foot 10 cm down in the arch's
+# top: never level with the TunnelEnd's underside at y 27.2)
+D.box(V, "Cladding", 198.4, 199.2, 27.1, 42.2, 74.3, 89.7, BRICK[2], "Brick", flags=SOLID)
 # Iron girder edges where the tunnel sits on the brick
 for z in (73.6, 90.4):
     D.box(V, "Girder", 147, 199.08, 26.2, 27.8, z - 0.5, z + 0.5, METAL, "Metal", flags=SOLID)  # (its end 8 cm proud)
@@ -473,13 +476,17 @@ def mwall(piece, fn, x, z, ry, y, faulty=None, folder=P, scale=1.0, tint=None, *
         faulty_since(start, faulty)
 
 
-def surface_top(x, z, r):
-    """The highest top of the visible parts made so far over the square (x +- r, z +- r)."""
+def surface_top(x, z, r, below=FINISH + 8):
+    """The highest top of the visible parts made so far over the square (x +- r, z +- r), among
+    those that start under `below` (within reach of the floor: not the tunnel or an arch
+    overhead)."""
     top = FINISH
     for row in D.parts:
         if row[12] >= 1:
             continue
         b = aabb(row)
+        if b[2] >= below:
+            continue
         if b[0] < x + r and b[1] > x - r and b[4] < z + r and b[5] > z - r:
             top = max(top, b[3])
     return top
@@ -624,7 +631,7 @@ wall(PW.background_facade, 188, 114, OUT_S, folder=F, width=48, height=58, depth
 # extractor), bags bulging over the rim under it, the near lid shut.
 v = vr("dumpster")
 mplace("Dumpster", PO.dumpster, 157.0, 60.2, OUT_N, tint=weathered(DUMPSTER, v, 6, 0.1), lid="open", full=True,
-       against_wall=True, lids=("o", "c"))
+       against_wall=True, lids=("o", "c"), open_ang=101)  # (the old lid where DumpsterLidWarped shows)
 dump = Frame(D, P, (157.0, FINISH, 60.2), ry=OUT_N)
 mframe("DumpsterLid", dump.sub((1.6, 4.47, 1.72)), P)
 mframe("DumpsterLidWarped", dump.sub((-1.6, 4.47, 1.72), rx=101), P)  # (resting on the bricks)
@@ -664,8 +671,9 @@ mplace("TrafficCone", PO.traffic_cone, 140.2, 96.8, 0, tint=weathered((204, 84, 
        state="standing", sandbag=False)
 # knocked over: lying on its base's edge and its tip (the tip lower than the base's middle)
 v = vr("cone 2")
-mplace("TrafficConeWorn", PO.traffic_cone, 143.4, 92.6, 120, y=FINISH + 0.735, rz=-102.9, rx=v.choice((-4, 4)),
-       tint=weathered((196, 80, 34), v, 8, 0.15), state="fallen", sandbag=False)
+cone_rx = v.choice((-4, 4))
+mplace("TrafficConeWorn", PO.traffic_cone, 143.4, 92.6, 120, y=FINISH + 0.735, rz=-102.9, rx=cone_rx,
+       tint=weathered((196, 80, 34), v, 8, 0.15), state="fallen", sandbag=False, pose=(0.735, cone_rx, -102.9))
 place(PG.wood_scraps, 146.2, 94.6, 40, kind="planks")
 mplace("ConcreteChunk1", PG.concrete_chunk, 167.2, 92.2, 10, size=1.6, rebar=True)
 mplace("ConcreteChunk2", PG.concrete_chunk, 155.6, 91.0, 65, scale=0.95, size=0.95, rebar=False)
@@ -678,7 +686,7 @@ place(PG.wall_base_grime, 163.8, 90.2, OUT_N, length=8.6)
 
 # -- the yard, north: Vic's black market ---------------------------------------------------------
 start = len(D.extras)
-place(PO.market_stall, 180.0, 68.2, 0, goods="electronics", light=True, compact=True)
+place(PO.market_stall, 180.0, 68.2, 0, goods="electronics", light=True, compact=True, behind=None)  # (the TV: below)
 faulty_since(start, 0.25)
 for ex in D.extras[start:]:
     if ex.get("l"):
@@ -692,7 +700,6 @@ mplace("CrtTv", PO.tv, 177.7, 76.4, 10, floor_y=tv_y, tint=weathered((110, 104, 
        state="ok")
 place(PO.plastic_crates, 191.0, 66.6, 90, count=4)
 place(PO.shoe_boxes, 172.6, 70.6, 90, count=5)
-mplace("Radio", PO.radio, 184.4, 75.2, 180, tint=(46, 46, 48))
 # the neon in the arch (the S dead), flickering like a failing tube
 D.part(MK, "NeonSign", ((MARKET[0] + MARKET[1]) / 2, 11.1, 72.3), (6.8, 1.2, 0.1), BLACK, "SmoothPlastic",
        flags=DECOR,
@@ -710,7 +717,7 @@ place(PO.wooden_crates, 183.6, 59.9, 90, floor_y=FINISH + 2.25, count=1)
 # the general-waste bin against the wall beside the chained door (between its step and the low
 # wall), the bags dumped at the door nobody opens any more
 v = vr("recycling yard")
-mplace("RecyclingBin", PO.recycling_bin, 178.6, 58.0, OUT_N, kind="general", lid="open")
+mplace("RecyclingBin", PO.recycling_bin, 178.6, 58.0, OUT_N, kind="general", lid="open", lid_ang=60)
 mframe("RecyclingBinLid", Frame(D, MK, (178.6, FINISH, 58.0), ry=OUT_N).sub((0, 3.84, 1.92), rx=60), MK,
        tint=weathered((92, 96, 94), v, 6, 0.0))
 mplace("TrashBag1", PG.trash_bag, 171.5, 58.6, 30, scale=1.05, tint=(22, 22, 24), size=2.2)
@@ -723,7 +730,8 @@ place(PG.cigarette_butts, 186.8, 66.6, 0, count=7)
 # behind the fences (east passage): what nobody comes to see
 v = vr("chair")
 mplace("OfficeChairWorn", PO.office_chair, 202.0, 75.5, 40, y=FINISH + 1.243, rz=88,
-       tint=weathered((52, 58, 70), v, 6, 0.15), state="tipped")
+       tint=weathered((52, 58, 70), v, 6, 0.15), state="tipped", pose=(1.243, 0, 88),
+       recline=(4, 36))
 # (its top resting on the bricks of the east wall, x 205; clear of the meter box)
 mplace("MattressLean", PO.mattress, 204.0, 84.0, OUT_W, mesh_xz=(204.18, 84.0),
        tint=weathered((176, 168, 150), vr("mattress lean"), 8, 0.1), state="leaning", torn=True)

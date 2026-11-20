@@ -57,6 +57,7 @@ LAYERS = {
     "WoodDark": ((66, 50, 38), 0.0, 0.8, False, False, False),
     "Fabric": ((96, 92, 84), 0.0, 0.9, True, False, False),
     "FabricDark": ((42, 40, 40), 0.0, 0.9, False, False, False),
+    "Wool": ((86, 80, 64), 0.0, 0.95, False, False, False),  # an old army blanket: grey olive-brown
     "Leather": ((58, 40, 30), 0.0, 0.6, False, False, False),  # dark brown
     "LeatherBlack": ((30, 29, 29), 0.0, 0.55, False, False, False),
     "Foam": ((176, 164, 132), 0.0, 0.95, False, False, False),

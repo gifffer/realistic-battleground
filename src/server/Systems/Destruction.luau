@@ -12,6 +12,10 @@
 --     prompts off), not destroyed: the original comes back RESTORE_AFTER
 --     seconds after the last hit on it (when nobody stands inside it), and
 --     its pieces go then.
+--   • A city prop swapped for its kit mesh (City/PropKit) breaks through its
+--     invisible collision proxies (attribute KitProxy): the first one hit
+--     hides the whole prop, its mesh layers (KitMesh) and its other proxies,
+--     and they all come back together. Its debris take the mesh's colour.
 -- Every client throws the debris (Remotes.WallBroken, Client KitVFX). The
 -- debris collide with the map but not with fighters (collision groups).
 --
@@ -55,6 +59,7 @@ type Saved = {
 	canQuery: boolean,
 	canTouch: boolean,
 	toggles: { Toggle },
+	group: { BasePart }, -- the rest of a kit prop, hidden with it
 }
 type Broken = {
 	part: BasePart,
@@ -80,6 +85,66 @@ local function toggle(saved: Saved, instance: Instance, property: string, value:
 	(instance :: any)[property] = value
 end
 
+-- The kit prop marker (City/PropKit) a collision proxy belongs to, or nil.
+local function kitMarker(part: BasePart): Instance?
+	if part:GetAttribute("KitProxy") ~= true then
+		return nil
+	end
+	local node = part.Parent
+	while node and node ~= workspace do
+		if node.Name == "MeshProp" and node:GetAttribute("MeshApplied") == true then
+			return node
+		end
+		node = node.Parent
+	end
+	return nil
+end
+
+-- The look of what `part` shows: a kit proxy shows its prop's biggest mesh layer.
+local function looks(part: BasePart): (Color3, Enum.Material)
+	local marker = kitMarker(part)
+	if marker then
+		local best: BasePart? = nil
+		local bestVolume = -1
+		for _, child in marker:GetChildren() do
+			if child:IsA("BasePart") and child:GetAttribute("KitMesh") == true then
+				local volume = child.Size.X * child.Size.Y * child.Size.Z
+				if volume > bestVolume then
+					best, bestVolume = child, volume
+				end
+			end
+		end
+		if best then
+			return best.Color, best.Material
+		end
+	end
+	return part.Color, part.Material
+end
+
+local function hideRest(saved: Saved, part: BasePart, marker: Instance)
+	for _, item in marker:GetDescendants() do
+		if item == part or item:IsDescendantOf(part) then
+			continue
+		end
+		if item:IsA("BasePart") and item:GetAttribute("KitMesh") == true then
+			toggle(saved, item, "Transparency", 1)
+			toggle(saved, item, "CanQuery", false)
+			for _, child in item:GetChildren() do
+				if child:IsA("Light") or child:IsA("ParticleEmitter") then
+					toggle(saved, child, "Enabled", false)
+				end
+			end
+		elseif item:IsA("BasePart") and item:GetAttribute("KitProxy") == true then
+			toggle(saved, item, "CanCollide", false)
+			toggle(saved, item, "CanQuery", false)
+			toggle(saved, item, "CanTouch", false)
+			-- (marked broken too: a client that let its charge through it puts it back otherwise)
+			item:SetAttribute("Broken", true)
+			table.insert(saved.group, item)
+		end
+	end
+end
+
 local function hide(part: BasePart): Saved
 	local saved: Saved = {
 		transparency = part.Transparency,
@@ -87,7 +152,12 @@ local function hide(part: BasePart): Saved
 		canQuery = part.CanQuery,
 		canTouch = part.CanTouch,
 		toggles = {},
+		group = {},
 	}
+	local marker = kitMarker(part)
+	if marker then
+		hideRest(saved, part, marker)
+	end
 	part.Transparency = 1
 	part.CanCollide = false
 	part.CanQuery = false
@@ -292,12 +362,13 @@ function Destruction.blast(
 			return
 		end
 		if how == "whole" then
+			local color, material = looks(part) -- (before it hides)
 			record(part, blast.now)
 			table.insert(blast.thrown, {
 				cframe = part.CFrame,
 				size = part.Size,
-				color = part.Color,
-				material = part.Material,
+				color = color,
+				material = material,
 			})
 			return
 		end
@@ -332,9 +403,21 @@ end
 -- Is a fighter standing inside `part`? (don't trap them in it)
 local occupiedParams = OverlapParams.new()
 occupiedParams.FilterType = Enum.RaycastFilterType.Include
-local function occupied(part: BasePart): boolean
+local function occupied(entry: Broken): boolean
 	occupiedParams.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
-	return #workspace:GetPartBoundsInBox(part.CFrame, part.Size, occupiedParams) > 0
+	local part = entry.part
+	if #workspace:GetPartBoundsInBox(part.CFrame, part.Size, occupiedParams) > 0 then
+		return true
+	end
+	for _, other in entry.saved.group do
+		if
+			other.Parent ~= nil
+			and #workspace:GetPartBoundsInBox(other.CFrame, other.Size, occupiedParams) > 0
+		then
+			return true
+		end
+	end
+	return false
 end
 
 local function restore(entry: Broken)
@@ -361,6 +444,9 @@ local function restore(entry: Broken)
 		end
 	end
 	part:SetAttribute("Broken", nil)
+	for _, other in entry.saved.group do
+		other:SetAttribute("Broken", nil)
+	end
 end
 
 -- Fighters in their collision group (debris go through them).
@@ -412,7 +498,7 @@ function Destruction.start()
 		nextCheck = now + 1
 		for _, entry in broken do
 			if now - entry.lastHit >= RESTORE_AFTER then
-				if occupied(entry.part) then
+				if occupied(entry) then
 					entry.lastHit = now - RESTORE_AFTER + 1 -- (try again in a second)
 				else
 					restore(entry)

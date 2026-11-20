@@ -1059,7 +1059,7 @@ def concrete_chunk2(ctx):
 # Everything crosses the mound's surface at an angle (never lies in it): no z-fighting.
 # RubblePile2 is longer (two crests), with a leaning slab piece and more brick.
 # ----------------------------------------------------------------------------------------------
-RP_R, RP_H = 2.6, 1.0
+RP_R, RP_H = 2.6, 1.2  # (H / R ~0.46: a tipped heap of rubble settles near its angle of repose)
 
 
 def _mound(noise, R, H, stretch=(1.0, 1.0), crests=((0.0, 0.0, 1.0),)):
@@ -1068,7 +1068,9 @@ def _mound(noise, R, H, stretch=(1.0, 1.0), crests=((0.0, 0.0, 1.0),)):
     sx, sz = stretch
 
     def outline(a):
-        return R * (1 + 0.12 * noise.fbm((math.cos(a) * 1.3, 4.0, math.sin(a) * 1.3), 2))
+        # (lobes and bays, not a circle: a heap is tipped load by load)
+        return R * (1 + 0.3 * noise.fbm((math.cos(a) * 0.9, 4.0, math.sin(a) * 0.9), 2)
+                    + 0.12 * noise.n((math.cos(a) * 3, 7.0, math.sin(a) * 3)))
 
     def height(x, z):
         best = 0.0
@@ -1083,16 +1085,27 @@ def _mound(noise, R, H, stretch=(1.0, 1.0), crests=((0.0, 0.0, 1.0),)):
         return best + lumps * smoothstep(0.0, 0.25, best) - 0.03 * (1 - smoothstep(0.0, 0.1, best))
 
     rings = []
-    nr, segs = 18, 60
-    span = R * 1.12 * max(sx, sz) + max(math.hypot(cx, cz) for cx, cz, _ in crests)
+    nr, segs = 20, 60
+    # (out past the outline's widest lobe: 1 + 0.3 + 0.12 at most)
+    span = R * 1.45 * max(sx, sz) + max(math.hypot(cx, cz) for cx, cz, _ in crests)
+
+    def reach(a):
+        """How far the heap goes along the direction a (its foot), + a thin skirt."""
+        far = 0.3
+        for i in range(1, 121):
+            r = span * i / 120
+            if height(math.cos(a) * r, math.sin(a) * r) > 0.0:
+                far = r
+        return far + 0.12
+
+    reaches = [reach(2 * math.pi * j / segs) for j in range(segs)]
     for k in range(nr, 0, -1):
         t = (k / nr) ** 1.25
         ring = []
         for j in range(segs):
             a = 2 * math.pi * j / segs
-            r = t * span
-            # (the ring hugs the outline: stretched with it)
-            x, z = math.cos(a) * r * sx / max(sx, sz), math.sin(a) * r * sz / max(sx, sz)
+            r = t * reaches[j]  # (the rings follow the foot's lobes and bays)
+            x, z = math.cos(a) * r, math.sin(a) * r
             ring.append((x, max(height(x, z), -0.03), z))
         rings.append(ring)
     rings.append([(0.0, height(0.0, 0.0), 0.0)])
@@ -1124,7 +1137,9 @@ def _rubble(ctx, two):
         crests = ((-0.9, 0.1, 1.0), (1.0, -0.15, 0.82))
         mound, height = _mound(noise, RP_R * 0.82, RP_H, stretch=(1.0, 0.85), crests=crests)
     else:
-        mound, height = _mound(noise, RP_R, RP_H)
+        # an off-centre main tip and a lower shoulder, a little longer than wide
+        crests = ((-0.5, 0.2, 1.0), (0.9, -0.3, 0.6))
+        mound, height = _mound(noise, RP_R * 0.82, RP_H, stretch=(1.0, 0.82), crests=crests)
     ctx.add("Concrete", mound)
     reach = RP_R * (1.25 if two else 1.0)
 
@@ -1152,7 +1167,8 @@ def _rubble(ctx, two):
     for k in range(26 if two else 22):
         big = k < 4
         sz = rng.uniform(0.55, 0.85) if big else rng.uniform(0.18, 0.42)
-        x, z = spot(0.05, 0.6) if big else spot(0.0, 1.05)
+        # (two of the big ones rolled to the foot: they break the outline)
+        x, z = (spot(0.05, 0.6) if k < 2 else spot(0.85, 1.05)) if big else spot(0.0, 1.05)
         bm, _ = _fragment(rng, noise, (sz, sz * rng.uniform(0.45, 0.7), sz * rng.uniform(0.6, 0.9)), 5,
                           cast=(1,), rough=0.03, edge=0.24 if big else 0.4)
         ctx.add("Concrete", bm, on_slope(x, z, sz * 0.15, rng.uniform(0, 360), 30))

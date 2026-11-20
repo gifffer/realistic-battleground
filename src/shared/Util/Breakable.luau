@@ -12,6 +12,11 @@
 --   • A plain block wall is cut into pieces (only the ones hit go); any other
 --     part (mesh, union, decorated) breaks whole if small enough.
 --
+--   • A city prop swapped for its kit mesh (Server/Systems/City/PropKit): its
+--     old parts stay as invisible collision proxies with the attribute
+--     KitProxy = true. They break like the visible parts they replace, and
+--     always whole (the server hides the whole prop with them).
+--
 --   • A body THROWN into a wall only breaks it if it (or a parent) has the
 --     CollectionService tag "Breakable" (fences, shop fronts, the city's
 --     ground-floor panels with their dark room behind): Breakable.tagged.
@@ -93,10 +98,11 @@ end
 -- How `part` breaks ("pieces" / "whole"), or nil if it doesn't. `feetY`:
 -- the height of the attacker's feet.
 function Breakable.check(part: BasePart, feetY: number): string?
+	local kitProxy = part:GetAttribute("KitProxy") == true
 	if
 		not part.Anchored
 		or not part.CanCollide
-		or part.Transparency >= 0.9
+		or (part.Transparency >= 0.9 and not kitProxy)
 		or part:IsA("Terrain")
 		or part:IsA("SpawnLocation")
 		or part:GetAttribute("Broken") == true
@@ -131,6 +137,9 @@ function Breakable.check(part: BasePart, feetY: number): string?
 	end
 	if protected(part) then
 		return nil
+	end
+	if kitProxy then
+		return "whole" -- (its mesh can't be cut: the whole prop goes)
 	end
 	if
 		part.ClassName == "Part"

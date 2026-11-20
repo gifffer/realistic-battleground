@@ -14,11 +14,15 @@
 -- a Color3, or the string "r,g,b") and Scale (optional number). The prop's old primitive parts
 -- are parented UNDER that marker. PropKit.apply(city), called by City/init once the city is
 -- built, does for every marker whose piece is in the kit:
---   * clones the piece's layers there (anchored, no collision / touch / query: pure visuals),
+--   * clones the piece's layers there (anchored, no collision / touch, attribute KitMesh),
 --     each coloured from LOOKS below (a tintable layer takes the marker's Tint), sized by
---     Scale;
+--     Scale. A layer at least QUERY_SIZE studs big is queryable (CanQuery): the client's
+--     raycasts (blood landing, rain stopping) hit the surface that shows; physics never does;
 --   * the old parts that collide or are queried (CanCollide / CanQuery) become invisible
---     collision proxies, so collisions, raycasts and hit detection do not change;
+--     collision proxies (attribute KitProxy), so collisions and the server's hit detection
+--     do not change. They stay breakable: Shared/Util/Breakable lets a KitProxy break although
+--     it is invisible, and Systems/Destruction hides the whole prop (its mesh layers and its
+--     other proxies) with it, then brings it all back;
 --   * THE LIVE BULB: when the piece has a Glow layer (a lamp's bulb / lens, a fire's embers,
 --     a stove's flame ring) and the old parts have a light part (a part tagged CityLamp,
 --     CityBulkhead, CityFireEmbers, CityShopLight, CityNeon, CityEmergency, or else one with a
@@ -56,6 +60,8 @@ local PER_CHUNK = 60
 -- Pieces at least this big (studs: about their size once scaled) cast shadows; smaller
 -- clutter does not (cheaper, and tiny shadows only add noise).
 local SHADOW_SIZE = 1.2
+-- Mesh layers at least this big (studs, largest side once scaled) are queryable (see the top).
+local QUERY_SIZE = 1
 
 -- How each layer looks: colour (sRGB), material, shine (Reflectance), whether the marker's
 -- Tint replaces the colour, whether it is a thin sheet seen from both sides, whether it may
@@ -102,6 +108,7 @@ local LOOKS: { [string]: Look } = {
 	WoodDark = look(66, 50, 38, Enum.Material.Wood),
 	Fabric = look(96, 92, 84, Enum.Material.Fabric, 0, true),
 	FabricDark = look(42, 40, 40, Enum.Material.Fabric),
+	Wool = look(86, 80, 64, Enum.Material.Fabric), -- (an old army blanket: grey olive-brown)
 	Leather = look(58, 40, 30, Enum.Material.Leather),
 	LeatherBlack = look(30, 29, 29, Enum.Material.Leather),
 	Foam = look(176, 164, 132, Enum.Material.Fabric),
@@ -398,6 +405,9 @@ local function retire(
 			continue
 		end
 		if proxy or alive then
+			if proxy then
+				item:SetAttribute("KitProxy", true)
+			end
 			item.Transparency = 1
 			item.CastShadow = false
 			hideSkin(item)
@@ -456,11 +466,12 @@ local function swap(marker: BasePart, all: { [string]: Piece }): boolean
 		part.Anchored = true
 		part.CanCollide = false
 		part.CanTouch = false
-		part.CanQuery = false
+		part.Size = layer.size * scale
+		part.CanQuery = math.max(part.Size.X, part.Size.Y, part.Size.Z) >= QUERY_SIZE
+		part:SetAttribute("KitMesh", true)
 		part.Massless = true
 		part.CastShadow = shadows and style.shadow
 		part.Transparency = 0
-		part.Size = layer.size * scale
 		part.Color = if style.tint and tint then tint else style.color
 		part.Material = style.material
 		part.Reflectance = style.shine

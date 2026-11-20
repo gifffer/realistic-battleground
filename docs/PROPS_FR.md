@@ -31,6 +31,8 @@ Aucune bouteille, nulle part.
 - Chaque objet marqué dans les données (une pièce invisible `MeshProp`) reçoit son modèle 3D au même endroit, à la même taille, tourné pareil (couché, penché...).
 - Les anciennes pièces de l'objet :
   - celles qui ont des **collisions** (ou que les coups/rayons touchent) deviennent **invisibles mais restent** : on se cogne, on saute, on monte dessus et on frappe exactement comme avant ;
+  - ces objets **se cassent toujours** sous les gros coups (charge, atterrissage...) : tout l'objet (modèle compris) vole en morceaux de sa couleur, puis revient au bout de 25 s ;
+  - le sang et la pluie s'arrêtent sur le **modèle visible** (il est touchable par les rayons, mais sans collision) ;
   - celles qui portent un **tag**, des **particules** (feu, vapeur, gouttière) ou un son restent aussi (invisibles), déplacées à l'endroit du modèle (bouche de la gouttière, haut du brasero) ;
   - les autres (pure décoration) sont **supprimées**.
 - **Les lampes** : l'ampoule (ou la vitre) du modèle **devient** l'ampoule du jeu. Elle s'allume la nuit, s'éteint le jour et pendant les coupures de courant, clignote (Flicker), vieillit (Faulty), reste morte (Dead) comme avant ; le brasero brille et vacille. Une lampe sans lumière dans les données montre une vitre éteinte.
