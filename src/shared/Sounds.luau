@@ -603,55 +603,6 @@ local sounds: { [string]: SoundInfo } = {
 	},
 	ZippoClose_Sub = { ids = {}, volume = 0.07, pitch = 1, pitchVariation = 0.03 },
 	ZippoClose_Tail = { ids = {}, volume = 0.14, pitch = 1, pitchVariation = 0.06 },
-	-- FlameFlare: lighter fluid squirted through a lighter flame into someone's face, flaring into a burst of fire
-	FlameFlare_Transient = { ids = {}, volume = 0.56, pitch = 1, pitchVariation = 0.06 },
-	FlameFlare_Mechanism = { ids = {}, volume = 0.45, pitch = 1, pitchVariation = 0.06 },
-	FlameFlare_Body = {
-		ids = { 9114442751, 9114444052, 9114443884, 9114444008 },
-		volume = 1.7,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		length = 1,
-		fadeOut = 0.3,
-		trims = {
-			[9114442751] = { start = 0.25, gain = 0.38 },
-			[9114444052] = { start = 0.24, gain = 1.88 },
-			[9114443884] = { start = 0.26, gain = 1.62 },
-			[9114444008] = { start = 0.62, gain = 0.86 },
-		},
-	},
-	FlameFlare_Sub = { ids = {}, volume = 0.28, pitch = 1, pitchVariation = 0.03 },
-	FlameFlare_Tail = {
-		ids = { 9125616715, 9125616655 },
-		volume = 0.55,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		length = 1,
-		fadeOut = 0.3,
-		trims = {
-			[9125616715] = { gain = 0.83 },
-			[9125616655] = { gain = 1.21 },
-		},
-	},
-	-- MolotovLight: a petrol-soaked rag stuffed in a bottle neck being lit and catching fire
-	MolotovLight_Transient = { ids = {}, volume = 0.35, pitch = 1, pitchVariation = 0.06 },
-	MolotovLight_Mechanism = { ids = {}, volume = 0.35, pitch = 1, pitchVariation = 0.06 },
-	MolotovLight_Body = {
-		ids = { 9114446852, 9114447022, 9114446802 },
-		volume = 1.43,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		trims = {
-			[9114446852] = { start = 0.03, gain = 1.02 },
-			[9114447022] = { start = 0.08, gain = 0.87 },
-			[9114446802] = { start = 0.11, gain = 1.12 },
-		},
-	},
-	MolotovLight_Sub = { ids = {}, volume = 0.14, pitch = 1, pitchVariation = 0.03 },
-	MolotovLight_Tail = { ids = {}, volume = 0.25, pitch = 1, pitchVariation = 0.06 },
 	-- MolotovThrow: a lit Molotov cocktail bottle being thrown overhand and flying past
 	MolotovThrow_Transient = { ids = {}, volume = 0.45, pitch = 1, pitchVariation = 0.06 },
 	MolotovThrow_Mechanism = { ids = {}, volume = 0.25, pitch = 1, pitchVariation = 0.06 },
@@ -672,36 +623,6 @@ local sounds: { [string]: SoundInfo } = {
 	},
 	MolotovThrow_Sub = { ids = {}, volume = 0.11, pitch = 1, pitchVariation = 0.03 },
 	MolotovThrow_Tail = { ids = {}, volume = 0.18, pitch = 1, pitchVariation = 0.06 },
-	-- MolotovShatter: a glass Molotov bottle smashing on concrete and splashing petrol
-	MolotovShatter_Transient = {
-		ids = { 9113552392, 9113552215, 9113552246, 9113553645 },
-		volume = 1.97,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		length = 2.2,
-		fadeOut = 0.4,
-		trims = {
-			[9113552392] = { start = 0.3, gain = 0.97 },
-			[9113552215] = { start = 0.32, gain = 1.43 },
-			[9113552246] = { start = 0.35, gain = 0.91 },
-			[9113553645] = { start = 0.24, gain = 0.79 },
-		},
-	},
-	MolotovShatter_Mechanism = {
-		ids = { 9125702439, 9125702803 },
-		volume = 3.29,
-		pitch = 1,
-		pitchVariation = 0.08,
-		volumeVariation = 1.5,
-		trims = {
-			[9125702439] = { gain = 0.91 },
-			[9125702803] = { gain = 1.1 },
-		},
-	},
-	MolotovShatter_Body = { ids = {}, volume = 0.71, pitch = 1, pitchVariation = 0.03 },
-	MolotovShatter_Sub = { ids = {}, volume = 0.32, pitch = 1, pitchVariation = 0.03 },
-	MolotovShatter_Tail = { ids = {}, volume = 0.2, pitch = 1, pitchVariation = 0.06 },
 	-- FuelIgnite: spilled petrol on the ground igniting into a fireball
 	FuelIgnite_Transient = { ids = {}, volume = 0.79, pitch = 1, pitchVariation = 0.06 },
 	FuelIgnite_Mechanism = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.06 },
@@ -748,22 +669,6 @@ local sounds: { [string]: SoundInfo } = {
 	},
 	PoolFire_Sub = { ids = {}, volume = 0.22, pitch = 1, pitchVariation = 0, looped = true },
 	PoolFire_Tail = { ids = {}, volume = 0.14, pitch = 1, pitchVariation = 0, looped = true },
-	-- FuelSwig: a man taking a mouthful of fuel from a metal hip flask
-	FuelSwig_Transient = { ids = {}, volume = 0.32, pitch = 1, pitchVariation = 0.06 },
-	FuelSwig_Mechanism = { ids = {}, volume = 0.25, pitch = 1, pitchVariation = 0.06 },
-	FuelSwig_Body = {
-		ids = { 9114171960, 9114172109 },
-		volume = 2.95,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		trims = {
-			[9114171960] = { start = 0.09, gain = 1.05 },
-			[9114172109] = { start = 0.2, gain = 0.95 },
-		},
-	},
-	FuelSwig_Sub = { ids = {}, volume = 0.08, pitch = 1, pitchVariation = 0.03 },
-	FuelSwig_Tail = { ids = {}, volume = 0.13, pitch = 1, pitchVariation = 0.06 },
 	-- FireBreath: a fire breather spitting atomised fuel through a lighter flame into a roaring jet of fire
 	FireBreath_Transient = {
 		ids = { 9114446277, 9114441555 },
@@ -875,55 +780,6 @@ local sounds: { [string]: SoundInfo } = {
 	},
 	SelfIgnite_Sub = { ids = {}, volume = 0.4, pitch = 1, pitchVariation = 0.03 },
 	SelfIgnite_Tail = { ids = {}, volume = 0.32, pitch = 1, pitchVariation = 0.06 },
-	-- FuelPour: petrol being poured from a jerrycan over a body lying on the ground
-	FuelPour_Transient = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.06 },
-	FuelPour_Mechanism = { ids = {}, volume = 0.4, pitch = 1, pitchVariation = 0.06 },
-	FuelPour_Body = {
-		ids = { 9120575856 },
-		volume = 1.43,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		length = 1.1,
-		fadeOut = 0.25,
-		trims = {
-			[9120575856] = { start = 0.06 },
-		},
-	},
-	FuelPour_Sub = { ids = {}, volume = 0.16, pitch = 1, pitchVariation = 0.03 },
-	FuelPour_Tail = { ids = {}, volume = 0.2, pitch = 1, pitchVariation = 0.06 },
-	-- CanThrow: an almost empty metal jerrycan tossed aside onto a concrete floor
-	CanThrow_Transient = { ids = {}, volume = 0.63, pitch = 1, pitchVariation = 0.06 },
-	CanThrow_Mechanism = { ids = {}, volume = 0.32, pitch = 1, pitchVariation = 0.06 },
-	CanThrow_Body = {
-		ids = { 9113704875 },
-		volume = 1.32,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		length = 2,
-		fadeOut = 0.3,
-		trims = {
-			[9113704875] = { start = 0.08 },
-		},
-	},
-	CanThrow_Sub = { ids = {}, volume = 0.16, pitch = 1, pitchVariation = 0.03 },
-	CanThrow_Tail = { ids = {}, volume = 0.16, pitch = 1, pitchVariation = 0.06 },
-	-- ZippoDrop: a lit Zippo lighter dropped onto a petrol-soaked body
-	ZippoDrop_Transient = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.06 },
-	ZippoDrop_Mechanism = { ids = {}, volume = 0.25, pitch = 1, pitchVariation = 0.06 },
-	ZippoDrop_Body = {
-		ids = { 9114462912 },
-		volume = 0.66,
-		pitch = 1.15,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		trims = {
-			[9114462912] = { start = 0.18 },
-		},
-	},
-	ZippoDrop_Sub = { ids = {}, volume = 0.1, pitch = 1, pitchVariation = 0.03 },
-	ZippoDrop_Tail = { ids = {}, volume = 0.16, pitch = 1, pitchVariation = 0.06 },
 	-- BodyIgnite: a petrol-soaked person on the ground going up in flames
 	BodyIgnite_Transient = { ids = {}, volume = 0.79, pitch = 1, pitchVariation = 0.06 },
 	BodyIgnite_Mechanism = { ids = {}, volume = 0.56, pitch = 1, pitchVariation = 0.06 },
@@ -979,7 +835,7 @@ local sounds: { [string]: SoundInfo } = {
 	},
 	BurnScream_Sub = { ids = {}, volume = 0.18, pitch = 1, pitchVariation = 0.03 },
 	BurnScream_Tail = { ids = {}, volume = 0.35, pitch = 1, pitchVariation = 0.06 },
-	-- InfernoBreath: the Inferno Breath's longer jet of fire
+	-- InfernoBreath: the Inferno's longer jet of fire
 	InfernoBreath_Transient = {
 		ids = { 9114446277, 9114441555 },
 		volume = 1.07,
@@ -1015,19 +871,6 @@ local sounds: { [string]: SoundInfo } = {
 		fadeOut = 0.3,
 		trims = {
 			[9114445526] = { start = 0.05 },
-		},
-	},
-	-- CanSlosh: petrol sloshing in a jerrycan swung back
-	CanSlosh_Body = {
-		ids = { 9114190682 },
-		volume = 2.32,
-		pitch = 1,
-		pitchVariation = 0.06,
-		volumeVariation = 1.5,
-		length = 0.9,
-		fadeOut = 0.2,
-		trims = {
-			[9114190682] = { start = 0.07 },
 		},
 	},
 	-- FireSwing: a burning fist swung past like a torch
@@ -1120,6 +963,211 @@ local sounds: { [string]: SoundInfo } = {
 		pitch = 1,
 		pitchVariation = 0,
 		looped = true,
+	},
+	-- GunDraw: the flamethrower swung off his back, the fuel sloshing in the bottle
+	GunDraw_Body = {
+		ids = { 9114190682 },
+		volume = 3.55,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 0.4,
+		fadeOut = 0.15,
+		trims = {
+			[9114190682] = { start = 0.07 },
+		},
+	},
+	-- PilotLight: the pilot burner lit: a lever click and a soft blue fwip
+	PilotLight_Body = {
+		ids = { 9121005783 },
+		volume = 0.42,
+		pitch = 1.3,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		trims = {
+			[9121005783] = { start = 0.07 },
+		},
+	},
+	PilotLight_Tail = {
+		ids = { 9114446183 },
+		volume = 0.88,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		trims = {
+			[9114446183] = { start = 0.15 },
+		},
+	},
+	-- PilotOut: the pilot flame shut off: a short high sizzle
+	PilotOut_Body = {
+		ids = { 9119166199 },
+		volume = 0.16,
+		pitch = 1.2,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 0.4,
+		fadeOut = 0.15,
+		trims = {
+			[9119166199] = { start = 0.08 },
+		},
+	},
+	-- TriggerClick: the flamethrower's trigger squeezed: a dull metal click
+	TriggerClick_Body = {
+		ids = { 9121005566 },
+		volume = 0.84,
+		pitch = 0.8,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		trims = {
+			[9121005566] = { start = 0.03 },
+		},
+	},
+	-- BurstPop: a pressurised ball of fire popping out of a flamethrower, crackling drops
+	BurstPop_Body = {
+		ids = { 9114442751, 9114444052, 9114443884, 9114444008 },
+		volume = 1.7,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 1,
+		fadeOut = 0.3,
+		trims = {
+			[9114442751] = { start = 0.25, gain = 0.38 },
+			[9114444052] = { start = 0.24, gain = 1.88 },
+			[9114443884] = { start = 0.26, gain = 1.62 },
+			[9114444008] = { start = 0.62, gain = 0.86 },
+		},
+	},
+	BurstPop_Tail = {
+		ids = { 9119166424, 9119166217, 9119165644, 9119166425 },
+		volume = 0.42,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 1.2,
+		fadeOut = 0.3,
+		trims = {
+			[9119166424] = { start = 0.16, gain = 0.88 },
+			[9119166217] = { start = 0.1, gain = 0.97 },
+			[9119165644] = { start = 0.07, gain = 0.97 },
+			[9119166425] = { start = 0.07, gain = 1.22 },
+		},
+	},
+	-- GlobLaunch: a glob of napalm coughed out of the muzzle: a short burst of fire
+	GlobLaunch_Transient = {
+		ids = { 9114446277, 9114441555 },
+		volume = 0.89,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 0.4,
+		fadeOut = 0.15,
+		trims = {
+			[9114446277] = { start = 0.26, gain = 1.14 },
+			[9114441555] = { start = 0.75, gain = 0.88 },
+		},
+	},
+	GlobLaunch_Body = {
+		ids = { 9114429507, 9114429835 },
+		volume = 0.43,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 0.5,
+		fadeOut = 0.2,
+		trims = {
+			[9114429507] = { start = 0.05, gain = 1.03 },
+			[9114429835] = { start = 0.15, gain = 0.97 },
+		},
+	},
+	-- GlobSplat: a glob of burning napalm splatting on the floor (no glass)
+	GlobSplat_Body = {
+		ids = { 9125702439, 9125702803 },
+		volume = 4.65,
+		pitch = 1,
+		pitchVariation = 0.08,
+		volumeVariation = 1.5,
+		trims = {
+			[9125702439] = { gain = 0.91 },
+			[9125702803] = { gain = 1.1 },
+		},
+	},
+	-- StreamEnd: the jet let go: the tail of the flame whooshing away
+	StreamEnd_Tail = {
+		ids = { 9114445526 },
+		volume = 1.11,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 1,
+		fadeOut = 0.4,
+		trims = {
+			[9114445526] = { start = 0.05 },
+		},
+	},
+	-- PressureHiss: the regulator's pressurised gas hiss rising
+	PressureHiss_Body = {
+		ids = { 9126173160 },
+		volume = 0.35,
+		pitch = 1.4,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 0.8,
+		fadeOut = 0.3,
+		trims = {
+			[9126173160] = { start = 0.14 },
+		},
+	},
+	-- ValveCrank: the ball valve slapped shut or the bottle's handwheel cranked: a metal clack
+	ValveCrank_Body = {
+		ids = { 9121005783 },
+		volume = 0.75,
+		pitch = 0.6,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		trims = {
+			[9121005783] = { start = 0.07 },
+		},
+	},
+	-- TorchLance: a short hard blowtorch lance lighting
+	TorchLance_Body = {
+		ids = { 9114446277, 9114441555 },
+		volume = 1.12,
+		pitch = 1.25,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 0.25,
+		fadeOut = 0.1,
+		trims = {
+			[9114446277] = { start = 0.26, gain = 1.14 },
+			[9114441555] = { start = 0.75, gain = 0.88 },
+		},
+	},
+	-- Vent: the overheated gun's relief valve venting: a white-hot hiss
+	Vent_Body = {
+		ids = { 9119166199, 9119165933 },
+		volume = 0.37,
+		pitch = 0.8,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 1.5,
+		fadeOut = 0.5,
+		trims = {
+			[9119166199] = { start = 0.08, gain = 0.88 },
+			[9119165933] = { start = 0.11, gain = 1.14 },
+		},
+	},
+	Vent_Tail = {
+		ids = { 9114445526 },
+		volume = 0.88,
+		pitch = 1,
+		pitchVariation = 0.06,
+		volumeVariation = 1.5,
+		length = 1.5,
+		fadeOut = 0.5,
+		trims = {
+			[9114445526] = { start = 0.05 },
+		},
 	},
 	-- <<< Pyromaniac sounds (generated)
 }

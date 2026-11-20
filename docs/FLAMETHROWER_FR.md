@@ -31,3 +31,13 @@ Le jeu retrouve tout seul l'orientation et l'échelle de l'import (grâce aux ce
 - Module : `src/client/Combat/Flamethrower.luau` (API en tête de fichier : `draw`, `holster`, `fumble`, `point`/`muzzle`, `setPilot`, `trigger`, `setValve`, `crankValve`, `setGauge`, `setHeat`, `vent`).
 - Points d'attache : `Muzzle` (sa direction = celle du jet), `PilotLight`, `GripR`, `GripL`, `Stock`, `BackMount`, `ShroudGlow`, `GaugeFace`, `Regulator`.
 - Régénérer les pièces et les aperçus : `venv/bin/python -I tools/pyro/flamethrower_parts.py --write --render <dossier>` puis `stylua src`.
+
+## Dans les attaques
+
+Le lance-flammes est maintenant **l'arme des 8 attaques** du Pyromane (et du finisher). Chaque clip (`tools/anim/pyro_clips.py`) le dégaine du dos (la main droite va chercher la poignée, `draw`), tire, puis le remet dans le dos (`holster`). Les poses de tir sont **calculées** avec l'arme dans les mains : le bras droit est résolu pour que le **canon vise là où part le feu**, le bras gauche pour que la main se pose sur la **poignée en bois** (ou le volant de la bouteille, la vanne, la veilleuse). `python3 tools/anim/pyro_clips.py --check` le vérifie image par image (60 i/s) ; `--render <dossier>` dessine les planches avec l'arme et la ligne de tir.
+
+- **Prise « debout »** (`Flamethrower.port`) : seulement dans le finisher, pour que la main gauche puisse approcher le Zippo de la veilleuse (les bras R6 sont rigides). Elle est calculée par `pyro_clips.py --write`, qui réécrit la ligne `local PORT = ...` de `Flamethrower.luau`.
+- **Le jet** part toujours du point `Muzzle` de l'arme ; si l'arme n'est pas encore construite, il part devant la poitrine.
+- **Coupé** (étourdi, mis au sol, mort, autre action) : le jet se détache tout de suite, la gâchette se relâche et l'arme retourne dans le dos en 0,15 s.
+
+Le modèle et le FBX n'ont **pas changé** : rien à réimporter.

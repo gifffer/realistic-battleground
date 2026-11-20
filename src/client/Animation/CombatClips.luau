@@ -10193,10 +10193,9 @@ end
 for name, clip in require(script.Parent.RiftClips) do
 	clips[name] = clip
 end
--- The Pyromaniac's too (his rush is the tackle's run).
+-- The Pyromaniac's too.
 for name, clip in require(script.Parent.PyroClips) do
 	clips[name] = clip
 end
-clips.Pyro_Rush = clips.Brawler_Tackle
 
 return table.freeze(clips)

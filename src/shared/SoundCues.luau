@@ -28,30 +28,10 @@ local cues: { [string]: Cue } = {
 			{ sound = "ZippoClose_Body", at = 0 },
 		},
 	},
-	FlameFlare = {
-		looped = false,
-		layers = {
-			{ sound = "FlameFlare_Body", at = 0 },
-			{ sound = "FlameFlare_Tail", at = 0.1 },
-		},
-	},
-	MolotovLight = {
-		looped = false,
-		layers = {
-			{ sound = "MolotovLight_Body", at = 0 },
-		},
-	},
 	MolotovThrow = {
 		looped = false,
 		layers = {
 			{ sound = "MolotovThrow_Body", at = 0 },
-		},
-	},
-	MolotovShatter = {
-		looped = false,
-		layers = {
-			{ sound = "MolotovShatter_Transient", at = 0 },
-			{ sound = "MolotovShatter_Mechanism", at = 0 },
 		},
 	},
 	FuelIgnite = {
@@ -66,12 +46,6 @@ local cues: { [string]: Cue } = {
 		layers = {
 			{ sound = "PoolFire_Mechanism", at = 0 },
 			{ sound = "PoolFire_Body", at = 0 },
-		},
-	},
-	FuelSwig = {
-		looped = false,
-		layers = {
-			{ sound = "FuelSwig_Body", at = 0 },
 		},
 	},
 	FireBreath = {
@@ -102,24 +76,6 @@ local cues: { [string]: Cue } = {
 			{ sound = "SelfIgnite_Body", at = 0 },
 		},
 	},
-	FuelPour = {
-		looped = false,
-		layers = {
-			{ sound = "FuelPour_Body", at = 0 },
-		},
-	},
-	CanThrow = {
-		looped = false,
-		layers = {
-			{ sound = "CanThrow_Body", at = 0 },
-		},
-	},
-	ZippoDrop = {
-		looped = false,
-		layers = {
-			{ sound = "ZippoDrop_Body", at = 0 },
-		},
-	},
 	BodyIgnite = {
 		looped = false,
 		layers = {
@@ -140,12 +96,6 @@ local cues: { [string]: Cue } = {
 			{ sound = "InfernoBreath_Transient", at = 0 },
 			{ sound = "InfernoBreath_Body", at = 0.05 },
 			{ sound = "InfernoBreath_Tail", at = 0.8 },
-		},
-	},
-	CanSlosh = {
-		looped = false,
-		layers = {
-			{ sound = "CanSlosh_Body", at = 0 },
 		},
 	},
 	FireSwing = {
@@ -178,6 +128,82 @@ local cues: { [string]: Cue } = {
 		looped = true,
 		layers = {
 			{ sound = "PyreRoar_Body", at = 0 },
+		},
+	},
+	GunDraw = {
+		looped = false,
+		layers = {
+			{ sound = "GunDraw_Body", at = 0 },
+		},
+	},
+	PilotLight = {
+		looped = false,
+		layers = {
+			{ sound = "PilotLight_Body", at = 0 },
+			{ sound = "PilotLight_Tail", at = 0.05 },
+		},
+	},
+	PilotOut = {
+		looped = false,
+		layers = {
+			{ sound = "PilotOut_Body", at = 0 },
+		},
+	},
+	TriggerClick = {
+		looped = false,
+		layers = {
+			{ sound = "TriggerClick_Body", at = 0 },
+		},
+	},
+	BurstPop = {
+		looped = false,
+		layers = {
+			{ sound = "BurstPop_Body", at = 0 },
+			{ sound = "BurstPop_Tail", at = 0.05 },
+		},
+	},
+	GlobLaunch = {
+		looped = false,
+		layers = {
+			{ sound = "GlobLaunch_Transient", at = 0 },
+			{ sound = "GlobLaunch_Body", at = 0 },
+		},
+	},
+	GlobSplat = {
+		looped = false,
+		layers = {
+			{ sound = "GlobSplat_Body", at = 0 },
+		},
+	},
+	StreamEnd = {
+		looped = false,
+		layers = {
+			{ sound = "StreamEnd_Tail", at = 0 },
+		},
+	},
+	PressureHiss = {
+		looped = false,
+		layers = {
+			{ sound = "PressureHiss_Body", at = 0 },
+		},
+	},
+	ValveCrank = {
+		looped = false,
+		layers = {
+			{ sound = "ValveCrank_Body", at = 0 },
+		},
+	},
+	TorchLance = {
+		looped = false,
+		layers = {
+			{ sound = "TorchLance_Body", at = 0 },
+		},
+	},
+	Vent = {
+		looped = false,
+		layers = {
+			{ sound = "Vent_Body", at = 0 },
+			{ sound = "Vent_Tail", at = 0.1 },
 		},
 	},
 }

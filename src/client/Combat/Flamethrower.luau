@@ -13,6 +13,8 @@
 --   Flamethrower.watch(model)              dressed while it is a Pyromaniac
 --   Flamethrower.draw(model, seconds?)     from the back to the hands (Right
 --                                          Arm weld, the validated hold)
+--   Flamethrower.port(model, seconds?)     stood upright in the right hand
+--                                          (the finisher's pilot ritual)
 --   Flamethrower.holster(model, seconds?)  back across the back (Torso weld)
 --   Flamethrower.fumble(model)             cut short: trigger off, pilot out,
 --                                          slung in 0.15 s
@@ -57,6 +59,23 @@ local Shape = require(script.Parent.FlamethrowerShape)
 local Flamethrower = {}
 
 local FOLDER = "Flamethrower"
+-- The finisher's upright hold (Right Arm space): the gun stood up across his
+-- chest, the pilot burner by his left shoulder. Written by
+-- tools/anim/pyro_clips.py --write (solved with the clip).
+local PORT = CFrame.new(
+	-0.8921,
+	-0.3331,
+	-0.6422,
+	0.2702,
+	0.4839,
+	0.8323,
+	-0.4938,
+	0.8118,
+	-0.3117,
+	-0.8265,
+	-0.3268,
+	0.4583
+)
 local DRAW_TIME = 0.12
 local FUMBLE_TIME = 0.15
 local AWAKENED_HEAT = 0.55
@@ -788,6 +807,16 @@ function Flamethrower.draw(model: Model, seconds: number?)
 	end
 	gun.drawn = true
 	remount(gun, arm, Shape.GRIP, seconds or DRAW_TIME)
+end
+
+function Flamethrower.port(model: Model, seconds: number?)
+	local gun = guns[model]
+	local arm = bodyPart(model, "Right Arm")
+	if gun == nil or arm == nil then
+		return
+	end
+	gun.drawn = true
+	remount(gun, arm, PORT, seconds or DRAW_TIME)
 end
 
 function Flamethrower.holster(model: Model, seconds: number?)

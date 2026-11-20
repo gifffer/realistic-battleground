@@ -132,11 +132,14 @@ local KIT_SHAKES: { [string]: { [string]: Shake } } = {
 	-- (the Pyromaniac's: quiet until the fire goes up; its effects are
 	-- Combat/PyroFx's, from the same timeline)
 	Immolate = {
-		CanAway = { at = 0, strength = 0.4, punch = 0 },
-		Release = { at = 0, strength = 0.2, punch = 1 },
-		Ignite = { at = 0, strength = 2.6, punch = -4, flash = 0.5 },
+		ValveOpen = { at = 0, strength = 0.2, punch = 0 },
+		PilotLit = { at = 0, strength = 0.15, punch = 0.5 },
+		Lower = { at = 0, strength = 0.2, punch = 1 },
+		Ignite = { at = 0, strength = 3, punch = -5, flash = 0.6 },
 		Writhe = { at = 0, strength = 0.8, punch = 0 },
+		StreamEnd = { at = 0, strength = 0.5, punch = 0 },
 		Still = { at = 0, strength = 0.6, punch = 1.5, grade = true },
+		Vent = { at = 0, strength = 0.3, punch = 0 },
 	},
 	KnockoutCombo = {
 		Grab = { at = 0, strength = 0.8, punch = 1 },

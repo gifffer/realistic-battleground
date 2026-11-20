@@ -48,62 +48,6 @@
    "verified": true,
    "visible": true
   },
-  "9113552215": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Bottle Breaks 2 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9113552246": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Bottle Breaks 3 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9113552392": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Bottle Breaks 1 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9113553645": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Bottle Breaks 1 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9113704875": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Canister Drop Canister Impact 3 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9114171960": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Drinking Cu Gulping 5 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9114172109": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Drinking Cu Gulping 6 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
   "9114190682": {
    "creator": "ProSoundEffects",
    "free": true,
@@ -204,30 +148,6 @@
    "creator": "ProSoundEffects",
    "free": true,
    "name": "Fire Whoosh 6 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9114446802": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Fire Whoosh 13 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9114446852": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Fire Whoosh 15 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9114447022": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Fire Whoosh 19 (SFX)",
    "type": "SoundEffect",
    "verified": true,
    "visible": true
@@ -440,14 +360,6 @@
    "verified": true,
    "visible": true
   },
-  "9120575856": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Water Pour 1 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
   "9121005566": {
    "creator": "ProSoundEffects",
    "free": true,
@@ -468,22 +380,6 @@
    "creator": "ProSoundEffects",
    "free": true,
    "name": "Zippo Lighter 5 (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9125616655": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Kerosene Explosion Whooshing Poofs Crackling (SFX)",
-   "type": "SoundEffect",
-   "verified": true,
-   "visible": true
-  },
-  "9125616715": {
-   "creator": "ProSoundEffects",
-   "free": true,
-   "name": "Kerosene Explosion Whooshing Poofs Crackling (SFX)",
    "type": "SoundEffect",
    "verified": true,
    "visible": true
@@ -631,97 +527,6 @@
    "stability": 4.34,
    "sub": 0.503,
    "truePeak": -8.9
-  },
-  "9113552215": {
-   "I": -27.3,
-   "Mmax": -25.1,
-   "attack": 0.01,
-   "centroid": 8176,
-   "dur": 4.02,
-   "end40": 2.53,
-   "harsh": 0.162,
-   "onset": 0.33,
-   "peak": 0.34,
-   "sub": 0.0,
-   "truePeak": -2.4
-  },
-  "9113552246": {
-   "I": -23.8,
-   "Mmax": -21.1,
-   "attack": 0.01,
-   "centroid": 7836,
-   "dur": 3.16,
-   "end40": 1.95,
-   "harsh": 0.166,
-   "onset": 0.36,
-   "peak": 0.37,
-   "sub": 0.001,
-   "truePeak": -2.4
-  },
-  "9113552392": {
-   "I": -24.4,
-   "Mmax": -21.6,
-   "attack": 0.01,
-   "centroid": 8233,
-   "dur": 4.45,
-   "end40": 2.37,
-   "harsh": 0.155,
-   "onset": 0.31,
-   "peak": 0.32,
-   "sub": 0.0,
-   "truePeak": -2.8
-  },
-  "9113553645": {
-   "I": -24.8,
-   "Mmax": -19.8,
-   "attack": 0.01,
-   "centroid": 7665,
-   "dur": 4.46,
-   "end40": 2.5,
-   "harsh": 0.233,
-   "onset": 0.25,
-   "peak": 0.26,
-   "sub": 0.001,
-   "truePeak": -2.5
-  },
-  "9113704875": {
-   "I": -25.3,
-   "Mmax": -21.4,
-   "attack": 0.02,
-   "centroid": 1627,
-   "dur": 3.23,
-   "end40": 2.53,
-   "harsh": 0.127,
-   "onset": 0.09,
-   "peak": 0.11,
-   "sub": 0.003,
-   "truePeak": -4.3
-  },
-  "9114171960": {
-   "I": -35.7,
-   "Mmax": -34.8,
-   "attack": 0.29,
-   "centroid": 245,
-   "dur": 0.92,
-   "end40": 0.83,
-   "harsh": 0.0,
-   "onset": 0.1,
-   "peak": 0.39,
-   "sub": 0.226,
-   "truePeak": -12.0
-  },
-  "9114172109": {
-   "I": -34.0,
-   "Mmax": -34.0,
-   "attack": 0.4,
-   "centroid": 246,
-   "dur": 1.23,
-   "end40": 1.17,
-   "harsh": 0.001,
-   "onset": 0.21,
-   "peak": 0.61,
-   "sub": 0.268,
-   "truePeak": -11.7
   },
   "9114190682": {
    "I": -39.5,
@@ -907,45 +712,6 @@
    "peak": 0.31,
    "sub": 0.048,
    "truePeak": -5.8
-  },
-  "9114446802": {
-   "I": -26.6,
-   "Mmax": -25.1,
-   "attack": 0.2,
-   "centroid": 2186,
-   "dur": 1.15,
-   "end40": 1.04,
-   "harsh": 0.081,
-   "onset": 0.12,
-   "peak": 0.32,
-   "sub": 0.206,
-   "truePeak": -7.0
-  },
-  "9114446852": {
-   "I": -26.0,
-   "Mmax": -24.3,
-   "attack": 0.17,
-   "centroid": 2165,
-   "dur": 0.83,
-   "end40": 0.71,
-   "harsh": 0.118,
-   "onset": 0.04,
-   "peak": 0.21,
-   "sub": 0.076,
-   "truePeak": -7.7
-  },
-  "9114447022": {
-   "I": -25.1,
-   "Mmax": -22.8,
-   "attack": 0.4,
-   "centroid": 1351,
-   "dur": 1.27,
-   "end40": 1.19,
-   "harsh": 0.076,
-   "onset": 0.09,
-   "peak": 0.49,
-   "sub": 0.223,
-   "truePeak": -8.8
   },
   "9114462912": {
    "I": -24.3,
@@ -1285,19 +1051,6 @@
    "sub": 0.03,
    "truePeak": -3.8
   },
-  "9120575856": {
-   "I": -28.0,
-   "Mmax": -26.0,
-   "attack": 0.52,
-   "centroid": 5268,
-   "dur": 3.63,
-   "end40": 3.55,
-   "harsh": 0.182,
-   "onset": 0.07,
-   "peak": 0.59,
-   "sub": 0.005,
-   "truePeak": -10.7
-  },
   "9121005566": {
    "I": -28.5,
    "Mmax": -28.5,
@@ -1336,32 +1089,6 @@
    "peak": 0.09,
    "sub": 0.002,
    "truePeak": -2.1
-  },
-  "9125616655": {
-   "I": -22.2,
-   "Mmax": -20.5,
-   "attack": 0.28,
-   "centroid": 255,
-   "dur": 1.1,
-   "end40": 0.8,
-   "harsh": 0.004,
-   "onset": 0.0,
-   "peak": 0.28,
-   "sub": 0.422,
-   "truePeak": -8.2
-  },
-  "9125616715": {
-   "I": -19.5,
-   "Mmax": -17.2,
-   "attack": 0.31,
-   "centroid": 201,
-   "dur": 1.21,
-   "end40": 1.03,
-   "harsh": 0.002,
-   "onset": 0.0,
-   "peak": 0.31,
-   "sub": 0.591,
-   "truePeak": -5.8
   },
   "9125652432": {
    "I": -14.6,
@@ -1430,109 +1157,31 @@
   }
  },
  "segments": {
-  "9113552215@0.32+2.2": {
-   "I": -27.5,
-   "Mmax": -25.0,
-   "attack": 0.01,
-   "centroid": 8242,
-   "dur": 2.21,
-   "end40": 1.8,
-   "harsh": 0.168,
-   "onset": 0.02,
-   "peak": 0.03,
-   "sub": 0.0,
-   "truePeak": -2.4
+  "9114190682@0.07+0.4": {
+   "I": -41.0,
+   "Mmax": -41.0,
+   "attack": 0.22,
+   "centroid": 751,
+   "dur": 0.45,
+   "end40": 0.4,
+   "harsh": 0.025,
+   "onset": 0.0,
+   "peak": 0.22,
+   "sub": 0.071,
+   "truePeak": -24.8
   },
-  "9113552246@0.35+2.2": {
-   "I": -24.4,
-   "Mmax": -21.1,
-   "attack": 0.01,
-   "centroid": 7934,
-   "dur": 2.2,
-   "end40": 1.6,
-   "harsh": 0.165,
+  "9114429507@0.05+0.5": {
+   "I": -9.9,
+   "Mmax": -9.9,
+   "attack": 0.08,
+   "centroid": 748,
+   "dur": 0.5,
+   "end40": 0.48,
+   "harsh": 0.083,
    "onset": 0.01,
-   "peak": 0.02,
-   "sub": 0.0,
-   "truePeak": -2.4
-  },
-  "9113552392@0.3+2.2": {
-   "I": -25.8,
-   "Mmax": -21.6,
-   "attack": 0.01,
-   "centroid": 8541,
-   "dur": 2.21,
-   "end40": 2.08,
-   "harsh": 0.138,
-   "onset": 0.02,
-   "peak": 0.03,
-   "sub": 0.0,
-   "truePeak": -2.8
-  },
-  "9113553645@0.24+2.2": {
-   "I": -26.6,
-   "Mmax": -19.8,
-   "attack": 0.01,
-   "centroid": 7611,
-   "dur": 2.2,
-   "end40": 1.99,
-   "harsh": 0.251,
-   "onset": 0.01,
-   "peak": 0.02,
-   "sub": 0.0,
-   "truePeak": -2.5
-  },
-  "9113704875@0.08+2": {
-   "I": -26.2,
-   "Mmax": -21.4,
-   "attack": 0.02,
-   "centroid": 1532,
-   "dur": 2.0,
-   "end40": 1.73,
-   "harsh": 0.12,
-   "onset": 0.01,
-   "peak": 0.03,
-   "sub": 0.002,
-   "truePeak": -4.3
-  },
-  "9114171960@0.09": {
-   "I": -35.0,
-   "Mmax": -34.8,
-   "attack": 0.29,
-   "centroid": 247,
-   "dur": 0.83,
-   "end40": 0.74,
-   "harsh": 0.0,
-   "onset": 0.01,
-   "peak": 0.3,
-   "sub": 0.231,
-   "truePeak": -12.0
-  },
-  "9114172109@0.2": {
-   "I": -34.0,
-   "Mmax": -34.0,
-   "attack": 0.39,
-   "centroid": 247,
-   "dur": 1.04,
-   "end40": 0.97,
-   "harsh": 0.001,
-   "onset": 0.02,
-   "peak": 0.41,
-   "sub": 0.271,
-   "truePeak": -11.7
-  },
-  "9114190682@0.07+0.9": {
-   "I": -36.6,
-   "Mmax": -35.3,
-   "attack": 0.57,
-   "centroid": 781,
-   "dur": 0.9,
-   "end40": 0.88,
-   "harsh": 0.031,
-   "onset": 0.01,
-   "peak": 0.58,
-   "sub": 0.133,
-   "truePeak": -17.3
+   "peak": 0.09,
+   "sub": 0.443,
+   "truePeak": -2.2
   },
   "9114429507@0.05+2.2": {
    "I": -12.8,
@@ -1572,6 +1221,19 @@
    "peak": 0.09,
    "sub": 0.595,
    "truePeak": -2.1
+  },
+  "9114429835@0.15+0.5": {
+   "I": -9.5,
+   "Mmax": -9.4,
+   "attack": 0.07,
+   "centroid": 751,
+   "dur": 0.51,
+   "end40": 0.49,
+   "harsh": 0.097,
+   "onset": 0.02,
+   "peak": 0.09,
+   "sub": 0.474,
+   "truePeak": -1.6
   },
   "9114429835@0.15+2.2": {
    "I": -11.9,
@@ -1636,6 +1298,32 @@
    "onset": 0.0,
    "peak": 0.06,
    "sub": 0.56,
+   "truePeak": -2.7
+  },
+  "9114441555@0.75+0.25": {
+   "I": -17.8,
+   "Mmax": -17.8,
+   "attack": 0.05,
+   "centroid": 666,
+   "dur": 0.45,
+   "end40": 0.25,
+   "harsh": 0.003,
+   "onset": 0.0,
+   "peak": 0.05,
+   "sub": 0.556,
+   "truePeak": -2.7
+  },
+  "9114441555@0.75+0.4": {
+   "I": -17.8,
+   "Mmax": -17.8,
+   "attack": 0.05,
+   "centroid": 666,
+   "dur": 0.45,
+   "end40": 0.27,
+   "harsh": 0.003,
+   "onset": 0.0,
+   "peak": 0.05,
+   "sub": 0.557,
    "truePeak": -2.7
   },
   "9114442751@0.25+1": {
@@ -1742,6 +1430,19 @@
    "sub": 0.34,
    "truePeak": -11.5
   },
+  "9114445526@0.05+1.5": {
+   "I": -31.3,
+   "Mmax": -28.9,
+   "attack": 0.35,
+   "centroid": 561,
+   "dur": 1.33,
+   "end40": 1.3,
+   "harsh": 0.016,
+   "onset": 0.01,
+   "peak": 0.36,
+   "sub": 0.396,
+   "truePeak": -11.5
+  },
   "9114446183@0.15": {
    "I": -32.9,
    "Mmax": -32.9,
@@ -1781,44 +1482,31 @@
    "sub": 0.135,
    "truePeak": -5.8
   },
-  "9114446802@0.11": {
-   "I": -27.1,
-   "Mmax": -25.1,
-   "attack": 0.2,
-   "centroid": 2614,
-   "dur": 1.04,
-   "end40": 0.93,
-   "harsh": 0.089,
-   "onset": 0.01,
-   "peak": 0.21,
-   "sub": 0.208,
-   "truePeak": -7.0
+  "9114446277@0.26+0.25": {
+   "I": -20.1,
+   "Mmax": -20.1,
+   "attack": 0.05,
+   "centroid": 1542,
+   "dur": 0.45,
+   "end40": 0.25,
+   "harsh": 0.046,
+   "onset": 0.0,
+   "peak": 0.05,
+   "sub": 0.087,
+   "truePeak": -5.8
   },
-  "9114446852@0.03": {
-   "I": -26.5,
-   "Mmax": -24.3,
-   "attack": 0.17,
-   "centroid": 2323,
-   "dur": 0.8,
-   "end40": 0.68,
-   "harsh": 0.127,
-   "onset": 0.01,
-   "peak": 0.18,
-   "sub": 0.075,
-   "truePeak": -7.7
-  },
-  "9114447022@0.08": {
-   "I": -24.6,
-   "Mmax": -22.9,
-   "attack": 0.4,
-   "centroid": 1253,
-   "dur": 1.19,
-   "end40": 1.11,
-   "harsh": 0.07,
-   "onset": 0.01,
-   "peak": 0.41,
-   "sub": 0.247,
-   "truePeak": -8.8
+  "9114446277@0.26+0.4": {
+   "I": -20.1,
+   "Mmax": -20.1,
+   "attack": 0.05,
+   "centroid": 1559,
+   "dur": 0.45,
+   "end40": 0.4,
+   "harsh": 0.046,
+   "onset": 0.0,
+   "peak": 0.05,
+   "sub": 0.088,
+   "truePeak": -5.8
   },
   "9114462912@0.18": {
    "I": -23.8,
@@ -2145,6 +1833,32 @@
    "sub": 0.004,
    "truePeak": -6.9
   },
+  "9119165933@0.11+1.5": {
+   "I": -20.6,
+   "Mmax": -18.4,
+   "attack": 0.07,
+   "centroid": 16350,
+   "dur": 1.51,
+   "end40": 1.49,
+   "harsh": 0.027,
+   "onset": 0.02,
+   "peak": 0.09,
+   "sub": 0.006,
+   "truePeak": -6.9
+  },
+  "9119166199@0.08+0.4": {
+   "I": -16.2,
+   "Mmax": -16.2,
+   "attack": 0.06,
+   "centroid": 12880,
+   "dur": 0.45,
+   "end40": 0.41,
+   "harsh": 0.11,
+   "onset": 0.01,
+   "peak": 0.07,
+   "sub": 0.005,
+   "truePeak": -2.0
+  },
   "9119166199@0.08+1.2": {
    "I": -19.9,
    "Mmax": -16.2,
@@ -2156,6 +1870,19 @@
    "onset": 0.01,
    "peak": 0.07,
    "sub": 0.014,
+   "truePeak": -2.0
+  },
+  "9119166199@0.08+1.5": {
+   "I": -19.9,
+   "Mmax": -16.2,
+   "attack": 0.06,
+   "centroid": 12544,
+   "dur": 1.51,
+   "end40": 1.49,
+   "harsh": 0.062,
+   "onset": 0.01,
+   "peak": 0.07,
+   "sub": 0.022,
    "truePeak": -2.0
   },
   "9119166217@0.1+1.2": {
@@ -2210,19 +1937,6 @@
    "sub": 0.03,
    "truePeak": -3.8
   },
-  "9120575856@0.06+1.1": {
-   "I": -27.1,
-   "Mmax": -26.1,
-   "attack": 0.53,
-   "centroid": 5142,
-   "dur": 1.11,
-   "end40": 1.09,
-   "harsh": 0.136,
-   "onset": 0.01,
-   "peak": 0.54,
-   "sub": 0.004,
-   "truePeak": -12.2
-  },
   "9121005566@0.03": {
    "I": -28.5,
    "Mmax": -28.5,
@@ -2261,32 +1975,6 @@
    "peak": 0.03,
    "sub": 0.014,
    "truePeak": -2.1
-  },
-  "9125616655@0+1": {
-   "I": -22.2,
-   "Mmax": -20.5,
-   "attack": 0.28,
-   "centroid": 256,
-   "dur": 1.0,
-   "end40": 0.8,
-   "harsh": 0.004,
-   "onset": 0.0,
-   "peak": 0.28,
-   "sub": 0.424,
-   "truePeak": -8.2
-  },
-  "9125616715@0+1": {
-   "I": -19.5,
-   "Mmax": -17.2,
-   "attack": 0.31,
-   "centroid": 206,
-   "dur": 1.0,
-   "end40": 0.98,
-   "harsh": 0.003,
-   "onset": 0.0,
-   "peak": 0.31,
-   "sub": 0.58,
-   "truePeak": -5.8
   },
   "9125652432@0.07+1.4": {
    "I": -15.0,
@@ -2339,6 +2027,19 @@
    "peak": 0.05,
    "sub": 0.373,
    "truePeak": -10.3
+  },
+  "9126173160@0.14+0.8": {
+   "I": -22.9,
+   "Mmax": -20.9,
+   "attack": 0.42,
+   "centroid": 1412,
+   "dur": 0.8,
+   "end40": 0.78,
+   "harsh": 0.125,
+   "onset": 0.01,
+   "peak": 0.43,
+   "sub": 0.064,
+   "truePeak": -11.7
   },
   "9126173160@0.14+1": {
    "I": -22.7,

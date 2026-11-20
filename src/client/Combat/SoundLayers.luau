@@ -46,11 +46,11 @@ local nextVariant: { [string]: number } = {}
 local IGNITION_CUES = {
 	FireImpact = true,
 	BodyIgnite = true,
-	MolotovShatter = true, -- (its fireball, FuelIgnite, follows 0.06 s later)
+	GlobSplat = true, -- (its fireball, FuelIgnite, follows 0.06 s later)
 	FuelIgnite = true,
 }
 local IGNITION_WINDOW = 0.5 -- seconds a cue covers a body catching fire
-local IGNITION_REACH = 10 -- studs round a blast (a Molotov's whole splash)
+local IGNITION_REACH = 10 -- studs round a blast (a napalm glob's whole splash)
 local ignitedAt: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
 local blasts: { { position: Vector3, at: number } } = {}
 

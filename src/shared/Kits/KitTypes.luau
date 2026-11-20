@@ -136,11 +136,14 @@ export type MoveDef = {
 -- it bursts on the first thing it touches (or after `lifetime`): `hit` on a
 -- body it hits directly, `splash` on everyone else within `radius` of the
 -- burst (if nothing stands between). Acid leaves a puddle that keeps
--- burning whoever stands in it. A Molotov (the Pyromaniac) sets the floor
--- on fire there instead (`fire`).
+-- burning whoever stands in it. A Molotov or a glob of napalm (the
+-- Pyromaniac's flamethrower) sets the floor on fire there instead (`fire`).
+-- `origin`: where it leaves from, in his root's space (the gun's muzzle);
+-- nil = his hand.
 export type FlaskDef = {
-	kind: "Acid" | "Explosive" | "Molotov",
+	kind: "Acid" | "Explosive" | "Molotov" | "Napalm",
 	release: number,
+	origin: Vector3?,
 	speed: number, -- studs/s at release, where he aims
 	lift: number, -- studs/s added upward (the arc)
 	gravity: number, -- studs/s²
@@ -162,12 +165,13 @@ export type FireDef = {
 	burn: BurnDef,
 }
 
--- A cone in front of him (the Pyromaniac): flame he spits through his
--- lighter, or fuel he splashes from a can. From `from` to `to` seconds into
+-- A cone in front of him (the Pyromaniac's flamethrower): a jet of fire,
+-- or raw fuel sprayed with the pilot off. From `from` to `to` seconds into
 -- the move, every `tick` seconds, `hit` lands on whoever is within `range`
 -- studs and `angle` degrees of where he faces (in sight). `douse`: they are
 -- soaked in fuel for that many seconds (Shared/PyroConfig: fire burns them
--- harder).
+-- harder). `scorch`: after the last tick, the floor `at` studs ahead of
+-- him catches fire (a pool, like a Molotov's).
 export type ConeDef = {
 	kind: "Flame" | "Fuel",
 	from: number,
@@ -177,6 +181,7 @@ export type ConeDef = {
 	angle: number,
 	hit: HitDef, -- (its hitbox / forward unused)
 	douse: number?,
+	scorch: { at: number, fire: FireDef }?,
 }
 
 -- A ray gun (Dr. Rift): `at` seconds into the move, a beam from his hand

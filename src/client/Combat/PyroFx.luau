@@ -1,27 +1,33 @@
 --!strict
 -- PyroFx: how the Pyromaniac's fire looks and sounds (Shared/Kits/Pyromaniac).
 -- Look only: the server decided every hit and every burn (Combat/Gadgets).
---
---   • his props, from the clips (PyroFx.onAction, called by KitEffects): a
---     brass Zippo (lid, wheel, flame), a wine bottle of petrol with a rag in
---     its neck, a red jerrycan, a steel hip flask. Built from parts at real
---     size (1 stud ≈ 36 cm; the lighter a little bigger to be seen).
---   • Remotes.PyroFx (Gadgets): the Molotov flying, breaking (glass, the
---     petrol splash, a fireball that pops at full size), the fire pool (one
---     small fire per server cell, catching outward and dying out one by one;
---     thick black smoke - petrol burns sooty -, embers, one flickering light,
---     a black scorch that stays), the cones (spat flame, flung petrol).
---   • on every fighter: soaked in petrol (drips), his burning forearms in his
+--   * his flamethrower (Combat/Flamethrower: slung on his back, drawn,
+--     pilot, trigger, valves, gauge, heat), on the clips' beats
+--     (PyroFx.onAction, called by KitEffects; Animation/PyroClips). Every
+--     jet leaves its muzzle and each move has its own shape: a fireball
+--     that POPS (Flash Burst), a glob of napalm (Napalm Lob / Mortar, with a
+--     crown of burning drips), a sweeping stream (Flame Stream), a cold fan
+--     of raw fuel with the pilot out (Fuel Spray); Awakened, a blue-white
+--     root on every jet: a lance (Blowtorch), a pillar (the activation), an
+--     inferno that rakes the floor, a bow wave ahead of a charge.
+--   * Remotes.PyroFx (Gadgets): the globs flying and splatting (a fireball
+--     that pops at full size), the fire pools (one small fire per server
+--     cell, catching outward and dying out one by one; thick black smoke -
+--     petrol burns sooty -, embers, one flickering light, a black scorch
+--     that stays), the cones (the streams; they let go of the muzzle as
+--     soon as he is stunned, knocked down or starts something else).
+--   * on every fighter: soaked in fuel (drips), his burning forearms in his
 --     Awakening, the finisher's burning body's roar (and its corpse's).
---   • the finisher "Immolate" (Shared/Finishers), from FinisherStarted.
+--   * the finisher "Immolate" (Shared/Finishers), from FinisherStarted: raw
+--     fuel poured from the muzzle, the Zippo to the pilot burner, a
+--     point-blank full-bore stream, the gun cherry red, the vent.
 -- The burns themselves (degrees on the skin, charred clothes, flames on the
 -- body, smoke, smouldering): Client/Combat/Burns, from the server's burn
 -- attributes, like every other burn in the game.
 -- Every flame is built from Combat/FireLook's layers (looping flame
 -- clusters, tongues, core glow, soot, embers, fireballs, a burning film on
--- the floor), each beat on the clip's keyframe (Animation/PyroClips).
--- Sounds: layered cues (Shared/SoundCues, Combat/SoundLayers), each timed to
--- the same beat as its effect (docs/SONS_PYROMANE_FR.md).
+-- the floor). Sounds: layered cues (Shared/SoundCues, Combat/SoundLayers),
+-- each timed to the same beat as its effect (docs/SONS_PYROMANE_FR.md).
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
@@ -44,7 +50,6 @@ local random = Random.new()
 
 local FIRE_TEXTURE = "rbxasset://textures/particles/fire_main.dds"
 local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
-local SPARK_TEXTURE = "rbxasset://textures/particles/sparkles_main.dds"
 
 -- Petrol burns yellow-orange with a sooty tip, never blue; its smoke is
 -- thick and near black, greying as it thins out.
@@ -54,8 +59,12 @@ local FLAME_DEEP = Color3.fromRGB(196, 58, 14)
 local SOOT = Color3.fromRGB(26, 23, 21)
 local SOOT_THIN = Color3.fromRGB(78, 73, 68)
 local PETROL = Color3.fromRGB(196, 168, 96)
-local GLASS = Color3.fromRGB(46, 72, 40) -- a green wine bottle
 local SCORCH = Color3.fromRGB(20, 17, 15)
+-- Blue only in two places: the propane pilot light, and the overpressure
+-- root of an Awakened jet (and the finisher's) - then petrol orange.
+local BLUE_CORE = Color3.fromRGB(200, 225, 255)
+local BLUE_WARM = Color3.fromRGB(255, 240, 210)
+local FUEL_MIST = Color3.fromRGB(210, 196, 160)
 
 local LIGHT_COLOR = Color3.fromRGB(255, 150, 70)
 local POOL_LIGHT = Color3.fromRGB(255, 140, 60)
@@ -262,7 +271,7 @@ end
 -- Flames (shared looks)
 ------------------------------------------------------------------------------
 
--- A small steady flame (the lighter's wick, the bottle's rag): a looping
+-- A small steady flame (the Zippo's wick, a burning drip): a looping
 -- flame cluster with tongues licking off it, a thin wisp of soot. Its
 -- particles stay where they were born (LockedToPart off): a moving hand
 -- leaves a smear of flame. It catches (grows to full size in `grow` s).
@@ -379,201 +388,685 @@ local function buildZippo(folder: Instance, holder: BasePart, grip: CFrame): Zip
 	return zippo
 end
 
-type Bottle = {
-	main: BasePart,
-	rag: Attachment,
-	light: (on: boolean) -> (),
-	flame: () -> SmallFlame?,
-}
-
--- A 75 cl wine bottle (30 cm: 0.85 studs, 7.5 cm across: 0.21), two thirds
--- full of petrol, a torn rag stuffed in the neck. Origin = its body's centre,
--- +Y to the neck.
-local function buildBottle(folder: Instance, holder: BasePart?, at: CFrame): Bottle
-	local body = part(
-		"BottleBody",
-		Vector3.new(0.5, 0.21, 0.21),
-		GLASS,
-		Enum.Material.Glass,
-		Enum.PartType.Cylinder
-	)
-	body.Transparency = 0.45
-	if holder then
-		weld(holder, body, at * UPRIGHT)
-	else
-		body.CFrame = at * UPRIGHT
-		body.Anchored = true
-	end
-	body.Parent = folder
-	local function add(
-		name: string,
-		size: Vector3,
-		color: Color3,
-		material: Enum.Material,
-		offset: CFrame,
-		shape: Enum.PartType?,
-		transparency: number?
-	)
-		local p = part(name, size, color, material, shape)
-		p.Transparency = transparency or 0
-		weld(body, p, offset)
-		p.Parent = folder
-	end
-	-- (in the body's space: its X is the bottle's axis, toward the neck)
-	add(
-		"BottleShoulder",
-		Vector3.new(0.1, 0.17, 0.17),
-		GLASS,
-		Enum.Material.Glass,
-		CFrame.new(0.29, 0, 0),
-		Enum.PartType.Cylinder,
-		0.45
-	)
-	add(
-		"BottleNeck",
-		Vector3.new(0.24, 0.085, 0.085),
-		GLASS,
-		Enum.Material.Glass,
-		CFrame.new(0.45, 0, 0),
-		Enum.PartType.Cylinder,
-		0.4
-	)
-	add(
-		"Petrol",
-		Vector3.new(0.34, 0.18, 0.18),
-		PETROL,
-		Enum.Material.Glass,
-		CFrame.new(-0.07, 0, 0),
-		Enum.PartType.Cylinder,
-		0.35
-	)
-	add(
-		"RagWad",
-		Vector3.new(0.12, 0.1, 0.11),
-		Color3.fromRGB(176, 166, 146),
-		Enum.Material.Fabric,
-		CFrame.new(0.6, 0.01, 0) * CFrame.Angles(0.3, 0.2, 0.4)
-	)
-	add(
-		"RagTail",
-		Vector3.new(0.24, 0.05, 0.09),
-		Color3.fromRGB(150, 138, 118),
-		Enum.Material.Fabric,
-		CFrame.new(0.48, 0.07, 0.02) * CFrame.Angles(0, 0, math.rad(-20))
-	)
-	local rag = Instance.new("Attachment")
-	rag.Name = "Rag"
-	rag.CFrame = CFrame.new(0.66, 0, 0) * CFrame.Angles(0, 0, math.rad(-90))
-	rag.Parent = body
-	local lit: SmallFlame? = nil
-	return {
-		main = body,
-		rag = rag,
-		-- The petrol-soaked rag catches: sparks, the flame grows in 0.25 s.
-		light = function(on: boolean)
-			if on and lit == nil then
-				sparks(rag, 6, 5, 50)
-				lit = smallFlame(rag, 0.22, 0.25)
-				fireLight(rag, 1.4, 8, 0.25)
-			end
-		end,
-		flame = function(): SmallFlame?
-			return lit
-		end,
-	}
-end
-
--- A 20 l jerrycan (47 × 34 × 17 cm: 1.3 × 0.94 × 0.47 studs), red, held by
--- its top handle. Origin = the handle; the can hangs below it (-Y).
-local CAN_RED = Color3.fromRGB(138, 26, 20)
-local function buildCan(folder: Instance, holder: BasePart, grip: CFrame): Attachment
-	local handle = part(
-		"CanHandle",
-		Vector3.new(0.07, 0.07, 0.42),
-		Color3.fromRGB(30, 28, 26),
-		Enum.Material.Metal
-	)
-	weld(holder, handle, grip)
-	handle.Parent = folder
-	local body = part("CanBody", Vector3.new(0.47, 1.3, 0.94), CAN_RED, Enum.Material.Metal)
-	weld(handle, body, CFrame.new(0, -0.72, 0.05))
-	body.Parent = folder
-	for _, z in { -0.18, 0.18 } do
-		local post = part("CanPost", Vector3.new(0.06, 0.12, 0.06), CAN_RED, Enum.Material.Metal)
-		weld(handle, post, CFrame.new(0, -0.05, z))
-		post.Parent = folder
-	end
-	-- the pressed X on its sides
-	for _, angle in { 34, -34 } do
-		local rib = part(
-			"CanRib",
-			Vector3.new(0.49, 0.06, 1.2),
-			Color3.fromRGB(118, 20, 16),
-			Enum.Material.Metal
-		)
-		weld(body, rib, CFrame.Angles(math.rad(angle), 0, 0))
-		rib.Parent = folder
-	end
-	local cap = part(
-		"CanSpout",
-		Vector3.new(0.14, 0.12, 0.12),
-		Color3.fromRGB(40, 38, 34),
-		Enum.Material.Metal,
-		Enum.PartType.Cylinder
-	)
-	weld(body, cap, CFrame.new(0, 0.66, -0.38) * UPRIGHT)
-	cap.Parent = folder
-	local spout = Instance.new("Attachment")
-	spout.Name = "Spout"
-	spout.Position = Vector3.new(0, 0.74, -0.4)
-	spout.Parent = body
-	return spout
-end
-
-local function buildFlask(folder: Instance, holder: BasePart, grip: CFrame)
-	local flask = part(
-		"HipFlask",
-		Vector3.new(0.3, 0.42, 0.08),
-		Color3.fromRGB(150, 150, 146),
-		Enum.Material.Metal
-	)
-	flask.Reflectance = 0.2
-	weld(holder, flask, grip)
-	flask.Parent = folder
-	local cap = part(
-		"HipFlaskCap",
-		Vector3.new(0.06, 0.07, 0.07),
-		Color3.fromRGB(120, 118, 112),
-		Enum.Material.Metal,
-		Enum.PartType.Cylinder
-	)
-	weld(flask, cap, CFrame.new(0, 0.24, 0) * UPRIGHT)
-	cap.Parent = folder
-end
-
--- Grips, in the arm's space (the hand at Y = -1, its front -Z): the prop's
--- +Y goes along the arm's -Z (upright when the arm points forward).
+-- (the Zippo in the hand: its +Y along the arm's -Z, upright when the arm
+-- points forward; the hand at Y = -1)
 local HAND_UPRIGHT = CFrame.new(0, -1.1, -0.12) * CFrame.Angles(math.rad(-90), 0, 0)
-local HAND_HANG = CFrame.new(0, -1.08, 0)
 
-------------------------------------------------------------------------------
--- Moves: props and sounds on the clips' beats
-------------------------------------------------------------------------------
-
-type Run = { token: number, folder: Folder, zippo: Zippo?, bottle: Bottle?, spout: Attachment? }
+-- One move playing on a model (its props, its beats).
+type Run = { token: number, folder: Folder, zippo: Zippo? }
 local runs: { [Model]: Run } = setmetatable({}, { __mode = "k" }) :: any
 local runToken = 0
 
-local function endRun(model: Model)
+------------------------------------------------------------------------------
+-- The jets (shared looks): every one leaves the gun's muzzle
+------------------------------------------------------------------------------
+
+-- The gun's muzzle (LookVector = where the jet goes), or a stand-in in
+-- front of his chest while the gun isn't built yet.
+local function muzzleOf(model: Model): Attachment?
+	local at = Flamethrower.muzzle(model)
+	if at then
+		return at
+	end
+	local head = bodyPart(model, "Head")
+	if head == nil then
+		return nil
+	end
+	local stand = head:FindFirstChild("PyroMuzzle")
+	if stand and stand:IsA("Attachment") then
+		return stand
+	end
+	local made = Instance.new("Attachment")
+	made.Name = "PyroMuzzle"
+	made.Position = Vector3.new(0.4, -1.4, -2.2)
+	made.Parent = head
+	return made
+end
+
+-- An attachment `ahead` studs down the jet, riding with the gun.
+local function along(muzzle: Attachment, ahead: number, name: string): Attachment
+	local a = Instance.new("Attachment")
+	a.Name = name
+	a.CFrame = muzzle.CFrame * CFrame.new(0, 0, -ahead)
+	a.Parent = muzzle.Parent
+	return a
+end
+
+local function isAwake(model: Model): boolean
+	return model:GetAttribute("Awakened") == true
+end
+
+-- Cut short: stunned, knocked down, dead.
+local function cutShort(model: Model): boolean
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	return model:GetAttribute("Stunned") == true
+		or model:GetAttribute("Ragdolled") == true
+		or (humanoid ~= nil and humanoid.Health <= 0)
+end
+
+-- A beam of flame from `a0` to `a1` (the flame band texture scrolling).
+local function flameBeam(
+	a0: Attachment,
+	a1: Attachment,
+	width0: number,
+	width1: number,
+	colour: ColorSequence
+): Beam
+	local b = Instance.new("Beam")
+	b.Attachment0 = a0
+	b.Attachment1 = a1
+	b.Texture = FireLook.image("flameStrip") or ""
+	b.TextureMode = Enum.TextureMode.Wrap
+	b.TextureLength = 3
+	b.TextureSpeed = 5
+	b.FaceCamera = true
+	b.Segments = 12
+	b.Width0 = width0
+	b.Width1 = width1
+	b.LightEmission = 1
+	b.Brightness = 3
+	b.LightInfluence = 0
+	b.Color = colour
+	b.Transparency = numbers({ 0, 0.6, 1 }, { 0.15, 0.4, 1 })
+	b.Parent = a1
+	return b
+end
+
+-- The overpressure root of an Awakened jet (and of the finisher's): its
+-- first studs burn blue-white before turning petrol orange. Off after
+-- `seconds` (or by the returned stop).
+local function blueRoot(
+	muzzle: Attachment,
+	length: number,
+	width: number,
+	seconds: number
+): () -> ()
+	local tip = along(muzzle, length, "PyroBlueTip")
+	local beam =
+		flameBeam(muzzle, tip, width * 0.45, width, ColorSequence.new(BLUE_CORE, BLUE_WARM))
+	beam.Brightness = 5
+	beam.Transparency = numbers({ 0, 0.7, 1 }, { 0.05, 0.3, 0.9 })
+	local glow = FireLook.layer("glow", muzzle, 0.45, "PyroBlueGlow")
+	glow.Color = ColorSequence.new(BLUE_CORE)
+	glow.EmissionDirection = Enum.NormalId.Front
+	glow.Speed = NumberRange.new(length * 6, length * 8)
+	glow.Lifetime = NumberRange.new(0.05, 0.08)
+	glow.Rate = 40 * FireLook.quality()
+	local done = false
+	local function stop()
+		if done then
+			return
+		end
+		done = true
+		glow.Enabled = false
+		Debris:AddItem(glow, 0.3)
+		TweenService:Create(beam, TweenInfo.new(0.08), { Width0 = 0, Width1 = 0 }):Play()
+		Debris:AddItem(tip, 0.1)
+	end
+	task.delay(seconds, stop)
+	return stop
+end
+
+-- Fuel drooling from the slash-cut tip (`burning`: the pilot licks it:
+-- small burning drops). A few for `seconds`.
+local function drool(muzzle: Attachment, seconds: number, burning: boolean)
+	local e = FireLook.layer("spark", muzzle, if burning then 1.2 else 0.9, "PyroDrool")
+	e.Color = if burning
+		then colors({ 0, 0.5, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
+		else ColorSequence.new(PETROL)
+	e.LightEmission = if burning then 0.8 else 0.1
+	e.Size = numbers({ 0, 1 }, { 0.08, 0.04 })
+	e.Speed = NumberRange.new(0.2, 0.8)
+	e.SpreadAngle = Vector2.new(20, 20)
+	e.Acceleration = Vector3.new(0, -40, 0)
+	e.Lifetime = NumberRange.new(0.35, 0.6)
+	e.Rate = 22
+	task.delay(seconds, function()
+		e.Enabled = false
+		Debris:AddItem(e, 0.7)
+	end)
+end
+
+-- A short lick of flame out of the tip and soot (after a burst, a
+-- sputter), and smoke puffing out of the shroud's holes.
+local function lick(model: Model, muzzle: Attachment, size: number, seconds: number)
+	local tongue = FireLook.layer("tongue", muzzle, size, "PyroLick")
+	tongue.EmissionDirection = Enum.NormalId.Front
+	tongue.Speed = NumberRange.new(1, 3)
+	tongue.Acceleration = Vector3.new(0, 6, 0)
+	tongue.Rate = 26 * FireLook.quality()
+	local soot = FireLook.layer("smoke", muzzle, size * 0.5, "PyroLickSmoke")
+	soot.Color = ColorSequence.new(SOOT, SOOT_THIN)
+	soot.Speed = NumberRange.new(1, 2)
+	soot.Acceleration = Vector3.new(0, 4, 0)
+	soot.Lifetime = NumberRange.new(0.8, 1.3)
+	soot.Rate = 10 * FireLook.quality()
+	task.delay(seconds, function()
+		tongue.Enabled = false
+		soot.Enabled = false
+		Debris:AddItem(tongue, 0.6)
+		Debris:AddItem(soot, 1.5)
+	end)
+	Flamethrower.trigger(model, false)
+end
+
+-- Tongues of flame spitting out of the shroud's drilled holes (Awakened
+-- overpressure), for `seconds`.
+local function shroudSpit(model: Model, seconds: number)
+	local core = Flamethrower.point(model, "ShroudGlow")
+	if core == nil then
+		return
+	end
+	local spit = FireLook.layer("tongue", core, 0.35, "PyroShroudSpit")
+	spit.SpreadAngle = Vector2.new(180, 180)
+	spit.Speed = NumberRange.new(1.5, 3)
+	spit.Lifetime = NumberRange.new(0.12, 0.2)
+	spit.Rate = 40 * FireLook.quality()
+	task.delay(seconds, function()
+		spit.Enabled = false
+		Debris:AddItem(spit, 0.4)
+	end)
+end
+
+------------------------------------------------------------------------------
+-- Sustained jets: the stream, the inferno, the charge's wedge, the
+-- finisher's full bore
+------------------------------------------------------------------------------
+
+type JetLook = {
+	range: number, -- studs the stream reaches
+	width: number, -- at its far end
+	rate: number, -- flame clusters per second
+	billow: number, -- the rolling fireball at its far end (size)
+	soot: number, -- soot plume over the far half (rate)
+	light: number,
+	blue: boolean, -- the overpressure root
+	rake: number?, -- seconds in: the muzzle pitches down, the end licks the floor
+	low: boolean?, -- a short low stream splashing off the floor (the charge)
+}
+
+type Jet = { stop: (fast: boolean?) -> (), model: Model }
+local jets: { [Model]: Jet } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Where the jet's axis meets the floor (a ray down its length), or nil.
+local function floorHit(muzzle: Attachment, range: number, ignore: { Instance }): Vector3?
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+	local from = muzzle.WorldPosition
+	local hit = workspace:Raycast(from, muzzle.WorldCFrame.LookVector * range, params)
+	if hit and hit.Normal.Y > 0.6 then
+		return hit.Position
+	end
+	return nil
+end
+
+-- Flames licking along the floor where a jet splashes (look only; the
+-- server's pool, if any, does the burning).
+local function groundLick(at: Vector3, size: number, seconds: number)
+	local spot = anchorAt(at + Vector3.new(0, 0.1, 0), Vector3.new(0, 1, 0))
+	local ground = FireLook.layer("ground", spot, size, "PyroGroundLick")
+	ground.Rate = 10 * FireLook.quality()
+	local tongues = FireLook.layer("tongue", spot, size * 0.8, "PyroGroundLick")
+	tongues.SpreadAngle = Vector2.new(70, 70)
+	tongues.Speed = NumberRange.new(2, 5)
+	tongues.Rate = 18 * FireLook.quality()
+	task.delay(seconds, function()
+		ground.Enabled = false
+		tongues.Enabled = false
+	end)
+	Debris:AddItem(spot, seconds + 1.5)
+end
+
+-- A stream of fire out of the muzzle for `seconds`: a continuous core that
+-- REACHES out (0.09 s, it extends, it isn't an impact), flame clusters
+-- thrown down it that brake and curl up into a rolling billow at its far
+-- end, black soot over its far half, the light inside it. It lets go of
+-- the muzzle at the end (the tail flies on, thins) or at once when he is
+-- stunned, knocked down, killed or starts something else.
+local function startJet(model: Model, look: JetLook, seconds: number): Jet?
+	local muzzle = muzzleOf(model)
+	if muzzle == nil then
+		return nil
+	end
+	local old = jets[model]
+	if old then
+		old.stop(true)
+	end
+	local run = runs[model]
+	local q = FireLook.quality()
+	local range = look.range
+	Flamethrower.trigger(model, true)
+	-- The start: a puff of fire at the muzzle.
+	local puff = FireLook.layer("fireball", muzzle, 0.9, "PyroJetPuff")
+	puff.EmissionDirection = Enum.NormalId.Front
+	puff.Speed = NumberRange.new(range * 0.4, range * 0.6)
+	puff.SpreadAngle = Vector2.new(20, 20)
+	puff.Lifetime = NumberRange.new(0.3, 0.45)
+	puff:Emit(2)
+	Debris:AddItem(puff, 1)
+	-- The core, reaching out.
+	local tip = along(muzzle, 0.3, "PyroJetTip")
+	local core = flameBeam(
+		muzzle,
+		tip,
+		0.25,
+		look.width,
+		ColorSequence.new(Color3.fromRGB(255, 244, 226), Color3.fromRGB(255, 170, 100))
+	)
+	core.TextureLength = range * 0.35
+	local reach = if look.low then range * 0.55 else range * 0.72
+	TweenService
+		:Create(tip, TweenInfo.new(0.09), { CFrame = muzzle.CFrame * CFrame.new(0, 0, -reach) })
+		:Play()
+	-- Flame clusters thrown down it: they brake, sag, curl up.
+	local body = FireLook.layer("body", muzzle, 1, "PyroJetBody")
+	body.Orientation = Enum.ParticleOrientation.FacingCamera
+	body.EmissionDirection = Enum.NormalId.Front
+	body.Size = numbers({ 0, 0.25, 1 }, { 0.35, look.width * 0.55, look.width * 1.1 })
+	body.Transparency = numbers({ 0, 0.1, 0.75, 1 }, { 0.55, 0.1, 0.45, 1 })
+	body.Lifetime = NumberRange.new(0.36, 0.5)
+	body.Speed = NumberRange.new(range * 2.2, range * 2.8)
+	body.Drag = 2.5
+	body.Acceleration = Vector3.new(0, if look.low then 4 else 10, 0)
+	body.SpreadAngle = Vector2.new(if look.low then 18 else 6, if look.low then 10 else 5)
+	body.Rotation = NumberRange.new(0, 360)
+	body.RotSpeed = NumberRange.new(-90, 90)
+	body.Rate = look.rate * q
+	-- Soot over the far half, the light inside the stream.
+	local mid = along(muzzle, range * 0.5, "PyroJetMid")
+	local soot = FireLook.layer("smoke", mid, 0.8, "PyroJetSoot")
+	soot.Color = ColorSequence.new(SOOT, SOOT_THIN)
+	soot.EmissionDirection = Enum.NormalId.Top
+	soot.Speed = NumberRange.new(2, 4)
+	soot.Lifetime = NumberRange.new(1.2, 1.9)
+	soot.Acceleration = Vector3.new(0, 3, 0)
+	soot.SpreadAngle = Vector2.new(40, 40)
+	soot.Rate = look.soot * q
+	local lightAt = along(muzzle, range * 0.4, "PyroJetLight")
+	local light = fireLight(lightAt, look.light, range, 0.06)
+	local stopBlue = if look.blue then blueRoot(muzzle, 2, 0.7, seconds + 0.1) else nil
+	-- The billow at the far end (a fireball every ~0.12 s).
+	local billow = FireLook.layer("fireball", tip, look.billow, "PyroJetBillow")
+	billow.Speed = NumberRange.new(1, 3)
+	billow.SpreadAngle = Vector2.new(50, 50)
+	billow.Acceleration = Vector3.new(0, 7, 0)
+	billow.Lifetime = NumberRange.new(0.5, 0.8)
+	local started = os.clock()
+	local nextBillow = started + 0.09
+	local nextLick = started + 0.15
+	local jet: Jet
+	local connection: RBXScriptConnection? = nil
+	local done = false
+	local function stop(fast: boolean?)
+		if done then
+			return
+		end
+		done = true
+		if jets[model] == jet then
+			jets[model] = nil
+		end
+		if connection then
+			connection:Disconnect()
+		end
+		body.Enabled = false
+		soot.Enabled = false
+		light:Destroy()
+		if stopBlue then
+			stopBlue()
+		end
+		Debris:AddItem(body, 0.7)
+		Debris:AddItem(mid, 2)
+		Debris:AddItem(lightAt, 0.1)
+		Debris:AddItem(billow, 1)
+		-- It lets go of the muzzle: the tail flies on and thins.
+		local tail = muzzle.CFrame * CFrame.new(0, 0.4, -range * 0.95)
+		TweenService:Create(
+			core,
+			TweenInfo.new(if fast then 0.08 else 0.15),
+			{ Width0 = 0, Width1 = look.width * 0.3 }
+		):Play()
+		TweenService:Create(tip, TweenInfo.new(if fast then 0.08 else 0.15), { CFrame = tail })
+			:Play()
+		Debris:AddItem(tip, 0.18)
+		if not fast then
+			lick(model, muzzle, 0.6, 0.2)
+		else
+			Flamethrower.trigger(model, false)
+		end
+	end
+	jet = { stop = stop, model = model }
+	jets[model] = jet
+	connection = RunService.Heartbeat:Connect(function()
+		local now = os.clock()
+		if cutShort(model) or muzzle.Parent == nil or (run ~= nil and runs[model] ~= run) then
+			stop(true)
+			return
+		end
+		if now >= nextBillow then
+			nextBillow = now + 0.12
+			billow:Emit(1)
+		end
+		-- Licking along the floor: the charge's bow wave, the inferno's rake.
+		local raking = look.low or (look.rake ~= nil and now - started >= look.rake)
+		if raking and now >= nextLick then
+			nextLick = now + 0.1
+			local at = floorHit(muzzle, range, { model, effectsFolder() })
+			if at then
+				groundLick(at, if look.low then 1.4 else 1.8, 0.35)
+			end
+		end
+	end)
+	task.delay(seconds, function()
+		stop(false)
+	end)
+	return jet
+end
+
+local function stopJet(model: Model)
+	local jet = jets[model]
+	if jet then
+		jet.stop(true)
+	end
+end
+
+------------------------------------------------------------------------------
+-- One-shot jets: the burst, the lance, the pillar, the spray
+------------------------------------------------------------------------------
+
+-- FLASH BURST: a petrol slug streaks out (0.40), then a round pressurised
+-- fireball POPS full size 3-5 studs ahead (0.42): a glow core, a ring of
+-- sparks, a flash; it rolls forward with drag and turns to soot.
+local function slug(muzzle: Attachment)
+	local stream = FireLook.layer("spark", muzzle, 1.4, "PyroSlug")
+	stream.Color = ColorSequence.new(PETROL, FLAME)
+	stream.LightEmission = 0.5
+	stream.Brightness = 1.5
+	stream.Speed = NumberRange.new(18, 22)
+	stream.Lifetime = NumberRange.new(0.06, 0.09)
+	stream.Acceleration = Vector3.zero
+	stream.SpreadAngle = Vector2.new(3, 3)
+	stream.EmissionDirection = Enum.NormalId.Front
+	stream:Emit(10)
+	Debris:AddItem(stream, 0.5)
+end
+
+local function burstPop(model: Model, muzzle: Attachment)
+	local look = muzzle.WorldCFrame.LookVector
+	local centre = muzzle.WorldPosition + look * 4
+	local at = anchorAt(centre, look)
+	local q = FireLook.quality()
+	if FireLook.has("fireball") then
+		local ball = FireLook.layer("fireball", at, 2.4, "PyroBurst")
+		ball.EmissionDirection = Enum.NormalId.Front
+		ball.Speed = NumberRange.new(8, 12)
+		ball.Drag = 5
+		ball.SpreadAngle = Vector2.new(30, 30)
+		ball.Lifetime = NumberRange.new(0.4, 0.6)
+		ball.Size = numbers({ 0, 1 }, { 3.6, 4.4 })
+		ball:Emit(math.floor(3 + 2 * q))
+	else
+		local burst = emitter(at, {
+			Texture = FIRE_TEXTURE,
+			Color = colors({ 0, 0.3, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP }),
+			LightEmission = 0.8,
+			Size = numbers({ 0, 0.2, 1 }, { 2.4, 2.8, 0.6 }),
+			Transparency = numbers({ 0, 0.6, 1 }, { 0.1, 0.3, 1 }),
+			Lifetime = NumberRange.new(0.3, 0.5),
+			Speed = NumberRange.new(8, 12),
+			Drag = 4,
+			SpreadAngle = Vector2.new(40, 40),
+			EmissionDirection = Enum.NormalId.Front,
+			Rotation = NumberRange.new(0, 360),
+			Rate = 0,
+		})
+		burst:Emit(22)
+	end
+	local core = FireLook.layer("glow", at, 2.2, "PyroBurstCore")
+	core.Lifetime = NumberRange.new(0.1, 0.14)
+	core:Emit(2)
+	-- the ring of sparks, radial (4 frames)
+	local ring = FireLook.layer("spark", at, 1.3, "PyroBurstRing")
+	ring.SpreadAngle = Vector2.new(180, 180)
+	ring.Speed = NumberRange.new(14, 22)
+	ring.Lifetime = NumberRange.new(0.06, 0.1)
+	ring:Emit(10)
+	local embers = FireLook.layer("ember", at, 1, "PyroBurstEmbers")
+	embers.EmissionDirection = Enum.NormalId.Front
+	embers.Speed = NumberRange.new(5, 11)
+	embers.Lifetime = NumberRange.new(0.5, 1.1)
+	embers:Emit(math.floor(10 * q))
+	flash(centre, 3, 14, 0.25)
+	task.delay(0.18, function()
+		local soot = FireLook.layer("smoke", at, 0.6, "PyroBurstSmoke")
+		soot.EmissionDirection = Enum.NormalId.Front
+		soot.Speed = NumberRange.new(3, 6)
+		soot.Acceleration = Vector3.new(0, 4, 0)
+		soot.Lifetime = NumberRange.new(1, 1.6)
+		soot:Emit(4)
+	end)
+	Debris:AddItem(at, 2.5)
+	Flamethrower.trigger(model, true)
+end
+
+-- BLOWTORCH: a short hard lance (3 studs), blue-white core with an orange
+-- fringe, molten slag sparks; it snaps off with a puff. Returns its stop.
+local function lance(model: Model, seconds: number): (() -> ())?
+	local muzzle = muzzleOf(model)
+	if muzzle == nil then
+		return nil
+	end
+	Flamethrower.trigger(model, true)
+	local tip = along(muzzle, 3, "PyroLanceTip")
+	local fringe = flameBeam(muzzle, tip, 0.5, 0.35, ColorSequence.new(FLAME_CORE, FLAME))
+	fringe.Transparency = numbers({ 0, 0.8, 1 }, { 0.3, 0.5, 1 })
+	local stopBlue = blueRoot(muzzle, 2.4, 0.3, seconds)
+	local slag = FireLook.layer("spark", tip, 1, "PyroSlag")
+	slag.Color = colors({ 0, 0.4, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
+	slag.SpreadAngle = Vector2.new(35, 35)
+	slag.EmissionDirection = Enum.NormalId.Front
+	slag.Speed = NumberRange.new(6, 12)
+	slag.Acceleration = Vector3.new(0, -40, 0)
+	slag.Lifetime = NumberRange.new(0.2, 0.4)
+	slag.Rate = 45 * FireLook.quality()
+	local glowAt = along(muzzle, 1.5, "PyroLanceLight")
+	local light = Instance.new("PointLight")
+	light.Color = BLUE_CORE
+	light.Brightness = 2.5
+	light.Range = 8
+	light.Parent = glowAt
+	local done = false
+	local function stop()
+		if done then
+			return
+		end
+		done = true
+		stopBlue()
+		slag.Enabled = false
+		light:Destroy()
+		TweenService:Create(fringe, TweenInfo.new(0.06), { Width0 = 0, Width1 = 0 }):Play()
+		Debris:AddItem(tip, 0.6)
+		Debris:AddItem(glowAt, 0.1)
+		local puff = FireLook.layer("smoke", muzzle, 0.4, "PyroLancePuff")
+		puff.EmissionDirection = Enum.NormalId.Front
+		puff.Speed = NumberRange.new(1, 2)
+		puff:Emit(2)
+		Debris:AddItem(puff, 1.5)
+		Flamethrower.trigger(model, false)
+	end
+	task.delay(seconds, stop)
+	return stop
+end
+
+-- The AWAKENING's pillar: the gun pointed at the sky, a column of fire
+-- ~10 studs, blue-white at its root, a flash; dark smoke rising slowly.
+local function pillar(model: Model, seconds: number)
+	local muzzle = muzzleOf(model)
+	if muzzle == nil then
+		return
+	end
+	Flamethrower.trigger(model, true)
+	local tip = along(muzzle, 0.5, "PyroPillarTip")
+	local core = flameBeam(muzzle, tip, 0.4, 2.6, ColorSequence.new(FLAME_CORE, FLAME))
+	core.TextureLength = 4
+	TweenService
+		:Create(tip, TweenInfo.new(0.08), { CFrame = muzzle.CFrame * CFrame.new(0, 0, -10) })
+		:Play()
+	blueRoot(muzzle, 2, 0.8, seconds)
+	local body = FireLook.layer("body", muzzle, 1.3, "PyroPillar")
+	body.EmissionDirection = Enum.NormalId.Front
+	body.Speed = NumberRange.new(24, 30)
+	body.Drag = 2
+	body.SpreadAngle = Vector2.new(8, 8)
+	body.Lifetime = NumberRange.new(0.35, 0.5)
+	body.Rate = 50 * FireLook.quality()
+	local billow = FireLook.layer("fireball", tip, 2.4, "PyroPillarTop")
+	billow.SpreadAngle = Vector2.new(70, 70)
+	billow.Speed = NumberRange.new(1, 3)
+	billow:Emit(3)
+	flash(muzzle.WorldPosition + Vector3.new(0, 5, 0), 6, 22, 0.3)
+	task.delay(seconds, function()
+		body.Enabled = false
+		Debris:AddItem(body, 0.7)
+		TweenService:Create(core, TweenInfo.new(0.15), { Width0 = 0, Width1 = 0.5 }):Play()
+		Debris:AddItem(tip, 0.2)
+		local smoke = FireLook.layer("smoke", tip, 1.6, "PyroPillarSmoke")
+		smoke.Color = ColorSequence.new(SOOT, SOOT_THIN)
+		smoke.Speed = NumberRange.new(1, 3)
+		smoke.Acceleration = Vector3.new(0, 2, 0)
+		smoke.Lifetime = NumberRange.new(2, 3.5)
+		smoke:Emit(8)
+		Flamethrower.trigger(model, false)
+	end)
+end
+
+-- A ray down to the floor: past the fighters (and their bodies) and our effects.
+local function floorParams(): RaycastParams
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local ignore: { Instance } = { effectsFolder() }
+	for _, tag in { Config.Combat.TAG, Config.Combat.CORPSE_TAG } do
+		for _, item in CollectionService:GetTagged(tag) do
+			table.insert(ignore, item)
+		end
+	end
+	params.FilterDescendantsInstances = ignore
+	return params
+end
+
+-- A wet dark mark on the floor (raw fuel), fading over `seconds`.
+local function wetMark(at: Vector3, size: number, seconds: number)
+	local mark = part(
+		"PyroFuelMark",
+		Vector3.new(size, 0.03, size * 0.7),
+		Color3.fromRGB(40, 33, 24),
+		Enum.Material.SmoothPlastic
+	)
+	mark.Anchored = true
+	mark.Reflectance = 0.15
+	mark.Transparency = 0.35
+	mark.CFrame = CFrame.new(at + Vector3.new(0, 0.02, 0))
+		* CFrame.Angles(0, random:NextNumber(0, math.pi * 2), 0)
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(1, 0.05, 1)
+	mesh.Parent = mark
+	mark.Parent = effectsFolder()
+	TweenService:Create(
+		mark,
+		TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{ Transparency = 1 }
+	):Play()
+	Debris:AddItem(mark, seconds + 0.1)
+end
+
+-- FUEL SPRAY: a wide flat fan of raw amber fuel out of the muzzle (no
+-- flame: the pilot is out) for `seconds`, swept with his torso; heavy drops
+-- land as wet marks.
+local function spray(model: Model, seconds: number)
+	local muzzle = muzzleOf(model)
+	if muzzle == nil then
+		return
+	end
+	Flamethrower.trigger(model, true)
+	local fuel = emitter(muzzle, {
+		Name = "PyroSpray",
+		Color = ColorSequence.new(PETROL),
+		LightInfluence = 1,
+		Size = numbers({ 0, 1 }, { 0.12, 0.07 }),
+		Transparency = numbers({ 0, 0.8, 1 }, { 0.25, 0.4, 1 }),
+		Lifetime = NumberRange.new(0.4, 0.65),
+		Speed = NumberRange.new(16, 24),
+		Drag = 0.6,
+		Acceleration = Vector3.new(0, -30, 0),
+		EmissionDirection = Enum.NormalId.Front,
+		SpreadAngle = Vector2.new(30, 6),
+		Orientation = Enum.ParticleOrientation.VelocityParallel,
+		Squash = numbers({ 0, 1 }, { 2, 2 }),
+		Rate = 260,
+	})
+	local mist = emitter(muzzle, {
+		Name = "PyroSprayMist",
+		Texture = SMOKE_TEXTURE,
+		Color = ColorSequence.new(FUEL_MIST),
+		LightInfluence = 1,
+		Size = numbers({ 0, 1 }, { 0.5, 2.4 }),
+		Transparency = numbers({ 0, 1 }, { 0.85, 1 }),
+		Lifetime = NumberRange.new(0.5, 0.9),
+		Speed = NumberRange.new(8, 12),
+		Drag = 2,
+		EmissionDirection = Enum.NormalId.Front,
+		SpreadAngle = Vector2.new(34, 8),
+		Rate = 30,
+	})
+	-- the heavy drops landing
+	for index = 1, 3 do
+		task.delay(seconds * index / 4, function()
+			if muzzle.Parent == nil then
+				return
+			end
+			local look = muzzle.WorldCFrame.LookVector
+			local from = muzzle.WorldPosition + look * random:NextNumber(3, 8)
+			local floor =
+				workspace:Raycast(from + Vector3.new(0, 2, 0), Vector3.new(0, -9, 0), floorParams())
+			if floor and floor.Normal.Y > 0.6 then
+				wetMark(floor.Position, random:NextNumber(1, 1.8), 6)
+			end
+		end)
+	end
+	task.delay(seconds, function()
+		fuel.Enabled = false
+		mist.Enabled = false
+		Debris:AddItem(fuel, 0.8)
+		Debris:AddItem(mist, 1)
+		Flamethrower.trigger(model, false)
+		if muzzle.Parent then
+			drool(muzzle, 0.25, false)
+		end
+	end)
+end
+
+------------------------------------------------------------------------------
+-- Moves: the gun drawn, fired, slung, on the clips' beats
+------------------------------------------------------------------------------
+
+-- (`cut`: ended early, the gun drawn: fumbled back onto his back)
+local function endRun(model: Model, cut: boolean?)
 	local run = runs[model]
 	runs[model] = nil
 	if run then
 		run.folder:Destroy()
+		if cut and Flamethrower.isDrawn(model) then
+			Flamethrower.fumble(model)
+			Flamethrower.setGauge(model, nil)
+			Flamethrower.setHeat(model, 0)
+		end
 	end
 end
 
 local function newRun(model: Model, seconds: number): Run
-	endRun(model)
+	endRun(model, true)
+	stopJet(model)
 	runToken += 1
 	local folder = Instance.new("Folder")
 	folder.Name = "PyroProps"
@@ -584,18 +1077,18 @@ local function newRun(model: Model, seconds: number): Run
 	task.delay(seconds, function()
 		local current = runs[model]
 		if current and current.token == token then
-			endRun(model)
+			endRun(model, true)
 		end
 	end)
 	return run
 end
 
--- `fn` at `at` seconds, if this run is still going.
+-- `fn` at `at` seconds, if this run is still going (and he isn't cut short).
 local function beat(model: Model, run: Run, at: number, fn: () -> ())
 	local token = run.token
 	task.delay(at, function()
 		local current = runs[model]
-		if current and current.token == token and model.Parent then
+		if current and current.token == token and model.Parent and not cutShort(model) then
 			fn()
 		end
 	end)
@@ -611,78 +1104,44 @@ local function zippoIn(model: Model, run: Run, armName: string): Zippo?
 	return zippo
 end
 
--- The flare: lighter fluid squirted through the flame. A thin jet of
--- fluid, then (+0.02 s) a burst of fire forward, full size at once (pop,
--- don't grow), rolling up into soot (+0.1 s), embers; one flash.
-local function flare(model: Model, zippo: Zippo)
-	local root = bodyPart(model, "HumanoidRootPart")
-	local from = zippo.wick.WorldPosition
-	local look = if root then root.CFrame.LookVector else Vector3.new(0, 0, -1)
-	local at = anchorAt(from, look)
-	local stream = FireLook.layer("spark", at, 1.4, "PyroFluid")
-	stream.Color = ColorSequence.new(PETROL, FLAME)
-	stream.LightEmission = 0.5
-	stream.Brightness = 1.5
-	stream.Speed = NumberRange.new(18, 22)
-	stream.Lifetime = NumberRange.new(0.08, 0.12)
-	stream.Acceleration = Vector3.zero
-	stream.SpreadAngle = Vector2.new(4, 4)
-	stream.EmissionDirection = Enum.NormalId.Front
-	stream:Emit(10)
-	flash(from + look * 1.5, 3, 12, 0.25)
-	task.delay(0.02, function()
-		if FireLook.has("fireball") then
-			local ball = FireLook.layer("fireball", at, 1.7, "PyroFlare")
-			ball.EmissionDirection = Enum.NormalId.Front
-			ball.Speed = NumberRange.new(8, 12)
-			ball.Drag = 6
-			ball.SpreadAngle = Vector2.new(12, 12)
-			ball.Lifetime = NumberRange.new(0.35, 0.5)
-			ball.Size = numbers({ 0, 1 }, { 1.2, 2.2 })
-			ball:Emit(5)
-		else
-			local burst = emitter(at, {
-				Texture = FIRE_TEXTURE,
-				Color = colors({ 0, 0.3, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP }),
-				LightEmission = 0.8,
-				Size = numbers({ 0, 0.2, 1 }, { 0.6, 1.4, 0.4 }),
-				Transparency = numbers({ 0, 0.6, 1 }, { 0.1, 0.3, 1 }),
-				Lifetime = NumberRange.new(0.18, 0.32),
-				Speed = NumberRange.new(10, 16),
-				Drag = 3,
-				SpreadAngle = Vector2.new(14, 14),
-				EmissionDirection = Enum.NormalId.Front,
-				Rotation = NumberRange.new(0, 360),
-				Rate = 0,
-			})
-			burst:Emit(22)
-		end
-		local embers = FireLook.layer("ember", at, 1, "PyroFlareEmbers")
-		embers.EmissionDirection = Enum.NormalId.Front
-		embers.Speed = NumberRange.new(6, 12)
-		embers.Lifetime = NumberRange.new(0.5, 1.1)
-		embers:Emit(8)
+-- The beats every move shares: the hand at the slung grip (`grip`: the
+-- gun swung round under the arm, the fuel sloshing), the pilot lit
+-- (`pilot`: a click and a blue "fwip"), slung again (`sling`: the pilot out).
+local function gunBeats(model: Model, run: Run, grip: number, pilot: number?, sling: number)
+	beat(model, run, grip, function()
+		Flamethrower.draw(model)
+		SoundLayers.play("GunDraw", model)
 	end)
-	task.delay(0.1, function()
-		local soot = FireLook.layer("smoke", at, 0.45, "PyroFlareSmoke")
-		soot.EmissionDirection = Enum.NormalId.Front
-		soot.Speed = NumberRange.new(3, 5)
-		soot.Lifetime = NumberRange.new(1, 1.6)
-		soot:Emit(3)
+	if pilot then
+		beat(model, run, pilot, function()
+			Flamethrower.setPilot(model, true)
+			SoundLayers.play("PilotLight", model)
+		end)
+	end
+	beat(model, run, sling, function()
+		Flamethrower.trigger(model, false)
+		Flamethrower.setPilot(model, false)
+		Flamethrower.setGauge(model, nil)
+		Flamethrower.holster(model)
 	end)
-	Debris:AddItem(at, 2.5)
+end
+
+-- The trigger squeezed: the lever and the cable-pulled valve.
+local function squeeze(model: Model)
+	Flamethrower.trigger(model, true)
+	SoundLayers.play("TriggerClick", model)
 end
 
 local CLIP_LENGTHS: { [string]: number } = {
-	Pyro_Zippo = 0.8,
-	Pyro_Molotov = 1,
-	Pyro_Firebomb = 0.75,
-	Pyro_Breath = 1.4,
-	Pyro_BreathBig = 1.4,
-	Pyro_Douse = 0.9,
+	Pyro_Burst = 0.85,
+	Pyro_Napalm = 1,
+	Pyro_Stream = 1.3,
+	Pyro_Spray = 0.95,
 	Pyro_Awaken = 1,
-	Pyro_FirePunch = 0.6,
-	Pyro_Rush = 0.9,
+	Pyro_Torch = 0.6,
+	Pyro_Mortar = 0.8,
+	Pyro_Inferno = 1.5,
+	Pyro_TorchCharge = 0.9,
 }
 
 -- (set below: the burning forearms of his Awakening)
@@ -692,6 +1151,12 @@ local awakenStarted: { [Model]: number } = setmetatable({}, { __mode = "k" }) ::
 function PyroFx.onAction(model: Model, animation: string)
 	local length = CLIP_LENGTHS[animation]
 	if length == nil then
+		-- (anything else he does - a punch, a dash - cuts a jet short; not
+		-- his finisher's own clips: onFinisherStarted runs those)
+		if runs[model] and string.sub(animation, 1, 5) ~= "Pyro_" then
+			stopJet(model)
+			endRun(model, true)
+		end
 		return
 	end
 	if animation == "Pyro_Awaken" then
@@ -699,164 +1164,189 @@ function PyroFx.onAction(model: Model, animation: string)
 	end
 	armsOnAction(model, animation)
 	local run = newRun(model, length)
-	if animation == "Pyro_Zippo" then
-		local zippo = zippoIn(model, run, "Right Arm")
-		beat(model, run, 0.15, function()
-			if zippo then
-				zippo.setOpen(true)
+	if animation == "Pyro_Burst" then
+		-- FLASH BURST: coil, a spit of fuel, the blip, the pop (0.42), recoil.
+		gunBeats(model, run, 0.15, 0.24, 0.68)
+		beat(model, run, 0.31, function()
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				drool(muzzle, 0.08, true)
 			end
-			SoundLayers.play("ZippoOpen", model)
-		end)
-		beat(model, run, 0.27, function()
-			if zippo then
-				zippo.setLit(true)
-			end
-			SoundLayers.play("ZippoStrike", model)
-		end)
-		beat(model, run, 0.4, function()
-			if zippo then
-				flare(model, zippo)
-			end
-			SoundLayers.play("FlameFlare", model)
-		end)
-		beat(model, run, 0.68, function()
-			if zippo then
-				zippo.setLit(false)
-				zippo.setOpen(false)
-			end
-			SoundLayers.play("ZippoClose", model)
-		end)
-	elseif animation == "Pyro_Molotov" or animation == "Pyro_Firebomb" then
-		local big = animation == "Pyro_Firebomb"
-		local arm = bodyPart(model, "Right Arm")
-		local bottle = if arm then buildBottle(run.folder, arm, HAND_UPRIGHT) else nil
-		run.bottle = bottle
-		if big then
-			-- (lit off his own burning fist)
-			beat(model, run, 0.12, function()
-				if bottle then
-					bottle.light(true)
-				end
-				SoundLayers.play("MolotovLight", model)
-			end)
-		else
-			local zippo = zippoIn(model, run, "Left Arm")
-			if zippo then
-				zippo.setOpen(true)
-			end
-			beat(model, run, 0.05, function()
-				SoundLayers.play("ZippoOpen", model)
-			end)
-			beat(model, run, 0.18, function()
-				if zippo then
-					zippo.setLit(true)
-				end
-				SoundLayers.play("ZippoStrike", model)
-			end)
-			beat(model, run, 0.3, function()
-				if bottle then
-					bottle.light(true)
-				end
-				SoundLayers.play("MolotovLight", model)
-			end)
-			beat(model, run, 0.46, function()
-				if zippo then
-					-- (pocketed)
-					zippo.setLit(false)
-					for _, p in run.folder:GetChildren() do
-						if string.sub(p.Name, 1, 5) == "Zippo" then
-							p:Destroy()
-						end
-					end
-				end
-			end)
-		end
-		beat(model, run, if big then 0.36 else 0.62, function()
-			SoundLayers.play("MolotovThrow", model)
-		end)
-	elseif animation == "Pyro_Breath" or animation == "Pyro_BreathBig" then
-		local left = bodyPart(model, "Left Arm")
-		if left then
-			buildFlask(run.folder, left, HAND_UPRIGHT)
-		end
-		SoundLayers.play("FuelSwig", model)
-		beat(model, run, 0.4, function()
-			for _, p in run.folder:GetChildren() do
-				if string.sub(p.Name, 1, 8) == "HipFlask" then
-					p:Destroy()
-				end
-			end
-		end)
-		local zippo: Zippo? = nil
-		beat(model, run, 0.25, function()
-			zippo = zippoIn(model, run, "Right Arm")
-			if zippo then
-				zippo.setOpen(true)
-			end
-			SoundLayers.play("ZippoOpen", model)
 		end)
 		beat(model, run, 0.38, function()
-			if zippo then
-				zippo.setLit(true)
-			end
-			SoundLayers.play("ZippoStrike", model)
+			squeeze(model)
+			SoundLayers.play("PressureHiss", model)
 		end)
-		beat(model, run, 1.25, function()
-			if zippo then
-				zippo.setLit(false)
-				zippo.setOpen(false)
+		beat(model, run, 0.4, function()
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				slug(muzzle)
 			end
-			SoundLayers.play("ZippoClose", model)
 		end)
-	elseif animation == "Pyro_Douse" then
-		local arm = bodyPart(model, "Right Arm")
-		if arm then
-			run.spout = buildCan(run.folder, arm, HAND_HANG)
-		end
-		-- (the petrol sloshing in the can on the backswing)
-		beat(model, run, 0.16, function()
-			SoundLayers.play("CanSlosh", model)
+		beat(model, run, 0.42, function()
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				burstPop(model, muzzle)
+			end
+			SoundLayers.play("BurstPop", model)
+		end)
+		beat(model, run, 0.52, function()
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				lick(model, muzzle, 0.45, 0.1)
+			end
+		end)
+	elseif animation == "Pyro_Napalm" then
+		-- NAPALM LOB: the valve choked (0.33), the pressure builds, burning
+		-- drool; snapped open (0.58); the glob coughed out (0.62, the server).
+		gunBeats(model, run, 0.15, 0.27, 0.83)
+		beat(model, run, 0.33, function()
+			Flamethrower.setValve(model, -1)
+			Flamethrower.setGauge(model, 0.95)
+			SoundLayers.play("ValveCrank", model)
+			SoundLayers.play("PressureHiss", model)
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				drool(muzzle, 0.24, true)
+			end
+		end)
+		beat(model, run, 0.58, function()
+			Flamethrower.setValve(model, 1)
+			SoundLayers.play("ValveCrank", model)
+		end)
+		beat(model, run, 0.6, function()
+			squeeze(model)
+		end)
+		beat(model, run, 0.62, function()
+			Flamethrower.setGauge(model, 0.15)
+			SoundLayers.play("GlobLaunch", model)
+		end)
+		beat(model, run, 0.64, function()
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				lick(model, muzzle, 0.7, 0.15) -- (the tip sputters, smokes)
+			end
+		end)
+	elseif animation == "Pyro_Stream" then
+		-- FLAME STREAM: braced, the regulator hiss rising, the trigger
+		-- (0.42); the stream itself is the server's cone (0.45 -> 1.0).
+		gunBeats(model, run, 0.15, 0.24, 1.12)
+		beat(model, run, 0.3, function()
+			SoundLayers.play("PressureHiss", model)
+		end)
+		beat(model, run, 0.42, function()
+			squeeze(model)
+		end)
+	elseif animation == "Pyro_Spray" then
+		-- FUEL SPRAY: the pilot shut (0.27), a cold fan of raw fuel
+		-- (0.40 -> 0.62), the pilot relit (0.66): "now I light you".
+		gunBeats(model, run, 0.15, 0.2, 0.77)
+		beat(model, run, 0.27, function()
+			Flamethrower.setPilot(model, false)
+			SoundLayers.play("PilotOut", model)
+		end)
+		beat(model, run, 0.4, function()
+			spray(model, 0.22)
+			SoundLayers.play("FuelSplash", model)
+		end)
+		beat(model, run, 0.66, function()
+			Flamethrower.setPilot(model, true)
+			SoundLayers.play("PilotLight", model)
 		end)
 	elseif animation == "Pyro_Awaken" then
-		local zippo = zippoIn(model, run, "Right Arm")
-		beat(model, run, 0.15, function()
-			if zippo then
-				zippo.setOpen(true)
-			end
-			SoundLayers.play("ZippoOpen", model)
+		-- BURNING MAN: the handwheel cranked wide open, the gun to the sky,
+		-- the pillar (0.45), the blowback on his forearms (0.55: they catch,
+		-- below), down to the hip; the gun runs hot from now on.
+		gunBeats(model, run, 0.08, 0.11, 0.83)
+		beat(model, run, 0.14, function()
+			Flamethrower.crankValve(model, 0.2)
+			SoundLayers.play("ValveCrank", model)
+			SoundLayers.play("PressureHiss", model)
 		end)
-		beat(model, run, 0.35, function()
-			if zippo then
-				zippo.setLit(true)
-			end
-			SoundLayers.play("ZippoStrike", model)
+		beat(model, run, 0.45, function()
+			pillar(model, 0.1)
+			SoundLayers.play("FireBreath", model)
 		end)
 		beat(model, run, 0.55, function()
 			SoundLayers.play("SelfIgnite", model)
 		end)
-	elseif animation == "Pyro_FirePunch" or animation == "Pyro_Rush" then
-		SoundController.play(if animation == "Pyro_Rush" then "Dash" else "HeavySwing", model)
-		-- (a torch swung past: its peak lands on the hit, 0.24 s)
-		beat(model, run, 0.1, function()
-			SoundLayers.play("FireSwing", model)
+	elseif animation == "Pyro_Torch" then
+		-- BLOWTORCH: chambered, the thrust; the lance lit 0.04 s before
+		-- contact (0.22), the hit (0.26), it snaps off (0.36).
+		gunBeats(model, run, 0.08, 0.1, 0.45)
+		SoundController.play("HeavySwing", model)
+		beat(model, run, 0.16, function()
+			SoundLayers.play("FireSwing", model) -- (the hot muzzle swung in)
+		end)
+		beat(model, run, 0.22, function()
+			lance(model, 0.14)
+			SoundLayers.play("TorchLance", model)
+		end)
+	elseif animation == "Pyro_Mortar" then
+		-- NAPALM MORTAR: braced at 45 deg, the shroud spits (overpressure),
+		-- the glob (0.45, the server) with a backflash and a big recoil.
+		gunBeats(model, run, 0.08, 0.1, 0.64)
+		beat(model, run, 0.25, function()
+			shroudSpit(model, 0.15)
+			Flamethrower.setGauge(model, 1)
+			SoundLayers.play("PressureHiss", model)
+		end)
+		beat(model, run, 0.43, function()
+			squeeze(model)
+		end)
+		beat(model, run, 0.45, function()
+			SoundLayers.play("GlobLaunch", model)
+			Flamethrower.setGauge(model, 0.1)
+			local muzzle = muzzleOf(model)
+			if muzzle then
+				-- the backflash: a 3-stud tongue out of the tip
+				local back = FireLook.layer("fireball", muzzle, 1.1, "PyroBackflash")
+				back.EmissionDirection = Enum.NormalId.Front
+				back.Speed = NumberRange.new(5, 8)
+				back.Drag = 4
+				back.Lifetime = NumberRange.new(0.18, 0.28)
+				back:Emit(3)
+				Debris:AddItem(back, 0.6)
+				flash(muzzle.WorldPosition, 3, 12, 0.2)
+				lick(model, muzzle, 0.6, 0.15)
+			end
+		end)
+	elseif animation == "Pyro_Inferno" then
+		-- INFERNO: the handwheel cranked (0.2), the trigger (0.42); the
+		-- stream is the server's cone (0.45 -> 1.25), raked down the floor.
+		gunBeats(model, run, 0.08, 0.1, 1.34)
+		beat(model, run, 0.2, function()
+			Flamethrower.crankValve(model, 0.2)
+			SoundLayers.play("ValveCrank", model)
+			SoundLayers.play("PressureHiss", model)
+		end)
+		beat(model, run, 0.42, function()
+			squeeze(model)
+		end)
+	elseif animation == "Pyro_TorchCharge" then
+		-- TORCH CHARGE: the dash behind a wedge of fire (the server's cone,
+		-- 0.14 -> 0.48), the shroud rammed into them (the charge's hit).
+		gunBeats(model, run, 0.08, 0.1, 0.73)
+		SoundController.play("Dash", model)
+		beat(model, run, 0.13, function()
+			squeeze(model)
 		end)
 	end
 end
 
--- Our move was refused by the server: the props go.
+-- Our move was refused by the server: the gun goes back.
 function PyroFx.stopAction(model: Model)
-	endRun(model)
+	stopJet(model)
+	endRun(model, true)
 end
 
 ------------------------------------------------------------------------------
--- The Molotov in flight, breaking
+-- The globs of napalm in flight
 ------------------------------------------------------------------------------
 
 type Flight = {
-	bottle: Bottle,
 	connection: RBXScriptConnection,
 	trail: Attachment,
-	ribbon: { Attachment },
 	folder: Folder,
 }
 local flights: { [number]: Flight } = {}
@@ -877,16 +1367,10 @@ local function endFlight(id: number)
 		end
 	end
 	Debris:AddItem(flight.trail, 1.5)
-	for _, a in flight.ribbon do
-		for _, item in a:GetChildren() do
-			if item:IsA("Trail") then
-				item.Enabled = false
-			end
-		end
-		Debris:AddItem(a, 0.4)
-	end
 end
 
+-- A glob of jellied fire (1.2 studs; the mortar's 1.8, a white-hot core):
+-- rolling, a flame ribbon behind it, shedding burning drips that fall.
 local function thrown(data: { [string]: any })
 	local id, origin, velocity, gravity = data.id, data.origin, data.velocity, data.gravity
 	if
@@ -897,98 +1381,90 @@ local function thrown(data: { [string]: any })
 	then
 		return
 	end
+	local big = typeof(data.size) == "number" and data.size >= 6
 	local by = data.by
 	if typeof(by) == "Instance" and by:IsA("Model") then
-		local run = runs[by]
-		if run and run.bottle then
-			run.bottle.main.Parent = nil -- (it left the hand)
-			for _, p in run.folder:GetChildren() do
-				if
-					string.sub(p.Name, 1, 6) == "Bottle"
-					or p.Name == "Petrol"
-					or string.sub(p.Name, 1, 3) == "Rag"
-				then
-					p:Destroy()
-				end
-			end
-			run.bottle = nil
-		end
+		SoundLayers.play("MolotovThrow", by) -- (the glob's flame licking past)
 	end
+	local size = if big then 1.8 else 1.2
 	endFlight(id)
 	local folder = Instance.new("Folder")
-	folder.Name = "Molotov"
+	folder.Name = "NapalmGlob"
 	folder.Parent = effectsFolder()
-	local bottle = buildBottle(folder, nil, CFrame.new(origin))
-	bottle.light(true)
-	-- (welded parts follow the anchored body)
-	for _, p in folder:GetChildren() do
-		if p:IsA("BasePart") and p ~= bottle.main then
-			p.Anchored = false
-		end
-	end
-	-- In the air the rag's flame streams out behind it: its flames come
-	-- thicker (born where the bottle was: a ribbon of fire), a thin trail of
-	-- soot, and (uploaded) a flame ribbon on two points that follow the rag.
-	local lit = bottle.flame()
-	if lit then
-		for _, e in lit.flames do
-			e.Rate *= 3
-		end
-	end
+	local core = part(
+		"GlobCore",
+		Vector3.new(1, 1, 1) * size * 0.42,
+		if big then FLAME_CORE else FLAME,
+		Enum.Material.Neon,
+		Enum.PartType.Ball
+	)
+	core.Anchored = true
+	core.Transparency = 0.15
+	core.CFrame = CFrame.new(origin)
+	core.Parent = folder
+	-- (the flames stay where they were born: a smear of fire behind it)
 	local trail = anchorAt(origin)
-	local soot = FireLook.layer("smoke", trail, 0.22, "PyroTrailSmoke")
+	local q = FireLook.quality()
+	local body = FireLook.layer("body", trail, size * 0.6, "PyroGlobFlames")
+	body.Lifetime = NumberRange.new(0.18, 0.3)
+	body.Rate = (if big then 70 else 45) * q
+	local drips = FireLook.layer("spark", trail, 1.1, "PyroGlobDrips")
+	drips.Color = colors({ 0, 0.5, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
+	drips.Size = numbers({ 0, 1 }, { 0.12, 0.05 })
+	drips.Speed = NumberRange.new(0.5, 2)
+	drips.SpreadAngle = Vector2.new(180, 180)
+	drips.Acceleration = Vector3.new(0, -45, 0)
+	drips.Lifetime = NumberRange.new(0.4, 0.7)
+	drips.Rate = (if big then 30 else 18) * q
+	local soot = FireLook.layer("smoke", trail, size * 0.25, "PyroGlobSmoke")
 	soot.Color = ColorSequence.new(SOOT, SOOT_THIN)
 	soot.Transparency = numbers({ 0, 0.2, 1 }, { 0.8, 0.6, 1 })
 	soot.Lifetime = NumberRange.new(0.7, 1.2)
 	soot.Speed = NumberRange.new(0, 0.4)
-	soot.Drag = 2
-	soot.Rate = 20 * FireLook.quality()
-	local ribbon: { Attachment } = {}
+	soot.Rate = 18 * q
+	local light = Instance.new("PointLight")
+	light.Color = LIGHT_COLOR
+	light.Brightness = if big then 3 else 2
+	light.Range = if big then 14 else 10
+	light.Parent = trail
 	local strip = FireLook.image("flameStrip")
 	if strip then
-		local top, bottom = anchorAt(origin), anchorAt(origin)
-		ribbon = { top, bottom }
+		local top, bottom = Instance.new("Attachment"), Instance.new("Attachment")
+		top.Position = Vector3.new(0, size * 0.3, 0)
+		bottom.Position = Vector3.new(0, -size * 0.3, 0)
+		top.Parent = core
+		bottom.Parent = core
 		local t = Instance.new("Trail")
 		t.Attachment0 = top
 		t.Attachment1 = bottom
 		t.Texture = strip
 		t.TextureMode = Enum.TextureMode.Stretch
-		t.Lifetime = 0.25
+		t.Lifetime = if big then 0.32 else 0.24
 		t.FaceCamera = true
 		t.LightEmission = 1
 		t.Brightness = 2
 		t.LightInfluence = 0
 		t.Color = ColorSequence.new(Color3.fromRGB(255, 240, 220), FLAME_DEEP)
 		t.Transparency = numbers({ 0, 0.6, 1 }, { 0.15, 0.55, 1 })
-		t.WidthScale = numbers({ 0, 1 }, { 1, 0.1 })
-		t.Parent = top
+		t.WidthScale = numbers({ 0, 1 }, { 1, 0.15 })
+		t.Parent = core
 	end
-	-- Tumbling end over end, slowly (a heavy bottle), the rag flame dragged behind.
 	local axis = velocity:Cross(Vector3.new(0, 1, 0))
 	axis = if axis.Magnitude > 1e-3 then axis.Unit else Vector3.new(1, 0, 0)
-	local spin = random:NextNumber(7, 10)
 	local started = os.clock()
 	local connection = RunService.RenderStepped:Connect(function()
 		local t = os.clock() - started
 		local position = origin + velocity * t - Vector3.new(0, 0.5 * gravity * t * t, 0)
-		bottle.main.CFrame = CFrame.new(position) * CFrame.fromAxisAngle(axis, -spin * t) * UPRIGHT
-		local rag = bottle.rag.WorldPosition
-		trail.WorldPosition = rag
-		if ribbon[1] then
-			ribbon[1].WorldPosition = rag + Vector3.new(0, 0.2, 0)
-			ribbon[2].WorldPosition = rag - Vector3.new(0, 0.12, 0)
-		end
+		-- rolling, wobbling (a jelly, not a stone)
+		local wobble = 1 + math.sin(t * 30) * 0.12
+		core.Size = Vector3.new(wobble, 1 / wobble, 1) * size * 0.42
+		core.CFrame = CFrame.new(position) * CFrame.fromAxisAngle(axis, -8 * t)
+		trail.WorldPosition = position
 		if t > 4 then
 			endFlight(id)
 		end
 	end)
-	flights[id] = {
-		bottle = bottle,
-		connection = connection,
-		trail = trail,
-		ribbon = ribbon,
-		folder = folder,
-	}
+	flights[id] = { connection = connection, trail = trail, folder = folder }
 end
 
 -- The fireball: the petrol vapour going up all at once. Full size at once
@@ -1031,69 +1507,63 @@ local function fireball(position: Vector3, size: number)
 	Debris:AddItem(at, 3.5)
 end
 
-local function shatter(position: Vector3, on: Model?)
-	-- Glass: a few real pieces that bounce and stay a while, glitter.
-	for _ = 1, 8 do
-		local size = random:NextNumber(0.05, 0.16)
-		local shard = Instance.new("WedgePart")
-		shard.Size = Vector3.new(0.02, size, size * random:NextNumber(0.6, 1.4))
-		shard.Color = GLASS
-		shard.Material = Enum.Material.Glass
-		shard.Transparency = 0.35
-		shard.CanQuery = false
-		shard.CanTouch = false
-		shard.CastShadow = false
-		shard.CFrame = CFrame.new(position + Vector3.new(0, 0.2, 0))
-			* CFrame.Angles(random:NextNumber(0, 6.28), random:NextNumber(0, 6.28), 0)
-		shard.AssemblyLinearVelocity = Vector3.new(
-			random:NextNumber(-12, 12),
-			random:NextNumber(4, 12),
-			random:NextNumber(-12, 12)
-		)
-		shard.AssemblyAngularVelocity = random:NextUnitVector() * 20
-		shard.Parent = effectsFolder()
-		Debris:AddItem(shard, 12)
-	end
+-- A glob landing: no glass, a wet amber SPLAT (fuel thrown out low and
+-- radially, a dark wet mark), the fireball pops at full size, then the
+-- server's pool. The mortar's adds a CROWN: burning drips thrown out in a
+-- ring that each burn on the floor for 2 s (look only: the pool burns).
+local function splat(position: Vector3, on: Model?, big: boolean)
 	local at = anchorAt(position + Vector3.new(0, 0.2, 0), Vector3.new(0, 1, 0))
-	local glitter = emitter(at, {
-		Texture = SPARK_TEXTURE,
-		Color = ColorSequence.new(Color3.fromRGB(200, 230, 200)),
-		LightEmission = 0.4,
-		Size = numbers({ 0, 1 }, { 0.12, 0.04 }),
-		Transparency = numbers({ 0, 1 }, { 0.2, 1 }),
-		Lifetime = NumberRange.new(0.3, 0.6),
-		Speed = NumberRange.new(8, 16),
-		SpreadAngle = Vector2.new(80, 80),
-		Acceleration = Vector3.new(0, -60, 0),
-		Rate = 0,
-	})
-	glitter:Emit(30)
-	-- The petrol: drops flung out and down, half of them already burning
-	-- (bright arcs of fire falling round the burst).
-	local burning = FireLook.layer("spark", at, 2, "PyroBurningDrops")
-	burning.Color = colors({ 0, 0.5, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
-	burning.Size = numbers({ 0, 1 }, { 0.14, 0.05 })
-	burning.Speed = NumberRange.new(8, 18)
-	burning.SpreadAngle = Vector2.new(75, 75)
-	burning.Acceleration = Vector3.new(0, -50, 0)
-	burning.Lifetime = NumberRange.new(0.5, 0.8)
-	burning:Emit(math.floor(25 * FireLook.quality()))
-	local splash = emitter(at, {
+	local q = FireLook.quality()
+	local wet = emitter(at, {
 		Color = ColorSequence.new(PETROL),
 		LightEmission = 0.1,
 		LightInfluence = 1,
-		Size = numbers({ 0, 1 }, { 0.12, 0.06 }),
+		Size = numbers({ 0, 1 }, { 0.13, 0.06 }),
 		Transparency = numbers({ 0, 0.7, 1 }, { 0.3, 0.4, 1 }),
-		Lifetime = NumberRange.new(0.35, 0.7),
-		Speed = NumberRange.new(8, 20),
-		SpreadAngle = Vector2.new(75, 75),
-		Acceleration = Vector3.new(0, -50, 0),
+		Lifetime = NumberRange.new(0.3, 0.6),
+		Speed = NumberRange.new(10, 22),
+		SpreadAngle = Vector2.new(85, 85),
+		Acceleration = Vector3.new(0, -60, 0),
 		Orientation = Enum.ParticleOrientation.VelocityParallel,
 		Squash = numbers({ 0, 1 }, { 1.5, 1.5 }),
 		Rate = 0,
 	})
-	splash:Emit(25)
+	wet:Emit(if big then 40 else 28)
+	local burning = FireLook.layer("spark", at, 2, "PyroBurningDrops")
+	burning.Color = colors({ 0, 0.5, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
+	burning.Size = numbers({ 0, 1 }, { 0.14, 0.05 })
+	burning.Speed = NumberRange.new(8, 18)
+	burning.SpreadAngle = Vector2.new(80, 80)
+	burning.Acceleration = Vector3.new(0, -50, 0)
+	burning.Lifetime = NumberRange.new(0.5, 0.8)
+	burning:Emit(math.floor((if big then 34 else 22) * q))
 	Debris:AddItem(at, 1.5)
+	local floor =
+		workspace:Raycast(position + Vector3.new(0, 1, 0), Vector3.new(0, -6, 0), floorParams())
+	if floor and floor.Normal.Y > 0.6 then
+		wetMark(floor.Position, if big then 4 else 3, 8)
+	end
+	if big then
+		local count = math.floor(12 * q)
+		for index = 1, count do
+			local angle = index / count * math.pi * 2 + random:NextNumber(-0.25, 0.25)
+			local reach = random:NextNumber(3, 5.5)
+			local spot = position
+				+ Vector3.new(math.cos(angle) * reach, 1.5, math.sin(angle) * reach)
+			local hit = workspace:Raycast(spot, Vector3.new(0, -6, 0), floorParams())
+			if hit and hit.Normal.Y > 0.6 then
+				task.delay(random:NextNumber(0.12, 0.3), function()
+					local drop =
+						anchorAt(hit.Position + Vector3.new(0, 0.05, 0), Vector3.new(0, 1, 0))
+					local flame = smallFlame(drop, 0.35, 0.06)
+					task.delay(random:NextNumber(1.7, 2.3), function()
+						snuff(flame)
+						Debris:AddItem(drop, 1.5)
+					end)
+				end)
+			end
+		end
+	end
 	if on then
 		local torso = bodyPart(on, "Torso")
 		if torso then
@@ -1112,18 +1582,15 @@ local function burst(data: { [string]: any })
 	end
 	local on = data.on
 	local body: Model? = if typeof(on) == "Instance" and on:IsA("Model") then on else nil
-	shatter(position, body)
-	fireball(
-		position,
-		if typeof(data.radius) == "number" then math.clamp(data.radius * 0.6, 2.5, 5) else 3
-	)
-	SoundLayers.playAt("MolotovShatter", position)
+	local radius = if typeof(data.radius) == "number" then data.radius else 5
+	splat(position, body, radius >= 6)
+	fireball(position, math.clamp(radius * 0.6, 2.5, 5))
+	SoundLayers.playAt("GlobSplat", position)
 	task.delay(0.06, function()
 		SoundLayers.playAt("FuelIgnite", position)
 	end)
 end
 
-------------------------------------------------------------------------------
 -- Fire pools
 ------------------------------------------------------------------------------
 -- Each server cell (p, r, born, dies) burns on its own: a burning film lying
@@ -1499,166 +1966,80 @@ local function stepPools(dt: number)
 end
 
 ------------------------------------------------------------------------------
--- Cones: spat flame, flung petrol
+
+------------------------------------------------------------------------------
+-- Cones: the server's jets (Gadgets), drawn from the gun's muzzle
 ------------------------------------------------------------------------------
 
+-- Each move's own stream (the server decides who it reaches: these are looks).
+local STREAM: JetLook = {
+	range = 14,
+	width = 2.2,
+	rate = 45,
+	billow = 1.6,
+	soot = 12,
+	light = 3,
+	blue = false,
+}
+local INFERNO: JetLook = {
+	range = 17,
+	width = 3.2,
+	rate = 70,
+	billow = 2.4,
+	soot = 20,
+	light = 4,
+	blue = true,
+	rake = 0.6, -- (1.05 s into the move: the muzzle goes down, the end licks the floor)
+}
+local WEDGE: JetLook = {
+	range = 8,
+	width = 2.6,
+	rate = 55,
+	billow = 1.4,
+	soot = 8,
+	light = 3,
+	blue = true,
+	low = true,
+}
+
 local function cone(data: { [string]: any })
-	local by, kind, range, angle, seconds = data.by, data.kind, data.range, data.angle, data.seconds
+	local by, kind, range, seconds = data.by, data.kind, data.range, data.seconds
 	if
 		typeof(by) ~= "Instance"
 		or not by:IsA("Model")
 		or typeof(range) ~= "number"
-		or typeof(angle) ~= "number"
 		or typeof(seconds) ~= "number"
 	then
 		return
 	end
 	local model = by
-	local head = bodyPart(model, "Head")
-	local root = bodyPart(model, "HumanoidRootPart")
-	if head == nil or root == nil then
-		return
+	if kind ~= "Flame" then
+		return -- (the fuel spray is drawn on the clip's beat: PyroFx.onAction)
 	end
-	if kind == "Flame" then
-		-- (Inferno's gout lasts longer: its own, longer cut of the jet)
-		SoundLayers.play(if seconds > 0.7 then "InfernoBreath" else "FireBreath", model)
-		-- (in the head's space: its front is -Z)
-		local mouthAt = Vector3.new(0, -0.25, -0.65)
-		local mouth = Instance.new("Attachment")
-		mouth.Name = "PyroBreath"
-		mouth.Position = mouthAt
-		mouth.Parent = head
-		local q = FireLook.quality()
-		-- It starts with a puff of fire at the lips and a spit of fuel.
-		local puff = FireLook.layer("fireball", mouth, 1.1, "PyroBreathPuff")
-		puff.EmissionDirection = Enum.NormalId.Front
-		puff.Speed = NumberRange.new(range * 0.4, range * 0.6)
-		puff.SpreadAngle = Vector2.new(25, 25)
-		puff.Lifetime = NumberRange.new(0.4, 0.6)
-		puff:Emit(3)
-		-- The body of the gout: big flame clusters thrown forward, braking,
-		-- curling up at the far end.
-		local jet = FireLook.layer("body", mouth, 1, "PyroBreathJet")
-		jet.Orientation = Enum.ParticleOrientation.FacingCamera
-		jet.EmissionDirection = Enum.NormalId.Front
-		jet.Size = numbers({ 0, 0.25, 1 }, { 0.4, range * 0.12, range * 0.22 })
-		jet.Transparency = numbers({ 0, 0.1, 0.75, 1 }, { 0.6, 0.1, 0.45, 1 })
-		jet.Lifetime = NumberRange.new(0.38, 0.52)
-		jet.Speed = NumberRange.new(range * 2.2, range * 2.8)
-		jet.Drag = 2.5
-		jet.Acceleration = Vector3.new(0, 10, 0)
-		jet.SpreadAngle = Vector2.new(angle * 0.5, angle * 0.35)
-		jet.Rotation = NumberRange.new(0, 360)
-		jet.RotSpeed = NumberRange.new(-90, 90)
-		jet.Rate = 45 * q
-		local smoke = FireLook.layer("smoke", mouth, 0.7, "PyroBreathSmoke")
-		smoke.EmissionDirection = Enum.NormalId.Front
-		smoke.Color = ColorSequence.new(SOOT, SOOT_THIN)
-		smoke.Speed = NumberRange.new(range * 0.8, range * 1.2)
-		smoke.Lifetime = NumberRange.new(1, 1.6)
-		smoke.Drag = 1.5
-		smoke.Acceleration = Vector3.new(0, 4, 0)
-		smoke.SpreadAngle = Vector2.new(angle * 0.6, angle * 0.4)
-		smoke.Rate = 12 * q
-		-- The light sits inside the gout, not at the mouth.
-		local lightAt = Instance.new("Attachment")
-		lightAt.Name = "PyroBreathLight"
-		lightAt.Position = mouthAt + Vector3.new(0, 0, -range * 0.4)
-		lightAt.Parent = head
-		local light = fireLight(lightAt, 3, range, 0.06)
-		-- Uploaded: a continuous jet core (a scrolling flame band on a Beam)
-		-- shooting out to its length in 0.08 s, pulled back at the end.
-		local beam: Beam? = nil
-		local tip: Attachment? = nil
-		local strip = FireLook.image("flameStrip")
-		if strip then
-			local made = Instance.new("Attachment")
-			made.Name = "PyroBreathTip"
-			made.Position = mouthAt
-			made.Parent = head
-			tip = made
-			local b = Instance.new("Beam")
-			b.Attachment0 = mouth
-			b.Attachment1 = made
-			b.Texture = strip
-			b.TextureMode = Enum.TextureMode.Wrap
-			b.TextureLength = range * 0.35
-			b.TextureSpeed = 5
-			b.FaceCamera = true
-			b.Segments = 12
-			b.Width0 = 0.25
-			b.Width1 = range * 0.18
-			b.LightEmission = 1
-			b.Brightness = 3
-			b.LightInfluence = 0
-			b.Color =
-				ColorSequence.new(Color3.fromRGB(255, 244, 226), Color3.fromRGB(255, 176, 110))
-			b.Transparency = numbers({ 0, 0.6, 1 }, { 0.15, 0.4, 1 })
-			b.Parent = made
-			beam = b
-			TweenService:Create(
-				made,
-				TweenInfo.new(0.08),
-				{ Position = mouthAt + Vector3.new(0, 0, -range * 0.7) }
-			):Play()
-		end
-		task.delay(seconds, function()
-			jet.Enabled = false
-			smoke.Enabled = false
-			light:Destroy()
-			Debris:AddItem(mouth, 1.8)
-			Debris:AddItem(lightAt, 0.1)
-			if beam and tip then
-				-- (the gout lets go of the lips and thins out)
-				TweenService:Create(beam, TweenInfo.new(0.1), { Width0 = 0, Width1 = range * 0.05 })
-					:Play()
-				TweenService:Create(
-					tip,
-					TweenInfo.new(0.1),
-					{ Position = mouthAt + Vector3.new(0, 0.4, -range * 0.85) }
-				):Play()
-				Debris:AddItem(tip, 0.12)
-			end
+	local move = data.move
+	if move == "Inferno" then
+		SoundLayers.play("InfernoBreath", model)
+		Flamethrower.setHeat(model, 0.75)
+		task.delay(seconds + 0.2, function()
+			Flamethrower.setHeat(model, 0)
 		end)
-	elseif kind == "Fuel" then
-		SoundLayers.play("FuelSplash", model)
-		local run = runs[model]
-		local from = if run and run.spout
-			then run.spout.WorldPosition
-			else head.Position - Vector3.new(0, 0.8, 0)
-		local look = root.CFrame.LookVector
-		local at = anchorAt(from, (look + Vector3.new(0, 0.35, 0)).Unit)
-		local fuel = emitter(at, {
-			Color = ColorSequence.new(PETROL),
-			LightInfluence = 1,
-			Size = numbers({ 0, 1 }, { 0.14, 0.08 }),
-			Transparency = numbers({ 0, 0.8, 1 }, { 0.25, 0.4, 1 }),
-			Lifetime = NumberRange.new(0.5, 0.8),
-			Speed = NumberRange.new(range * 1.4, range * 2.2),
-			Drag = 0.6,
-			Acceleration = Vector3.new(0, -40, 0),
-			EmissionDirection = Enum.NormalId.Front,
-			SpreadAngle = Vector2.new(angle * 0.5, angle * 0.25),
-			Orientation = Enum.ParticleOrientation.VelocityParallel,
-			Squash = numbers({ 0, 1 }, { 2, 2 }),
-			Rate = 0,
-		})
-		fuel:Emit(70)
-		local mist = emitter(at, {
-			Texture = SMOKE_TEXTURE,
-			Color = ColorSequence.new(Color3.fromRGB(210, 196, 160)),
-			LightInfluence = 1,
-			Size = numbers({ 0, 1 }, { 0.6, 2.2 }),
-			Transparency = numbers({ 0, 1 }, { 0.85, 1 }),
-			Lifetime = NumberRange.new(0.5, 0.9),
-			Speed = NumberRange.new(range * 0.8, range * 1.2),
-			Drag = 2,
-			EmissionDirection = Enum.NormalId.Front,
-			SpreadAngle = Vector2.new(angle * 0.6, angle * 0.3),
-			Rate = 0,
-		})
-		mist:Emit(10)
-		Debris:AddItem(at, 1.5)
+		startJet(model, INFERNO, seconds)
+		-- (the floor it raked: the server's pool catches there just after)
+		task.delay(seconds, function()
+			SoundLayers.play("StreamEnd", model)
+		end)
+	elseif move == "TorchCharge" then
+		SoundLayers.play("FireBreath", model)
+		startJet(model, WEDGE, seconds)
+	else
+		SoundLayers.play("FireBreath", model)
+		local look = table.clone(STREAM)
+		look.range = range
+		look.blue = isAwake(model)
+		startJet(model, look, seconds)
+		task.delay(seconds, function()
+			SoundLayers.play("StreamEnd", model)
+		end)
 	end
 end
 
@@ -1730,13 +2111,13 @@ local function refreshDoused(model: Model)
 end
 
 -- His forearms alight (Awakening "BURNING MAN"), on the clip's beats: the
--- Zippo touches the left forearm (0.4: sparks), the left wrap catches and
--- the fire runs up from the wrist to the elbow (0.55), the right one
--- catches (0.63), the arms are flung out (0.75: a burst of fire off each,
--- the light pops). Then they burn like a burning body (FireLook layers on
+-- pillar's blowback rains burning fuel back on them (0.5: drops), the left
+-- wrap catches and the fire runs up from the wrist to the elbow (0.55), the
+-- right one catches (0.63), the gun swung down to the hip (0.75: a burst of
+-- fire off each, the light pops). Then they burn like a burning body (FireLook layers on
 -- a forearm-sized block) with ONE light on the chest between them. A swing
 -- fans them (more flame for an instant); a landed burning hit flares.
-local AWAKEN_SPARKS = 0.4
+local AWAKEN_SPARKS = 0.5
 local AWAKEN_LEFT = 0.55
 local AWAKEN_RIGHT = 0.63
 local AWAKEN_FLING = 0.75
@@ -1867,13 +2248,22 @@ local function refreshArms(model: Model)
 				end)
 			end
 			at(AWAKEN_SPARKS, function()
-				local arm = bodyPart(model, "Left Arm")
-				if arm then
-					local spot = Instance.new("Attachment")
-					spot.Position = Vector3.new(0, -0.8, -0.3)
-					spot.Parent = arm
-					sparks(spot, 10, 6, 60)
-					Debris:AddItem(spot, 0.7)
+				-- (burning fuel falling back out of the pillar onto his arms)
+				for _, name in { "Left Arm", "Right Arm" } do
+					local arm = bodyPart(model, name)
+					if arm then
+						local spot = Instance.new("Attachment")
+						spot.Position = Vector3.new(0, 1.2, 0)
+						spot.Parent = arm
+						local rain = FireLook.layer("spark", spot, 1.2, "PyroBlowback")
+						rain.Color = colors({ 0, 0.5, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
+						rain.EmissionDirection = Enum.NormalId.Bottom
+						rain.Speed = NumberRange.new(3, 6)
+						rain.SpreadAngle = Vector2.new(25, 25)
+						rain.Acceleration = Vector3.new(0, -40, 0)
+						rain:Emit(10)
+						Debris:AddItem(spot, 0.9)
+					end
 				end
 			end)
 			at(AWAKEN_LEFT, function()
@@ -1934,45 +2324,54 @@ local function fanArms(model: Model, from: number, to: number)
 end
 
 armsOnAction = function(model: Model, animation: string)
-	if animation == "Pyro_FirePunch" then
-		fanArms(model, 0.1, 0.25)
-	elseif animation == "Pyro_Rush" then
-		fanArms(model, 0.1, 0.55)
+	if animation == "Pyro_Torch" then
+		fanArms(model, 0.16, 0.36) -- (the thrust)
+	elseif animation == "Pyro_TorchCharge" then
+		fanArms(model, 0.12, 0.55) -- (the charge)
 	end
 end
 
--- A burning fist / rush landed: a flare of fire off the fist that hit, a
--- radial burst of sparks (4 frames), a short flash.
+-- The blowtorch / the charge landed: the flame comes off the MUZZLE onto
+-- them (a blossom of fire on their body), molten slag sparks (4 frames), a
+-- flash (blue-white for the lance).
 function PyroFx.onHit(victim: Model, attacker: Model, moveId: string)
-	if moveId ~= "BurningFist" and moveId ~= "BurningRush" then
+	if moveId ~= "Blowtorch" and moveId ~= "TorchCharge" then
 		return
 	end
 	local torso = bodyPart(victim, "Torso")
 	if torso == nil then
 		return
 	end
-	local fist: Vector3? = nil
-	local best = math.huge
-	for _, name in { "Right Arm", "Left Arm" } do
-		local arm = bodyPart(attacker, name)
-		if arm then
-			local position = (arm.CFrame * CFrame.new(0, -1, 0)).Position
-			local distance = (position - torso.Position).Magnitude
-			if distance < best then
-				fist, best = position, distance
-			end
-		end
-	end
-	local at = fist or torso.Position
-	local anchor = anchorAt(at, torso.Position - at)
-	local ball = FireLook.layer("fireball", anchor, 1.5, "PyroImpact")
+	local muzzle = Flamethrower.muzzle(attacker)
+	local from = if muzzle then muzzle.WorldPosition else torso.Position
+	local toward = torso.Position - from
+	local at = if toward.Magnitude > 1 then torso.Position - toward.Unit * 0.6 else torso.Position
+	local anchor = anchorAt(at, if toward.Magnitude > 1e-3 then toward else nil)
+	local ball =
+		FireLook.layer("fireball", anchor, if moveId == "TorchCharge" then 2 else 1.4, "PyroImpact")
 	ball.EmissionDirection = Enum.NormalId.Front
 	ball.Speed = NumberRange.new(2, 5)
-	ball.SpreadAngle = Vector2.new(50, 50)
+	ball.SpreadAngle = Vector2.new(60, 60)
 	ball.Lifetime = NumberRange.new(0.4, 0.6)
-	ball:Emit(3)
-	sparks(anchor, 12, 14, 80)
-	flash(at, 4, 10, 0.2)
+	ball:Emit(if moveId == "TorchCharge" then 5 else 3)
+	sparks(anchor, 14, 14, 80)
+	if moveId == "Blowtorch" then
+		-- a ring of flame splashing on them (2 studs)
+		local ring = FireLook.layer("tongue", anchor, 0.7, "PyroTorchRing")
+		ring.SpreadAngle = Vector2.new(90, 90)
+		ring.Speed = NumberRange.new(4, 7)
+		ring:Emit(10)
+		local light = Instance.new("PointLight")
+		light.Color = BLUE_CORE
+		light.Brightness = 6
+		light.Range = 10
+		light.Parent = anchor
+		task.delay(1 / 30, function()
+			light:Destroy()
+		end)
+	else
+		flash(at, 5, 14, 0.25)
+	end
 	Debris:AddItem(anchor, 1.5)
 	SoundLayers.playAt("FireImpact", at, torso)
 end
@@ -2047,16 +2446,20 @@ local function watch(instance: Instance)
 end
 
 ------------------------------------------------------------------------------
+
+------------------------------------------------------------------------------
 -- The finisher "Immolate"
 ------------------------------------------------------------------------------
 
 type Show = {
 	cancelled: boolean,
 	run: Run?,
-	pour: { ParticleEmitter },
+	pour: { Instance },
 	victim: Model,
 	pouring: boolean,
 	wet: BasePart?,
+	jet: Jet?,
+	drips: ParticleEmitter?,
 }
 
 local poolIds = 0
@@ -2165,40 +2568,63 @@ local function floorFire(show: Show, attacker: Model)
 end
 local shows: { [Model]: Show } = setmetatable({}, { __mode = "k" }) :: any
 
--- The lit Zippo tossed from his hand onto their chest (an arc, 0.25 s).
-local function tossZippo(zippo: Zippo, victim: Model)
-	local torso = bodyPart(victim, "Torso")
-	local main = zippo.main
-	local from = main.CFrame
-	local to = if torso then torso.CFrame * CFrame.new(0, 0, -0.55) else from - Vector3.new(0, 2, 0)
-	-- (free of the hand: every part of it follows the case)
-	for _, w in main:GetChildren() do
-		if w:IsA("Weld") then
-			w:Destroy()
-		end
+-- The finisher's full bore: point-blank, the flame bending and splashing
+-- along the body (the rake from the start: it licks where it lands).
+local FULL_BORE: JetLook = {
+	range = 4,
+	width = 1.8,
+	rate = 70,
+	billow = 1.8,
+	soot = 18,
+	light = 4,
+	blue = true,
+	rake = 0,
+}
+
+-- The raw fuel poured on them: a glossy amber stream out of the muzzle (no
+-- flame: he killed the pilot), laminar, falling on the body.
+local function fuelPour(show: Show, attacker: Model)
+	local muzzle = muzzleOf(attacker)
+	if muzzle == nil then
+		return
 	end
-	main.Anchored = true
-	local started = os.clock()
-	local connection: RBXScriptConnection? = nil
-	connection = RunService.RenderStepped:Connect(function()
-		local u = math.min(1, (os.clock() - started) / 0.25)
-		local position = from.Position:Lerp(to.Position, u)
-			+ Vector3.new(0, math.sin(u * math.pi) * 0.4, 0)
-		main.CFrame = CFrame.new(position) * from.Rotation:Lerp(to.Rotation, u)
-		if u >= 1 and connection then
-			connection:Disconnect()
-		end
-	end)
+	Flamethrower.trigger(attacker, true)
+	local stream = emitter(muzzle, {
+		Name = "PyroFuelPour",
+		Color = ColorSequence.new(PETROL),
+		LightInfluence = 1,
+		LightEmission = 0.15,
+		Size = numbers({ 0, 1 }, { 0.14, 0.1 }),
+		Transparency = numbers({ 0, 1 }, { 0.15, 0.4 }),
+		Lifetime = NumberRange.new(0.25, 0.35),
+		Speed = NumberRange.new(9, 11),
+		SpreadAngle = Vector2.new(2, 2),
+		EmissionDirection = Enum.NormalId.Front,
+		Acceleration = Vector3.new(0, -20, 0),
+		Orientation = Enum.ParticleOrientation.VelocityParallel,
+		Squash = numbers({ 0, 1 }, { 3, 3 }),
+		Rate = 140,
+	})
+	table.insert(show.pour, stream)
 end
 
+-- His final vent: the relief valve's white-hot hiss straight up, shimmer.
 local function finisherEvent(show: Show, kind: string, attacker: Model, victim: Model)
 	local run = show.run
-	if kind == "Douse" then
-		-- (the pour is heard when the petrol comes out, not at the cap)
-		SoundLayers.play("FuelPour", attacker)
+	if kind == "ValveOpen" then
+		Flamethrower.crankValve(attacker, 0.3)
+		SoundLayers.play("ValveCrank", attacker)
+		SoundLayers.play("PressureHiss", attacker)
+	elseif kind == "PilotOut" then
+		-- (he kills the pilot on purpose: what comes out now doesn't burn)
+		Flamethrower.setPilot(attacker, false)
+		SoundLayers.play("PilotOut", attacker)
+	elseif kind == "Douse" then
+		SoundLayers.play("FuelSplash", attacker)
 		-- It splashes off his head and shoulders all the while it pours,
 		-- and soaks the floor under him.
 		show.pouring = true
+		fuelPour(show, attacker)
 		wetStain(show, attacker)
 		local head = bodyPart(victim, "Head")
 		if head then
@@ -2228,62 +2654,24 @@ local function finisherEvent(show: Show, kind: string, attacker: Model, victim: 
 				Debris:AddItem(spot, 1)
 			end)
 		end
-		local spout = if run then run.spout else nil
-		if spout then
-			local stream = emitter(spout, {
-				Color = ColorSequence.new(PETROL),
-				LightInfluence = 1,
-				Size = numbers({ 0, 1 }, { 0.1, 0.07 }),
-				Transparency = numbers({ 0, 1 }, { 0.25, 0.45 }),
-				Lifetime = NumberRange.new(0.45, 0.6),
-				Speed = NumberRange.new(2, 3.5),
-				SpreadAngle = Vector2.new(6, 6),
-				EmissionDirection = Enum.NormalId.Front,
-				Acceleration = Vector3.new(0, -30, 0),
-				Orientation = Enum.ParticleOrientation.VelocityParallel,
-				Squash = numbers({ 0, 1 }, { 2.5, 2.5 }),
-				Rate = 90,
-			})
-			table.insert(show.pour, stream)
-		end
 	elseif kind == "DouseEnd" then
 		show.pouring = false
+		Flamethrower.trigger(attacker, false)
 		for _, e in show.pour do
-			e.Enabled = false
+			if e:IsA("ParticleEmitter") then
+				e.Enabled = false
+			end
+			Debris:AddItem(e, 0.5)
 		end
-	elseif kind == "CanAway" then
-		SoundLayers.play("CanThrow", attacker)
-		if run then
-			-- the can thrown out to his right: loose, it tumbles and stays
-			local root = bodyPart(attacker, "HumanoidRootPart")
-			local push = if root
-				then root.CFrame.RightVector * 14 + Vector3.new(0, 8, 0)
-				else Vector3.new(0, 8, 0)
-			local handle: BasePart? = nil
-			for _, p in run.folder:GetChildren() do
-				if p:IsA("BasePart") and string.sub(p.Name, 1, 3) == "Can" then
-					if p.Name == "CanHandle" then
-						handle = p
-						local w = p:FindFirstChildOfClass("Weld")
-						if w then
-							w:Destroy() -- (off his hand; the rest stays welded to it)
-						end
-					end
-					p.Massless = false
-					p.CanCollide = p.Name == "CanBody"
-					p.Parent = effectsFolder()
-					Debris:AddItem(p, 15)
-				end
-			end
-			if handle then
-				handle.AssemblyLinearVelocity = push
-				handle.AssemblyAngularVelocity = Vector3.new(0, 0, 6)
-			end
-			run.spout = nil
+	elseif kind == "Drip" then
+		-- one shake: fuel drips off the slash cut
+		local muzzle = muzzleOf(attacker)
+		if muzzle then
+			drool(muzzle, 0.3, false)
 		end
 	elseif kind == "Open" then
 		if run then
-			local zippo = zippoIn(attacker, run, "Right Arm")
+			local zippo = zippoIn(attacker, run, "Left Arm")
 			if zippo then
 				zippo.setOpen(true)
 			end
@@ -2294,11 +2682,24 @@ local function finisherEvent(show: Show, kind: string, attacker: Model, victim: 
 			run.zippo.setLit(true)
 		end
 		SoundLayers.play("ZippoStrike", attacker)
-	elseif kind == "Release" then
-		SoundLayers.play("ZippoDrop", victim)
-		if run and run.zippo then
-			tossZippo(run.zippo, victim)
+	elseif kind == "PilotLit" then
+		-- the Zippo's flame to the burner: the blue pilot pops, his face lit
+		-- blue and orange
+		Flamethrower.setPilot(attacker, true)
+		SoundLayers.play("PilotLight", attacker)
+		local pilot = Flamethrower.point(attacker, "PilotLight")
+		if pilot then
+			local light = Instance.new("PointLight")
+			light.Color = BLUE_CORE
+			light.Brightness = 3
+			light.Range = 6
+			light.Parent = pilot
+			TweenService:Create(light, TweenInfo.new(0.4), { Brightness = 0 }):Play()
+			Debris:AddItem(light, 0.45)
 		end
+	elseif kind == "Lower" then
+		-- the quiet hold, the muzzle down to their face: only the hiss
+		SoundLayers.play("PressureHiss", attacker)
 	elseif kind == "Ignite" then
 		local torso = bodyPart(victim, "Torso")
 		if torso then
@@ -2306,12 +2707,56 @@ local function finisherEvent(show: Show, kind: string, attacker: Model, victim: 
 			fireball(torso.Position + Vector3.new(0, 0.5, 0), 3.2)
 			floorFire(show, attacker)
 		end
+		SoundLayers.play("InfernoBreath", attacker)
+		SoundLayers.play("PressureHiss", attacker)
 		startPyre(victim, PyroConfig.IMMOLATE_BURN)
-		if run and run.zippo then
-			run.zippo.setLit(false) -- (it's in the fire now)
+		-- Full bore, point-blank: a blue-white root, the flame bending and
+		-- splashing along the body; the shroud and the muzzle cherry red,
+		-- dripping burning fuel.
+		show.jet = startJet(attacker, FULL_BORE, 1.2)
+		Flamethrower.setHeat(attacker, 1)
+		local muzzle = muzzleOf(attacker)
+		if muzzle then
+			local drips = FireLook.layer("spark", muzzle, 1.1, "PyroHotDrips")
+			drips.Color = colors({ 0, 0.5, 1 }, { FLAME_CORE, FLAME, FLAME_DEEP })
+			drips.EmissionDirection = Enum.NormalId.Bottom
+			drips.Speed = NumberRange.new(0.2, 1)
+			drips.Acceleration = Vector3.new(0, -40, 0)
+			drips.Lifetime = NumberRange.new(0.4, 0.7)
+			drips.Rate = 14
+			show.drips = drips
 		end
 	elseif kind == "Writhe" then
 		SoundLayers.play("BurnScream", victim)
+	elseif kind == "StreamEnd" then
+		local jet = show.jet
+		if jet then
+			jet.stop(false)
+			show.jet = nil
+		end
+		SoundLayers.play("StreamEnd", attacker)
+		-- a rolling soot cloud over the body
+		local torso = bodyPart(victim, "Torso")
+		if torso then
+			local at = anchorAt(torso.Position + Vector3.new(0, 1, 0))
+			local soot = FireLook.layer("smoke", at, 1.6, "PyroSootCloud")
+			soot.Color = ColorSequence.new(SOOT, SOOT_THIN)
+			soot.Speed = NumberRange.new(1, 3)
+			soot.SpreadAngle = Vector2.new(60, 60)
+			soot.Acceleration = Vector3.new(0, 2.5, 0)
+			soot.Lifetime = NumberRange.new(2, 3.2)
+			soot:Emit(math.floor(10 * FireLook.quality()))
+			Debris:AddItem(at, 4)
+		end
+	elseif kind == "Vent" then
+		Flamethrower.vent(attacker)
+		SoundLayers.play("Vent", attacker)
+		local drips = show.drips
+		if drips then
+			drips.Enabled = false
+			Debris:AddItem(drips, 0.8)
+			show.drips = nil
+		end
 	end
 end
 
@@ -2334,13 +2779,59 @@ local function onFinisherStarted(attacker: unknown, victim: unknown, id: unknown
 		old.cancelled = true
 	end
 	local run = newRun(attacker, cinematic.duration)
-	local arm = bodyPart(attacker, "Right Arm")
-	if arm then
-		run.spout = buildCan(run.folder, arm, HAND_HANG)
-	end
-	local show: Show =
-		{ cancelled = false, run = run, pour = {}, victim = victim, pouring = false, wet = nil }
+	local show: Show = {
+		cancelled = false,
+		run = run,
+		pour = {},
+		victim = victim,
+		pouring = false,
+		wet = nil,
+		jet = nil,
+		drips = nil,
+	}
 	shows[attacker] = show
+	-- The gun on the clip's beats (Animation/PyroClips): drawn, the pilot
+	-- lit; stood upright for the Zippo (1.7); back in both hands (2.62);
+	-- slung (5.4). Not cut short by the cinematic's own stun.
+	local token = run.token
+	local function gunAt(time: number, fn: () -> ())
+		task.delay(time, function()
+			local current = runs[attacker]
+			if current and current.token == token and not show.cancelled and attacker.Parent then
+				fn()
+			end
+		end)
+	end
+	gunAt(0.15, function()
+		Flamethrower.draw(attacker)
+		SoundLayers.play("GunDraw", attacker)
+	end)
+	gunAt(0.22, function()
+		Flamethrower.setPilot(attacker, true)
+	end)
+	gunAt(1.7, function()
+		Flamethrower.port(attacker, 0.15)
+	end)
+	gunAt(2.62, function()
+		local zippo = run.zippo
+		if zippo then
+			zippo.setLit(false)
+			zippo.setOpen(false)
+			SoundLayers.play("ZippoClose", attacker)
+			-- (pocketed)
+			for _, p in run.folder:GetChildren() do
+				if string.sub(p.Name, 1, 5) == "Zippo" then
+					p:Destroy()
+				end
+			end
+			run.zippo = nil
+		end
+		Flamethrower.draw(attacker, 0.15)
+	end)
+	gunAt(5.4, function()
+		Flamethrower.setPilot(attacker, false)
+		Flamethrower.holster(attacker)
+	end)
 	for _, event in cinematic.events do
 		task.delay(event.time, function()
 			if not show.cancelled and attacker.Parent and victim.Parent then
@@ -2368,7 +2859,15 @@ local function onFinisherEnded(attacker: unknown, victim: unknown, killed: unkno
 	end
 	show.cancelled = true
 	shows[attacker] = nil
-	endRun(attacker)
+	local jet = show.jet
+	if jet then
+		jet.stop(true)
+	end
+	if show.drips then
+		show.drips.Enabled = false
+	end
+	Flamethrower.setHeat(attacker, 0)
+	endRun(attacker, true)
 	stopPyre(show.victim)
 end
 

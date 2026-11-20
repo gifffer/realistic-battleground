@@ -47,7 +47,7 @@ CUES = [
         "name": "ZippoOpen",
         "thing": "a brass Zippo-style lighter lid being flicked open with the thumb",
         "fr": "Le couvercle du Zippo qui s'ouvre d'un coup de pouce (le « clink »).",
-        "when": "ZIPPO FLARE, MOLOTOV, FIRE BREATH, l'Awakening et le finisher, quand il ouvre le briquet.",
+        "when": "IMMOLATION (1,85 s), quand il sort le briquet pour rallumer la veilleuse.",
         "gain": -4,
         "layers": [
             ("Le bord du couvercle en laiton qui claque contre le boîtier", "2-9 kHz", "clic métallique sec, très court", 0, 25, 0,
@@ -66,7 +66,7 @@ CUES = [
         "name": "ZippoStrike",
         "thing": "a Zippo lighter's flint wheel being struck and the wick catching fire",
         "fr": "La molette frottée sur la pierre, les étincelles, la mèche qui prend feu.",
-        "when": "Juste après ZippoOpen (ZIPPO FLARE, MOLOTOV, FIRE BREATH, Awakening, finisher).",
+        "when": "IMMOLATION (2,15 s), juste après ZippoOpen.",
         "gain": -4,
         "layers": [
             ("La molette d'acier qui accroche la pierre", "2-10 kHz", "« tchk » granuleux, très bref", 0, 30, 0,
@@ -85,7 +85,7 @@ CUES = [
         "name": "ZippoClose",
         "thing": "a Zippo lighter lid snapping shut and smothering the flame",
         "fr": "Le couvercle refermé d'un coup sec : la flamme étouffée.",
-        "when": "À la fin de ZIPPO FLARE et de FIRE BREATH.",
+        "when": "IMMOLATION (2,62 s) : le briquet refermé et rangé.",
         "gain": -5,
         "layers": [
             ("Le couvercle qui claque sur le boîtier", "1-8 kHz", "« clac » métallique plein", 0, 30, 0,
@@ -101,48 +101,10 @@ CUES = [
         ],
     },
     {
-        "name": "FlameFlare",
-        "thing": "lighter fluid squirted through a lighter flame into someone's face, flaring into a burst of fire",
-        "fr": "Le jet de liquide à briquet à travers la flamme : une boule de feu courte dans le visage.",
-        "when": "ZIPPO FLARE, au moment du coup (0,42 s).",
-        "gain": -1,
-        "layers": [
-            ("Le bidon de liquide pressé, le jet qui part", "2-8 kHz", "« tsst » sous pression", 0, 80, -4,
-             "Short pressurized squirt of liquid from a small squeezed metal can, sharp tss sound, close-miked, dry, isolated, 0.15 seconds."),
-            ("Le jet de liquide qui crépite en traversant la flamme", "1-9 kHz", "sifflement mouillé et crépitant", 20, 250, -6,
-             "Hiss and spatter of a thin stream of lighter fluid spraying through a flame, wet sizzling crackle, isolated, 0.3 seconds."),
-            ("Le liquide qui s'embrase d'un coup", "150 Hz-3 kHz", "« fwoosh » de flamme, rond et chaud", 50, 500, 0,
-             "Sudden fwoosh of a burst of flame flaring up from sprayed fuel, warm roaring whoosh, medium size, no explosion, isolated, 0.6 seconds."),
-            ("La bouffée d'air chaud", "40-120 Hz", "« whump » grave et mou", 50, 300, -10,
-             "Soft deep whump of air pushed by a flame flaring up, low-frequency pressure puff, no crack, isolated, 0.3 seconds."),
-            ("Les gouttes qui brûlent encore", "1-6 kHz", "petits crépitements et grésillements qui s'éteignent", 250, 900, -12,
-             "Small burning droplets crackling and sizzling as they die out, sparse pops fading away, isolated, 1 second."),
-        ],
-    },
-    {
-        "name": "MolotovLight",
-        "thing": "a petrol-soaked rag stuffed in a bottle neck being lit and catching fire",
-        "fr": "Le chiffon imbibé d'essence au goulot qui prend feu.",
-        "when": "MOLOTOV, quand le briquet touche le chiffon (0,3 s).",
-        "gain": -3,
-        "layers": [
-            ("La flamme du briquet qui touche le tissu imbibé", "1-6 kHz", "petit « pff » sec", 0, 60, -6,
-             "Tiny dry puff as a lighter flame touches a fuel-soaked cloth, short soft pop, isolated, 0.1 seconds."),
-            ("Les fibres du coton qui s'enflamment", "2-10 kHz", "crépitement fin et sec", 20, 400, -6,
-             "Fine crisp crackle of cotton fibres catching fire, dry tight crackling, close-miked, isolated, 0.5 seconds."),
-            ("Le chiffon imbibé d'essence qui s'embrase", "150 Hz-2.5 kHz", "« whouf » chaud qui gonfle", 60, 500, 0,
-             "Petrol-soaked rag bursting into flame, warm rising whoof of fire catching on fabric, medium-small, no explosion, isolated, 0.6 seconds."),
-            ("La flamme qui monte", "40-120 Hz", "souffle grave doux", 60, 300, -14,
-             "Soft low bloom of a flame rising, subtle low-frequency airy push, isolated, 0.3 seconds."),
-            ("Le chiffon qui brûle en flottant", "300 Hz-4 kHz", "flamme de tissu qui flotte et crépite", 300, 1200, -9,
-             "Small rag flame burning and fluttering on a bottle neck, soft roar with light crackle, steady, isolated, 1.2 seconds."),
-        ],
-    },
-    {
         "name": "MolotovThrow",
         "thing": "a lit Molotov cocktail bottle being thrown overhand and flying past",
         "fr": "Le lancer : le bras, le liquide qui ballotte, la flamme du chiffon qui file dans l'air.",
-        "when": "MOLOTOV et FIREBOMB, au lâcher de la bouteille.",
+        "when": "NAPALM LOB et NAPALM MORTAR : la boule de napalm en vol (la flamme qui passe).",
         "gain": -3,
         "layers": [
             ("Le bras et la veste qui fendent l'air", "300 Hz-4 kHz", "« fff » de mouvement rapide, tissu", 0, 150, -4,
@@ -158,29 +120,10 @@ CUES = [
         ],
     },
     {
-        "name": "MolotovShatter",
-        "thing": "a glass Molotov bottle smashing on concrete and splashing petrol",
-        "fr": "La bouteille qui éclate au sol : le verre, les éclats, l'essence qui gicle.",
-        "when": "Quand le Molotov se brise (sol, mur ou sur quelqu'un).",
-        "gain": 0,
-        "layers": [
-            ("Le verre épais qui casse à l'impact", "1-12 kHz", "« crack » de verre net et violent", 0, 60, 0,
-             "Sharp loud crack of a thick glass bottle smashing on concrete, the first impact only, bright, close, dry, isolated one-shot, 0.1 seconds."),
-            ("Les éclats qui se dispersent et tintent", "3-14 kHz", "pluie d'éclats de verre qui tintent et roulent", 20, 600, -5,
-             "Shards of a broken glass bottle scattering and tinkling across a concrete floor, bright granular glass debris, isolated, 0.7 seconds."),
-            ("L'essence qui gicle et claque au sol", "200 Hz-4 kHz", "éclaboussure de liquide mouillée", 15, 350, -3,
-             "Wet splash of about a litre of liquid slapping onto concrete and spreading, splattering, isolated, 0.4 seconds."),
-            ("Le choc sur le béton", "40-150 Hz", "« toum » sourd", 0, 150, -10,
-             "Low dull thud of a heavy bottle hitting concrete, weight only, no glass, isolated, 0.2 seconds."),
-            ("Les derniers éclats qui se posent, l'essence qui coule", "2-10 kHz", "petits tintements épars et gouttes", 300, 1200, -14,
-             "Last few glass fragments settling with sparse tinkles, a little liquid trickling, quiet, isolated, 1.2 seconds."),
-        ],
-    },
-    {
         "name": "FuelIgnite",
         "thing": "spilled petrol on the ground igniting into a fireball",
         "fr": "L'essence répandue qui s'embrase : la boule de feu.",
-        "when": "Juste après MolotovShatter (la flaque prend feu).",
+        "when": "Juste après GlobSplat (la flaque prend feu).",
         "gain": 0,
         "layers": [
             ("Les vapeurs d'essence qui s'enflamment", "300 Hz-6 kHz", "« fwump » sec, claquant", 0, 80, -2,
@@ -200,7 +143,7 @@ CUES = [
         "looped": True,
         "thing": "a pool of burning petrol on a street floor (seamless loop)",
         "fr": "La flaque d'essence qui brûle (BOUCLE, tant que le feu dure).",
-        "when": "Pendant tout le feu au sol du Molotov, en 3D sur la flaque, baisse quand le feu meurt.",
+        "when": "Pendant tout le feu au sol (napalm, INFERNO), en 3D sur la flaque, baisse quand le feu meurt.",
         "gain": -3,
         "layers": [
             ("Les petits claquements de la flamme (bulles qui éclatent)", "1-8 kHz", "« pops » irréguliers", 0, 0, -8,
@@ -216,29 +159,10 @@ CUES = [
         ],
     },
     {
-        "name": "FuelSwig",
-        "thing": "a man taking a mouthful of fuel from a metal hip flask",
-        "fr": "Il boit une gorgée d'essence (pour la cracher) : le bouchon, le liquide, la bouche pleine.",
-        "when": "FIRE BREATH / INFERNO BREATH, au début.",
-        "gain": -6,
-        "layers": [
-            ("Le bouchon métallique dévissé", "1-8 kHz", "petit clic de métal", 0, 60, -4,
-             "Small metallic click of a hip flask screw cap being opened, close, dry, isolated, 0.1 seconds."),
-            ("Le liquide qui coule dans le flacon de métal", "300 Hz-3 kHz", "glouglou métallique", 80, 350, -6,
-             "Liquid glugging out of a small metal flask, hollow metallic glug, close, isolated, 0.4 seconds."),
-            ("La bouche qui se remplit", "150 Hz-2 kHz", "gorgée humide, bouche fermée", 150, 400, 0,
-             "A man filling his mouth with liquid and holding it, wet gulp with closed lips, no swallowing, close-miked, isolated, 0.4 seconds."),
-            ("La gorge", "60-200 Hz", "résonance grave de la poitrine", 150, 300, -16,
-             "Very subtle low throat and chest resonance of someone holding a mouthful, soft, isolated, 0.3 seconds."),
-            ("Le souffle par le nez", "500 Hz-5 kHz", "expiration courte et tendue", 500, 400, -12,
-             "Short tense exhale through the nose, breathy, close-miked, isolated, 0.4 seconds."),
-        ],
-    },
-    {
         "name": "FireBreath",
         "thing": "a fire breather spitting atomised fuel through a lighter flame into a roaring jet of fire",
         "fr": "Le cracheur de feu : l'essence pulvérisée à travers la flamme, un jet de feu qui rugit.",
-        "when": "FIRE BREATH (0,55 s → 1 s) et INFERNO BREATH (plus long).",
+        "when": "FLAME STREAM (0,45 s → 1 s), TORCH CHARGE (le jet devant lui) et le pilier de l'Awakening (0,45 s).",
         "gain": 0,
         "layers": [
             ("Les lèvres qui crachent le liquide en brouillard", "1-8 kHz", "« pfff » éclaté, mouillé", 0, 120, -4,
@@ -257,7 +181,7 @@ CUES = [
         "name": "FuelSplash",
         "thing": "petrol flung from a metal jerrycan onto a person",
         "fr": "L'essence projetée hors du jerrican sur quelqu'un (DOUSE).",
-        "when": "DOUSE, au balancement du jerrican (0,42 s).",
+        "when": "FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé.",
         "gain": -2,
         "layers": [
             ("Le liquide qui sort d'un coup du bec", "500 Hz-6 kHz", "claque de liquide lancée", 0, 80, -3,
@@ -296,7 +220,7 @@ CUES = [
         "name": "SelfIgnite",
         "thing": "petrol-soaked forearm wraps being lit with a lighter and flaring up along both arms",
         "fr": "Il allume ses propres avant-bras imbibés d'essence (BURNING MAN).",
-        "when": "L'activation de l'Awakening (0,55 s).",
+        "when": "L'activation de l'Awakening (0,55 s) : le retour de flamme sur ses avant-bras.",
         "gain": 0,
         "layers": [
             ("La flamme du briquet qui touche le tissu", "1-6 kHz", "petit « pff » sec", 0, 60, -6,
@@ -312,67 +236,10 @@ CUES = [
         ],
     },
     {
-        "name": "FuelPour",
-        "thing": "petrol being poured from a jerrycan over a body lying on the ground",
-        "fr": "L'essence versée du jerrican sur le corps (finisher).",
-        "when": "IMMOLATION, de 0,4 s à 1,45 s (quand le liquide sort).",
-        "gain": -2,
-        "layers": [
-            ("Le bouchon du jerrican qui saute", "500 Hz-6 kHz", "« clonk » métallique et « pop » d'air", 0, 120, -4,
-             "Metal jerrycan cap being unclipped with a clonk and a little air pop, close, isolated, 0.2 seconds."),
-            ("Les gloussements d'air dans le jerrican", "150 Hz-1.5 kHz", "glouglous creux, rythmés", 250, 1000, -6,
-             "Rhythmic hollow glugging of air bubbles entering a metal jerrycan while it is poured, isolated, 1 second."),
-            ("Le filet d'essence sur les vêtements et le corps", "200 Hz-6 kHz", "coulée continue, qui éclabousse", 250, 1050, 0,
-             "Steady stream of liquid pouring onto clothes and a body lying on concrete, wet splashing pour, isolated, 1.1 seconds."),
-            ("La résonance du bidon", "50-150 Hz", "« bloub » grave", 250, 1000, -14,
-             "Low hollow resonance of a large metal can being emptied, soft bloub, sub only, isolated, 1 second."),
-            ("Les dernières gouttes", "1-8 kHz", "gouttes qui tombent, filet qui s'arrête", 1150, 700, -12,
-             "Last drips of liquid from a can spout landing on fabric and concrete, the stream stopping, isolated, 0.7 seconds."),
-        ],
-    },
-    {
-        "name": "CanThrow",
-        "thing": "an almost empty metal jerrycan tossed aside onto a concrete floor",
-        "fr": "Le jerrican vide jeté par terre (finisher).",
-        "when": "IMMOLATION, à 1,6 s.",
-        "gain": -4,
-        "layers": [
-            ("Le bidon qui frappe le béton", "300 Hz-6 kHz", "« klang » de tôle creuse", 300, 80, 0,
-             "Hollow metal jerrycan hitting a concrete floor, loud klang of thin sheet metal, the impact only, isolated, 0.1 seconds."),
-            ("La poignée et le bouchon qui cliquettent au rebond", "1-8 kHz", "cliquetis métalliques", 330, 300, -6,
-             "Rattle of a metal handle and a dangling cap as a can bounces, small metallic clatter, isolated, 0.3 seconds."),
-            ("La résonance du bidon vide", "200 Hz-2 kHz", "« bwong » creux qui sonne", 310, 600, -4,
-             "Hollow ringing bwong of an empty metal jerrycan resonating after a hit, isolated, 0.6 seconds."),
-            ("Le choc", "40-120 Hz", "« toum » sourd", 300, 120, -12,
-             "Low dull thud of a light metal container landing, weight only, isolated, 0.1 seconds."),
-            ("Le bidon qui glisse, le reste d'essence qui ballotte", "300 Hz-5 kHz", "frottement sur le sol, clapotis", 500, 700, -12,
-             "Metal can skidding to a stop on concrete with a little liquid sloshing inside, isolated, 0.7 seconds."),
-        ],
-    },
-    {
-        "name": "ZippoDrop",
-        "thing": "a lit Zippo lighter dropped onto a petrol-soaked body",
-        "fr": "Le Zippo allumé lâché sur le corps (finisher).",
-        "when": "IMMOLATION, à 2,8 s (il tombe, touche la poitrine à 3,05 s).",
-        "gain": -6,
-        "layers": [
-            ("Le briquet qui touche la poitrine", "500 Hz-6 kHz", "petit choc de métal sur tissu mouillé", 250, 50, 0,
-             "Small metal lighter landing on a wet jacket on a body, soft dull tap, isolated, 0.1 seconds."),
-            ("Le couvercle qui cliquette", "2-8 kHz", "petit cliquetis", 255, 100, -6,
-             "Tiny rattle of a lighter lid as it lands, light metallic tick, isolated, 0.1 seconds."),
-            ("La flamme qui tombe", "300 Hz-3 kHz", "flamme qui flotte en chute", 0, 300, -6,
-             "Small lighter flame fluttering as it falls through the air, brief soft whoosh, isolated, 0.3 seconds."),
-            ("Le poids", "60-200 Hz", "« tup » mou", 250, 80, -14,
-             "Very soft low thud of a small object on a body, subtle, isolated, 0.1 seconds."),
-            ("La flamme qui lèche le tissu", "500 Hz-4 kHz", "petit sifflement avant l'embrasement", 280, 200, -10,
-             "Tiny flame licking at a fuel-soaked fabric, a short rising hiss right before ignition, isolated, 0.2 seconds."),
-        ],
-    },
-    {
         "name": "BodyIgnite",
         "thing": "a petrol-soaked person on the ground going up in flames",
         "fr": "Le corps imbibé qui s'embrase d'un coup (« whump »).",
-        "when": "IMMOLATION, à 3,05 s.",
+        "when": "IMMOLATION, à 3,05 s (le jet à bout portant).",
         "gain": 0,
         "layers": [
             ("Les vapeurs d'essence qui s'enflamment", "300 Hz-6 kHz", "« fwump » sec", 0, 80, -2,
@@ -412,33 +279,27 @@ CUES = [
 EXTRA_CUES = [
     {
         "name": "InfernoBreath",
-        "thing": "the Inferno Breath's longer jet of fire",
-        "fr": "Le jet de feu de l'INFERNO BREATH : le même que FIRE BREATH, plus long.",
-        "when": "INFERNO BREATH (0,55 s → 1,15 s).",
-    },
-    {
-        "name": "CanSlosh",
-        "thing": "petrol sloshing in a jerrycan swung back",
-        "fr": "L'essence qui ballotte dans le jerrican quand il le balance.",
-        "when": "DOUSE, à l'élan (0,16 s), avant le jet.",
+        "thing": "the Inferno's longer jet of fire",
+        "fr": "Le jet de l'INFERNO : le même que FireBreath, plus long.",
+        "when": "INFERNO (0,45 s → 1,25 s) et le plein jet du finisher (3,05 s).",
     },
     {
         "name": "FireSwing",
         "thing": "a burning fist swung past like a torch",
         "fr": "Le poing ou le bras en feu qui fend l'air : une torche qui passe.",
-        "when": "BURNING FIST et BURNING RUSH (0,1 s) : le pic tombe sur le coup (0,22 s).",
+        "when": "BLOWTORCH (0,16 s) : le canon chaud lancé vers eux.",
     },
     {
         "name": "FireImpact",
         "thing": "a burning fist landing: a puff of flame and searing skin",
         "fr": "Le poing en feu qui touche : un « pouf » de flamme et la peau qui grésille.",
-        "when": "BURNING FIST / BURNING RUSH, au coup confirmé par le serveur.",
+        "when": "BLOWTORCH / TORCH CHARGE, au coup confirmé par le serveur.",
     },
     {
         "name": "CatchFire",
         "thing": "someone catching fire: a whoosh of flame wrapping round them, a sizzle",
         "fr": "Quelqu'un qui prend feu : un souffle de flamme qui l'enveloppe, un grésillement.",
-        "when": "Le premier instant où un corps brûle (Molotov, souffle, flaque, finisher).",
+        "when": "Le premier instant où un corps brûle (napalm, jet, flaque, finisher).",
     },
     {
         "name": "Extinguish",
@@ -452,6 +313,78 @@ EXTRA_CUES = [
         "looped": True,
         "fr": "Le grondement du corps qui brûle en entier (BOUCLE).",
         "when": "IMMOLATION, de l'embrasement (3,05 s) à la fin du feu (12 s), par-dessus le crépitement du corps.",
+    },
+    {
+        "name": "GunDraw",
+        "thing": "the flamethrower swung off his back, the fuel sloshing in the bottle",
+        "fr": "Le lance-flammes ramené du dos à la hanche : l'essence qui ballotte dans la bouteille.",
+        "when": "Chaque attaque, quand la main prend la poignée (0,15 s ; 0,08 s en Awakening).",
+    },
+    {
+        "name": "PilotLight",
+        "thing": "the pilot burner lit: a lever click and a soft blue fwip",
+        "fr": "La veilleuse qui s'allume : un clic de levier et un petit « fwip » bleu.",
+        "when": "Après le dégainage de chaque attaque, FUEL SPRAY (0,66 s : rallumée), IMMOLATION (2,3 s).",
+    },
+    {
+        "name": "PilotOut",
+        "thing": "the pilot flame shut off: a short high sizzle",
+        "fr": "La veilleuse coupée : un petit grésillement aigu.",
+        "when": "FUEL SPRAY (0,27 s), IMMOLATION (avant de verser le carburant).",
+    },
+    {
+        "name": "TriggerClick",
+        "thing": "the flamethrower's trigger squeezed: a dull metal click",
+        "fr": "La gâchette pressée : un clic métallique sourd.",
+        "when": "FLASH BURST (0,38 s), NAPALM LOB (0,6 s), FLAME STREAM (0,42 s), NAPALM MORTAR, INFERNO, TORCH CHARGE.",
+    },
+    {
+        "name": "BurstPop",
+        "thing": "a pressurised ball of fire popping out of a flamethrower, crackling drops",
+        "fr": "La boule de feu sous pression qui éclate : un « pouf » franc, des gouttes qui crépitent.",
+        "when": "FLASH BURST, sur le coup (0,42 s).",
+    },
+    {
+        "name": "GlobLaunch",
+        "thing": "a glob of napalm coughed out of the muzzle: a short burst of fire",
+        "fr": "La boule de napalm crachée par le canon : une courte bouffée de feu.",
+        "when": "NAPALM LOB (0,62 s), NAPALM MORTAR (0,45 s).",
+    },
+    {
+        "name": "GlobSplat",
+        "thing": "a glob of burning napalm splatting on the floor (no glass)",
+        "fr": "La boule de napalm qui s'écrase au sol : un « splash » mouillé (pas de verre).",
+        "when": "À l'impact de la boule (sol, mur ou sur quelqu'un), juste avant FuelIgnite.",
+    },
+    {
+        "name": "StreamEnd",
+        "thing": "the jet let go: the tail of the flame whooshing away",
+        "fr": "Le jet relâché : la queue de la flamme qui s'éloigne.",
+        "when": "Fin de FLAME STREAM, d'INFERNO et du plein jet du finisher (4,25 s).",
+    },
+    {
+        "name": "PressureHiss",
+        "thing": "the regulator's pressurised gas hiss rising",
+        "fr": "Le sifflement du détendeur sous pression qui monte.",
+        "when": "Sous les jets : FLASH BURST, NAPALM LOB (la pression qui monte), FLAME STREAM, l'Awakening, NAPALM MORTAR, INFERNO, IMMOLATION.",
+    },
+    {
+        "name": "ValveCrank",
+        "thing": "the ball valve slapped shut or the bottle's handwheel cranked: a metal clack",
+        "fr": "La vanne claquée ou le volant de la bouteille tourné : un « clac » métallique.",
+        "when": "NAPALM LOB (0,33 s étranglée, 0,58 s rouverte), l'Awakening (0,14 s), INFERNO (0,2 s), IMMOLATION.",
+    },
+    {
+        "name": "TorchLance",
+        "thing": "a short hard blowtorch lance lighting",
+        "fr": "La lance du chalumeau qui s'allume : un jet court et dur.",
+        "when": "BLOWTORCH (0,22 s, juste avant le coup).",
+    },
+    {
+        "name": "Vent",
+        "thing": "the overheated gun's relief valve venting: a white-hot hiss",
+        "fr": "La soupape de sécurité du lance-flammes surchauffé : un long sifflement brûlant.",
+        "when": "IMMOLATION (4,8 s), après la mort.",
     },
 ]
 ALL_CUES = CUES + EXTRA_CUES
@@ -489,17 +422,7 @@ STOCK = {
         L("Tail", [9114446183, 9114445526], -33, at=0.12, pv=0.08),
     ],
     "ZippoClose": [L("Body", [9121005783], -27, pv=0.07)],
-    # (punchy kerosene poofs: the peak lands 30 ms after the cue, on the hit)
-    "FlameFlare": [
-        L("Body", [9114442751, 9114444052, 9114443884, 9114444008], -15, start="peak-0.03", length=1.0, fade=0.3),
-        L("Tail", [9125616715, 9125616655], -24, at=0.1, length=1.0, fade=0.3),
-    ],
-    "MolotovLight": [L("Body", [9114446852, 9114447022, 9114446802], -21)],
     "MolotovThrow": [L("Body", [9114463219, 9114463410, 9114463208, 9114463016], -21, length=1.4, fade=0.3)],
-    "MolotovShatter": [
-        L("Transient", [9113552392, 9113552215, 9113552246, 9113553645], -16, length=2.2, fade=0.4),
-        L("Mechanism", [9125702439, 9125702803], -21, pv=0.08),
-    ],
     # (the fireball pops 0.06 s after the glass; its tail fades over 1 s while
     # the pool's loop fades in: one sound turning into the other)
     "FuelIgnite": [
@@ -510,7 +433,6 @@ STOCK = {
         L("Body", [9112780561], -25),
         L("Mechanism", [9112780462], -31),
     ],
-    "FuelSwig": [L("Body", [9114171960, 9114172109], -25)],
     "FireBreath": [
         L("Transient", [9114446277, 9114441555], -19, start="peak-0.08"),
         L("Body", [9117984812, 9117985848, 9117985933], -15, at=0.05, length=0.75, fade=0.3),
@@ -521,7 +443,6 @@ STOCK = {
         L("Body", [9117984812, 9117985848, 9117985933], -14, at=0.05, length=0.95, fade=0.35),
         L("Tail", [9114445526], -28, at=0.8, length=1.0, fade=0.3),
     ],
-    "CanSlosh": [L("Body", [9114190682], -28, length=0.9, fade=0.2)],
     "FuelSplash": [
         L("Body", [9125702439, 9125702803], -20, pv=0.08),
         L("Mechanism", [9126173160], -22, length=1.0, fade=0.3),
@@ -534,10 +455,6 @@ STOCK = {
         L("Mechanism", [9114446277, 9114441555], -20, start="peak-0.1"),
         L("Body", [9117983605, 9117983322, 9117986652], -16, start="peak-0.2", pv=0.04),
     ],
-    "FuelPour": [L("Body", [9120575856], -23, length=1.1, fade=0.25)],
-    # (a clean canister drop: the "large can" files are mastered into clipping)
-    "CanThrow": [L("Body", [9113704875], -19, length=2.0, fade=0.3)],
-    "ZippoDrop": [L("Body", [9114462912], -25, pitch=1.15)],
     "BodyIgnite": [
         L("Body", [9114429835, 9114429507], -12, start="peak-0.04", length=3.0, fade=1.2),
         L("Sub", [9114554567], -20, pitch=0.8, length=1.5, fade=0.5, pv=0.03),
@@ -554,6 +471,32 @@ STOCK = {
         L("Tail", [9119165912, 9119165930], -30, at=0.1),
     ],
     "Extinguish": [L("Body", [9119166199, 9119165933], -30, pitch=0.9, length=1.2, fade=0.4)],
+    # --- the flamethrower (built from the same measured files) ---
+    "GunDraw": [L("Body", [9114190682], -30, length=0.4, fade=0.15)],
+    "PilotLight": [
+        L("Body", [9121005783], -32, pitch=1.3),
+        L("Tail", [9114446183], -34, at=0.05),
+    ],
+    "PilotOut": [L("Body", [9119166199], -32, pitch=1.2, length=0.4, fade=0.15)],
+    "TriggerClick": [L("Body", [9121005566], -30, pitch=0.8)],
+    # (the peak lands 30 ms after the cue, on the hit)
+    "BurstPop": [
+        L("Body", [9114442751, 9114444052, 9114443884, 9114444008], -15, start="peak-0.03", length=1.0, fade=0.3),
+        L("Tail", [9119166424, 9119166217, 9119165644, 9119166425], -23, at=0.05, length=1.2, fade=0.3),
+    ],
+    "GlobLaunch": [
+        L("Transient", [9114446277, 9114441555], -20, start="peak-0.05", length=0.4, fade=0.15),
+        L("Body", [9114429507, 9114429835], -17, length=0.5, fade=0.2),
+    ],
+    "GlobSplat": [L("Body", [9125702439, 9125702803], -18, pv=0.08)],
+    "StreamEnd": [L("Tail", [9114445526], -28, length=1.0, fade=0.4)],
+    "PressureHiss": [L("Body", [9126173160], -30, pitch=1.4, length=0.8, fade=0.3)],
+    "ValveCrank": [L("Body", [9121005783], -27, pitch=0.6)],
+    "TorchLance": [L("Body", [9114446277, 9114441555], -18, pitch=1.25, start="peak-0.05", length=0.25, fade=0.1)],
+    "Vent": [
+        L("Body", [9119166199, 9119165933], -26, pitch=0.8, length=1.5, fade=0.5),
+        L("Tail", [9114445526], -30, at=0.1, length=1.5, fade=0.5),
+    ],
 }
 
 # Why each file was picked (French, for the doc). Name and creator come from the
@@ -945,9 +888,15 @@ def stock_doc(measure):
         "les briquets à pipe (*Lighter Flicking…* : un briquet jetable puis quelqu'un qui aspire), et les "
         "boucles de la communauté utilisées avant (impossibles à télécharger sans compte, donc "
         "impossibles à vérifier).\n\n"
-        "**Le jerrican du finisher** n'a pas de bruit de bouchon : aucun son de la boutique ne "
-        "convient (que des couvercles de casserole ou de boîte de tennis). L'essence versée part "
-        "maintenant **quand le liquide sort** (0,4 s) et non au bouchon (0,15 s).\n\n"
+        "**Le lance-flammes** (depuis qu'il a remplacé le Zippo, les Molotov, le jerrican et la flasque "
+        "dans les attaques) n'a demandé **aucun nouveau téléchargement** : ses sons sont faits des mêmes "
+        "fichiers mesurés, coupés, montés ou descendus en hauteur (`pitch`) : *Fire Whoosh 6* (un vrai "
+        "jet de lance-flammes) pour le jet et la lance du chalumeau, le levier du Zippo grave pour la "
+        "gâchette et les vannes, le liquide qui part d'un coup monté d'une quinte pour le sifflement du "
+        "détendeur, le grésillement qui retombe pour la veilleuse coupée et la soupape du finisher. "
+        "Retirés du générateur car plus utilisés : *FlameFlare* (devenu *BurstPop*), *MolotovLight*, "
+        "*MolotovShatter* (plus de verre : *GlobSplat*), *FuelSwig*, *FuelPour*, *CanThrow*, *ZippoDrop*, "
+        "*CanSlosh* (devenu *GunDraw*).\n\n"
     )
     return "".join(o)
 

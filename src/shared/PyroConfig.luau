@@ -5,7 +5,7 @@
 
 local PyroConfig = {}
 
--- Soaked in fuel (his DOUSE, a Molotov breaking on someone): the server
+-- Soaked in fuel (his FUEL SPRAY, a glob of napalm on someone): the server
 -- time it dries off, on the fighter. Meanwhile any FIRE burn on them is
 -- stronger and lasts longer, and a fire pool reaches them from further.
 PyroConfig.DOUSED_ATTRIBUTE = "DousedUntil"
@@ -13,7 +13,7 @@ PyroConfig.DOUSED_RATE = 1.5 -- fire damage per second × this
 PyroConfig.DOUSED_EXTRA = 2 -- seconds added to a fire burn
 PyroConfig.DOUSED_REACH = 1.5 -- studs: a pool's cells catch them from this much further
 
--- Fire pools (Molotov): at most this many burning cells in the whole server
+-- Fire pools (napalm, Inferno): at most this many burning cells in the whole server
 -- at once (a new pool gets fewer when many are already burning), and this
 -- many pools (the oldest goes out early).
 PyroConfig.MAX_CELLS = 48

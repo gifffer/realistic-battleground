@@ -34,25 +34,10 @@ Colonnes : *Durée* du fichier ; *I* sonie moyenne (LUFS) ; *Max* sonie maximale
 |  | `_Tail` | 0,12 s | `9114446183` | Fire Whoosh 2 (SFX) | petit souffle doux : la mèche qui prend | 0,72 s | −33,7 | −32,9 | −15,8 | 0,15 | 0,26 | 241 | 0,00 | 0,54 | 1,26 | −32,9 | −33 Max | `volume` 0,79 |
 |  |  |  | `9114445526` | Fire Whoosh 12 (SFX) | souffle doux et long : la flamme qui flotte, qui retombe | 1,38 s | −31,3 | −28,9 | −11,5 | 0,05 | 0,35 | 558 | 0,02 | 0,38 | 0,79 | −33,0 |  |  |
 | [`ZippoClose`](#zippoclose) | `_Body` | 0,00 s | `9121005783` | Zippo Lighter 5 (SFX) | un « clac » sec : le couvercle refermé | 0,71 s | −24,6 | −24,5 | −2,1 | 0,07 | 0,01 | 8398 | 0,29 | 0,00 | 1,00 | −27,0 | −27 Max | `volume` 0,75 |
-| [`FlameFlare`](#flameflare) | `_Body` | 0,00 s | `9114442751` | Fire Whoosh 2 (SFX) | « pouf » de kérosène très court et franc | 1,15 s | −12,3 | −11,2 | −2,1 | 0,25 | 0,03 | 985 | 0,00 | 0,48 | 0,38 | −15,0 | −15 Max | `volume` 1,70, coupé à 1,00 s, fondu 0,30 s, pic à +0,03 s |
-|  |  |  | `9114444052` | Fire Whoosh 5 (SFX) | variante, plus ronde | 1,29 s | −25,9 | −25,1 | −7,4 | 0,24 | 0,03 | 345 | 0,00 | 0,49 | 1,88 | −15,0 |  |  |
-|  |  |  | `9114443884` | Fire Whoosh 1 (SFX) | variante, plus grave | 0,72 s | −24,2 | −23,8 | −6,6 | 0,26 | 0,03 | 197 | 0,00 | 0,57 | 1,62 | −15,0 |  |  |
-|  |  |  | `9114444008` | Fire Whoosh 3 (SFX) | variante, plus sèche | 1,38 s | −19,2 | −18,3 | −3,6 | 0,62 | 0,03 | 299 | 0,00 | 0,54 | 0,86 | −15,0 |  |  |
-|  | `_Tail` | 0,10 s | `9125616715` | Kerosene Explosion Whooshing Poofs Crackling (SFX) | les gouttes qui crépitent après le pouf | 1,21 s | −19,5 | −17,2 | −5,8 | 0,00 | 0,31 | 201 | 0,00 | 0,59 | 0,83 | −24,0 | −24 Max | `volume` 0,55, coupé à 1,00 s, fondu 0,30 s |
-|  |  |  | `9125616655` | Kerosene Explosion Whooshing Poofs Crackling (SFX) | variante | 1,10 s | −22,2 | −20,5 | −8,2 | 0,00 | 0,28 | 255 | 0,00 | 0,42 | 1,21 | −24,0 |  |  |
-| [`MolotovLight`](#molotovlight) | `_Body` | 0,00 s | `9114446852` | Fire Whoosh 15 (SFX) | le chiffon qui s'embrase, court | 0,83 s | −26,0 | −24,3 | −7,7 | 0,03 | 0,17 | 2165 | 0,12 | 0,08 | 1,02 | −21,0 | −21 Max | `volume` 1,43 |
-|  |  |  | `9114447022` | Fire Whoosh 19 (SFX) | variante qui gonfle plus lentement | 1,27 s | −25,1 | −22,9 | −8,8 | 0,08 | 0,40 | 1351 | 0,08 | 0,22 | 0,87 | −21,0 |  |  |
-|  |  |  | `9114446802` | Fire Whoosh 13 (SFX) | variante | 1,15 s | −26,6 | −25,1 | −7,0 | 0,11 | 0,20 | 2186 | 0,08 | 0,21 | 1,12 | −21,0 |  |  |
 | [`MolotovThrow`](#molotovthrow) | `_Body` | 0,00 s | `9114463219` | Flame Licks 8 (SFX) | torche qui passe : la flamme du chiffon qui file | 1,69 s | −20,4 | −17,7 | −5,9 | 0,19 | 0,37 | 206 | 0,00 | 0,56 | 1,00 | −20,9 | −21 Max | `volume` 0,69, coupé à 1,40 s, fondu 0,30 s |
 |  |  |  | `9114463410` | Flame Licks 10 (SFX) | variante | 1,93 s | −20,5 | −17,4 | −5,6 | 0,19 | 0,61 | 222 | 0,00 | 0,48 | 0,96 | −21,0 |  |  |
 |  |  |  | `9114463208` | Flame Licks 7 (SFX) | variante | 1,73 s | −20,2 | −17,6 | −7,3 | 0,20 | 0,15 | 169 | 0,00 | 0,66 | 0,99 | −20,9 |  |  |
 |  |  |  | `9114463016` | Flame Licks 4 (SFX) | variante, plus grave | 1,89 s | −21,2 | −18,2 | −7,2 | 0,19 | 0,44 | 145 | 0,00 | 0,70 | 1,06 | −20,9 |  |  |
-| [`MolotovShatter`](#molotovshatter) | `_Transient` | 0,00 s | `9113552392` | Bottle Breaks 1 (SFX) | bouteille qui éclate sur du béton | 4,45 s | −24,4 | −21,6 | −2,8 | 0,30 | 0,01 | 8233 | 0,15 | 0,00 | 0,97 | −16,0 | −16 Max | `volume` 1,97, coupé à 2,20 s, fondu 0,40 s |
-|  |  |  | `9113552215` | Bottle Breaks 2 (SFX) | variante | 4,02 s | −27,3 | −25,0 | −2,4 | 0,32 | 0,01 | 8176 | 0,16 | 0,00 | 1,43 | −16,0 |  |  |
-|  |  |  | `9113552246` | Bottle Breaks 3 (SFX) | variante | 3,16 s | −23,8 | −21,1 | −2,4 | 0,35 | 0,01 | 7836 | 0,17 | 0,00 | 0,91 | −16,0 |  |  |
-|  |  |  | `9113553645` | Bottle Breaks 1 (SFX) | variante, plus grosse | 4,46 s | −24,8 | −19,8 | −2,5 | 0,24 | 0,01 | 7665 | 0,23 | 0,00 | 0,79 | −16,0 |  |  |
-|  | `_Mechanism` | 0,00 s | `9125702439` | Mud Puddle Splash Shallow Water Impacts Hits (SFX) | l'essence qui gicle au sol | 0,88 s | −32,6 | −30,5 | −10,6 | 0,00 | 0,27 | 1560 | 0,19 | 0,07 | 0,91 | −21,0 | −21 Max | `volume` 3,29 |
-|  |  |  | `9125702803` | Mud Puddle Splash Shallow Water Impacts Hits (SFX) | variante | 0,78 s | −35,4 | −32,2 | −10,3 | 0,00 | 0,05 | 1089 | 0,10 | 0,37 | 1,10 | −21,0 |  |  |
 | [`FuelIgnite`](#fuelignite) | `_Body` | 0,00 s | `9114429507` | Fire Burst 1 (SFX) | boule de feu qui part d'un coup (pas une montée lente) | 8,67 s | −16,8 | −9,9 | −2,2 | 0,05 | 0,08 | 353 | 0,02 | 0,73 | 1,03 | −13,0 | −13 Max | `volume` 0,68, coupé à 2,20 s, fondu 1,00 s |
 |  |  |  | `9114429835` | Fire Burst 8 (SFX) | variante, plus grave | 8,81 s | −14,3 | −9,4 | −1,6 | 0,15 | 0,07 | 147 | 0,00 | 0,75 | 0,97 | −13,0 |  |  |
 |  |  |  | `9114429958` | Fire Burst 12 (SFX) | variante, plus claire | 8,94 s | −16,3 | −9,8 | −1,8 | 0,24 | 0,08 | 604 | 0,06 | 0,67 | 1,02 | −13,0 |  |  |
@@ -60,8 +45,6 @@ Colonnes : *Durée* du fichier ; *I* sonie moyenne (LUFS) ; *Max* sonie maximale
 |  | `_Sub` | 0,00 s | `9114554567` | Gas Fire Explosion 3 (SFX) | le « whoump » grave de l'essence | 4,03 s | −10,8 | −8,6 | −3,5 | 0,00 | 0,17 | 290 | 0,02 | 0,72 | 1,00 | −21,0 | −21 Max | `volume` 0,24, `pitch` 0,80, coupé à 1,50 s, fondu 0,50 s |
 | [`PoolFire`](#poolfire) | `_Body` | 0,00 s | `9112780561` | Fire Whoosh 1 (SFX) | kérosène qui brûle au sol, 49 s, niveau stable, sans crépitement fort | 49,01 s | −31,3 | σ 2,0 / soudure 0,9 | −13,9 | 0,00 | 11,13 | 258 | 0,00 | 0,45 | 1,00 | −25,0 | −25 I | `volume` 2,07 |
 |  | `_Mechanism` | 0,00 s | `9112780462` | Fireplace Constant Burning Flame 4 (SFX) | crépitement de feu de bois, 43 s : le grain sous la flaque | 42,75 s | −42,3 | σ 2,4 / soudure 1,1 | −5,1 | 0,00 | 5,33 | 2772 | 0,03 | 0,55 | 1,00 | −31,0 | −31 I | `volume` 3,67 |
-| [`FuelSwig`](#fuelswig) | `_Body` | 0,00 s | `9114171960` | Drinking Cu Gulping 5 (SFX) | une gorgée bue de près | 0,92 s | −35,7 | −34,8 | −12,0 | 0,09 | 0,29 | 245 | 0,00 | 0,23 | 1,05 | −25,0 | −25 Max | `volume` 2,95 |
-|  |  |  | `9114172109` | Drinking Cu Gulping 6 (SFX) | variante | 1,23 s | −34,0 | −34,0 | −11,7 | 0,20 | 0,39 | 246 | 0,00 | 0,27 | 0,95 | −25,0 |  |  |
 | [`FireBreath`](#firebreath) | `_Transient` | 0,00 s | `9114446277` | Fire Whoosh 6 (SFX) | jet de kérosène à travers une torche (« lance-flammes ») | 1,50 s | −20,0 | −19,7 | −5,8 | 0,23 | 0,08 | 1432 | 0,05 | 0,05 | 1,14 | −19,0 | −19 Max | `volume` 0,95, pic à +0,08 s |
 |  |  |  | `9114441555` | Fire Whoosh 8 (SFX) | variante, plus courte | 1,86 s | −16,3 | −17,4 | −2,7 | 0,72 | 0,06 | 1562 | 0,01 | 0,37 | 0,88 | −19,0 |  |  |
 |  | `_Body` | 0,05 s | `9117984812` | Pyro Fire Ball Burst 1 (SFX) | long jet de feu (pyrotechnie de cinéma) | 3,00 s | −17,4 | −13,2 | −1,0 | 0,22 | 0,32 | 483 | 0,02 | 0,44 | 0,59 | −15,0 | −15 Max | `volume` 1,37, coupé à 0,75 s, fondu 0,30 s |
@@ -79,9 +62,6 @@ Colonnes : *Durée* du fichier ; *I* sonie moyenne (LUFS) ; *Max* sonie maximale
 |  | `_Body` | 0,00 s | `9117983605` | Pyro Fire Ball Burst 9 (SFX) | boule de feu courte et grave | 1,48 s | −18,6 | −16,8 | −0,2 | 0,22 | 0,12 | 111 | 0,01 | 0,93 | 0,98 | −16,0 | −16 Max | `volume` 1,12, pic à +0,20 s |
 |  |  |  | `9117983322` | Pyro Fire Ball Burst 6 (SFX) | variante | 1,44 s | −20,2 | −18,5 | −0,4 | 0,21 | 0,11 | 176 | 0,01 | 0,86 | 1,19 | −16,0 |  |  |
 |  |  |  | `9117986652` | Pyro Fire Ball Burst 7 (SFX) | variante | 1,50 s | −17,5 | −15,7 | −0,2 | 0,37 | 0,20 | 107 | 0,00 | 0,98 | 0,86 | −16,0 |  |  |
-| [`FuelPour`](#fuelpour) | `_Body` | 0,00 s | `9120575856` | Water Pour 1 (SFX) | liquide versé qui éclabousse | 3,63 s | −28,0 | −26,1 | −10,7 | 0,06 | 0,53 | 5268 | 0,18 | 0,01 | 1,00 | −23,0 | −23 Max | `volume` 1,43, coupé à 1,10 s, fondu 0,25 s |
-| [`CanThrow`](#canthrow) | `_Body` | 0,00 s | `9113704875` | Canister Drop Canister Impact 3 (SFX) | bidon de métal lâché qui rebondit : net, creux, sans saturation (crête -4,3 dBFS) | 3,23 s | −25,3 | −21,4 | −4,3 | 0,08 | 0,02 | 1627 | 0,13 | 0,00 | 1,00 | −19,0 | −19 Max | `volume` 1,32, coupé à 2,00 s, fondu 0,30 s |
-| [`ZippoDrop`](#zippodrop) | `_Body` | 0,00 s | `9114462912` | Flame Licks 2 (SFX) | petite flamme qui passe, jouée plus aiguë | 1,59 s | −24,3 | −21,4 | −10,2 | 0,18 | 0,24 | 210 | 0,00 | 0,51 | 1,00 | −25,0 | −25 Max | `volume` 0,66, `pitch` 1,15 |
 | [`BodyIgnite`](#bodyignite) | `_Body` | 0,00 s | `9114429835` | Fire Burst 8 (SFX) | variante, plus grave | 8,81 s | −14,3 | −9,1 | −1,6 | 0,19 | 0,05 | 147 | 0,00 | 0,75 | 0,97 | −12,0 | −12 Max | `volume` 0,74, coupé à 3,00 s, fondu 1,20 s, pic à +0,04 s |
 |  |  |  | `9114429507` | Fire Burst 1 (SFX) | boule de feu qui part d'un coup (pas une montée lente) | 8,67 s | −16,8 | −9,7 | −2,2 | 0,10 | 0,04 | 353 | 0,02 | 0,73 | 1,04 | −12,0 |  |  |
 |  | `_Sub` | 0,00 s | `9114554567` | Gas Fire Explosion 3 (SFX) | le « whoump » grave de l'essence | 4,03 s | −10,8 | −8,6 | −3,5 | 0,00 | 0,17 | 290 | 0,02 | 0,72 | 1,00 | −20,0 | −20 Max | `volume` 0,27, `pitch` 0,80, coupé à 1,50 s, fondu 0,50 s |
@@ -96,7 +76,6 @@ Colonnes : *Durée* du fichier ; *I* sonie moyenne (LUFS) ; *Max* sonie maximale
 |  |  |  | `9117985848` | Pyro Fire Ball Burst 6 (SFX) | variante | 2,56 s | −23,4 | −19,8 | −4,8 | 0,25 | 0,11 | 254 | 0,01 | 0,54 | 1,27 | −14,0 |  |  |
 |  |  |  | `9117985933` | Pyro Fire Ball Burst 7 (SFX) | variante, plus sèche | 1,93 s | −23,1 | −20,2 | −3,2 | 0,22 | 0,09 | 186 | 0,01 | 0,71 | 1,33 | −14,0 |  |  |
 |  | `_Tail` | 0,80 s | `9114445526` | Fire Whoosh 12 (SFX) | souffle doux et long : la flamme qui flotte, qui retombe | 1,38 s | −31,3 | −28,9 | −11,5 | 0,05 | 0,35 | 558 | 0,02 | 0,38 | 1,00 | −28,0 | −28 Max | `volume` 1,11, coupé à 1,00 s, fondu 0,30 s |
-| [`CanSlosh`](#canslosh) | `_Body` | 0,00 s | `9114190682` | Drum Slosh Liquid Movement Small Splashes 1 (SFX) | liquide qui ballotte dans un fût | 3,85 s | −39,5 | −35,3 | −17,3 | 0,07 | 0,57 | 818 | 0,04 | 0,18 | 1,00 | −28,0 | −28 Max | `volume` 2,32, coupé à 0,90 s, fondu 0,20 s |
 | [`FireSwing`](#fireswing) | `_Body` | 0,00 s | `9114462915` | Flame Licks 1 (SFX) | torche agitée qui passe | 1,92 s | −22,6 | −19,7 | −9,5 | 0,45 | 0,12 | 183 | 0,00 | 0,55 | 1,05 | −20,0 | −20 Max | `volume` 0,92, coupé à 1,00 s, fondu 0,30 s, pic à +0,12 s |
 |  |  |  | `9114462930` | Flame Licks 3 (SFX) | variante | 1,80 s | −22,2 | −19,3 | −6,5 | 0,40 | 0,12 | 159 | 0,00 | 0,67 | 1,01 | −19,9 |  |  |
 |  |  |  | `9114463010` | Flame Licks 5 (SFX) | variante | 1,66 s | −22,4 | −19,5 | −9,4 | 0,25 | 0,12 | 221 | 0,00 | 0,50 | 1,03 | −20,0 |  |  |
@@ -115,10 +94,37 @@ Colonnes : *Durée* du fichier ; *I* sonie moyenne (LUFS) ; *Max* sonie maximale
 | [`Extinguish`](#extinguish) | `_Body` | 0,00 s | `9119166199` | Sizzle Short And Explosive Sear 8 (SFX) | grésillement qui retombe | 1,91 s | −19,4 | −16,2 | −2,0 | 0,08 | 0,06 | 12449 | 0,07 | 0,03 | 0,88 | −30,1 | −30 Max | `volume` 0,23, `pitch` 0,90, coupé à 1,20 s, fondu 0,40 s |
 |  |  |  | `9119165933` | Sizzle Short And Explosive Sear 6 (SFX) | variante | 2,25 s | −20,5 | −18,4 | −6,9 | 0,11 | 0,07 | 16220 | 0,03 | 0,01 | 1,14 | −30,0 |  |  |
 | [`PyreRoar`](#pyreroar) | `_Body` | 0,00 s | `9112780691` | Fire Whoosh 2 (SFX) | grondement de feu de kérosène, 56 s | 56,50 s | −33,2 | σ 4,3 / soudure −3,3 | −8,9 | 0,00 | 46,86 | 241 | 0,00 | 0,50 | 1,00 | −28,0 | −28 I | `volume` 1,82 |
+| [`GunDraw`](#gundraw) | `_Body` | 0,00 s | `9114190682` | Drum Slosh Liquid Movement Small Splashes 1 (SFX) | liquide qui ballotte dans un fût | 3,85 s | −39,5 | −41,0 | −17,3 | 0,07 | 0,22 | 818 | 0,04 | 0,18 | 1,00 | −30,0 | −30 Max | `volume` 3,55, coupé à 0,40 s, fondu 0,15 s |
+| [`PilotLight`](#pilotlight) | `_Body` | 0,00 s | `9121005783` | Zippo Lighter 5 (SFX) | un « clac » sec : le couvercle refermé | 0,71 s | −24,6 | −24,5 | −2,1 | 0,07 | 0,01 | 8398 | 0,29 | 0,00 | 1,00 | −32,0 | −32 Max | `volume` 0,42, `pitch` 1,30 |
+|  | `_Tail` | 0,05 s | `9114446183` | Fire Whoosh 2 (SFX) | petit souffle doux : la mèche qui prend | 0,72 s | −33,7 | −32,9 | −15,8 | 0,15 | 0,26 | 241 | 0,00 | 0,54 | 1,00 | −34,0 | −34 Max | `volume` 0,88 |
+| [`PilotOut`](#pilotout) | `_Body` | 0,00 s | `9119166199` | Sizzle Short And Explosive Sear 8 (SFX) | grésillement qui retombe | 1,91 s | −19,4 | −16,2 | −2,0 | 0,08 | 0,06 | 12449 | 0,07 | 0,03 | 1,00 | −32,1 | −32 Max | `volume` 0,16, `pitch` 1,20, coupé à 0,40 s, fondu 0,15 s |
+| [`TriggerClick`](#triggerclick) | `_Body` | 0,00 s | `9121005566` | Zippo Lighter 1 (SFX) | le « clink » du couvercle, net, sans blanc | 0,45 s | −28,5 | −28,5 | −4,8 | 0,03 | 0,03 | 5920 | 0,43 | 0,01 | 1,00 | −30,0 | −30 Max | `volume` 0,84, `pitch` 0,80 |
+| [`BurstPop`](#burstpop) | `_Body` | 0,00 s | `9114442751` | Fire Whoosh 2 (SFX) | « pouf » de kérosène très court et franc | 1,15 s | −12,3 | −11,2 | −2,1 | 0,25 | 0,03 | 985 | 0,00 | 0,48 | 0,38 | −15,0 | −15 Max | `volume` 1,70, coupé à 1,00 s, fondu 0,30 s, pic à +0,03 s |
+|  |  |  | `9114444052` | Fire Whoosh 5 (SFX) | variante, plus ronde | 1,29 s | −25,9 | −25,1 | −7,4 | 0,24 | 0,03 | 345 | 0,00 | 0,49 | 1,88 | −15,0 |  |  |
+|  |  |  | `9114443884` | Fire Whoosh 1 (SFX) | variante, plus grave | 0,72 s | −24,2 | −23,8 | −6,6 | 0,26 | 0,03 | 197 | 0,00 | 0,57 | 1,62 | −15,0 |  |  |
+|  |  |  | `9114444008` | Fire Whoosh 3 (SFX) | variante, plus sèche | 1,38 s | −19,2 | −18,3 | −3,6 | 0,62 | 0,03 | 299 | 0,00 | 0,54 | 0,86 | −15,0 |  |  |
+|  | `_Tail` | 0,05 s | `9119166424` | Sizzle Short And Explosive Sear 11 (SFX) | grésillement court | 1,81 s | −17,8 | −14,3 | −1,5 | 0,16 | 0,07 | 12232 | 0,09 | 0,01 | 0,88 | −22,9 | −23 Max | `volume` 0,42, coupé à 1,20 s, fondu 0,30 s |
+|  |  |  | `9119166217` | Sizzle Short And Explosive Sear 9 (SFX) | variante | 2,13 s | −18,3 | −15,1 | −1,2 | 0,10 | 0,04 | 8545 | 0,12 | 0,04 | 0,97 | −22,9 |  |  |
+|  |  |  | `9119165644` | Sizzle Short And Explosive Sear 2 (SFX) | variante | 2,69 s | −20,2 | −15,1 | −1,7 | 0,07 | 0,02 | 7587 | 0,05 | 0,03 | 0,97 | −22,9 |  |  |
+|  |  |  | `9119166425` | Sizzle Short And Explosive Sear 13 (SFX) | variante | 1,43 s | −21,1 | −17,1 | −3,8 | 0,07 | 0,03 | 13783 | 0,07 | 0,03 | 1,22 | −22,9 |  |  |
+| [`GlobLaunch`](#globlaunch) | `_Transient` | 0,00 s | `9114446277` | Fire Whoosh 6 (SFX) | jet de kérosène à travers une torche (« lance-flammes ») | 1,50 s | −20,0 | −20,1 | −5,8 | 0,26 | 0,05 | 1432 | 0,05 | 0,05 | 1,14 | −20,0 | −20 Max | `volume` 0,89, coupé à 0,40 s, fondu 0,15 s, pic à +0,05 s |
+|  |  |  | `9114441555` | Fire Whoosh 8 (SFX) | variante, plus courte | 1,86 s | −16,3 | −17,8 | −2,7 | 0,75 | 0,05 | 1562 | 0,01 | 0,37 | 0,88 | −19,9 |  |  |
+|  | `_Body` | 0,00 s | `9114429507` | Fire Burst 1 (SFX) | boule de feu qui part d'un coup (pas une montée lente) | 8,67 s | −16,8 | −9,9 | −2,2 | 0,05 | 0,08 | 353 | 0,02 | 0,73 | 1,03 | −17,0 | −17 Max | `volume` 0,43, coupé à 0,50 s, fondu 0,20 s |
+|  |  |  | `9114429835` | Fire Burst 8 (SFX) | variante, plus grave | 8,81 s | −14,3 | −9,4 | −1,6 | 0,15 | 0,07 | 147 | 0,00 | 0,75 | 0,97 | −17,0 |  |  |
+| [`GlobSplat`](#globsplat) | `_Body` | 0,00 s | `9125702439` | Mud Puddle Splash Shallow Water Impacts Hits (SFX) | l'essence qui gicle au sol | 0,88 s | −32,6 | −30,5 | −10,6 | 0,00 | 0,27 | 1560 | 0,19 | 0,07 | 0,91 | −18,0 | −18 Max | `volume` 4,65 |
+|  |  |  | `9125702803` | Mud Puddle Splash Shallow Water Impacts Hits (SFX) | variante | 0,78 s | −35,4 | −32,2 | −10,3 | 0,00 | 0,05 | 1089 | 0,10 | 0,37 | 1,10 | −18,0 |  |  |
+| [`StreamEnd`](#streamend) | `_Tail` | 0,00 s | `9114445526` | Fire Whoosh 12 (SFX) | souffle doux et long : la flamme qui flotte, qui retombe | 1,38 s | −31,3 | −28,9 | −11,5 | 0,05 | 0,35 | 558 | 0,02 | 0,38 | 1,00 | −28,0 | −28 Max | `volume` 1,11, coupé à 1,00 s, fondu 0,40 s |
+| [`PressureHiss`](#pressurehiss) | `_Body` | 0,00 s | `9126173160` | Water Burst Movement Out Of Liquid Splashing (SFX) | le liquide qui part d'un coup | 6,56 s | −28,6 | −20,9 | −11,7 | 0,14 | 0,42 | 1638 | 0,16 | 0,21 | 1,00 | −30,0 | −30 Max | `volume` 0,35, `pitch` 1,40, coupé à 0,80 s, fondu 0,30 s |
+| [`ValveCrank`](#valvecrank) | `_Body` | 0,00 s | `9121005783` | Zippo Lighter 5 (SFX) | un « clac » sec : le couvercle refermé | 0,71 s | −24,6 | −24,5 | −2,1 | 0,07 | 0,01 | 8398 | 0,29 | 0,00 | 1,00 | −27,0 | −27 Max | `volume` 0,75, `pitch` 0,60 |
+| [`TorchLance`](#torchlance) | `_Body` | 0,00 s | `9114446277` | Fire Whoosh 6 (SFX) | jet de kérosène à travers une torche (« lance-flammes ») | 1,50 s | −20,0 | −20,1 | −5,8 | 0,26 | 0,05 | 1432 | 0,05 | 0,05 | 1,14 | −18,0 | −18 Max | `volume` 1,12, `pitch` 1,25, coupé à 0,25 s, fondu 0,10 s, pic à +0,05 s |
+|  |  |  | `9114441555` | Fire Whoosh 8 (SFX) | variante, plus courte | 1,86 s | −16,3 | −17,8 | −2,7 | 0,75 | 0,05 | 1562 | 0,01 | 0,37 | 0,88 | −17,9 |  |  |
+| [`Vent`](#vent) | `_Body` | 0,00 s | `9119166199` | Sizzle Short And Explosive Sear 8 (SFX) | grésillement qui retombe | 1,91 s | −19,4 | −16,2 | −2,0 | 0,08 | 0,06 | 12449 | 0,07 | 0,03 | 0,88 | −25,9 | −26 Max | `volume` 0,37, `pitch` 0,80, coupé à 1,50 s, fondu 0,50 s |
+|  |  |  | `9119165933` | Sizzle Short And Explosive Sear 6 (SFX) | variante | 2,25 s | −20,5 | −18,4 | −6,9 | 0,11 | 0,07 | 16220 | 0,03 | 0,01 | 1,14 | −25,9 |  |  |
+|  | `_Tail` | 0,10 s | `9114445526` | Fire Whoosh 12 (SFX) | souffle doux et long : la flamme qui flotte, qui retombe | 1,38 s | −31,3 | −28,9 | −11,5 | 0,05 | 0,35 | 558 | 0,02 | 0,38 | 1,00 | −30,0 | −30 Max | `volume` 0,88, coupé à 1,50 s, fondu 0,50 s |
 
 **Écartés après mesure** : *Zippo Lighter 2/4/6* (presque muets : un clic de 20 ms puis rien), *Fire Burst 2* et *11* (une montée lente : le pic arrive 1,3 s après la boule de feu), *Gas Fire Explosion 4* (un grondement plat et saturé, sans attaque), *Fire Whoosh 13* (9114442370 : trop de 2-5 kHz, il pique), *Fry Or Sizzle 1* (trop sifflant pour une boucle), les briquets à pipe (*Lighter Flicking…* : un briquet jetable puis quelqu'un qui aspire), et les boucles de la communauté utilisées avant (impossibles à télécharger sans compte, donc impossibles à vérifier).
 
-**Le jerrican du finisher** n'a pas de bruit de bouchon : aucun son de la boutique ne convient (que des couvercles de casserole ou de boîte de tennis). L'essence versée part maintenant **quand le liquide sort** (0,4 s) et non au bouchon (0,15 s).
+**Le lance-flammes** (depuis qu'il a remplacé le Zippo, les Molotov, le jerrican et la flasque dans les attaques) n'a demandé **aucun nouveau téléchargement** : ses sons sont faits des mêmes fichiers mesurés, coupés, montés ou descendus en hauteur (`pitch`) : *Fire Whoosh 6* (un vrai jet de lance-flammes) pour le jet et la lance du chalumeau, le levier du Zippo grave pour la gâchette et les vannes, le liquide qui part d'un coup monté d'une quinte pour le sifflement du détendeur, le grésillement qui retombe pour la veilleuse coupée et la soupape du finisher. Retirés du générateur car plus utilisés : *FlameFlare* (devenu *BurstPop*), *MolotovLight*, *MolotovShatter* (plus de verre : *GlobSplat*), *FuelSwig*, *FuelPour*, *CanThrow*, *ZippoDrop*, *CanSlosh* (devenu *GunDraw*).
 
 ## Changer un son
 
@@ -135,36 +141,40 @@ Pas nécessaire. Mais pour un son encore plus précis, chaque fiche plus bas don
 
 | Son | Ce que c'est | Quand |
 |---|---|---|
-| [`ZippoOpen`](#zippoopen) | Le couvercle du Zippo qui s'ouvre d'un coup de pouce (le « clink »). | ZIPPO FLARE, MOLOTOV, FIRE BREATH, l'Awakening et le finisher, quand il ouvre le briquet. |
-| [`ZippoStrike`](#zippostrike) | La molette frottée sur la pierre, les étincelles, la mèche qui prend feu. | Juste après ZippoOpen (ZIPPO FLARE, MOLOTOV, FIRE BREATH, Awakening, finisher). |
-| [`ZippoClose`](#zippoclose) | Le couvercle refermé d'un coup sec : la flamme étouffée. | À la fin de ZIPPO FLARE et de FIRE BREATH. |
-| [`FlameFlare`](#flameflare) | Le jet de liquide à briquet à travers la flamme : une boule de feu courte dans le visage. | ZIPPO FLARE, au moment du coup (0,42 s). |
-| [`MolotovLight`](#molotovlight) | Le chiffon imbibé d'essence au goulot qui prend feu. | MOLOTOV, quand le briquet touche le chiffon (0,3 s). |
-| [`MolotovThrow`](#molotovthrow) | Le lancer : le bras, le liquide qui ballotte, la flamme du chiffon qui file dans l'air. | MOLOTOV et FIREBOMB, au lâcher de la bouteille. |
-| [`MolotovShatter`](#molotovshatter) | La bouteille qui éclate au sol : le verre, les éclats, l'essence qui gicle. | Quand le Molotov se brise (sol, mur ou sur quelqu'un). |
-| [`FuelIgnite`](#fuelignite) | L'essence répandue qui s'embrase : la boule de feu. | Juste après MolotovShatter (la flaque prend feu). |
-| [`PoolFire`](#poolfire) | La flaque d'essence qui brûle (BOUCLE, tant que le feu dure). **BOUCLE** | Pendant tout le feu au sol du Molotov, en 3D sur la flaque, baisse quand le feu meurt. |
-| [`FuelSwig`](#fuelswig) | Il boit une gorgée d'essence (pour la cracher) : le bouchon, le liquide, la bouche pleine. | FIRE BREATH / INFERNO BREATH, au début. |
-| [`FireBreath`](#firebreath) | Le cracheur de feu : l'essence pulvérisée à travers la flamme, un jet de feu qui rugit. | FIRE BREATH (0,55 s → 1 s) et INFERNO BREATH (plus long). |
-| [`FuelSplash`](#fuelsplash) | L'essence projetée hors du jerrican sur quelqu'un (DOUSE). | DOUSE, au balancement du jerrican (0,42 s). |
+| [`ZippoOpen`](#zippoopen) | Le couvercle du Zippo qui s'ouvre d'un coup de pouce (le « clink »). | IMMOLATION (1,85 s), quand il sort le briquet pour rallumer la veilleuse. |
+| [`ZippoStrike`](#zippostrike) | La molette frottée sur la pierre, les étincelles, la mèche qui prend feu. | IMMOLATION (2,15 s), juste après ZippoOpen. |
+| [`ZippoClose`](#zippoclose) | Le couvercle refermé d'un coup sec : la flamme étouffée. | IMMOLATION (2,62 s) : le briquet refermé et rangé. |
+| [`MolotovThrow`](#molotovthrow) | Le lancer : le bras, le liquide qui ballotte, la flamme du chiffon qui file dans l'air. | NAPALM LOB et NAPALM MORTAR : la boule de napalm en vol (la flamme qui passe). |
+| [`FuelIgnite`](#fuelignite) | L'essence répandue qui s'embrase : la boule de feu. | Juste après GlobSplat (la flaque prend feu). |
+| [`PoolFire`](#poolfire) | La flaque d'essence qui brûle (BOUCLE, tant que le feu dure). **BOUCLE** | Pendant tout le feu au sol (napalm, INFERNO), en 3D sur la flaque, baisse quand le feu meurt. |
+| [`FireBreath`](#firebreath) | Le cracheur de feu : l'essence pulvérisée à travers la flamme, un jet de feu qui rugit. | FLAME STREAM (0,45 s → 1 s), TORCH CHARGE (le jet devant lui) et le pilier de l'Awakening (0,45 s). |
+| [`FuelSplash`](#fuelsplash) | L'essence projetée hors du jerrican sur quelqu'un (DOUSE). | FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé. |
 | [`BodyBurn`](#bodyburn) | Un corps et ses vêtements en feu (BOUCLE). Aussi, plus bas, ses poings en feu pendant l'Awakening. **BOUCLE** | Sur la victime du finisher pendant qu'elle brûle, et (en plus faible) sur les avant-bras du Pyromane en Awakening. |
-| [`SelfIgnite`](#selfignite) | Il allume ses propres avant-bras imbibés d'essence (BURNING MAN). | L'activation de l'Awakening (0,55 s). |
-| [`FuelPour`](#fuelpour) | L'essence versée du jerrican sur le corps (finisher). | IMMOLATION, de 0,4 s à 1,45 s (quand le liquide sort). |
-| [`CanThrow`](#canthrow) | Le jerrican vide jeté par terre (finisher). | IMMOLATION, à 1,6 s. |
-| [`ZippoDrop`](#zippodrop) | Le Zippo allumé lâché sur le corps (finisher). | IMMOLATION, à 2,8 s (il tombe, touche la poitrine à 3,05 s). |
-| [`BodyIgnite`](#bodyignite) | Le corps imbibé qui s'embrase d'un coup (« whump »). | IMMOLATION, à 3,05 s. |
+| [`SelfIgnite`](#selfignite) | Il allume ses propres avant-bras imbibés d'essence (BURNING MAN). | L'activation de l'Awakening (0,55 s) : le retour de flamme sur ses avant-bras. |
+| [`BodyIgnite`](#bodyignite) | Le corps imbibé qui s'embrase d'un coup (« whump »). | IMMOLATION, à 3,05 s (le jet à bout portant). |
 | [`BurnScream`](#burnscream) | Les cris de la victime qui brûle (coupés à la mort). | IMMOLATION, de 3,2 s à 4,6 s (coupé net au « Still »). |
-| [`InfernoBreath`](#infernobreath) | Le jet de feu de l'INFERNO BREATH : le même que FIRE BREATH, plus long. | INFERNO BREATH (0,55 s → 1,15 s). |
-| [`CanSlosh`](#canslosh) | L'essence qui ballotte dans le jerrican quand il le balance. | DOUSE, à l'élan (0,16 s), avant le jet. |
-| [`FireSwing`](#fireswing) | Le poing ou le bras en feu qui fend l'air : une torche qui passe. | BURNING FIST et BURNING RUSH (0,1 s) : le pic tombe sur le coup (0,22 s). |
-| [`FireImpact`](#fireimpact) | Le poing en feu qui touche : un « pouf » de flamme et la peau qui grésille. | BURNING FIST / BURNING RUSH, au coup confirmé par le serveur. |
-| [`CatchFire`](#catchfire) | Quelqu'un qui prend feu : un souffle de flamme qui l'enveloppe, un grésillement. | Le premier instant où un corps brûle (Molotov, souffle, flaque, finisher). |
+| [`InfernoBreath`](#infernobreath) | Le jet de l'INFERNO : le même que FireBreath, plus long. | INFERNO (0,45 s → 1,25 s) et le plein jet du finisher (3,05 s). |
+| [`FireSwing`](#fireswing) | Le poing ou le bras en feu qui fend l'air : une torche qui passe. | BLOWTORCH (0,16 s) : le canon chaud lancé vers eux. |
+| [`FireImpact`](#fireimpact) | Le poing en feu qui touche : un « pouf » de flamme et la peau qui grésille. | BLOWTORCH / TORCH CHARGE, au coup confirmé par le serveur. |
+| [`CatchFire`](#catchfire) | Quelqu'un qui prend feu : un souffle de flamme qui l'enveloppe, un grésillement. | Le premier instant où un corps brûle (napalm, jet, flaque, finisher). |
 | [`Extinguish`](#extinguish) | Le feu qui s'éteint sur un corps : un grésillement qui retombe. | Quand les dernières flammes d'un corps s'éteignent, et à la fin de l'Awakening. |
 | [`PyreRoar`](#pyreroar) | Le grondement du corps qui brûle en entier (BOUCLE). **BOUCLE** | IMMOLATION, de l'embrasement (3,05 s) à la fin du feu (12 s), par-dessus le crépitement du corps. |
+| [`GunDraw`](#gundraw) | Le lance-flammes ramené du dos à la hanche : l'essence qui ballotte dans la bouteille. | Chaque attaque, quand la main prend la poignée (0,15 s ; 0,08 s en Awakening). |
+| [`PilotLight`](#pilotlight) | La veilleuse qui s'allume : un clic de levier et un petit « fwip » bleu. | Après le dégainage de chaque attaque, FUEL SPRAY (0,66 s : rallumée), IMMOLATION (2,3 s). |
+| [`PilotOut`](#pilotout) | La veilleuse coupée : un petit grésillement aigu. | FUEL SPRAY (0,27 s), IMMOLATION (avant de verser le carburant). |
+| [`TriggerClick`](#triggerclick) | La gâchette pressée : un clic métallique sourd. | FLASH BURST (0,38 s), NAPALM LOB (0,6 s), FLAME STREAM (0,42 s), NAPALM MORTAR, INFERNO, TORCH CHARGE. |
+| [`BurstPop`](#burstpop) | La boule de feu sous pression qui éclate : un « pouf » franc, des gouttes qui crépitent. | FLASH BURST, sur le coup (0,42 s). |
+| [`GlobLaunch`](#globlaunch) | La boule de napalm crachée par le canon : une courte bouffée de feu. | NAPALM LOB (0,62 s), NAPALM MORTAR (0,45 s). |
+| [`GlobSplat`](#globsplat) | La boule de napalm qui s'écrase au sol : un « splash » mouillé (pas de verre). | À l'impact de la boule (sol, mur ou sur quelqu'un), juste avant FuelIgnite. |
+| [`StreamEnd`](#streamend) | Le jet relâché : la queue de la flamme qui s'éloigne. | Fin de FLAME STREAM, d'INFERNO et du plein jet du finisher (4,25 s). |
+| [`PressureHiss`](#pressurehiss) | Le sifflement du détendeur sous pression qui monte. | Sous les jets : FLASH BURST, NAPALM LOB (la pression qui monte), FLAME STREAM, l'Awakening, NAPALM MORTAR, INFERNO, IMMOLATION. |
+| [`ValveCrank`](#valvecrank) | La vanne claquée ou le volant de la bouteille tourné : un « clac » métallique. | NAPALM LOB (0,33 s étranglée, 0,58 s rouverte), l'Awakening (0,14 s), INFERNO (0,2 s), IMMOLATION. |
+| [`TorchLance`](#torchlance) | La lance du chalumeau qui s'allume : un jet court et dur. | BLOWTORCH (0,22 s, juste avant le coup). |
+| [`Vent`](#vent) | La soupape de sécurité du lance-flammes surchauffé : un long sifflement brûlant. | IMMOLATION (4,8 s), après la mort. |
 
 ## ZippoOpen
 
-Le couvercle du Zippo qui s'ouvre d'un coup de pouce (le « clink »). **Quand :** ZIPPO FLARE, MOLOTOV, FIRE BREATH, l'Awakening et le finisher, quand il ouvre le briquet.
+Le couvercle du Zippo qui s'ouvre d'un coup de pouce (le « clink »). **Quand :** IMMOLATION (1,85 s), quand il sort le briquet pour rallumer la veilleuse.
 
 > *Brief :* Design a layered sound effect for a brass Zippo-style lighter lid being flicked open with the thumb. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -203,7 +213,7 @@ Tiny metallic ring decaying in a small room, very short natural reverb tail only
 
 ## ZippoStrike
 
-La molette frottée sur la pierre, les étincelles, la mèche qui prend feu. **Quand :** Juste après ZippoOpen (ZIPPO FLARE, MOLOTOV, FIRE BREATH, Awakening, finisher).
+La molette frottée sur la pierre, les étincelles, la mèche qui prend feu. **Quand :** IMMOLATION (2,15 s), juste après ZippoOpen.
 
 > *Brief :* Design a layered sound effect for a Zippo lighter's flint wheel being struck and the wick catching fire. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -242,7 +252,7 @@ Small steady lighter flame fluttering gently in still air, soft breathy flicker 
 
 ## ZippoClose
 
-Le couvercle refermé d'un coup sec : la flamme étouffée. **Quand :** À la fin de ZIPPO FLARE et de FIRE BREATH.
+Le couvercle refermé d'un coup sec : la flamme étouffée. **Quand :** IMMOLATION (2,62 s) : le briquet refermé et rangé.
 
 > *Brief :* Design a layered sound effect for a Zippo lighter lid snapping shut and smothering the flame. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -279,87 +289,9 @@ Very soft low thud of a hand closing around a small object, subtle, isolated, 0.
 Tiny puff of a small flame being smothered under a metal lid, short soft hiss cut off, isolated, 0.3 seconds.
 ```
 
-## FlameFlare
-
-Le jet de liquide à briquet à travers la flamme : une boule de feu courte dans le visage. **Quand :** ZIPPO FLARE, au moment du coup (0,42 s).
-
-> *Brief :* Design a layered sound effect for lighter fluid squirted through a lighter flame into someone's face, flaring into a burst of fire. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | Le bidon de liquide pressé, le jet qui part | 2-8 kHz | « tsst » sous pression | 0 ms | 80 ms |
-| Mécanique | Le jet de liquide qui crépite en traversant la flamme | 1-9 kHz | sifflement mouillé et crépitant | 20 ms | 250 ms |
-| Corps | Le liquide qui s'embrase d'un coup | 150 Hz-3 kHz | « fwoosh » de flamme, rond et chaud | 50 ms | 500 ms |
-| Grave (sub) | La bouffée d'air chaud | 40-120 Hz | « whump » grave et mou | 50 ms | 300 ms |
-| Queue (la fin) | Les gouttes qui brûlent encore | 1-6 kHz | petits crépitements et grésillements qui s'éteignent | 250 ms | 900 ms |
-
-### Les prompts (à coller)
-
-**`FlameFlare_Transient`**
-```
-Short pressurized squirt of liquid from a small squeezed metal can, sharp tss sound, close-miked, dry, isolated, 0.15 seconds.
-```
-**`FlameFlare_Mechanism`**
-```
-Hiss and spatter of a thin stream of lighter fluid spraying through a flame, wet sizzling crackle, isolated, 0.3 seconds.
-```
-**`FlameFlare_Body`**
-```
-Sudden fwoosh of a burst of flame flaring up from sprayed fuel, warm roaring whoosh, medium size, no explosion, isolated, 0.6 seconds.
-```
-**`FlameFlare_Sub`**
-```
-Soft deep whump of air pushed by a flame flaring up, low-frequency pressure puff, no crack, isolated, 0.3 seconds.
-```
-**`FlameFlare_Tail`**
-```
-Small burning droplets crackling and sizzling as they die out, sparse pops fading away, isolated, 1 second.
-```
-
-## MolotovLight
-
-Le chiffon imbibé d'essence au goulot qui prend feu. **Quand :** MOLOTOV, quand le briquet touche le chiffon (0,3 s).
-
-> *Brief :* Design a layered sound effect for a petrol-soaked rag stuffed in a bottle neck being lit and catching fire. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | La flamme du briquet qui touche le tissu imbibé | 1-6 kHz | petit « pff » sec | 0 ms | 60 ms |
-| Mécanique | Les fibres du coton qui s'enflamment | 2-10 kHz | crépitement fin et sec | 20 ms | 400 ms |
-| Corps | Le chiffon imbibé d'essence qui s'embrase | 150 Hz-2.5 kHz | « whouf » chaud qui gonfle | 60 ms | 500 ms |
-| Grave (sub) | La flamme qui monte | 40-120 Hz | souffle grave doux | 60 ms | 300 ms |
-| Queue (la fin) | Le chiffon qui brûle en flottant | 300 Hz-4 kHz | flamme de tissu qui flotte et crépite | 300 ms | 1200 ms |
-
-### Les prompts (à coller)
-
-**`MolotovLight_Transient`**
-```
-Tiny dry puff as a lighter flame touches a fuel-soaked cloth, short soft pop, isolated, 0.1 seconds.
-```
-**`MolotovLight_Mechanism`**
-```
-Fine crisp crackle of cotton fibres catching fire, dry tight crackling, close-miked, isolated, 0.5 seconds.
-```
-**`MolotovLight_Body`**
-```
-Petrol-soaked rag bursting into flame, warm rising whoof of fire catching on fabric, medium-small, no explosion, isolated, 0.6 seconds.
-```
-**`MolotovLight_Sub`**
-```
-Soft low bloom of a flame rising, subtle low-frequency airy push, isolated, 0.3 seconds.
-```
-**`MolotovLight_Tail`**
-```
-Small rag flame burning and fluttering on a bottle neck, soft roar with light crackle, steady, isolated, 1.2 seconds.
-```
-
 ## MolotovThrow
 
-Le lancer : le bras, le liquide qui ballotte, la flamme du chiffon qui file dans l'air. **Quand :** MOLOTOV et FIREBOMB, au lâcher de la bouteille.
+Le lancer : le bras, le liquide qui ballotte, la flamme du chiffon qui file dans l'air. **Quand :** NAPALM LOB et NAPALM MORTAR : la boule de napalm en vol (la flamme qui passe).
 
 > *Brief :* Design a layered sound effect for a lit Molotov cocktail bottle being thrown overhand and flying past. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -396,48 +328,9 @@ Subtle low air push of an object thrown hard, soft low whump, isolated, 0.3 seco
 Fluttering flame receding into the distance, fading fire flutter, isolated, 1 second.
 ```
 
-## MolotovShatter
-
-La bouteille qui éclate au sol : le verre, les éclats, l'essence qui gicle. **Quand :** Quand le Molotov se brise (sol, mur ou sur quelqu'un).
-
-> *Brief :* Design a layered sound effect for a glass Molotov bottle smashing on concrete and splashing petrol. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | Le verre épais qui casse à l'impact | 1-12 kHz | « crack » de verre net et violent | 0 ms | 60 ms |
-| Mécanique | Les éclats qui se dispersent et tintent | 3-14 kHz | pluie d'éclats de verre qui tintent et roulent | 20 ms | 600 ms |
-| Corps | L'essence qui gicle et claque au sol | 200 Hz-4 kHz | éclaboussure de liquide mouillée | 15 ms | 350 ms |
-| Grave (sub) | Le choc sur le béton | 40-150 Hz | « toum » sourd | 0 ms | 150 ms |
-| Queue (la fin) | Les derniers éclats qui se posent, l'essence qui coule | 2-10 kHz | petits tintements épars et gouttes | 300 ms | 1200 ms |
-
-### Les prompts (à coller)
-
-**`MolotovShatter_Transient`**
-```
-Sharp loud crack of a thick glass bottle smashing on concrete, the first impact only, bright, close, dry, isolated one-shot, 0.1 seconds.
-```
-**`MolotovShatter_Mechanism`**
-```
-Shards of a broken glass bottle scattering and tinkling across a concrete floor, bright granular glass debris, isolated, 0.7 seconds.
-```
-**`MolotovShatter_Body`**
-```
-Wet splash of about a litre of liquid slapping onto concrete and spreading, splattering, isolated, 0.4 seconds.
-```
-**`MolotovShatter_Sub`**
-```
-Low dull thud of a heavy bottle hitting concrete, weight only, no glass, isolated, 0.2 seconds.
-```
-**`MolotovShatter_Tail`**
-```
-Last few glass fragments settling with sparse tinkles, a little liquid trickling, quiet, isolated, 1.2 seconds.
-```
-
 ## FuelIgnite
 
-L'essence répandue qui s'embrase : la boule de feu. **Quand :** Juste après MolotovShatter (la flaque prend feu).
+L'essence répandue qui s'embrase : la boule de feu. **Quand :** Juste après GlobSplat (la flaque prend feu).
 
 > *Brief :* Design a layered sound effect for spilled petrol on the ground igniting into a fireball. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -476,7 +369,7 @@ A large fire roar settling down into a steady crackling burn, fading, isolated, 
 
 ## PoolFire
 
-La flaque d'essence qui brûle (BOUCLE, tant que le feu dure). **Quand :** Pendant tout le feu au sol du Molotov, en 3D sur la flaque, baisse quand le feu meurt. C'est une **BOUCLE**.
+La flaque d'essence qui brûle (BOUCLE, tant que le feu dure). **Quand :** Pendant tout le feu au sol (napalm, INFERNO), en 3D sur la flaque, baisse quand le feu meurt. C'est une **BOUCLE**.
 
 > *Brief :* Design a layered sound effect for a pool of burning petrol on a street floor (seamless loop). Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -513,48 +406,9 @@ Seamless loop of a low steady rumble of a fire, sub-bass only, smooth, isolated,
 Seamless loop of air being drawn into a fire, soft breathy flutter like gentle wind, isolated, 6 seconds, loopable.
 ```
 
-## FuelSwig
-
-Il boit une gorgée d'essence (pour la cracher) : le bouchon, le liquide, la bouche pleine. **Quand :** FIRE BREATH / INFERNO BREATH, au début.
-
-> *Brief :* Design a layered sound effect for a man taking a mouthful of fuel from a metal hip flask. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | Le bouchon métallique dévissé | 1-8 kHz | petit clic de métal | 0 ms | 60 ms |
-| Mécanique | Le liquide qui coule dans le flacon de métal | 300 Hz-3 kHz | glouglou métallique | 80 ms | 350 ms |
-| Corps | La bouche qui se remplit | 150 Hz-2 kHz | gorgée humide, bouche fermée | 150 ms | 400 ms |
-| Grave (sub) | La gorge | 60-200 Hz | résonance grave de la poitrine | 150 ms | 300 ms |
-| Queue (la fin) | Le souffle par le nez | 500 Hz-5 kHz | expiration courte et tendue | 500 ms | 400 ms |
-
-### Les prompts (à coller)
-
-**`FuelSwig_Transient`**
-```
-Small metallic click of a hip flask screw cap being opened, close, dry, isolated, 0.1 seconds.
-```
-**`FuelSwig_Mechanism`**
-```
-Liquid glugging out of a small metal flask, hollow metallic glug, close, isolated, 0.4 seconds.
-```
-**`FuelSwig_Body`**
-```
-A man filling his mouth with liquid and holding it, wet gulp with closed lips, no swallowing, close-miked, isolated, 0.4 seconds.
-```
-**`FuelSwig_Sub`**
-```
-Very subtle low throat and chest resonance of someone holding a mouthful, soft, isolated, 0.3 seconds.
-```
-**`FuelSwig_Tail`**
-```
-Short tense exhale through the nose, breathy, close-miked, isolated, 0.4 seconds.
-```
-
 ## FireBreath
 
-Le cracheur de feu : l'essence pulvérisée à travers la flamme, un jet de feu qui rugit. **Quand :** FIRE BREATH (0,55 s → 1 s) et INFERNO BREATH (plus long).
+Le cracheur de feu : l'essence pulvérisée à travers la flamme, un jet de feu qui rugit. **Quand :** FLAME STREAM (0,45 s → 1 s), TORCH CHARGE (le jet devant lui) et le pilier de l'Awakening (0,45 s).
 
 > *Brief :* Design a layered sound effect for a fire breather spitting atomised fuel through a lighter flame into a roaring jet of fire. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -593,7 +447,7 @@ A jet of flame curling up and dying out in the air, rolling flutter with crackle
 
 ## FuelSplash
 
-L'essence projetée hors du jerrican sur quelqu'un (DOUSE). **Quand :** DOUSE, au balancement du jerrican (0,42 s).
+L'essence projetée hors du jerrican sur quelqu'un (DOUSE). **Quand :** FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé.
 
 > *Brief :* Design a layered sound effect for petrol flung from a metal jerrycan onto a person. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -671,7 +525,7 @@ Seamless loop of a wet sizzle, like meat on a hot grill, continuous steam hiss, 
 
 ## SelfIgnite
 
-Il allume ses propres avant-bras imbibés d'essence (BURNING MAN). **Quand :** L'activation de l'Awakening (0,55 s).
+Il allume ses propres avant-bras imbibés d'essence (BURNING MAN). **Quand :** L'activation de l'Awakening (0,55 s) : le retour de flamme sur ses avant-bras.
 
 > *Brief :* Design a layered sound effect for petrol-soaked forearm wraps being lit with a lighter and flaring up along both arms. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -708,126 +562,9 @@ Deep soft whoomp of flames blooming, low-frequency swell, isolated, 0.4 seconds.
 Fire burning on fists and forearms, fluttering roar with crackle settling to steady, isolated, 1.2 seconds.
 ```
 
-## FuelPour
-
-L'essence versée du jerrican sur le corps (finisher). **Quand :** IMMOLATION, de 0,4 s à 1,45 s (quand le liquide sort).
-
-> *Brief :* Design a layered sound effect for petrol being poured from a jerrycan over a body lying on the ground. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | Le bouchon du jerrican qui saute | 500 Hz-6 kHz | « clonk » métallique et « pop » d'air | 0 ms | 120 ms |
-| Mécanique | Les gloussements d'air dans le jerrican | 150 Hz-1.5 kHz | glouglous creux, rythmés | 250 ms | 1000 ms |
-| Corps | Le filet d'essence sur les vêtements et le corps | 200 Hz-6 kHz | coulée continue, qui éclabousse | 250 ms | 1050 ms |
-| Grave (sub) | La résonance du bidon | 50-150 Hz | « bloub » grave | 250 ms | 1000 ms |
-| Queue (la fin) | Les dernières gouttes | 1-8 kHz | gouttes qui tombent, filet qui s'arrête | 1150 ms | 700 ms |
-
-### Les prompts (à coller)
-
-**`FuelPour_Transient`**
-```
-Metal jerrycan cap being unclipped with a clonk and a little air pop, close, isolated, 0.2 seconds.
-```
-**`FuelPour_Mechanism`**
-```
-Rhythmic hollow glugging of air bubbles entering a metal jerrycan while it is poured, isolated, 1 second.
-```
-**`FuelPour_Body`**
-```
-Steady stream of liquid pouring onto clothes and a body lying on concrete, wet splashing pour, isolated, 1.1 seconds.
-```
-**`FuelPour_Sub`**
-```
-Low hollow resonance of a large metal can being emptied, soft bloub, sub only, isolated, 1 second.
-```
-**`FuelPour_Tail`**
-```
-Last drips of liquid from a can spout landing on fabric and concrete, the stream stopping, isolated, 0.7 seconds.
-```
-
-## CanThrow
-
-Le jerrican vide jeté par terre (finisher). **Quand :** IMMOLATION, à 1,6 s.
-
-> *Brief :* Design a layered sound effect for an almost empty metal jerrycan tossed aside onto a concrete floor. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | Le bidon qui frappe le béton | 300 Hz-6 kHz | « klang » de tôle creuse | 300 ms | 80 ms |
-| Mécanique | La poignée et le bouchon qui cliquettent au rebond | 1-8 kHz | cliquetis métalliques | 330 ms | 300 ms |
-| Corps | La résonance du bidon vide | 200 Hz-2 kHz | « bwong » creux qui sonne | 310 ms | 600 ms |
-| Grave (sub) | Le choc | 40-120 Hz | « toum » sourd | 300 ms | 120 ms |
-| Queue (la fin) | Le bidon qui glisse, le reste d'essence qui ballotte | 300 Hz-5 kHz | frottement sur le sol, clapotis | 500 ms | 700 ms |
-
-### Les prompts (à coller)
-
-**`CanThrow_Transient`**
-```
-Hollow metal jerrycan hitting a concrete floor, loud klang of thin sheet metal, the impact only, isolated, 0.1 seconds.
-```
-**`CanThrow_Mechanism`**
-```
-Rattle of a metal handle and a dangling cap as a can bounces, small metallic clatter, isolated, 0.3 seconds.
-```
-**`CanThrow_Body`**
-```
-Hollow ringing bwong of an empty metal jerrycan resonating after a hit, isolated, 0.6 seconds.
-```
-**`CanThrow_Sub`**
-```
-Low dull thud of a light metal container landing, weight only, isolated, 0.1 seconds.
-```
-**`CanThrow_Tail`**
-```
-Metal can skidding to a stop on concrete with a little liquid sloshing inside, isolated, 0.7 seconds.
-```
-
-## ZippoDrop
-
-Le Zippo allumé lâché sur le corps (finisher). **Quand :** IMMOLATION, à 2,8 s (il tombe, touche la poitrine à 3,05 s).
-
-> *Brief :* Design a layered sound effect for a lit Zippo lighter dropped onto a petrol-soaked body. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
-
-### Les couches (design)
-
-| Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
-|---|---|---|---|---|---|
-| Transitoire (l'attaque) | Le briquet qui touche la poitrine | 500 Hz-6 kHz | petit choc de métal sur tissu mouillé | 250 ms | 50 ms |
-| Mécanique | Le couvercle qui cliquette | 2-8 kHz | petit cliquetis | 255 ms | 100 ms |
-| Corps | La flamme qui tombe | 300 Hz-3 kHz | flamme qui flotte en chute | 0 ms | 300 ms |
-| Grave (sub) | Le poids | 60-200 Hz | « tup » mou | 250 ms | 80 ms |
-| Queue (la fin) | La flamme qui lèche le tissu | 500 Hz-4 kHz | petit sifflement avant l'embrasement | 280 ms | 200 ms |
-
-### Les prompts (à coller)
-
-**`ZippoDrop_Transient`**
-```
-Small metal lighter landing on a wet jacket on a body, soft dull tap, isolated, 0.1 seconds.
-```
-**`ZippoDrop_Mechanism`**
-```
-Tiny rattle of a lighter lid as it lands, light metallic tick, isolated, 0.1 seconds.
-```
-**`ZippoDrop_Body`**
-```
-Small lighter flame fluttering as it falls through the air, brief soft whoosh, isolated, 0.3 seconds.
-```
-**`ZippoDrop_Sub`**
-```
-Very soft low thud of a small object on a body, subtle, isolated, 0.1 seconds.
-```
-**`ZippoDrop_Tail`**
-```
-Tiny flame licking at a fuel-soaked fabric, a short rising hiss right before ignition, isolated, 0.2 seconds.
-```
-
 ## BodyIgnite
 
-Le corps imbibé qui s'embrase d'un coup (« whump »). **Quand :** IMMOLATION, à 3,05 s.
+Le corps imbibé qui s'embrase d'un coup (« whump »). **Quand :** IMMOLATION, à 3,05 s (le jet à bout portant).
 
 > *Brief :* Design a layered sound effect for a petrol-soaked person on the ground going up in flames. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
@@ -905,31 +642,25 @@ A scream breaking into a rasping wheeze and stopping, voice giving out, isolated
 
 ## InfernoBreath
 
-Le jet de feu de l'INFERNO BREATH : le même que FIRE BREATH, plus long. **Quand :** INFERNO BREATH (0,55 s → 1,15 s).
-
-Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
-
-## CanSlosh
-
-L'essence qui ballotte dans le jerrican quand il le balance. **Quand :** DOUSE, à l'élan (0,16 s), avant le jet.
+Le jet de l'INFERNO : le même que FireBreath, plus long. **Quand :** INFERNO (0,45 s → 1,25 s) et le plein jet du finisher (3,05 s).
 
 Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
 
 ## FireSwing
 
-Le poing ou le bras en feu qui fend l'air : une torche qui passe. **Quand :** BURNING FIST et BURNING RUSH (0,1 s) : le pic tombe sur le coup (0,22 s).
+Le poing ou le bras en feu qui fend l'air : une torche qui passe. **Quand :** BLOWTORCH (0,16 s) : le canon chaud lancé vers eux.
 
 Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
 
 ## FireImpact
 
-Le poing en feu qui touche : un « pouf » de flamme et la peau qui grésille. **Quand :** BURNING FIST / BURNING RUSH, au coup confirmé par le serveur.
+Le poing en feu qui touche : un « pouf » de flamme et la peau qui grésille. **Quand :** BLOWTORCH / TORCH CHARGE, au coup confirmé par le serveur.
 
 Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
 
 ## CatchFire
 
-Quelqu'un qui prend feu : un souffle de flamme qui l'enveloppe, un grésillement. **Quand :** Le premier instant où un corps brûle (Molotov, souffle, flaque, finisher).
+Quelqu'un qui prend feu : un souffle de flamme qui l'enveloppe, un grésillement. **Quand :** Le premier instant où un corps brûle (napalm, jet, flaque, finisher).
 
 Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
 
@@ -942,6 +673,78 @@ Pas de design en cinq couches : les couches en place sont dans le tableau plus h
 ## PyreRoar
 
 Le grondement du corps qui brûle en entier (BOUCLE). **Quand :** IMMOLATION, de l'embrasement (3,05 s) à la fin du feu (12 s), par-dessus le crépitement du corps. C'est une **BOUCLE**.
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## GunDraw
+
+Le lance-flammes ramené du dos à la hanche : l'essence qui ballotte dans la bouteille. **Quand :** Chaque attaque, quand la main prend la poignée (0,15 s ; 0,08 s en Awakening).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## PilotLight
+
+La veilleuse qui s'allume : un clic de levier et un petit « fwip » bleu. **Quand :** Après le dégainage de chaque attaque, FUEL SPRAY (0,66 s : rallumée), IMMOLATION (2,3 s).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## PilotOut
+
+La veilleuse coupée : un petit grésillement aigu. **Quand :** FUEL SPRAY (0,27 s), IMMOLATION (avant de verser le carburant).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## TriggerClick
+
+La gâchette pressée : un clic métallique sourd. **Quand :** FLASH BURST (0,38 s), NAPALM LOB (0,6 s), FLAME STREAM (0,42 s), NAPALM MORTAR, INFERNO, TORCH CHARGE.
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## BurstPop
+
+La boule de feu sous pression qui éclate : un « pouf » franc, des gouttes qui crépitent. **Quand :** FLASH BURST, sur le coup (0,42 s).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## GlobLaunch
+
+La boule de napalm crachée par le canon : une courte bouffée de feu. **Quand :** NAPALM LOB (0,62 s), NAPALM MORTAR (0,45 s).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## GlobSplat
+
+La boule de napalm qui s'écrase au sol : un « splash » mouillé (pas de verre). **Quand :** À l'impact de la boule (sol, mur ou sur quelqu'un), juste avant FuelIgnite.
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## StreamEnd
+
+Le jet relâché : la queue de la flamme qui s'éloigne. **Quand :** Fin de FLAME STREAM, d'INFERNO et du plein jet du finisher (4,25 s).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## PressureHiss
+
+Le sifflement du détendeur sous pression qui monte. **Quand :** Sous les jets : FLASH BURST, NAPALM LOB (la pression qui monte), FLAME STREAM, l'Awakening, NAPALM MORTAR, INFERNO, IMMOLATION.
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## ValveCrank
+
+La vanne claquée ou le volant de la bouteille tourné : un « clac » métallique. **Quand :** NAPALM LOB (0,33 s étranglée, 0,58 s rouverte), l'Awakening (0,14 s), INFERNO (0,2 s), IMMOLATION.
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## TorchLance
+
+La lance du chalumeau qui s'allume : un jet court et dur. **Quand :** BLOWTORCH (0,22 s, juste avant le coup).
+
+Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
+
+## Vent
+
+La soupape de sécurité du lance-flammes surchauffé : un long sifflement brûlant. **Quand :** IMMOLATION (4,8 s), après la mort.
 
 Pas de design en cinq couches : les couches en place sont dans le tableau plus haut.
 

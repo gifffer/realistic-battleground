@@ -1,20 +1,25 @@
 --!strict
--- THE PYROMANIAC: a firebug in a stained work jacket. A brass Zippo, a few
--- wine bottles of petrol with rags stuffed in their necks, a red jerrycan.
+-- THE PYROMANIAC: a firebug in a stained work jacket, with a home-made
+-- flamethrower slung across his back (a fuel-pump nozzle for a grip, a
+-- conduit loop for a stock, an olive gas bottle on its right flank, a
+-- drilled exhaust-tube shroud, a copper pilot burner) and a brass Zippo.
 -- He doesn't hit hard: he sets people on fire and keeps them burning.
 --
--- Fire is real here: it doesn't burst into a magic blaze, it catches. A
--- Molotov breaks and the petrol burns on the floor for a few seconds, dying
--- out patch by patch; a lighter flare scorches a face; fuel he splashes on
--- someone makes the next fire on them far worse (Shared/PyroConfig). Every
--- burn goes through the server's burn slot (Combat startBurning: "Fire")
--- and the burn system (Server Combat/Burns, Client Combat/Burns): degrees
--- that deepen where it touched, clothes charring, flames, smoke.
+-- One gun, four jets, each its own shape: a ball of fire that pops in
+-- their face, a glob of burning napalm coughed in an arc, a long stream
+-- he sweeps, a cold fan of raw fuel (fire burns them far worse after it,
+-- Shared/PyroConfig). Awakened, the gun runs hot (a blue-white root on
+-- every jet): a blowtorch lance, a napalm mortar, an inferno that lights
+-- the floor, a charge behind a wedge of fire. Every burn goes through the
+-- server's burn slot (Combat startBurning: "Fire") and the burn system
+-- (Server Combat/Burns, Client Combat/Burns).
 --
 -- Pure data, read by Shared/Kits (see KitTypes). `at` / `release` / `from`
--- values = the keyframes of the clips (Client/Animation/PyroClips). The
--- Molotov and the cones are run by Server/Systems/Combat/Gadgets; their look
--- is Client/Combat/PyroFx, their sounds Shared/SoundCues.
+-- values = the keyframes of the clips (Client/Animation/PyroClips, made by
+-- tools/anim/pyro_clips.py with the gun in his hands). The globs and the
+-- cones are run by Server/Systems/Combat/Gadgets; their look is
+-- Client/Combat/PyroFx (the gun: Client/Combat/Flamethrower), their sounds
+-- Shared/SoundCues.
 
 local KitTypes = require(script.Parent.KitTypes)
 
@@ -35,11 +40,16 @@ local BREATH: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 3, d
 local FIST: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 2.5, dose = 0.7 }
 local BIG_POOL: KitTypes.BurnDef = { kind = "Fire", perSecond = 5, duration = 1.5 }
 local INFERNO: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 3.5, dose = 0.3 }
+-- (the blowtorch's lance: a focused, deep scar where it lands)
+local TORCH: KitTypes.BurnDef =
+	{ kind = "Fire", perSecond = 3, duration = 2.5, dose = 1, spot = true }
+-- (the bow wave ahead of his charge: a lick of fire each tick)
+local WEDGE: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 2, dose = 0.25 }
 
 local kit: KitTypes.KitDef = {
 	id = "Pyromaniac",
 	name = "PYROMANIAC",
-	description = "A firebug with a Zippo, a jerrycan and a crate of Molotovs. Everything burns.",
+	description = "A firebug with a home-made flamethrower and a Zippo. Everything burns.",
 	order = 6,
 	available = true,
 	unlockLevel = 6,
@@ -47,11 +57,11 @@ local kit: KitTypes.KitDef = {
 
 	moves = {
 		{
-			id = "ZippoFlare",
-			name = "ZIPPO FLARE",
-			description = "Flicks his lighter open and squirts fluid through the flame, into their face.",
-			animation = "Pyro_Zippo",
-			duration = 0.8,
+			id = "FlashBurst",
+			name = "FLASH BURST",
+			description = "Swings the gun up and blips the trigger: a ball of fire bursts in their face.",
+			animation = "Pyro_Burst",
+			duration = 0.85,
 			cooldown = 6,
 			stamina = 12,
 			hits = {
@@ -60,31 +70,32 @@ local kit: KitTypes.KitDef = {
 					damage = 6,
 					zone = "Head",
 					stun = 0.6, -- (blinded a moment)
-					hitbox = Vector3.new(5, 5, 6),
-					forward = 3.5,
+					hitbox = Vector3.new(5, 5, 7),
+					forward = 4.5, -- (1 to 8 studs: the gun's reach, point-blank too)
 					burn = FLARE,
 				},
 			},
 		},
 		{
-			id = "Molotov",
-			name = "MOLOTOV",
-			description = "Lights the rag and lobs the bottle. The petrol burns on the floor.",
-			animation = "Pyro_Molotov",
+			id = "NapalmLob",
+			name = "NAPALM LOB",
+			description = "Chokes the valve and coughs a glob of burning napalm in an arc. It burns on the floor.",
+			animation = "Pyro_Napalm",
 			duration = 1,
 			cooldown = 11,
 			stamina = 20,
 			hits = {},
 			gadget = {
 				flask = {
-					kind = "Molotov",
-					release = 0.68,
-					speed = 62,
-					lift = 14,
+					kind = "Napalm",
+					release = 0.62,
+					speed = 58,
+					lift = 18,
 					gravity = 75,
 					lifetime = 2.4,
-					-- (on a body: the bottle breaks on them, they're soaked
-					-- and alight)
+					-- (the muzzle at the release, 35 deg up: tools/anim/pyro_clips.py --check)
+					origin = Vector3.new(0.84, 2.7, -3),
+					-- (on a body: it splats on them, they're soaked and alight)
 					hit = {
 						at = 0,
 						damage = 6,
@@ -107,22 +118,22 @@ local kit: KitTypes.KitDef = {
 			},
 		},
 		{
-			id = "FireBreath",
-			name = "FIRE BREATH",
-			description = "A mouthful of fuel spat through his lighter: a cone of fire in front of him.",
-			animation = "Pyro_Breath",
-			duration = 1.35,
+			id = "FlameStream",
+			name = "FLAME STREAM",
+			description = "Plants his feet and hoses them down: a long stream of fire he can sweep.",
+			animation = "Pyro_Stream",
+			duration = 1.3,
 			cooldown = 10,
 			stamina = 20,
 			hits = {},
 			gadget = {
 				cone = {
 					kind = "Flame",
-					from = 0.55,
+					from = 0.45,
 					to = 1,
 					tick = 0.15,
-					range = 13,
-					angle = 24,
+					range = 14,
+					angle = 22,
 					hit = {
 						at = 0,
 						damage = 2,
@@ -135,27 +146,27 @@ local kit: KitTypes.KitDef = {
 			},
 		},
 		{
-			id = "Douse",
-			name = "DOUSE",
-			description = "Swings the jerrycan: petrol all over them. Fire burns them far worse for a while.",
-			animation = "Pyro_Douse",
-			duration = 0.9,
+			id = "FuelSpray",
+			name = "FUEL SPRAY",
+			description = "Kills the pilot and sprays them with raw fuel. Fire burns them far worse for a while.",
+			animation = "Pyro_Spray",
+			duration = 0.95,
 			cooldown = 9,
 			stamina = 15,
 			hits = {},
 			gadget = {
 				cone = {
 					kind = "Fuel",
-					from = 0.42,
-					to = 0.42,
+					from = 0.45,
+					to = 0.45,
 					tick = 1,
 					range = 10,
-					angle = 32,
+					angle = 34,
 					douse = 8,
 					hit = {
 						at = 0,
 						damage = 2,
-						stun = 0.5, -- (petrol in the eyes)
+						stun = 0.5, -- (fuel in the eyes)
 						hitbox = NONE,
 						forward = 0,
 						slow = { multiplier = 0.8, duration = 2 },
@@ -167,48 +178,50 @@ local kit: KitTypes.KitDef = {
 
 	awakening = {
 		name = "BURNING MAN",
-		description = "Pours petrol on his own forearms and lights them. His fists burn.",
+		description = "Opens the gas wide and torches the sky. The blowback sets his forearms alight; the gun runs hot.",
 		animation = "Pyro_Awaken",
 		duration = 12,
 		damageMultiplier = 1.15,
 		moves = {
 			{
-				id = "BurningFist",
-				name = "BURNING FIST",
-				description = "A hook with a blazing fist. It sets them alight.",
-				animation = "Pyro_FirePunch",
+				id = "Blowtorch",
+				name = "BLOWTORCH",
+				description = "Rams the hot muzzle into them and lights a cutting flame point-blank.",
+				animation = "Pyro_Torch",
 				duration = 0.6,
 				cooldown = 3,
 				stamina = 10,
 				hits = {
 					{
-						at = 0.24,
+						at = 0.26,
 						damage = 8,
 						stun = 0.6,
-						hitbox = Vector3.new(5, 5, 5.5),
-						forward = 3,
-						knockback = 10,
-						burn = FIST,
+						hitbox = Vector3.new(5, 5, 6),
+						forward = 3.5,
+						knockback = 12,
+						burn = TORCH,
 					},
 				},
 			},
 			{
-				id = "Firebomb",
-				name = "FIREBOMB",
-				description = "A bigger bottle, lit off his own fist. A wider, longer fire.",
-				animation = "Pyro_Firebomb",
-				duration = 0.75,
+				id = "NapalmMortar",
+				name = "NAPALM MORTAR",
+				description = "Braces the gun like a mortar and yanks the valve: a huge glob that splashes a crown of fire.",
+				animation = "Pyro_Mortar",
+				duration = 0.8,
 				cooldown = 7,
 				stamina = 15,
 				hits = {},
 				gadget = {
 					flask = {
-						kind = "Molotov",
-						release = 0.42,
-						speed = 66,
-						lift = 14,
+						kind = "Napalm",
+						release = 0.45,
+						speed = 60,
+						lift = 24,
 						gravity = 75,
-						lifetime = 2.4,
+						lifetime = 2.6,
+						-- (the muzzle at the release, 45 deg up)
+						origin = Vector3.new(0.78, 3.2, -2.4),
 						hit = {
 							at = 0,
 							damage = 8,
@@ -231,22 +244,22 @@ local kit: KitTypes.KitDef = {
 				},
 			},
 			{
-				id = "InfernoBreath",
-				name = "INFERNO BREATH",
-				description = "A longer, wider gout of fire.",
-				animation = "Pyro_BreathBig",
-				duration = 1.4,
+				id = "Inferno",
+				name = "INFERNO",
+				description = "Cranks the gas wide open: a huge stream that rakes the floor and leaves it burning.",
+				animation = "Pyro_Inferno",
+				duration = 1.5,
 				cooldown = 7,
 				stamina = 15,
 				hits = {},
 				gadget = {
 					cone = {
 						kind = "Flame",
-						from = 0.55,
-						to = 1.15,
+						from = 0.45,
+						to = 1.25,
 						tick = 0.15,
 						range = 17,
-						angle = 30,
+						angle = 28,
 						hit = {
 							at = 0,
 							damage = 2.5,
@@ -255,25 +268,30 @@ local kit: KitTypes.KitDef = {
 							forward = 0,
 							burn = INFERNO,
 						},
+						-- (the floor it raked catches: a small pool 9 studs ahead)
+						scorch = {
+							at = 9,
+							fire = { radius = 5, seconds = 4, cells = 7, burn = POOL },
+						},
 					},
 				},
 			},
 			{
-				id = "BurningRush",
-				name = "BURNING RUSH",
-				description = "Charges in arms first and takes them down, alight.",
-				animation = "Pyro_Rush",
+				id = "TorchCharge",
+				name = "TORCH CHARGE",
+				description = "Charges behind a wedge of fire and rams them down with the gun.",
+				animation = "Pyro_TorchCharge",
 				duration = 0.9,
 				cooldown = 8,
 				stamina = 20,
 				hits = {},
 				charge = {
 					speed = 44,
-					from = 0.1,
+					from = 0.14,
 					to = 0.55,
 					hit = {
 						at = 0.1,
-						damage = 9,
+						damage = 8,
 						zone = "Torso",
 						stun = 0,
 						hitbox = Vector3.new(6, 6, 5),
@@ -284,6 +302,26 @@ local kit: KitTypes.KitDef = {
 						burn = FIST,
 					},
 				},
+				gadget = {
+					-- (the bow wave of fire ahead of him: blockable, no stun, so it
+					-- never breaks the charge's contact)
+					cone = {
+						kind = "Flame",
+						from = 0.14,
+						to = 0.48,
+						tick = 0.12,
+						range = 8,
+						angle = 30,
+						hit = {
+							at = 0,
+							damage = 1,
+							stun = 0,
+							hitbox = NONE,
+							forward = 0,
+							burn = WEDGE,
+						},
+					},
+				},
 			},
 		},
 	},
@@ -291,7 +329,7 @@ local kit: KitTypes.KitDef = {
 	-- Cinematic kill (Shared/Finishers "Immolate").
 	finisher = {
 		name = "IMMOLATION",
-		description = "Petrol over the body, the lighter dropped on it. Nobody gets up.",
+		description = "Soaks them with raw fuel, lights the pilot with his Zippo, then hoses them down point-blank.",
 		animation = "Pyro_FinisherImmolate",
 		impact = 4.6,
 		duration = 5.8,
