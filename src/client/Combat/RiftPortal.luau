@@ -33,7 +33,7 @@ local TweenService = game:GetService("TweenService")
 local SoundController = require(script.Parent.Parent.Controllers.SoundController)
 local P = require(script.Parent.RiftParts)
 local RiftGear = require(script.Parent.RiftGear)
-local RiftBurn = require(script.Parent.RiftBurn)
+local Burns = require(script.Parent.Burns)
 
 local RiftPortal = {}
 
@@ -1447,7 +1447,7 @@ local function cloneIn(data: { [string]: any })
 	SoundController.playAt("PortalOpen", at.Position)
 	if typeof(clone) == "Instance" and clone:IsA("Model") then
 		RiftGear.watch(clone)
-		RiftBurn.watch(clone) -- (dressed even before CombatEffects sees it)
+		Burns.watch(clone) -- (dressed even before CombatEffects sees it)
 		-- (from 2.5 studs back: with the 0.6 pull it starts 1.5 back, in
 		-- the door, and slides out)
 		afterimage(clone, 0.35, nil, (at * CFrame.new(0, 0, 2.5)).Position)

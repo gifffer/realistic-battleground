@@ -35,6 +35,17 @@
 --                    looks at them, and lets it close: cut in two. The upper
 --                    body falls back off the legs, the legs stay standing a
 --                    moment, spurting, then fold.
+--   "Immolate"       Pyromaniac: the opponent laid on their back across in
+--                    front of him. He draws his flamethrower, cranks the
+--                    bottle open and kills the pilot: raw fuel hosed over
+--                    them from the head down (they cough, it stings). He
+--                    stands the gun up, lights the pilot with his Zippo (his
+--                    face lit blue and orange), looks at them a beat while
+--                    they beg, lowers the muzzle to their face and pulls the
+--                    trigger: a point-blank full-bore stream, face to legs,
+--                    the gun cherry red. They writhe and scream inside the
+--                    fire, then go still, curled up (the heat tightens the
+--                    muscles). The relief valve vents; the body burns on.
 --
 -- One timeline, read by the server (placement, the killing blow) and by
 -- every client (camera, sounds, blood, the bat). Times in seconds from the
@@ -700,6 +711,111 @@ cinematics.Gore = {
 			to = Vector3.new(7.5, 7, -20),
 			look = Vector3.new(0, -2.6, -16.5),
 			fov = 60,
+		},
+	},
+}
+
+-- Pyromaniac: "Immolate" (see the top of the file). The victim lies at
+-- SIDE_VICTIM (its head to his left, at about X = -1.2; its legs to his
+-- right), he stands where he is. The kill comes after the writhing, when
+-- it goes still (the server: Combat/Fire, the burning body).
+cinematics.Immolate = {
+	id = "Immolate",
+	duration = 5.8,
+	kill = 4.6,
+	placement = "side",
+	victimAnimation = "Pyro_FinisherImmolateVictim",
+	-- (the server reads "Douse" and "Ignite": Combat/Immolate)
+	events = {
+		{ time = 0.28, kind = "ValveOpen" }, -- the bottle's handwheel cranked
+		{ time = 0.36, kind = "PilotOut" }, -- he kills the pilot: menace
+		{ time = 0.4, kind = "Douse" }, -- raw fuel out of the muzzle, head first
+		{ time = 1.45, kind = "DouseEnd" },
+		{ time = 1.6, kind = "Drip" }, -- one shake: fuel drips off the tip
+		{ time = 1.85, kind = "Open" }, -- the gun stood up, the Zippo's lid
+		{ time = 2.15, kind = "Strike" }, -- the wheel: the flame
+		{ time = 2.3, kind = "PilotLit" }, -- the Zippo to the burner: blue
+		{ time = 2.4, kind = "Plea" }, -- the quiet beat: they beg
+		{ time = 2.8, kind = "Lower" }, -- the muzzle down to their face
+		{ time = 3.05, kind = "Ignite" }, -- full bore, point-blank
+		{ time = 3.2, kind = "Writhe" }, -- screaming, thrashing in the fire
+		{ time = 4.25, kind = "StreamEnd" }, -- the trigger let go
+		{ time = 4.6, kind = "Still" }, -- the kill: curled up, silent
+		{ time = 4.8, kind = "Vent" }, -- the relief valve: a white-hot hiss
+	},
+	shots = {
+		-- Wide, from behind his right shoulder: him over the body, the gun.
+		{
+			time = 0,
+			from = Vector3.new(5.2, 1.4, 3.2),
+			to = Vector3.new(4.6, 1.2, 2.6),
+			look = Vector3.new(0.3, -2.2, -2.4),
+			fov = 60,
+		},
+		-- Low along the body: the fuel stream from the muzzle on them.
+		{
+			time = 0.4,
+			from = Vector3.new(-3.8, -2.3, -4.8),
+			to = Vector3.new(-3.4, -2.2, -4.4),
+			look = Vector3.new(0.6, -1.9, -2.4),
+			fov = 50,
+		},
+		-- Their face, wet, coughing.
+		{
+			time = 1.0,
+			from = Vector3.new(-2.3, -1.15, -3.9),
+			to = Vector3.new(-2.1, -1.2, -3.7),
+			look = "victim",
+			fov = 40,
+		},
+		-- Close on his left hand and the gun stood up: the Zippo.
+		{
+			time = 1.85,
+			from = Vector3.new(-1.2, 1.6, -3.4),
+			to = Vector3.new(-1.0, 1.5, -3.1),
+			look = Vector3.new(-0.6, 1.1, 0.2),
+			fov = 36,
+		},
+		-- Very close on his face and the burner as the pilot pops blue, held
+		-- through their begging (heard, not seen) until the muzzle comes down.
+		{
+			time = 2.3,
+			from = Vector3.new(-1.6, 1.7, -2.2),
+			to = Vector3.new(-1.4, 1.6, -1.9),
+			look = Vector3.new(-0.5, 1.3, 0.6),
+			fov = 30,
+		},
+		-- Side on: the muzzle lowered to their face.
+		{
+			time = 2.8,
+			from = Vector3.new(4.6, -0.9, -4.6),
+			to = Vector3.new(4.9, -0.7, -4.9),
+			look = Vector3.new(-0.4, -1.5, -1.8),
+			fov = 55,
+		},
+		-- Low and wide by their head: the stream comes in from above-right.
+		{
+			time = 3.05,
+			from = Vector3.new(-5.6, -2.2, -1.0),
+			to = Vector3.new(-6.3, -1.8, -0.6),
+			look = Vector3.new(0.5, -1.8, -2.4),
+			fov = 62,
+		},
+		-- Close on the upper body under the jet.
+		{
+			time = 3.6,
+			from = Vector3.new(-2.7, -0.7, -5.3),
+			to = Vector3.new(-2.4, -0.4, -5.0),
+			look = Vector3.new(-0.6, -2.3, -2.7),
+			fov = 48,
+		},
+		-- High and wide: the vent's column, the smoke going up.
+		{
+			time = 4.6,
+			from = Vector3.new(3.6, 3.4, 2.6),
+			to = Vector3.new(4.2, 4.3, 3.2),
+			look = Vector3.new(0.3, -1.6, -1.2),
+			fov = 58,
 		},
 	},
 }

@@ -10,7 +10,8 @@
 --   1. Client clicks → Remotes.Attack. (Dummies call Combat.tryAttack.)
 --   2. tryAttack checks: alive? not stunned? not blocking? not too early?
 --      Then the combo advances (hits 1 → 2 → 3 → 4 → 1...).
---   3. After HIT_DELAY (the wind-up) the server puts a hitbox in front of
+--   3. After M1_HIT_DELAY[combo] (the wind-up: longer for the charged
+--      cross and finisher) the server puts a hitbox in front of
 --      the attacker. If the attacker got stunned meanwhile, the hit is
 --      cancelled. The victims are tested where they are AND where the
 --      attacker saw them (his ping ago, bounded: lag compensation, see
@@ -79,6 +80,9 @@ local Ragdoll = require(script.Parent.Ragdoll)
 local Stamina = require(script.Parent.Stamina)
 local Clones = require(script.Clones)
 local Gadgets = require(script.Gadgets)
+local Burns = require(script.Burns)
+local Immolate = require(script.Immolate)
+local PyroConfig = require(ReplicatedStorage.Shared.PyroConfig)
 local Hitbox = require(script.Hitbox)
 local Moves = require(script.Moves)
 local Rewind = require(script.Rewind)
@@ -219,6 +223,7 @@ end
 local function stun(state: CombatState, duration: number)
 	state.stunnedUntil = math.max(state.stunnedUntil, now() + duration)
 	state.attackToken += 1 -- a stunned fighter's wind-up is cancelled
+	state.m1DueAt = 0
 	state.slipUntil = 0 -- ...and so is a slip
 	stopBlocking(state)
 	setAttribute(state.model, "Stunned", true)
@@ -302,6 +307,16 @@ local function startBurning(
 	duration: number
 )
 	local time = now()
+	-- Soaked in petrol (the Pyromaniac): fire burns them harder, longer,
+	-- and the whole body goes up.
+	local doused = victim.model:GetAttribute(PyroConfig.DOUSED_ATTRIBUTE)
+	local soaked = kind == "Fire"
+		and typeof(doused) == "number"
+		and doused > workspace:GetServerTimeNow()
+	if soaked then
+		perSecond *= PyroConfig.DOUSED_RATE
+		duration += PyroConfig.DOUSED_EXTRA
+	end
 	local burning = time < victim.burnUntil
 	victim.burnPerSecond = math.max(perSecond, if burning then victim.burnPerSecond else 0)
 	victim.burnUntil = math.max(victim.burnUntil, time + duration)
@@ -312,7 +327,11 @@ local function startBurning(
 	end
 	victim.burnSource = attacker.model
 	victim.burnKind = kind
-	-- (clients: smoke, bubbling skin, the burn marks; Client/Combat/RiftFx)
+	-- (the body's burns, the flames: Combat/Burns, Client/Combat/Burns)
+	Burns.ignite(victim.model, kind, victim.burnPerSecond, duration)
+	if soaked then
+		Burns.engulf(victim.model, "Fire")
+	end
 	setAttribute(victim.model, "Burning", kind)
 end
 
@@ -669,6 +688,9 @@ local function healInjuries(state: CombatState)
 		end
 	end
 	state.bleedUntil = 0 -- update() stops the bleeding on its next frame
+	-- Burns: a new skin (and the fire out, as the bleeding).
+	state.burnUntil = 0
+	Burns.clear(state.model)
 end
 
 -- Thrown through a wall: a body sent flying fast (a knockdown or a strong
@@ -1127,6 +1149,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 	local burn = spec.burn
 	if burn then
+		-- (where it burns: its own part if it has one, a splash the legs)
+		Burns.expose(victim.model, burn, burn.where or zone, from)
 		startBurning(victim, credit, burn.kind, burn.perSecond, burn.duration)
 	end
 	-- (Glass leaves its cut instead of a bruise mark: no disc over the cut.)
@@ -1209,6 +1233,8 @@ function Combat.register(model: Model, player: Player?)
 		nextAttackAt = 0,
 		attackingUntil = 0,
 		attackToken = 0,
+		comboVictims = {},
+		m1DueAt = 0,
 		blocking = false,
 		blockStartedAt = -math.huge,
 		blockEndedAt = -math.huge,
@@ -1259,6 +1285,7 @@ function Combat.register(model: Model, player: Player?)
 	model:SetAttribute("Bleeding", false)
 	model:SetAttribute("Limping", false)
 	model:SetAttribute("LimpLeg", nil)
+	Burns.watch(model) -- ("Burning" set by a finisher: on fire all over)
 	-- A player fights with the kit saved in their profile.
 	-- (Only a kit they still own: Kits.owns.)
 	local data = if player then PlayerData.getData(player) else nil
@@ -2238,6 +2265,18 @@ local function startCinematic(
 			end
 		end)
 	end
+	if cinematic.id == "Immolate" then
+		-- petrol, then fire (Combat/Immolate: attributes put back if cut short)
+		Immolate.run(cinematic, target, woundsBefore, function(): boolean
+			return not over and state.attackToken == token and isAlive(state)
+		end, function()
+			local victimState = states[target]
+			if victimState then
+				victimState.burnPerSecond = 0 -- (its own burn ending must not put this out)
+				victimState.burnUntil = 0
+			end
+		end)
+	end
 	-- (the Boxer's: the hole opens as the hand goes in, "Gut"; cut short
 	-- before the kill, it closes again)
 	local liverAttribute: string? = nil
@@ -2323,9 +2362,11 @@ local function startCinematic(
 			elseif cinematic.id == "Gore" then
 				-- (dead first: never a living body torn in two)
 				bisect(target, anchor)
+			elseif cinematic.id == "Immolate" then
+				Immolate.killed(target) -- (the body burns on)
 			end
-		elseif cinematic.id == "KnockoutCombo" then
-			-- (it didn't die after all: no hole left in a living body)
+		elseif cinematic.id == "KnockoutCombo" or cinematic.id == "Immolate" then
+			-- (it didn't die after all: no hole, no fire left on a living body)
 			for attribute, previous in woundsBefore do
 				setAttribute(target, attribute, if previous == false then nil else previous)
 			end
@@ -2538,23 +2579,66 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 	local combo = state.combo
 	local isFinisher = combo == #C.M1_DAMAGE
 
+	-- Wind-up of this hit (click → fist lands). It comes from OUR combo
+	-- number, so the client never decides when the damage happens.
+	local hitDelay = C.M1_HIT_DELAY[combo]
+	local interval = if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL[combo]
 	state.lastAttackAt = time
-	state.nextAttackAt = time + (if isFinisher then C.FINISHER_RECOVERY else C.M1_INTERVAL)
-	state.attackingUntil = time + C.M1_INTERVAL
+	state.nextAttackAt = time + interval
+	-- Committed (no block, slower walk) until a moment after the fist lands.
+	state.attackingUntil = time + math.min(interval, hitDelay + C.M1_COMMIT_AFTER_HIT)
 	state.attackToken += 1
 	local token = state.attackToken
+	-- When the fist lands (the attacker's screen showed it `hitDelay` after
+	-- his click, which reached us one trip later).
+	local dueAt = now() + hitDelay
+	state.m1DueAt = dueAt
+
+	-- Combo hold: the fighters our previous M1 stunned stay stunned until
+	-- this one lands. Without it, a charged punch (cross, finisher) would
+	-- land after their stun ended, and they could block or dash out of the
+	-- middle of a combo. Only someone still stunned is held: a victim who
+	-- already got free stays free.
+	-- `held` remembers each one's stun before the hold: if this punch
+	-- doesn't hit them (cancelled, dashed out of, or it misses), the hold
+	-- is given back (see releaseHolds), so it is never free stun.
+	local held: { { victim: CombatState, before: number, holdUntil: number } } = {}
+	if combo > 1 then
+		local holdUntil = dueAt + C.COMBO_HOLD_MARGIN
+		for _, victim in state.comboVictims do
+			if isAlive(victim) and isStunned(victim) and victim.stunnedUntil < holdUntil then
+				table.insert(
+					held,
+					{ victim = victim, before = victim.stunnedUntil, holdUntil = holdUntil }
+				)
+				victim.stunnedUntil = holdUntil
+			end
+		end
+	end
+	table.clear(state.comboVictims)
+	-- Ends the hold of everyone this punch did NOT hit (`hitThem`), unless
+	-- something else stunned them longer meanwhile.
+	local function releaseHolds(hitThem: { [CombatState]: boolean })
+		for _, hold in held do
+			local victim = hold.victim
+			if not hitThem[victim] and victim.stunnedUntil == hold.holdUntil then
+				victim.stunnedUntil = math.max(hold.before, now())
+			end
+		end
+	end
+
 	-- Everyone plays the punch (animation + swing sound).
 	Remotes.CombatAction:FireAllClients(model, `Brawler_M1_{combo}`)
 
-	-- When the fist lands (the attacker's screen showed it HIT_DELAY after
-	-- his click, which reached us one trip later).
-	local dueAt = now() + C.HIT_DELAY
-	task.delay(C.HIT_DELAY, function()
+	task.delay(hitDelay, function()
 		-- Cancelled (stunned during the wind-up), dead, or removed?
 		if state.attackToken ~= token or not isAlive(state) then
+			releaseHolds({})
 			resolved()
 			return
 		end
+		state.m1DueAt = 0
+		local hitThem: { [CombatState]: boolean } = {}
 		-- The victims are also tested where the attacker saw them (lag
 		-- compensation, Combat/Rewind). The attacker's own body is where
 		-- his client had it then already: we receive it one trip late too.
@@ -2573,7 +2657,7 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					else dummyZone
 				local landed: Types.HitZone =
 					landingZone(aimed, partsByModel[victimModel], C.PUNCH_ZONES)
-				resolveHit(state, victim, {
+				local landedHit = resolveHit(state, victim, {
 					damage = C.M1_DAMAGE[combo] * C.ZONE_DAMAGE[landed],
 					zone = landed,
 					stun = if isFinisher then C.FINISHER_STUN else C.HIT_STUN,
@@ -2587,8 +2671,18 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 					attackId = attackId,
 					rewound = ageByModel[victimModel],
 				})
+				-- Remember who this hit stunned: our next M1 holds them
+				-- (the combo hold above). Not after the finisher: it ends
+				-- the combo. Blocked, parried or dodged hits don't stun.
+				if landedHit then
+					hitThem[victim] = true
+					if not isFinisher and isStunned(victim) then
+						table.insert(state.comboVictims, victim)
+					end
+				end
 			end
 		end
+		releaseHolds(hitThem)
 		resolved()
 	end)
 	return true
@@ -2637,6 +2731,13 @@ local function tryDash(model: Model, player: Player): boolean
 	end
 	state.nextDashAt = time + C.DASH_COOLDOWN
 	state.invulnerableUntil = time + C.DASH_INVULNERABLE
+	-- Dashing during an M1's wind-up cancels that punch (it would land
+	-- from wherever the dash took us). Its combo hold is given back.
+	if time < state.m1DueAt then
+		state.m1DueAt = 0
+		state.attackToken += 1
+		state.attackingUntil = math.min(state.attackingUntil, time)
+	end
 	return true
 end
 
@@ -2690,6 +2791,7 @@ function Combat.resetForRound(model: Model)
 	state.burnUntil = 0
 	state.burnKind = nil
 	setAttribute(model, "Burning", nil)
+	Burns.extinguish(model)
 	healInjuries(state)
 	state.fury = 0
 	setAttribute(model, "Fury", 0)
@@ -2702,6 +2804,8 @@ function Combat.resetForRound(model: Model)
 	state.combo = 0
 	state.nextAttackAt = 0
 	state.attackingUntil = 0
+	table.clear(state.comboVictims)
+	state.m1DueAt = 0
 	state.finishingUntil = 0
 end
 
@@ -2872,6 +2976,7 @@ local function update(dt: number)
 				state.burnSource = nil
 				state.burnKind = nil
 				setAttribute(model, "Burning", nil)
+				Burns.extinguish(model) -- (a burning body: a few seconds more)
 			elseif
 				time >= state.nextBurnTick
 				and time >= state.cinematicUntil
@@ -3195,6 +3300,7 @@ local function onGetUp(model: Model)
 end
 
 function Combat.start()
+	Burns.start()
 	-- Kit moves get the tools they need from here (see Combat/Moves.luau).
 	Rewind.start()
 	Moves.bind({
@@ -3234,6 +3340,7 @@ function Combat.start()
 			then
 				return
 			end
+			Burns.expose(victim.model, burn, nil, nil) -- (standing in it: the feet)
 			startBurning(victim, attacker, burn.kind, burn.perSecond, burn.duration)
 		end,
 		specFor = Moves.specFor,

@@ -14,7 +14,7 @@
 --     smoking puddle; explosive: a fireball, smoke, debris, a shockwave), a
 --     ray, portals opening and closing, a shot that fizzles, the gravity
 --     glove's shockwave, clones stepping in / out of portals.
---   • "Burning" attribute (acid / fire on someone): smoke, fizz or flames.
+--   • Burns on anyone (acid / fire, every source): Client/Combat/Burns.
 --   • The PortalCut finisher (CinematicController):
 --       Lift: the glove's field closes round the victim (a shimmering shell,
 --         a green outline, a light), arcs crackle from the glove to the
@@ -32,7 +32,7 @@
 --         (The wounds and the blood are WaistCut's: nothing here stays
 --         over the cut long enough to hide them.)
 --
---   RiftFx.watch(model)                    gear + burning visuals + aura
+--   RiftFx.watch(model)                    gear + burns + aura
 --   RiftFx.onAction(model, animation)      a move started (props)
 --   RiftFx.stopAction(model)               refused / cut short: props away
 --   RiftFx.onRemote(kind, data)            Remotes.RiftFx
@@ -80,7 +80,7 @@ local floorUnder = P.floorUnder
 local shakeNear = P.shakeNear
 
 local RiftGear = require(script.Parent.RiftGear)
-local RiftBurn = require(script.Parent.RiftBurn)
+local Burns = require(script.Parent.Burns)
 local RiftFlask = require(script.Parent.RiftFlask)
 local RiftPortal = require(script.Parent.RiftPortal)
 local RiftRay = require(script.Parent.RiftRay)
@@ -102,7 +102,7 @@ RiftFx.setShake = P.setShake
 
 function RiftFx.watch(model: Model)
 	RiftGear.watch(model)
-	RiftBurn.watch(model)
+	Burns.watch(model) -- (every burn, not only his: Client/Combat/Burns)
 	RiftGlove.watch(model)
 end
 

@@ -128,17 +128,40 @@ return table.freeze({
 
 		-- M1 combo: damage of hits 1, 2, 3 and 4 (the 4th is the "finisher").
 		M1_DAMAGE = table.freeze({ 5, 5, 5, 8 }),
-		M1_INTERVAL = 0.38, -- minimum time between two M1
+		-- Minimum time from the click of hit 1 / 2 / 3 to the next M1. Each one
+		-- is longer than that hit's M1_HIT_DELAY + hit-stop: the punch lands
+		-- and starts coming back before the next one starts (the cross needs
+		-- more: its arm is wound up, so it has further to come back).
+		M1_INTERVAL = table.freeze({ 0.38, 0.48, 0.38 }),
 		-- The server lets a punch / move in this much before its time (the
 		-- client sends it right on time, and the network adds a few ms:
 		-- without it, chained punches were refused - a swing with no hit).
 		ATTACK_GRACE = 0.08,
-		FINISHER_RECOVERY = 1.0, -- pause after the 4th hit before attacking again
+		-- Time from the click of the 4th hit to the next M1. = 0.85 s after the
+		-- 4th hit LANDS, as before: keep it moving with M1_HIT_DELAY[4], or the
+		-- next combo's jab lands while the victim is still in FINISHER_STUN
+		-- (an endless combo).
+		FINISHER_RECOVERY = 1.23,
 		COMBO_RESET = 1.0, -- no M1 for this long → the combo starts over at hit 1
-		-- Wind-up: time between the click and the moment the hit lands.
-		-- Gives the opponent a chance to block/parry. (Later synced with the
-		-- "Hit" marker of the animations.)
-		HIT_DELAY = 0.15,
+		-- Wind-up: time from the click to the moment the fist lands (the
+		-- server checks the hitbox then), per hit: jab, cross, hook, finisher.
+		-- The cross and the finisher are CHARGED (the arm goes back first),
+		-- so they land later: the opponent can see them coming. The M1 clips
+		-- (Client/Animation/CombatClips) put their contact keyframe exactly
+		-- at these times. Read it with the SERVER's combo number.
+		M1_HIT_DELAY = table.freeze({ 0.15, 0.28, 0.15, 0.38 }),
+		-- A charged punch (cross, finisher) is silent while the arm goes back;
+		-- its whoosh starts this long before the fist lands (when the arm
+		-- strikes: 0.18 s / 0.28 s after the click). Jab and hook whoosh at
+		-- the click.
+		M1_SWING_LEAD = 0.1,
+		-- The attacker can't block and walks slower until this long after his
+		-- fist lands (or until his next M1 is allowed, if that's sooner).
+		M1_COMMIT_AFTER_HIT = 0.23,
+		-- Throwing the next M1 of a combo keeps the fighters the last one
+		-- stunned stunned until it lands + this: a charged punch can't be
+		-- escaped in the middle of a combo.
+		COMBO_HOLD_MARGIN = 0.1,
 
 		-- Hitbox: a box in front of the attacker.
 		HITBOX_SIZE = Vector3.new(5, 5, 5.5),
@@ -163,7 +186,9 @@ return table.freeze({
 		REWIND_STUDIO_EXTRA_PING = 0,
 
 		-- Being hit.
-		HIT_STUN = 0.5, -- longer than M1_INTERVAL: a started combo can't be escaped
+		-- A started combo can't be escaped: the next M1 keeps this stun going
+		-- until it lands (see COMBO_HOLD_MARGIN).
+		HIT_STUN = 0.5,
 		FINISHER_STUN = 0.8,
 		KNOCKBACK_SPEED = 45, -- studs/s, 4th hit only
 		KNOCKBACK_TIME = 0.2,
@@ -363,11 +388,47 @@ return table.freeze({
 			rim = 0, -- bruise_rim.png
 			petechiae = 0, -- bruise_petechiae.png
 		}),
-		-- Burn pictures (Dr. Rift's acid and fire): assets/burns/*.png uploaded
-		-- to Roblox, their image ids here (docs/WOUNDS_FR.md). With them a burn
-		-- is realistic pictures spreading over the burnt limbs (raw eroded
-		-- flesh running down for acid, mottled char for fire); without (0),
-		-- simpler patches.
+		-- Burn textures (every burn: Dr. Rift's ray, acid and flasks, the
+		-- Pyromaniac's fire...): assets/burns/*.png uploaded to Roblox, their
+		-- image ids here (docs/BURNS_FR.md). Tiled on the burnt faces, one
+		-- per stage (1 redness, 2 blisters, 3 eschar, 4 char). 0 = not
+		-- uploaded: the old BURN_IMAGES below stand in (Roblox's own
+		-- particles for the flame / smoke / ember).
+		BURNS = table.freeze({
+			skin = table.freeze({
+				113128765394969,
+				131967997605329,
+				74252597997417,
+				125259548593338,
+			}), -- skin_1..4.png (bare skin)
+			cloth = table.freeze({
+				103796817123786,
+				82410079132632,
+				134218033394583,
+				129471308703785,
+			}), -- cloth_1..4.png (over a shirt / pants)
+			acid = table.freeze({ 112442746763176, 111696045453314, 92317291431094 }), -- acid_1..3.png
+			spot = 108212204997924, -- spot.png (a laser / ray burn)
+			flame = 83282802493156, -- flame.png (4 x 4 flipbook)
+			smoke = 135930341177500, -- smoke.png
+			ember = 104956583136032, -- ember.png
+		}),
+		-- Fire textures (assets/fire, tools/pyro/make_fire.py, docs/FIRE_FR.md):
+		-- every flame in the game (burning bodies, the Pyromaniac). 0 = not
+		-- uploaded: Roblox's own particles stand in (Client/Combat/FireLook).
+		FIRE = table.freeze({
+			flameLoop = 109483706228130, -- flame_loop.png (8 x 8 flipbook, loops)
+			flameTongue = 91629697684434, -- flame_tongue.png (4 x 4 flipbook, one shot)
+			fireball = 86463412008232, -- fireball.png (8 x 8 flipbook, one shot)
+			groundFire = 95247180631141, -- ground_fire.png (4 x 4 flipbook, loops)
+			smoke = 105239598679749, -- smoke.png (2 x 2: four puffs)
+			ember = 107619914333799, -- ember.png (2 x 2: dot, streak, flake, sparks)
+			glow = 121132183562543, -- glow.png
+			flameStrip = 139331479680133, -- flame_strip.png (Beams, Trails)
+			scorch = 112565139364663, -- scorch.png (a decal on the floor)
+		}),
+		-- The first burn pictures (assets/burns/legacy), still used while
+		-- BURNS above is 0: acid 1..3 for acid, fire 1..3 for stages 2..4.
 		BURN_IMAGES = table.freeze({
 			acid = table.freeze({ 131778333760722, 126361621625485, 94024882070515 }), -- acid_1..3.png
 			fire = table.freeze({ 126783746008106, 105061454734886, 79962622099236 }), -- fire_1..3.png

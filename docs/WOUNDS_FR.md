@@ -67,20 +67,9 @@ Les bleus sont beaucoup plus réalistes avec leurs images (taches douces et marb
    - `blobs = { id1, id2, id3, id4 }` (bruise_1 à bruise_4)
    - `rim = id` (bruise_rim), `petechiae = id` (bruise_petechiae)
 
-## Brûlures (Dr. Rift)
+## Brûlures
 
-L'acide et le feu du Dr. Rift laissent de **vraies brûlures**, dessinées d'après des photos de brûlures réelles :
-
-- **Acide** : la peau rongée là où l'acide a touché (le torse et un ou deux membres, plus quelques éclaboussures) : chair à vif rouge-brun terne, marbrée de zones juste rougies, bord sombre, croûteux et déchiqueté, quelques trous plus sombres, aspect mouillé, et des **coulures qui s'affinent vers le bas** (l'acide coule). La brûlure apparaît de haut en bas, comme un liquide qui coule.
-- **Feu** : la brûlure **s'étend sur tout le corps** en partant du torse (les jambes en dernier), en une bande continue le long de chaque membre (la même hauteur sur ses quatre côtés) : peau carbonisée noire et brun-violet, granuleuse, avec de grandes zones gris-violet luisantes (peau partie), quelques cloques et fissures, et de la suie autour.
-- Les brûlures **restent** quand ça s'arrête, comme les autres blessures, jusqu'au **kill** (la vie remonte d'un coup), la **nouvelle manche** d'un duel ou la **réapparition**. Soigné par un kill **pendant** qu'il brûle encore : les marques d'avant le soin partent quand le feu s'éteint. Rebrûlé : les mêmes marques, plus quelques nouvelles (avec une limite par personnage, pour ne pas ralentir le jeu).
-- Pendant qu'une coupure au verre est ouverte sur un membre, la brûlure de ce membre est cachée (sinon elle recouvrirait le trou) ; elle revient quand la coupure se referme.
-
-Les images sont dans `assets/burns/` (générées par `tools/burns/make_burns.py`). Sans elles, le jeu dessine des taches plus simples (ovales qui se chevauchent).
-
-![Rendu de contrôle : feu sur le corps, feu sur les jambes de près, acide sur le torse et le bras](../assets/burns/preview.png)
-
-Ce rendu (Blender) se refait avec `venv/bin/python -I tools/burns/preview_burns.py assets/burns <dossier>/feu fire 3` (ou `acid`, et `fallback` à la fin pour voir les taches simples sans images) ; l'image ci-dessus assemble trois de ces vues.
+Les brûlures (acide, feu, rayon du Dr. Rift, feu du Pyromane...) ont maintenant leur propre système : voir **`docs/BURNS_FR.md`** (degrés, flammes, fumée, images à importer).
 
 ### Mettre les images (une seule fois)
 

@@ -40,6 +40,7 @@ local BloodPool = require(script.Parent.BloodPool)
 local BloodRivulet = require(script.Parent.BloodRivulet)
 local BloodStain = require(script.Parent.BloodStain)
 local RiftFx = require(script.Parent.RiftFx)
+local PyroFx = require(script.Parent.PyroFx)
 
 local KitEffects = {}
 
@@ -168,6 +169,15 @@ local HIT_SOUNDS: { [string]: string } = {
 	GravityGlove = "HeavyHit", -- (the blast itself: from the move start, RiftFx)
 	GravitySlam = "GloveBlast",
 	RiftSwarm = "Hit",
+	-- The Pyromaniac (his fire makes its own sounds: Combat/PyroFx)
+	FlashBurst = "",
+	NapalmLob = "",
+	FlameStream = "",
+	FuelSpray = "",
+	Blowtorch = "HeavyHit",
+	NapalmMortar = "",
+	Inferno = "",
+	TorchCharge = "Tackle",
 }
 -- Sound when the move STARTS (the swing; "" = none).
 local START_SOUNDS: { [string]: string } = {
@@ -838,6 +848,7 @@ local swingToken: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: an
 function KitEffects.onAction(model: Model, animation: string, silent: boolean?)
 	local move = moveByAnimation[animation]
 	RiftFx.onAction(model, animation) -- (Dr. Rift's flask, guns, glove)
+	PyroFx.onAction(model, animation) -- (the Pyromaniac's flamethrower)
 	local prop = if move then move.prop else nil
 	if move and prop then
 		holdProp(model, prop, move.duration)
@@ -1025,6 +1036,7 @@ function KitEffects.stopAction(model: Model)
 	KitVFX.stop(model)
 	removeProp(model)
 	RiftFx.stopAction(model)
+	PyroFx.stopAction(model)
 end
 
 -- A move landed on `victim` (Remotes.CombatEvent "Hit" with a moveId).
@@ -1035,6 +1047,7 @@ function KitEffects.onHit(victim: Model, attacker: Model, moveId: string, zone: 
 		SoundController.play(hitSound, victim)
 	end
 	KitVFX.onHit(victim, attacker, moveId)
+	PyroFx.onHit(victim, attacker, moveId) -- (the blowtorch's / charge's flare)
 	-- Where it landed (the bottle goes where it's aimed: head or torso).
 	local struck = victim:FindFirstChild(if zone == "Head" then "Head" else "Torso")
 	local headPosition = if struck and struck:IsA("BasePart") then struck.Position else nil

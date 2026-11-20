@@ -1,344 +1,164 @@
-# Preview of Dr. Rift's burns on an R6 body (blocks and a round head),
-# rendered in Blender (Cycles), to compare with real burns. The pictures
-# (assets/burns/*.png, from make_burns.py) are laid out the way
-# src/client/Combat/RiftBurn.luau does it: fire in a band along every part,
-# the same height on its four sides, big overlapping pictures and a soot
-# halo; acid where it landed, running down, a few small splashes; small
-# flat plates on the head. "fallback" draws instead the simpler patches the
-# game shows while BURN_IMAGES is empty (overlapping flattened ovals).
-#
-#   venv/bin/python -I tools/burns/preview_burns.py <assets/burns> <out prefix> <fire|acid> <seed> [fallback]
-#
-# Writes <out prefix>_0.png (whole body), _1.png (torso and arm), _2.png
-# (legs, close).
-import math
+# Preview of the burn textures (tools/burns/make_burns.py) as the game
+# stacks them (src/client/Combat/Burns.luau): every stage up to the
+# degree, each fading in over its first 0.4 degree, on light and dark skin,
+# on a shirt; tiled 2 x 2 (seams); the laser spot; the flame, smoke and
+# ember sprites tinted as in the game; an R6 body front with a few cases.
+#   venv/bin/python -I tools/burns/preview_burns.py [textures_dir] [out.png]
 import os
-import random
 import sys
 
-import bpy
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
-ASSETS, OUT, KIND, SEED = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
-FALLBACK = len(sys.argv) > 5 and sys.argv[5] == "fallback"
-PPS = 160  # pixels per stud, as in the game
-SKIN = np.array([206, 160, 128]) / 255
-rng = random.Random(SEED)
-PARTS = {  # name: (size xyz, centre), Roblox axes (Y up, front -Z)
-    "Torso": ((2, 2, 1), (0, 3, 0)),
-    "Right Arm": ((1, 2, 1), (1.5, 3, 0)),
-    "Left Arm": ((1, 2, 1), (-1.5, 3, 0)),
-    "Right Leg": ((1, 2, 1), (0.5, 1, 0)),
-    "Left Leg": ((1, 2, 1), (-0.5, 1, 0)),
-}
-HEAD_CENTRE, HEAD_RADIUS, HEAD_HALF = (0, 4.6, 0), 0.6, 0.32
-WEIGHT = {"Torso": 1, "Right Arm": 0.7, "Left Arm": 0.7, "Right Leg": 0.58, "Left Leg": 0.58}
-SIDES = ["Front", "Back", "Left", "Right"]
-BAND = {"Torso": 0.6, "Right Arm": 0.55, "Left Arm": 0.55, "Right Leg": 0.5, "Left Leg": 0.5}
-FIRE_CELL = 1.2
-HEAD_PICTURE = 0.32
-HALO_FIRE, HALO_ACID = (70, 46, 36), (150, 84, 70)
+SRC = sys.argv[1] if len(sys.argv) > 1 else "assets/burns"
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(SRC, "preview.png")
+CELL = 256
 
 
-def face_size(name, face):
-    sx, sy, sz = PARTS[name][0]
-    return (sz, sy) if face in ("Left", "Right") else (sx, sy)
+def load(name):
+    return np.asarray(Image.open(os.path.join(SRC, name)).convert("RGBA")).astype(float) / 255
 
 
-imgs = {k: [Image.open(f"{ASSETS}/{k}_{i}.png").convert("RGBA") for i in (1, 2, 3)] for k in ("acid", "fire")}
-halo_img = Image.open(f"{ASSETS}/burn_halo.png").convert("RGBA")
-pictures = {}  # (name, face) -> [(layer, image, colour, transparency, size, at, rotation)]
-head_plates = []  # (angle, height, size, image, colour, transparency, layer)
+def fade(stage, degree):
+    """How much of a stage shows at a degree (same curve as the game)."""
+    t = np.clip((degree - (stage - 1)) / 0.4, 0, 1)
+    return t * t * (3 - 2 * t)
 
 
-def burn(name, face, at, size, drip):
-    flip = 0 if drip or rng.random() < 0.5 else 180
-    shade = rng.uniform(0.88, 1)
-    pictures.setdefault((name, face), []).append(
-        (rng.randint(2, 4), rng.choice(imgs[KIND]), (int(255 * shade),) * 3, rng.uniform(0, 0.08), size, at, flip + rng.uniform(-8, 8))
-    )
-
-
-def halo(name, face, at, size):
-    fire = KIND == "fire"
-    pictures.setdefault((name, face), []).append(
-        (1, halo_img, HALO_FIRE if fire else HALO_ACID, 0.45 if fire else 0.62, size, at, rng.uniform(-8, 8))
-    )
-
-
-def on_head():
-    angle = rng.uniform(0, 2 * math.pi)
-    top = HEAD_HALF - 0.08
-    height = rng.uniform(-top, top)
-    head_plates.append((angle, height, HEAD_PICTURE * 1.35, halo_img, HALO_FIRE if KIND == "fire" else HALO_ACID, 0.5, 1))
-    head_plates.append((angle, height, HEAD_PICTURE, rng.choice(imgs[KIND]), (245, 245, 245), 0.04, 2))
-
-
-def plan_pictures():
-    if KIND == "fire":
-        for name in ["Torso", "Head", "Right Arm", "Left Arm", "Right Leg", "Left Leg"]:
-            if name == "Head":
-                for _ in range(3):
-                    on_head()
-                continue
-            height = PARTS[name][0][1]
-            length = height * rng.uniform(BAND[name], 1)
-            top = rng.uniform(0, height - length)
-            for face in SIDES:
-                w, _ = face_size(name, face)
-                columns = max(1, round(w))
-                rows = max(1, math.ceil(length / FIRE_CELL))
-                cx, cy = w / columns, length / rows
-                halo(name, face, (w / 2, top + length / 2 + rng.uniform(-0.1, 0.1)), (w * 1.7, length * 1.35 + 0.4))
-                for c in range(columns):
-                    for r in range(rows):
-                        width = cx * rng.uniform(1.75, 2)
-                        size = (width, max(cy * rng.uniform(1.8, 2.2), width * rng.uniform(1.1, 1.3)))
-                        at = (cx * (c + 0.5) + rng.uniform(-0.12, 0.12) * cx, top + cy * (r + 0.5) + rng.uniform(-0.18, 0.18) * cy)
-                        burn(name, face, at, size, False)
-        return
-    # acid: the torso and the right arm hit, a few small splashes
-    for name in ["Torso", "Right Arm"]:
-        faces = ["Front", "Back"] if name == "Torso" else ["Front", "Right"]
-        for face in faces:
-            w, h = face_size(name, face)
-            s = rng.uniform(1.1, 1.6)
-            size = (s, s * rng.uniform(1.3, 1.7))
-            top = h * rng.uniform(0.02, 0.3)
-            at = (w * rng.uniform(0.35, 0.65), top + size[1] / 2)
-            halo(name, face, at, (size[0] * 1.35, size[1] * 1.35))
-            burn(name, face, at, size, True)
-    on_head()
-    for _ in range(3):
-        name = rng.choice(list(PARTS))
-        face = rng.choice(SIDES)
-        w, h = face_size(name, face)
-        s = rng.uniform(0.45, 0.7)
-        size = (s, s * rng.uniform(1.2, 1.6))
-        at = (w * rng.uniform(0.25, 0.75), h * rng.uniform(0.15, 0.6))
-        halo(name, face, at, (size[0] * 1.35, size[1] * 1.35))
-        burn(name, face, at, size, True)
-
-
-def paste(canvas, piece, x, y):
-    """Composites `piece` at (x, y), clipped to the canvas (the face edge)."""
-    big = Image.new("RGBA", (canvas.width + 2 * piece.width, canvas.height + 2 * piece.height), (0, 0, 0, 0))
-    big.paste(canvas, (piece.width, piece.height))
-    big.alpha_composite(piece, (x + piece.width, y + piece.height))
-    canvas.paste(big.crop((piece.width, piece.height, piece.width + canvas.width, piece.height + canvas.height)))
-
-
-def draw(canvas, items):
-    for layer, im, color, alpha, size, at, rot in sorted(items, key=lambda p: p[0]):
-        pw, ph = max(int(size[0] * PPS), 1), max(int(size[1] * PPS), 1)
-        arr = np.array(im.resize((pw, ph), Image.LANCZOS)).astype(float)
-        arr[..., :3] *= np.array(color) / 255
-        arr[..., 3] *= 1 - alpha
-        piece = Image.fromarray(arr.clip(0, 255).astype(np.uint8), "RGBA").rotate(-rot, expand=True, resample=Image.BICUBIC)
-        paste(canvas, piece, int(at[0] * PPS - piece.width / 2), int(at[1] * PPS - piece.height / 2))
-
-
-def tinted(name):
-    k = (0.28 if KIND == "fire" else 0.2) if not FALLBACK else (0.55 if KIND == "fire" else 0.38)
-    tint = np.array([40, 28, 22] if KIND == "fire" else [184, 96, 80]) / 255
-    return SKIN * (1 - k * WEIGHT.get(name, 0.7)) + tint * k * WEIGHT.get(name, 0.7)
-
-
-def face_texture(name, face):
-    w, h = face_size(name, face)
-    base = tinted(name)
-    canvas = Image.new("RGBA", (int(w * PPS), int(h * PPS)), tuple(int(c * 255) for c in base) + (255,))
-    draw(canvas, pictures.get((name, face), []))
-    return canvas
-
-
-# --- the fallback: patches of overlapping flattened ovals (RiftBurn addMarks)
-CHAR, CHAR_PURPLE, SCORCH = (26, 16, 16), (54, 32, 36), (84, 52, 38)
-SHEEN, GLOW = (150, 116, 112), (255, 92, 20)
-RAW, RAW_DEEP, CRUST, SLOUGH = (156, 56, 44), (110, 38, 30), (84, 30, 20), (204, 158, 128)
-MARKS = {"Torso": 4, "Head": 2, "Right Arm": 2, "Left Arm": 2, "Right Leg": 1, "Left Leg": 1}
-
-
-def plan_fallback():
-    """[(part, face, centre (u, v) studs on the face, radius, [(scale, dx, dy, stretch, spin, colour, alpha, glossy)])]"""
-    marks = []
-    fire = KIND == "fire"
-    for name, count in MARKS.items():
-        if name == "Head":
+def stack(base, prefix, count, degree, tint=1.0):
+    out = base.copy()
+    for k in range(1, count + 1):
+        a = fade(k, degree)
+        if a <= 0:
             continue
-        for _ in range(count):
-            radius = rng.uniform(0.28, 0.55) if name == "Torso" else rng.uniform(0.22, 0.42)
-            face = rng.choice(SIDES)
-            w, h = face_size(name, face)
-            fit = min(radius, w * 0.45, h * 0.45)
-            at = (rng.uniform(fit, w - fit), rng.uniform(fit, h - fit))
-            j = lambda: rng.uniform(-0.32, 0.32)
-            L = []
+        img = load(f"{prefix}_{k}.png")
+        color = img[..., :3] * (tint if k <= 2 else 1.0)
+        alpha = img[..., 3:] * a
+        out = out * (1 - alpha) + color * alpha
+    return out
 
-            def layer(scale, dx, dy, color, alpha, glossy=False, stretch=None, spin=None):
-                L.append((scale, dx, dy, stretch or rng.uniform(0.5, 1), spin if spin is not None else rng.uniform(0, 6.28), color, alpha, glossy))
 
-            if fire:
-                layer(0.95, j() * 0.3, j() * 0.3, SCORCH, 0.5)
-                layer(0.75, j(), j(), SCORCH, 0.4)
-                for clump in range(1, rng.randint(2, 3) + 1):
-                    layer(rng.uniform(0.3, 0.55), j(), j(), CHAR_PURPLE if clump == 2 else CHAR, rng.uniform(0.05, 0.25))
-                if rng.random() < 0.45:
-                    layer(rng.uniform(0.14, 0.24), j(), j(), SHEEN, 0.2, True)
-                if rng.random() < 0.45:
-                    layer(rng.uniform(0.08, 0.16), j(), j(), CHAR, 0.15)  # (a glowing speck, cooled down)
+def base_color(rgb, n=512, cloth=False):
+    out = np.ones((n, n, 3)) * np.array(rgb) / 255
+    if cloth:  # a plain knit: faint threads
+        py, px = np.mgrid[0:n, 0:n]
+        out *= (0.93 + 0.07 * np.sin(px * 1.3) * np.sin(py * 1.3))[..., None]
+    return out
+
+
+def to_img(arr, size=CELL):
+    return Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8)).resize((size, size), Image.LANCZOS)
+
+
+SKINS = [((226, 180, 146), 1.0), ((120, 78, 52), 0.6)]
+SHIRT = (52, 70, 110)
+
+
+def label(draw, xy, text):
+    draw.text(xy, text, fill=(230, 230, 230))
+
+
+def main():
+    rows = []
+    titles = []
+    degrees = [0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
+    for skin, tint in SKINS:
+        rows.append([stack(base_color(skin), "skin", 4, d, tint) for d in degrees])
+        titles.append(f"skin {skin}")
+    rows.append([stack(base_color(SHIRT, cloth=True), "cloth", 4, d) for d in degrees])
+    titles.append("cloth on a blue shirt")
+    rows.append([stack(base_color((235, 235, 230), cloth=True), "cloth", 4, d) for d in degrees])
+    titles.append("cloth on a white tee")
+    rows.append([stack(base_color(SKINS[0][0]), "acid", 3, min(d, 3)) for d in degrees])
+    titles.append("acid (max 3)")
+
+    w = CELL * len(degrees)
+    sheet = Image.new("RGB", (w, (CELL + 18) * (len(rows) + 2) + 40), (24, 24, 26))
+    draw = ImageDraw.Draw(sheet)
+    y = 0
+    for title, row in zip(titles, rows):
+        label(draw, (6, y + 2), title + "   degrees " + " / ".join(str(d) for d in degrees))
+        for i, arr in enumerate(row):
+            sheet.paste(to_img(arr), (i * CELL, y + 18))
+        y += CELL + 18
+
+    # Seams: 2 x 2 tiles of each full stack.
+    label(draw, (6, y + 2), "2x2 tiles (seams), spot on skin, particles tinted")
+    tiles = [
+        stack(base_color(SKINS[0][0]), "skin", 4, 4.0),
+        stack(base_color(SKINS[0][0]), "skin", 4, 2.0),
+        stack(base_color(SHIRT, cloth=True), "cloth", 4, 3.0),
+        stack(base_color(SKINS[0][0]), "acid", 3, 3.0),
+    ]
+    for i, arr in enumerate(tiles):
+        big = np.tile(arr, (2, 2, 1))
+        sheet.paste(to_img(big), (i * CELL, y + 18))
+    spot = load("spot.png")
+    skin = base_color(SKINS[0][0])
+    er = load("skin_1.png")
+    skin = skin * (1 - er[..., 3:] * 0.5) + er[..., :3] * er[..., 3:] * 0.5
+    sp = skin * (1 - spot[..., 3:]) + spot[..., :3] * spot[..., 3:]
+    sheet.paste(to_img(sp), (4 * CELL, y + 18))
+    # flame: frames 0, 5, 10 tinted, additive over dark
+    flame = load("flame.png")
+    fr = flame.shape[0] // 4
+    for j, i in enumerate((1, 6, 11)):
+        r, c = divmod(i, 4)
+        f = flame[r * fr : (r + 1) * fr, c * fr : (c + 1) * fr]
+        lum = f[..., 0]
+        col = np.stack([np.ones_like(lum), 0.35 + 0.55 * lum, 0.08 + 0.5 * lum**3], -1)
+        col = col * (lum * f[..., 3])[..., None] * 1.4
+        bg = np.ones_like(col) * 0.06
+        sheet.paste(to_img(np.clip(bg + col, 0, 1), CELL // 2), (5 * CELL + j * (CELL // 2), y + 18))
+    smoke = load("smoke.png")
+    sm = 0.5 * (1 - smoke[..., 3:]) + smoke[..., :3] * 0.18 * smoke[..., 3:]
+    sheet.paste(to_img(sm, CELL // 2), (6 * CELL + CELL // 2, y + 18))
+    ember = load("ember.png")
+    em = np.clip(0.05 + ember[..., :3] * np.array([1, 0.55, 0.2]) * ember[..., 3:] * 1.5, 0, 1)
+    sheet.paste(to_img(em, CELL // 2), (7 * CELL, y + 18))
+    y += CELL + 18
+
+    # R6 front: an immolated body, a Molotov on the legs, a ray spot on the torso.
+    label(draw, (6, y + 2), "R6 front: on fire all over (4) / Molotov at the feet (legs 2.5, torso 1) / ray spot + acid on an arm")
+    ppx = 40  # px per stud
+    cases = [
+        {"Torso": 4, "Head": 3.5, "LA": 4, "RA": 4, "LL": 4, "RL": 4},
+        {"Torso": 1.0, "Head": 0, "LA": 0.6, "RA": 0, "LL": 2.6, "RL": 2.2},
+        {"Torso": 0.8, "Head": 0, "LA": 0, "RA": 0, "LL": 0, "RL": 0, "spot": True, "acid": 2.6},
+    ]
+    for ci, case in enumerate(cases):
+        ox = ci * 260 + 20
+        oy = y + 30
+        parts = [
+            ("Head", (1.5, 0, 1, 1), "skin"),
+            ("Torso", (1, 1, 2, 2), "cloth"),
+            ("RA", (0, 1, 1, 2), "cloth"),
+            ("LA", (3, 1, 1, 2), "acid" if case.get("acid") else "cloth"),
+            ("RL", (1, 3, 1, 2), "cloth"),
+            ("LL", (2, 3, 1, 2), "cloth"),
+        ]
+        for name, (px, py, pw, ph), kind in parts:
+            wpx, hpx = int(pw * ppx), int(ph * ppx)
+            base = base_color(SHIRT if name in ("Torso", "RA", "LA") else (40, 40, 44), cloth=True)
+            if name == "Head":
+                base = base_color(SKINS[0][0])
+            d = case.get(name, 0)
+            if kind == "acid":
+                arr = stack(base_color(SHIRT, cloth=True), "acid", 3, case["acid"])
+            elif d > 0:
+                arr = stack(base, kind, 4, d)
             else:
-                layer(0.95, j() * 0.3, j() * 0.3, CRUST, 0.3, True)
-                for _ in range(rng.randint(1, 2)):
-                    layer(rng.uniform(0.5, 0.75), j() * 0.6, j() * 0.6, RAW if rng.random() < 0.5 else RAW_DEEP, 0.05, True)
-                for _ in range(rng.randint(1, 2)):
-                    long = rng.uniform(0.7, 1.2)
-                    layer(rng.uniform(0.18, 0.28), j() * 1.4, -long * 0.9, RAW_DEEP, 0.1, True, long / 0.25, 0)
-                if rng.random() < 0.4:
-                    layer(rng.uniform(0.12, 0.22), j(), j(), SLOUGH, 0.15, True)
-            marks.append((name, face, at, fit, L))
-    return marks
+                arr = base
+            if name == "Torso" and case.get("spot"):
+                sp = load("spot.png")
+                arr = arr * (1 - sp[..., 3:]) + sp[..., :3] * sp[..., 3:]
+            # 512 px = 2 studs: crop the face size from the tile
+            crop = np.tile(arr, (2, 2, 1))[: int(ph * 256), : int(pw * 256)]
+            im = Image.fromarray((np.clip(crop, 0, 1) * 255).astype(np.uint8)).resize((wpx, hpx), Image.LANCZOS)
+            sheet.paste(im, (ox + int(px * ppx), oy + int(py * ppx)))
+    sheet.save(OUT)
+    print("wrote", OUT)
 
 
-# ---- Blender scene
-bpy.ops.wm.read_factory_settings(use_empty=True)
-scene = bpy.context.scene
-scene.render.engine = "CYCLES"
-scene.cycles.samples = 48
-scene.cycles.device = "CPU"
-scene.render.resolution_x, scene.render.resolution_y = 1000, 1000
-world = bpy.data.worlds.new("w")
-scene.world = world
-world.use_nodes = True
-world.node_tree.nodes["Background"].inputs[0].default_value = (0.35, 0.37, 0.4, 1)
-world.node_tree.nodes["Background"].inputs[1].default_value = 0.6
-tmp = os.path.join(os.path.dirname(os.path.abspath(OUT)), "tex")
-os.makedirs(tmp, exist_ok=True)
-
-
-def material(name, path=None, rgb=None, alpha=False, roughness=0.75):
-    m = bpy.data.materials.new(name)
-    m.use_nodes = True
-    bsdf = m.node_tree.nodes["Principled BSDF"]
-    bsdf.inputs["Roughness"].default_value = roughness
-    if path:
-        tex = m.node_tree.nodes.new("ShaderNodeTexImage")
-        tex.image = bpy.data.images.load(path)
-        m.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-        if alpha:
-            m.node_tree.links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
-    else:
-        bsdf.inputs["Base Color"].default_value = (*rgb, 1)
-    return m
-
-
-def quad(verts, mat):
-    mesh = bpy.data.meshes.new("q")
-    mesh.from_pydata(verts, [], [(0, 1, 2, 3)])
-    uv = mesh.uv_layers.new()
-    for i, c in enumerate([(0, 0), (1, 0), (1, 1), (0, 1)]):
-        uv.data[i].uv = c
-    obj = bpy.data.objects.new("q", mesh)
-    obj.data.materials.append(mat)
-    scene.collection.objects.link(obj)
-    return obj
-
-
-def B(p):
-    """Roblox (x, y, z) -> Blender (x, z, y): Z up, Roblox front (-Z) -> Blender -Y."""
-    return (p[0], p[2], p[1])
-
-
-def face_frame(name, face):
-    """Origin (top left corner of the face), right and down axes, outward normal (Roblox space)."""
-    (sx, sy, sz), c = PARTS[name]
-    hx, hy, hz = sx / 2, sy / 2, sz / 2
-    c = np.array(c, float)
-    return {
-        "Front": (c + (-hx, hy, -hz), np.array((1, 0, 0.0)), np.array((0, -1, 0.0)), np.array((0, 0, -1.0))),
-        "Back": (c + (hx, hy, hz), np.array((-1, 0, 0.0)), np.array((0, -1, 0.0)), np.array((0, 0, 1.0))),
-        "Right": (c + (hx, hy, -hz), np.array((0, 0, 1.0)), np.array((0, -1, 0.0)), np.array((1, 0, 0.0))),
-        "Left": (c + (-hx, hy, hz), np.array((0, 0, -1.0)), np.array((0, -1, 0.0)), np.array((-1, 0, 0.0))),
-    }[face]
-
-
-if FALLBACK:
-    marks = plan_fallback()
-else:
-    plan_pictures()
-
-skinmat = {}
-for name, ((sx, sy, sz), c) in PARTS.items():
-    for face in SIDES:
-        o, right, down, _ = face_frame(name, face)
-        w, h = face_size(name, face)
-        tex = face_texture(name, face)
-        path = f"{tmp}/{KIND}_{name.replace(' ', '')}_{face}.png"
-        tex.save(path)
-        verts = [o + down * h, o + down * h + right * w, o + right * w, o]  # uv (0,0) bottom left
-        quad([B(v) for v in verts], material(path, path))
-    hx, hy, hz = sx / 2, sy / 2, sz / 2
-    m = material("skin_" + name, rgb=tuple(tinted(name) ** 2.2))
-    cx, cy, cz = c
-    quad([B((cx - hx, cy + hy, cz - hz)), B((cx + hx, cy + hy, cz - hz)), B((cx + hx, cy + hy, cz + hz)), B((cx - hx, cy + hy, cz + hz))], m)
-
-# the head: a cylinder, its plates just outside it
-bpy.ops.mesh.primitive_cylinder_add(radius=HEAD_RADIUS, depth=0.9, location=B(HEAD_CENTRE), vertices=48)
-bpy.context.object.data.materials.append(material("head", rgb=tuple(tinted("Head") ** 2.2)))
-for i, (angle, height, size, im, color, alpha, layer) in enumerate(head_plates):
-    n = np.array((math.sin(angle), 0, math.cos(angle)))
-    across = np.cross((0, 1, 0), n)
-    centre = np.array(HEAD_CENTRE) + n * (HEAD_RADIUS + 0.003 + 0.0015 * layer) + np.array((0, height, 0))
-    arr = np.array(im.resize((256, 256), Image.LANCZOS)).astype(float)
-    arr[..., :3] *= np.array(color) / 255
-    arr[..., 3] *= 1 - alpha
-    path = f"{tmp}/{KIND}_head_{i}.png"
-    Image.fromarray(arr.clip(0, 255).astype(np.uint8), "RGBA").save(path)
-    m = material(f"plate{i}", path, alpha=True)
-    hs = size / 2
-    verts = [centre - across * hs - (0, hs, 0), centre + across * hs - (0, hs, 0), centre + across * hs + (0, hs, 0), centre - across * hs + (0, hs, 0)]
-    quad([B(v) for v in verts], m)
-
-if FALLBACK:
-    for name, face, at, fit, layers in marks:
-        o, right, down, normal = face_frame(name, face)
-        centre = o + right * at[0] + down * at[1]
-        thick = 0.07
-        for k, (scale, dx, dy, stretch, spin, color, alpha, glossy) in enumerate(layers):
-            width = fit * 2 * scale
-            p = centre + right * dx * fit - down * dy * fit + normal * (thick * 0.18)
-            bpy.ops.mesh.primitive_uv_sphere_add(radius=0.5, location=B(p), segments=24, ring_count=12)
-            ob = bpy.context.object
-            ob.scale = (width, width * stretch, thick + 0.004 * k)
-            # turn the oval into the face's plane (its Z out along the normal)
-            z = normal
-            x = right * math.cos(spin) - down * math.sin(spin)
-            y = np.cross(z, x)
-            M = np.array([B(x), B(y), B(z)]).T
-            ob.rotation_mode = "QUATERNION"
-            from mathutils import Matrix
-
-            ob.rotation_quaternion = Matrix(M.tolist()).to_quaternion()
-            mat = material(f"m{name}{k}", rgb=tuple((np.array(color) / 255) ** 2.2), roughness=0.3 if glossy else 0.85)
-            mat.node_tree.nodes["Principled BSDF"].inputs["Alpha"].default_value = 1 - alpha
-            ob.data.materials.append(mat)
-
-floor_mat = material("floor", rgb=(0.3, 0.3, 0.3))
-bpy.ops.mesh.primitive_plane_add(size=30, location=(0, 0, 0))
-bpy.context.object.data.materials.append(floor_mat)
-sun = bpy.data.objects.new("sun", bpy.data.lights.new("sun", "SUN"))
-sun.data.energy = 3.2
-sun.rotation_euler = (math.radians(50), 0, math.radians(-35))
-scene.collection.objects.link(sun)
-cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
-scene.collection.objects.link(cam)
-scene.camera = cam
-views = [((-5.5, -9.5, 4.2), (0, 0, 2.7), 40), ((3.6, -4.8, 3.9), (0.9, 0, 3.4), 40), ((-1.6, -4.5, 1.6), (0, 0, 1.2), 42)]
-for i, (loc, target, lens) in enumerate(views):
-    cam.location = loc
-    cam.data.lens = lens
-    d = np.array(target) - np.array(loc)
-    cam.rotation_euler = (math.atan2(math.hypot(d[0], d[1]), -d[2]), 0, math.atan2(d[1], d[0]) - math.pi / 2)
-    scene.render.filepath = f"{OUT}_{i}.png"
-    bpy.ops.render.render(write_still=True)
+if __name__ == "__main__":
+    main()

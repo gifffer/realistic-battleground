@@ -17,8 +17,8 @@ local NONE = Vector3.zero
 
 local ACID: KitTypes.BurnDef = { kind = "Acid", perSecond = 4, duration = 4 }
 local ACID_PUDDLE: KitTypes.BurnDef = { kind = "Acid", perSecond = 3, duration = 1.5 }
-local BURN: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 3 }
-local BIG_BURN: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 3 }
+local BURN: KitTypes.BurnDef = { kind = "Fire", perSecond = 3, duration = 3, spot = true } -- (the ray)
+local BIG_BURN: KitTypes.BurnDef = { kind = "Fire", perSecond = 4, duration = 3, spot = true }
 local BLAST_BURN: KitTypes.BurnDef = { kind = "Fire", perSecond = 2, duration = 2 }
 
 local kit: KitTypes.KitDef = {
