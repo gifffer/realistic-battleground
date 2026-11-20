@@ -152,6 +152,12 @@ local function inCinematic(character: Model): boolean
 	return character:GetAttribute("InCinematic") == true
 end
 
+-- Carrying the contraband case (the server's "Carrying" attribute): no kit move, no
+-- Awakening, no finisher. M1, block and dash still work.
+local function isCarrying(character: Model): boolean
+	return character:GetAttribute("Carrying") ~= nil
+end
+
 local function tryAttack()
 	local character, _, root = getCharacterParts()
 	local time = os.clock()
@@ -168,8 +174,9 @@ local function tryAttack()
 		return
 	end
 
-	-- Opponent down in front of us: finish them (the server confirms).
-	if findFinishTarget(root) then
+	-- Opponent down in front of us: finish them (the server confirms). Not while carrying
+	-- the case (the server never finishes then: the click stays a punch).
+	if not isCarrying(character) and findFinishTarget(root) then
 		local finisher = myFinisher(character)
 		combo = 0
 		lastAttackAt = time
@@ -351,6 +358,8 @@ function CombatController.canStartMove(): boolean
 		and not blocking
 		and not isStunned(character)
 		and not inCinematic(character)
+		and not isCarrying(character) -- (the case in hand: no kit move, no Awakening)
+		and player:GetAttribute("Extracting") ~= true -- (busy at the lab bench)
 		and not isBusyMoving()
 		and os.clock() >= nextAttackAt
 end

@@ -14,7 +14,7 @@
 --      same "DuelId": Combat only lets them hit each other.
 --   2. Each round: full health / stamina, everything reset, "3, 2, 1, FIGHT"
 --      (frozen meanwhile). The first knocked to 0 HP loses the round (no
---      KO on the ground, no finisher: Knockout.setInterceptor).
+--      KO on the ground, no finisher: Knockout.addInterceptor("Duels", 10, …)).
 --   3. First to Config.Duels.ROUNDS_TO_WIN rounds wins. Leaving = forfeit.
 --   4. Rewards (XP, coins), ELO for ranked; then back to the free arena.
 --
@@ -92,7 +92,16 @@ local function aliveCharacter(player: Player): Model?
 	return nil
 end
 
--- Can `player` start a duel right now? (Not in one, alive, not knocked out.)
+-- Contraband: carrying a courier case ("Carrying" on the character) or being
+-- inside a private lab ("InLab" on the player, or the character) = busy.
+local function busyWithContraband(player: Player, character: Model): boolean
+	return character:GetAttribute("Carrying") ~= nil
+		or player:GetAttribute("InLab") == true
+		or character:GetAttribute("InLab") == true
+end
+
+-- Can `player` start a duel right now? (Not in one, alive, not knocked out,
+-- not carrying a case, not in a lab.)
 local function isFree(player: Player): boolean
 	local character = aliveCharacter(player)
 	return player.Parent == Players
@@ -101,6 +110,7 @@ local function isFree(player: Player): boolean
 		and character ~= nil
 		and not Knockout.isKnockedOut(character)
 		and not Combat.isInCinematic(character)
+		and not busyWithContraband(player, character)
 end
 
 local function inCombat(player: Player): boolean
@@ -662,7 +672,8 @@ end
 
 function Duels.start()
 	Arenas.build()
-	Knockout.setInterceptor(interceptKnockout)
+	-- Order 10: asked before anything else (room for Police = 20 later).
+	Knockout.addInterceptor("Duels", 10, interceptKnockout)
 	PlayerData.onLoaded(onLoaded)
 	PlayerData.onLeaving(onLeaving)
 	Players.PlayerRemoving:Connect(function(player)

@@ -54,6 +54,7 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local ALSClips = require(script.Parent.Parent.Animation.ALSClips)
+local CarryClips = require(script.Parent.Parent.Animation.CarryClips)
 local CombatClips = require(script.Parent.Parent.Animation.CombatClips)
 local Locomotion = require(script.Parent.Parent.Animation.Locomotion)
 local MovementClips = require(script.Parent.Parent.Animation.MovementClips)
@@ -181,6 +182,7 @@ type Layer = {
 	fadeIn: number,
 	fadeOut: number,
 	pose: { [string]: CFrame }, -- sampled each frame (reused table)
+	rate: number?, -- fixed playback speed (overrides playbackRate), e.g. a re-timed punch
 }
 
 -- One channel = a list of layers (the newest is the one playing; older ones
@@ -236,6 +238,16 @@ type Tracked = {
 
 local CharacterAnimationController = {}
 
+-- A hold pose (setHoldPose): something held in a hand that keeps an arm in place whatever
+-- the body does (the BX-7 case in the left hand). Poses are R6Pose poses (parent space).
+--   leftShoulder  REPLACES the Left Shoulder's pose (on top of the locomotion, guard,
+--                 punches...), weighted by `weight`;
+--   root          is ADDED on top of the Root joint (a small tilt), weighted too.
+export type HoldPose = { leftShoulder: CFrame?, root: CFrame?, weight: number }
+-- Called once per frame per character while set: (frame time, its locomotion state, on its
+-- feet or not) → the pose, or nil for nothing this frame.
+export type HoldProvider = (dt: number, loco: Locomotion.State, onFeet: boolean) -> HoldPose?
+
 local tracked: { [Model]: Tracked } = {}
 -- We pressed block: show it before the server's "Blocking" attribute arrives.
 local predictedBlock = false
@@ -244,6 +256,12 @@ local sprintPose: { [string]: CFrame } = {}
 -- Bodies held at a place of their own (pinRoot): where the torso's centre
 -- is this frame (world), or nil once it's over.
 local pins: { [Model]: () -> Vector3? } = setmetatable({}, { __mode = "k" }) :: any
+-- Left-hand punches (clip name → combo hit) and the right-hand one used instead while the
+-- left hand holds something.
+local LEFT_HAND_PUNCHES: { [string]: number } = { Brawler_M1_1 = 1, Brawler_M1_3 = 3 }
+local RIGHT_HAND_PUNCH = "Brawler_M1_2"
+-- Hold poses (setHoldPose), per model.
+local holds: { [Model]: HoldProvider } = setmetatable({}, { __mode = "k" }) :: any
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -261,7 +279,10 @@ local function isLocal(entry: Tracked): boolean
 end
 
 local function findClip(name: string): R6Pose.Clip?
-	return (MovementClips :: any)[name] or (CombatClips :: any)[name] or (ALSClips :: any)[name]
+	return (MovementClips :: any)[name]
+		or (CombatClips :: any)[name]
+		or (ALSClips :: any)[name]
+		or (CarryClips :: any)[name]
 end
 
 local function newLayer(name: string, clip: R6Pose.Clip, fadeIn: number, fadeOut: number): Layer
@@ -475,7 +496,7 @@ local function advanceChannel(entry: Tracked, channel: Channel, dt: number, oneS
 	end
 	for index = #channel, 1, -1 do
 		local layer = channel[index]
-		layer.time += dt * playbackRate(entry, layer.name)
+		layer.time += dt * (layer.rate or playbackRate(entry, layer.name))
 
 		-- Our own climb / vault: follow the body's real progress exactly.
 		if layer.target == 1 and isLocal(entry) then
@@ -658,6 +679,9 @@ local function compose(entry: Tracked, dt: number)
 	end
 	local pending = entry.pendingInertia
 	entry.pendingInertia = nil
+	-- Something held in a hand (setHoldPose): asked once per frame.
+	local holdProvider = holds[entry.model]
+	local hold = if holdProvider then holdProvider(dt, loco, feet) else nil
 
 	for joint, motor in entry.motors do
 		-- What Roblox's Animator wants this frame. If the joint still holds
@@ -716,6 +740,18 @@ local function compose(entry: Tracked, dt: number)
 		end
 		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched
+		-- Held in a hand: the Left Shoulder takes the hold pose (over the action: a left
+		-- punch stays a hold), the Root gets its small tilt on top.
+		if hold and hold.weight > 0 then
+			local weight = math.min(hold.weight, 1)
+			if joint == "LeftShoulder" and hold.leftShoulder then
+				result = result:Lerp(R6Pose.toTransform(motor, hold.leftShoulder), weight)
+				any = true
+			elseif joint == "Root" and hold.root then
+				result = result * CFrame.identity:Lerp(R6Pose.toTransform(motor, hold.root), weight)
+				any = true
+			end
+		end
 		-- Flinch: added on top of everything, on the head and (less) the torso.
 		if entry.flinch ~= Vector3.zero and (joint == "Neck" or joint == "Root") then
 			local share = if joint == "Neck" then 1 else FLINCH_TORSO_SHARE
@@ -1067,6 +1103,19 @@ end
 function CharacterAnimationController.playAction(model: Model, name: string)
 	local entry = tracked[model]
 	local clip = findClip(name)
+	-- Holding something in the LEFT hand (the case): the left-hand punches (hits 1 and 3) are
+	-- thrown with the right-hand one (hit 2), sped up so its impact lands on the same frame
+	-- as the server's hit (Config.Combat.M1_HIT_DELAY). The layer keeps the asked name.
+	local rate: number? = nil
+	if holds[model] and LEFT_HAND_PUNCHES[name] then
+		local right = findClip(RIGHT_HAND_PUNCH)
+		local delays = Config.Combat.M1_HIT_DELAY
+		local own = delays[LEFT_HAND_PUNCHES[name]]
+		if right and own and own > 0 then
+			clip = right
+			rate = delays[2] / own
+		end
+	end
 	if clip == nil then
 		warnMissingClip(name)
 		return
@@ -1085,7 +1134,9 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 		layer.fadeOut = ACTION_FADE_IN -- cut the old one fast
 	end
 	local fadeIn = if REACTIONS[name] then REACTION_FADE_IN else ACTION_FADE_IN
-	table.insert(entry.action, newLayer(name, clip, fadeIn, ACTION_FADE_OUT))
+	local layer = newLayer(name, clip :: R6Pose.Clip, fadeIn, ACTION_FADE_OUT)
+	layer.rate = rate
+	table.insert(entry.action, layer)
 	entry.lastAction = name
 	-- (An emote is not a fight: no fists up after it.)
 	if string.sub(name, 1, 6) ~= "Emote_" then
@@ -1117,6 +1168,24 @@ function CharacterAnimationController.pinRoot(model: Model, at: (() -> Vector3?)
 		pins[model] = at
 	else
 		pins[model] = nil
+	end
+end
+
+-- Sets (or with nil, removes) the hold pose of `model`: see HoldPose above. The switch is
+-- inertialized like the others (nothing pops); the provider's own weight can fade it too.
+-- Forgotten when the model is removed.
+function CharacterAnimationController.setHoldPose(model: Model, provider: HoldProvider?)
+	if holds[model] == provider then
+		return
+	end
+	if provider then
+		holds[model] = provider
+	else
+		holds[model] = nil
+	end
+	local entry = tracked[model]
+	if entry then
+		requestInertia(entry, DEFAULT_INERTIA)
 	end
 end
 
@@ -1261,6 +1330,7 @@ local function track(model: Model, owner: Player?)
 	model.AncestryChanged:Connect(function(_, parent)
 		if parent == nil then
 			tracked[model] = nil
+			holds[model] = nil
 		end
 	end)
 end

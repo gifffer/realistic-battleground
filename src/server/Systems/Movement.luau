@@ -34,6 +34,11 @@
 -- stunned). Same idea, by name:
 --   Movement.setSprintLock(player, "Block", true)   -- can't sprint
 --   Movement.setSprintLock(player, "Block", false)  -- lock removed
+--
+-- Stamina drain modifiers (sprint drain × every modifier) and climb locks
+-- (no mantle "Climb" while any lock; the low "Vault" still works), same idea:
+--   Movement.setStaminaDrainModifier(player, "Case", 1.3)  -- carrying: tires faster
+--   Movement.setClimbLock(player, "Case", true)            -- carrying: no mantle
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -62,6 +67,10 @@ type State = {
 	wasSprinting: boolean,
 	-- Reasons that forbid sprinting right now (blocking, stunned...).
 	sprintLocks: { [string]: boolean },
+	-- Sprint stamina drain × every value here (carrying a case...).
+	drainModifiers: { [string]: number },
+	-- Reasons that forbid the mantle ("Climb") right now (carrying a case...).
+	climbLocks: { [string]: boolean },
 }
 
 local Movement = {}
@@ -81,10 +90,22 @@ local function getState(player: Player): State
 			lastClimbAt = -math.huge,
 			wasSprinting = false,
 			sprintLocks = {},
+			drainModifiers = {},
+			climbLocks = {},
 		}
 		states[player] = state
 	end
 	return state
+end
+
+-- Like getState, but nil once the player has left the server: a clean-up that runs
+-- while he leaves (dropping a case, ending an extraction...) must not bring his
+-- entry back (Heartbeat would then loop over a player who is gone).
+local function liveState(player: Player): State?
+	if player.Parent ~= Players then
+		return states[player]
+	end
+	return getState(player)
 end
 
 local function getAliveHumanoid(player: Player): Humanoid?
@@ -140,7 +161,12 @@ local function updatePlayer(player: Player, state: State, now: number, dt: numbe
 			and not Stamina.isExhausted(player)
 			and horizontalSpeed(humanoid) > Config.Character.MOVING_THRESHOLD
 		then
-			sprinting = Stamina.drain(player, Config.Stamina.SPRINT_DRAIN_PER_SECOND * dt)
+			local drainMultiplier = 1
+			for _, multiplier in state.drainModifiers do
+				drainMultiplier *= multiplier
+			end
+			sprinting =
+				Stamina.drain(player, Config.Stamina.SPRINT_DRAIN_PER_SECOND * drainMultiplier * dt)
 			if sprinting then
 				moveState = "Sprint"
 			end
@@ -218,6 +244,11 @@ local function tryStartClimb(player: Player, state: State, kind: Action, now: nu
 	if character == nil or now - state.lastClimbAt < climb.COOLDOWN or isFightLocked(player) then
 		return
 	end
+	-- The mantle (high ledge) is refused while something locks it (carrying a
+	-- case: both hands needed). The low "Vault" is still allowed.
+	if kind == "Climb" and next(state.climbLocks) ~= nil then
+		return
+	end
 	-- The server looks for the ledge ITSELF (with a tolerance for lag).
 	if Ledge.find(character, climb.SERVER_TOLERANCE) == nil then
 		return
@@ -240,7 +271,11 @@ end
 
 -- `multiplier` = nil removes the modifier. Must be a number between 0 and 2.
 function Movement.setSpeedModifier(player: Player, key: string, multiplier: number?)
-	local modifiers = getState(player).modifiers
+	local state = liveState(player)
+	if state == nil then
+		return
+	end
+	local modifiers = state.modifiers
 	if multiplier == nil then
 		modifiers[key] = nil
 		return
@@ -262,7 +297,41 @@ end
 -- Forbids sprinting while `locked` (combat: blocking, attacking, stunned).
 -- `key` names the reason; sprint is allowed again when every lock is gone.
 function Movement.setSprintLock(player: Player, key: string, locked: boolean)
-	local locks = getState(player).sprintLocks
+	local state = liveState(player)
+	if state == nil then
+		return
+	end
+	local locks = state.sprintLocks
+	if locked then
+		locks[key] = true
+	else
+		locks[key] = nil
+	end
+end
+
+-- Sprint stamina drain × `multiplier` while it is set (`key` names the reason;
+-- nil removes it). Several modifiers multiply. Clamped to 0.1 .. 3.
+function Movement.setStaminaDrainModifier(player: Player, key: string, multiplier: number?)
+	local state = liveState(player)
+	if state == nil then
+		return
+	end
+	local modifiers = state.drainModifiers
+	if multiplier == nil or multiplier ~= multiplier then
+		modifiers[key] = nil
+		return
+	end
+	modifiers[key] = math.clamp(multiplier, 0.1, 3)
+end
+
+-- Forbids the mantle ("Climb") while `locked` (`key` names the reason). The
+-- "Vault" over low obstacles stays allowed.
+function Movement.setClimbLock(player: Player, key: string, locked: boolean)
+	local state = liveState(player)
+	if state == nil then
+		return
+	end
+	local locks = state.climbLocks
 	if locked then
 		locks[key] = true
 	else

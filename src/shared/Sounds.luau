@@ -574,6 +574,26 @@ local sounds: { [string]: SoundInfo } = {
 	-- The can dropping into the tray (one shot, in 3D at the machine).
 	SpezColaDrop = { ids = { 124906885034839 }, volume = 0.8, pitch = 1, pitchVariation = 0.05 },
 
+	-- Contraband (case, lab, extraction) -----------------------------------
+	-- Empty for now: paste ids when you have them (nothing uploaded by us). Case sounds are
+	-- 3D on the carrier; lab and extraction sounds are 2D, heard only by the lab's owner.
+	CaseLatch = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
+	CaseLidOpen = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
+	CaseLidClose = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
+	CaseHum = { ids = {}, volume = 0.2, pitch = 1, pitchVariation = 0, looped = true },
+	CasePickup = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
+	CaseSetDown = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
+	CaseDrop = { ids = {}, volume = 0.7, pitch = 1, pitchVariation = 0.08 },
+	VatHum = { ids = {}, volume = 0.25, pitch = 1, pitchVariation = 0, looped = true },
+	VatReadyChime = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0 },
+	ClampClunk = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.06 },
+	HatchHiss = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.06 },
+	MembraneStretch = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.08 },
+	FibreSnap = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.12 },
+	CoreRelease = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.05 },
+	CapsuleSeal = { ids = {}, volume = 0.6, pitch = 1, pitchVariation = 0.05 },
+	ChuteSlide = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
+
 	-- >>> Pyromaniac sounds (generated)
 	-- Pyromaniac (Shared/Kits/Pyromaniac) --------------------------------------------------
 	-- A kit sound is a cue of up to FIVE layers played together (Shared/SoundCues: when each

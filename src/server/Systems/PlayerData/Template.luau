@@ -42,6 +42,13 @@ local template: Types.PlayerProfile = {
 	-- Added with the shop (step 10).
 	ownedCosmetics = {},
 	equipped = { Title = "", Outfit = "", KillEffect = "", Emote = "EmoteShrug" },
+	-- Added with the contraband prototype: Reconcile() adds it to older saves.
+	contraband = {
+		culture = { active = false, grown = 0 },
+		stash = {},
+		caseTier = "Courier",
+		log = { extractions = 0, sales = 0, coinsEarned = 0, casesLost = 0 },
+	},
 }
 
 return template

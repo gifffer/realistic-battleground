@@ -131,41 +131,48 @@ local function scale(color: Color3, factor: number): Color3
 	)
 end
 
+-- Darkest night OutdoorAmbient the weather may give (power cuts excepted).
+local NIGHT_AMBIENT_FLOOR = Color3.fromRGB(72, 66, 66)
+
 -- The base look of the afternoon or of the night (a new table each call: the weather
--- changes it freely). Values from DIRECTION2.md 6.2: still gloomy, but the night is no longer a
--- flat dark blue. The ambient light is lifted and almost neutral, so a fighter in dark clothes
--- stays readable away from the lamps, and the lamps and shop windows give the contrast.
+-- changes it freely).
+-- Night = "Smog Night" (see ART_V2 §3.2, contraband direction): a warm brown smog instead of
+-- the old cool blue haze, deep blacks, sodium lamps doing the contrast. The ambient light
+-- stays lifted (OutdoorAmbient ≥ 70 grey) so a fighter in dark clothes is still readable
+-- away from the lamps. If the darkest avatar is unreadable in Studio: give back +0.1
+-- ExposureCompensation first, before thinning the smog.
 local function baseLook(night: boolean): Look
 	if night then
 		return {
 			lighting = {
-				ClockTime = 22.4,
-				Brightness = 0.7,
-				Ambient = rgb(46, 46, 54),
-				OutdoorAmbient = rgb(84, 86, 104),
-				ExposureCompensation = 0.35,
-				EnvironmentDiffuseScale = 0.35,
-				EnvironmentSpecularScale = 0.9,
-				ShadowSoftness = 0.25,
+				ClockTime = 21.6,
+				Brightness = 0.6,
+				Ambient = rgb(40, 36, 36),
+				OutdoorAmbient = rgb(86, 78, 80),
+				ExposureCompensation = 0.3,
+				EnvironmentDiffuseScale = 0.3,
+				EnvironmentSpecularScale = 1.0,
+				ShadowSoftness = 0.3,
 			},
 			atmosphere = {
-				-- A low Offset keeps the near streets clear; the haze builds up with distance.
-				Density = 0.32,
+				-- A low Offset keeps the near streets clear; the smog builds up with distance.
+				Density = 0.38,
 				Offset = 0.02,
-				Color = rgb(72, 78, 98),
-				Decay = rgb(40, 44, 60),
+				Color = rgb(96, 82, 74),
+				Decay = rgb(58, 40, 62),
 				Glare = 0,
-				Haze = 1.4,
+				Haze = 2.0,
 			},
-			clouds = { Cover = 0.88, Density = 0.6, Color = rgb(54, 56, 66) },
+			clouds = { Cover = 0.9, Density = 0.65, Color = rgb(70, 60, 64) },
 			grade = {
-				Brightness = 0.04,
-				Contrast = 0.1,
-				Saturation = -0.08,
-				TintColor = rgb(232, 234, 246),
+				Brightness = 0.02,
+				Contrast = 0.18,
+				Saturation = -0.25,
+				TintColor = rgb(255, 238, 224),
 			},
-			-- (Threshold 1.6, was 1.3: lit sidewalks and zebras bloomed to white)
-			bloom = { Intensity = 0.6, Size = 24, Threshold = 1.6 },
+			-- (Threshold 1.5: ART_V2 says 1.4, but 1.3 once bloomed the lit sidewalks and
+			-- zebras to white, so we keep a margin)
+			bloom = { Intensity = 0.5, Size = 28, Threshold = 1.5 },
 			sunRays = { Intensity = 0, Spread = 0.6 },
 		}
 	end
@@ -233,7 +240,8 @@ local function currentLook(): Look
 		look.atmosphere.Density = 0.5
 		look.atmosphere.Offset = 0
 		look.atmosphere.Haze = 3.6
-		look.atmosphere.Color = if targetNight then rgb(48, 52, 62) else rgb(160, 162, 164)
+		-- (night: a thicker brown smog, Smog Night)
+		look.atmosphere.Color = if targetNight then rgb(74, 64, 60) else rgb(160, 162, 164)
 		look.atmosphere.Glare = 0
 		look.bloom.Size = 36
 		look.grade.Contrast -= 0.05
@@ -242,6 +250,16 @@ local function currentLook(): Look
 	if not powerOn then
 		look.lighting.Ambient = scale(look.lighting.Ambient, 0.75)
 		look.lighting.OutdoorAmbient = scale(look.lighting.OutdoorAmbient, 0.75)
+	elseif targetNight then
+		-- Readability guard: rain / storm never take the night ambient below this (a fighter
+		-- in dark clothes stays readable). Only a power cut goes darker, on purpose.
+		local current = look.lighting.OutdoorAmbient
+		local floor = NIGHT_AMBIENT_FLOOR
+		look.lighting.OutdoorAmbient = Color3.new(
+			math.max(current.R, floor.R),
+			math.max(current.G, floor.G),
+			math.max(current.B, floor.B)
+		)
 	end
 	return look
 end

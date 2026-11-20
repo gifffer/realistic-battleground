@@ -176,6 +176,13 @@ local function inSafeZone(state: CombatState): boolean
 	return SafeZone.contains(state.root.Position)
 end
 
+-- Carrying something in the hands (contraband: the courier case sets the
+-- character attribute "Carrying" = "Case"). Then only M1, block and dash:
+-- no kit move (1–4, grabs, throws), no Awakening, no finisher.
+local function isCarrying(model: Model): boolean
+	return model:GetAttribute("Carrying") ~= nil
+end
+
 local function setAttribute(model: Model, name: string, value: any)
 	if model:GetAttribute(name) ~= value then
 		model:SetAttribute(name, value)
@@ -2403,7 +2410,10 @@ function Combat.tryAttack(model: Model, aim: Vector3?, attackId: number?): boole
 
 	-- A KO'd fighter right in front: finish them instead of punching.
 	-- (Players only: training dummies never finish anyone.)
-	local finishTarget = if state.player then Knockout.findFinishTarget(model) else nil
+	-- (Not while carrying a case: the M1 stays a punch.)
+	local finishTarget = if state.player and not isCarrying(model)
+		then Knockout.findFinishTarget(model)
+		else nil
 	if finishTarget and startFinisher(state, finishTarget) then
 		resolved() -- a finisher, not this M1
 		return true
@@ -3077,8 +3087,14 @@ local function onUseMove(player: Player, slot: unknown, aim: unknown, requestId:
 		return
 	end
 	local direction = AimRule.validate(aim, state.root.CFrame.LookVector)
-	-- (no kit move, grab or throw from the park: it is a safe zone)
-	if inSafeZone(state) or not Moves.use(state, slot, direction) then
+	-- (no kit move, grab or throw from the park: it is a safe zone; nor while
+	-- carrying a case, nor during a contraband extraction at the lab bench)
+	if
+		inSafeZone(state)
+		or isCarrying(character)
+		or player:GetAttribute("Extracting") == true
+		or not Moves.use(state, slot, direction)
+	then
 		-- Echo the client's number for this request (only sent back, never
 		-- trusted): it undoes THAT move, not a newer one.
 		local id = if typeof(requestId) == "number"
@@ -3097,7 +3113,12 @@ local function onAwaken(player: Player)
 		return
 	end
 	local state = states[character]
-	if state and not inSafeZone(state) then
+	if
+		state
+		and not inSafeZone(state)
+		and not isCarrying(character)
+		and player:GetAttribute("Extracting") ~= true
+	then
 		Moves.awaken(state)
 	end
 end
