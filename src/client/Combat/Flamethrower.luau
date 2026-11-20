@@ -127,6 +127,13 @@ type Gun = {
 	heat: number,
 	heatBoost: number,
 	shownHeat: number, -- (the holes repainted only when it moved)
+	-- what the hinges and the pilot last showed (rewritten only on a change)
+	shownTrigger: number,
+	shownValve: number,
+	shownNeedle: number,
+	shownPilotSize: number,
+	shownPilotSpeed: number,
+	shownPilotAwake: boolean?,
 	ventUntil: number,
 	connections: { RBXScriptConnection },
 }
@@ -544,6 +551,12 @@ local function dress(model: Model)
 		heat = 0,
 		heatBoost = 0,
 		shownHeat = -1,
+		shownTrigger = -1,
+		shownValve = -2,
+		shownNeedle = -1,
+		shownPilotSize = -1,
+		shownPilotSpeed = -1,
+		shownPilotAwake = nil,
 		ventUntil = 0,
 		connections = {},
 	}
@@ -692,10 +705,12 @@ local function step(dt: number)
 		gun.valve = approach(gun.valve, gun.valveTarget, 9, dt)
 		local hinges = gun.hinges
 		local pivots = Shape.PIVOTS :: any
-		if hinges.Trigger then
+		if hinges.Trigger and gun.trigger ~= gun.shownTrigger then
+			gun.shownTrigger = gun.trigger
 			hinges.Trigger.C0 = pivots.Trigger * CFrame.Angles(0, TRIGGER_PULL * gun.trigger, 0)
 		end
-		if hinges.Valve then
+		if hinges.Valve and gun.valve ~= gun.shownValve then
+			gun.shownValve = gun.valve
 			local angle = if gun.valve >= 0
 				then VALVE_OPEN * gun.valve
 				else VALVE_CHOKE * -gun.valve
@@ -715,7 +730,8 @@ local function step(dt: number)
 			target += math.noise(now * 9, gun.root.Position.X) * 0.08
 		end
 		gun.gauge = approach(gun.gauge, math.clamp(target, 0, 1), 3, dt)
-		if hinges.Needle then
+		if hinges.Needle and math.abs(gun.gauge - gun.shownNeedle) > 0.002 then
+			gun.shownNeedle = gun.gauge
 			hinges.Needle.C0 = pivots.Needle
 				* CFrame.Angles(0, 0, NEEDLE_ZERO - NEEDLE_SPAN * gun.gauge)
 		end
@@ -742,21 +758,33 @@ local function step(dt: number)
 		flame.Rate = if on then 90 else 0
 		core.Rate = if on then 70 else 0
 		if on then
+			-- (the flicker quantised: the sequences rebuilt only when it moved)
 			local flick = 1
 				+ math.noise(now * 13, gun.root.Position.Z) * (if awake then 0.35 else 0.12)
-			flame.Speed = NumberRange.new(1.1 * k * flick, 1.4 * k * flick)
-			flame.Size = NumberSequence.new({
-				NumberSequenceKeypoint.new(0, 0.07 * k),
-				NumberSequenceKeypoint.new(1, 0.02 * k),
-			})
-			flame.Color = if awake
-				then ColorSequence.new({
-					ColorSequenceKeypoint.new(0, PILOT_BLUE),
-					ColorSequenceKeypoint.new(0.55, PILOT_BLUE),
-					ColorSequenceKeypoint.new(1, PILOT_TIP),
+			local speed = math.floor(k * flick * 20 + 0.5) / 20
+			if speed ~= gun.shownPilotSpeed then
+				gun.shownPilotSpeed = speed
+				flame.Speed = NumberRange.new(1.1 * speed, 1.4 * speed)
+			end
+			local size = math.floor(k * 20 + 0.5) / 20
+			if size ~= gun.shownPilotSize then
+				gun.shownPilotSize = size
+				flame.Size = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0.07 * size),
+					NumberSequenceKeypoint.new(1, 0.02 * size),
 				})
-				else ColorSequence.new(PILOT_BLUE)
-			flame.Acceleration = if awake then Vector3.new(0, 3, 0) else Vector3.zero
+			end
+			if awake ~= gun.shownPilotAwake then
+				gun.shownPilotAwake = awake
+				flame.Color = if awake
+					then ColorSequence.new({
+						ColorSequenceKeypoint.new(0, PILOT_BLUE),
+						ColorSequenceKeypoint.new(0.55, PILOT_BLUE),
+						ColorSequenceKeypoint.new(1, PILOT_TIP),
+					})
+					else ColorSequence.new(PILOT_BLUE)
+				flame.Acceleration = if awake then Vector3.new(0, 3, 0) else Vector3.zero
+			end
 		end
 		gun.pilotLight.Enabled = on
 		gun.pilotLight.Brightness = 0.4 * k

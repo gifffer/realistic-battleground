@@ -393,7 +393,7 @@ end
 local HAND_UPRIGHT = CFrame.new(0, -1.1, -0.12) * CFrame.Angles(math.rad(-90), 0, 0)
 
 -- One move playing on a model (its props, its beats).
-type Run = { token: number, folder: Folder, zippo: Zippo? }
+type Run = { token: number, folder: Folder, zippo: Zippo?, finisher: boolean? }
 local runs: { [Model]: Run } = setmetatable({}, { __mode = "k" }) :: any
 local runToken = 0
 
@@ -1083,14 +1083,30 @@ local function newRun(model: Model, seconds: number): Run
 	return run
 end
 
+-- Cut short mid-move (stunned, knocked down, dead): the jet lets go, the
+-- gun is fumbled back and the run ends, so no later beat fires from the
+-- slung muzzle. (Not his finisher: its own stun does not cut it.)
+local function cutRun(model: Model)
+	local run = runs[model]
+	if run and not run.finisher and cutShort(model) then
+		stopJet(model)
+		endRun(model, true)
+	end
+end
+
 -- `fn` at `at` seconds, if this run is still going (and he isn't cut short).
 local function beat(model: Model, run: Run, at: number, fn: () -> ())
 	local token = run.token
 	task.delay(at, function()
 		local current = runs[model]
-		if current and current.token == token and model.Parent and not cutShort(model) then
-			fn()
+		if current == nil or current.token ~= token or model.Parent == nil then
+			return
 		end
+		if cutShort(model) then
+			cutRun(model)
+			return
+		end
+		fn()
 	end)
 end
 
@@ -1119,6 +1135,7 @@ local function gunBeats(model: Model, run: Run, grip: number, pilot: number?, sl
 		end)
 	end
 	beat(model, run, sling, function()
+		stopJet(model) -- (the jet lets go before the gun swings onto his back)
 		Flamethrower.trigger(model, false)
 		Flamethrower.setPilot(model, false)
 		Flamethrower.setGauge(model, nil)
@@ -1238,9 +1255,12 @@ function PyroFx.onAction(model: Model, animation: string)
 			squeeze(model)
 		end)
 	elseif animation == "Pyro_Spray" then
-		-- FUEL SPRAY: the pilot shut (0.27), a cold fan of raw fuel
-		-- (0.40 -> 0.62), the pilot relit (0.66): "now I light you".
-		gunBeats(model, run, 0.15, 0.2, 0.77)
+		-- FUEL SPRAY: drawn with the pilot already burning, shut (0.27), a
+		-- cold fan of raw fuel (0.40 -> 0.62), relit (0.66): "now I light you".
+		gunBeats(model, run, 0.15, nil, 0.77)
+		beat(model, run, 0.15, function()
+			Flamethrower.setPilot(model, true) -- (silent: lit since the draw)
+		end)
 		beat(model, run, 0.27, function()
 			Flamethrower.setPilot(model, false)
 			SoundLayers.play("PilotOut", model)
@@ -1272,20 +1292,20 @@ function PyroFx.onAction(model: Model, animation: string)
 		end)
 	elseif animation == "Pyro_Torch" then
 		-- BLOWTORCH: chambered, the thrust; the lance lit 0.04 s before
-		-- contact (0.22), the hit (0.26), it snaps off (0.36).
-		gunBeats(model, run, 0.08, 0.1, 0.45)
+		-- contact (0.22), the hit (0.26), it snaps off (0.35).
+		gunBeats(model, run, 0.08, 0.1, 0.43)
 		SoundController.play("HeavySwing", model)
 		beat(model, run, 0.16, function()
 			SoundLayers.play("FireSwing", model) -- (the hot muzzle swung in)
 		end)
 		beat(model, run, 0.22, function()
-			lance(model, 0.14)
+			lance(model, 0.13)
 			SoundLayers.play("TorchLance", model)
 		end)
 	elseif animation == "Pyro_Mortar" then
 		-- NAPALM MORTAR: braced at 45 deg, the shroud spits (overpressure),
 		-- the glob (0.45, the server) with a backflash and a big recoil.
-		gunBeats(model, run, 0.08, 0.1, 0.64)
+		gunBeats(model, run, 0.08, 0.1, 0.63)
 		beat(model, run, 0.25, function()
 			shroudSpit(model, 0.15)
 			Flamethrower.setGauge(model, 1)
@@ -1314,7 +1334,7 @@ function PyroFx.onAction(model: Model, animation: string)
 	elseif animation == "Pyro_Inferno" then
 		-- INFERNO: the handwheel cranked (0.2), the trigger (0.42); the
 		-- stream is the server's cone (0.45 -> 1.25), raked down the floor.
-		gunBeats(model, run, 0.08, 0.1, 1.34)
+		gunBeats(model, run, 0.08, 0.1, 1.33)
 		beat(model, run, 0.2, function()
 			Flamethrower.crankValve(model, 0.2)
 			SoundLayers.play("ValveCrank", model)
@@ -2439,6 +2459,19 @@ local function watch(instance: Instance)
 	model:GetAttributeChangedSignal(PyroConfig.IMMOLATED_ATTRIBUTE):Connect(function()
 		refreshImmolated(model)
 	end)
+	-- (stunned or knocked down mid-move: the move's later beats are dropped)
+	model:GetAttributeChangedSignal("Stunned"):Connect(function()
+		cutRun(model)
+	end)
+	model:GetAttributeChangedSignal("Ragdolled"):Connect(function()
+		cutRun(model)
+	end)
+	local humanoid = model:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.Died:Connect(function()
+			cutRun(model)
+		end)
+	end
 	Flamethrower.watch(model) -- (his flamethrower, slung on his back)
 	refreshDoused(model)
 	refreshArms(model)
@@ -2779,6 +2812,7 @@ local function onFinisherStarted(attacker: unknown, victim: unknown, id: unknown
 		old.cancelled = true
 	end
 	local run = newRun(attacker, cinematic.duration)
+	run.finisher = true
 	local show: Show = {
 		cancelled = false,
 		run = run,

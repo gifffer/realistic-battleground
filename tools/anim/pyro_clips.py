@@ -480,6 +480,14 @@ def holster_keys(t, length):
     return [carry, key((t + length) * 0.5, blend(carry["pose"], pose(), 0.55)), key(length, pose())]
 
 
+def swing_down(src, at, t, u=0.5):
+    """A key at `at`, part-way (`u`) from the pose `src` to the reach for
+    the slung grip at `t`: the gun brought down in one even swing instead of
+    a stop at the hip (no pop on a quick sling)."""
+    carry = reach(t, root_of(-6, -24, 0, 0, -0.04, 0))
+    return key(at, blend(src["pose"], carry["pose"], u))
+
+
 # --- SLOT 1: FLASH BURST (0.85): swings the gun up, blips the trigger: a
 # fireball pops in their face at 0.42 (the hit) ----------------------------------
 CLIPS["Pyro_Burst"] = {
@@ -592,8 +600,10 @@ DRAWN["Pyro_Awaken"] = [(0, "sling"), (0.08, "grip"), (0.83, "sling")]
 WINDOWS["Pyro_Awaken"] = [(0.45, 0.55, "pillar", (70, 90), 90)]
 SNAPS["Pyro_Awaken"] = [(0, 0.14)]
 
+_TORCH_HOLD = aim(0.335, root_of(-16, -47, 0, 0, -0.14, -0.42), 1, hips=stance(0.14, 20, -16), tangent="flat")
+
 # --- AWAKENED 1: BLOWTORCH (0.6): chambered at the hip, a bayonet thrust, the
-# lance lit at 0.22, the hit at 0.26, released 0.36 --------------------------------
+# lance lit at 0.22, the hit at 0.26, released 0.35 --------------------------------
 CLIPS["Pyro_Torch"] = {
     "length": 0.6,
     "keys": draw_keys(True) + [
@@ -601,17 +611,21 @@ CLIPS["Pyro_Torch"] = {
             note="Chamber"),
         aim(0.22, root_of(-12, -64, 0, 0, -0.12, 0.05), 0, hips=stance(0.12, 14, -12), note="Trigger"),
         aim(0.26, root_of(-17, -48, 0, 0, -0.14, -0.4), 0, hips=stance(0.14, 20, -17), note="Hit"),
-        aim(0.34, root_of(-16, -47, 0, 0, -0.14, -0.42), 1, hips=stance(0.14, 20, -16), tangent="flat"),
-        aim(0.4, root_of(-10, -50, 0, 0, -0.1, -0.2), -4, hips=stance(0.1, 12, -10)),
-    ] + holster_keys(0.45, 0.6),
+        _TORCH_HOLD,
+        # (pulled back out of them in one even swing to the slung grip)
+        swing_down(_TORCH_HOLD, 0.38, 0.43, 0.48),
+    ] + holster_keys(0.43, 0.6),
 }
-DRAWN["Pyro_Torch"] = [(0, "sling"), (0.08, "grip"), (0.45, "sling")]
-WINDOWS["Pyro_Torch"] = [(0.22, 0.36, "lance", (-6, 3), 4)]
-SNAPS["Pyro_Torch"] = [(0, 0.16), (0.4, 0.6)]
+DRAWN["Pyro_Torch"] = [(0, "sling"), (0.08, "grip"), (0.43, "sling")]
+WINDOWS["Pyro_Torch"] = [(0.22, 0.35, "lance", (-6, 3), 4)]
+SNAPS["Pyro_Torch"] = [(0, 0.16)]
 
 # --- AWAKENED 2: NAPALM MORTAR (0.8): braced like a mortar at 45 deg, the
 # shroud spits (0.25-0.4), the glob at 0.45, a big recoil ---------------------------
 MORTAR_HIPS = stance(0.2, 14, 0)
+# (the recoil: shoved back, the muzzle kicked up)
+_MORTAR_KICK = aim(0.49, root_of(10, -46, 0, 0, -0.18, 0.4), 55, hips=stance(0.18, 14, 10), look=(0, 18),
+                   rs_ref=(90, -10, -60))
 CLIPS["Pyro_Mortar"] = {
     "length": 0.8,
     "keys": draw_keys(True) + [
@@ -623,16 +637,15 @@ CLIPS["Pyro_Mortar"] = {
             rs_ref=(90, -10, -60), tangent="flat", note="Trigger"),
         aim(0.45, root_of(-3, -48, 0, 0, -0.26, -0.02), 45, hips=stance(0.26, 14, -3), look=(0, 14),
             rs_ref=(90, -10, -60), note="Release"),
-        aim(0.52, root_of(10, -46, 0, 0, -0.18, 0.4), 59, hips=stance(0.18, 14, 10), look=(0, 18),
-            rs_ref=(90, -10, -60)),
-        aim(0.6, root_of(2, -48, 0, 0, -0.14, 0.2), 40, hips=stance(0.14, 18, 2), look=(0, 10),
-            rs_ref=(90, -10, -60), tangent="flat"),
-    ] + holster_keys(0.64, 0.8),
+        _MORTAR_KICK,
+        # (down from the sky in one even swing to the slung grip)
+        swing_down(_MORTAR_KICK, 0.56, 0.63),
+    ] + holster_keys(0.63, 0.8),
 }
-DRAWN["Pyro_Mortar"] = [(0, "sling"), (0.08, "grip"), (0.64, "sling")]
+DRAWN["Pyro_Mortar"] = [(0, "sling"), (0.08, "grip"), (0.63, "sling")]
 WINDOWS["Pyro_Mortar"] = [(0.4, 0.46, "mortar", (40, 50), 4)]
 RELEASES["Pyro_Mortar"] = [0.45]
-SNAPS["Pyro_Mortar"] = [(0, 0.18), (0.6, 0.8)]
+SNAPS["Pyro_Mortar"] = [(0, 0.18)]
 
 
 # --- AWAKENED 3: INFERNO (1.5): low and wide, the handwheel cranked (0.22-0.4),
@@ -642,6 +655,7 @@ def inferno(time, yaw, pitch=-3, lean=-16, drop=-0.24, **kw):
                look=(yaw * 0.5, min(0, pitch * 0.5)), **kw)
 
 
+_INFERNO_RAKE = inferno(1.25, 0, pitch=-20, lean=-20, tangent="flat", note="Release")
 CLIPS["Pyro_Inferno"] = {
     "length": 1.5,
     "keys": draw_keys(True) + [
@@ -654,12 +668,13 @@ CLIPS["Pyro_Inferno"] = {
         inferno(0.86, 0),
         inferno(1.0, -16),
         inferno(1.1, -10, pitch=-13),
-        inferno(1.25, 0, pitch=-20, lean=-20, tangent="flat", note="Release"),
-    ] + holster_keys(1.34, 1.5),
+        _INFERNO_RAKE,
+        swing_down(_INFERNO_RAKE, 1.295, 1.33, 0.55),
+    ] + holster_keys(1.33, 1.5),
 }
-DRAWN["Pyro_Inferno"] = [(0, "sling"), (0.08, "grip"), (1.34, "sling")]
+DRAWN["Pyro_Inferno"] = [(0, "sling"), (0.08, "grip"), (1.33, "sling")]
 WINDOWS["Pyro_Inferno"] = [(0.45, 1.0, "inferno", (-6, 3), 18), (1.12, 1.25, "rake", (-22, -10), 12)]
-SNAPS["Pyro_Inferno"] = [(0, 0.2), (1.25, 1.5)]
+SNAPS["Pyro_Inferno"] = [(0, 0.2)]
 
 
 # --- AWAKENED 4: TORCH CHARGE (0.9): a low charge behind a wedge of fire
@@ -682,7 +697,7 @@ CLIPS["Pyro_TorchCharge"] = {
 }
 DRAWN["Pyro_TorchCharge"] = [(0, "sling"), (0.08, "grip"), (0.73, "sling")]
 WINDOWS["Pyro_TorchCharge"] = [(0.16, 0.55, "wedge", (-16, -6), 4)]
-SNAPS["Pyro_TorchCharge"] = [(0, 0.14), (0.64, 0.9)]
+SNAPS["Pyro_TorchCharge"] = [(0, 0.14)]
 
 
 # --- FINISHER: IMMOLATION (5.8, Shared/Finishers "Immolate") -------------------------

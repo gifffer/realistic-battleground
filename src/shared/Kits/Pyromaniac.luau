@@ -89,9 +89,11 @@ local kit: KitTypes.KitDef = {
 				flask = {
 					kind = "Napalm",
 					release = 0.62,
-					speed = 58,
-					lift = 18,
-					gravity = 75,
+					-- (it leaves along the barrel: lift / speed = tan 35 deg; the
+					-- same reach on flat ground, a higher arc)
+					speed = 44,
+					lift = 31,
+					gravity = 80,
 					lifetime = 2.4,
 					-- (the muzzle at the release, 35 deg up: tools/anim/pyro_clips.py --check)
 					origin = Vector3.new(0.84, 2.7, -3),
@@ -216,9 +218,11 @@ local kit: KitTypes.KitDef = {
 					flask = {
 						kind = "Napalm",
 						release = 0.45,
-						speed = 60,
-						lift = 24,
-						gravity = 75,
+						-- (along the barrel: lift = speed, 45 deg; the same reach,
+						-- a mortar's high arc)
+						speed = 46,
+						lift = 46,
+						gravity = 93,
 						lifetime = 2.6,
 						-- (the muzzle at the release, 45 deg up)
 						origin = Vector3.new(0.78, 3.2, -2.4),

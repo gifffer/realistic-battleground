@@ -709,7 +709,7 @@ local sounds: { [string]: SoundInfo } = {
 			[9114445526] = { start = 0.05 },
 		},
 	},
-	-- FuelSplash: petrol flung from a metal jerrycan onto a person
+	-- FuelSplash: raw fuel sprayed out of a flamethrower nozzle onto a person
 	FuelSplash_Transient = { ids = {}, volume = 0.56, pitch = 1, pitchVariation = 0.06 },
 	FuelSplash_Mechanism = {
 		ids = { 9126173160 },

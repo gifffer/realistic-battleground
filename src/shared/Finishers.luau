@@ -776,21 +776,14 @@ cinematics.Immolate = {
 			look = Vector3.new(-0.6, 1.1, 0.2),
 			fov = 36,
 		},
-		-- Very close on his face and the burner as the pilot pops blue.
+		-- Very close on his face and the burner as the pilot pops blue, held
+		-- through their begging (heard, not seen) until the muzzle comes down.
 		{
 			time = 2.3,
 			from = Vector3.new(-1.6, 1.7, -2.2),
-			to = Vector3.new(-1.5, 1.65, -2.05),
+			to = Vector3.new(-1.4, 1.6, -1.9),
 			look = Vector3.new(-0.5, 1.3, 0.6),
 			fov = 30,
-		},
-		-- The still beat: their face, from above, begging.
-		{
-			time = 2.4,
-			from = Vector3.new(-1.6, 0.2, -2.9),
-			to = Vector3.new(-1.55, 0.1, -2.85),
-			look = "victim",
-			fov = 38,
 		},
 		-- Side on: the muzzle lowered to their face.
 		{

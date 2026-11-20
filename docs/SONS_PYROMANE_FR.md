@@ -148,7 +148,7 @@ Pas nécessaire. Mais pour un son encore plus précis, chaque fiche plus bas don
 | [`FuelIgnite`](#fuelignite) | L'essence répandue qui s'embrase : la boule de feu. | Juste après GlobSplat (la flaque prend feu). |
 | [`PoolFire`](#poolfire) | La flaque d'essence qui brûle (BOUCLE, tant que le feu dure). **BOUCLE** | Pendant tout le feu au sol (napalm, INFERNO), en 3D sur la flaque, baisse quand le feu meurt. |
 | [`FireBreath`](#firebreath) | Le cracheur de feu : l'essence pulvérisée à travers la flamme, un jet de feu qui rugit. | FLAME STREAM (0,45 s → 1 s), TORCH CHARGE (le jet devant lui) et le pilier de l'Awakening (0,45 s). |
-| [`FuelSplash`](#fuelsplash) | L'essence projetée hors du jerrican sur quelqu'un (DOUSE). | FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé. |
+| [`FuelSplash`](#fuelsplash) | Le carburant cru pulvérisé par la buse (FUEL SPRAY, IMMOLATION). | FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé. |
 | [`BodyBurn`](#bodyburn) | Un corps et ses vêtements en feu (BOUCLE). Aussi, plus bas, ses poings en feu pendant l'Awakening. **BOUCLE** | Sur la victime du finisher pendant qu'elle brûle, et (en plus faible) sur les avant-bras du Pyromane en Awakening. |
 | [`SelfIgnite`](#selfignite) | Il allume ses propres avant-bras imbibés d'essence (BURNING MAN). | L'activation de l'Awakening (0,55 s) : le retour de flamme sur ses avant-bras. |
 | [`BodyIgnite`](#bodyignite) | Le corps imbibé qui s'embrase d'un coup (« whump »). | IMMOLATION, à 3,05 s (le jet à bout portant). |
@@ -447,16 +447,16 @@ A jet of flame curling up and dying out in the air, rolling flutter with crackle
 
 ## FuelSplash
 
-L'essence projetée hors du jerrican sur quelqu'un (DOUSE). **Quand :** FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé.
+Le carburant cru pulvérisé par la buse (FUEL SPRAY, IMMOLATION). **Quand :** FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé.
 
-> *Brief :* Design a layered sound effect for petrol flung from a metal jerrycan onto a person. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
+> *Brief :* Design a layered sound effect for raw fuel sprayed out of a flamethrower nozzle onto a person. Break it into transient, mechanism, body, sub, and tail layers, and for each give the source, pitch range, texture, and timing. Then write one ready-to-paste audio generation prompt per layer, plus suggested mix levels.
 
 ### Les couches (design)
 
 | Couche | Source | Hauteur (Hz) | Texture | Début | Durée |
 |---|---|---|---|---|---|
 | Transitoire (l'attaque) | Le liquide qui sort d'un coup du bec | 500 Hz-6 kHz | claque de liquide lancée | 0 ms | 80 ms |
-| Mécanique | Le jerrican en tôle qui se tord et la poignée qui grince | 200 Hz-3 kHz | « bonk » de tôle creuse, grincement | 0 ms | 250 ms |
+| Mécanique | Le réservoir en tôle qui cogne et la poignée qui grince | 200 Hz-3 kHz | « bonk » de tôle creuse, grincement | 0 ms | 250 ms |
 | Corps | L'arc d'essence qui s'écrase sur le corps et le sol | 150 Hz-5 kHz | grande éclaboussure étalée, mouillée | 50 ms | 500 ms |
 | Grave (sub) | Le poids du liquide | 40-140 Hz | « floc » grave | 40 ms | 200 ms |
 | Queue (la fin) | Les gouttes qui tombent | 1-8 kHz | gouttes et filets qui ruissellent | 400 ms | 1300 ms |

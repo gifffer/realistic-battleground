@@ -179,14 +179,14 @@ CUES = [
     },
     {
         "name": "FuelSplash",
-        "thing": "petrol flung from a metal jerrycan onto a person",
-        "fr": "L'essence projetée hors du jerrican sur quelqu'un (DOUSE).",
+        "thing": "raw fuel sprayed out of a flamethrower nozzle onto a person",
+        "fr": "Le carburant cru pulvérisé par la buse (FUEL SPRAY, IMMOLATION).",
         "when": "FUEL SPRAY (0,4 s) : le carburant cru pulvérisé ; IMMOLATION (0,4 s) : le carburant versé.",
         "gain": -2,
         "layers": [
             ("Le liquide qui sort d'un coup du bec", "500 Hz-6 kHz", "claque de liquide lancée", 0, 80, -3,
              "Sudden slap of liquid thrown out of a can spout, sharp wet burst, close, isolated, 0.1 seconds."),
-            ("Le jerrican en tôle qui se tord et la poignée qui grince", "200 Hz-3 kHz", "« bonk » de tôle creuse, grincement", 0, 250, -8,
+            ("Le réservoir en tôle qui cogne et la poignée qui grince", "200 Hz-3 kHz", "« bonk » de tôle creuse, grincement", 0, 250, -8,
              "Hollow metal jerrycan flexing with a dull bonk as it is swung, handle creak, isolated, 0.3 seconds."),
             ("L'arc d'essence qui s'écrase sur le corps et le sol", "150 Hz-5 kHz", "grande éclaboussure étalée, mouillée", 50, 500, 0,
              "Wide arc of liquid splashing over a person and onto concrete, heavy wet splatter, isolated, 0.6 seconds."),
