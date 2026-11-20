@@ -202,14 +202,14 @@ end
 local function mergeAlleys(data: CityData)
 	-- (in pieces AlleyData1, AlleyData2... like CityData: Studio's script size limit)
 	local pieces = {}
-	local index = 1
+	local pieceIndex = 1
 	while true do
-		local module = script:FindFirstChild(`AlleyData{index}`)
+		local module = script:FindFirstChild(`AlleyData{pieceIndex}`)
 		if module == nil or not module:IsA("ModuleScript") then
 			break
 		end
 		table.insert(pieces, require(module) :: any)
-		index += 1
+		pieceIndex += 1
 	end
 	if #pieces == 0 then
 		return
