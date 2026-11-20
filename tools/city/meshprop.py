@@ -27,8 +27,15 @@ props_*.py fallbacks do with Frame.sub).
 
 import json
 import os
+import random
 
-from citykit import DECOR
+from citykit import DECOR, yxz_angles
+
+# The prop libraries (props_*.py) swap some of their own sub-objects for kit pieces (a stall's
+# goods, a rack's jackets, a stack's crates, a door's bulkhead...) through lib_meshprop(). That
+# is OFF by default, so their previews and --check part counts stay the primitive props; a
+# generator that wants the kit (tools/city/alleys.py) sets meshprop.LIBS = True before building.
+LIBS = False
 
 _INFO = None
 _INFO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "cityprops", "pieces.json")
@@ -71,3 +78,37 @@ def meshprop(D, folder, piece, origin, ry, rx=0.0, rz=0.0, size=None, tint=None,
         with D.under(marker):
             fallback()
     return marker
+
+
+def lib_meshprop(D, folder, piece, origin, ry, fallback, **kw):
+    """meshprop() when LIBS is on, else just fallback() (the primitive prop, no marker). For the
+    prop libraries' own sub-objects. Returns the marker's row index or None."""
+    if LIBS:
+        return meshprop(D, folder, piece, origin, ry, fallback=fallback, **kw)
+    fallback()
+    return None
+
+
+def frame_meshprop(D, folder, piece, frame, fallback=None, lib=False, **kw):
+    """meshprop() at a citykit.Frame's origin, turned like the frame (any rotation: its YXZ
+    angles). `lib`: through lib_meshprop (only when LIBS is on)."""
+    rx, ry, rz = yxz_angles(frame.m)
+    origin = tuple(float(v) for v in frame.origin)
+    if lib:
+        return lib_meshprop(D, folder, piece, origin, ry, fallback or (lambda: None), rx=rx, rz=rz, **kw)
+    return meshprop(D, folder, piece, origin, ry, rx=rx, rz=rz, fallback=fallback, **kw)
+
+
+def variation(*key):
+    """A random.Random seeded by `key` (deterministic across runs): the kit variant / tint / small
+    tilt of one placed copy, drawn WITHOUT touching the props' own rng (so the primitive layout,
+    which is the fallback, stays exactly as it was)."""
+    return random.Random("|".join(str(k) for k in key))
+
+
+def weathered(rgb, rng, amount=10, grey=0.12):
+    """A real object's colour as it is after years outside: a little off its catalogue colour,
+    slightly desaturated toward its own grey. (r, g, b) 0..255."""
+    m = sum(rgb) / 3
+    return tuple(max(0, min(255, round(c + (m - c) * grey * rng.uniform(0.5, 1.5) + rng.uniform(-amount, amount))))
+                 for c in rgb)

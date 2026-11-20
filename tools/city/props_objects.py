@@ -73,6 +73,8 @@ from citykit import (  # noqa: E402
     yxz_matrix,
 )
 import zlayers  # noqa: E402
+import meshprop as MESHPROP  # noqa: E402
+from meshprop import frame_meshprop, lib_meshprop, variation, weathered  # noqa: E402
 
 CARDBOARD_MAT = "Cardboard"  # the 2024 material; "SmoothPlastic" if a build ever lacks it
 
@@ -400,7 +402,7 @@ def _streak(f, rng, x, ytop, z, face, length=None, color=RUST_DARK):
 # Bins, skips, the container, drums
 # =============================================================================================
 @prop({"lid": "closed"}, {"lid": "open"}, {"lid": "half"}, {"lid": "open", "color": (40, 54, 74), "full": True})
-def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, against_wall=False):
+def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, against_wall=False, lids=None):
     """A big steel commercial dumpster (front-load skip): sloped top, the body's shell with three
     stamped ribs on the front, corner posts, a rolled rim, fork pockets on both sides, two black
     plastic lids on hinges (closed / one or both thrown back "open" / one propped up by the rubbish
@@ -408,7 +410,8 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
     corners, drip streaks, a faded info plate, a sprayed tag. When open, bin bags and cardboard
     bulge over the rim. Its back goes against a wall (+Z).
     Footprint ~6 x 3.6 studs (+0.4 pockets), 3.9-4.6 tall (open lids to ~7.5). 45-65 parts;
-    shell and lids PROP, the rest DECOR."""
+    shell and lids PROP, the rest DECOR. `lids`: force each lid's state ("c" closed, "o" open,
+    "h" half; the -X lid first), e.g. to match the kit's lid markers placed over it."""
     f = Frame(D, folder, origin, ry=ry)
     lid = lid or _pick(rng, ["closed", "closed", "open", "half"])
     full = (rng.random() < 0.7) if full is None else full
@@ -466,6 +469,7 @@ def dumpster(D, folder, origin, ry, rng, lid=None, color=None, full=None, agains
         "open": _pick(rng, [("o", "o"), ("o", "c"), ("c", "o")]),
         "half": _pick(rng, [("h", "c"), ("c", "h"), ("h", "o")]),
     }[lid]
+    states = tuple(lids) if lids else states
     lid_col = _tone(_pick(rng, [LID_BLACK, LID_BLACK, dark]), rng, 4)
     open_sides = []
     for s, st in zip((-1, 1), states):
@@ -1080,17 +1084,22 @@ def plastic_crates(D, folder, origin, ry, rng, count=None, color=None):
     for i in range(stack):
         col = _tone(base if rng.random() < 0.75 else _pick(rng, PLASTIC_CRATE), rng, 8, darken=rng.uniform(0.05, 0.3))
         g = f.sub((rng.uniform(-0.06, 0.06), y, rng.uniform(-0.06, 0.06)), ry=rng.uniform(-6, 6))
-        _plastic_crate(g, rng, col, w, d, h)
-        if rng.random() < 0.35:
-            _skin(g, "Marker", (rng.uniform(-0.4, 0.4), h * 0.22, -d / 2), rng.uniform(0.4, 0.8), 0.12, "-z",
-                  (24, 24, 26), spin=rng.uniform(-8, 8))
+
+        def crate(g=g, col=col):
+            _plastic_crate(g, rng, col, w, d, h)
+            if rng.random() < 0.35:
+                _skin(g, "Marker", (rng.uniform(-0.4, 0.4), h * 0.22, -d / 2), rng.uniform(0.4, 0.8), 0.12, "-z",
+                      (24, 24, 26), spin=rng.uniform(-8, 8))
+
+        frame_meshprop(D, folder, "PlasticCrate", g.sub((0, 0.004 * i, 0)), crate, lib=True, tint=col)
         y += h
     if stack < count:
         # (in front of the stack, -Z: the side away from the wall the stack stands against)
         # (on its side its height runs back toward the stack: its bottom is h + 0.55..0.85 in front)
         g = f.sub((rng.uniform(-0.3, 0.3), d / 2, -d / 2 - h - rng.uniform(0.55, 0.85)), ry=rng.uniform(-20, 20),
                   rx=90)
-        _plastic_crate(g, rng, _tone(base, rng, 8, 0.2), w, d, h)
+        col = _tone(base, rng, 8, 0.2)
+        frame_meshprop(D, folder, "PlasticCrate", g, lambda: _plastic_crate(g, rng, col, w, d, h), lib=True, tint=col)
 
 
 # =============================================================================================
@@ -1218,7 +1227,7 @@ def folding_table(D, folder, origin, ry, rng, kind=None, cloth=None, w=None, d=N
 
 
 @prop({}, {"w": 10, "d": 7}, {"light": False, "torn": True})
-def market_canopy(D, folder, origin, ry, rng, w=None, d=None, light=True, torn=None, color=None):
+def market_canopy(D, folder, origin, ry, rng, w=None, d=None, light=True, torn=None, color=None, pin=False):
     """A makeshift stall canopy: one woven tarp stretched over four mismatched poles (scaffold
     tube, a length of timber, conduit) footed in cinder blocks and a bucket of concrete, higher at
     the front, sagging in the middle where rain pools (a dark wet patch), its front edge hanging
@@ -1227,7 +1236,9 @@ def market_canopy(D, folder, origin, ry, rng, w=None, d=None, light=True, torn=N
     The sheet is five strips of one colour following the sag (each tilted differently, so no two
     faces are coplanar); the pool, the tape and the hole lie on their strip, in its frame.
     Footprint w x d (default ~8 x 6) studs + 1.5 for the ropes, 6.5-7.8 tall. 27-34 parts;
-    poles SMALL, the tarp DECOR_SHADOW (too high to touch)."""
+    poles SMALL, the tarp DECOR_SHADOW (too high to touch).
+    `pin`: the poles exactly at the corners and plumb (the same rng draws, unused), so they match
+    the kit's MarketTarp when they are its collision proxies."""
     f = Frame(D, folder, origin, ry=ry)
     W = w or rng.uniform(7.5, 9)
     Dp = d or rng.uniform(5.5, 6.5)
@@ -1239,9 +1250,13 @@ def market_canopy(D, folder, origin, ry, rng, w=None, d=None, light=True, torn=N
         for sz in (-1, 1):
             x, z = sx * W / 2 + rng.uniform(-0.15, 0.15), sz * Dp / 2 + rng.uniform(-0.15, 0.15)
             h = (hf if sz < 0 else hb) + rng.uniform(-0.15, 0.15)
+            if pin:
+                x, z = sx * W / 2, sz * Dp / 2
             corners[(sx, sz)] = (x, h, z)
             kind = rng.randrange(3)
             lean = (x + rng.uniform(-0.25, 0.25), 0.15, z + rng.uniform(-0.25, 0.25))  # (its foot inside the block)
+            if pin:
+                lean = (x, 0.15, z)
             if kind == 0:
                 _rod(f, "CanopyPole", lean, (x, h, z), 0.2, _tone(GALVANISED, rng, 8, 0.3), "Metal", flags=SMALL)
             elif kind == 1:
@@ -1334,7 +1349,7 @@ def _open_box(f, rng, w, d, h, col, mat, name, t=0.04, b=0.04, flags=DECOR, tone
 GOODS_FOOT = {
     "phone_tray": (1.62, 1.37),
     "watch_case": (1.62, 1.52),
-    "cash_box": (1.06, 1.1),
+    "cash_box": (1.06, 1.15),  # (the kit's open lid and key tag reach z -0.52..0.60)
     "shoe_boxes": (2.5, 1.5),
 }
 
@@ -1670,16 +1685,24 @@ def clothes_rack(D, folder, origin, ry, rng, count=None, fallen=None):
     W, H = 4.8, 5.2
     mc = _tone((150, 150, 148), rng, 8, darken=rng.uniform(0.15, 0.35))
     bend = rng.uniform(-4, 4)
-    for s in (-1, 1):
-        x = s * W / 2
-        _rod(f, "RackUpright", (x, 0.35, 0), (x + (bend * 0.03 if s > 0 else 0), H, 0), 0.14, mc, "Metal", flags=SMALL)
-        _rod(f, "RackFoot", (x, 0.3, -0.9), (x, 0.3, 0.9), 0.14, mc, "Metal")
-        for u in (-1, 1):
-            _ball(f, "Castor", (x, 0.14, u * 0.85), 0.28, RUBBER, "Rubber")
-    _rod(f, "RackRail", (-W / 2, H, 0), (W / 2 + bend * 0.03, H, 0), 0.12, mc, "Metal", extend=0.1)
-    _rod(f, "RackBase", (-W / 2, 0.45, 0), (W / 2, 0.45, 0), 0.12, mc, "Metal")
+
+    def rack():
+        for s in (-1, 1):
+            x = s * W / 2
+            _rod(f, "RackUpright", (x, 0.35, 0), (x + (bend * 0.03 if s > 0 else 0), H, 0), 0.14, mc, "Metal",
+                 flags=SMALL)
+            _rod(f, "RackFoot", (x, 0.3, -0.9), (x, 0.3, 0.9), 0.14, mc, "Metal")
+            for u in (-1, 1):
+                _ball(f, "Castor", (x, 0.14, u * 0.85), 0.28, RUBBER, "Rubber")
+        _rod(f, "RackRail", (-W / 2, H, 0), (W / 2 + bend * 0.03, H, 0), 0.12, mc, "Metal", extend=0.1)
+        _rod(f, "RackBase", (-W / 2, 0.45, 0), (W / 2, 0.45, 0), 0.12, mc, "Metal")
+
+    lib_meshprop(D, folder, "ClothesRack", origin, ry, rack)
+    kit = MESHPROP.LIBS  # (the kit swaps the jackets: they are spaced for its pieces)
+    vr = variation("clothes_rack", *(round(float(v), 2) for v in origin))
     kinds = [(_pick(rng, ["Leather", "Fabric", "Fabric", "Plastic"])) for _ in range(count)]
-    thick = [0.64 if m == "Plastic" else 0.44 for m in kinds]  # a puffer is fat
+    # (along the rail: a puffer is fat; the kit's jackets are 0.56 / 0.70 deep, + their few degrees of yaw)
+    thick = [(0.66 if m == "Leather" else 0.8) if kit else (0.64 if m == "Plastic" else 0.44) for m in kinds]
     room = W - 1.2 - sum(thick)
     while room < 0.1 * count and len(kinds) > 1:  # (never more jackets than fit)
         kinds.pop()
@@ -1688,34 +1711,55 @@ def clothes_rack(D, folder, origin, ry, rng, count=None, fallen=None):
     x = -W / 2 + 0.6
     lift = [0.0, 0.05, 0.1]
     rng.shuffle(lift)
+    last = None
     for i, (mat, tk) in enumerate(zip(kinds, thick)):
         x += rng.uniform(0.06, room / len(kinds)) + tk / 2
         jc = _tone(_pick(rng, JACKET), rng, 6, darken=rng.uniform(0, 0.25))
-        g = f.sub((x, H, 0), ry=90 + rng.uniform(-6, 6), rz=rng.uniform(-3, 3))
+        u, v = rng.uniform(-6, 6), rng.uniform(-3, 3)
+        if kit:
+            u *= 0.4  # (the kit jackets are 1.95 wide: a big yaw would swing them into their neighbours)
+        g = f.sub((x, H, 0), ry=90 + u, rz=v)
         x += tk / 2
-        hc = (120, 120, 120)
-        _rod(g, "Hanger", (0, 0.07, -0.05), (0, -0.14, 0), 0.03, hc, "Metal")
-        for s in (-1, 1):
-            _rod(g, "Hanger", (0, -0.14, 0), (s * 0.7, -0.33, 0), 0.035, hc, "Metal")
         jl = rng.uniform(2.2, 2.9)
-        hz = tk / 2
         top = -0.48 - lift[i % 3]
-        g.box("Jacket", (-0.75, top - jl, -hz), (0.75, top, hz), jc, mat, flags=DECOR_SHADOW)
-        for s in (-1, 1):  # the shoulders under the hanger's arms, sloping
-            g.part("Jacket", (s * 0.4, top + 0.02, 0), (0.75, 0.16, tk - 0.13), _tone(jc, rng, 3), mat,
-                   rot=(0, 0, s * -15))
-        g.box("JacketCollar", (-0.28, top - 0.04, -hz - 0.07), (0.28, top + 0.2, hz + 0.07), _tone(jc, rng, 4, 0.15),
-              mat)
-        for s in (-1, 1):
-            g.part("Sleeve", (s * 0.86, top - 0.1 - jl * 0.42, 0), (0.3, jl * 0.8, tk * 0.7), _tone(jc, rng, 4, 0.05),
-                   mat, rot=(rng.uniform(-6, 6), 0, s * rng.uniform(4, 10)))
-    for _ in range(fallen):
+        if mat == "Leather":
+            piece = "Jacket1" if vr.random() < 0.5 else "Jacket1Brown"
+            tint = None
+        else:
+            piece, tint = "Jacket2", weathered(jc, vr, 6, 0.1)
+        if piece == last and piece != "Jacket2":
+            piece = "Jacket1Brown" if piece == "Jacket1" else "Jacket1"  # (never two identical side by side)
+        last = piece
+        frame_meshprop(D, folder, piece, g, lib=True, tint=tint,
+                       fallback=lambda g=g, jc=jc, mat=mat, tk=tk, jl=jl, top=top: _rack_jacket(g, rng, jc, mat, tk,
+                                                                                                    jl, top))
+    for _ in range(0 if kit else fallen):  # (the heap of a fallen jacket: no kit piece, left out with the kit)
         jc = _tone(_pick(rng, JACKET), rng, 6, darken=0.2)
         x = rng.uniform(-1.5, 1.5)
         f.part("Jacket", (x, 0.2, rng.uniform(-0.6, 0.3)), (1.6, 0.4, 1.3), jc, "Fabric",
                rot=(rng.uniform(-8, 8), rng.uniform(0, 180), rng.uniform(-8, 8)), flags=DECOR_SHADOW)
         f.part("Sleeve", (x + 0.7, 0.15, rng.uniform(-0.8, -0.4)), (1.4, 0.3, 0.35), jc, "Fabric",
                rot=(rng.uniform(-6, 6), rng.uniform(0, 180), rng.uniform(4, 9)))
+
+
+def _rack_jacket(g, rng, jc, mat, tk, jl, top):
+    """One jacket on its wire hanger, hung across the rail at g (g's origin on the rail, its Z
+    along the rail): the hook, the hanger's arms, a body with sloping shoulders, a collar standing
+    7 cm proud, two limp sleeves (the primitive fallback of the kit's Jacket pieces)."""
+    hc = (120, 120, 120)
+    _rod(g, "Hanger", (0, 0.07, -0.05), (0, -0.14, 0), 0.03, hc, "Metal")
+    for s in (-1, 1):
+        _rod(g, "Hanger", (0, -0.14, 0), (s * 0.7, -0.33, 0), 0.035, hc, "Metal")
+    hz = tk / 2
+    g.box("Jacket", (-0.75, top - jl, -hz), (0.75, top, hz), jc, mat, flags=DECOR_SHADOW)
+    for s in (-1, 1):  # the shoulders under the hanger's arms, sloping
+        g.part("Jacket", (s * 0.4, top + 0.02, 0), (0.75, 0.16, tk - 0.13), _tone(jc, rng, 3), mat,
+               rot=(0, 0, s * -15))
+    g.box("JacketCollar", (-0.28, top - 0.04, -hz - 0.07), (0.28, top + 0.2, hz + 0.07), _tone(jc, rng, 4, 0.15),
+          mat)
+    for s in (-1, 1):
+        g.part("Sleeve", (s * 0.86, top - 0.1 - jl * 0.42, 0), (0.3, jl * 0.8, tk * 0.7), _tone(jc, rng, 4, 0.05),
+               mat, rot=(rng.uniform(-6, 6), 0, s * rng.uniform(4, 10)))
 
 
 @prop({}, {"open": False})
@@ -1822,7 +1866,14 @@ def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=Fal
     goods = goods or _pick(rng, ["electronics", "electronics", "clothes"])
     yaw = _yaw(f)
     cw, cd = (6.8, 5.4) if compact else (rng.uniform(8.5, 9.5), rng.uniform(6, 7))
-    market_canopy(D, folder, _w(f, 0, 0.5), yaw, rng, w=cw, d=cd, light=light)
+    vr = variation("market_stall", *(round(float(v), 2) for v in origin))
+    if compact:  # (the kit's MarketTarp is this size: 6.8 x 5.4 between the poles)
+        tarp = weathered(_pick(vr, TARP), vr, 6, 0.15)
+        lib_meshprop(D, folder, "MarketTarp", _w(f, 0, 0.5), yaw, tint=tarp,
+                     fallback=lambda: market_canopy(D, folder, _w(f, 0, 0.5), yaw, rng, w=cw, d=cd, light=light,
+                                                    color=tarp, pin=True))
+    else:
+        market_canopy(D, folder, _w(f, 0, 0.5), yaw, rng, w=cw, d=cd, light=light)
     tw = 4.8 if compact else rng.uniform(5.5, 6.2)
     td = rng.uniform(2.4, 2.7)
     tyaw = yaw + rng.uniform(-3, 3)
@@ -1849,14 +1900,31 @@ def market_stall(D, folder, origin, ry, rng, goods=None, light=True, compact=Fal
             seen.add(it[0])
     lay = _lay_goods(rng, placed, tw, td)
     top = _table(D, folder, tpos, tyaw, rng, w=tw, d=td, clear=[r[5] for r in lay])
+    kit = {"phone_tray": "PhoneTray", "watch_case": "WatchCase", "cash_box": "CashBox"}
     for fn, opts, x, z, gyaw, _ in lay:
-        fn(D, folder, tuple(float(v) for v in tf.world((x, top + 0.01, z))), tyaw + gyaw, rng, **opts)
+        at = tuple(float(v) for v in tf.world((x, top + 0.01, z)))
+
+        def goods_fn(fn=fn, at=at, gyaw=gyaw, opts=opts):
+            fn(D, folder, at, tyaw + gyaw, rng, **opts)
+
+        piece = kit.get(fn.__name__)
+        if piece and opts.get("open", True):  # (the kit has them open; the goods stand 0.012 above it)
+            tint = None
+            if piece == "CashBox":
+                tint = weathered(_pick(vr, [(62, 66, 74), (120, 36, 32), (40, 60, 110)]), vr, 6)
+            lib_meshprop(D, folder, piece, tuple(float(v) for v in tf.world((x, top, z))), tyaw + gyaw, goods_fn,
+                         tint=tint)
+        else:
+            goods_fn()
     if goods == "electronics":
         if rng.random() < 0.6:
-            tv(D, folder, _w(f, rng.uniform(-0.4, 0.4), 1.75), yaw + 180 + rng.uniform(-10, 10), rng, kind="crt",
-               state="ok")
+            at, a = _w(f, rng.uniform(-0.4, 0.4), 1.75), yaw + 180 + rng.uniform(-10, 10)
+            lib_meshprop(D, folder, "CrtTv", at, a, lambda: tv(D, folder, at, a, rng, kind="crt", state="ok"),
+                         tint=weathered(_pick(vr, [(58, 56, 54), (112, 106, 94), (72, 62, 52)]), vr, 5))
         else:
-            radio(D, folder, _w(f, rng.uniform(-0.5, 0.5), 1.5), yaw + rng.uniform(-15, 15), rng)
+            at, a = _w(f, rng.uniform(-0.5, 0.5), 1.5), yaw + rng.uniform(-15, 15)
+            lib_meshprop(D, folder, "Radio", at, a, lambda: radio(D, folder, at, a, rng),
+                         tint=weathered(_pick(vr, [(46, 46, 48), (150, 150, 154), (70, 70, 74)]), vr, 5))
     else:
         clothes_rack(D, folder, _w(f, rng.uniform(-0.3, 0.3), 1.9), yaw + rng.uniform(-6, 6), rng,
                      count=rng.randint(4, 5))

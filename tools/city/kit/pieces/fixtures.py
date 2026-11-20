@@ -465,7 +465,7 @@ def _offset2(pts, d):
 def _gooseneck(ctx, dead):
     ctx.budget = 4900
     ctx.smooth_angle = 50
-    ctx.tint("MetalPainted", (38, 56, 46))  # bottle-green enamel gone dull (outside of the shade)
+    ctx.tint("MetalPainted", (38, 56, 46))  # dark green enamel gone dull (outside of the shade)
     noise, rng = ctx.noise, ctx.rng
     # ---- the shade: outer skin from the rim bead up to the neck (radius, height above rim)
     # (a dome near the neck flaring out into a shallow skirt: the RLM barn shade)

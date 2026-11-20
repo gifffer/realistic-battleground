@@ -90,6 +90,9 @@ import citykit  # noqa: E402
 import props_ground as PG  # noqa: E402
 import props_objects as PO  # noqa: E402
 import props_walls as PW  # noqa: E402
+import meshprop as MESHPROP  # noqa: E402
+from citykit import Frame  # noqa: E402
+from meshprop import frame_meshprop, meshprop, variation, weathered  # noqa: E402
 
 Data = citykit.Data
 
@@ -179,6 +182,14 @@ def floor_at(x, z):
     return top
 
 
+def aabb(row):
+    """World bounds of a part row (its rotation included)."""
+    m = citykit.yxz_matrix(row[4], row[5], row[6])
+    half = abs(m) @ [row[7] / 2, row[8] / 2, row[9] / 2]
+    return (row[1] - half[0], row[1] + half[0], row[2] - half[1], row[2] + half[1], row[3] - half[2], row[3] + half[2])
+
+
+
 # =========================================================================================
 # 1. Cutting the ring: gaps in E3 (alley A) and E4 (alley B), the east bounds wall
 # =========================================================================================
@@ -214,12 +225,13 @@ W = "Alleys/Walls"
 V = "Alleys/Arches"
 B = "Alleys/Bounds"
 
-# Base slab (the city's ends at X 151) and the floors.
+# Base slab (the city's ends at X 151) and the floors: thin finishes lying ON the slabs (no side or
+# under face of theirs in the plane of a slab's).
 D.box(G, "BaseSlab", 151, 209, -0.8, FLOOR, 50, 108, ASPHALT, "Asphalt",
       extra={"t": ["CityWetSurface"]})
-D.box(G, "AlleyFloor", 131, 169, -0.8, FINISH, 58, 66, COBBLE, "Cobblestone", extra={"t": ["CityWetSurface"]})
-D.box(G, "AlleyFloor", 131, 169, -0.8, FINISH, 90, 98, CONCRETE_DARK, "Concrete", extra={"t": ["CityWetSurface"]})
-D.box(G, "CourtFloor", 169, 205, -0.8, FINISH, 56, 102, (78, 75, 70), "Concrete", extra={"t": ["CityWetSurface"]})
+D.box(G, "AlleyFloor", 131, 169, FLOOR, FINISH, 58, 66, COBBLE, "Cobblestone", extra={"t": ["CityWetSurface"]})
+D.box(G, "AlleyFloor", 131, 169, FLOOR, FINISH, 90, 98, CONCRETE_DARK, "Concrete", extra={"t": ["CityWetSurface"]})
+D.box(G, "CourtFloor", 169, 205, FLOOR, FINISH, 56, 102, (78, 75, 70), "Concrete", extra={"t": ["CityWetSurface"]})
 # A gutter down the middle of alley A, a drain grate in each alley
 D.box(G, "Gully", 131, 169, FINISH, FINISH + 0.08, 61.6, 62.4, (40, 40, 40), "Slate", flags=DECOR)
 for gx, gz in ((158, 62), (162, 94), (186, 66)):
@@ -297,13 +309,16 @@ arch_trim(SQUAT[0], SQUAT[1], 92, 1)
 for z0, z1 in ((74.4, 75.0), (89.0, 89.6)):
     D.box(V, "Cladding", 147, 199, 27.2, 42.4, z0, z1, BRICK[2], "Brick", flags=SOLID, extra={"a": UNBREAKABLE})
 D.box(V, "Cladding", 147, 199.7, 42.2, 42.6, 74.3, 89.7, (52, 50, 48), "Slate", flags=SOLID)
-D.box(V, "Cladding", 198.4, 199.6, 27.2, 42.6, 74.4, 89.6, BRICK[2], "Brick", flags=SOLID)
+# (the east end: under the slate cap, short of the city's TunnelEnd and inside the side cladding's faces)
+D.box(V, "Cladding", 198.4, 199.0, 27.2, 42.2, 74.45, 89.55, BRICK[2], "Brick", flags=SOLID)
 # Iron girder edges where the tunnel sits on the brick
 for z in (73.6, 90.4):
-    D.box(V, "Girder", 147, 199, 26.2, 27.8, z - 0.5, z + 0.5, METAL, "Metal", flags=SOLID)
+    D.box(V, "Girder", 147, 199.08, 26.2, 27.8, z - 0.5, z + 0.5, METAL, "Metal", flags=SOLID)  # (its end 8 cm proud)
 # Rust streaks down the brick under the girders
 for x in (172, 190, 196):
     for z, side in ((72.0, -1), (92.0, 1)):
+        if (x, z) in ((172, 72.0), (196, 72.0)):
+            continue  # (the rust_streak props on the arch's face below do these two)
         D.box(V, "Streak", x - 0.4, x + 0.4, 14, 26, z + side * 0.05 - 0.03, z + side * 0.05 + 0.03, RUST_DARK,
               "Slate", flags=DECOR, transparency=0.35)
 
@@ -346,7 +361,7 @@ for i in range(2):
 # Plywood boarding nailed over the old doorway in alley A (a dark storeroom behind it)
 D.box(W, "StoreRoom", DOOR_X0 - 1, DOOR_X1 + 1, FLOOR, 9.2, 52.0, 54.0, SOOT, "Brick", flags=SOLID,
       extra={"a": UNBREAKABLE})  # (its back wall)
-D.box(W, "StoreRoomFloor", DOOR_X0 - 1, DOOR_X1 + 1, -0.8, FINISH, 52.0, 58.0, (50, 46, 42), "Concrete")
+D.box(W, "StoreRoomFloor", DOOR_X0, DOOR_X1, FLOOR, FINISH, 54.0, 58.0, (50, 46, 42), "Concrete")
 for (x0, x1) in ((DOOR_X0 - 1, DOOR_X0), (DOOR_X1, DOOR_X1 + 1)):
     D.box(W, "Jamb", x0, x1, FLOOR, 9.2, 54.0, 58.0, BRICK[0], "Brick", extra={"a": UNBREAKABLE})
 D.box(W, "StoreRoomCeiling", DOOR_X0 - 1, DOOR_X1 + 1, 9.2, 10.2, 52.0, 58.0, SOOT, "Concrete",
@@ -417,20 +432,86 @@ def wall(fn, x, z, ry, faulty=None, folder=P, **kw):
     place(fn, x, z, ry, folder=folder, floor_y=FLOOR, faulty=faulty, **kw)
 
 
+# -- the kit (tools/city/kit/: CityProps.fbx). A prop that has a kit piece is a MeshProp marker
+# (meshprop.py) with the old primitive prop under it as its fallback: that is what shows until the
+# FBX is imported in Studio, and once it is, PropKit keeps its colliding / queried parts as
+# invisible proxies (collisions, tags, lights, fx survive) and swaps the rest for the mesh. The
+# prop libraries swap their own sub-objects too (a stall's goods, a rack's jackets, a stack's
+# crates, a door's bulkhead, a downpipe's lengths, a rooftop tank) once LIBS is on.
+MESHPROP.LIBS = True
+
+
+def vr(*key):
+    """The variation (variant, tint, tilt) of one placed copy: seeded by its spot, never by R, so
+    the fallback props come out exactly as they would without the kit."""
+    return variation("alleys", *key)
+
+
+def mplace(piece, fn, x, z, ry=0.0, folder=None, floor_y=FINISH, y=None, rx=0.0, rz=0.0, tint=None, scale=1.0,
+           faulty=None, mesh_xz=None, **kw):
+    """A floor prop as a kit piece: the marker at (x, y or floor_y, z) (or mesh_xz) turned (rx, ry,
+    rz), the old props_* call (fn, same arguments as place()) its fallback. fn None: the marker
+    alone."""
+    folder = folder or zone_folder(x, z)
+    start = len(D.extras)
+    at = (x, floor_y, z)
+    mx, mz = mesh_xz or (x, z)
+    marker = meshprop(D, folder, piece, (mx, floor_y if y is None else y, mz), ry, rx=rx, rz=rz, tint=tint,
+                      scale=scale, fallback=(lambda: fn(D, folder, at, ry, R, **kw)) if fn else None)
+    if faulty is not None:
+        faulty_since(start, faulty)
+    return marker
+
+
+def mwall(piece, fn, x, z, ry, y, faulty=None, folder=P, scale=1.0, tint=None, **kw):
+    """A wall prop as a kit piece: its origin on the wall face at height y (the props' own
+    f.sub((0, y, 0)) point), the old wall() call its fallback."""
+    start = len(D.extras)
+    meshprop(D, folder, piece, (x, FLOOR + y, z), ry, tint=tint, scale=scale,
+             fallback=lambda: fn(D, folder, (x, FLOOR, z), ry, R, y=y, **kw))
+    if faulty is not None:
+        faulty_since(start, faulty)
+
+
+def surface_top(x, z, r):
+    """The highest top of the visible parts made so far over the square (x +- r, z +- r)."""
+    top = FINISH
+    for row in D.parts:
+        if row[12] >= 1:
+            continue
+        b = aabb(row)
+        if b[0] < x + r and b[1] > x - r and b[4] < z + r and b[5] > z - r:
+            top = max(top, b[3])
+    return top
+
+
+def mframe(piece, frame, folder, tint=None, scale=1.0, fallback=None):
+    """A kit piece at a citykit.Frame (any rotation)."""
+    return frame_meshprop(D, folder, piece, frame, fallback=fallback, tint=tint, scale=scale)
+
+
 # -- the old lights, rebuilt: a few bulkheads (failing), the rest is dark --------------------
 def wall_light(x, y, z, out, dead=False, faulty=None):
-    """A caged bulkhead on a wall: CityBulkhead (dead ones CityLamp + Dead)."""
+    """A bulkhead on a wall (x, y, z: the old box's centre, 0.25 off the face along `out`):
+    CityBulkhead (dead ones CityLamp + Dead). The kit's BulkheadLight, the old box and bulb
+    (which carries the light, the tag and Faulty) its fallback."""
     attrs = {}
     if dead:
         attrs["Dead"] = True
     if faulty is not None:
         attrs["Faulty"] = faulty
-    D.part(L, "WallLight", (x, y, z), (0.6, 0.8, 0.5), (60, 60, 56), "Metal", flags=DECOR)
-    D.part(L, "Bulb", (x + out[0] * 0.35, y - 0.05, z + out[1] * 0.35), (0.45, 0.45, 0.45), WARM, "Neon",
-           flags=DECOR, shape=4,
-           extra={"t": ["CityLamp" if dead else "CityBulkhead"], "a": attrs or None,
-                  "l": {"type": "Point", "color": list(WARM), "range": 18, "brightness": 0.9, "name": "Light",
-                        "shadows": True}})
+
+    def old():
+        D.part(L, "WallLight", (x, y, z), (0.6, 0.8, 0.5), (60, 60, 56), "Metal", flags=DECOR)
+        D.part(L, "Bulb", (x + out[0] * 0.35, y - 0.05, z + out[1] * 0.35), (0.45, 0.45, 0.45), WARM, "Neon",
+               flags=DECOR, shape=4,
+               extra={"t": ["CityLamp" if dead else "CityBulkhead"], "a": attrs or None,
+                      "l": {"type": "Point", "color": list(WARM), "range": 18, "brightness": 0.9, "name": "Light",
+                            "shadows": True}})
+
+    face = (x - out[0] * 0.25, y, z - out[1] * 0.25)
+    ry = math.degrees(math.atan2(-out[0], -out[1]))  # (the piece's -Z out of the wall, along `out`)
+    meshprop(D, L, "BulkheadLightDead" if dead else "BulkheadLight", face, ry, fallback=old)
 
 
 # Above the two gaps, seen from the Yard and from under the viaduct (what draws you in)
@@ -442,27 +523,26 @@ wall_light(130.75, 15, 94, (-1, 0), faulty=0.85)
 # windows above (one lit, one barred, the rest boarded), a fire escape, a gutter, posters.
 wall(PW.wall_grime, 158, 58, OUT_N, width=22, height=5)
 wall(PW.back_door, 151.5, 58, OUT_N, faulty=0.55, variant="closed", stencil="KITCHEN - NO ENTRY")
-wall(PW.vent_hood, 155.5, 58, OUT_N, y=8.5, grease=True)
-wall(PW.pipe_run, 156, 58, OUT_N, length=9, y=11.2, drop="down")
-wall(PW.ac_unit, 159.5, 58, OUT_N, y=12.5)
-wall(PW.meter_box, 148.4, 58, OUT_N, y=3.4)
+wall(PW.vent_hood, 155.5, 58, OUT_N, y=7.6, grease=True)  # (its cowl under the pipe's flange)
+wall(PW.pipe_run, 156, 58, OUT_N, length=9, y=11.2, drop=None, valve=False)  # (no down-turn: the door is under it;
+# no valve: its wheel would graze the barred window's sill)
+mwall("AcUnit", PW.ac_unit, 156.7, 58, OUT_N, y=13.4)  # (clear of the pipe and the fire escape's rails)
+wall(PW.meter_box, 148.1, 58, OUT_N, y=3.4, width=1.7)  # (clear of the door frame from x 149.18)
 wall(PW.window, 152, 58, OUT_N, y=12.5, variant="barred")
 wall(PW.window, 160.5, 58, OUT_N, y=21.5, variant="lit", kind="tv")
 wall(PW.window, 152, 58, OUT_N, y=21.5, variant="boarded")
 wall(PW.window, 166, 58, OUT_N, y=21.5, variant="broken")
 wall(PW.fire_escape, 162.5, 58, OUT_N, width=8, floors=2, floor_h=10)
-wall(PW.downpipe, 168.2, 58, OUT_N, height=28.5, gutter=5)
-wall(PW.torn_posters, 161.2, 58, OUT_N, y=4.2, width=2.8, height=3.6)
+wall(PW.downpipe, 168.6, 58, OUT_N, height=28.5, gutter=5)  # (clear of the top window's jamb)
+wall(PW.torn_posters, 162.2, 58, OUT_N, y=4.2, width=2.8, height=3.6)  # (clear of the dumpster's lid)
 wall(PW.graffiti_tag, 155.2, 58, OUT_N, y=4.5, width=4.6, text="NO COPS. NO NAMES.")
 wall(PW.plaster_patch, 165, 58, OUT_N, y=10.8, width=4, height=3)
 wall(PW.building_top, 158, 58, OUT_N, width=22, top=WALL_TOP, clutter="tank")
 # Alley A, south side (z 66): the viaduct's granite embankment and the ring's end
 wall(PW.wall_grime, 158, 66, OUT_S, width=22, height=4, soot=True)
-wall(PW.efflorescence, 152, 66, OUT_S, width=5)
 wall(PW.rust_streak, 150, 66, OUT_S, y=24, length=7)
 wall(PW.rust_streak, 163.5, 66, OUT_S, y=24, length=9, bolt=False)
 wall(PW.graffiti_tag, 158, 66, OUT_S, y=5, width=6, text="MARROW EATS ITS OWN", color=(170, 60, 50))
-wall(PW.crack, 166, 66, OUT_S, length=6, y=8)
 wall(PW.wall_grime, 139, 66, OUT_S, width=16, height=4)
 wall(PW.wall_grime, 139, 58, OUT_N, width=16, height=4)
 wall(PW.graffiti_tag, 139, 58, OUT_N, y=3.6, width=5, text="ARCHES >", color=(190, 180, 120))
@@ -473,15 +553,16 @@ wall(PW.cable_sag, 166.5, 58, OUT_N, span=8, y=15, y_end=17, cables=2, shoes=Tru
 # shutter, a faded painted sign, boarded windows, a dead AC, a dying lamp.
 wall(PW.wall_grime, 158, 98, OUT_S, width=22, height=5)
 wall(PW.roller_shutter, 158.5, 98, OUT_S, width=7, height=7)
-wall(PW.painted_sign, 158, 98, OUT_S, y=17, width=14, text="KESSLER BROS · DEMOLITION & SALVAGE")
+# (above the window lintels, short of the AC)
+wall(PW.painted_sign, 158, 98, OUT_S, y=18.6, width=11.5, text="KESSLER BROS · DEMOLITION & SALVAGE")
 wall(PW.window, 151, 98, OUT_S, y=12.5, variant="boarded")
 wall(PW.window, 165.5, 98, OUT_S, y=12.5, variant="barred")
 wall(PW.window, 151, 98, OUT_S, y=22, variant="dirty")
-wall(PW.ac_unit, 165.5, 98, OUT_S, y=20)
-wall(PW.gooseneck_lamp, 163, 98, OUT_S, faulty=0.9, y=11, reach=2.4, color=(255, 196, 140), range_=22,
-     brightness=1.0)
-wall(PW.downpipe, 148.2, 98, OUT_S, height=28.5)
-wall(PW.torn_posters, 153.8, 98, OUT_S, y=4, width=3, height=3.8)
+mwall("AcUnit", PW.ac_unit, 165.5, 98, OUT_S, y=20, tint=(176, 170, 152))
+mwall("GooseneckLamp", PW.gooseneck_lamp, 163, 98, OUT_S, 11, faulty=0.9, reach=2.4, color=(255, 196, 140),
+      range_=22, brightness=1.0, tint=(36, 38, 40))
+wall(PW.downpipe, 168.6, 98, OUT_S, height=28.5)  # (at the far end: the scaffold covers the west end)
+wall(PW.torn_posters, 152.4, 98, OUT_S, y=4, width=3, height=3.8)  # (clear of the shutter's housing, the scaffold)
 wall(PW.building_top, 158, 98, OUT_S, width=22, top=WALL_TOP, clutter="antenna")
 # Alley B, north side (z 90): the embankment
 wall(PW.wall_grime, 158, 90, OUT_N, width=22, height=4)
@@ -499,19 +580,19 @@ wall(PW.window, 196, 56, OUT_N, y=13, variant="lit", kind="warm")
 wall(PW.window, 178, 56, OUT_N, y=23, variant="dirty")
 wall(PW.window, 190, 56, OUT_N, y=23, variant="broken")
 wall(PW.window, 202, 56, OUT_N, y=23, variant="lit", kind="tv")
-wall(PW.satellite_dish, 193, 56, OUT_N, y=19)
-wall(PW.downpipe, 171, 56, OUT_N, height=32.5)
+mwall("SatelliteDish", PW.satellite_dish, 193, 56, OUT_N, 19)
+wall(PW.downpipe, 169.8, 56, OUT_N, height=32.5)  # (in the corner, clear of the chained door's frame)
 wall(PW.building_top, 187, 56, OUT_N, width=36, top=COURT_TOP, clutter="tank")
 wall(PW.wall_grime, 205, 79, OUT_W, width=46, height=5)
-wall(PW.fire_escape, 205, 66, OUT_W, width=10, floors=3, floor_h=10)
+wall(PW.fire_escape, 205, 65.6, OUT_W, width=10, floors=3, floor_h=10)  # (its ladder clear of the fence)
 wall(PW.window, 205, 84, OUT_W, y=13, variant="barred")
 wall(PW.window, 205, 98, OUT_W, y=13, variant="boarded")
 wall(PW.window, 205, 84, OUT_W, y=23, variant="lit", kind="warm")
 wall(PW.window, 205, 98, OUT_W, y=23, variant="dirty")
 wall(PW.meter_box, 205, 88, OUT_W, y=3.4)
-wall(PW.gooseneck_lamp, 205, 95, OUT_W, faulty=0.45, y=15, reach=2.6, color=(255, 150, 70), range_=30,
-     brightness=1.4)
-wall(PW.ac_unit, 205, 76, OUT_W, y=8)
+mwall("GooseneckLamp", PW.gooseneck_lamp, 205, 95, OUT_W, 15, faulty=0.45, scale=2.6 / 2.4, reach=2.6,
+      color=(255, 150, 70), range_=30, brightness=1.4, tint=(40, 56, 46))
+mwall("AcUnit", PW.ac_unit, 205, 76, OUT_W, 8, tint=(150, 148, 136))
 wall(PW.building_top, 205, 79, OUT_W, width=46, top=COURT_TOP, clutter="antenna")
 wall(PW.wall_grime, 187, 102, OUT_S, width=36, height=5)
 wall(PW.window, 175, 102, OUT_S, y=13, variant="boarded")
@@ -532,7 +613,6 @@ wall(PW.rust_streak, 196, 72, OUT_S, y=26, length=8, bolt=False)
 wall(PW.wall_grime, 175, 92, OUT_N, width=12, height=4)
 wall(PW.wall_grime, 196, 92, OUT_N, width=6, height=4)
 wall(PW.rust_streak, 175, 92, OUT_N, y=26, length=9, bolt=False)
-wall(PW.efflorescence, 196, 92, OUT_N, width=4)
 
 # Beyond the walls: the backs of tall buildings, some windows lit (depth at night)
 wall(PW.background_facade, 211, 80, OUT_W, folder=F, width=56, height=72, depth=12, lit_share=0.18)
@@ -540,12 +620,25 @@ wall(PW.background_facade, 188, 44, OUT_N, folder=F, width=48, height=62, depth=
 wall(PW.background_facade, 188, 114, OUT_S, folder=F, width=48, height=58, depth=12, lit_share=0.15)
 
 # -- the floor: alley A (kitchen back) ----------------------------------------------------------
-place(PO.dumpster, 156.6, 60.2, OUT_N, lid="open", full=True, against_wall=True)
-place(PG.trash_heap, 151.6, 60.4, OUT_N, count=5)
-place(PO.recycling_bin, 144.5, 60.2, OUT_N, kind="paper", lid="closed")
+# The restaurant's dumpster: the lid on the far side thrown back against the bricks (clear of the
+# extractor), bags bulging over the rim under it, the near lid shut.
+v = vr("dumpster")
+mplace("Dumpster", PO.dumpster, 157.0, 60.2, OUT_N, tint=weathered(DUMPSTER, v, 6, 0.1), lid="open", full=True,
+       against_wall=True, lids=("o", "c"))
+dump = Frame(D, P, (157.0, FINISH, 60.2), ry=OUT_N)
+mframe("DumpsterLid", dump.sub((1.6, 4.47, 1.72)), P)
+mframe("DumpsterLidWarped", dump.sub((-1.6, 4.47, 1.72), rx=101), P)  # (resting on the bricks)
+mframe("TrashBag1", dump.sub((-1.5, 2.2, -0.1), ry=v.uniform(0, 360), rz=4), P, scale=1.1)
+place(PG.trash_heap, 151.2, 61.3, OUT_N, count=4)  # (in front of the dead kitchen's door, clear of its step)
+v = vr("recycling A")
+mplace("RecyclingBin", PO.recycling_bin, 144.5, 60.2, OUT_N, kind="paper", lid="closed")
+mframe("RecyclingBinLidPaper", Frame(D, P, (144.5, FINISH, 60.2), ry=OUT_N).sub((0, 3.84, 1.92)), P,
+       tint=weathered((44, 98, 62), v, 6, 0.1))
 place(PG.cardboard_flat, 161.4, 60.0, OUT_N + 10, wet=True, torn=True)
 place(PG.cardboard_box, 160.6, 61.0, 25, state="crushed")
-place(PG.milk_crate, 149.6, 61.0, 15, state="upside")
+# an upturned milk crate the kitchen staff sat on to smoke (its rim on the gully's edge: 0.08 up)
+mplace("MilkCrate", PG.milk_crate, 147.4, 61.6, 15, y=FINISH + 0.08 + 0.935, rx=180, state="upside",
+       tint=weathered((168, 36, 34), vr("crate A"), 8, 0.15))
 place(PG.cigarette_butts, 149.8, 62.4, 0, count=9, radius=1.1)
 place(PG.oil_stain, 155.8, 63.4, 30, size=3)
 place(PG.damp_stain, 158.4, 63.2, 0, size=4, run=True)
@@ -553,9 +646,8 @@ place(PG.crack, 144.5, 61.5, 70, length=7)
 place(PG.crack, 163.8, 64.2, -20, length=5)
 place(PG.wall_base_grime, 158, 65.8, OUT_S, length=20)
 place(PG.weeds, 151, 65.6, OUT_S, kind="wall", length=5)
-place(PG.leaves_drift, 167.8, 64.9, OUT_S, corner=True)
-place(PG.litter_scatter, 164.5, 63.0, 0, radius=2.5, density=0.8)
-place(PG.tyre, 136.5, 64.6, 10, state="stack")
+place(PG.litter_scatter, 164.5, 63.0, 0, radius=2.2, density=0.5)
+place(PG.tyre, 136.5, 64.6, 10, state="stack", count=3)
 place(PG.paper_sheet, 140.5, 60.2, 35, kind="newspaper", wet=True)
 place(PG.wrapper, 146.0, 63.3, 0, kind="takeaway")
 
@@ -563,20 +655,26 @@ place(PG.wrapper, 146.0, 63.3, 0, kind="takeaway")
 place(PO.scaffolding, 150.5, 96.2, OUT_S, bays=1, levels=2, netting=True)
 place(PO.construction_barrier, 134.5, 96.3, 10, kind="aframe", banner=True)
 place(PG.cinder_block, 158.0, 96.9, 0, state="stack")
-place(PG.cement_bag, 160.8, 97.0, 10, torn=True)
+mplace("CementBag", PG.cement_bag, 160.8, 96.5, 10, torn=True)  # (clear of the shutter's padlock)
 place(PG.plank_stack, 165.5, 96.6, OUT_S, count=6)
-place(PG.rubble_pile, 160.5, 92.6, 0, radius=2.2)
+mplace("RubblePile1", PG.rubble_pile, 160.5, 92.6, 0, scale=2.2 / 2.6, radius=2.2)
 place(PG.rebar, 156.8, 93.6, 75, bends=1, length=4)
 place(PG.loose_bricks, 163.6, 94.2, 20, count=6)
-place(PO.traffic_cone, 140.2, 96.8, 0, state="standing")
-place(PO.traffic_cone, 143.4, 92.6, 120, state="fallen")
+mplace("TrafficCone", PO.traffic_cone, 140.2, 96.8, 0, tint=weathered((204, 84, 32), vr("cone 1"), 8, 0.1),
+       state="standing", sandbag=False)
+# knocked over: lying on its base's edge and its tip (the tip lower than the base's middle)
+v = vr("cone 2")
+mplace("TrafficConeWorn", PO.traffic_cone, 143.4, 92.6, 120, y=FINISH + 0.735, rz=-102.9, rx=v.choice((-4, 4)),
+       tint=weathered((196, 80, 34), v, 8, 0.15), state="fallen", sandbag=False)
 place(PG.wood_scraps, 146.2, 94.6, 40, kind="planks")
-place(PG.concrete_chunk, 167.2, 92.2, 10, size=1.6, rebar=True)
+mplace("ConcreteChunk1", PG.concrete_chunk, 167.2, 92.2, 10, size=1.6, rebar=True)
+mplace("ConcreteChunk2", PG.concrete_chunk, 155.6, 91.0, 65, scale=0.95, size=0.95, rebar=False)
 place(PG.paint_marks, 154.8, 94.2, 0)
 place(PG.pothole, 141.8, 94.0, 0, radius=2)
 place(PG.asphalt_patch, 158.2, 94.2, 5)
-place(PG.wall_base_grime, 158, 90.2, OUT_N, length=20)
-place(PG.leaves_drift, 168.0, 97.0, OUT_S, corner=True)
+# (not behind the propped metal sheets, x 153-159.1: their faces would meet its silt)
+place(PG.wall_base_grime, 150.4, 90.2, OUT_N, length=4.6)
+place(PG.wall_base_grime, 163.8, 90.2, OUT_N, length=8.6)
 
 # -- the yard, north: Vic's black market ---------------------------------------------------------
 start = len(D.extras)
@@ -587,12 +685,14 @@ for ex in D.extras[start:]:
         ex["t"] = sorted(set((ex.get("t") or []) + ["CityBulkhead"]))
         ex["l"]["shadows"] = False
 place(PO.wooden_crates, 177.7, 76.4, 0, count=3)
-place(PO.wooden_crates, 184.2, 77.6, 180, count=2)
+place(PO.wooden_crates, 185.6, 76.9, 180, count=1)  # (clear of the rack's castors and of the arch's side)
 place(PO.clothes_rack, 181.0, 78.6, 0, count=5)
-place(PO.tv, 177.7, 76.4, 10, floor_y=FINISH + 4.4, kind="crt", state="ok")
+tv_y = surface_top(177.7, 76.4, 0.8)  # (on the crate stack's lid, whatever its height came out)
+mplace("CrtTv", PO.tv, 177.7, 76.4, 10, floor_y=tv_y, tint=weathered((110, 104, 92), vr("tv"), 5, 0.1), kind="crt",
+       state="ok")
 place(PO.plastic_crates, 191.0, 66.6, 90, count=4)
 place(PO.shoe_boxes, 172.6, 70.6, 90, count=5)
-place(PO.radio, 184.4, 75.2, 180)
+mplace("Radio", PO.radio, 184.4, 75.2, 180, tint=(46, 46, 48))
 # the neon in the arch (the S dead), flickering like a failing tube
 D.part(MK, "NeonSign", ((MARKET[0] + MARKET[1]) / 2, 11.1, 72.3), (6.8, 1.2, 0.1), BLACK, "SmoothPlastic",
        flags=DECOR,
@@ -604,48 +704,67 @@ D.part(MK, "NeonSign", ((MARKET[0] + MARKET[1]) / 2, 11.1, 72.3), (6.8, 1.2, 0.1
 D.part(N_, "NpcSpot", (181.5, FINISH, 72.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        extra={"a": {"NpcRole": "Dealer", "NpcName": "Vic", "NpcPose": "ArmsCrossed", "NpcSeed": 31}})
 # the container you can climb (pallets and a crate as steps), its corner of rubbish
-place(PO.shipping_container, 195.0, 61.1, 0, length=18, doors="ajar")
+place(PO.shipping_container, 195.0, 61.1, 0, length=18, doors="closed")  # (its door end faces the wall)
 place(PG.pallet_stack, 183.6, 59.9, 90, count=4)
 place(PO.wooden_crates, 183.6, 59.9, 90, floor_y=FINISH + 2.25, count=1)
-place(PO.recycling_bin, 173.0, 58.4, OUT_N, kind="general", lid="open")
-place(PG.trash_bag, 176.3, 58.0, 30, size=2.2)
-place(PG.trash_bag, 177.4, 59.0, 120, size=1.9, torn=True)
+# the general-waste bin against the wall beside the chained door (between its step and the low
+# wall), the bags dumped at the door nobody opens any more
+v = vr("recycling yard")
+mplace("RecyclingBin", PO.recycling_bin, 178.6, 58.0, OUT_N, kind="general", lid="open")
+mframe("RecyclingBinLid", Frame(D, MK, (178.6, FINISH, 58.0), ry=OUT_N).sub((0, 3.84, 1.92), rx=60), MK,
+       tint=weathered((92, 96, 94), v, 6, 0.0))
+mplace("TrashBag1", PG.trash_bag, 171.5, 58.6, 30, scale=1.05, tint=(22, 22, 24), size=2.2)
+mplace("TrashBag2", PG.trash_bag, 174.6, 58.9, 80, scale=0.95, tint=(30, 36, 32), size=1.9, torn=True)
 place(PG.manhole, 179.0, 63.6, 0)
 place(PG.crack, 186.0, 66.8, -35, length=6)
 place(PG.oil_stain, 191.2, 67.8, 0, size=2.5)
-place(PG.leaves_drift, 169.8, 57.4, OUT_N, corner=True)
-place(PG.litter_scatter, 174.5, 66.0, 0, radius=2.2, density=0.7)
+place(PG.litter_scatter, 174.5, 66.0, 0, radius=2.0, density=0.5)
 place(PG.cigarette_butts, 186.8, 66.6, 0, count=7)
 # behind the fences (east passage): what nobody comes to see
-place(PO.office_chair, 202.0, 75.5, 40, state="tipped")
-place(PO.mattress, 204.0, 87.0, OUT_W, state="leaning", torn=True)
-place(PO.wheelie_bin, 201.0, 90.4, 160, state="tipped")
-place(PG.litter_scatter, 202.2, 79.0, 0, radius=1.6, density=0.6)
+v = vr("chair")
+mplace("OfficeChairWorn", PO.office_chair, 202.0, 75.5, 40, y=FINISH + 1.243, rz=88,
+       tint=weathered((52, 58, 70), v, 6, 0.15), state="tipped")
+# (its top resting on the bricks of the east wall, x 205; clear of the meter box)
+mplace("MattressLean", PO.mattress, 204.0, 84.0, OUT_W, mesh_xz=(204.18, 84.0),
+       tint=weathered((176, 168, 150), vr("mattress lean"), 8, 0.1), state="leaning", torn=True)
+# the tipped bin: on its side, resting on its wheel hubs, its rim and its lid swung open
+v = vr("wheelie")
+bin_tint = weathered((54, 88, 58), v, 6, 0.15)
+# (lying along the passage, its mouth toward the east wall, the spilled bag in front of it)
+mplace("WheelieBinWorn", PO.wheelie_bin, 199.6, 89.4, 175, y=FINISH + 1.125, rz=91.6, tint=bin_tint, state="tipped")
+tipped = Frame(D, SQ, (199.6, FINISH + 1.125, 89.4), ry=175, rz=91.6)
+mframe("WheelieBinLid", tipped.sub((0, 3.18, 1.18), rx=45), SQ, tint=bin_tint)
+mouth = tipped.world((0, 4.0, -0.3))
+mframe("TrashBag3", Frame(D, SQ, (float(mouth[0]), FINISH, float(mouth[2])), ry=v.uniform(0, 360)), SQ, tint=(26, 26, 28),
+       scale=0.8)
 
 # -- the yard, south: the squat ---------------------------------------------------------------------
-place(PO.mattress, 189.8, 87.4, 0, state="flat", torn=True)
-place(PO.sleeping_bag, 189.8, 87.6, 0, floor_y=FINISH + 0.7, state="bunched")
-place(PO.blankets, 186.6, 89.8, 15, kind="crumpled")
-place(PO.camp_stove, 186.8, 85.6, 0, lit=True, pot=True, light=True)
-place(PO.backpack, 192.2, 85.0, -20, state="standing")
-place(PO.tent, 174.2, 97.0, 90, kind="ridge", open=True)
+mplace("MattressTorn", PO.mattress, 189.8, 87.4, 0, tint=weathered((196, 186, 160), vr("mattress"), 8, 0.15),
+       state="flat", torn=True)
+mplace("SleepingBag", PO.sleeping_bag, 189.8, 87.6, 0, floor_y=FINISH + 0.7, y=FINISH + 0.59, scale=0.85,
+       tint=(44, 58, 86), state="bunched")
+mplace("Blankets1", PO.blankets, 186.6, 89.8, 15, kind="crumpled")
+mplace("CampStove", PO.camp_stove, 186.8, 85.6, 0, lit=True, pot=True, light=True)
+mplace("Backpack", PO.backpack, 192.2, 85.0, -20, state="standing")
+mplace("Tent", PO.tent, 174.2, 97.0, 90, tint=(70, 92, 64), kind="ridge", open=True)
 place(PO.cardboard_shelter, 180.6, 98.6, 0, blanket=True)
-place(PO.lean_to, 198.0, 99.7, 0, closed_side=True)
+mplace("LeanTo", PO.lean_to, 198.0, 99.7, 0, tint=weathered((44, 86, 150), vr("leanto"), 8, 0.2), closed_side=True)
 place(PO.shopping_cart, 192.0, 99.6, 30, full=True, state="upright")
 start = len(D.extras)
-place(PO.oil_drum, 187.6, 96.0, 0, state="fire", light=True)
-place(PO.armchair, 184.2, 97.6, -60, state="worn", blanket=True)
+mplace("OilDrumBurn", PO.oil_drum, 187.6, 96.0, 0, state="fire", light=True)
+mplace("ArmchairBlanket", PO.armchair, 184.2, 97.6, -60, tint=weathered((110, 92, 66), vr("armchair"), 8, 0.15),
+       state="worn", blanket=True)
 place(PO.camp_stool, 189.5, 97.9, 200)
-place(PG.milk_crate, 186.0, 94.2, 40, state="upright")
-place(PG.cardboard_flat, 174.2, 93.4, 5, wet=True)
+mplace("MilkCrateBroken", PG.milk_crate, 186.0, 94.2, 40, tint=weathered((40, 60, 110), vr("crate S"), 8, 0.15),
+       state="upright")
 place(PG.wrapper, 177.5, 94.0, 0, kind="foil")
 place(PG.wrapper, 183.0, 94.4, 0, kind="cup")
 place(PG.cigarette_butts, 185.4, 95.6, 0, count=6)
-place(PG.litter_scatter, 196.0, 95.0, 0, radius=2.0, density=0.7)
-place(PG.wall_base_grime, 187, 101.8, OUT_S, length=30)
-place(PG.weeds, 202.0, 101.6, OUT_S, kind="wall", length=4)
-place(PG.leaves_drift, 204.0, 100.8, OUT_S, corner=True)
-place(PG.damp_stain, 195.0, 94.6, 90, size=3)
+place(PG.litter_scatter, 195.5, 95.5, 0, radius=1.5, density=0.5)
+# (west of the lean-to: its closed side stands on the wall's foot)
+place(PG.wall_base_grime, 183.0, 101.8, OUT_S, length=22)
+place(PG.weeds, 203.4, 101.6, OUT_S, kind="wall", length=2.4)
+place(PG.damp_stain, 199.0, 94.0, 90, size=3)
 D.part(N_, "NpcSpot", (184.4, FINISH, 84.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        rot=(0, 180, 0),
        extra={"a": {"NpcRole": "Vagrant", "NpcName": "Old Ray", "NpcPose": "SitGround", "NpcSeed": 47}})
@@ -678,13 +797,6 @@ KINDS = ["IronBar", "Plank"]
 
 
 LENGTH = {"IronBar": 3.2, "Plank": 3.2, "Random": 3.2}
-
-
-def aabb(row):
-    """World bounds of a part row (its rotation included)."""
-    m = citykit.yxz_matrix(row[4], row[5], row[6])
-    half = abs(m) @ [row[7] / 2, row[8] / 2, row[9] / 2]
-    return (row[1] - half[0], row[1] + half[0], row[2] - half[1], row[2] + half[1], row[3] - half[2], row[3] + half[2])
 
 
 def boxes_all():

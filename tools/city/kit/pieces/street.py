@@ -324,6 +324,10 @@ def _tyre_profile(depth, rib=None):
     ]
 
 
+# Old tyres: the "RubberWorn" layer (sun-greyed, dusty; plain "Rubber" is new black rubber).
+RUBBER = "RubberWorn"
+
+
 def _tyre(ctx, bald):
     """The tyre (see the block comment above): carcass lathe, tread blocks, lettering, wear."""
     ctx.budget = 5600
@@ -349,7 +353,7 @@ def _tyre(ctx, bald):
             yy -= 0.02 * g * (1 if y > TY_YC else -1)
         return (r + d, yy)
 
-    ctx.add("Rubber", lathe(prof, segs=40, radius_fn=carcass_fn))
+    ctx.add(RUBBER, lathe(prof, segs=40, radius_fn=carcass_fn))
 
     # ---- tread blocks: 4 rows, slanted lateral grooves, the shoulders running over the shoulder
     def carc_r(dy):
@@ -388,7 +392,7 @@ def _tyre(ctx, bald):
             ins = 0.06
             top = [corner(ins, ys[0] + 0.006, True), corner(1 - ins, ys[0] + 0.006, True),
                    corner(1 - ins, ys[1] - 0.006, True), corner(ins, ys[1] - 0.006, True)]
-            ctx.add("Rubber", _hexa(bot + top))
+            ctx.add(RUBBER, _hexa(bot + top))
 
     # ---- raised lettering on the upper sidewall: two arcs (the maker, the size), stroke blocks
     def side_y(r):
@@ -407,7 +411,7 @@ def _tyre(ctx, bald):
                     y = side_y(rr) + (0.012 if top else -0.012)
                     rr2, yy = carcass_fn(aa, rr, y)
                     pts.append((rr2 * math.cos(aa), yy, rr2 * math.sin(aa)))
-            ctx.add("Rubber", _hexa(pts))
+            ctx.add(RUBBER, _hexa(pts))
             a += w + rng.uniform(0.012, 0.03) + (0.06 if rng.random() < 0.15 else 0)
 
     # ---- wear
@@ -430,7 +434,7 @@ def _tyre(ctx, bald):
             k *= 0.85
         return k
 
-    ctx.wear("Rubber", rubber)
+    ctx.wear(RUBBER, rubber)
 
 
 def tyre(ctx):

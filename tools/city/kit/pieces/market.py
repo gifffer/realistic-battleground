@@ -762,8 +762,8 @@ def _wood_hanger(ctx):
     ctx.add("Chrome", cyl(0.03, 0.03, 10), T(0, _shoulder_y(0) - 0.02, 0))
 
 
-def jacket1(ctx):
-    """Dark leather biker jacket on a wooden hanger (hook = origin, on the rail; 1.95 wide,
+def _jacket1(ctx, leather_layer):
+    """Leather biker jacket on a wooden hanger (hook = origin, on the rail; 1.95 wide,
     hanging 2.35 below the rail): broad wide-lapelled collar, the asymmetric zip running from
     the hem up to the left shoulder, slanted zip pockets, a belt round the hem with its buckle,
     zips at the cuffs, sleeves hanging limp down the sides; stiff leather: few broad folds,
@@ -782,7 +782,7 @@ def jacket1(ctx):
         return a, bf, bb
 
     g = _Garment(hem, prof, fold, n=40)
-    ctx.add("Leather", g.build())
+    ctx.add(leather_layer, g.build())
     # the belt round the hem: a band proud of the body, the buckle on the left side
     belt_y = hem + 0.13
     ring = []
@@ -795,12 +795,12 @@ def jacket1(ctx):
         out = Vector((x, 0, z))
         out = out + out.normalized() * 0.022
         ring.append((out.x, belt_y, out.z))
-    ctx.add("Leather", _sweep(ring[:-1], [(-0.012, -0.08), (0.012, -0.08), (0.016, 0.0), (0.012, 0.08), (-0.012, 0.08)],
+    ctx.add(leather_layer, _sweep(ring[:-1], [(-0.012, -0.08), (0.012, -0.08), (0.016, 0.0), (0.012, 0.08), (-0.012, 0.08)],
                               ups=Vector((0, 1, 0)), closed=True))
     bx = -0.5
     bz = g.front(bx, belt_y) - 0.05
     ctx.add("Chrome", _rbox(0.14, 0.17, 0.03, 0.02), T(bx, belt_y, bz) @ R(0, -18, 0))
-    ctx.add("Leather", _rbox(0.1, 0.12, 0.03, 0.02), T(bx, belt_y, bz - 0.012) @ R(0, -18, 0))
+    ctx.add(leather_layer, _rbox(0.1, 0.12, 0.03, 0.02), T(bx, belt_y, bz - 0.012) @ R(0, -18, 0))
     # the asymmetric zip: from the hem (right of centre) up across the chest to under the lapel
     zp = []
     for k_ in range(12):
@@ -829,7 +829,7 @@ def jacket1(ctx):
                 rb.append(Vector((x, y, z - lift * 0.5)))
             top.append(rt)
             bot.append(rb)
-        ctx.add("Leather", _grid_slab(top, bot))
+        ctx.add(leather_layer, _grid_slab(top, bot))
     # the collar: a band round the back of the neck, standing then folding over
     cp = []
     for k_ in range(13):
@@ -838,12 +838,12 @@ def jacket1(ctx):
         z = 0.14 * -math.sin(th) + 0.02
         cp.append((x, NECK[1] - 0.02 + 0.03 * math.sin(math.radians(lerp(0, 180, k_ / 12))), z))
     cp = [(-0.22, NECK[1] - 0.08, -0.1)] + cp + [(0.22, NECK[1] - 0.08, -0.1)]
-    ctx.add("Leather", _sweep(cp, [(-0.02, -0.05), (0.02, -0.05), (0.035, 0.07), (0.0, 0.08)], ups=Vector((0, 1, 0))))
+    ctx.add(leather_layer, _sweep(cp, [(-0.02, -0.05), (0.02, -0.05), (0.035, 0.07), (0.0, 0.08)], ups=Vector((0, 1, 0))))
     # sleeves (stiff, creased at the elbow), zips at the cuffs
     for sx in (-1, 1):
         sl, pts = _sleeve(_sleeve_path(sx, hem + 0.1, fwd=0.06, out=0.02), (0.1, 0.17), (0.08, 0.11), noise,
                           sx * 3.0 + 1, n=16, segs=12, bunch=0.12)
-        ctx.add("Leather", sl)
+        ctx.add(leather_layer, sl)
         c = pts[-1]
         ctx.add("Metal", _sweep([c + Vector((sx * 0.065, 0.24, 0.0)), c + Vector((sx * 0.075, 0.02, 0.0))],
                                 [(-0.008, -0.02), (0.008, -0.02), (0.008, 0.02), (-0.008, 0.02)], ups=Vector((0, 0, -1))))
@@ -866,10 +866,22 @@ def jacket1(ctx):
         k *= 1 + 0.12 * smoothstep(0.5, 0.9, p.normal.y)
         return k * (0.9 + 0.1 * noise.fbm(p.co * 5, 2))
 
-    ctx.wear("Leather", leather)
+    ctx.wear(leather_layer, leather)
     ctx.wear("Metal", lambda p: 0.75 + 0.15 * noise.fbm(p.co * 9, 2))
     ctx.wear("Wood", mul(edge_wear(0.15), lambda p: 0.85))
     ctx.wear("Chrome", lambda p: 0.8)
+
+
+def jacket1(ctx):
+    """Black leather biker jacket on a wooden hanger (hook = origin, on the rail): wide lapels,
+    asymmetric zip, slanted zip pockets, belt with buckle, zipped cuffs; few broad stiff folds,
+    rubbed on the ridges."""
+    _jacket1(ctx, "LeatherBlack")
+
+
+def jacket1_brown(ctx):
+    """The same biker jacket in dark brown leather (other folds)."""
+    _jacket1(ctx, "Leather")
 
 
 def jacket2(ctx):
@@ -1759,6 +1771,7 @@ PIECES = {
     "CrtTv": crt_tv,
     "Radio": radio,
     "Jacket1": jacket1,
+    "Jacket1Brown": jacket1_brown,
     "Jacket2": jacket2,
     "ClothesRack": clothes_rack,
     "MarketTarp": market_tarp,

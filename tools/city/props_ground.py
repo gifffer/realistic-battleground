@@ -63,6 +63,8 @@ from citykit import (  # noqa: E402
     mix,
 )
 import zlayers  # noqa: E402
+import meshprop as MESHPROP  # noqa: E402
+from meshprop import frame_meshprop, lib_meshprop, variation, weathered  # noqa: E402
 
 CARDBOARD_MAT = "Cardboard"
 
@@ -1005,7 +1007,10 @@ def litter_scatter(D, folder, origin, ry, rng, radius=None, density=1.0):
         o = _w(f, x, z)
         yaw = _yaw(f) + rng.uniform(0, 360)
         if kind == "ball":
-            paper_ball(D, folder, o, yaw, rng)
+            vr = variation("paper", round(float(o[0]), 2), round(float(o[2]), 2))
+            lib_meshprop(D, folder, "PaperBall" if vr.random() < 0.55 else "PaperBall2", o, yaw,
+                         lambda o=o, yaw=yaw: paper_ball(D, folder, o, yaw, rng), scale=round(vr.uniform(0.85, 1.15), 2),
+                         tint=None)
         elif kind == "sheet":
             paper_sheet(D, folder, o, yaw, rng, kind=_pick(rng, ["sheet", "sheet", "flyer"]))
         elif kind in ("packet", "can", "cup", "foil"):
@@ -1101,8 +1106,13 @@ def trash_heap(D, folder, origin, ry, rng, count=None):
             y = s * 0.45
             s *= 0.9
         placed.append((x, z))
-        trash_bag(D, folder, _w(f, x, z, y), _yaw(f) + rng.uniform(-40, 40), rng, size=s,
-                  torn=(i == torn_i and i < 3))
+        at, a, torn = _w(f, x, z, y), _yaw(f) + rng.uniform(-40, 40), (i == torn_i and i < 3)
+        vr = variation("trash_heap", round(float(at[0]), 2), round(float(at[2]), 2))
+        # (the kit: a slumped bag, a torn one, a flattened one lying on the others)
+        piece = "TrashBag2" if torn else ("TrashBag3" if i >= 3 else "TrashBag1")
+        lib_meshprop(D, folder, piece, at, a, lambda at=at, a=a, s=s, torn=torn: trash_bag(D, folder, at, a, rng, size=s,
+                                                                                          torn=torn),
+                     scale=round(s / 2.1, 3), tint=weathered(_pick(vr, BAG), vr, 3, 0.0))
     litter_scatter(D, folder, _w(f, 0, -1.4), _yaw(f), rng, radius=2.0, density=0.6)
 
 
@@ -1565,11 +1575,13 @@ def _ring(f, rng, R_out, t, W, col, n=16, flags=DECOR_SHADOW, wear=0.25):
                rot=(0, -math.degrees(th), 0), flags=flags if i % 4 == 0 else DECOR_SHADOW)
 
 
-@prop({"state": "flat"}, {"state": "leaning"}, {"state": "stack"})
-def tyre(D, folder, origin, ry, rng, state=None):
+@prop({"state": "flat"}, {"state": "leaning"}, {"state": "stack"}, {"state": "stack", "count": 3})
+def tyre(D, folder, origin, ry, rng, state=None, count=None):
     """An old car tyre: lying flat (wet dirt in its hole), leaning against a wall (on +Z),
-    or a stack of 2-3 slightly off each other. Built as a ring of 16 rubber segments, sun-greyed in
-    patches. Footprint 2.3 studs (stack ~2.6). 16-17 parts (stack 33-49); some segments SMALL."""
+    or a stack of 2-3 (`count`) slightly off each other. Built as a ring of 16 rubber segments,
+    sun-greyed in patches. Footprint 2.3 studs (stack ~2.6). 16-17 parts (stack 33-49); some
+    segments SMALL. With the kit on (meshprop.LIBS) each tyre of a stack is a kit Tyre / TyreBald
+    (its ring the fallback), stacked by the kit tyre's real height."""
     f = Frame(D, folder, origin, ry=ry)
     state = state or _pick(rng, ["flat", "leaning", "stack"])
     R, t, W = rng.uniform(1.05, 1.2), 0.46, rng.uniform(0.62, 0.75)
@@ -1584,11 +1596,25 @@ def tyre(D, folder, origin, ry, rng, state=None):
         g = f.sub((0, R * math.cos(lr) + W / 2 * math.sin(lr), R * math.sin(lr)), rx=90 + lean)
         _ring(g, rng, R, t, W, col, flags=SMALL)
     else:
-        n = rng.randint(2, 3)
+        n = rng.randint(2, 3) if count is None else count
+        kit = MESHPROP.LIBS
+        vr = variation("tyre", *(round(float(v), 2) for v in origin))
+        y = 0.0
         for i in range(n):
-            g = f.sub((rng.uniform(-0.25, 0.25), W / 2 + i * W, rng.uniform(-0.25, 0.25)),
-                      rx=rng.uniform(-3, 3), rz=rng.uniform(-3, 3))
-            _ring(g, rng, R * rng.uniform(0.95, 1.05), t, W, _tone(col, rng, 4), flags=SMALL)
+            dx, dz, tx, tz = rng.uniform(-0.25, 0.25), rng.uniform(-0.25, 0.25), rng.uniform(-3, 3), rng.uniform(-3, 3)
+            k = rng.uniform(0.95, 1.05)
+            if not kit:
+                g = f.sub((dx, W / 2 + i * W, dz), rx=tx, rz=tz)
+                _ring(g, rng, R * k, t, W, _tone(col, rng, 4), flags=SMALL)
+                continue
+            # the kit tyre (0.75 tall, 2.3 across at scale 1): its pivot on its bottom, a hair of air
+            # between two (rubber on rubber: the tilt is halved so a rim never sinks into the next)
+            sc = round(R * k / 1.15, 3)
+            g = f.sub((dx, y, dz), ry=vr.uniform(0, 360), rx=tx * 0.4, rz=tz * 0.4)
+            ring = f.sub((dx, y + W / 2, dz), rx=tx, rz=tz)
+            frame_meshprop(D, folder, "TyreBald" if i == 1 else "Tyre", g, lib=True, scale=sc,
+                           fallback=lambda ring=ring, k=k: _ring(ring, rng, R * k, t, W, _tone(col, rng, 4), flags=SMALL))
+            y += 0.75 * sc + 0.03
         _disk(f, "TyreDirt", 0, 0, (R - t) * 1.9, DECAL_TH, SOIL_DARK, "Ground")
 
 

@@ -19,12 +19,25 @@
 --     Scale;
 --   * the old parts that collide or are queried (CanCollide / CanQuery) become invisible
 --     collision proxies, so collisions, raycasts and hit detection do not change;
---   * the old parts that carry something alive (tags, attributes, lights, particles, signs,
---     prompts, sounds...) become invisible too but stay; when the piece has a Light / Fx
---     marker and the part is not a collision proxy, it is moved there (lights to Light,
---     particles to Fx) so the glow / smoke comes from the mesh;
+--   * THE LIVE BULB: when the piece has a Glow layer (a lamp's bulb / lens, a fire's embers,
+--     a stove's flame ring) and the old parts have a light part (a part tagged CityLamp,
+--     CityBulkhead, CityFireEmbers, CityShopLight, CityNeon, CityEmergency, or else one with a
+--     child Light), that part HANDS OVER to the mesh's Glow part: its tags, its attributes
+--     (Dead, Flicker, Faulty, FaultySeed, Built*...), its colour, its material and its Light
+--     move onto the Glow MeshPart. So the mesh's own lens IS the bulb for every system:
+--     Ambience switches it (Neon by night, grey glass by day, power cuts, Dead, Flicker, the
+--     burn barrel's fire), Client/FaultyLightController dims it with its light. A spot light
+--     keeps pointing the same way. A piece with a Light marker but no light part in the data
+--     (an unlit stove, a lamp placed without its light) shows its Glow layer unlit (glass);
+--     a Glow layer of a piece with no Light marker (a radio's LED) just glows;
+--   * the old parts that carry something else alive (tags, attributes, lights, particles,
+--     prompts, sounds...) become invisible but stay; when the piece has a Light / Fx marker and
+--     the part is not a collision proxy, it is moved there (lights to Light; particles and the
+--     CityGutter / CitySteam / CityDrip parts to Fx, even an already invisible one) so the glow
+--     / smoke / spout comes from the mesh. Their decals, textures and SurfaceGuis (the old
+--     look's stencils and labels) are hidden: they would float on the old faces;
 --   * the rest (pure decoration) is removed;
---   * already-invisible parts (gameplay markers: NPC spots, spawns...) are left alone.
+--   * other already-invisible parts (gameplay markers: NPC spots, spawns...) are left alone.
 -- Without the kit (not imported yet) or for a piece the kit does not have, nothing changes:
 -- the old parts show. Server only (clones replicate like any part).
 --
@@ -80,6 +93,7 @@ local LOOKS: { [string]: Look } = {
 	Plastic = look(150, 120, 96, Enum.Material.Plastic, 0, true),
 	PlasticDark = look(38, 38, 40, Enum.Material.Plastic),
 	Rubber = look(30, 30, 31, Enum.Material.Rubber),
+	RubberWorn = look(80, 75, 70, Enum.Material.Rubber), -- (old tyres: sun-greyed sidewalls)
 	Reflective = look(208, 210, 206, Enum.Material.SmoothPlastic, 0.06),
 	Metal = look(128, 130, 132, Enum.Material.Metal, 0.02),
 	MetalPainted = look(84, 92, 88, Enum.Material.Plastic, 0, true),
@@ -89,6 +103,7 @@ local LOOKS: { [string]: Look } = {
 	Fabric = look(96, 92, 84, Enum.Material.Fabric, 0, true),
 	FabricDark = look(42, 40, 40, Enum.Material.Fabric),
 	Leather = look(58, 40, 30, Enum.Material.Leather),
+	LeatherBlack = look(30, 29, 29, Enum.Material.Leather),
 	Foam = look(176, 164, 132, Enum.Material.Fabric),
 	Cardboard = look(140, 110, 76, Enum.Material.Cardboard),
 	Paper = look(196, 190, 174, Enum.Material.SmoothPlastic),
@@ -103,6 +118,19 @@ local LOOKS: { [string]: Look } = {
 	Soil = look(66, 54, 42, Enum.Material.Ground),
 }
 local DEFAULT_LOOK: Look = LOOKS.Plastic
+-- The Glow layer of a lamp whose light is not there (no light part in the data): dirty glass.
+local UNLIT_GLOW: Look = look(90, 90, 86, Enum.Material.Glass, 0.05, false, false, false)
+-- Tags of the light parts Ambience drives (the live bulb, see the top of this file).
+local LIGHT_TAGS: { [string]: boolean } = {
+	CityLamp = true,
+	CityBulkhead = true,
+	CityFireEmbers = true,
+	CityShopLight = true,
+	CityNeon = true,
+	CityEmergency = true,
+}
+-- Tags of the parts that spout / smoke (Ambience adds their particles): they go to the Fx marker.
+local FX_TAGS: { [string]: boolean } = { CityGutter = true, CitySteam = true, CityDrip = true }
 -- Marker cubes of a piece (never drawn).
 local POINTS: { [string]: boolean } = { Pivot = true, Light = true, Fx = true }
 
@@ -243,10 +271,17 @@ local function readTint(marker: Instance): Color3?
 end
 
 -- Does this old part carry something that must keep working (a tag another system looks
--- for, attributes, a light, particles, a sign, a prompt, a sound...)?
+-- for, attributes, a light, particles, a sign, a prompt, a sound...)? Also: has it a light,
+-- and does it smoke / spout (particles, or a tag whose particles Ambience adds)?
 local function isAlive(part: BasePart): (boolean, boolean, boolean)
-	local alive = #part:GetTags() > 0 or next(part:GetAttributes()) ~= nil
+	local alive = next(part:GetAttributes()) ~= nil
 	local lit, smokes = false, false
+	for _, tag in part:GetTags() do
+		alive = true
+		if FX_TAGS[tag] then
+			smokes = true
+		end
+	end
 	for _, child in part:GetChildren() do
 		if child:IsA("Light") then
 			lit = true
@@ -257,6 +292,84 @@ local function isAlive(part: BasePart): (boolean, boolean, boolean)
 		end
 	end
 	return alive or lit or smokes, lit, smokes
+end
+
+-- Hides what an invisible part would still draw: decals, textures, surface signs (the old
+-- look's stencils and labels would float on faces the mesh no longer has).
+local function hideSkin(part: BasePart)
+	for _, child in part:GetChildren() do
+		if child:IsA("Decal") then -- (Texture is a Decal)
+			child.Transparency = 1
+		elseif child:IsA("SurfaceGui") then
+			child.Enabled = false
+		end
+	end
+end
+
+-- The old part that is the piece's light (see "THE LIVE BULB" at the top): a part with a tag
+-- of LIGHT_TAGS first, else one with a child Light. Nil when there is none.
+local function findBulb(marker: BasePart, meshes: { [Instance]: boolean }): BasePart?
+	local withLight: BasePart? = nil
+	for _, item in marker:GetDescendants() do
+		if not item:IsA("BasePart") or meshes[item] then
+			continue
+		end
+		for _, tag in item:GetTags() do
+			if LIGHT_TAGS[tag] then
+				return item
+			end
+		end
+		if withLight == nil and item:FindFirstChildWhichIsA("Light") then
+			withLight = item
+		end
+	end
+	return withLight
+end
+
+-- The face of `to` that points closest to `direction` (world).
+local function nearestFace(to: BasePart, direction: Vector3): Enum.NormalId
+	local localDirection = to.CFrame:VectorToObjectSpace(direction)
+	local best, bestDot = Enum.NormalId.Front, -math.huge
+	for _, face in Enum.NormalId:GetEnumItems() do
+		local dot = Vector3.FromNormalId(face):Dot(localDirection)
+		if dot > bestDot then
+			best, bestDot = face, dot
+		end
+	end
+	return best
+end
+
+-- The old light part hands its role over to the mesh's Glow part: tags, attributes, colour,
+-- material and lights (a spot keeps its world direction). Tags go last, so the systems that
+-- watch them (Ambience, Client/FaultyLightController) find a complete part.
+local function handOver(bulb: BasePart, glow: BasePart)
+	glow.Color = bulb.Color
+	glow.Material = bulb.Material
+	glow.Reflectance = bulb.Reflectance
+	for name, value in bulb:GetAttributes() do
+		glow:SetAttribute(name, value)
+		bulb:SetAttribute(name, nil)
+	end
+	for _, child in bulb:GetChildren() do
+		if child:IsA("SpotLight") then
+			child.Face =
+				nearestFace(glow, bulb.CFrame:VectorToWorldSpace(Vector3.FromNormalId(child.Face)))
+			child.Parent = glow
+		elseif child:IsA("SurfaceLight") then
+			local surface = child :: SurfaceLight
+			surface.Face = nearestFace(
+				glow,
+				bulb.CFrame:VectorToWorldSpace(Vector3.FromNormalId(surface.Face))
+			)
+			surface.Parent = glow
+		elseif child:IsA("Light") then
+			child.Parent = glow
+		end
+	end
+	for _, tag in bulb:GetTags() do
+		bulb:RemoveTag(tag)
+		glow:AddTag(tag)
+	end
 end
 
 -- Turns the marker's old parts into invisible proxies / keeps what is alive / removes the
@@ -273,14 +386,21 @@ local function retire(
 		if not item:IsA("BasePart") or meshes[item] then
 			continue
 		end
-		if item.Transparency >= 1 then
-			continue -- (an invisible gameplay marker: not ours to touch)
-		end
-		local alive, lit, smokes = isAlive(item)
 		local proxy = item.CanCollide or item.CanQuery
+		local alive, lit, smokes = isAlive(item)
+		if item.Transparency >= 1 then
+			-- (an invisible gameplay marker: not ours to touch, except an fx emitter that can
+			-- go to the mesh's vent)
+			if smokes and not proxy and piece.points.Fx then
+				item.CFrame = CFrame.new((pivot * scaled(piece.points.Fx, scale)).Position)
+					* item.CFrame.Rotation
+			end
+			continue
+		end
 		if proxy or alive then
 			item.Transparency = 1
 			item.CastShadow = false
+			hideSkin(item)
 			if not proxy then
 				-- (only a part nothing collides with may move: lights to the mesh's lamp,
 				-- particles to its vent)
@@ -324,9 +444,13 @@ local function swap(marker: BasePart, all: { [string]: Piece }): boolean
 	local pivot = marker.CFrame
 	local shadows = piece.extent * scale >= SHADOW_SIZE
 	local meshes: { [Instance]: boolean } = {}
+	local glow: BasePart? = nil
 	for _, layer in piece.layers do
 		local part = layer.source:Clone()
 		part:ClearAllChildren()
+		for _, tag in part:GetTags() do
+			part:RemoveTag(tag)
+		end
 		local style = LOOKS[layer.name] or DEFAULT_LOOK
 		part.Name = `{piece.name}_{layer.name}`
 		part.Anchored = true
@@ -350,8 +474,25 @@ local function swap(marker: BasePart, all: { [string]: Piece }): boolean
 		-- (the importer gives each mesh its pivot at the kit's origin, far away)
 		part.PivotOffset = CFrame.identity
 		part.CFrame = pivot * scaled(layer.offset, scale)
-		part.Parent = marker
 		meshes[part] = true
+		if layer.name == "Glow" then
+			glow = part
+		end
+	end
+	-- The live bulb (see the top of this file), before the meshes go in: they enter the place
+	-- with their tags already on.
+	if glow and piece.points.Light then
+		local bulb = findBulb(marker, meshes)
+		if bulb then
+			handOver(bulb, glow)
+		else
+			glow.Color = UNLIT_GLOW.color
+			glow.Material = UNLIT_GLOW.material
+			glow.Reflectance = UNLIT_GLOW.shine
+		end
+	end
+	for part in meshes do
+		(part :: BasePart).Parent = marker
 	end
 	retire(marker, piece, pivot, scale, meshes)
 	marker:SetAttribute("MeshApplied", true)

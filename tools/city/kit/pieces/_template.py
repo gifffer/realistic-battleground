@@ -8,8 +8,8 @@ HOW A PIECE IS MADE
   * build_fn(ctx) gets a kitlib.Piece and adds closed bmeshes to material layers:
         ctx.add("Plastic", bm, matrix=None)
     Layers (one MeshPart each, coloured by the game, PropKit.luau LOOKS): Plastic*, PlasticDark,
-    Rubber, Reflective, Metal, MetalPainted*, Rust, Wood, WoodDark, Fabric*, FabricDark,
-    Leather, Foam, Cardboard, Paper, Concrete, Brick, Tarp*, Glass, Screen, Chrome, Black,
+    Rubber, RubberWorn, Reflective, Metal, MetalPainted*, Rust, Wood, WoodDark, Fabric*, FabricDark,
+    Leather, LeatherBlack, Foam, Cardboard, Paper, Concrete, Brick, Tarp*, Glass, Screen, Chrome, Black,
     Glow, Soil (* = tintable: ctx.tint(layer, (r, g, b)) gives its default colour).
   * Space: Roblox axes, studs. +Y up, the front faces -Z. Floor pieces: origin = centre of the
     footprint on the floor (y = 0). Wall pieces: origin on the wall face, -Z out of the wall.

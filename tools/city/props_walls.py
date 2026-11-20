@@ -78,6 +78,8 @@ from citykit import (  # noqa: E402
     yxz_matrix,
 )
 import zlayers  # noqa: E402
+import meshprop as MESHPROP  # noqa: E402
+from meshprop import frame_meshprop, lib_meshprop  # noqa: E402
 
 # ------------------------------------------------------------------ palette (dirty, desaturated)
 BRICK = [(84, 60, 50), (96, 64, 52), (68, 49, 42), (80, 44, 36)]
@@ -1255,8 +1257,13 @@ def back_door(D, folder, origin, ry, rng, width=4.0, height=7.6, variant="closed
         n += soft(f, rng, "Grime", min(s * a, s * b), max(s * a, s * b), 0.45, rng.uniform(2.6, 3.8), DAMP, opacity=0.3,
                   k=0, anchor="bottom")
     if light:
-        n += bulkhead_light(D, folder, f.world((rng.uniform(-0.3, 0.3), 0, 0)), ry_of(f), rng, y=h + 1.4,
-                            dead=dead_light)
+        dx = rng.uniform(-0.3, 0.3)
+        at, a = f.world((dx, 0, 0)), ry_of(f)
+        box = []
+        lib_meshprop(D, folder, "BulkheadLightDead" if dead_light else "BulkheadLight",
+                     tuple(float(v) for v in f.world((dx, h + 1.4, 0))), a,
+                     lambda: box.append(bulkhead_light(D, folder, at, a, rng, y=h + 1.4, dead=dead_light)))
+        n += box[0]
     return n
 
 
@@ -1528,7 +1535,21 @@ def _water_tank(f, rng, cx, base, cz, r, th, legs, color=None, braces=True, far=
     stacked discs) with a small finial, and the outlet pipe down to the roof.
     (The mesh kit replaces this with a real model; these parts are the fallback.) far: the
     lighter version for a building in the background (two hoops, six facets, no outlet).
-    Returns the parts made."""
+    Returns the parts made. With the kit on (meshprop.LIBS) the kit's WaterTank (staves 2.75 in
+    radius: scaled r / 2.75) stands there, these parts its fallback, with the legs and staves set
+    to its proportions so the solid ones (collision proxies) match it."""
+    if MESHPROP.LIBS and not far:  # (the far ones stay the light primitive version: background only)
+        sc = r / 2.75
+        legs, th = 3.6 * sc, 5.3 * sc + 0.12
+        box = []
+        frame_meshprop(f.D, f.folder, "WaterTank", f.sub((cx, base, cz)), scale=round(sc, 3),
+                       fallback=lambda: box.append(_water_tank_parts(f, rng, cx, base, cz, r, th, legs, color, braces,
+                                                                     far)))
+        return box[0] + 1
+    return _water_tank_parts(f, rng, cx, base, cz, r, th, legs, color, braces, far)
+
+
+def _water_tank_parts(f, rng, cx, base, cz, r, th, legs, color, braces, far):
     n = 0
     k = r * 0.68
     for sx in (-1, 1):
@@ -2266,6 +2287,15 @@ def downpipe(D, folder, origin, ry, rng, height=24.0, x=0.0, gutter=6.0, color=N
     f = frame_at(D, folder, origin, ry).sub((x, 0, 0))
     pc = color or jitter(rng.choice([METAL_DARK, (60, 62, 60), (34, 34, 34), (70, 60, 52)]), rng, 6)
     n = 0
+    kit = MESHPROP.LIBS
+    if kit:
+        # The kit's cast-iron lengths tile from the shoe's socket (y 1.2): 6.0 lengths, then 1.5
+        # ones (never two overlapping: coaxial pipes would z-fight); the gutter comes down onto
+        # the last socket (its underside just over it), so the run needs no swan neck.
+        reach = height - 0.46 - 1.2
+        n6 = int(reach // 6.0)
+        n15 = int((reach - 6.0 * n6) // 1.5)
+        height = 1.2 + 6.0 * n6 + 1.5 * n15 + 0.46
     # gutter (in its own frame: the sag tilts the gutter, its bead and its end caps together),
     # set where neither its capped end nor the broken length off its other end runs into a
     # neighbouring wall (a corner is often close)
@@ -2304,32 +2334,65 @@ def downpipe(D, folder, origin, ry, rng, height=24.0, x=0.0, gutter=6.0, color=N
     d = 0.36  # (real: 68-110 mm)
     zc = -0.38
     top = height - 2.1
-    # outlet + swan neck: down from the gutter, a step back toward the wall, down again
-    n += bend(f, "SwanNeck", [(0, height - 0.3, -0.45), (0, height - 0.95, -0.45), (0, height - 1.55, zc),
-                              (0, top, zc)], d, pc, "Metal", flags=DECOR)
-    # the pipe: one length from the swan neck to the shoe; socket collars and clips
-    rod(f, "Downpipe", (0, top, zc), (0, 0.9, zc), d, jitter(pc, rng, 3), "Metal", flags=DECOR_SHADOW)
-    n += 1
-    joints = rng.randint(3, 4)
-    leak = rng.randrange(joints)
-    for i in range(joints):
-        a = top - (i + 0.15) * (top - 0.9) / joints
-        f.part("Collar", (0, a, zc), (0.32, d + 0.1, d + 0.1), jitter(pc, rng, 3, 0.1), "Metal", rot=(0, 0, 90),
-               shape=CYLINDER, flags=DECOR)
-        cy_ = a - 0.55
-        f.part("Clip", (0, cy_, zc), (0.16, d + 0.07, d + 0.07), METAL_DARK, "Metal", rot=(0, 0, 90), shape=CYLINDER,
+    leaks = []
+
+    def pipe():
+        nonlocal n
+        # outlet + swan neck: down from the gutter, a step back toward the wall, down again
+        n += bend(f, "SwanNeck", [(0, height - 0.3, -0.45), (0, height - 0.95, -0.45), (0, height - 1.55, zc),
+                                  (0, top, zc)], d, pc, "Metal", flags=DECOR)
+        # the pipe: one length from the swan neck to the shoe; socket collars and clips
+        rod(f, "Downpipe", (0, top, zc), (0, 0.9, zc), d, jitter(pc, rng, 3), "Metal", flags=DECOR_SHADOW)
+        n += 1
+        joints = rng.randint(3, 4)
+        leak = rng.randrange(joints)
+        for i in range(joints):
+            a = top - (i + 0.15) * (top - 0.9) / joints
+            f.part("Collar", (0, a, zc), (0.32, d + 0.1, d + 0.1), jitter(pc, rng, 3, 0.1), "Metal", rot=(0, 0, 90),
+                   shape=CYLINDER, flags=DECOR)
+            cy_ = a - 0.55
+            f.part("Clip", (0, cy_, zc), (0.16, d + 0.07, d + 0.07), METAL_DARK, "Metal", rot=(0, 0, 90),
+                   shape=CYLINDER, flags=DECOR)
+            rod(f, "Clip", (0, cy_, 0.06), (0, cy_, zc), 0.06, METAL_DARK, "Metal", flags=DECOR)  # (its stem, in the wall)
+            n += 3
+            if i == leak:  # (a cracked joint: the wet stain stays on the wall, out of the kit's markers)
+                leaks.append(a)
+                if not kit:
+                    leak_stain(a)
+
+    def leak_stain(a):
+        nonlocal n
+        n += streak(f, rng, "Leak", rng.uniform(0.35, 0.6) * rng.choice((-1, 1)), a - 0.2,
+                    rng.uniform(4, max(4.5, a - 1.5)), 0.7, WET_DARK, k=0, tr=0.5, taper=3)
+
+    def shoe():
+        nonlocal n
+        # the shoe (kicked out at the foot): a bend and a short spout, the tagged shoe at its end
+        f.part("ShoeBend", (0, 0.9, zc), (d * 1.04, d * 1.04, d * 1.04), jitter(pc, rng, 4, 0.1), "Metal", shape=BALL,
                flags=DECOR)
-        rod(f, "Clip", (0, cy_, 0.06), (0, cy_, zc), 0.06, METAL_DARK, "Metal", flags=DECOR)  # (its stem, in the wall)
-        n += 3
-        if i == leak:
-            n += streak(f, rng, "Leak", rng.uniform(0.35, 0.6) * rng.choice((-1, 1)), a - 0.2,
-                        rng.uniform(4, max(4.5, a - 1.5)), 0.7, WET_DARK, k=0, tr=0.5, taper=3)
-    # the shoe (kicked out at the foot): a bend and a short spout, the tagged shoe at its end
-    f.part("ShoeBend", (0, 0.9, zc), (d * 1.04, d * 1.04, d * 1.04), jitter(pc, rng, 4, 0.1), "Metal", shape=BALL,
-           flags=DECOR)
-    f.part("Shoe", (0.0, 0.66, zc - 0.22), (0.62, d, d), jitter(pc, rng, 4, 0.1), "Metal", rot=(0, 90, -40),
-           shape=CYLINDER, flags=DECOR, extra={"t": ["CityGutter"]})
-    n += 2
+        f.part("Shoe", (0.0, 0.66, zc - 0.22), (0.62, d, d), jitter(pc, rng, 4, 0.1), "Metal", rot=(0, 90, -40),
+               shape=CYLINDER, flags=DECOR, extra={"t": ["CityGutter"]})
+        n += 2
+
+    if kit:
+        tint = tuple(pc)
+        frame_meshprop(D, folder, "DownpipeShoe", f, shoe, tint=tint)
+        y = 1.2
+        for i in range(n6):
+            frame_meshprop(D, folder, "DownpipeStraight", f.sub((0, y, 0)), pipe if i == 0 else None, tint=tint)
+            frame_meshprop(D, folder, "DownpipeBracket", f.sub((0, y + 3.0, 0)), tint=tint)
+            y += 6.0
+        for i in range(n15):
+            frame_meshprop(D, folder, "DownpipeStraightShort", f.sub((0, y, 0)), pipe if i == 0 and not n6 else None,
+                           tint=tint)
+            y += 1.5
+        n += 2 * n6 + n15 + 1
+        joints = [1.2 + 6.0 * (i + 1) for i in range(n6)] + [1.2 + 6.0 * n6 + 1.5 * (i + 1) for i in range(n15)]
+        for a in leaks:  # (from the kit joint nearest the old cracked one)
+            leak_stain(min(joints[:-1] or joints, key=lambda j: abs(j - a)) + 0.2)
+    else:
+        pipe()
+        shoe()
     # green slime on the wall round the foot (moss where the water splashes)
     n += soft(f, rng, "Slime", -0.9, 1.1, 0, rng.uniform(1.2, 2.0), jitter(MOSS, rng, 6, 0.2), opacity=0.6, k=0,
               anchor="bottom", material="Grass")

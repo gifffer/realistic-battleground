@@ -48,6 +48,7 @@ LAYERS = {
     "Plastic": ((150, 120, 96), 0.0, 0.45, True, False, False),
     "PlasticDark": ((38, 38, 40), 0.0, 0.5, False, False, False),
     "Rubber": ((30, 30, 31), 0.0, 0.9, False, False, False),
+    "RubberWorn": ((80, 75, 70), 0.0, 0.9, False, False, False),  # old tyres: sun-greyed sidewalls
     "Reflective": ((208, 210, 206), 0.0, 0.3, False, False, False),
     "Metal": ((128, 130, 132), 0.8, 0.45, False, False, False),
     "MetalPainted": ((84, 92, 88), 0.2, 0.5, True, False, False),
@@ -56,7 +57,8 @@ LAYERS = {
     "WoodDark": ((66, 50, 38), 0.0, 0.8, False, False, False),
     "Fabric": ((96, 92, 84), 0.0, 0.9, True, False, False),
     "FabricDark": ((42, 40, 40), 0.0, 0.9, False, False, False),
-    "Leather": ((58, 40, 30), 0.0, 0.6, False, False, False),
+    "Leather": ((58, 40, 30), 0.0, 0.6, False, False, False),  # dark brown
+    "LeatherBlack": ((30, 29, 29), 0.0, 0.55, False, False, False),
     "Foam": ((176, 164, 132), 0.0, 0.95, False, False, False),
     "Cardboard": ((140, 110, 76), 0.0, 0.9, False, False, False),
     "Paper": ((196, 190, 174), 0.0, 0.85, False, False, False),
