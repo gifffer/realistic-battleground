@@ -1086,15 +1086,17 @@ def sleeping_bag(ctx):
         u = i / (nu - 1)
         z = (u - 0.5) * L
         x = (j / (nv - 1) - 0.5) * width(u)
-        # dropped on end, held by the hood and let go: it stands on its foot, buckles and
-        # topples over on itself (a gentle wave and lean seed the folds' direction); clothes
-        # left inside it make the lump it falls over
-        y = FLOOR + 0.3 + u * L * 0.97
-        return Vector((x + 0.35 * u * u, y, 0.22 * math.sin(u * 7.0 + 0.5) + 0.12 * math.sin(x * 1.7) - 0.4 * u))
+        # laid out flat a little above the floor, with a gentle wave and a side-to-side tilt to
+        # seed the folds' direction; then pushed together from both ends (moving walls) so it
+        # buckles into the bunched, puffy heap of a bag kicked off in the morning
+        return Vector((x + 0.25 * math.sin(u * 3.0), FLOOR + 0.55 + 0.06 * x + 0.1 * math.sin(u * 9.0 + 0.7), z))
 
-    lump = _lumpy_ball(0.55, noise, amp=0.25, segs=12, rings=8, squash=(1.3, 0.5, 0.9))
-    bmesh.ops.transform(lump, matrix=T(0.2, FLOOR + 0.2, -0.9), verts=lump.verts)
-    pts = _cloth(nu, nv, start, 160, t, colliders=[lump], bend=3.0, mass=0.5, friction=60.0)
+    lump = _lumpy_ball(0.6, noise, amp=0.25, segs=12, rings=8, squash=(1.3, 0.55, 1.0))
+    bmesh.ops.transform(lump, matrix=T(0.15, FLOOR + 0.2, -0.3), verts=lump.verts)
+    end = L / 2 + 0.4
+    walls = [((6.0, 3.0, 0.4), (0.0, 1.5, -end), (0.0, 1.5, -1.55), 8, 95),
+             ((6.0, 3.0, 0.4), (0.0, 1.5, end), (0.0, 1.5, 1.45), 8, 95)]
+    pts = _cloth(nu, nv, start, 130, t, colliders=[lump], walls=walls, bend=2.0, mass=0.5, friction=40.0)
     nrm = _sheet_normals(pts, nu, nv)
 
     def puff(k):
