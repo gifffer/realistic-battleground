@@ -113,6 +113,11 @@ return table.freeze({
 		-- where one dummy finishes another with any kit's finisher, to watch
 		-- them from outside (Server/Systems/TestTools).
 		TEST_TOOLS = true,
+		-- In Studio only: the autopsy VIDEO mini-game (18+, a Dexter-style
+		-- room, a scalpel, the organs, a pixel screen). Set to true to use
+		-- it; never runs in the published game (Client/Autopsy,
+		-- docs/AUTOPSY_FR.md).
+		AUTOPSY_VIDEO = false,
 	}),
 
 	-- Basic combat (M1 combo, block, parry, dash). Times are in seconds.

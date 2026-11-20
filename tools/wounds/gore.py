@@ -119,6 +119,33 @@ Pieces ("Gore_<Piece>_<Layer>", one mesh per layer, coloured by the game):
   (The open fractures are wound inserts: build_wound_kit.py "Break",
   fracture.py.)
 
+  The autopsy video (kind "autopsy"; Z-Anatomy, autopsy.npz,
+  extract_autopsy.py): the R6 torso opened from the front, in torso space
+  (2 x 2 x 1, its front at Z = -0.5), everything behind Z = -0.40 (the game
+  draws the skin, fat and muscle over the front) and inside |Y| <= 0.97;
+  every organ its own piece, to be pulled out:
+  AutCavity    the inside of the torso: five walls, no front, lumpy, facing
+               in (FleshDark), blood pooled on the back wall (Blood)
+  AutBack      what stays: the ribs behind Z = -0.12 and the spine T1-L5
+               (Bone), the discs and the trachea (Cartilage), the psoas and
+               quadratus lumborum (Muscle), the aorta (Artery), the inferior
+               vena cava (Vein), the oesophagus (GutDark)
+  AutDiaphragm the diaphragm (Muscle)
+  AutKidneyR / AutKidneyL   a kidney (Kidney), its renal artery and vein
+               (Vessel)
+  AutPancreas  the pancreas (Pancreas) in the loop of the duodenum (Gut)
+  AutSpleen    the spleen (Spleen)
+  AutStomach   the stomach (Stomach)
+  AutLiver     the liver (Liver) and its gallbladder (Gallbladder)
+  AutColon     the ascending, transverse and descending colon (Colon)
+  AutGut       the small intestine's loops (Gut: the jejunum)
+  AutOmentum   the greater omentum, the fatty apron over the guts (Fat)
+  AutLungR / AutLungL   a lung's lobes (Lung), its main bronchus (Cartilage)
+  AutHeart     the ventricles (Heart), the atria (HeartDark), the ascending
+               aorta, pulmonary trunk and superior vena cava (Artery)
+  AutChest     the chest plate: the sternum and the ribs in front of
+               Z = -0.12 (Bone), the costal cartilages (Cartilage)
+
 Head space (studs): X right of the character, Y up, Z to the back, origin =
 the head's centre. Piece n sits in the kit with its head space moved to
 SLOTS[n] (written in src/shared/GoreShapes.luau).
@@ -181,6 +208,11 @@ COLORS = {
     "Mesentery": (0.88, 0.76, 0.52),
     "Colon": (0.74, 0.58, 0.50),
     "Chyme": (0.62, 0.52, 0.2),
+    # (the autopsy video: the organs of the open torso)
+    "Stomach": (0.78, 0.50, 0.45),
+    "Spleen": (0.36, 0.08, 0.15),
+    "Kidney": (0.42, 0.11, 0.11),
+    "Pancreas": (0.86, 0.70, 0.52),
 }
 
 
@@ -1060,7 +1092,7 @@ def build(add_object):
     kinds = {
         k: []
         for k in ("skull", "brain", "eye", "tooth", "splat", "streak", "pool", "organ", "limb", "bisect", "gut", "cut",
-                  "dismember")
+                  "dismember", "autopsy")
     }
 
     def piece(name, layers, kind=None):
@@ -1187,6 +1219,11 @@ def build(add_object):
     # off, the left arm and leg. (After Dr. Rift's, their own random numbers:
     # the pieces above keep their slots.)
     heavy_gore(6060, piece)
+
+    # The autopsy video: the organs of the R6 torso opened from the front,
+    # each its own piece. (Last, their own random numbers: nothing above moves.)
+    for name, layers in autopsy(random.Random(7373)):
+        piece(name, layers, "autopsy")
     return slots, kinds
 
 
@@ -2923,3 +2960,88 @@ def heavy_gore(rng_seed, piece):
     for layers in (leg_end, hip):
         for bm in layers.values():
             bm.free()
+
+
+# ---------------------------------------------------------------------------
+# The autopsy video: the R6 torso opened from the front, every organ its own
+# piece (torso space) so it can be pulled out. Z-Anatomy, autopsy.npz
+# (extract_autopsy.py): everything already behind Z = -0.40 (the game draws
+# the skin, fat and muscle over the front) and inside |Y| <= 0.97.
+
+AUTOPSY_ANATOMY = os.path.join(HERE, "anatomy", "autopsy.npz")  # extract_autopsy.py
+PLATE_CUT = -0.12  # the ribs are cut here (Z): in front of it, the chest plate
+CAVITY = (0.93, 0.985, -0.40, 0.45)  # the lining: half width, half height, front, back
+
+
+def cavity_lining(rng):
+    """The inside of the torso: five walls (no front), lumpy, facing in."""
+    hx, hy, front, back = CAVITY
+    bm = bmesh.new()
+
+    def wall(origin, du, dv, nu, nv):
+        rows = [[bm.verts.new(origin + du * (i / nu) + dv * (j / nv)) for j in range(nv + 1)] for i in range(nu + 1)]
+        for i in range(nu):
+            for j in range(nv):
+                bm.faces.new((rows[i][j], rows[i + 1][j], rows[i + 1][j + 1], rows[i][j + 1]))
+
+    depth = Vector((0, 0, back - front))
+    wide, high = Vector((2 * hx, 0, 0)), Vector((0, 2 * hy, 0))
+    wall(Vector((-hx, -hy, back)), wide, high, 24, 24)  # the back
+    wall(Vector((-hx, -hy, front)), depth, high, 10, 24)  # the sides
+    wall(Vector((hx, -hy, front)), depth, high, 10, 24)
+    wall(Vector((-hx, hy, front)), wide, depth, 24, 10)  # the top and the bottom
+    wall(Vector((-hx, -hy, front)), wide, depth, 24, 10)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
+    # (the back wall bowed toward the corners a little: not a flat box)
+    for v in bm.verts:
+        sx, sy = v.co.x / hx, v.co.y / hy
+        v.co.z -= (0.05 * sx**6 + 0.04 * sy**6) * (v.co.z - front) / (back - front)
+    bmesh.ops.triangulate(bm, faces=bm.faces[:])
+    bm.normal_update()
+    for face in bm.faces:  # facing the middle
+        if face.normal.dot(face.calc_center_median() - Vector((0, 0, 0.1))) > 0:
+            face.normal_flip()
+    bm.normal_update()
+    return lumpy(bm, rng, 0.016, 9.0)
+
+
+def autopsy(rng):
+    """[(piece, {layer: bmesh})], in this order (see the module's doc)."""
+    groups = load_anatomy(AUTOPSY_ANATOMY)
+
+    def mesh(*names):
+        return bm_join_all([bm_of(v, f) for n in names for v, f in groups[n]])
+
+    ribs = mesh("ribs")
+    front = cut(bm_copy(ribs), [((0, 0, PLATE_CUT), (0, 0, 1))])
+    back = cut(ribs, [((0, 0, PLATE_CUT), (0, 0, -1))])
+    lining = cavity_lining(rng)
+    # (blood pooled on the back wall, where it runs to: the body lies face up)
+    pooled = bm_copy(lining)
+    bmesh.ops.delete(pooled, geom=[f for f in pooled.faces if f.calc_center_median().z < 0.1], context="FACES")
+    blood = decimate(blood_coat(rng, pooled, cover=0.45, lift=0.007), 1600)
+    return [
+        ("AutCavity", {"FleshDark": lining, "Blood": blood}),
+        ("AutBack", {
+            "Bone": bm_join_all([back, mesh("spine")]),
+            "Cartilage": mesh("discs", "trachea"),
+            "Muscle": mesh("psoas"),
+            "Artery": mesh("aorta"),
+            "Vein": mesh("cava"),
+            "GutDark": mesh("oesophagus"),
+        }),
+        ("AutDiaphragm", {"Muscle": mesh("diaphragm")}),
+        ("AutKidneyR", {"Kidney": mesh("kidneyr"), "Vessel": mesh("renalr")}),
+        ("AutKidneyL", {"Kidney": mesh("kidneyl"), "Vessel": mesh("renall")}),
+        ("AutPancreas", {"Pancreas": mesh("pancreas"), "Gut": mesh("duodenum")}),
+        ("AutSpleen", {"Spleen": mesh("spleen")}),
+        ("AutStomach", {"Stomach": mesh("stomach")}),
+        ("AutLiver", {"Liver": mesh("liver"), "Gallbladder": mesh("gallbladder")}),
+        ("AutColon", {"Colon": mesh("colon")}),
+        ("AutGut", {"Gut": mesh("jejunum")}),
+        ("AutOmentum", {"Fat": lumpy(mesh("omentum"), rng, 0.008, 30.0)}),
+        ("AutLungR", {"Lung": mesh("lungr"), "Cartilage": mesh("bronchusr")}),
+        ("AutLungL", {"Lung": mesh("lungl"), "Cartilage": mesh("bronchusl")}),
+        ("AutHeart", {"Heart": mesh("ventricles"), "HeartDark": mesh("atria"), "Artery": mesh("heartvessels")}),
+        ("AutChest", {"Bone": bm_join_all([front, mesh("sternum")]), "Cartilage": mesh("cartilage")}),
+    ]

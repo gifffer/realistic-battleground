@@ -110,6 +110,10 @@ function GoreKit.get(): { [string]: Piece }?
 	for _, name in GoreShapes.cut do
 		optional[name] = true
 	end
+	-- (nor the autopsy video's organs: Studio only, never required)
+	for _, name in GoreShapes.autopsy do
+		optional[name] = true
+	end
 	for name in GoreShapes.slots do
 		if found[name] == nil and not optional[name] then
 			if not warned and next(found) == nil then
