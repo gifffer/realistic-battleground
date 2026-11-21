@@ -9,12 +9,20 @@ the city changes and a part is not found any more, that entry is skipped and the
     venv/bin/python -I tools/city/overlay/build_overlay.py            # build + validate + write
     venv/bin/python -I tools/city/overlay/build_overlay.py --check    # fail if the files are stale
     venv/bin/python -I tools/city/overlay/build_overlay.py --only demo --dry
+    venv/bin/python -I tools/city/overlay/build_overlay.py --prune            # after a citygen regen
 
 Edit modules: tools/city/overlay/edits/*.py (one per area / family, run in name order), each
 with a function edits(O); O is an overlay.core.Overlay (its docstring lists the ops). Every
 match must hit exactly one built row: misses, ambiguous matches and refused removals stop the
 build. The result is then applied to a fresh copy of the city exactly like the game does
-(overlay/apply.py) and must apply with 0 skipped entries.
+(overlay/apply.py) and must apply with 0 skipped entries; the city it gives is checked (every
+built sign complete, with a real font; no part under itself, in a parent cycle, or under a part
+that is not built), and only problems the overlay brings stop the build.
+
+--prune: after citygen moved or changed parts, the entries whose parts are not found any more
+are DROPPED (listed loudly; fix or delete them in edits/*.py later) and the rest is written:
+op and schema errors still stop the build. --check also lists the committed entries that no
+longer resolve on the current city.
 """
 
 import argparse
@@ -29,7 +37,8 @@ sys.path.insert(0, os.path.dirname(HERE))  # tools/city: the overlay package, me
 
 from overlay import apply as overlay_apply  # noqa: E402
 from overlay import citydata  # noqa: E402
-from overlay.core import Overlay  # noqa: E402
+from overlay.citydata import EXTRA, NAME, PARENT  # noqa: E402
+from overlay.core import Overlay, sign_problem  # noqa: E402
 
 EDITS_DIR = os.path.join(HERE, "edits")
 PREFIX = "CityOverlay"
@@ -74,6 +83,47 @@ def build(only=None):
     return O
 
 
+def city_problems(data):
+    """{problem text} of the built city `data` (merged, an overlay applied or not): incomplete
+    signs or unknown fonts (addSign), parts under themselves, in a parent cycle, or under a part
+    that is not built (they would vanish or stop the build)."""
+    parts, skip = data["parts"], data.get("skip", set())
+    out = set()
+    for i, r in enumerate(parts):
+        if i in skip:
+            continue
+        ex = data["extras"][r[EXTRA] - 1] if r[EXTRA] else None
+        if isinstance(ex, dict) and ex.get("g") is not None:
+            why = sign_problem(ex["g"], whole=True) if isinstance(ex["g"], dict) else "not a table"
+            if why:
+                out.add(f"row {i} ({data['names'][r[NAME] - 1]}): sign {why}")
+        p = r[PARENT] - 1
+        if p < 0:
+            continue
+        if p == i:
+            out.add(f"row {i} ({data['names'][r[NAME] - 1]}): under itself")
+        elif p >= len(parts) or p in skip:
+            out.add(f"row {i} ({data['names'][r[NAME] - 1]}): its parent row {p} is not built")
+        else:
+            seen, k = {i}, p
+            while k >= 0:
+                if k in seen:
+                    out.add(f"row {i} ({data['names'][r[NAME] - 1]}): parent cycle")
+                    break
+                seen.add(k)
+                k = parts[k][PARENT] - 1 if k < len(parts) else -1
+    return out
+
+
+def stale_entries(data):
+    """[(entry id, match, hits)] of the COMMITTED CityOverlay that do not resolve on `data`."""
+    ov = citydata.load(PREFIX)
+    if not ov:
+        return []
+    stats = overlay_apply.apply(copy.deepcopy(data), copy.deepcopy(ov))
+    return stats["missed"]
+
+
 def pieces(text):
     """The Luau files' contents for the JSON text (each <= MAX_BYTES)."""
     if "]==" in text:
@@ -105,23 +155,40 @@ def main():
     ap.add_argument("--check", action="store_true", help="validate, and fail if the written files differ")
     ap.add_argument("--dry", action="store_true", help="validate only, write nothing")
     ap.add_argument("--only", help="comma list of edit modules (with --dry: try one module)")
+    ap.add_argument("--prune", action="store_true",
+                    help="drop the entries whose parts are not found (after a citygen regen), write the rest")
     ap.add_argument("--verbose", "-v", action="store_true")
     a = ap.parse_args()
     if a.only and not (a.dry or a.check):
         raise SystemExit("--only writes a partial overlay: use it with --dry")
 
+    if a.check:
+        for eid, m, hits in stale_entries(citydata.merged()):
+            print(f"stale: committed entry {eid} no longer resolves: {m} hit {hits} rows")
     O = build(a.only)
     for w in O.warnings:
         print("warning:", w)
-    if O.errors:
-        for e in O.errors:
+    errors = list(O.errors)
+    if a.prune:
+        soft = [e for e in errors if e in O.soft]
+        errors = [e for e in errors if e not in O.soft]
+        for e in soft:
+            print("PRUNED (part not found):", e)
+        for eid in O.dropped():
+            print("PRUNED entry:", eid)
+        if soft:
+            print(f"!!! {len(soft)} match(es) missed, {len(O.dropped())} entr(ies) dropped: "
+                  "fix or delete them in tools/city/overlay/edits/ !!!")
+    if errors:
+        for e in errors:
             print("ERROR:", e)
-        raise SystemExit(f"{len(O.errors)} error(s): nothing written")
+        raise SystemExit(f"{len(errors)} error(s): nothing written")
 
     ov = O.json()
     text = json.dumps(ov, separators=(",", ":"), ensure_ascii=False)
     # the game's view: apply to a fresh copy, every entry must apply
     fresh = citydata.merged()
+    baseline = city_problems(fresh)
     before = len(fresh["parts"]) - len(fresh["skip"])
     lines = []
     stats = overlay_apply.apply(fresh, json.loads(text), lines)
@@ -130,6 +197,13 @@ def main():
         for eid, m, hits in stats["missed"]:
             print(f"ERROR: entry {eid}: {m} hit {hits} rows")
         raise SystemExit("the overlay does not apply cleanly to the current city")
+    for p in sorted(baseline):
+        print("warning (city, not the overlay):", p)
+    new = sorted(city_problems(fresh) - baseline)
+    if new:
+        for p in new:
+            print("ERROR:", p)
+        raise SystemExit(f"the overlay breaks {len(new)} part(s) of the city: nothing written")
     kinds = {}
     for e in ov["entries"]:
         for op in e["ops"]:

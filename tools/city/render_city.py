@@ -108,13 +108,14 @@ def wrap(text, fnt, max_w):
     return lines
 
 
-def text_scaled(text, font_name, w, h, max_size=100, min_size=1):
-    """Roblox TextScaled: the biggest size whose wrapped lines fit (w, h) px (line height = size)."""
+def text_scaled(text, font_name, w, h, max_size=100, min_size=1, line_h=1.0):
+    """Roblox TextScaled: the biggest size whose wrapped lines fit (w, h) px (line height = size
+    x line_h, the sign's lineH)."""
     top = int(max(1, min(100, max_size)))
     for s in range(top, 0, -1):
         f = font(font_name, s)
         lines = wrap(text, f, w)
-        if len(lines) * s <= h and all(f.getlength(ln) <= w for ln in lines):
+        if len(lines) * s * line_h <= h and all(f.getlength(ln) <= w for ln in lines):
             return max(s, int(min_size)), lines
     s = max(1, int(min_size))
     return s, wrap(text, font(font_name, s), w)
@@ -159,8 +160,9 @@ def sign_image(g, face_w, face_h, magnify=4, max_tex=2048):
     alphas = None
     if g.get("rich"):
         text, alphas = rich_alpha(text)
+    line_h = float(g.get("lineH") or 1.0)
     size, lines = text_scaled(text, g.get("font", "Oswald"), max(1, iw), max(1, ih),
-                             g.get("maxSize", 100), g.get("minSize", 1))
+                             g.get("maxSize", 100), g.get("minSize", 1), line_h)
     bg = g.get("bg")
     bg_tr = g.get("bg_tr", 1)
     fill_bg = (0, 0, 0, 0)
@@ -172,7 +174,7 @@ def sign_image(g, face_w, face_h, magnify=4, max_tex=2048):
     alpha = int(255 * (1 - float(g.get("textTr", 0))))
     color = tuple(g.get("color", (255, 255, 255))) + (alpha,)
     stroke = g.get("stroke")
-    total = len(lines) * size
+    total = len(lines) * size * line_h
     ya = g.get("yalign", "Center")
     y0 = H * py + (0 if ya == "Top" else (ih - total) if ya == "Bottom" else (ih - total) / 2)
     xa = g.get("xalign", "Center")
@@ -184,7 +186,7 @@ def sign_image(g, face_w, face_h, magnify=4, max_tex=2048):
         if isinstance(stroke, dict) and stroke.get("color"):
             kw = dict(stroke_width=max(1, size // 14),
                       stroke_fill=tuple(stroke["color"]) + (int(255 * (1 - stroke.get("tr", 0))),))
-        yy = y0 + i * size + size / 2
+        yy = y0 + (i + 0.5) * size * line_h
         if alphas is None:
             draw.text((x, yy), ln, font=f, fill=color, anchor="lm", **kw)
             continue

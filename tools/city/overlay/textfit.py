@@ -47,21 +47,24 @@ def line_em(line, font="Oswald"):
     return f.getlength(line) / _REF
 
 
-def text_studs(text, font, w, h, pad=0.0):
+def text_studs(text, font, w, h, pad=0.0, line_h=1.0):
     """The text size (studs) TextScaled reaches with no 100 px cap: explicit lines only (the
-    signs' texts carry their own \\n, so nothing wraps)."""
+    signs' texts carry their own \\n, so nothing wraps). line_h: the sign's lineH (LineHeight:
+    each line takes line_h x the size)."""
     px, py = (pad, pad) if isinstance(pad, (int, float)) else (pad[0], pad[1])
     iw, ih = w * (1 - 2 * px), h * (1 - 2 * py)
     lines = strip_rich(text).split("\n")
     widest = max(line_em(ln, font) for ln in lines) or 1e-6
-    return max(1e-3, min(ih / len(lines), iw / widest))
+    return max(1e-3, min(ih / (len(lines) * line_h), iw / widest))
 
 
-def fit_pps(text, font, w, h, pad=0.0, lo=10, hi=200, scale=1.0):
+def fit_pps(text, font, w, h, pad=0.0, lo=10, hi=400, scale=1.0, line_h=1.0):
     """PixelsPerStud so that the 100 px cap is the size the box allows (rounded up: the cap binds,
     so TextScaled draws the lines as given, at 100 px, and never wraps them into a bigger size).
+    The cap must bind: below it, TextScaled may wrap a line to draw the text bigger, so hi is
+    high (a small sign's canvas stays small).
     scale < 1 makes the text that much smaller than the box allows."""
-    s = text_studs(text, font, w, h, pad) * scale
+    s = text_studs(text, font, w, h, pad, line_h) * scale
     return int(max(lo, min(hi, math.ceil(100 / s))))
 
 

@@ -421,6 +421,7 @@ def sign_extra(text, color, font="PermanentMarker", lit=False, face="Front", bg=
 # Text on the walls (texts audit S0): sprays and tags readable at 8+ studs, at least 3:1 against
 # what they are painted on; else black or off-white, whichever reads better.
 INK_BLACK = (22, 22, 22)
+TAG_LINE_H = 1.15  # (graffiti_tag: LineHeight of a tag on two lines)
 INK_WHITE = (228, 222, 206)
 
 
@@ -930,14 +931,23 @@ def graffiti_tag(D, folder, origin, ry, rng, width=5.0, height=1.8, y=4.0, x=0.0
     rng.choice(["PermanentMarker", "Kalam"])  # (was the font: the draw is kept, the alleys stay as they were)
     words, pps, size = wall_text(words, "PermanentMarker", width, height)
     nl = words.count("\n") + 1
+    # PermanentMarker's caps and descenders fill its whole line: two lines at LineHeight 1 touch
+    # ("ASK FOR" sat on "VIC"). A little air between them (lineH), the size fitted with it.
+    line_h = TAG_LINE_H if nl > 1 else None
+    if line_h:
+        size = textfit.text_studs(words, "PermanentMarker", width, height, [0.04, 0.06], line_h)
+        pps = textfit.fit_pps(words, "PermanentMarker", width, height, [0.04, 0.06], line_h=line_h)
     f.part("Graffiti", (x, y + height / 2, _ov(2)), (width, height, 0.05), (0, 0, 0), "SmoothPlastic",
            rot=(0, 0, rz), transparency=1, flags=DECOR,
-           extra=sign_extra(words, color, font="PermanentMarker", pps=pps, pad=[0.04, 0.06], textTr=0.04))
+           extra=sign_extra(words, color, font="PermanentMarker", pps=pps, pad=[0.04, 0.06], textTr=0.04,
+                            lineH=line_h))
     n += 1
     if drips:
-        # under the letters: the text's own width, from the foot of its last line
-        tw = min(width * 0.92, max(textfit.line_em(ln, "PermanentMarker") for ln in words.split("\n")) * size)
-        foot = y + height / 2 - nl * size / 2 + 0.25 * size
+        # under the letters: the last line's own width, from its foot (the text block is centred
+        # on the carrier and tilted rz with it: the foot follows the tilt)
+        size = min(size, 100 / pps)  # (what TextScaled draws: the 100 px cap)
+        tw = min(width * 0.92, textfit.line_em(words.split("\n")[-1], "PermanentMarker") * size)
+        foot = y + height / 2 - nl * size * (line_h or 1) / 2 + 0.03 * size
         xs = sorted(rng.uniform(-tw * 0.42, tw * 0.42) for _ in range(rng.randint(1, 5)))
         last = -1e9
         for dx in xs:
@@ -946,7 +956,7 @@ def graffiti_tag(D, folder, origin, ry, rng, width=5.0, height=1.8, y=4.0, x=0.0
             last = dx
             w = rng.uniform(0.035, 0.09)
             ln = rng.uniform(0.25, 1.5) * (0.6 if w < 0.05 else 1.0)
-            ys = foot + size * (rng.uniform(0.18, 0.4) - 0.18) * 0.3
+            ys = foot + dx * math.sin(math.radians(rz)) + size * (rng.uniform(0.18, 0.4) - 0.18) * 0.1
             g = f.sub((x + dx, ys, 0), rz=rng.uniform(-2, 2))
             if overlay(g, "Drip", -w / 2, w / 2, -ln, 0, color, k=1, tr=0.1) is None:
                 continue
@@ -1088,8 +1098,8 @@ def window(D, folder, origin, ry, rng, width=3.4, height=5.0, y=4.0, variant="di
                 n += 1
         z_spray = W_SURROUND + 0.06 + 0.07 * planks + 0.1
         words, ink = rng.choice(["KEEP OUT", "X", "CONDEMNED", "NO ENTRY"]), jitter((170, 60, 50), rng, 10)
-        if y > 18:
-            return n  # (texts audit S0: nobody reads a spray three floors up; the boards stay bare)
+        if y > 9:
+            return n  # (texts audit S0: nobody reads a spray on an upper floor; the boards stay bare)
         # sprayed across the boards, readable from the alley: at least 3:1 on the plywood (red on
         # brown wood was 1.1-1.8:1), the carrier no wider than the opening
         ink = readable_ink(ink, mix(ply_lo, ply_hi, 0.5), need=3.5)

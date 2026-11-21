@@ -11,7 +11,9 @@ Overlay JSON (written by build_overlay.py):
   entries: [{"id": str, "ops": [op...]}]; an entry applies only when ALL its matches are found
            (exactly one row each, not removed by the alleys or an earlier entry), else it is
            skipped as a whole (the original city stays).
-  match M: {"f": folder, "n": name, "at": [x, y, z]} (ORIGINAL position, tolerance 0.05)
+  match M: {"f": folder, "n": name, "at": [x, y, z]} (ORIGINAL position, tolerance 0.05), plus
+           its guards (core.Match): "sz" [3] original size (tolerance 0.05), "r" [3] original
+           rotation (0.5 deg), "tx" its sign's original text: a row that differs is no match
   ops:
     {"op": "set", "m": M, ...}   fields: color, material (overlay palette indices), tr, refl,
          flags, shape, pos [3], rot [3], size [3], extra (overlay extra index: replaces the
@@ -34,10 +36,10 @@ def patch_extra(base, patch):
     The patch's key "-" lists what to delete first: "g" (the whole sign), "g.pad" (one field)."""
     out = copy.deepcopy(base) if base else {}
     for path in patch.get("-", ()):
-        head, _, field = path.partition(".")
-        if not field:
+        head, dot, field = path.partition(".")
+        if not dot:
             out.pop(head, None)
-        elif isinstance(out.get(head), dict):
+        elif head and field and isinstance(out.get(head), dict):  # (like the Luau "^([^.]+)%.(.+)$")
             out[head].pop(field, None)
     for k, v in patch.items():
         if k == "-":
@@ -50,8 +52,19 @@ def patch_extra(base, patch):
     return out
 
 
+ROT_TOL = 0.5
+
+
+def sign_text(data, r):
+    ex = data["extras"][r[EXTRA] - 1] if r[EXTRA] else None
+    g = ex.get("g") if isinstance(ex, dict) else None
+    return g.get("text") if isinstance(g, dict) else None
+
+
 class Index:
-    """folder|name -> [(row index, original position)] of the rows that are built."""
+    """folder|name -> [(row index, original position, size, rotation, sign text)] of the rows that
+    are built (ORIGINAL values: an earlier entry may move or resize a row, later entries still
+    know it as the generator made it)."""
 
     def __init__(self, data):
         self.data = data
@@ -61,16 +74,24 @@ class Index:
             if i in skip:
                 continue
             k = data["folders"][r[FOLDER] - 1] + "|" + data["names"][r[NAME] - 1]
-            self.by_key.setdefault(k, []).append((i, (r[X], r[X + 1], r[X + 2])))
+            self.by_key.setdefault(k, []).append((i, tuple(r[X:X + 3]), tuple(r[SX:SX + 3]), tuple(r[RX:RX + 3]),
+                                                  sign_text(data, r)))
 
     def find(self, m, gone=()):
         """[row indices] matching M (all hits: the caller wants exactly one)."""
         out = []
-        for i, at in self.by_key.get(m["f"] + "|" + m["n"], ()):
+        for i, at, size, rot, text in self.by_key.get(m["f"] + "|" + m["n"], ()):
             if i in gone:
                 continue
-            if all(abs(at[k] - m["at"][k]) < TOL for k in range(3)):
-                out.append(i)
+            if not all(abs(at[k] - m["at"][k]) < TOL for k in range(3)):
+                continue
+            if "sz" in m and not all(abs(size[k] - m["sz"][k]) < TOL for k in range(3)):
+                continue
+            if "r" in m and not all(abs(rot[k] - m["r"][k]) < ROT_TOL for k in range(3)):
+                continue
+            if "tx" in m and text != m["tx"]:
+                continue
+            out.append(i)
         return out
 
 

@@ -183,6 +183,8 @@ local function addLabel(model: Model, body: BasePart, name: string, offset: CFra
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 200
 	gui.LightInfluence = 1
+	-- (the wave is wider than the flat sheet: cut at its edges, never past the can's curve)
+	gui.ClipsDescendants = true
 	gui.Parent = sheet
 	-- the wave: a white stripe, slightly tilted, under the name
 	local wave = Instance.new("Frame")

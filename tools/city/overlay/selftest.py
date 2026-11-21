@@ -3,8 +3,11 @@
     venv/bin/python -I tools/city/overlay/selftest.py
 
 Checks: set / remove / add (+ sign plate) / reparent / wrap / sign / box resolve and apply;
-refusals (removing a colliding or tagged part, wrapping a door) are reported; an entry whose
-match is gone (the city regenerated) is skipped whole at runtime and the rest still applies.
+refusals (removing a colliding or tagged part, wrapping a door, an incomplete new sign or a font
+that is not an Enum.Font, a part under itself or in a cycle, moving a SpezCola button out of its
+machine, removing a part the overlay hung something under, moving a neon's text to a plate) are
+reported; an entry whose match is gone or changed (moved, resized: the guards) is skipped whole
+at runtime and the rest still applies; an entry that lost a part at build time is never written.
 """
 
 import copy
@@ -56,6 +59,7 @@ def main():
     O.wrap(O.match(C.folder_of(data, r), C.name_of(data, r), r[1:4]), "Dumpster", origin=r[1:4])
     assert "refused" in O.errors[-1], O.errors[-1]
     O.errors.pop()
+    refusals(O, data)
     assert not O.errors, O.errors
     ov = json.loads(json.dumps(O.json()))
 
@@ -87,9 +91,54 @@ def main():
     stats = A.apply(changed, copy.deepcopy(ov))
     assert stats["skipped"] == 1 and stats["applied"] == len(ov["entries"]) - 1, stats
     print("city changed:", stats["applied"], "applied,", stats["skipped"], "skipped:", stats["missed"])
+    # same place, other size (a regen made it bigger): the guard skips it too
+    changed = C.merged()
+    for r in changed["parts"]:
+        if C.name_of(changed, r) == "Lid" and abs(r[1] + 87.7) < 0.01 and abs(r[3] - 25) < 0.01:
+            r[7] += 0.5
+    stats = A.apply(changed, copy.deepcopy(ov))
+    assert stats["skipped"] == 1, stats
+    print("city resized:", stats["applied"], "applied,", stats["skipped"], "skipped")
     if "--luau" in sys.argv:
         luau_parity(ov)
     print("selftest OK")
+
+
+def refusals(O, data):
+    """Every refusal reports one error (popped here) and writes nothing broken."""
+    def refused(what, fn):
+        n = len(O.errors)
+        fn()
+        assert len(O.errors) == n + 1, (what, O.errors[n:])
+        print("refused:", O.errors.pop())
+
+    refused("new sign without color", lambda: O.add(
+        "Props/Street", "X", (0, 5, 0), (1, 1, 1), (1, 1, 1), sign=dict(text="HI", face="Front")))
+    refused("font file name", lambda: O.add(
+        "Props/Street", "X", (0, 5, 0), (1, 1, 1), (1, 1, 1),
+        sign=dict(text="HI", face="Front", color=[1, 1, 1], font="LibreBodoni")))
+    bin_ = O.match("Props/Street", "Bin", (29.1, 2.75, -91))
+    lid = O.match("Props/Street", "Bin", (29.1, 2.75, -89.2))
+    refused("under itself", lambda: O.reparent(lid, lid))
+    with O.entry("cycle"):
+        O.reparent(bin_, lid)
+        refused("cycle", lambda: O.reparent(lid, bin_))
+    button = O.match("Zones/Cage/SpezColaMachine_2", "Button", (-44.025, 5.55, 115.89))
+    refused("SpezCola button", lambda: O.reparent(button, bin_))
+    neon = O.match("Buildings/B7", "NeonSign", (-102, 10.9, -17.85))
+    refused("neon to a plate", lambda: O.sign(neon, text="X", plate=dict(pos=(0, 0, 0), size=(1, 1, 0.05))))
+    # something hung under a decoration row: that row cannot be removed any more
+    deco = O.match("Props/Street", "PhoneSign", (-69.5, 9.3, -67.46))
+    O.add("Props/Street", "Sticker", (-69.5, 9.0, -67.5), (0.3, 0.3, 0.05), (200, 200, 200), under=deco)
+    refused("remove a parent", lambda: O.remove(deco))
+    # an entry that loses a part at build time is never written
+    with O.entry("half") as e:
+        O.set(lid, color=(1, 2, 3))
+        O.reparent(lid, O.match("Props/Street", "Nope", (0, 0, 0)))
+    O.errors.pop()
+    assert e["id"] in O.dropped() and all(x["id"] != e["id"] for x in O.json()["entries"])
+    # the cycle entry too (its second op was refused)
+    assert "selftest:cycle" in O.dropped()
 
 
 def strip(v):

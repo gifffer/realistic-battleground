@@ -38,7 +38,27 @@ FACES = {"Front": ((0, 0, -1), (-1, 0, 0), (0, 1, 0), 0, 1), "Back": ((0, 0, 1),
 # The optional sign fields (City/init.luau addSign) on top of text/font/color/face/lit/bg/bg_tr.
 SIGN_FIELDS = {"text", "font", "color", "face", "lit", "bg", "bg_tr", "rot", "align",
                "pad", "maxSize", "minSize", "xalign", "yalign", "pps", "stroke", "light", "textTr",
-               "rich", "maxDist", "bright"}
+               "rich", "maxDist", "bright", "lineH"}
+# A sign that did not exist before needs these (addSign reads them without a default).
+SIGN_REQUIRED = ("text", "face", "color")
+# Enum.Font names (addSign looks the font up by name: anything else falls back to Oswald, with a
+# warning, so a typo such as the file name "LibreBodoni" is caught here).
+FONTS = {"Legacy", "Arial", "ArialBold", "SourceSans", "SourceSansBold", "SourceSansSemibold",
+         "SourceSansLight", "SourceSansItalic", "Bodoni", "Garamond", "Cartoon", "Code", "Highway", "SciFi",
+         "Arcade", "Fantasy", "Antique", "Gotham", "GothamMedium", "GothamBold", "GothamBlack", "AmaticSC",
+         "Bangers", "Creepster", "DenkOne", "Fondamento", "FredokaOne", "GrenzeGotisch", "IndieFlower",
+         "JosefinSans", "Jura", "Kalam", "LuckiestGuy", "Merriweather", "Michroma", "Nunito", "Oswald",
+         "PatrickHand", "PermanentMarker", "Roboto", "RobotoCondensed", "RobotoMono", "Sarpanch",
+         "SpecialElite", "TitilliumWeb", "Ubuntu", "BuilderSans", "BuilderSansMedium", "BuilderSansBold",
+         "BuilderSansExtraBold", "Arimo", "ArimoBold"}
+# Tags Ambience drives through the part's own "Sign" SurfaceGui / light: a sign moved off such a
+# part (sign(plate=...)) would stop following day / night, Flicker and power cuts.
+DRIVEN_TAGS = {"CityNeon", "CityLamp", "CityShopLight", "CityBulkhead", "CityWindowLit", "CityEmergency"}
+# Panes Server/Systems/CityGlass dresses at runtime by name (its KINDS / GLASS_ONLY: Color,
+# Transparency, Reflectance, Material are overwritten there): an overlay "set" of those fields on
+# them has no visible effect (warned).
+GLASS_NAMES = {"ShopGlass", "DoorGlass", "PhoneGlass", "Window", "Glass", "GlassStrip", "LobbyGlass", "BoothGlass",
+               "Fanlight", "Transom", "Skylight"}
 
 
 class OverlayError(Exception):
@@ -46,13 +66,19 @@ class OverlayError(Exception):
 
 
 class Match:
-    """A city row by folder + name + ORIGINAL position (resolved against the merged data)."""
+    """A city row by folder + name + ORIGINAL position (resolved against the merged data).
+    `guard`: what the row looked like at build time ("sz" size, "r" rotation, "tx" its sign's
+    text): at runtime a row that kept its place but changed size, turn or text no longer matches
+    (the entry is skipped and the regenerated original stays, never a stale absolute value)."""
 
-    def __init__(self, folder, name, at, row=None):
+    def __init__(self, folder, name, at, row=None, guard=None):
         self.folder, self.name, self.at, self.row = folder, name, tuple(float(v) for v in at), row
+        self.guard = guard or {}
 
     def json(self):
-        return {"f": self.folder, "n": self.name, "at": [round(v, 4) for v in self.at]}
+        out = {"f": self.folder, "n": self.name, "at": [round(v, 4) for v in self.at]}
+        out.update(self.guard)
+        return out
 
     def __repr__(self):
         return f"{self.folder}/{self.name}@({self.at[0]:g}, {self.at[1]:g}, {self.at[2]:g})"
@@ -92,10 +118,17 @@ class Overlay:
         self.by_key = {}
         for i, r in enumerate(data["parts"]):
             self.by_key.setdefault(folder_of(data, r) + "|" + name_of(data, r), []).append(i)
+        # the parent graph AS THE OVERLAY LEAVES IT (reparent / add(under=) keep it current):
+        # parent[i] = ("row", j) | ("part", k: an overlay part) | None
         self.children = {}
+        self.parent = {}
         for i, r in enumerate(data["parts"]):
             if r[PARENT] > 0 and i not in self.skip:
                 self.children.setdefault(r[PARENT] - 1, []).append(i)
+                self.parent[i] = ("row", r[PARENT] - 1)
+        self.added_under = {}  # city row -> [overlay parts added under it]
+        self.tainted = set()  # ids of entries that lost an op to a missing match (never written)
+        self.soft = []  # the match errors (a part not found): --prune drops their entries instead
         self.colors, self.materials, self.folders, self.names = [], [], [], []
         self.extras, self.parts, self.entries = [], [], []
         self.errors, self.warnings = [], []
@@ -106,8 +139,10 @@ class Overlay:
         self.counts = {}
 
     # ------------------------------------------------------------------ errors
-    def error(self, msg):
+    def error(self, msg, soft=False):
         self.errors.append(f"[{self.module}] {msg}")
+        if soft:
+            self.soft.append(self.errors[-1])
 
     def warn(self, msg):
         self.warnings.append(f"[{self.module}] {msg}")
@@ -121,21 +156,30 @@ class Overlay:
                 out.append(i)
         return out
 
+    def _found(self, i):
+        """The Match of built row i, with its guards (size, rotation, sign text)."""
+        r = self.data["parts"][i]
+        guard = {"sz": [round(v, 4) for v in r[SX:SX + 3]], "r": [round(v, 4) for v in r[RX:RX + 3]]}
+        g = (extra_of(self.data, r) or {}).get("g")
+        if isinstance(g, dict) and isinstance(g.get("text"), str):
+            guard["tx"] = g["text"]
+        return Match(folder_of(self.data, r), name_of(self.data, r), (r[X], r[X + 1], r[X + 2]), i, guard)
+
     def match(self, folder, name, at):
         """The one built row folder/name at `at` (tolerance 0.05). Errors are recorded (the build
         fails), a Match with row None is returned so the edit module can go on."""
         hits = self._hits(folder, name, at)
         built = [i for i in hits if i not in self.skip]
         if len(built) == 1:
-            r = self.data["parts"][built[0]]
-            return Match(folder, name, (r[X], r[X + 1], r[X + 2]), built[0])
+            return self._found(built[0])
         if not built and hits:
-            self.error(f"match {folder}/{name} at {tuple(at)}: that row was removed by the alleys")
+            self.error(f"match {folder}/{name} at {tuple(at)}: that row was removed by the alleys", soft=True)
         elif not built:
             near = self._nearest(folder, name, at)
-            self.error(f"match {folder}/{name} at {tuple(at)}: no row" + (f" (nearest: {near})" if near else ""))
+            self.error(f"match {folder}/{name} at {tuple(at)}: no row" + (f" (nearest: {near})" if near else ""),
+                       soft=True)
         else:
-            self.error(f"match {folder}/{name} at {tuple(at)}: ambiguous, {len(built)} rows")
+            self.error(f"match {folder}/{name} at {tuple(at)}: ambiguous, {len(built)} rows", soft=True)
         return Match(folder, name, at, None)
 
     def _nearest(self, folder, name, at):
@@ -153,10 +197,9 @@ class Overlay:
         hits = [i for i in self.by_key.get(folder + "|" + name, ())
                 if i not in self.skip and math.dist(at, self.data["parts"][i][X:X + 3]) <= radius]
         if len(hits) != 1:
-            self.error(f"near {folder}/{name} at {tuple(at)} r {radius}: {len(hits)} rows")
+            self.error(f"near {folder}/{name} at {tuple(at)} r {radius}: {len(hits)} rows", soft=True)
             return Match(folder, name, at, None)
-        r = self.data["parts"][hits[0]]
-        return Match(folder, name, (r[X], r[X + 1], r[X + 2]), hits[0])
+        return self._found(hits[0])
 
     def box(self, folder, names=None, lo=(-1e9, -1e9, -1e9), hi=(1e9, 1e9, 1e9), prefix=False):
         """Every built row of `folder` (or under it, prefix=True) whose name is in `names` (a str or
@@ -176,9 +219,9 @@ class Overlay:
                 continue
             if all(lo[k] <= r[X + k] <= hi[k] for k in range(3)):
                 if len([j for j in self._hits(f, n, r[X:X + 3]) if j not in self.skip]) != 1:
-                    self.error(f"box: {f}/{n} at {r[X:X + 3]} is not unique by position")
+                    self.error(f"box: {f}/{n} at {r[X:X + 3]} is not unique by position", soft=True)
                     continue
-                out.append(Match(f, n, (r[X], r[X + 1], r[X + 2]), i))
+                out.append(self._found(i))
         if not out:
             self.warn(f"box {folder} {sorted(names) if names else '*'} {lo}..{hi}: empty")
         return out
@@ -235,10 +278,16 @@ class Overlay:
     def _count(self, kind):
         self.counts[kind] = self.counts.get(kind, 0) + 1
 
+    def _taint(self):
+        """The current entry lost an op (a part not found): it must never be written half."""
+        if self._entry is not None:
+            self.tainted.add(id(self._entry))
+
     def _check(self, m, what):
         if not isinstance(m, Match):
             raise OverlayError(f"{what}: expected a Match, got {m!r}")
         if m.row is None:
+            self._taint()
             return False  # (already reported)
         if m.row in self.removed:
             self.error(f"{what} {m}: removed earlier by the overlay")
@@ -261,6 +310,10 @@ class Overlay:
             return
         if not self._check(m, "set"):
             return
+        if name_of(self.data, self.row(m)) in GLASS_NAMES and (
+                color is not None or transparency is not None or reflectance is not None or material is not None):
+            self.warn(f"set {m}: CityGlass dresses this pane at runtime (colour / transparency / reflectance / "
+                      "material set here are overwritten)")
         op = {"op": "set", "m": m.json()}
         if color is not None:
             op["color"] = self._color(color)
@@ -287,7 +340,8 @@ class Overlay:
         if sign is False:
             dels.append("g")
         elif sign is not None:
-            self._check_sign(sign, m)
+            had = isinstance((self.extra(m) or {}).get("g"), dict) and "g" not in dels
+            self._check_sign(sign, m, new=not had)
             patch["g"] = {**patch.get("g", {}), **sign}
         if attrs is not None:
             patch["a"] = {**patch.get("a", {}), **attrs}
@@ -321,6 +375,7 @@ class Overlay:
         if r[FLAGS] & COLLIDE:
             why.append("collision")
         kids = [k for k in self.children.get(m.row, ()) if k not in self.removed]
+        kids += self.added_under.get(m.row, [])
         if kids:
             why.append(f"{len(kids)} children (remove them first)")
         if why and not force:
@@ -338,7 +393,7 @@ class Overlay:
         same entry). sign: its "g" (a SurfaceGui on it). Returns a PartRef."""
         ex = dict(extra or {})
         if sign is not None:
-            self._check_sign(sign, None, size)
+            self._check_sign(sign, None, size, new=True)
             ex["g"] = sign
         row = [SHAPES.index(shape) + 1 if isinstance(shape, str) else shape,
                *[round(float(v), 4) for v in pos], *[round(float(v), 4) for v in rot],
@@ -352,29 +407,92 @@ class Overlay:
                 return PartRef(0, None)
             op["under"] = under.json()
         elif isinstance(under, PartRef):
+            if under.index == 0:
+                self._taint()  # (its parent was never added)
+                return PartRef(0, None)
             row[PARENT] = under.index
         self.parts.append(row)
         op["p"] = len(self.parts)
+        if isinstance(under, Match):
+            self.added_under.setdefault(under.row, []).append(op["p"])
         entry = self._op(op)
         if isinstance(under, PartRef) and under.entry is not entry:
             self.error(f"add {folder}/{name}: its parent was added in another entry (use O.entry)")
         self._count("add")
         return PartRef(len(self.parts), entry)
 
-    def reparent(self, m, to):
-        """Puts the matched row under `to` (a Match, or a PartRef added in the same entry)."""
+    def _protected(self, i):
+        """Why row i must not leave its place ([] = it may)."""
+        r = self.data["parts"][i]
+        ex = extra_of(self.data, r) or {}
+        bad = sorted(set(ex.get("t") or []) & PROTECTED_TAGS)
+        f = folder_of(self.data, r)
+        if any(p in f for p in PROTECTED_FOLDERS):
+            bad.append(f"in {f}")
+        return bad
+
+    def _descendants(self, i):
+        out, todo = [], list(self.children.get(i, ()))
+        while todo:
+            k = todo.pop()
+            if k in self.removed or k in out:
+                continue
+            out.append(k)
+            todo.extend(self.children.get(k, ()))
+        return out
+
+    def reparent(self, m, to, force=None):
+        """Puts the matched row under `to` (a Match, or a PartRef added in the same entry).
+        Refused unless force="reason": the row under itself, a row other systems find by its tag
+        or its place in a Model (PROTECTED_TAGS / PROTECTED_FOLDERS), a facade piece leaving its
+        Facade_<face> Model (the breakable wall counts its panels there), or a cycle."""
         if not self._check(m, "reparent"):
             return
         op = {"op": "parent", "m": m.json()}
         if isinstance(to, PartRef):
+            if to.index == 0:
+                self._taint()
+                return
             op["p"] = to.index
+            new_folder = self.folders[self.parts[to.index - 1][FOLDER] - 1]
         else:
             if not self._check(to, "reparent to"):
                 return
+            if to.row == m.row:
+                self.error(f"reparent {m}: under itself")
+                self._taint()
+                return
+            k, seen = to.row, set()
+            while k is not None and k not in seen:  # (`to` must not hang under m)
+                seen.add(k)
+                if k == m.row:
+                    self.error(f"reparent {m} under {to}: a cycle ({to} hangs under {m})")
+                    self._taint()
+                    return
+                p = self.parent.get(k)
+                k = p[1] if p and p[0] == "row" else None
             op["to"] = to.json()
+            new_folder = to.folder
+        why = self._protected(m.row)
+        if any(seg.startswith("Facade_") for seg in m.folder.split("/")) and new_folder != m.folder:
+            why.append(f"leaves its {m.folder} Model")
+        if why and not force:
+            self.error(f"reparent {m}: refused ({', '.join(why)}); pass force='reason'")
+            self._taint()
+            return
+        if why:
+            self.warn(f"reparent {m} FORCED ({', '.join(why)}): {force}")
         entry = self._op(op)
         if isinstance(to, PartRef) and to.entry is not entry:
             self.error(f"reparent {m}: the new parent was added in another entry (use O.entry)")
+        old = self.parent.get(m.row)
+        if old and old[0] == "row" and m.row in self.children.get(old[1], []):
+            self.children[old[1]].remove(m.row)
+        if isinstance(to, PartRef):
+            self.parent[m.row] = ("part", to.index)
+        else:
+            self.parent[m.row] = ("row", to.row)
+            self.children.setdefault(to.row, []).append(m.row)
         self._count("parent")
 
     def wrap(self, matches, piece, origin, ry=0.0, rx=0.0, rz=0.0, tint=None, scale=1.0, size=None,
@@ -392,12 +510,9 @@ class Overlay:
         if len(ok) != len(matches) or not ok:
             return None
         for m in ok:
-            r = self.row(m)
-            ex = extra_of(self.data, r) or {}
-            bad = sorted(set(ex.get("t", [])) & PROTECTED_TAGS)
-            f = folder_of(self.data, r)
-            if any(p in f for p in PROTECTED_FOLDERS):
-                bad.append(f"in {f}")
+            bad = self._protected(m.row)
+            for k in self._descendants(m.row):  # (they come along under the marker)
+                bad += [f"{why} under it" for why in self._protected(k)]
             if bad and not force:
                 self.error(f"wrap {m}: refused ({', '.join(bad)}); keep it out of the wrap or force='reason'")
                 return None
@@ -418,19 +533,22 @@ class Overlay:
             attrs["Scale"] = round(float(scale), 3)
         first = self.row(ok[0])
         parent = None
-        if first[PARENT] > 0:
-            p = self.data["parts"][first[PARENT] - 1]
-            parent = Match(folder_of(self.data, p), name_of(self.data, p), p[X:X + 3], first[PARENT] - 1)
+        cur = self.parent.get(ok[0].row)  # (where the overlay left it, not where citygen put it)
+        if cur and cur[0] == "part":
+            self.error(f"wrap {ok[0]}: it hangs under an overlay part now (wrap before reparenting)")
+            return None
+        if cur:
+            parent = self._found(cur[1])
         with self.entry(name or f"wrap_{piece}_{len(self.entries) + 1}"):
             marker = self.add(folder or folder_of(self.data, first), "MeshProp", origin, size, (128, 128, 128),
                               "SmoothPlastic", rot=(rx, ry, rz), transparency=1.0, flags=DECOR,
                               extra={"a": attrs}, under=parent)
             for m in ok:
-                self.reparent(m, marker)
+                self.reparent(m, marker, force=force)
         self._count("wrap")
         return marker
 
-    def sign(self, host, *, text=None, pos=None, size=None, rot=None, plate=None, under=None, **fields):
+    def sign(self, host, *, text=None, pos=None, size=None, rot=None, plate=None, under=None, force=None, **fields):
         """Moves / reframes a sign.
         * plate=None: the host itself is the carrier: pos / size / rot move and resize it, the
           sign fields (text, pad, maxSize, pps="auto"...) are merged into its "g";
@@ -438,13 +556,25 @@ class Overlay:
           carries the text (the host keeps its look, its sign is taken off it); it is parented to
           `under` (a Match: the panel / glass it sits on, so it breaks with it) or to the host.
         pps="auto": the S0 rule (auto_pps) from the carrier's face height, pad y and lines.
+        A lit / Ambience-driven host (CityNeon, CityLamp, CityShopLight...: DRIVEN_TAGS, or lit=True)
+        keeps its sign: a plate would take the text away from Ambience (day / night, Flicker, power
+        cuts); refused unless force="reason".
         Returns the plate's PartRef (or None)."""
         if not self._check(host, "sign"):
             return None
-        old = (extra_of(self.data, self.row(host)) or {}).get("g")
-        if old is None and (text is None or "face" not in fields):
-            self.error(f"sign {host}: it has no sign; give text= and face=")
+        hex_ = extra_of(self.data, self.row(host)) or {}
+        old = hex_.get("g")
+        if old is None and (text is None or "face" not in fields or "color" not in fields):
+            self.error(f"sign {host}: it has no sign; give text=, face= and color=")
             return None
+        if plate is not None:
+            driven = sorted(set(hex_.get("t") or []) & DRIVEN_TAGS)
+            if (old or {}).get("lit") or fields.get("lit"):
+                driven.append("lit")
+            if driven and not force:
+                self.error(f"sign {host}: refused to move its text to a plate ({', '.join(driven)}: Ambience "
+                           "drives the host's own 'Sign'); pass force='reason'")
+                return None
         g = dict(fields)
         if text is not None:
             g["text"] = text
@@ -463,7 +593,7 @@ class Overlay:
             with self.entry(f"sign_{host.name}_{len(self.entries) + 1}"):
                 self.set(host, pos=pos, size=size, rot=rot, sign=g)
                 if under is not None:
-                    self.reparent(host, under)
+                    self.reparent(host, under, force=force)
             self._count("sign")
             return None
         full = {**(old or {}), **g}
@@ -472,17 +602,29 @@ class Overlay:
                            plate.get("color", (20, 20, 20)), plate.get("material", "SmoothPlastic"),
                            rot=plate.get("rot", r[RX:RX + 3]), transparency=plate.get("transparency", 0.0),
                            flags=plate.get("flags", DECOR), sign=full, under=under or host)
+            if ref.index == 0:
+                return None
             if old is not None:
                 self.set(host, sign=False)
         self._count("sign")
         return ref
 
-    def _check_sign(self, g, m, size=None):
+    def _check_sign(self, g, m, size=None, new=False):
+        """new: the part has no sign yet (add(sign=), or set / sign on a part without one): the
+        fields addSign reads without a default must be there."""
         if g is False:
             return
+        where = f" on {m}" if m is not None else ""
         bad = set(g) - SIGN_FIELDS
         if bad:
             self.error(f"sign fields {sorted(bad)} unknown (allowed: {sorted(SIGN_FIELDS)})")
+        if new:
+            missing = [k for k in SIGN_REQUIRED if g.get(k) is None]
+            if missing:
+                self.error(f"new sign{where}: {missing} missing (a new sign needs {list(SIGN_REQUIRED)})")
+        problem = sign_problem(g)
+        if problem:
+            self.error(f"sign{where}: {problem}")
         if "face" in g and g["face"] not in FACES:
             self.error(f"sign face {g['face']!r}")
         for key in ("xalign",):
@@ -495,8 +637,37 @@ class Overlay:
 
     # ------------------------------------------------------------------ output
     def json(self):
+        """The overlay JSON. Entries that lost an op to a missing part (tainted) are left out: an
+        entry is written whole or not at all (build_overlay fails on those misses unless --prune)."""
+        entries = [e for e in self.entries if id(e) not in self.tainted]
         return {"version": 1, "colors": self.colors, "materials": self.materials, "folders": self.folders,
-                "names": self.names, "extras": self.extras, "parts": self.parts, "entries": self.entries}
+                "names": self.names, "extras": self.extras, "parts": self.parts, "entries": entries}
+
+    def dropped(self):
+        """The ids of the entries json() leaves out."""
+        return [e["id"] for e in self.entries if id(e) in self.tainted]
+
+
+def sign_problem(g, whole=False):
+    """What is wrong with sign fields g (None = fine). whole: g is a complete sign (as built)."""
+    if whole:
+        for k in SIGN_REQUIRED:
+            if g.get(k) is None:
+                return f"{k} missing"
+    if "text" in g and not isinstance(g["text"], str):
+        return f"text {g['text']!r} is not a string"
+    if g.get("font") is not None and g["font"] not in FONTS:
+        return f"font {g['font']!r} is not an Enum.Font name (tools/city/fonts holds files, not names)"
+    if "face" in g and g["face"] not in FACES:
+        return f"face {g['face']!r}"
+    for key in ("color", "bg"):
+        v = g.get(key)
+        if v is not None and not (isinstance(v, (list, tuple)) and len(v) == 3
+                                  and all(isinstance(c, (int, float)) for c in v)):
+            return f"{key} {v!r} is not [r, g, b]"
+    if "lineH" in g and not (isinstance(g["lineH"], (int, float)) and 1 <= g["lineH"] <= 3):
+        return f"lineH {g['lineH']!r} (1..3)"
+    return None
 
 
 def face_size(size, face):
@@ -508,5 +679,5 @@ def flags_alive(row):
     return bool(row[FLAGS] & (COLLIDE | QUERY))
 
 
-__all__ = ["Overlay", "Match", "PartRef", "OverlayError", "auto_pps", "rotm", "face_size", "FACES", "DECOR",
-           "EXTRA", "FOLDER", "NAME"]
+__all__ = ["Overlay", "Match", "PartRef", "OverlayError", "auto_pps", "rotm", "face_size", "sign_problem", "FACES",
+           "FONTS", "DECOR", "EXTRA", "FOLDER", "NAME"]
