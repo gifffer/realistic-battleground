@@ -235,8 +235,10 @@ local function buildLocomotive()
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Front
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 30
+	-- (sharp: the 100 px TextScaled cap is the padded box's height; the digits off the edges)
+	gui.PixelsPerStud = 175
 	gui.LightInfluence = 0
+	gui.ClipsDescendants = true
 	local number = Instance.new("TextLabel")
 	number.Size = UDim2.fromScale(1, 1)
 	number.BackgroundTransparency = 1
@@ -244,6 +246,12 @@ local function buildLocomotive()
 	number.TextScaled = true
 	number.Font = Enum.Font.Oswald
 	number.TextColor3 = rgb(240, 236, 220)
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0.25, 0)
+	padding.PaddingRight = UDim.new(0.25, 0)
+	padding.PaddingTop = UDim.new(0.14, 0)
+	padding.PaddingBottom = UDim.new(0.14, 0)
+	padding.Parent = number
 	number.Parent = gui
 	gui.Parent = board
 	add(Vector3.new(8.0, 0.5, 6.6), Vector3.new(0, 9.85, 9.2), DARK, METAL)

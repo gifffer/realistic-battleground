@@ -79,6 +79,7 @@ from citykit import (  # noqa: E402
 )
 import zlayers  # noqa: E402
 import meshprop as MESHPROP  # noqa: E402
+from overlay import textfit  # noqa: E402
 from meshprop import frame_meshprop, lib_meshprop  # noqa: E402
 
 # ------------------------------------------------------------------ palette (dirty, desaturated)
@@ -407,12 +408,52 @@ def light_extra(tags, light, attrs=None):
     return ex
 
 
-def sign_extra(text, color, font="PermanentMarker", lit=False, face="Front", bg=None):
+def sign_extra(text, color, font="PermanentMarker", lit=False, face="Front", bg=None, **more):
     """A SurfaceGui text on the carrier's face. bg: a background colour (a printed sticker or
-    label drawn flush on the carrier, no extra part)."""
-    return {"g": {"text": text, "font": font, "color": [int(c) for c in color], "face": face, "lit": lit,
-                  "bg": [int(c) for c in bg] if bg else None, "bg_tr": 0.0 if bg else 1.0, "rot": 0,
-                  "align": "Center"}}
+    label drawn flush on the carrier, no extra part). more: the optional sign fields of
+    City/init.luau addSign (pps, pad, textTr, xalign, rich...; see the texts audit S0)."""
+    g = {"text": text, "font": font, "color": [int(c) for c in color], "face": face, "lit": lit,
+         "bg": [int(c) for c in bg] if bg else None, "bg_tr": 0.0 if bg else 1.0, "rot": 0, "align": "Center"}
+    g.update({k: v for k, v in more.items() if v is not None})
+    return {"g": g}
+
+
+# Text on the walls (texts audit S0): sprays and tags readable at 8+ studs, at least 3:1 against
+# what they are painted on; else black or off-white, whichever reads better.
+INK_BLACK = (22, 22, 22)
+INK_WHITE = (228, 222, 206)
+
+
+def _lum(c):
+    def ch(v):
+        v = v / 255.0
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (ch(v) for v in c)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a, b):
+    la, lb = _lum(a), _lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def readable_ink(color, ground, need=3.0):
+    """color if it reads at `need`:1 on ground, else black or off-white (the better one)."""
+    if ground is None or contrast(color, ground) >= need:
+        return color
+    return max((INK_BLACK, INK_WHITE), key=lambda c: contrast(c, ground))
+
+
+def wall_text(text, font, w, h, pad=(0.04, 0.06), lines=True):
+    """(text with its own line breaks, pps, text height in studs) for a w x h carrier: on one line
+    or two, whichever draws it bigger."""
+    if lines and "\n" not in text:
+        two = textfit.two_lines(text, limit=0)
+        if textfit.text_studs(two, font, w, h, pad) > textfit.text_studs(text, font, w, h, pad) * 1.05:
+            text = two
+    size = textfit.text_studs(text, font, w, h, pad)
+    return text, textfit.fit_pps(text, font, w, h, pad), size
 
 
 def _layer_front(f, idx):
@@ -763,14 +804,23 @@ def torn_posters(D, folder, origin, ry, rng, width=3.6, height=4.2, y=3.5, text=
         ib0, ib1 = py + dy + ph * 0.3, py + dy + ph * 0.74
         if kc < ib0 + 0.1 and kd > ib1 - 0.05:
             n += _ok(overlay(f, "Print", a + pw * 0.1, b - pw * 0.1, max(ib0, kc + 0.05), ib1, ink, k=2, tr=0.0))
+        # (texts audit S0 posters: the headline in the top band between the image and the top edge,
+        # the sub-line 12 % of the sheet high, both sharp; the sub-line's faded ink kept dark enough
+        # to read, 3:1 on the paper)
         if kd > py + dy + ph * 0.9:
-            f.part("PosterText", ((a + b) / 2, py + dy + ph * 0.86, _ov(3)), (pw * 0.86, ph * 0.13, 0.05), (0, 0, 0),
+            hw, hh = pw * 0.86, ph * 0.18
+            ink_h, font_h = jitter((40, 34, 30), rng, 6), rng.choice(["Oswald", "Bodoni", "Arial"])
+            f.part("PosterText", ((a + b) / 2, py + dy + ph * 0.855, _ov(3)), (hw, hh, 0.05), (0, 0, 0),
                    "SmoothPlastic", transparency=1, flags=DECOR,
-                   extra=sign_extra(label, jitter((40, 34, 30), rng, 6), font=rng.choice(["Oswald", "Bodoni", "Arial"])))
+                   extra=sign_extra(label, ink_h, font=font_h, pad=[0.03, 0.06],
+                                    pps=textfit.fit_pps(label, font_h, hw, hh, [0.03, 0.06])))
             n += 1
         if states[i] == "intact" and kc < py + dy + ph * 0.2:
-            f.part("PosterSub", ((a + b) / 2, py + dy + ph * 0.17, _ov(3)), (pw * 0.8, ph * 0.08, 0.05), (0, 0, 0),
-                   "SmoothPlastic", transparency=1, flags=DECOR, extra=sign_extra(sub, ink, font="Oswald"))
+            sw_, sh_ = pw * 0.8, ph * 0.12
+            f.part("PosterSub", ((a + b) / 2, py + dy + ph * 0.17, _ov(3)), (sw_, sh_, 0.05), (0, 0, 0),
+                   "SmoothPlastic", transparency=1, flags=DECOR,
+                   extra=sign_extra(sub, readable_ink(ink, paper), font="Oswald", pad=[0.03, 0.08],
+                                    pps=textfit.fit_pps(sub, "Oswald", sw_, sh_, [0.03, 0.08])))
             n += 1
         # staples at the top corners (round heads on the paper)
         if i == 0 or rng.random() < 0.5:
@@ -826,8 +876,15 @@ def painted_sign(D, folder, origin, ry, rng, width=9.0, height=2.4, y=11.0, text
         side = rng.choice((-1, 1))
         n += _ok(tri(g, "SignFlake", fx + (fw if side > 0 else 0), fy + fh * rng.uniform(0.0, 0.4),
                      side * rng.uniform(0.3, 0.7), fh * rng.uniform(0.4, 0.6), bc, k=1, tr=0.0, material=bm))
-    f.part("SignText", (0, y + height / 2, _ov(2)), (width * 0.92, height * 0.62, 0.05), (0, 0, 0), "SmoothPlastic",
-           transparency=1, flags=DECOR, extra=sign_extra(text, mix(ink, ground, 0.35), font="Oswald"))
+    # the lettering (texts audit T14): faded but readable (the ink 15 % into the ground, at least
+    # 3:1; it was 35 %, 1.5:1), on two lines of its own at its separator, sharp
+    words = text.replace(" · ", "\n", 1) if "\n" not in text else text
+    ink = readable_ink(mix(ink, ground, 0.15), ground)
+    tw, th, pad = width * 0.92, height * 0.62, [0.04, 0.04]
+    f.part("SignText", (0, y + height / 2, _ov(2)), (tw, th, 0.05), (0, 0, 0), "SmoothPlastic",
+           transparency=1, flags=DECOR,
+           extra=sign_extra(words, ink, font="Oswald", pps=textfit.fit_pps(words, "Oswald", tw, th, pad), pad=pad,
+                            textTr=0.08))
     n += 1
     for _ in range(rng.randint(1, 2)):  # rain has washed streaks through the paint
         n += streak(f, rng, "RunOff", rng.uniform(x0 + 0.5, x1 - 0.5), y + height + 0.3, height + rng.uniform(0.5, 2),
@@ -844,27 +901,44 @@ def graffiti_tag(D, folder, origin, ry, rng, width=5.0, height=1.8, y=4.0, x=0.0
     """A spray-painted tag: the text (a "g" sign on an invisible part, face Front), paint drips
     running from the strokes (each a thin run ending in a point, all different: where the can
     was held too long), and often an older tag 'buffed' out under a mismatched grey roller
-    patch. Footprint: width x height. Parts: 1-12."""
+    patch. Footprint: width x height. Parts: 1-12.
+    Texts audit S0: PermanentMarker (thin scripts don't read at 8+ studs), its own line breaks,
+    sharp (PixelsPerStud fitted), at most +-4 deg off level, at least 3:1 against the buff patch or
+    the wall (else black / off-white), the buff patch centred on the text, drips starting at the
+    letters' foot."""
     f = frame_at(D, folder, origin, ry)
     color = color or jitter(rng.choice([(180, 176, 160), (170, 60, 50), (60, 90, 120), (190, 180, 120),
                                          (30, 30, 30), (120, 150, 90)]), rng, 10)
     n = 0
+    ground = None
     if buffed if buffed is not None else rng.random() < 0.4:
         g = f.sub((x, 0, 0), rz=rng.uniform(-1, 1))
         bc = jitter((92, 88, 80), rng, 6)
-        if overlay(g, "Buff", -width * 0.6, width * 0.55, y - height * 0.15, y + height * 1.1, bc, k=0, tr=0.1,
+        if overlay(g, "Buff", -width * 0.57, width * 0.57, y - height * 0.12, y + height * 1.12, bc, k=0, tr=0.1,
                    material="Concrete") is not None:
             n += 1
+            ground = bc
             # the roller's last pass ran out of paint: a thinner strip on one side
-            n += _ok(overlay(g, "Buff", width * 0.55, width * 0.55 + rng.uniform(0.3, 0.6), y,
+            n += _ok(overlay(g, "Buff", width * 0.57, width * 0.57 + rng.uniform(0.3, 0.6), y,
                              y + height * rng.uniform(0.6, 0.95), jitter(bc, rng, 4, 0.04), k=0, tr=0.35))
-    rz = rng.uniform(-6, 6)
+    if ground is None:
+        host = zlayers.host_at(D, f.world((x, y + height / 2, 0.1)))
+        ground = host[0] if host else None
+    color = readable_ink(color, ground)
+    rz = rng.uniform(-6, 6) * 4 / 6
+    words = text or rng.choice(GRAFFITI_TAGS)
+    rng.choice(["PermanentMarker", "Kalam"])  # (was the font: the draw is kept, the alleys stay as they were)
+    words, pps, size = wall_text(words, "PermanentMarker", width, height)
+    nl = words.count("\n") + 1
     f.part("Graffiti", (x, y + height / 2, _ov(2)), (width, height, 0.05), (0, 0, 0), "SmoothPlastic",
            rot=(0, 0, rz), transparency=1, flags=DECOR,
-           extra=sign_extra(text or rng.choice(GRAFFITI_TAGS), color, font=rng.choice(["PermanentMarker", "Kalam"])))
+           extra=sign_extra(words, color, font="PermanentMarker", pps=pps, pad=[0.04, 0.06], textTr=0.04))
     n += 1
     if drips:
-        xs = sorted(rng.uniform(-width * 0.42, width * 0.42) for _ in range(rng.randint(1, 5)))
+        # under the letters: the text's own width, from the foot of its last line
+        tw = min(width * 0.92, max(textfit.line_em(ln, "PermanentMarker") for ln in words.split("\n")) * size)
+        foot = y + height / 2 - nl * size / 2 + 0.25 * size
+        xs = sorted(rng.uniform(-tw * 0.42, tw * 0.42) for _ in range(rng.randint(1, 5)))
         last = -1e9
         for dx in xs:
             if dx - last < 0.18:
@@ -872,7 +946,7 @@ def graffiti_tag(D, folder, origin, ry, rng, width=5.0, height=1.8, y=4.0, x=0.0
             last = dx
             w = rng.uniform(0.035, 0.09)
             ln = rng.uniform(0.25, 1.5) * (0.6 if w < 0.05 else 1.0)
-            ys = y + height * rng.uniform(0.18, 0.4)
+            ys = foot + size * (rng.uniform(0.18, 0.4) - 0.18) * 0.3
             g = f.sub((x + dx, ys, 0), rz=rng.uniform(-2, 2))
             if overlay(g, "Drip", -w / 2, w / 2, -ln, 0, color, k=1, tr=0.1) is None:
                 continue
@@ -994,8 +1068,9 @@ def window(D, folder, origin, ry, rng, width=3.4, height=5.0, y=4.0, variant="di
     if variant == "boarded":
         # two plywood sheets butting (one older, darker, water-stained), planks nailed across
         split = y + h * rng.uniform(0.35, 0.6)
-        _zbox(f, "Plywood", ix0, ix1, y, split, W_BOARD, jitter((92, 80, 60), rng, 8), "WoodPlanks", flags=DECOR)
-        _zbox(f, "Plywood", ix0, ix1, split, y + h, W_BOARD, jitter((122, 104, 76), rng, 8), "WoodPlanks", flags=DECOR)
+        ply_lo, ply_hi = jitter((92, 80, 60), rng, 8), jitter((122, 104, 76), rng, 8)
+        _zbox(f, "Plywood", ix0, ix1, y, split, W_BOARD, ply_lo, "WoodPlanks", flags=DECOR)
+        _zbox(f, "Plywood", ix0, ix1, split, y + h, W_BOARD, ply_hi, "WoodPlanks", flags=DECOR)
         n += 2
         planks = rng.randint(2, 3)
         for i in range(planks):
@@ -1012,9 +1087,17 @@ def window(D, folder, origin, ry, rng, width=3.4, height=5.0, y=4.0, variant="di
                 bolt(g, "Nail", (e * (ox - sw / 2), rng.uniform(-0.1, 0.1), -0.03), 0.07, (60, 56, 52))
                 n += 1
         z_spray = W_SURROUND + 0.06 + 0.07 * planks + 0.1
-        f.part("Spray", (0, y + h * 0.55, -z_spray), (w * 1.1, h * 0.3, 0.05), (0, 0, 0), "SmoothPlastic",
+        words, ink = rng.choice(["KEEP OUT", "X", "CONDEMNED", "NO ENTRY"]), jitter((170, 60, 50), rng, 10)
+        if y > 18:
+            return n  # (texts audit S0: nobody reads a spray three floors up; the boards stay bare)
+        # sprayed across the boards, readable from the alley: at least 3:1 on the plywood (red on
+        # brown wood was 1.1-1.8:1), the carrier no wider than the opening
+        ink = readable_ink(ink, mix(ply_lo, ply_hi, 0.5), need=3.5)
+        sw_, sh_ = w * 0.9, h * 0.3
+        words, pps, _ = wall_text(words, "PermanentMarker", sw_, sh_, pad=[0.05, 0.08])
+        f.part("Spray", (0, y + h * 0.55, -z_spray), (sw_, sh_, 0.05), (0, 0, 0), "SmoothPlastic",
                transparency=1, flags=DECOR,
-               extra=sign_extra(rng.choice(["KEEP OUT", "X", "CONDEMNED", "NO ENTRY"]), jitter((170, 60, 50), rng, 10)))
+               extra=sign_extra(words, ink, pps=pps, pad=[0.05, 0.08], textTr=0.04))
         return n + 1
     # --- the box frame (head and bottom full width, sides between: butt joints)
     fw = 0.24 if style == "upvc" else 0.2
@@ -1217,7 +1300,7 @@ def back_door(D, folder, origin, ry, rng, width=4.0, height=7.6, variant="closed
     g = f.sub((-w / 2 + 0.04, 0.47, -0.43), ry=angle)
     lw, lh = w - 0.1, h - 0.52
     edge = rng.uniform(0.18, 0.28)  # the free edge: paint worn off, rust, hand grime
-    g.box("DoorLeaf", (0, 0, 0), (lw - edge, lh, 0.08), paint, "Metal", flags=SOLID)
+    leaf = g.box("DoorLeaf", (0, 0, 0), (lw - edge, lh, 0.08), paint, "Metal", flags=SOLID)
     g.box("DoorLeaf", (lw - edge, 0, 0), (lw, lh, 0.08), jitter(mix(paint, RUST_DARK, 0.45), rng, 4), "CorrodedMetal",
           flags=SOLID)
     g.box("KickPlate", (0.1, 0.05, -0.08), (lw - 0.1, 1.25, 0), jitter(mix(GALV, RUST_DARK, 0.25), rng, 6, 0.1),
@@ -1237,10 +1320,22 @@ def back_door(D, folder, origin, ry, rng, width=4.0, height=7.6, variant="closed
     beam(g, "CloserArm", (1.35, lh - 0.35, -0.28), (1.6, lh + 0.05, -0.28), 0.08, 0.06, METAL_DARK, "Metal",
          side=(0, 0, 1), flags=DECOR)
     n += 2
-    g.part("Stencil", (lw / 2, lh * 0.62, -0.06), (lw * 0.85, 0.8, 0.05), (0, 0, 0), "SmoothPlastic", transparency=1,
-           flags=DECOR, extra=sign_extra(stencil or rng.choice(["NO ENTRY", "FIRE EXIT · KEEP CLEAR", "PRIVATE",
-                                                                  "DELIVERIES", "NO LOITERING"]),
-                                         jitter((168, 160, 140), rng, 8), font="Oswald"))
+    # the stencil (texts audit T01 / T02): in the free band between the deadlock (top 4.81) and the
+    # closer (lh - 0.49), centred on the painted part of the leaf (not its worn free edge), on two
+    # lines at its separator when it has one, 0.02 thick and 0.02 off the leaf, sharp, worn paint;
+    # parented to the leaf (it swings and breaks with it)
+    words = stencil or rng.choice(["NO ENTRY", "FIRE EXIT · KEEP CLEAR", "PRIVATE", "DELIVERIES", "NO LOITERING"])
+    ink = jitter((168, 160, 140), rng, 8)
+    for sep in (" · ", " - "):
+        if sep in words:
+            words = words.replace(sep, "\n", 1)
+            break
+    sw_, sh_ = min(2.6, lw - edge - 0.5), (1.0 if "\n" in words else 0.7)
+    pad = [0.06, 0.08 if "\n" in words else 0.1]
+    g.part("Stencil", ((lw - edge) / 2, lh - 1.4, -0.03), (sw_, sh_, 0.02), (0, 0, 0), "SmoothPlastic",
+           transparency=1, flags=DECOR, parent=leaf,
+           extra=sign_extra(words, ink, font="Oswald", pps=textfit.fit_pps(words, "Oswald", sw_, sh_, pad), pad=pad,
+                            textTr=0.1))
     n += 1
     if variant == "chained":
         pts = [(lw - 0.55, 3.6, -0.3), (lw - 0.2, 3.25, -0.34), (lw + 0.15, 3.35, -0.36), (lw + 0.45, 3.5, -0.34)]
@@ -1350,11 +1445,16 @@ def roller_shutter(D, folder, origin, ry, rng, width=8.0, height=7.0, open_heigh
                rot=(0, _signed(rng, 6, 20), _signed(rng, 3, 8)), flags=DECOR)
         n += 2
     if tag:
-        f.part("Graffiti", (rng.uniform(-w / 6, w / 6), y0 + (h - y0) * 0.55, -(zr + 0.08)),
-               (w * 0.75, (h - y0) * 0.35, 0.05),
-               (0, 0, 0), "SmoothPlastic", rot=(0, 0, rng.uniform(-5, 5)), transparency=1, flags=DECOR,
-               extra=sign_extra(rng.choice(GRAFFITI_TAGS),
-                                jitter(rng.choice([(180, 176, 160), (170, 60, 50), (30, 30, 30)]), rng, 10)))
+        # (texts audit S0: its own line breaks, sharp, +-4 deg, at least 3:1 on the slats)
+        tx, ty, trz = rng.uniform(-w / 6, w / 6), y0 + (h - y0) * 0.55, rng.uniform(-5, 5) * 0.8
+        words = rng.choice(GRAFFITI_TAGS)
+        ink = readable_ink(jitter(rng.choice([(180, 176, 160), (170, 60, 50), (30, 30, 30)]), rng, 10), base,
+                           need=3.5)
+        tw, th = w * 0.75, (h - y0) * 0.35
+        words, pps, _ = wall_text(words, "PermanentMarker", tw, th)
+        f.part("Graffiti", (tx, ty, -(zr + 0.08)), (tw, th, 0.05), (0, 0, 0), "SmoothPlastic", rot=(0, 0, trz),
+               transparency=1, flags=DECOR,
+               extra=sign_extra(words, ink, pps=pps, pad=[0.04, 0.06], textTr=0.04))
         n += 1
     # rust run from the hood's screws onto the wall beside the guides
     n += streak(f, rng, "RustStreak", rng.choice((-1, 1)) * (w / 2 + 0.5), h - 0.1, rng.uniform(1.0, 2.2), 0.3,
@@ -2117,9 +2217,13 @@ def meter_box(D, folder, origin, ry, rng, y=3.2, x=0.0, conduits=2, width=None):
     f.part("MeterGlass", (-W * 0.12, y + H * 0.55, -0.92), (0.14, 0.5, 0.5), (34, 38, 36), "Glass", rot=(0, 90, 0),
            shape=CYLINDER, flags=DECOR)
     _zbox(f, "VentSlot", -W / 4, W / 4, y + 0.3, y + 0.46, (0.83, 0.9), (20, 20, 20), "Metal", flags=DECOR)
-    f.part("Label", (W * 0.1, y + H * 0.8, -0.86), (W * 0.5, 0.42, 0.04), (0, 0, 0), "SmoothPlastic", transparency=1,
-           flags=DECOR, extra=sign_extra("DANGER · 415V", (30, 28, 24), font="Oswald",
-                                         bg=jitter((170, 150, 40), rng, 8, 0.15)))
+    # the warning sticker (texts audit T13): two lines of its own, sharp (5 px text at 25 px per stud
+    # was a blur), off its edges
+    lab_w, lab_pad = W * 0.5, [0.08, 0.08]
+    f.part("Label", (W * 0.1, y + H * 0.8, -0.86), (lab_w, 0.42, 0.04), (0, 0, 0), "SmoothPlastic", transparency=1,
+           flags=DECOR, extra=sign_extra("DANGER\n415 V", (25, 22, 18), font="Oswald",
+                                         bg=jitter((170, 150, 40), rng, 8, 0.15), pad=lab_pad,
+                                         pps=textfit.fit_pps("DANGER\n415 V", "Oswald", lab_w, 0.42, lab_pad)))
     n += 4
     # conduits up the wall: saddle straps, an LB fitting at the top turning into the wall
     for i in range(conduits):

@@ -133,6 +133,8 @@ def build(mode, night, world, samples, size, exposure=0.0, ambient=0.0):
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"
+    sc.render.threads_mode = "FIXED"
+    sc.render.threads = 2  # (the machine is shared)
     sc.cycles.samples = samples
     sc.cycles.use_denoising = True
     sc.cycles.max_bounces = 4

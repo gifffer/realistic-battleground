@@ -542,7 +542,8 @@ wall(PW.window, 166, 58, OUT_N, y=21.5, variant="broken")
 wall(PW.fire_escape, 162.5, 58, OUT_N, width=8, floors=2, floor_h=10)
 wall(PW.downpipe, 168.6, 58, OUT_N, height=28.5, gutter=5)  # (clear of the top window's jamb)
 wall(PW.torn_posters, 162.2, 58, OUT_N, y=4.2, width=2.8, height=3.6)  # (clear of the dumpster's lid)
-wall(PW.graffiti_tag, 155.2, 58, OUT_N, y=4.5, width=4.6, text="NO COPS. NO NAMES.")
+# (texts audit T03: between the door frame (x 153.82) and the dumpster's open lid, above its hinge bar)
+wall(PW.graffiti_tag, 155.45, 58, OUT_N, y=4.9, width=2.8, text="NO COPS. NO NAMES.")
 wall(PW.plaster_patch, 165, 58, OUT_N, y=10.8, width=4, height=3)
 wall(PW.building_top, 158, 58, OUT_N, width=22, top=WALL_TOP, clutter="tank")
 # Alley A, south side (z 66): the viaduct's granite embankment and the ring's end
@@ -706,8 +707,11 @@ D.part(MK, "NeonSign", ((MARKET[0] + MARKET[1]) / 2, 11.1, 72.3), (6.8, 1.2, 0.1
        extra={"t": ["CityNeon"], "a": {"Color": "red", "Flicker": "random"},
               "l": {"type": "Point", "color": list(RED_NEON), "range": 14, "brightness": 1.2, "name": "Light",
                     "shadows": False},
-              "g": {"text": "BUY · ELL", "font": "Oswald", "color": list(RED_NEON), "face": "Front", "lit": True,
-                    "bg": None, "bg_tr": 1.0, "rot": 0, "align": "Center"}})
+              # (the dead S is still there, a dark tube: its gap stays; texts audit S0 neon)
+              "g": {"text": 'BUY · <font transparency="0.85">S</font>ELL', "rich": True, "font": "Oswald",
+                    "color": list(RED_NEON), "face": "Front", "lit": True, "bg": None, "bg_tr": 1.0, "rot": 0,
+                    "align": "Center", "pad": [0.05, 0.14],
+                    "pps": PW.textfit.fit_pps("BUY · SELL", "Oswald", 6.8, 1.2, [0.05, 0.14])}})
 D.part(N_, "NpcSpot", (181.5, FINISH, 72.8), (1, 1, 1), BLACK, "SmoothPlastic", flags=DECOR, transparency=1,
        extra={"a": {"NpcRole": "Dealer", "NpcName": "Vic", "NpcPose": "ArmsCrossed", "NpcSeed": 31}})
 # the container you can climb (pallets and a crate as steps), its corner of rubbish

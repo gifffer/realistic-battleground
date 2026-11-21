@@ -54,3 +54,48 @@ venv/bin/python -I tools/city/kit/build_city_kit.py assets/cityprops --preview /
 ```
 
 `--preview` rend des images de chaque objet (4 angles + un gros plan, à côté d'une silhouette humaine de 1,80 m). Voir `assets/cityprops/README.md` pour le détail des objets.
+
+## La couche CityOverlay (corrections de toute la ville)
+
+**Ce que c'est.** Les données de la ville (`src/server/Systems/City/CityData1..4.luau`) sont **générées** par `citygen.py`, qui n'est pas dans le dépôt et qui est relancé quand la ville grandit. Une retouche faite à la main dans CityData serait donc **perdue** au prochain export. Toutes les corrections de la ville entière (couleurs, z-fighting, panneaux et textes recadrés, objets remplacés par les modèles 3D du kit...) passent par une **couche à part** : `CityOverlay1..N.luau`, à côté de CityData.
+
+**Comment ça marche.** Chaque correction vise une pièce par son **dossier + nom + position d'origine** (tolérance 0,05 stud). Au démarrage, `City/init.luau` charge la ville, ajoute les ruelles, puis applique l'overlay (`applyOverlay`) avant de construire. Les opérations :
+- **set** : change la couleur, la matière, la transparence, la taille, la position, les drapeaux ou le panneau (texte) d'une pièce ;
+- **remove** : enlève une pièce de pure décoration (l'outil refuse tout ce qui a un tag, une lumière, des collisions...) ;
+- **add** : ajoute une pièce (par exemple une plaque fine pour un texte) ;
+- **wrap** : met des pièces sous un marqueur `MeshProp` : PropKit les remplace par le modèle 3D, comme dans les ruelles ;
+- **sign** : déplace ou recadre un texte (plaque dédiée, marges, taille max, netteté).
+
+Les opérations vont par **groupes** : si la ville a changé et qu'une pièce visée n'est plus là, tout le groupe est **sauté** et la ville d'origine reste (rien ne casse). L'Output affiche une seule ligne : `[CityOverlay] applied X ops, skipped Y (city changed?)`. Si Y n'est pas 0, la ville a été régénérée : il faut relancer l'outil (ci-dessous) pour voir quelles corrections ne trouvent plus leur pièce.
+
+**Les textes** (`SurfaceGui`) acceptent maintenant des champs en plus, tous facultatifs (sans eux, rien ne change) : `pps` (pixels par stud : plus c'est haut, plus un petit texte est net), `pad` (marges), `maxSize` / `minSize` (taille du texte), `xalign` / `yalign` (alignement), `stroke` (contour), `light` (sensibilité à la lumière), `bright`, `textTr` (peinture usée), `rich`, `maxDist`. Pour les néons (tag CityNeon), Ambience garde la main sur `light` et `bright`.
+
+**Refaire l'overlay** (après une modification des corrections, ou quand la ville a été régénérée) :
+
+```bash
+venv/bin/python -I tools/city/overlay/build_overlay.py           # vérifie et écrit CityOverlay*.luau
+venv/bin/python -I tools/city/overlay/build_overlay.py --check   # échoue si les fichiers ne sont plus à jour
+venv/bin/python -I tools/city/overlay/selftest.py --luau          # teste toutes les opérations (+ le vrai code du jeu sous Lune)
+```
+
+Les corrections sont dans `tools/city/overlay/edits/*.py` (un fichier par endroit ou par famille d'objets, chacun avec une fonction `edits(O)`). L'outil s'arrête avec une erreur si une pièce visée n'existe pas, existe en double, ou a été retirée par les ruelles.
+
+**Voir le résultat** sans Studio : `tools/city/render_city.py` rend toute la ville (données + ruelles + overlay, avec ou sans le kit, de jour ou de nuit, textes compris) :
+
+```bash
+venv/bin/python -I tools/city/render_city.py --list
+venv/bin/python -I tools/city/render_city.py --cams kitchen_door,duffys --out /tmp/rendus
+venv/bin/python -I tools/city/render_city.py --cam 0,60,120:0,0,0 --night --out /tmp/rendus
+```
+
+**Les textes de la carte** suivent tous la même règle :
+- le texte ne touche jamais les bords de sa plaque (marges) ;
+- sa netteté (`pps`) est calculée pour chaque panneau par `tools/city/overlay/textfit.py`, avec les vraies polices : le texte remplit sa zone pile à la taille maximale de Roblox (100 px). Il est donc net et ne se recoupe jamais tout seul sur une ligne de plus ;
+- les textes sur deux lignes ont leurs propres retours à la ligne (plus de « · » qui reste en bout de ligne) ;
+- seuls les néons sont allumés ;
+- les graffitis sont en PermanentMarker, assez contrastés (au moins 3:1, sinon noir ou blanc cassé) et à peine penchés ;
+- un texte posé sur un panneau cassable ou une vitre est rangé sous elle : il part avec elle quand elle casse.
+
+Les textes de la ville sont dans `edits/texts.py`. Ceux des ruelles sont corrigés directement dans leur générateur (`tools/city/props_walls.py`, `alleys.py`) : porte de cuisine, NO LOITERING, étiquettes DANGER, tags, affiches, enseigne peinte KESSLER, néon du marché.
+
+Ne modifie jamais `CityOverlay*.luau` ni `CityData*.luau` à la main.
