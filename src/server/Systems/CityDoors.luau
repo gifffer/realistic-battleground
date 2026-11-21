@@ -20,6 +20,13 @@
 --                        Saloon doors: only its size is used (how far they swing, max 80°);
 --                        the direction is chosen each time (away from the person).
 --     DoorStyle  string  optional: "Saloon" for swinging half doors (anything else = glass)
+--     Locked     boolean optional: true on ANY part of a doorway = the doorway is locked: it
+--                        never opens when someone comes near (glass doors close; saloon doors
+--                        stay shut). Read live at every check, so it can be set / cleared at
+--                        any time. Only CityDoors.pulse() opens a locked door (the private lab
+--                        doors of the contraband prototype open for a moment when their owner
+--                        goes in or out).
+--   Set the attributes BEFORE adding the tag (they are read when the part is tagged).
 --
 -- GLASS doors, checked every 0.15 seconds:
 --   • someone's HumanoidRootPart within OPEN_RANGE studs of the doorway's centre → OPEN:
@@ -119,6 +126,8 @@ type Door = {
 	-- sounds
 	soundAnchor: Attachment?, -- the invisible point the sounds play from (made on first use)
 	lastSound: { [string]: number }, -- slot name → os.clock() of its last play
+	-- CityDoors.pulse: os.clock() until which the door is held open (even if locked)
+	pulseUntil: number,
 }
 
 local doors: { [string]: Door } = {}
@@ -174,6 +183,7 @@ local function addPart(instance: Instance)
 			closeSoundPending = false,
 			soundAnchor = nil,
 			lastSound = {},
+			pulseUntil = 0,
 		}
 		doors[group] = door
 	end
@@ -242,6 +252,21 @@ end
 
 local function isSomeoneNear(door: Door, positions: { Vector3 }): boolean
 	return nearest(door, positions, OPEN_RANGE, HEIGHT_RANGE) ~= nil
+end
+
+-- Locked = any of its parts has the attribute Locked == true (read live, no cache).
+local function isDoorLocked(door: Door): boolean
+	for _, leaf in door.leaves do
+		if leaf.part:GetAttribute("Locked") == true then
+			return true
+		end
+	end
+	return false
+end
+
+-- Held open by CityDoors.pulse right now?
+local function isPulsed(door: Door): boolean
+	return os.clock() < door.pulseUntil
 end
 
 ------------------------------------------------------------------------------
@@ -332,7 +357,8 @@ local function checkGlass()
 		if door.saloon then
 			continue
 		end
-		local near = isSomeoneNear(door, positions)
+		-- locked: people near it don't count (only a pulse opens it)
+		local near = isPulsed(door) or (not isDoorLocked(door) and isSomeoneNear(door, positions))
 		if near and not door.isOpen then
 			setOpen(door, true)
 		elseif not near and door.isOpen then
@@ -398,7 +424,13 @@ local function checkSaloons()
 		if not door.saloon then
 			continue
 		end
-		local who = nearest(door, positions, SALOON_RANGE, SALOON_HEIGHT_RANGE)
+		-- locked: nobody pushes it open (target 0); a pulse opens it (default direction)
+		local who: Vector3? = nil
+		if isPulsed(door) then
+			who = nearest(door, positions, SALOON_RANGE, SALOON_HEIGHT_RANGE) or door.centre
+		elseif not isDoorLocked(door) then
+			who = nearest(door, positions, SALOON_RANGE, SALOON_HEIGHT_RANGE)
+		end
 		if who then
 			if door.target == 0 then
 				-- a new push. If the doors are nearly closed, they open away from this person;
@@ -477,6 +509,33 @@ local function stepSaloons(dt: number)
 			placeSaloon(door)
 		end
 	end
+end
+
+------------------------------------------------------------------------------
+-- Public API
+------------------------------------------------------------------------------
+
+-- Opens the doorway `group` now, EVEN IF LOCKED, and lets it close again after `seconds`
+-- (the normal close path: someone still in the doorway → it stays passable until they leave).
+-- An unknown group does nothing.
+function CityDoors.pulse(group: string, seconds: number)
+	local door = doors[group]
+	if door == nil or seconds ~= seconds then
+		return
+	end
+	door.pulseUntil = math.max(door.pulseUntil, os.clock() + math.clamp(seconds, 0, 30))
+	if door.saloon then
+		return -- (the next saloon check, at most 0.1 s later, opens it)
+	end
+	if not door.isOpen then
+		setOpen(door, true)
+	end
+end
+
+-- Is the doorway `group` locked (see "Locked" at the top)? Unknown group = false.
+function CityDoors.isLocked(group: string): boolean
+	local door = doors[group]
+	return door ~= nil and isDoorLocked(door)
 end
 
 ------------------------------------------------------------------------------

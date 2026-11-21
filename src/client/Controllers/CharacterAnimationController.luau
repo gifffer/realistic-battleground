@@ -52,8 +52,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+-- (a plain identity CFrame: Selene refuses methods called on CFrame.identity)
+local IDENTITY = CFrame.new()
+
 local Config = require(ReplicatedStorage.Shared.Config)
 local ALSClips = require(script.Parent.Parent.Animation.ALSClips)
+local CarryClips = require(script.Parent.Parent.Animation.CarryClips)
 local CombatClips = require(script.Parent.Parent.Animation.CombatClips)
 local Locomotion = require(script.Parent.Parent.Animation.Locomotion)
 local MovementClips = require(script.Parent.Parent.Animation.MovementClips)
@@ -181,7 +185,14 @@ type Layer = {
 	fadeIn: number,
 	fadeOut: number,
 	pose: { [string]: CFrame }, -- sampled each frame (reused table)
+	warp: Warp?, -- a re-timed clip (the right cross thrown for a left punch, see playAction)
 }
+
+-- A clip re-timed around its impact ("marker"): real time 0..impactReal plays clip time
+-- 0..impactClip, then impactReal..endReal plays the rest of the clip. So the fist lands on
+-- the server's hit time AND the recovery ends when the next click may come, instead of one
+-- speed-up compressing the whole clip, recovery included.
+type Warp = { impactClip: number, impactReal: number, endReal: number, elapsed: number }
 
 -- One channel = a list of layers (the newest is the one playing; older ones
 -- are fading out).
@@ -226,7 +237,8 @@ type Tracked = {
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
-	lastAction: string?, -- last one-shot clip played (which punch was thrown)
+	lastAction: string?, -- last one-shot clip asked for (which punch of the combo)
+	lastShown: string?, -- the clip it really showed (a left punch thrown as a right cross)
 	flinch: Vector3, -- spring position: extra head rotation, degrees
 	flinchSpeed: Vector3, -- spring speed, degrees per second
 	-- To know if Roblox's Animator rewrote a joint this frame (see compose()).
@@ -236,6 +248,16 @@ type Tracked = {
 
 local CharacterAnimationController = {}
 
+-- A hold pose (setHoldPose): something held in a hand that keeps an arm in place whatever
+-- the body does (the BX-7 case in the left hand). Poses are R6Pose poses (parent space).
+--   leftShoulder  REPLACES the Left Shoulder's pose (on top of the locomotion, guard,
+--                 punches...), weighted by `weight`;
+--   root          is ADDED on top of the Root joint (a small tilt), weighted too.
+export type HoldPose = { leftShoulder: CFrame?, root: CFrame?, weight: number }
+-- Called once per frame per character while set: (frame time, its locomotion state, on its
+-- feet or not) → the pose, or nil for nothing this frame.
+export type HoldProvider = (dt: number, loco: Locomotion.State, onFeet: boolean) -> HoldPose?
+
 local tracked: { [Model]: Tracked } = {}
 -- We pressed block: show it before the server's "Blocking" attribute arrives.
 local predictedBlock = false
@@ -244,6 +266,12 @@ local sprintPose: { [string]: CFrame } = {}
 -- Bodies held at a place of their own (pinRoot): where the torso's centre
 -- is this frame (world), or nil once it's over.
 local pins: { [Model]: () -> Vector3? } = setmetatable({}, { __mode = "k" }) :: any
+-- Left-hand punches (clip name → combo hit) and the right-hand one used instead while the
+-- left hand holds something.
+local LEFT_HAND_PUNCHES: { [string]: number } = { Brawler_M1_1 = 1, Brawler_M1_3 = 3 }
+local RIGHT_HAND_PUNCH = "Brawler_M1_2"
+-- Hold poses (setHoldPose), per model.
+local holds: { [Model]: HoldProvider } = setmetatable({}, { __mode = "k" }) :: any
 
 ------------------------------------------------------------------------------
 -- Helpers
@@ -261,7 +289,10 @@ local function isLocal(entry: Tracked): boolean
 end
 
 local function findClip(name: string): R6Pose.Clip?
-	return (MovementClips :: any)[name] or (CombatClips :: any)[name] or (ALSClips :: any)[name]
+	return (MovementClips :: any)[name]
+		or (CombatClips :: any)[name]
+		or (ALSClips :: any)[name]
+		or (CarryClips :: any)[name]
 end
 
 local function newLayer(name: string, clip: R6Pose.Clip, fadeIn: number, fadeOut: number): Layer
@@ -475,7 +506,20 @@ local function advanceChannel(entry: Tracked, channel: Channel, dt: number, oneS
 	end
 	for index = #channel, 1, -1 do
 		local layer = channel[index]
-		layer.time += dt * playbackRate(entry, layer.name)
+		local warp = layer.warp
+		if warp then
+			warp.elapsed += dt
+			local real = warp.elapsed
+			if real <= warp.impactReal then
+				layer.time = real * warp.impactClip / warp.impactReal
+			else
+				local after = (layer.clip.length - warp.impactClip)
+					/ (warp.endReal - warp.impactReal)
+				layer.time = warp.impactClip + (real - warp.impactReal) * after
+			end
+		else
+			layer.time += dt * playbackRate(entry, layer.name)
+		end
 
 		-- Our own climb / vault: follow the body's real progress exactly.
 		if layer.target == 1 and isLocal(entry) then
@@ -658,6 +702,9 @@ local function compose(entry: Tracked, dt: number)
 	end
 	local pending = entry.pendingInertia
 	entry.pendingInertia = nil
+	-- Something held in a hand (setHoldPose): asked once per frame.
+	local holdProvider = holds[entry.model]
+	local hold = if holdProvider then holdProvider(dt, loco, feet) else nil
 
 	for joint, motor in entry.motors do
 		-- What Roblox's Animator wants this frame. If the joint still holds
@@ -716,6 +763,18 @@ local function compose(entry: Tracked, dt: number)
 		end
 		result, touched = blendChannel(entry.action, motor, joint, result, keepHeight)
 		any = any or touched
+		-- Held in a hand: the Left Shoulder takes the hold pose (over the action: a left
+		-- punch stays a hold), the Root gets its small tilt on top.
+		if hold and hold.weight > 0 then
+			local weight = math.min(hold.weight, 1)
+			if joint == "LeftShoulder" and hold.leftShoulder then
+				result = result:Lerp(R6Pose.toTransform(motor, hold.leftShoulder), weight)
+				any = true
+			elseif joint == "Root" and hold.root then
+				result = result * IDENTITY:Lerp(R6Pose.toTransform(motor, hold.root), weight)
+				any = true
+			end
+		end
 		-- Flinch: added on top of everything, on the head and (less) the torso.
 		if entry.flinch ~= Vector3.zero and (joint == "Neck" or joint == "Root") then
 			local share = if joint == "Neck" then 1 else FLINCH_TORSO_SHARE
@@ -1067,6 +1126,23 @@ end
 function CharacterAnimationController.playAction(model: Model, name: string)
 	local entry = tracked[model]
 	local clip = findClip(name)
+	-- Holding something in the LEFT hand (the case): the left-hand punches (hits 1 and 3) are
+	-- thrown with the right-hand one (hit 2), re-timed around its impact (Warp): the fist
+	-- lands on the server's hit (Config.Combat.M1_HIT_DELAY) and the recovery fills the time
+	-- until the next click (M1_INTERVAL). The layer keeps the asked name (the combo checks),
+	-- lastShown says what was really thrown (the victim's reaction follows THAT fist).
+	local warp: Warp? = nil
+	if holds[model] and LEFT_HAND_PUNCHES[name] then
+		local right = findClip(RIGHT_HAND_PUNCH)
+		local hit = LEFT_HAND_PUNCHES[name]
+		local delays = Config.Combat.M1_HIT_DELAY
+		local own = delays[hit]
+		local interval = Config.Combat.M1_INTERVAL[hit]
+		if right and own and own > 0 and interval and interval > own then
+			clip = right
+			warp = { impactClip = delays[2], impactReal = own, endReal = interval, elapsed = 0 }
+		end
+	end
 	if clip == nil then
 		warnMissingClip(name)
 		return
@@ -1085,8 +1161,11 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 		layer.fadeOut = ACTION_FADE_IN -- cut the old one fast
 	end
 	local fadeIn = if REACTIONS[name] then REACTION_FADE_IN else ACTION_FADE_IN
-	table.insert(entry.action, newLayer(name, clip, fadeIn, ACTION_FADE_OUT))
+	local layer = newLayer(name, clip :: R6Pose.Clip, fadeIn, ACTION_FADE_OUT)
+	layer.warp = warp
+	table.insert(entry.action, layer)
 	entry.lastAction = name
+	entry.lastShown = if warp then RIGHT_HAND_PUNCH else name
 	-- (An emote is not a fight: no fists up after it.)
 	if string.sub(name, 1, 6) ~= "Emote_" then
 		entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
@@ -1120,11 +1199,63 @@ function CharacterAnimationController.pinRoot(model: Model, at: (() -> Vector3?)
 	end
 end
 
+-- Sets (or with nil, removes) the hold pose of `model`: see HoldPose above. The switch is
+-- inertialized like the others (nothing pops); the provider's own weight can fade it too.
+-- Forgotten when the model is removed.
+function CharacterAnimationController.setHoldPose(model: Model, provider: HoldProvider?)
+	if holds[model] == provider then
+		return
+	end
+	if provider then
+		holds[model] = provider
+	else
+		holds[model] = nil
+	end
+	local entry = tracked[model]
+	if entry then
+		requestInertia(entry, DEFAULT_INERTIA)
+	end
+end
+
 -- The last one-shot clip played on `model` (e.g. which punch it just threw),
 -- or nil. Used to pick the matching hit reaction.
 function CharacterAnimationController.getLastAction(model: Model): string?
 	local entry = tracked[model]
 	return if entry then entry.lastAction else nil
+end
+
+-- The clip `model` really showed for its last one-shot (differs from getLastAction when a
+-- left punch was thrown as a right cross because the left hand holds the case). Use it for
+-- anything that follows the motion seen (the victim's reaction, the flinch's direction).
+function CharacterAnimationController.getLastShownClip(model: Model): string?
+	local entry = tracked[model]
+	return if entry then entry.lastShown or entry.lastAction else nil
+end
+
+-- Is `model` blocking (the server's "Blocking", or our own block before it arrives)?
+function CharacterAnimationController.isBlocking(model: Model): boolean
+	if model:GetAttribute("Blocking") == true then
+		return true
+	end
+	local entry = tracked[model]
+	return predictedBlock and entry ~= nil and isLocal(entry)
+end
+
+-- What the body of `model` is busy with: "Reaction" (a hit reaction plays), "Action" (any
+-- other one-shot: a punch, a dash...), "Guard" (none, but the fists are still up after a
+-- fight), or nil. An overlay (setHoldPose) yields to these.
+function CharacterAnimationController.actionState(model: Model): string?
+	local entry = tracked[model]
+	if entry == nil then
+		return nil
+	end
+	for index = #entry.action, 1, -1 do
+		local layer = entry.action[index]
+		if layer.target == 1 then
+			return if REACTIONS[layer.name] then "Reaction" else "Action"
+		end
+	end
+	return if os.clock() < entry.combatUntil then "Guard" else nil
 end
 
 -- This frame's value of `joint` in the action clip `name` playing on
@@ -1253,6 +1384,7 @@ local function track(model: Model, owner: Player?)
 		combatUntil = 0,
 		freezeUntil = 0,
 		lastAction = nil,
+		lastShown = nil,
 		flinch = Vector3.zero,
 		flinchSpeed = Vector3.zero,
 		lastWritten = {},
@@ -1261,6 +1393,7 @@ local function track(model: Model, owner: Player?)
 	model.AncestryChanged:Connect(function(_, parent)
 		if parent == nil then
 			tracked[model] = nil
+			holds[model] = nil
 		end
 	end)
 end

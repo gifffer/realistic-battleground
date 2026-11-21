@@ -239,4 +239,26 @@ return table.freeze({
 	-- Molotov flying / breaking, a fire pool and its cells, a cone of flame
 	-- or of petrol. Kinds and data: Server/Systems/Combat/Gadgets.luau (top).
 	PyroFx = event("PyroFx"),
+
+	-- Contraband prototype (Server/Systems/Contraband). Labs, extraction, the
+	-- courier case and the buyer. Everything else is server-made ProximityPrompts.
+
+	-- server → ONE client  (kind: Types.ContrabandEventKind, data: { [string]: any })
+	-- Your lab, your extraction, the case you hold, your sale, short notices.
+	-- Only ever sent to the player it concerns, and never with a bio-core id.
+	ContrabandEvent = event("ContrabandEvent"),
+
+	-- client → server  ()
+	-- "Send me my lab / case / extraction state again" (the first push can
+	-- arrive before the client listens). Rate-limited.
+	ContrabandSync = event("ContrabandSync"),
+
+	-- client → server  (sessionId: number, step: number, data: { [string]: any }?)
+	-- One step of the extraction mini-game is done (step 0 = cancel). The
+	-- server checks the session, the order, the minimum times and the data.
+	ExtractStep = event("ExtractStep"),
+
+	-- client → server  (action: string)
+	-- Something to do with the case I hold. Only "SetDown" (G) for now.
+	CaseAction = event("CaseAction"),
 })

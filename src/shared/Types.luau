@@ -37,6 +37,8 @@ export type PlayerProfile = {
 	-- (Shared/Cosmetics ids; "" = none).
 	ownedCosmetics: { [string]: boolean },
 	equipped: { Title: string, Outfit: string, KillEffect: string, Emote: string },
+	-- Contraband prototype: the lab culture, the bio-cores in the stash, the case.
+	contraband: ContrabandProfile,
 }
 
 export type QuestState = {
@@ -135,5 +137,98 @@ export type KillFeedDetails = {
 	victimId: number?,
 	killerId: number?,
 }
+
+-- ===================== Contraband prototype =====================
+-- (Server/Systems/Contraband). Labs, clones, bio-cores, the courier case.
+
+-- How good an extracted bio-core is (Shared/Contraband/Grades).
+export type CoreGrade = "A" | "B" | "C"
+
+-- One bio-core kept in the lab stash (saved). No id: ids only exist for one
+-- server session (Ledger) and never leave the server.
+export type StashCore = {
+	grade: CoreGrade,
+	score: number, -- 0..100, the extraction score that gave the grade
+	madeAt: number, -- os.time() when it was extracted
+}
+
+-- The saved contraband part of a player's save (PlayerProfile.contraband).
+export type ContrabandProfile = {
+	culture: { active: boolean, grown: number }, -- grown = seconds of online growth so far
+	stash: { StashCore },
+	caseTier: string, -- "Courier" (2 cradles); "MkII" later
+	log: { extractions: number, sales: number, coinsEarned: number, casesLost: number },
+}
+
+-- Where the culture in the lab vat is.
+export type CultureStage = "Empty" | "Growing" | "Ready" | "Extracting"
+
+-- server → owner (ContrabandEvent "LabState")
+export type LabStatePayload = {
+	inLab: boolean,
+	stage: CultureStage,
+	grown: number, -- seconds grown at server time `at`
+	total: number, -- seconds needed (Config.Lab.CULTURE_TIME or the fast value)
+	at: number, -- workspace:GetServerTimeNow() when `grown` was measured
+	running: boolean, -- true = grows at 1 s per s from `at`
+	bench: { CoreGrade }, -- stash cores, in order (NO ids)
+	stashMax: number,
+}
+
+-- server → owner (ContrabandEvent "ExtractState")
+export type ExtractStatePayload = {
+	active: boolean,
+	sessionId: number,
+	step: number, -- 1..6 (current), 7 = done
+	stepStartedAt: number, -- server time
+	guides: number, -- 6
+	correct: { number }, -- the fibre guides to cut (1..6), e.g. {1,3,4,6}
+	cut: { number }, -- guides already cut
+	clamps: { number }, -- clamps already unlocked (1, 2)
+	minTimes: { number }, -- copy of Config.Extraction.MIN_TIME
+}
+
+-- server → the case HOLDER only (ContrabandEvent "CaseState")
+export type CaseStatePayload = {
+	holding: boolean,
+	tier: string,
+	cradles: number,
+	grades: { CoreGrade },
+}
+
+-- server → seller (ContrabandEvent "SaleResult")
+export type SaleResultPayload = {
+	ok: boolean,
+	coins: number,
+	sold: { CoreGrade },
+	reason: string?,
+}
+
+-- End of an extraction: the grade, where the core went, why points were lost (short English
+-- lines from the server, e.g. "1 wrong fibre") and what the core is worth at the buyer.
+export type ExtractDonePayload = {
+	grade: CoreGrade,
+	toCase: boolean,
+	notes: { string },
+	worth: number,
+}
+
+-- Messages from the server to one player (Remotes.ContrabandEvent):
+--   LabState      LabStatePayload
+--   ExtractState  ExtractStatePayload
+--   ExtractDone   ExtractDonePayload
+--   CaseState     CaseStatePayload
+--   SaleStarted   { endsAt: number }   (server time)
+--   SaleResult    SaleResultPayload
+--   Notice        { text: string }     (short English line, written by the server)
+export type ContrabandEventKind =
+	"LabState"
+	| "ExtractState"
+	| "ExtractDone"
+	| "CaseState"
+	| "SaleStarted"
+	| "SaleResult"
+	| "Notice"
+	| "DoorCut" -- (no data) a lab door teleport is coming: the client fades the screen
 
 return nil

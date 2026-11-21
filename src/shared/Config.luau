@@ -63,6 +63,10 @@ return table.freeze({
 		USE_ITEM = Enum.KeyCode.R,
 		-- Opens the last top bar panel seen / closes the open one.
 		MENU = Enum.KeyCode.M,
+		-- Set down the courier case you carry (contraband). Only while carrying:
+		-- the Awakening (also G) is refused then, so the two never clash.
+		-- Picking a case up is a prompt (E).
+		CASE_SET_DOWN = Enum.KeyCode.G,
 	}),
 
 	-- Slide: press CROUCH while sprinting. A burst of speed that fades,
@@ -1058,5 +1062,115 @@ return table.freeze({
 		DRINK_SPEED = 0.7, -- walking speed × this while drinking
 		PROMPT_DISTANCE = 8, -- studs (the machine's button)
 		DRINK_DISTANCE = 6, -- studs (the "PICK UP" prompt of a can on the ground)
+	}),
+
+	-- ===================== Contraband prototype =====================
+	-- (Server/Systems/Contraband, client Lab / Extraction / Case controllers.)
+	-- Values are starting points for playtests.
+
+	-- Private labs: one per player, built while its owner is on the server.
+	Lab = table.freeze({
+		-- Lab slot 1 floor centre; slot n = ORIGIN + (n - 1) * SPACING on X.
+		-- Far from the city (about ±150) and the duel arenas (3000, 200, 3000).
+		ORIGIN = Vector3.new(-4000, 250, -4000),
+		SPACING = 400,
+		-- Seconds of ONLINE growth: MATRIX 0–25 %, FRAME 25–75 %, SHELL 75–100 %.
+		CULTURE_TIME = 480,
+		MATRIX_END = 0.25,
+		FRAME_END = 0.75,
+		PHASE_SHIFT_TIME = 2, -- client "phase shift" effect at 25 % and 75 %
+		-- In Studio, grow in CULTURE_FAST_TIME seconds instead (tests). The server
+		-- also sets the workspace attribute CultureFast = true then (Studio only).
+		CULTURE_FAST_IN_STUDIO = true,
+		CULTURE_FAST_TIME = 45,
+		PLANT_COST = 0, -- coins to plant a culture
+		TICK = 1, -- seconds between two growth ticks (server)
+		RESYNC_EVERY = 30, -- LabState sent again this often while in the lab
+		STASH_MAX = 8, -- bio-cores the lab shelf holds
+		ENTER_HOLD = 0.4, -- seconds to hold E on a lab door
+		ENTER_DISTANCE = 8, -- studs
+		PROMPT_DISTANCE = 7, -- studs (the prompts inside the lab)
+		NO_ENTRY_AFTER_HIT = 8, -- seconds after a hit before you can enter (no hiding mid-fight)
+		DOOR_PULSE = 0.9, -- seconds a lab door stays open when someone goes in / out
+		ANY_DOOR = true, -- true = every lab door leads to YOUR lab
+		INTRUDER_CHECK = 1, -- seconds between "is someone else in my lab?" checks
+	}),
+
+	-- The extraction mini-game (6 steps: unlock, open, spread, cut, lift, seal).
+	Extraction = table.freeze({
+		-- Minimum seconds per step (the server refuses faster), about 70 % of DESIGN_TIME.
+		MIN_TIME = table.freeze({ 1.4, 0.8, 1.6, 2.0, 1.5, 0.6 }),
+		DESIGN_TIME = table.freeze({ 3, 2, 3, 6, 4, 2 }), -- ≈ 20 s + camera moves ≈ 25 s
+		GUIDES = 6, -- fibre guides shown
+		CORRECT_GUIDES = 4, -- the ones to cut
+		CUT_MIN_GAP = 0.25, -- seconds between two cuts
+		LIFT_GOOD_TIME = 2.5, -- a lift faster than this loses grade
+		-- Score penalties (score starts at 100).
+		PENALTY = table.freeze({
+			unlock = 10,
+			spread = 15,
+			wrongCut = 12,
+			wrongCutMax = 2,
+			liftFast = 20,
+			liftRough = 10,
+		}),
+		GRADE_A = 85, -- score ≥ this = A
+		GRADE_B = 60, -- score ≥ this = B, else C
+		TIMEOUT = 120, -- seconds before an extraction is abandoned
+		MAX_INVALID = 20, -- invalid ExtractStep messages before the session is aborted
+		START_DISTANCE = 8, -- studs from the bench / vat
+	}),
+
+	-- The BX-7 courier case.
+	Case = table.freeze({
+		SPEED_MULT = 0.88, -- walk and sprint speed while carrying
+		STAMINA_DRAIN_MULT = 1.3, -- sprint stamina drain while carrying
+		CRADLES = table.freeze({ Courier = 2, MkII = 3 }), -- bio-cores per case tier
+		SIZE = Vector3.new(1.6, 1.15, 0.42), -- studs (width, height, thickness)
+		PICKUP_HOLD = 0.6, -- seconds to hold E
+		PICKUP_DISTANCE = 8, -- studs (prompt)
+		SERVER_DISTANCE = 10, -- studs (server re-check)
+		SETDOWN_COOLDOWN = 1, -- seconds
+		DROP_LID_ANGLE = 12, -- degrees: lid ajar when dropped by a knockout
+		DROP_FLING = 6, -- studs/s: small push when dropped
+		SETTLE_TIME = 1.5, -- seconds before a dropped case is anchored
+		-- Once settled, a dropped case that fell more than SETTLE_MAX_FALL studs, rolled more
+		-- than SETTLE_MAX_ROLL studs or rolled onto the train lane goes back to the drop point.
+		SETTLE_MAX_FALL = 6,
+		SETTLE_MAX_ROLL = 8,
+		EMPTY_DESPAWN_TIME = 120, -- seconds before an empty case on the ground disappears
+		DESPAWN_CLEAR_RADIUS = 60, -- ...only if no player is this close (studs)
+		-- A case WITH cores nobody came near for this long: its cores go back to their maker's
+		-- stash (if he is online and has room).
+		ABANDON_TIME = 900,
+		-- Cases in the whole server (the server uses at least MaxPlayers × MAX_ISSUED_LIVE + 8).
+		MAX_WORLD = 40,
+		MAX_ISSUED_LIVE = 2, -- cases one player may keep lying in his own lab
+		READOUT = "-18.4 C", -- the little screen inside the lid
+		LAST_POSITION_EVERY = 0.5, -- seconds: last safe spot (dropped there on disconnect)
+	}),
+
+	-- The buyer.
+	Market = table.freeze({
+		BASE_PRICE = 60, -- coins per bio-core of grade B
+		GRADE_MULT = table.freeze({ A = 1.2, B = 1.0, C = 0.8 }),
+		PRIVATE_SERVER_MULT = 0.5,
+		OPEN_TIME = 1.6, -- seconds the case stays open (vulnerable) when selling
+		CANCEL_MOVE = 4, -- studs moved during the sale = cancelled
+		PROMPT_DISTANCE = 8,
+		PROMPT_HOLD = 0.5,
+		SERVER_DISTANCE = 10,
+		SELL_COOLDOWN = 3,
+		-- Trip log (anti-teleport): checkpoints and limits.
+		TRIP_CHECK_EVERY = 2, -- seconds
+		TRIP_MAX_AVG_SPEED = 30, -- studs/s, straight line from the start of the trip
+		TRIP_MAX_JUMP = 120, -- studs between two checkpoints
+	}),
+
+	-- Shared contraband settings.
+	Contraband = table.freeze({
+		-- Rate limit shared by all contraband prompts of one player.
+		PROMPT_RATE = table.freeze({ capacity = 4, perSecond = 2 }),
+		DEBUG_LOG = true, -- Studio only: prints Heat / TripLog lines
 	}),
 })

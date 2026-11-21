@@ -20,6 +20,7 @@
 --   • WIND GUSTS (rain and thunderstorm): every few seconds a gust leans the rain harder for
 --     1 to 3 s, then it settles back. fallDirection() is the slanted fall (much more in a
 --     thunderstorm).
+--   • THE LAB (ZoneLook "Lab", contraband) is sealed: no rain, thunder or notice there.
 --   • THE PARK (ParkZone, see ParkAtmosphereController) is always sunny: no rain, no
 --     splashes, no wet grade and no lightning in there.
 --   • A one-line notice top-left for 3 s: "RAIN", "THUNDERSTORM", "FOG", "POWER CUT".
@@ -38,6 +39,7 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local ParkAtmosphereController = require(script.Parent.ParkAtmosphereController)
+local ZoneLookController = require(script.Parent.ZoneLookController)
 local SoundController = require(script.Parent.SoundController)
 
 local W = Config.Weather
@@ -82,6 +84,11 @@ local noticeId = 0
 -- The rain right now (0 → 1, the park not counted) and whether it is a thunderstorm: read by
 -- CityAudioController for the rain sound.
 local currentIntensity = 0
+
+-- 0 (city) → 1 (inside the private lab: no weather reaches it, like the park).
+local function labBlend(): number
+	return if ZoneLookController.current() == "Lab" then ZoneLookController.blend() else 0
+end
 local currentStorm = false
 -- The way the drops fall right now (a unit vector, slanted by the wind and the gusts).
 local currentFall = Vector3.new(0, -1, 0)
@@ -324,7 +331,7 @@ end
 -- The bolt and the double flash of the screen, then the rumble. (Not in the park: the sun
 -- shines there.) A thunderstorm's flashes are brighter.
 local function thunder()
-	if ParkAtmosphereController.blend() > 0.5 then
+	if ParkAtmosphereController.blend() > 0.5 or labBlend() > 0.5 then
 		return
 	end
 	local close = random:NextNumber() < CLOSE_STRIKE_CHANCE
@@ -377,7 +384,7 @@ local function onWeatherChanged()
 		kind = "Storm"
 	end
 	-- In the park the sun always shines: no weather notice there (nothing happens in it).
-	if ParkAtmosphereController.inPark() then
+	if ParkAtmosphereController.inPark() or labBlend() > 0.5 then
 		return
 	end
 	local text = NOTICE_TEXT[kind]
@@ -413,7 +420,7 @@ local function update()
 	currentIntensity = rainIntensity(now)
 	currentStorm = workspace:GetAttribute("Storm") == true
 	-- No rain at all in the park (always sunny there): faded with the park's light.
-	local intensity = currentIntensity * (1 - ParkAtmosphereController.blend())
+	local intensity = currentIntensity * (1 - ParkAtmosphereController.blend()) * (1 - labBlend())
 	local cameraPosition = camera.CFrame.Position
 
 	-- Screen grade: wet look + thunder flash (a cold blue-white while it lasts).
@@ -495,7 +502,8 @@ end
 -- itself), whether it is a thunderstorm, whether a roof is above the camera, and whether
 -- the camera is under a low ceiling (inside).
 function WeatherController.rainState(): (number, boolean, boolean, boolean)
-	return currentIntensity, currentStorm, covered, indoors
+	-- (the private lab is a sealed room far from the city: no rain there at all)
+	return currentIntensity * (1 - labBlend()), currentStorm, covered, indoors
 end
 
 -- The fog right now: 0 → 1 (fades in / out like the server's haze; the park NOT counted).
