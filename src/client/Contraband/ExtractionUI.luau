@@ -16,6 +16,10 @@
 --
 -- Every position here is in VIEWPORT pixels (the ScreenGui ignores Roblox's top bar inset),
 -- like Camera:WorldToViewportPoint.
+-- Transitions (quiet, realistic UI: no Back / Bounce): the step panel and the result card
+-- are CanvasGroups that fade in (0.18 s Quad Out, the card also grows 96 % → 100 %) and out
+-- (0.15 s Quad In, then hidden); each tween is kept and cancelled by the next show / hide.
+-- The step pips ease to their new colour (0.15 s).
 --
 --   ExtractionUI.new(onStop) → UI
 --   ExtractionUI.show(ui, on)
@@ -40,13 +44,31 @@ local COLORS = Theme.Colors
 local MARK = Color3.fromRGB(160, 232, 222)
 local SWEET = Color3.fromRGB(255, 196, 110) -- the clamp's sweet spot (amber)
 local STEP_COUNT = 6
+local FADE_IN = 0.18
+local FADE_OUT = 0.15
+local CARD_SIZE = Vector2.new(320, 92)
+
+-- The tweens running on a UI (kept so a new show / hide can cancel them).
+type Running = { panel: Tween?, card: { Tween }, token: number, cardToken: number }
+local running: { [ScreenGui]: Running } = setmetatable({}, { __mode = "k" }) :: any
+
+local function runningOf(gui: ScreenGui): Running
+	local found = running[gui]
+	if found then
+		return found
+	end
+	local made: Running = { panel = nil, card = {}, token = 0, cardToken = 0 }
+	running[gui] = made
+	return made
+end
 
 type Ring = { frame: Frame, needle: Frame, sweet: { Frame }, stroke: UIStroke }
 
 export type UI = {
 	gui: ScreenGui,
 	catcher: TextButton,
-	panel: Frame,
+	panel: CanvasGroup,
+	footer: Frame,
 	title: TextLabel,
 	hint: TextLabel,
 	pips: { Frame },
@@ -59,7 +81,7 @@ export type UI = {
 	meterBack: Frame,
 	meterFill: Frame,
 	meterTension: Frame,
-	card: Frame,
+	card: CanvasGroup,
 	cardTitle: TextLabel,
 	cardSub: TextLabel,
 	cardNote: TextLabel,
@@ -140,7 +162,7 @@ function ExtractionUI.new(onStop: () -> ()): UI
 	}) :: TextButton
 
 	-- Top centre: step, hint, pips.
-	local panel = Theme.make("Frame", {
+	local panel = Theme.make("CanvasGroup", {
 		Name = "Step",
 		AnchorPoint = Vector2.new(0.5, 0),
 		Position = UDim2.new(0.5, 0, 0, 64),
@@ -151,7 +173,7 @@ function ExtractionUI.new(onStop: () -> ()): UI
 		Parent = gui,
 	}, {
 		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS_LARGE) }),
-	}) :: Frame
+	}) :: CanvasGroup
 	Theme.autoScale(panel, 0.8)
 	local title = Theme.text({
 		Name = "Title",
@@ -268,11 +290,12 @@ function ExtractionUI.new(onStop: () -> ()): UI
 		ZIndex = 5,
 		Parent = meterBack,
 	}) :: Frame
-	local card = Theme.make("Frame", {
+	local card = Theme.make("CanvasGroup", {
 		Name = "Result",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.42),
-		Size = UDim2.fromOffset(320, 92),
+		Size = UDim2.fromOffset(CARD_SIZE.X, CARD_SIZE.Y),
+		GroupTransparency = 1,
 		BackgroundColor3 = COLORS.Scrim,
 		BackgroundTransparency = 0.3,
 		Visible = false,
@@ -280,7 +303,7 @@ function ExtractionUI.new(onStop: () -> ()): UI
 		Parent = gui,
 	}, {
 		Theme.make("UICorner", { CornerRadius = UDim.new(0, Theme.RADIUS_LARGE) }),
-	}) :: Frame
+	}) :: CanvasGroup
 	Theme.autoScale(card, 0.8)
 	local cardTitle = Theme.text({
 		Position = UDim2.fromOffset(0, 12),
@@ -321,6 +344,7 @@ function ExtractionUI.new(onStop: () -> ()): UI
 		gui = gui,
 		catcher = catcher,
 		panel = panel,
+		footer = footer,
 		title = title,
 		hint = hint,
 		pips = pips,
@@ -342,12 +366,51 @@ function ExtractionUI.new(onStop: () -> ()): UI
 end
 
 function ExtractionUI.show(ui: UI, on: boolean)
-	ui.gui.Enabled = on
-	ui.escCap.Visible = not Theme.isTouch()
-	if not on then
-		ui.card.Visible = false
-		ui.stop.reset()
+	local state = runningOf(ui.gui)
+	if state.panel then
+		state.panel:Cancel()
+		state.panel = nil
 	end
+	state.token += 1
+	local token = state.token
+	ui.escCap.Visible = not Theme.isTouch()
+	if on then
+		ui.catcher.Visible = true
+		ui.footer.Visible = true
+		if not ui.gui.Enabled then
+			ui.panel.GroupTransparency = 1
+		end
+		ui.gui.Enabled = true
+		state.panel = Theme.tween(
+			ui.panel,
+			FADE_IN,
+			{ GroupTransparency = 0 },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.Out
+		)
+		return
+	end
+	-- (the clicks go back to the game at once; the panel fades out, then the gui is off)
+	ui.catcher.Visible = false
+	ui.footer.Visible = false
+	ui.stop.reset()
+	ExtractionUI.result(ui, nil, nil)
+	if not ui.gui.Enabled then
+		return
+	end
+	local tween = Theme.tween(
+		ui.panel,
+		FADE_OUT,
+		{ GroupTransparency = 1 },
+		Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In
+	)
+	state.panel = tween
+	tween.Completed:Once(function(playback)
+		if playback == Enum.PlaybackState.Completed and state.token == token then
+			ui.gui.Enabled = false
+		end
+	end)
 end
 
 -- `step` 1..6 (7 = done).
@@ -355,15 +418,15 @@ function ExtractionUI.setStep(ui: UI, step: number, name: string, hint: string)
 	ui.title.Text = if step <= STEP_COUNT then `STEP {step}/{STEP_COUNT} · {name}` else name
 	ui.hint.Text = hint
 	for i, pip in ui.pips do
+		local color, transparency = COLORS.Ink3, 0.3
 		if i < step then
-			pip.BackgroundColor3 = MARK
-			pip.BackgroundTransparency = 0
+			color, transparency = MARK, 0
 		elseif i == step then
-			pip.BackgroundColor3 = COLORS.InkHi
-			pip.BackgroundTransparency = 0
-		else
-			pip.BackgroundColor3 = COLORS.Ink3
-			pip.BackgroundTransparency = 0.3
+			color, transparency = COLORS.InkHi, 0
+		end
+		if pip.BackgroundColor3 ~= color or pip.BackgroundTransparency ~= transparency then
+			-- (a new tween on the same properties replaces the running one)
+			Theme.tween(pip, 0.15, { BackgroundColor3 = color, BackgroundTransparency = transparency })
 		end
 	end
 end
@@ -451,8 +514,9 @@ function ExtractionUI.marker(ui: UI, key: string, centre: Vector2?, radius: numb
 	marker.Position = UDim2.fromOffset(centre.X, centre.Y)
 	marker.Size = UDim2.fromOffset(radius * 2 * pulse, radius * 2 * pulse)
 	local text = marker:FindFirstChild("Label")
-	if text and text:IsA("TextLabel") then
-		text.Text = label or ""
+	local wanted = label or ""
+	if text and text:IsA("TextLabel") and text.Text ~= wanted then
+		text.Text = wanted
 	end
 end
 
@@ -495,14 +559,46 @@ function ExtractionUI.meter(ui: UI, at: Vector2?, progress: number, tension: num
 end
 
 function ExtractionUI.result(ui: UI, text: string?, sub: string?, note: string?)
+	local state = runningOf(ui.gui)
+	for _, tween in state.card do
+		tween:Cancel()
+	end
+	table.clear(state.card)
+	state.cardToken += 1
+	local token = state.cardToken
+	local card = ui.card
 	if text == nil then
-		ui.card.Visible = false
+		if not card.Visible then
+			return
+		end
+		local tween = Theme.tween(
+			card,
+			FADE_OUT,
+			{ GroupTransparency = 1 },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
+		table.insert(state.card, tween)
+		tween.Completed:Once(function(playback)
+			if playback == Enum.PlaybackState.Completed and state.cardToken == token then
+				card.Visible = false
+			end
+		end)
 		return
 	end
-	ui.card.Visible = true
 	ui.cardTitle.Text = text
 	ui.cardSub.Text = sub or ""
 	ui.cardNote.Text = note or ""
+	if not card.Visible then
+		card.GroupTransparency = 1
+		card.Size = UDim2.fromOffset(CARD_SIZE.X * 0.96, CARD_SIZE.Y * 0.96)
+	end
+	card.Visible = true
+	table.insert(state.card, Theme.tween(card, FADE_IN, { GroupTransparency = 0 }))
+	table.insert(
+		state.card,
+		Theme.tween(card, FADE_IN, { Size = UDim2.fromOffset(CARD_SIZE.X, CARD_SIZE.Y) })
+	)
 end
 
 -- Is the viewport point over the STOP button? (its own clicks must not start a gesture)

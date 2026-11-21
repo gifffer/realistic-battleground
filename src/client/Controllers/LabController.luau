@@ -50,6 +50,9 @@ export type LabParts = {
 local DRAW_DISTANCE = 90
 -- How often we look for our lab model (seconds).
 local FIND_EVERY = 0.5
+-- Shelf capsules whose faint PointLight is on: the nearest ones to the camera (the others
+-- keep their breathing pinpoint; 8 tiny lights added almost nothing but cost).
+local SHELF_LIGHTS = 2
 
 local state: Types.LabStatePayload? = nil
 local labParts: LabParts? = nil
@@ -59,6 +62,7 @@ local cloneHidden = false
 local snapNext = true
 local shelf: { Model } = {}
 local shelfKey = ""
+local shelfLit: { [Model]: boolean } = {} -- (reused: which shelf capsules have their light on)
 local findTimer = 0
 
 local function getFolder(): Folder
@@ -203,8 +207,11 @@ local function render(dt: number)
 	end
 	if (camera.CFrame.Position - currentVat.core.Position).Magnitude > DRAW_DISTANCE then
 		snapNext = true -- (coming back: no phase shift for what happened meanwhile)
+		-- (once, on the change: the vat light off, its bubbles cleared, not frozen)
+		VatVisual.setCulled(currentVat, true)
 		return
 	end
+	VatVisual.setCulled(currentVat, false)
 	local now = os.clock()
 	local progress = LabController.progress()
 	VatVisual.setCloneHidden(currentVat, cloneHidden)
@@ -217,8 +224,26 @@ local function render(dt: number)
 		snap = snapNext,
 	}, dt, now)
 	snapNext = false
+	-- Shelf: every pinpoint breathes, only the SHELF_LIGHTS nearest have their light on.
+	table.clear(shelfLit)
+	local eye = camera.CFrame.Position
+	for _ = 1, math.min(SHELF_LIGHTS, #shelf) do
+		local best: Model? = nil
+		local bestDistance = math.huge
+		for _, capsule in shelf do
+			if not shelfLit[capsule] then
+				local distance = (capsule.WorldPivot.Position - eye).Magnitude
+				if distance < bestDistance then
+					best, bestDistance = capsule, distance
+				end
+			end
+		end
+		if best then
+			shelfLit[best] = true
+		end
+	end
 	for _, capsule in shelf do
-		CoreModel.animate(capsule, now)
+		CoreModel.animate(capsule, now, shelfLit[capsule] == true)
 	end
 end
 

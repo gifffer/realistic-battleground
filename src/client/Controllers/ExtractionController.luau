@@ -22,6 +22,17 @@
 --            into the recycling chute
 -- Mouse and touch work the same (one pointer). ESC, Backspace or the STOP button stop it
 -- (nothing is lost: the vat stays READY).
+--
+-- Timing (the roblox-animation skill's "markers", in this game's own system): every sound
+-- and effect fires from the LOCAL event it belongs to (the clamp reaching its mark, the hatch
+-- let go with its puff, the membrane starting to stretch, the core letting go, the cap
+-- shutting), never from the server's reply (which only validates). The outro waits for the
+-- seal gesture to finish (the cap never snaps shut mid-swing) and runs its own event table
+-- on its own clock (ChuteSlide at 1.4 s). Values the server re-applies on a new step glide
+-- to it unless the step jumped (a resync). Camera: BindToRenderStep after the camera
+-- scripts, a hard cut to the bench shot with a short push-in (no straight-line flight
+-- through the lab's walls), and back to where the player's camera is NOW relative to his
+-- body (not to a 25 s old position).
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
@@ -45,16 +56,18 @@ local player = Players.LocalPlayer
 local ExtractionController = {}
 
 local INTRO_TIME = 2
-local CAMERA_IN = 1
+local CAMERA_PUSH = 0.35 -- the push-in after the cut to the bench shot
+local CAMERA_PUSH_BACK = 0.8 -- studs: where the push-in starts, behind the final shot
+local CAMERA_PUSH_FOV = 6 -- degrees wider at the start of the push-in
 local CAMERA_OUT = 0.6
+local RENDER_NAME = "ExtractionScene"
+local SEAL_TIME = 0.6 -- the seal gesture (cap shuts at 0.625 of it)
+local SETTLE_RATE = 10 -- 1/s: a re-applied value glides to the server's (~0.3 s to 95 %)
 local CHUTE_TIME = 3
 local CARD_TIME = 2.5 -- seconds the result card stays before the camera comes back
--- The sound when the server confirms a step is done (Shared/Sounds, empty ids for now).
-local STEP_DONE_SOUND: { [number]: string } = {
-	[1] = "ClampClunk",
-	[2] = "HatchHiss",
-	[3] = "MembraneStretch",
-	[5] = "CoreRelease",
+-- Outro events (seconds from the outro's start), fired when its clock crosses them.
+local OUTRO_EVENTS: { { t: number, sound: string } } = {
+	{ t = 1.4, sound = "ChuteSlide" },
 }
 local CUT_GAP = 0.3 -- seconds between two cuts (the server wants ≥ 0.25)
 local LIFT_TIME = 1.6 -- the fastest a lift can go (resistance)
@@ -105,6 +118,7 @@ type Gesture = {
 	lastCut: number,
 	localCut: { [number]: boolean },
 	sealT: number?,
+	stretched: boolean, -- the membrane's stretch sound played (once per spread)
 }
 
 local session: Session? = nil
@@ -114,12 +128,25 @@ local gesture: Gesture
 local pointer: Vector2 = Vector2.zero
 local pressing = false
 local wrongHintUntil = 0 -- os.clock(): the "Wrong fibre" hint shows until then
-local savedCamera: { cframe: CFrame, fov: number, kind: Enum.CameraType }? = nil
-local cameraFrom: CFrame? = nil
+-- The player's camera when we took it: its FOV, and where it was relative to his body (the
+-- way back goes to that spot around where the body is NOW).
+local savedCamera: { offset: CFrame?, cframe: CFrame, fov: number, kind: Enum.CameraType }? =
+	nil
 local cameraStart = 0
 local cameraOut: { from: CFrame, start: number }? = nil
 local outroStart = 0
+local outroEvent = 1 -- the next OUTRO_EVENTS entry to fire
 local vatRoot: CFrame? = nil
+-- ExtractDone came while the seal was still playing: the outro starts when it ends.
+local queuedOutro: { grade: string, toCase: boolean, notes: { string }, worth: number }? = nil
+-- What the scene shows of the steps the gestures no longer drive (glides, see enterStep).
+local hatchShown, hatchTarget = 0, 0
+local spreadShown, spreadTarget = 0, 0
+local bound = false -- our BindToRenderStep is on
+-- Our body's parts, hidden while the camera is over the bench (collected once, not every
+-- frame), and the connection that hides parts added meanwhile.
+local hiddenParts: { Instance } = {}
+local hideConnection: RBXScriptConnection? = nil
 
 local function newGesture(): Gesture
 	return {
@@ -138,6 +165,7 @@ local function newGesture(): Gesture
 		lastCut = -100,
 		localCut = {},
 		sealT = nil,
+		stretched = false,
 	}
 end
 gesture = newGesture()
@@ -205,15 +233,26 @@ end
 -- Camera and own character
 ------------------------------------------------------------------------------
 
+local function rootPart(): BasePart?
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	return if root and root:IsA("BasePart") then root else nil
+end
+
 local function takeCamera()
 	local camera = workspace.CurrentCamera
 	if camera == nil then
 		return
 	end
 	if savedCamera == nil then
-		savedCamera = { cframe = camera.CFrame, fov = camera.FieldOfView, kind = camera.CameraType }
+		local root = rootPart()
+		savedCamera = {
+			offset = if root then root.CFrame:ToObjectSpace(camera.CFrame) else nil,
+			cframe = camera.CFrame,
+			fov = camera.FieldOfView,
+			kind = camera.CameraType,
+		}
 	end
-	cameraFrom = camera.CFrame
 	cameraStart = os.clock()
 	cameraOut = nil
 	camera.CameraType = Enum.CameraType.Scriptable
@@ -226,7 +265,6 @@ local function giveCameraBack()
 	local saved = savedCamera
 	savedCamera = nil
 	cameraOut = nil
-	cameraFrom = nil
 	if camera and saved then
 		camera.FieldOfView = saved.fov
 		camera.CameraType = Enum.CameraType.Custom
@@ -236,14 +274,46 @@ local function giveCameraBack()
 end
 
 -- Your own body hides while the camera is over the bench (it would stand in the shot).
+-- The parts are collected once (and those added meanwhile); keepBodyHidden() re-applies the
+-- value every frame without walking the character (the default camera scripts may write
+-- LocalTransparencyModifier too).
+local function hideable(instance: Instance): boolean
+	return instance:IsA("BasePart") or instance:IsA("Decal")
+end
+
 local function hideOwnBody(hidden: boolean)
+	if hideConnection then
+		hideConnection:Disconnect()
+		hideConnection = nil
+	end
+	for _, part in hiddenParts do
+		if part.Parent then
+			(part :: any).LocalTransparencyModifier = 0
+		end
+	end
+	table.clear(hiddenParts)
 	local character = player.Character
-	if character == nil then
+	if not hidden or character == nil then
 		return
 	end
 	for _, descendant in character:GetDescendants() do
-		if descendant:IsA("BasePart") or descendant:IsA("Decal") then
-			descendant.LocalTransparencyModifier = if hidden then 1 else 0
+		if hideable(descendant) then
+			table.insert(hiddenParts, descendant)
+			(descendant :: any).LocalTransparencyModifier = 1
+		end
+	end
+	hideConnection = character.DescendantAdded:Connect(function(descendant)
+		if hideable(descendant) then
+			table.insert(hiddenParts, descendant)
+			(descendant :: any).LocalTransparencyModifier = 1
+		end
+	end)
+end
+
+local function keepBodyHidden()
+	for _, part in hiddenParts do
+		if (part :: any).LocalTransparencyModifier ~= 1 then
+			(part :: any).LocalTransparencyModifier = 1
 		end
 	end
 end
@@ -252,6 +322,21 @@ end
 -- Session start / end
 ------------------------------------------------------------------------------
 
+local render: (dt: number) -> () -- defined below (every frame while a session runs)
+
+local function bindRender(on: boolean)
+	if on == bound then
+		return
+	end
+	bound = on
+	if on then
+		-- after the camera scripts (Camera + 1 is CameraController): our shot wins
+		RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Camera.Value + 2, render)
+	else
+		RunService:UnbindFromRenderStep(RENDER_NAME)
+	end
+end
+
 local function stopLocal()
 	local current = bench
 	bench = nil
@@ -259,8 +344,10 @@ local function stopLocal()
 		BenchVisual.destroy(current)
 	end
 	session = nil
+	queuedOutro = nil
 	pressing = false
 	gesture = newGesture()
+	bindRender(false)
 	if ui then
 		ExtractionUI.show(ui, false)
 		ExtractionUI.result(ui, nil, nil)
@@ -300,7 +387,11 @@ local function enterStep(step: number)
 	end
 	current.shown = step
 	current.sentStep = 0
+	-- (a normal step after the one we just did: what the server re-applies glides there;
+	-- the first step, a jump or a step back = a resync: it snaps)
+	local resync = previous == 0 or step ~= previous + 1
 	local keepUnlocked = gesture.unlocked
+	local previous = current.shown
 	gesture = newGesture()
 	pressing = false
 	local info = STEPS[step]
@@ -322,8 +413,16 @@ local function enterStep(step: number)
 			BenchVisual.setClampUnlocked(scene, clamp, true)
 		end
 	end
-	BenchVisual.setHatch(scene, if step >= 3 then 1 else 0)
-	BenchVisual.setSpread(scene, if step >= 4 then 1 else 0)
+	hatchTarget = if step >= 3 then 1 else 0
+	spreadTarget = if step >= 4 then 1 else 0
+	if resync or math.abs(hatchShown - hatchTarget) > 0.2 then
+		hatchShown = hatchTarget
+	end
+	if resync or math.abs(spreadShown - spreadTarget) > 0.2 then
+		spreadShown = spreadTarget
+	end
+	BenchVisual.setHatch(scene, hatchShown)
+	BenchVisual.setSpread(scene, spreadShown)
 	BenchVisual.setFibres(scene, current.correct, current.cut, step == 4)
 	for _, guide in current.cut do
 		gesture.localCut[guide] = true
@@ -352,6 +451,7 @@ local function begin(data: Types.ExtractStatePayload)
 	}
 	local scene = BenchVisual.new(parts.benchAnchor.CFrame, LabController.visuals())
 	bench = scene
+	hatchShown, hatchTarget, spreadShown, spreadTarget = 0, 0, 0, 0
 	vatRoot = parts.vatCore.CFrame
 	BenchVisual.place(scene, parts.vatCore.CFrame)
 	LabController.setCloneHidden(true)
@@ -360,22 +460,24 @@ local function begin(data: Types.ExtractStatePayload)
 	ExtractionUI.setStep(screen, 1, "PREPARING", "The shell goes onto the bench.")
 	takeCamera()
 	hideOwnBody(true)
+	bindRender(true)
 end
 
-local function startOutro(grade: string, toCase: boolean, notes: { string }, worth: number)
+local function beginOutro(grade: string, toCase: boolean, notes: { string }, worth: number)
 	local current = session
 	local scene = bench
+	queuedOutro = nil
 	if current == nil or scene == nil then
 		return
 	end
 	current.done = true
 	outroStart = os.clock()
-	SoundController.play2D("CapsuleSeal")
-	task.delay(1.4, function()
-		if session == current then
-			SoundController.play2D("ChuteSlide")
-		end
-	end)
+	outroEvent = 1
+	if not scene.capShut then
+		-- (no seal gesture shown here, e.g. after a resync: still close it with its sound)
+		BenchVisual.seal(scene, 1)
+		SoundController.play2D("CapsuleSeal")
+	end
 	if grade == "A" or grade == "B" or grade == "C" then
 		BenchVisual.reveal(scene, grade)
 	end
@@ -401,6 +503,21 @@ local function startOutro(grade: string, toCase: boolean, notes: { string }, wor
 	)
 end
 
+-- The server's verdict. If our seal is still playing, the outro waits for its end (the grade
+-- is revealed in a SHUT capsule, never over a cap still swinging).
+local function startOutro(grade: string, toCase: boolean, notes: { string }, worth: number)
+	local current = session
+	if current == nil or current.done then
+		return
+	end
+	local sealT = gesture.sealT
+	if current.shown == 6 and sealT and sealT < 1 then
+		queuedOutro = { grade = grade, toCase = toCase, notes = notes, worth = worth }
+		return
+	end
+	beginOutro(grade, toCase, notes, worth)
+end
+
 ------------------------------------------------------------------------------
 -- Server messages
 ------------------------------------------------------------------------------
@@ -423,10 +540,8 @@ local function onExtractState(data: Types.ExtractStatePayload)
 	current.correct = table.clone(data.correct)
 	current.cut = table.clone(data.cut)
 	current.clamps = table.clone(data.clamps)
+	-- (no sound here: each one played at its own local event; the reply only validates)
 	local changed = current.step ~= data.step
-	if changed and data.step > current.step and STEP_DONE_SOUND[current.step] then
-		SoundController.play2D(STEP_DONE_SOUND[current.step])
-	end
 	current.step = data.step
 	if changed and current.shown > 0 then
 		enterStep(data.step)
@@ -585,19 +700,23 @@ local function pointerUp(at: Vector2)
 			local accuracy = 1 - math.clamp((math.abs(degrees - 90) - 6) / 30, 0, 1)
 			gesture.unlocked[clamp] = true
 			BenchVisual.setClampUnlocked(scene, clamp, true)
+			SoundController.play2D("ClampClunk")
 			send(1, { clamp = clamp, accuracy = accuracy })
 			if gesture.unlocked[1] and gesture.unlocked[2] then
 				current.sentStep = 1
 			end
 		else
 			gesture.turns[clamp] = 0
-			BenchVisual.setClamp(scene, clamp, 0)
+			-- (let go short of the mark: the spring brings the lever back, it doesn't snap)
+			BenchVisual.settleClamp(scene, clamp, 0)
 		end
 	elseif step == 2 and gesture.grabbing then
 		gesture.grabbing = false
 		if gesture.value >= 0.8 then
 			gesture.settle = 1
+			-- the seal breaks: the hiss and the cold puff together
 			BenchVisual.puff(scene)
+			SoundController.play2D("HatchHiss")
 			current.sentStep = 2
 			send(2, {})
 		else
@@ -626,31 +745,48 @@ end
 -- Every frame
 ------------------------------------------------------------------------------
 
+local function easeOut(x: number): number
+	x = math.clamp(x, 0, 1)
+	return 1 - (1 - x) * (1 - x) * (1 - x)
+end
+
 local function updateCamera(now: number)
 	local camera = workspace.CurrentCamera
 	local scene = bench
-	if camera == nil or scene == nil or savedCamera == nil then
+	local saved = savedCamera
+	if camera == nil or scene == nil or saved == nil then
 		return
 	end
 	local target = BenchVisual.cameraCFrame(scene.anchor)
 	local out = cameraOut
 	if out then
-		-- back to the player's view (then Custom takes over)
-		local saved = savedCamera :: { cframe: CFrame, fov: number, kind: Enum.CameraType }
+		-- back to the player's view, where it is NOW around his body (then Custom takes over)
+		local root = rootPart()
+		local offset = saved.offset
+		local goal = if root and offset then root.CFrame * offset else saved.cframe
 		local t = smooth((now - out.start) / CAMERA_OUT)
-		camera.CFrame = out.from:Lerp(saved.cframe, t)
+		camera.CFrame = out.from:Lerp(goal, t)
 		camera.FieldOfView = BenchVisual.CAMERA_FOV + (saved.fov - BenchVisual.CAMERA_FOV) * t
 		if t >= 1 then
 			giveCameraBack()
 		end
 		return
 	end
+	-- A hard cut to the bench shot, then a short push-in (ease-out): no flight through the
+	-- small lab's walls or the vat.
 	camera.CameraType = Enum.CameraType.Scriptable
-	local from = cameraFrom or target
-	local t = smooth((now - cameraStart) / CAMERA_IN)
-	camera.CFrame = from:Lerp(target, t)
-	local saved = savedCamera :: { cframe: CFrame, fov: number, kind: Enum.CameraType }
-	camera.FieldOfView = saved.fov + (BenchVisual.CAMERA_FOV - saved.fov) * t
+	local push = 1 - easeOut((now - cameraStart) / CAMERA_PUSH)
+	camera.CFrame = target * CFrame.new(0, 0, CAMERA_PUSH_BACK * push)
+	camera.FieldOfView = BenchVisual.CAMERA_FOV + CAMERA_PUSH_FOV * push
+end
+
+-- A value the server re-applied glides to it (frame-rate independent, never pops).
+local function glide(value: number, target: number, dt: number): number
+	if value == target then
+		return value
+	end
+	local next = value + (target - value) * (1 - math.exp(-dt * SETTLE_RATE))
+	return if math.abs(target - next) < 0.002 then target else next
 end
 
 local function updateIntro(now: number, scene: BenchVisual.Bench, current: Session)
@@ -682,6 +818,16 @@ local function updateGesture(
 	local toolAt = onPlane(pointer, points.plane.Position, points.plane.UpVector)
 		or points.plane.Position
 
+	-- What the gestures of the steps done no longer drive glides to the server's state.
+	if step >= 3 and hatchShown ~= hatchTarget then
+		hatchShown = glide(hatchShown, hatchTarget, dt)
+		BenchVisual.setHatch(scene, hatchShown)
+	end
+	if step >= 4 and spreadShown ~= spreadTarget then
+		spreadShown = glide(spreadShown, spreadTarget, dt)
+		BenchVisual.setSpread(scene, spreadShown)
+	end
+
 	-- markers off by default; each step turns its own on
 	local showRings, showBand, showMeter = false, false, false
 	local markerCore, markerHatch, markerMembrane, markerCapsule = false, false, false, false
@@ -710,6 +856,7 @@ local function updateGesture(
 			gesture.value = value
 		end
 		BenchVisual.setHatch(scene, value)
+		hatchShown = value
 		markerHatch = not gesture.grabbing and not waiting
 		BenchVisual.showTool(
 			scene,
@@ -747,7 +894,13 @@ local function updateGesture(
 				gesture.value += (settle - gesture.value) * (1 - math.exp(-dt * 6))
 			end
 		end
+		-- the membrane starts to give: its stretch sound, once
+		if gesture.grabbing and not gesture.stretched and gesture.value > 0.12 then
+			gesture.stretched = true
+			SoundController.play2D("MembraneStretch")
+		end
 		BenchVisual.setSpread(scene, gesture.value)
+		spreadShown = gesture.value
 		markerMembrane = not gesture.grabbing and not waiting
 		BenchVisual.showTool(
 			scene,
@@ -793,6 +946,7 @@ local function updateGesture(
 				-- the soft release: the core lets go of its cradle
 				gesture.value = 1
 				gesture.grabbing = false
+				SoundController.play2D("CoreRelease")
 				current.sentStep = 5
 				local smoothness = 1 - gesture.badTime / math.max(gesture.heldTime, 0.1)
 				send(5, { smooth = math.clamp(smoothness, 0, 1) })
@@ -813,9 +967,12 @@ local function updateGesture(
 	elseif step == 6 then
 		local sealT = gesture.sealT
 		if sealT then
-			sealT = math.min(1, sealT + dt / 0.6)
+			sealT = math.min(1, sealT + dt / SEAL_TIME)
 			gesture.sealT = sealT
-			BenchVisual.seal(scene, sealT)
+			-- (the click and the hiss on the frame the cap shuts: the seal's own "marker")
+			if BenchVisual.seal(scene, sealT) then
+				SoundController.play2D("CapsuleSeal")
+			end
 			BenchVisual.showTool(scene, nil, toolAt, cameraCFrame, false)
 		elseif gesture.grabbing then
 			-- the core follows the pointer at its lifted height
@@ -892,6 +1049,11 @@ local function updateOutro(now: number, scene: BenchVisual.Bench, parts: LabCont
 		end
 		hideOwnBody(false)
 	end
+	-- Its events, on its own clock (a hitch can't split a sound from its motion).
+	while OUTRO_EVENTS[outroEvent] and t >= OUTRO_EVENTS[outroEvent].t do
+		SoundController.play2D(OUTRO_EVENTS[outroEvent].sound)
+		outroEvent += 1
+	end
 	-- 0.8–1.2 s: the hatch closes; the capsule goes to its place (the shelf / the case)
 	BenchVisual.setHatch(scene, 1 - smooth((t - 0.8) / 0.4))
 	if t >= 1.6 then
@@ -918,7 +1080,7 @@ local function updateOutro(now: number, scene: BenchVisual.Bench, parts: LabCont
 	end
 end
 
-local function render(dt: number)
+function render(dt: number)
 	local current = session
 	local scene = bench
 	local screen = ui
@@ -934,7 +1096,7 @@ local function render(dt: number)
 	end
 	updateCamera(now)
 	if savedCamera ~= nil and not current.done then
-		hideOwnBody(true)
+		keepBodyHidden()
 	end
 	if current.done then
 		updateOutro(now, scene, parts)
@@ -943,6 +1105,11 @@ local function render(dt: number)
 	else
 		BenchVisual.place(scene, BenchVisual.lyingRoot(scene.anchor))
 		updateGesture(dt, current, scene, screen)
+		-- the verdict came during the seal: the outro starts once the cap is shut
+		local queued = queuedOutro
+		if queued and (gesture.sealT or 1) >= 1 then
+			beginOutro(queued.grade, queued.toCase, queued.notes, queued.worth)
+		end
 	end
 	if bench then
 		BenchVisual.step(scene, dt, now)
@@ -988,7 +1155,7 @@ function ExtractionController.init()
 end
 
 function ExtractionController.start()
-	RunService.RenderStepped:Connect(render)
+	-- (render is bound with BindToRenderStep while a session runs only: see bindRender)
 
 	-- One pointer: the mouse, or the first finger.
 	local touch: any = nil -- (the finger we follow)

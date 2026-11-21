@@ -15,7 +15,10 @@
 --
 --   CoreModel.core(grade, scale?, cframe?)   → Model "BioCore" (long axis = the model's Y)
 --   CoreModel.capsule(grade?, cframe?, empty?) → Model "Capsule" (long axis = Y, cap "CapTop")
---   CoreModel.animate(model, now)            breathing light (call it each frame, optional)
+--   CoreModel.animate(model, now, lit?)      breathing light (call it each frame, optional);
+--                                            each model breathes on its own phase (8 capsules
+--                                            on a shelf never pulse in lockstep); lit = false
+--                                            switches its PointLight off (the pin still breathes)
 --   CoreModel.weldTo(model, part)            unanchor + weld every part to `part` (held case)
 --   CoreModel.setCapOpen(capsule, open)      0 = closed .. 1 = top cap lifted off (seal step)
 --
@@ -239,27 +242,61 @@ function CoreModel.setCapOpen(capsule: Model, open: number)
 	cap.CFrame = capsule.WorldPivot * closed:Lerp(aside, o) * CFrame.new(0, lift, 0) * Parts.UPRIGHT
 end
 
--- Breathing light: brightness 0.3 ± a little (2.5 s), B pulses faster, A changes colour.
-function CoreModel.animate(model: Model, now: number)
+-- What animate() needs per model, found once (no recursive search per frame).
+type Breath = { pin: BasePart, light: PointLight?, look: Look, phase: number, lit: boolean }
+local breaths: { [Model]: Breath | false } = setmetatable({}, { __mode = "k" }) :: any
+local phases = Random.new()
+
+local function breathOf(model: Model): Breath?
+	local known = breaths[model]
+	if known ~= nil then
+		return known or nil
+	end
 	local pin = model:FindFirstChild("Pin", true)
 	if pin == nil or not pin:IsA("BasePart") then
-		return
+		breaths[model] = false
+		return nil
 	end
-	local light = pin:FindFirstChildOfClass("PointLight")
 	local core = if pin.Parent and pin.Parent:IsA("Model") then pin.Parent else model
 	local grade = core:GetAttribute("Grade")
-	local look = LOOKS[if grade == "A" or grade == "B" or grade == "C" then grade else "None"]
-	local period = if look.pulse then 1.4 else 2.5
-	local breath = 0.5 + 0.5 * math.sin(now * math.pi * 2 / period)
-	if light then
-		light.Brightness = 0.22 + 0.16 * breath
-		if look.light2 then
-			local mix = 0.5 + 0.5 * math.sin(now * math.pi * 2 / 7)
-			light.Color = look.light:Lerp(look.light2 :: Color3, mix)
-			pin.Color = light.Color
-		end
+	local breath: Breath = {
+		pin = pin,
+		light = pin:FindFirstChildOfClass("PointLight"),
+		look = LOOKS[if grade == "A" or grade == "B" or grade == "C" then grade else "None"],
+		phase = phases:NextNumber(0, 7), -- seconds: its own place in the breath
+		lit = true,
+	}
+	breaths[model] = breath
+	return breath
+end
+
+-- Breathing light: brightness 0.3 ± a little (2.5 s), B pulses faster, A changes colour.
+function CoreModel.animate(model: Model, now: number, lit: boolean?)
+	local breath = breathOf(model)
+	if breath == nil then
+		return
 	end
-	pin.Transparency = 0.1 + 0.25 * (1 - breath)
+	local pin, light, look = breath.pin, breath.light, breath.look
+	local t = now + breath.phase
+	local period = if look.pulse then 1.4 else 2.5
+	local wave = 0.5 + 0.5 * math.sin(t * math.pi * 2 / period)
+	local on = lit ~= false
+	if light and breath.lit ~= on then
+		breath.lit = on
+		light.Enabled = on
+	end
+	if light and on then
+		light.Brightness = 0.22 + 0.16 * wave
+	end
+	if look.light2 then
+		local mix = 0.5 + 0.5 * math.sin(t * math.pi * 2 / 7)
+		local color = look.light:Lerp(look.light2 :: Color3, mix)
+		if light and on then
+			light.Color = color
+		end
+		pin.Color = color
+	end
+	pin.Transparency = 0.1 + 0.25 * (1 - wave)
 end
 
 -- Where stash capsule number `index` (1..8) stands on the lab's stash shelf (the server's

@@ -8,12 +8,25 @@
 -- Everything inside is milky / teal / amber, never red. No organs, no anatomy.
 --
 -- The 6 gestures move pieces of this scene (ExtractionController drives them):
---   1 UNLOCK  setClamp(i, turn 0..1), setClampUnlocked(i)   (LED teal → amber)
+--   1 UNLOCK  setClamp(i, turn 0..1), settleClamp(i, turn), setClampUnlocked(i)
+--             (LED teal → amber; a released lever settles in ~0.2 s, never snaps)
 --   2 OPEN    setHatch(open 0..1), puff()                  (cold vapour)
 --   3 SPREAD  setSpread(0..1)                               (the membrane parts)
 --   4 CUT     setFibres(correct, cut, active), cut(i)       (fibre snaps, milky droplets)
 --   5 LIFT    setLift(0..1)                                 (the core rises from its cradle)
 --   6 SEAL    setCoreWorld(cframe?), seal(t), reveal(grade) (into the capsule, frost)
+--             (setCoreWorld(nil) glides the core back in 0.25 s; seal() returns true on the
+--             frame the cap shuts: the click / hiss is fired from there)
+--
+-- Effects (client only, nothing uploaded):
+--   • cold vapour: ONE ParticleEmitter per bench (built-in smoke texture), Rate 0 + Emit(n)
+--     bursts. Cryogenic vapour is heavier than air: it spills out, slows (Drag) and sinks
+--     (negative Acceleration) instead of rising like steam; it fades in and out (no pop).
+--   • seal: a slower vapour burst at the capsule mouth, then a thin ring of cold mist at the
+--     cap seam when the cap shuts (a second emitter, Disc shape, rim only).
+--   • milky droplets: small glossy beads (parts) falling at real gravity (~30 studs/s²); on
+--     the cavity floor they flatten and STAY (until the scene fades), like the references'
+--     fluids that land and stay. Never red.
 -- Tools: showTool(name, at, camera, pressing): "Hand", "Hands" (spread), "Scalpel", nil.
 --
 -- Space: the shell is built STANDING (like CloneModel: feet y -2.5, chest = -Z) and laid
@@ -44,13 +57,14 @@ type Fibre = {
 	cutAt: number?, -- clock time of the cut (snap animation)
 }
 
-type Particle = {
+type Droplet = {
 	part: BasePart,
 	active: boolean,
 	position: Vector3,
 	velocity: Vector3,
-	age: number,
-	life: number,
+	size: number,
+	landed: boolean,
+	rest: Vector3, -- where it lies, in the shell root's space (it follows the shell)
 }
 
 export type Points = {
@@ -72,7 +86,16 @@ export type Bench = {
 	items: { Item },
 	hatch: { BasePart },
 	hatchLed: BasePart,
-	clamps: { { knob: BasePart, lever: BasePart, led: BasePart, at: Vector3, turn: number } },
+	clamps: {
+		{
+			knob: BasePart,
+			lever: BasePart,
+			led: BasePart,
+			at: Vector3,
+			turn: number,
+			target: number, -- where a released lever settles
+		}
+	},
 	membrane: { BasePart },
 	strands: { BasePart },
 	fibres: { Fibre },
@@ -82,16 +105,23 @@ export type Bench = {
 	core: Model,
 	coreLift: number,
 	coreWorld: CFrame?, -- set while the core is dragged (seal)
+	coreReturn: { from: CFrame, at: number }?, -- let go: gliding back to its lift
 	coreHidden: boolean,
 	capsule: Model,
 	capsuleAt: CFrame,
 	sealed: boolean,
+	capShut: boolean,
 	frost: number,
 	tools: { [string]: Parts.Rig },
 	toolParts: { [string]: { BasePart } },
 	shownTool: string?,
-	droplets: { Particle },
-	vapour: { Particle },
+	droplets: { Droplet },
+	vapourSource: BasePart, -- invisible part the vapour bursts come from
+	vapour: ParticleEmitter,
+	mistSource: BasePart, -- at the capsule's cap seam
+	mist: ParticleEmitter,
+	moved: { BasePart }, -- reused every frame (no table per frame)
+	cframes: { CFrame },
 	random: Random,
 	visible: number,
 }
@@ -113,6 +143,12 @@ local GLOVE_CUFF = rgb(52, 84, 140)
 local HAND_SIDE_ANGLE = 40 -- degrees: the single hand comes in from the screen's right
 local HAND_GRIP_OFFSET = 0.25 -- studs: a gripping hand holds things from the side
 local VAPOUR = rgb(236, 244, 248)
+local VAPOUR_DEEP = rgb(205, 220, 228)
+local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds" -- built in, no upload
+local DROP_GRAVITY = 30 -- studs/s² (real gravity at 1 stud = 0.28 m: the drops don't float)
+local DROP_TRANSPARENCY = 0.15
+local CORE_RETURN_TIME = 0.25
+local CLAMP_SETTLE = 14 -- 1/s: a released lever settles in ~0.2 s
 local LED_LOCKED = rgb(150, 220, 230)
 local LED_OPEN = rgb(255, 170, 70)
 local HAND_SCALE = 0.6
@@ -157,6 +193,95 @@ end
 
 local function clampLever(at: Vector3, turn: number): CFrame
 	return CFrame.new(at) * CFrame.Angles(0, 0, turn * math.pi / 2) * CFrame.new(-0.14, 0, -0.035)
+end
+
+local function smooth(x: number): number
+	x = math.clamp(x, 0, 1)
+	return x * x * (3 - 2 * x)
+end
+
+-- Cubic in (accelerating: a spring-loaded cap) / out (fastest at the start: a snapped fibre).
+local function easeIn(x: number): number
+	x = math.clamp(x, 0, 1)
+	return x * x * x
+end
+
+local function easeOut(x: number): number
+	x = math.clamp(x, 0, 1)
+	return 1 - (1 - x) * (1 - x) * (1 - x)
+end
+
+-- The cold vapour emitter (one per bench, bursts only). Cryogenic vapour: soft, matte, lit
+-- by the room (not a glow), fades in and out, slows down and sinks.
+local function vapourEmitter(parent: BasePart): ParticleEmitter
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "ColdVapour"
+	emitter.Texture = SMOKE_TEXTURE
+	emitter.Enabled = true
+	emitter.Rate = 0 -- bursts only (Emit)
+	emitter.Color = ColorSequence.new(VAPOUR, VAPOUR_DEEP)
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.15),
+		NumberSequenceKeypoint.new(0.4, 0.55, 0.1),
+		NumberSequenceKeypoint.new(1, 0.9, 0.15),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.12, 0.6),
+		NumberSequenceKeypoint.new(0.5, 0.78),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Lifetime = NumberRange.new(1.0, 1.6)
+	emitter.Speed = NumberRange.new(0.4, 1.2)
+	emitter.SpreadAngle = Vector2.new(40, 40)
+	emitter.Drag = 3
+	emitter.Acceleration = Vector3.new(0, -0.8, 0) -- heavier than air: it sinks and spills
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.RotSpeed = NumberRange.new(-20, 20)
+	emitter.LightEmission = 0 -- it is not a glow
+	emitter.LightInfluence = 1 -- lit by the cold tube / bench lamp
+	emitter.ZOffset = 0.2 -- in front of the membrane / hatch
+	emitter.Shape = Enum.ParticleEmitterShape.Box
+	emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	emitter.EmissionDirection = Enum.NormalId.Top
+	emitter.Parent = parent
+	return emitter
+end
+
+-- The cold mist ring at the capsule's cap seam (one burst when the cap shuts).
+local function mistEmitter(parent: BasePart): ParticleEmitter
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "SealMist"
+	emitter.Texture = SMOKE_TEXTURE
+	emitter.Enabled = true
+	emitter.Rate = 0
+	emitter.Color = ColorSequence.new(VAPOUR)
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(1, 0.3, 0.05),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.2, 0.7),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Lifetime = NumberRange.new(0.6, 0.9)
+	emitter.Speed = NumberRange.new(0.2, 0.5)
+	emitter.Drag = 4
+	emitter.Acceleration = Vector3.new(0, -0.6, 0)
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.RotSpeed = NumberRange.new(-30, 30)
+	emitter.LightEmission = 0
+	emitter.LightInfluence = 1
+	emitter.ZOffset = 0.1
+	-- (a Disc on a part, rim only: a ring around the seam, blowing outward)
+	emitter.Shape = Enum.ParticleEmitterShape.Disc
+	emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	emitter.ShapeInOut = Enum.ParticleEmitterShapeInOut.Outward
+	emitter.ShapePartial = 0.85
+	emitter.EmissionDirection = Enum.NormalId.Top
+	emitter.Parent = parent
+	return emitter
 end
 
 ------------------------------------------------------------------------------
@@ -255,16 +380,23 @@ function BenchVisual.new(anchor: CFrame, parent: Instance): Bench
 		core = CoreModel.core(nil, 1),
 		coreLift = 0,
 		coreWorld = nil,
+		coreReturn = nil,
 		coreHidden = false,
 		capsule = CoreModel.capsule(nil, capsuleAt, true),
 		capsuleAt = capsuleAt,
 		sealed = false,
+		capShut = false,
 		frost = 0,
 		tools = {},
 		toolParts = {},
 		shownTool = nil,
 		droplets = {},
-		vapour = {},
+		vapourSource = nil :: any,
+		vapour = nil :: any,
+		mistSource = nil :: any,
+		mist = nil :: any,
+		moved = {},
+		cframes = {},
 		random = Random.new(),
 		visible = 1,
 	}
@@ -450,7 +582,10 @@ function BenchVisual.new(anchor: CFrame, parent: Instance): Bench
 			Parent = folder,
 		})
 		track(bench, led, CFrame.new(at + Vector3.new(0.13, 0.17, 0.01)))
-		table.insert(bench.clamps, { knob = knob, lever = lever, led = led, at = at, turn = 0 })
+		table.insert(
+			bench.clamps,
+			{ knob = knob, lever = lever, led = led, at = at, turn = 0, target = 0 }
+		)
 	end
 
 	-- The capsule's steel holder beside the head, the capsule open in it.
@@ -480,9 +615,10 @@ function BenchVisual.new(anchor: CFrame, parent: Instance): Bench
 	bench.tools.Scalpel = scalpelRig
 	bench.toolParts.Scalpel = scalpelParts
 
-	-- Particle pools (milky droplets, cold vapour).
-	for _ = 1, 14 do
-		local part = Parts.ball(0.06, {
+	-- Milky droplets: a pool of beads (4 per cut × 6 fibres; they stay where they land).
+	for _ = 1, 24 do
+		-- (an ellipsoid: it flattens into a bead when it lands)
+		local part = Parts.ellipsoid(Vector3.new(0.06, 0.06, 0.06), {
 			Name = "Droplet",
 			Color = COLORS.gel,
 			Transparency = 1,
@@ -494,26 +630,31 @@ function BenchVisual.new(anchor: CFrame, parent: Instance): Bench
 			active = false,
 			position = Vector3.zero,
 			velocity = Vector3.zero,
-			age = 0,
-			life = 1,
+			size = 0.06,
+			landed = false,
+			rest = Vector3.zero,
 		})
 	end
-	for _ = 1, 12 do
-		local part = Parts.ball(0.3, {
-			Name = "Vapour",
-			Color = VAPOUR,
-			Transparency = 1,
-			Parent = folder,
-		})
-		table.insert(bench.vapour, {
-			part = part,
-			active = false,
-			position = Vector3.zero,
-			velocity = Vector3.zero,
-			age = 0,
-			life = 1.4,
-		})
-	end
+	-- Cold vapour and the seal's mist ring: emitters on small invisible parts (Box / Disc
+	-- shapes need a part parent, not an Attachment).
+	local vapourSource = Parts.part({
+		Name = "VapourSource",
+		Size = Vector3.new(0.7, 0.05, 0.7),
+		Transparency = 1,
+		CFrame = anchor,
+		Parent = folder,
+	})
+	bench.vapourSource = vapourSource
+	bench.vapour = vapourEmitter(vapourSource)
+	local mistSource = Parts.part({
+		Name = "SealMistSource",
+		Size = Vector3.new(0.5, 0.05, 0.5),
+		Transparency = 1,
+		CFrame = capsuleAt * CFrame.new(0, 0.45, 0),
+		Parent = folder,
+	})
+	bench.mistSource = mistSource
+	bench.mist = mistEmitter(mistSource)
 
 	folder.Parent = parent
 	BenchVisual.place(bench, bench.root)
@@ -524,13 +665,23 @@ end
 -- Gesture states
 ------------------------------------------------------------------------------
 
+-- Puts clamp `index`'s lever at `turn` now (it is being turned by hand).
 function BenchVisual.setClamp(bench: Bench, index: number, turn: number)
 	local clamp = bench.clamps[index]
 	if clamp == nil then
 		return
 	end
 	clamp.turn = math.clamp(turn, 0, 1.4)
+	clamp.target = clamp.turn
 	Parts.setLocal(bench.rig, clamp.lever, clampLever(clamp.at, clamp.turn))
+end
+
+-- Lets go of clamp `index`: its lever settles to `turn` (step(), ~0.2 s, no snap).
+function BenchVisual.settleClamp(bench: Bench, index: number, turn: number)
+	local clamp = bench.clamps[index]
+	if clamp then
+		clamp.target = math.clamp(turn, 0, 1.4)
+	end
 end
 
 function BenchVisual.setClampUnlocked(bench: Bench, index: number, unlocked: boolean)
@@ -540,7 +691,7 @@ function BenchVisual.setClampUnlocked(bench: Bench, index: number, unlocked: boo
 	end
 	clamp.led.Color = if unlocked then LED_OPEN else LED_LOCKED
 	if unlocked then
-		BenchVisual.setClamp(bench, index, 1)
+		BenchVisual.settleClamp(bench, index, 1)
 	end
 	local all = true
 	for _, other in bench.clamps do
@@ -596,27 +747,18 @@ function BenchVisual.setFibres(bench: Bench, correct: { number }, cut: { number 
 	bench.fibresActive = active
 end
 
-local function puffAt(bench: Bench, at: Vector3, count: number, spread: number)
-	local spawned = 0
-	for _, puff in bench.vapour do
-		if not puff.active and spawned < count then
-			spawned += 1
-			puff.active = true
-			puff.age = 0
-			puff.life = bench.random:NextNumber(1.1, 1.6)
-			puff.position = at
-				+ Vector3.new(
-					bench.random:NextNumber(-spread, spread),
-					0,
-					bench.random:NextNumber(-spread, spread)
-				)
-			puff.velocity = Vector3.new(
-				bench.random:NextNumber(-0.2, 0.2),
-				bench.random:NextNumber(0.5, 0.9),
-				0
-			)
-		end
+-- A burst of cold vapour over a `spread`-stud square around `at` (world). `slow`: a gentle
+-- breath (the capsule's seal) instead of the hatch's gush.
+local function puffAt(bench: Bench, at: Vector3, count: number, spread: number, slow: boolean?)
+	if bench.visible <= 0 then
+		return
 	end
+	local source = bench.vapourSource
+	source.Size = Vector3.new(spread * 2, 0.05, spread * 2)
+	source.CFrame = CFrame.new(at) * bench.anchor.Rotation
+	-- (per-burst settings, set every time: nothing stale from the previous burst)
+	bench.vapour.Speed = if slow then NumberRange.new(0.2, 0.5) else NumberRange.new(0.4, 1.2)
+	bench.vapour:Emit(count)
 end
 
 -- Snaps fibre `index` (quietly when `silent`: no droplets, e.g. a resync). `wrong`: a decoy
@@ -639,24 +781,24 @@ function BenchVisual.cut(bench: Bench, index: number, silent: boolean?, wrong: b
 	if wrong then
 		puffAt(bench, bench.root * ((fibre.a + fibre.b) / 2), 5, 0.2)
 	end
-	-- milky droplets from the cut point, falling into the cavity
+	-- milky droplets from the cut point, falling into the cavity (they stay where they land)
 	local middle = bench.root * ((fibre.a + fibre.b) / 2)
 	local spawned = 0
 	for _, drop in bench.droplets do
 		if not drop.active and spawned < 4 then
 			spawned += 1
 			drop.active = true
-			drop.age = 0
-			drop.life = bench.random:NextNumber(1.2, 1.8)
+			drop.landed = false
 			drop.position = middle
 			drop.velocity = Vector3.new(
 				bench.random:NextNumber(-0.5, 0.5),
-				bench.random:NextNumber(0.2, 0.9),
+				bench.random:NextNumber(0.4, 1.4),
 				bench.random:NextNumber(-0.5, 0.5)
 			)
 			local d = bench.random:NextNumber(0.045, 0.08)
+			drop.size = d
 			drop.part.Size = Vector3.new(d, d, d)
-			drop.part.Transparency = 0.15
+			drop.part.Transparency = Parts.fade(DROP_TRANSPARENCY, bench.visible)
 		end
 	end
 end
@@ -665,8 +807,15 @@ function BenchVisual.setLift(bench: Bench, lift: number)
 	bench.coreLift = math.clamp(lift, 0, 1)
 end
 
--- While dragged (seal), the core follows `cframe` in world space; nil = back to its lift.
+-- While dragged (seal), the core follows `cframe` in world space; nil = back to its lift
+-- (it glides back in CORE_RETURN_TIME, it doesn't teleport).
 function BenchVisual.setCoreWorld(bench: Bench, cframe: CFrame?)
+	local was = bench.coreWorld
+	if cframe == nil and was then
+		bench.coreReturn = { from = was, at = os.clock() }
+	elseif cframe then
+		bench.coreReturn = nil
+	end
 	bench.coreWorld = cframe
 end
 
@@ -677,7 +826,8 @@ function BenchVisual.puff(bench: Bench)
 end
 
 -- Seal: t 0 → 1, the core drops into the capsule, the cap closes, the glass frosts.
-function BenchVisual.seal(bench: Bench, t: number)
+-- Returns true on the one frame the cap shuts (t = 0.625): the click / hiss go there.
+function BenchVisual.seal(bench: Bench, t: number): boolean
 	if not bench.sealed and t > 0 then
 		bench.sealed = true
 		bench.coreHidden = true
@@ -685,15 +835,28 @@ function BenchVisual.seal(bench: Bench, t: number)
 		filled.Parent = bench.folder
 		bench.capsule:Destroy()
 		bench.capsule = filled
-		puffAt(bench, bench.capsuleAt.Position + Vector3.new(0, 0.5, 0), 4, 0.15)
+		-- a slow cold breath out of the capsule's mouth
+		puffAt(bench, bench.capsuleAt.Position + Vector3.new(0, 0.5, 0), 5, 0.15, true)
 	end
-	CoreModel.setCapOpen(bench.capsule, 1 - math.clamp(t * 1.6, 0, 1))
+	-- (a spring-loaded cap: it accelerates shut, ease-IN, to a hard stop)
+	local closing = math.clamp(t * 1.6, 0, 1)
+	CoreModel.setCapOpen(bench.capsule, 1 - easeIn(closing))
+	local shutNow = false
+	if closing >= 1 and not bench.capShut then
+		bench.capShut = true
+		shutNow = true
+		-- the cold hisses out of the seam: a thin ring of mist
+		if bench.visible > 0 then
+			bench.mist:Emit(10)
+		end
+	end
 	bench.frost = math.clamp(t, 0, 1)
 	local tube = bench.capsule:FindFirstChild("Tube")
 	if tube and tube:IsA("BasePart") then
 		tube.Transparency = 0.55 - 0.2 * bench.frost
 		tube.Color = Color3.fromRGB(210, 225, 230):Lerp(Color3.fromRGB(236, 244, 248), bench.frost)
 	end
+	return shutNow
 end
 
 -- After the server's verdict: the capsule shows the real core (grade colour).
@@ -723,7 +886,18 @@ local function coreCFrame(bench: Bench): CFrame
 	local eased = lift * lift * (3 - 2 * lift)
 	local rest = CFrame.new(CORE_REST + Vector3.new(0, 0, -1.2 * eased))
 	-- the core's long axis follows the body (standing Y)
-	return bench.root * rest
+	local target = bench.root * rest
+	-- let go away from the capsule: it glides back to its lift (no teleport)
+	local back = bench.coreReturn
+	if back then
+		local t = (os.clock() - back.at) / CORE_RETURN_TIME
+		if t >= 1 then
+			bench.coreReturn = nil
+		else
+			return back.from:Lerp(target, smooth(t))
+		end
+	end
+	return target
 end
 
 function BenchVisual.place(bench: Bench, root: CFrame)
@@ -739,6 +913,8 @@ end
 -- Shows tool `name` ("Hand", "Hands", "Scalpel" or nil) with its tip at `at` (world), turned
 -- so its handle / wrist points toward the camera. "Hands" puts two hands `apart` studs apart
 -- along the bench's long axis (the spread).
+local shownTools: { [string]: boolean } = {} -- (reused by showTool every frame)
+
 function BenchVisual.showTool(
 	bench: Bench,
 	name: string?,
@@ -747,7 +923,8 @@ function BenchVisual.showTool(
 	pressing: boolean,
 	apart: number?
 )
-	local show: { [string]: boolean } = {}
+	local show = shownTools
+	table.clear(show)
 	if name == "Hand" then
 		show.Hand = true
 	elseif name == "Hands" then
@@ -811,11 +988,24 @@ function BenchVisual.showTool(
 end
 
 function BenchVisual.step(bench: Bench, dt: number, now: number)
-	-- Fibres: correct ones glow steady, decoys flicker dimmer; cut ones retract (0.3 s).
+	-- Clamp levers let go: they settle to their target (no snap).
+	for _, clamp in bench.clamps do
+		if clamp.turn ~= clamp.target then
+			local turn = clamp.turn + (clamp.target - clamp.turn) * (1 - math.exp(-dt * CLAMP_SETTLE))
+			if math.abs(clamp.target - turn) < 0.002 then
+				turn = clamp.target
+			end
+			clamp.turn = turn
+			Parts.setLocal(bench.rig, clamp.lever, clampLever(clamp.at, turn))
+		end
+	end
+
+	-- Fibres: correct ones glow steady, decoys flicker dimmer; cut ones retract (0.3 s,
+	-- fastest right at the cut: the recoil of a tense fibre, ease-out).
 	for index, fibre in bench.fibres do
 		local cutAt = fibre.cutAt
 		if cutAt then
-			local t = math.clamp((os.clock() - cutAt) / 0.3, 0, 1)
+			local t = easeOut((os.clock() - cutAt) / 0.3)
 			local keep = 1 - 0.65 * t
 			local middle = (fibre.a + fibre.b) / 2
 			local innerEnd = fibre.a + (middle - fibre.a) * keep
@@ -849,47 +1039,36 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 		end
 	end
 
-	-- Droplets: fall, rest on the cavity floor, fade.
+	-- Droplets: fall at real gravity, land on the cavity floor as flat beads and stay there
+	-- (they follow the shell, and fade with the scene).
 	local floorY = (bench.root * Vector3.new(0, 0, CHEST_Z + 0.6)).Y
-	local moved: { BasePart } = {}
-	local cframes: { CFrame } = {}
+	local moved, cframes = bench.moved, bench.cframes
+	table.clear(moved)
+	table.clear(cframes)
+	local dropTransparency = Parts.fade(DROP_TRANSPARENCY, bench.visible)
 	for _, drop in bench.droplets do
 		if drop.active then
-			drop.age += dt
-			if drop.age >= drop.life then
-				drop.active = false
-				drop.part.Transparency = 1
+			local position: Vector3
+			if drop.landed then
+				position = bench.root * drop.rest
 			else
-				drop.velocity += Vector3.new(0, -9, 0) * dt
-				local position = drop.position + drop.velocity * dt
+				drop.velocity += Vector3.new(0, -DROP_GRAVITY, 0) * dt
+				position = drop.position + drop.velocity * dt
 				if position.Y < floorY then
 					position = Vector3.new(position.X, floorY, position.Z)
 					drop.velocity = Vector3.zero
+					drop.landed = true
+					drop.rest = bench.root:PointToObjectSpace(position)
+					local d = drop.size
+					drop.part.Size = Vector3.new(d * 1.6, d * 0.35, d * 1.6)
 				end
-				drop.position = position
-				drop.part.Transparency = 0.15
-					+ 0.85 * math.max(0, (drop.age - drop.life * 0.6) / (drop.life * 0.4))
-				table.insert(moved, drop.part)
-				table.insert(cframes, CFrame.new(position))
 			end
-		end
-	end
-	-- Vapour: rises, swells, thins out.
-	for _, puff in bench.vapour do
-		if puff.active then
-			puff.age += dt
-			local t = puff.age / puff.life
-			if t >= 1 then
-				puff.active = false
-				puff.part.Transparency = 1
-			else
-				puff.position += puff.velocity * dt
-				local d = 0.2 + 0.7 * t
-				puff.part.Size = Vector3.new(d, d, d)
-				puff.part.Transparency = 0.55 + 0.45 * t
-				table.insert(moved, puff.part)
-				table.insert(cframes, CFrame.new(puff.position))
+			drop.position = position
+			if drop.part.Transparency ~= dropTransparency then
+				drop.part.Transparency = dropTransparency
 			end
+			table.insert(moved, drop.part)
+			table.insert(cframes, CFrame.new(position))
 		end
 	end
 	if #moved > 0 then
@@ -941,10 +1120,6 @@ function BenchVisual.chuteRoot(bench: Bench, chute: CFrame, t: number): CFrame
 	local inside = chute.Position + inward * 2.5 + Vector3.new(0, -0.4, 0)
 	local raised = start.Position + Vector3.new(0, 0.35, 0)
 	local rotation = start.Rotation
-	local function smooth(x: number): number
-		x = math.clamp(x, 0, 1)
-		return x * x * (3 - 2 * x)
-	end
 	local position: Vector3
 	if t < 0.15 then
 		position = start.Position:Lerp(raised, smooth(t / 0.15))
@@ -970,6 +1145,11 @@ function BenchVisual.fade(bench: Bench, visible: number)
 	local stencil = bench.folder:FindFirstChild("Text", true)
 	if stencil and stencil:IsA("TextLabel") then
 		stencil.TextTransparency = 1 - bench.visible
+	end
+	-- (gone: no vapour hanging over an empty bench; puffAt emits nothing while faded out)
+	if bench.visible <= 0 then
+		bench.vapour:Clear()
+		bench.mist:Clear()
 	end
 end
 
