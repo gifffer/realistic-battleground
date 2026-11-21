@@ -52,6 +52,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+-- (a plain identity CFrame: Selene refuses methods called on CFrame.identity)
+local IDENTITY = CFrame.new()
+
 local Config = require(ReplicatedStorage.Shared.Config)
 local ALSClips = require(script.Parent.Parent.Animation.ALSClips)
 local CarryClips = require(script.Parent.Parent.Animation.CarryClips)
@@ -768,7 +771,7 @@ local function compose(entry: Tracked, dt: number)
 				result = result:Lerp(R6Pose.toTransform(motor, hold.leftShoulder), weight)
 				any = true
 			elseif joint == "Root" and hold.root then
-				result = result * CFrame.identity:Lerp(R6Pose.toTransform(motor, hold.root), weight)
+				result = result * IDENTITY:Lerp(R6Pose.toTransform(motor, hold.root), weight)
 				any = true
 			end
 		end
