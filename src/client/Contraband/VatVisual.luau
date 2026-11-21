@@ -305,21 +305,18 @@ function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): 
 			CFrame = vatCore.CFrame,
 			Parent = folder,
 		})
-		table.insert(
-			vat.bubbles,
-			{
-				part = part,
-				active = false,
-				x = 0,
-				z = 0,
-				y = 0,
-				speed = 1,
-				seed = i,
-				age = 0,
-				size = d,
-				breaking = false,
-			}
-		)
+		table.insert(vat.bubbles, {
+			part = part,
+			active = false,
+			x = 0,
+			z = 0,
+			y = 0,
+			speed = 1,
+			seed = i,
+			age = 0,
+			size = d,
+			breaking = false,
+		})
 	end
 	if screen then
 		buildScreen(vat, screen)
@@ -392,7 +389,11 @@ local function updateBubbles(vat: Vat, rate: number, surge: boolean, dt: number,
 				if breakT > 0 then
 					bubble.breaking = true
 					local d = bubble.size
-					bubble.part.Size = Vector3.new(d * (1 + 0.3 * breakT), d * (1 - 0.6 * breakT), d * (1 + 0.3 * breakT))
+					bubble.part.Size = Vector3.new(
+						d * (1 + 0.3 * breakT),
+						d * (1 - 0.6 * breakT),
+						d * (1 + 0.3 * breakT)
+					)
 				end
 				local wobble = math.sin(now * 5 + bubble.seed) * 0.06
 				table.insert(moved, bubble.part)
@@ -596,7 +597,9 @@ function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
 		local lightColor = vat.light.Color:Lerp(fluidLook.light, k)
 		local l = fluidLook.light
 		if
-			math.abs(lightColor.R - l.R) + math.abs(lightColor.G - l.G) + math.abs(lightColor.B - l.B)
+			math.abs(lightColor.R - l.R)
+				+ math.abs(lightColor.G - l.G)
+				+ math.abs(lightColor.B - l.B)
 			< 0.004
 		then
 			lightColor = l

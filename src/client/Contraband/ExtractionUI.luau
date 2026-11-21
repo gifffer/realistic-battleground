@@ -426,7 +426,11 @@ function ExtractionUI.setStep(ui: UI, step: number, name: string, hint: string)
 		end
 		if pip.BackgroundColor3 ~= color or pip.BackgroundTransparency ~= transparency then
 			-- (a new tween on the same properties replaces the running one)
-			Theme.tween(pip, 0.15, { BackgroundColor3 = color, BackgroundTransparency = transparency })
+			Theme.tween(
+				pip,
+				0.15,
+				{ BackgroundColor3 = color, BackgroundTransparency = transparency }
+			)
 		end
 	end
 end

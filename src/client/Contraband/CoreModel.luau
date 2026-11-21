@@ -249,8 +249,10 @@ local phases = Random.new()
 
 local function breathOf(model: Model): Breath?
 	local known = breaths[model]
-	if known ~= nil then
-		return known or nil
+	if known == false then
+		return nil
+	elseif known then
+		return known :: Breath
 	end
 	local pin = model:FindFirstChild("Pin", true)
 	if pin == nil or not pin:IsA("BasePart") then

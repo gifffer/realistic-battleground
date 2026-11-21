@@ -577,7 +577,11 @@ local sounds: { [string]: SoundInfo } = {
 	-- Contraband (case, lab, extraction) -----------------------------------
 	-- Empty for now: paste ids when you have them (nothing uploaded by us). Case sounds are
 	-- 3D on the carrier; lab and extraction sounds are 2D, heard only by the lab's owner.
+	-- (the opening plays them on its own timeline, CaseController: wheels 0–0.26 s, latches
+	-- 0.4 / 0.5 s, seal pop + lid 0.6 s)
+	CaseWheelTick = { ids = {}, volume = 0.35, pitch = 1, pitchVariation = 0.1 },
 	CaseLatch = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
+	CaseSealPop = { ids = {}, volume = 0.45, pitch = 1, pitchVariation = 0.05 },
 	CaseLidOpen = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
 	CaseLidClose = { ids = {}, volume = 0.5, pitch = 1, pitchVariation = 0.05 },
 	CaseHum = { ids = {}, volume = 0.2, pitch = 1, pitchVariation = 0, looped = true },

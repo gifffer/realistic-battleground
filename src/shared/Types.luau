@@ -229,5 +229,6 @@ export type ContrabandEventKind =
 	| "SaleStarted"
 	| "SaleResult"
 	| "Notice"
+	| "DoorCut" -- (no data) a lab door teleport is coming: the client fades the screen
 
 return nil

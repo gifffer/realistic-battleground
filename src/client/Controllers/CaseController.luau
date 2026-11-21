@@ -11,15 +11,33 @@
 --   • THE CARRY POSE (Animation/CarryClips, through CharacterAnimationController.setHoldPose):
 --     the left arm hangs straight, 7° out, swings only a little with the steps; the torso
 --     leans 1.5° away from the case, the loaded shoulder drops; a grip shift every 6–10 s.
---   • SELLING (character attribute CaseOpen = true, 1.6 s): the arm brings the case up, lying
---     flat in front of the hip; the locks (0.4 s) and latches (0.2 s), then the lid swings
---     open (0.5 s, ease-out); the foam and the cold LED show. On the HOLDER's screen only,
---     the capsules lie in their cradles (he knows the grades from "CaseState"); everybody
---     else sees the foam and the LED, never what is inside. Closes in ~0.8 s afterwards.
+--     The case always stays in the ARM's space, its handle in the fist: hanging, lying flat
+--     to sell (CarryClips.PRESENT_TURN) or up as a shield (SHIELD_TURN) are only turns of it
+--     in the fist (never placed from the torso: it can't float off the hand or lag a frame).
+--   • BLOCKING while carrying: the arm brings the case up in front of the chest (0.12 s up,
+--     0.2 s down). During a hit reaction the hold lets the arm go a little (weight 0.7: the
+--     arm jolts with the hit); no grip shift while fighting.
+--   • SELLING (character attribute CaseOpen = true, started at CaseOpenAt on the SERVER's
+--     clock, so every screen plays the same timeline and one who streams in mid-sale joins
+--     it instead of replaying it): the arm brings the case up, lying flat in front of the
+--     hip; an event table ("markers") fires on the timeline: the lock wheels tick (0–0.26 s),
+--     the latches flip (0.4 / 0.5 s), the seal pops with a cold breath (0.6 s) and the lid
+--     swings open (0.6–1.1 s, ease-out); the foam and the cold LED show. On the HOLDER's
+--     screen only, the capsules lie in their cradles (he knows the grades from "CaseState");
+--     everybody else sees the foam and the LED, never what is inside. Closing: the lid
+--     (0.5 s), the latches click (0.5 s), then the case comes down.
 --   • SET DOWN: Config.Controls.CASE_SET_DOWN (G) while carrying asks the server
 --     (Remotes.CaseAction "SetDown") and plays the 0.5 s crouch (CarryClips.CaseSetDown).
---     Other players' set-downs play the same crouch here when their case leaves the hand
---     while they stand (not for a knockout or a death).
+--     The case leaves the hand at the clip's contact marker (SET_DOWN_CONTACT: the hand on
+--     the floor), not on the server's reply; the ground case the server spawns is hidden
+--     here until then. Refused by the server: it comes back to the hand. Other players'
+--     set-downs play the same crouch here when their case leaves the hand while they stand
+--     (not for a knockout or a death), and their case also leaves the hand at the contact.
+--   • PICK UP: the crouch (CarryClips.CasePickUp) when a case was just taken from the ground
+--     next to the character; it is in the hand from the contact marker (a local stand-in
+--     stays on the floor until then).
+--   • DROPPED CASES (attribute LidAjar): they fall shut and the lid pops ajar on the first
+--     impact (a damped spring: a little past, then settles).
 --   • PROMPTS (this screen only, the server still checks everything): the buyer's
 --     "SellPrompt" only shows while we carry a case; a case's "PickupPrompt" hides while we
 --     already carry one, and inside a lab when the lab isn't ours.
@@ -62,15 +80,53 @@ local ACCEL_GAIN = 0.38
 local ACCEL_MAX = 150
 -- Hold pose fade in / out (seconds).
 local HOLD_FADE = 0.15
+-- During a hit reaction the hold lets the arm follow the hit a little.
+local REACTION_HOLD = 0.7
 -- Selling: the case comes up (seconds), the locks and latches, the lid opening, closing.
 local PRESENT_TIME = 0.35
 local LID_OPEN_AT = 0.6 -- 0.4 s of wheels + 0.2 s of latches, after the start
 local LID_OPEN_TIME = 0.5
 local LID_OPEN_ANGLE = 100
 local LID_CLOSE_TIME = 0.5
-local LOWER_AFTER_CLOSE = 0.45
--- Set down: how long the hold lets go for our own crouch.
+local LOWER_AFTER_CLOSE = 0.55
+-- A latch tongue flips (seconds, degrees).
+local LATCH_FLIP_TIME = 0.06
+local LATCH_OPEN_ANGLE = 80
+-- The opening's / closing's events (seconds from the start of each; the "markers").
+type CaseEvent = { t: number, sound: string?, latch: number?, latchOpen: boolean?, puff: boolean? }
+local OPEN_EVENTS: { CaseEvent } = {
+	{ t = 0, sound = "CaseWheelTick" },
+	{ t = 0.13, sound = "CaseWheelTick" },
+	{ t = 0.26, sound = "CaseWheelTick" },
+	{ t = 0.4, sound = "CaseLatch", latch = 1, latchOpen = true },
+	{ t = 0.5, sound = "CaseLatch", latch = 2, latchOpen = true },
+	{ t = 0.6, sound = "CaseSealPop", puff = true },
+	{ t = 0.6, sound = "CaseLidOpen" },
+}
+local CLOSE_EVENTS: { CaseEvent } = {
+	{ t = 0, sound = "CaseLidClose" },
+	{ t = 0.5, sound = "CaseLatch", latch = 1, latchOpen = false },
+	{ t = 0.55, sound = "CaseLatch", latch = 2, latchOpen = false },
+}
+-- Set down / pick up: how long the hold lets go for the crouch; how long we wait for the
+-- server before giving a refused set-down back to the hand.
 local SET_DOWN_RELEASE = 0.45
+local SET_DOWN_REFUSED = 1.2
+-- A ground case taken this recently, this close to a character that starts carrying, was
+-- picked up from the floor by it (seconds, studs): the pick-up crouch plays.
+local PICK_UP_WINDOW = 0.6
+local PICK_UP_RANGE = 7
+-- Ground cases this close to a character putting its case down are hidden until its hand
+-- reaches the floor (studs).
+local SET_DOWN_HIDE_RANGE = 5
+-- Farther than this from the camera, a held case doesn't swing or move in the hand.
+local DETAIL_DISTANCE = 120
+-- A dropped case's lid: spring (rad/s, damping ratio) and the longest wait for the impact.
+local LID_POP_FREQUENCY = 35
+local LID_POP_DAMPING = 0.45
+local LID_POP_WAIT = 2
+
+type Latch = { weld: Weld, rest: CFrame, open: boolean, changedAt: number, shown: number }
 
 type Held = {
 	character: Model,
@@ -79,9 +135,11 @@ type Held = {
 	baseShell: BasePart,
 	weld: Weld,
 	arm: BasePart,
-	torso: BasePart,
 	root: BasePart,
 	mine: boolean,
+	latches: { Latch },
+	puff: ParticleEmitter,
+	far: boolean,
 	-- pendulum (radians: forward / back about the arm's X, sideways about its Z)
 	swing: Vector2,
 	swingSpeed: Vector2,
@@ -89,23 +147,51 @@ type Held = {
 	accel: Vector3,
 	-- hold pose
 	weight: number,
+	react: number, -- 1, or REACTION_HOLD during a hit reaction (smoothed)
+	shield: number, -- 0..1 toward the block pose
 	gripShift: number,
 	nextGripAt: number,
 	gripStartedAt: number?,
 	releaseUntil: number,
-	-- selling
-	openedAt: number?, -- os.clock() when CaseOpen came
-	closedAt: number?, -- os.clock() when it went
+	-- set down / pick up (os.clock() when the crouch started), the hand at the contact
+	setDownAt: number?,
+	letGo: boolean, -- the hand reached the floor: the case is out of it
+	detachAtContact: boolean, -- the server already took it: gone at the contact
+	pickUpAt: number?,
+	standIn: Model?, -- the ground case shown on the floor until the hand reaches it
+	hiddenGround: { [BasePart]: boolean }, -- ground cases hidden until the contact
+	-- selling (the SERVER's clock: workspace:GetServerTimeNow())
+	openedAt: number?, -- when CaseOpen came (CaseOpenAt)
+	closedAt: number?, -- when it went
+	openEvent: number, -- the next OPEN_EVENTS / CLOSE_EVENTS entry to fire
 	present: number, -- 0..1
 	lid: number, -- degrees
+	shownLid: number, -- what setLid last got (only called on a change)
 	lidAtClose: number,
 	capsules: Model?,
 }
+
+-- A ground case that falls shut and pops its lid ajar on the impact (attribute LidAjar).
+type Ajar = {
+	model: Model,
+	hitbox: BasePart,
+	target: number, -- degrees
+	since: number,
+	lastVelocityY: number,
+	hit: boolean,
+	angle: number,
+	speed: number,
+}
+-- A ground case that just left the floor (picked up?): where it was, when.
+type Taken = { cframe: CFrame, lid: number, cradles: number?, at: number }
 
 local held: { [Model]: Held } = {}
 local watched: { [Model]: { RBXScriptConnection } } = {}
 local folder: Folder? = nil
 local random = Random.new()
+local ajarCases: { [Model]: Ajar } = {}
+local takenCases: { Taken } = {}
+local groundFolder: Instance? = nil -- workspace.ContrabandCases once found
 
 -- What the server told us about the case WE hold.
 local myGrades: { Types.CoreGrade } = {}
@@ -192,16 +278,35 @@ end
 
 local function makeProvider(entry: Held): CharacterAnimationController.HoldProvider
 	local pose: CharacterAnimationController.HoldPose = { weight = 0 }
+	local character = entry.character
 	return function(dt: number, loco: Locomotion.State, onFeet: boolean)
 		local now = os.clock()
-		-- Fade in when it appears, out while our own set-down crouch plays.
-		local target = if now < entry.releaseUntil then 0 else 1
+		-- Fade in when it appears, out while a set-down / pick-up crouch plays (and while the
+		-- hand is empty: let go at the contact, the server's answer not here yet).
+		local target = if now < entry.releaseUntil or entry.letGo or entry.pickUpAt then 0 else 1
 		local step = dt / HOLD_FADE
 		entry.weight = if entry.weight < target
 			then math.min(target, entry.weight + step)
 			else math.max(target, entry.weight - step)
+		-- What the body is busy with: a hit reaction moves the arm a little (the hold yields),
+		-- no grip shift in a fight.
+		local busy = CharacterAnimationController.actionState(character)
+		local react = if busy == "Reaction" then REACTION_HOLD else 1
+		entry.react += (react - entry.react) * (1 - math.exp(-dt * 20))
+		-- Blocking: the case comes up as a shield (not while selling).
+		local blocking = CharacterAnimationController.isBlocking(character)
+			and entry.openedAt == nil
+		local shieldStep = dt / (if blocking then CarryClips.SHIELD_IN else CarryClips.SHIELD_OUT)
+		entry.shield =
+			math.clamp(entry.shield + (if blocking then shieldStep else -shieldStep), 0, 1)
 		-- Grip shift: every 6–10 s, 0.4 s there and 0.4 s back.
-		if entry.gripStartedAt == nil and now >= entry.nextGripAt and entry.openedAt == nil then
+		if
+			entry.gripStartedAt == nil
+			and now >= entry.nextGripAt
+			and entry.openedAt == nil
+			and busy == nil
+			and entry.shield <= 0
+		then
 			entry.gripStartedAt = now
 		end
 		local startedAt = entry.gripStartedAt
@@ -218,9 +323,13 @@ local function makeProvider(entry: Held): CharacterAnimationController.HoldProvi
 		end
 		local swing = if onFeet then CarryClips.armSwing(loco.phase, loco.amp, loco.sprint) else 0
 		local present = smooth(entry.present)
-		pose.leftShoulder = CarryClips.holdShoulder(swing * (1 - present), entry.gripShift, present)
-		pose.root = CarryClips.rootTilt(present)
-		pose.weight = entry.weight
+		local shield = smooth(entry.shield)
+		local raised = math.max(present, shield)
+		pose.leftShoulder =
+			CarryClips.holdShoulder(swing * (1 - raised), entry.gripShift, present, shield)
+		pose.root = CarryClips.rootTilt(raised)
+		-- (eased: the fade has no hard start or stop)
+		pose.weight = smooth(entry.weight) * entry.react
 		return pose
 	end
 end
@@ -229,6 +338,35 @@ end
 -- Attach / detach
 ------------------------------------------------------------------------------
 
+-- Ground cases near `at` hidden on this screen (LocalTransparencyModifier) into `into`.
+local function hideGroundCasesNear(at: Vector3, into: { [BasePart]: boolean })
+	local ground = groundFolder
+	if ground == nil then
+		return
+	end
+	for _, model in ground:GetChildren() do
+		if model:IsA("Model") and model:GetAttribute("CaseId") ~= nil then
+			if (model:GetPivot().Position - at).Magnitude <= SET_DOWN_HIDE_RANGE then
+				for _, part in model:GetDescendants() do
+					if part:IsA("BasePart") and not into[part] then
+						into[part] = true
+						part.LocalTransparencyModifier = 1
+					end
+				end
+			end
+		end
+	end
+end
+
+local function showGroundCases(hidden: { [BasePart]: boolean })
+	for part in hidden do
+		if part.Parent then
+			part.LocalTransparencyModifier = 0
+		end
+	end
+	table.clear(hidden)
+end
+
 local function detach(character: Model)
 	local entry = held[character]
 	if entry == nil then
@@ -236,22 +374,120 @@ local function detach(character: Model)
 	end
 	held[character] = nil
 	CharacterAnimationController.setHoldPose(character, nil)
+	showGroundCases(entry.hiddenGround)
+	if entry.standIn then
+		entry.standIn:Destroy()
+		entry.standIn = nil
+	end
+	entry.puff.Enabled = false
+	entry.puff:Clear()
 	entry.model:Destroy()
 end
 
-local function attach(character: Model)
+-- The latch tongues turn on a Weld (not the build's WeldConstraint) so they can flip.
+local function hingedLatches(model: Model): { Latch }
+	local list: { Latch } = {}
+	local lidShell = model:FindFirstChild("LidShell")
+	if lidShell == nil or not lidShell:IsA("BasePart") then
+		return list
+	end
+	for _, part in model:GetChildren() do
+		if part.Name == "Latch" and part:IsA("BasePart") then
+			local constraint = part:FindFirstChildOfClass("WeldConstraint")
+			if constraint then
+				constraint:Destroy()
+			end
+			local rest = lidShell.CFrame:ToObjectSpace(part.CFrame)
+			local weld = Instance.new("Weld")
+			weld.Name = "LatchHinge"
+			weld.Part0 = lidShell
+			weld.Part1 = part
+			weld.C0 = rest
+			weld.Parent = part
+			table.insert(
+				list,
+				{ weld = weld, rest = rest, open = false, changedAt = -100, shown = 0 }
+			)
+		end
+	end
+	-- (latch 1 = the +X one, by the vent; 2 = the −X one)
+	table.sort(list, function(a, b)
+		return a.rest.Position.X > b.rest.Position.X
+	end)
+	return list
+end
+
+-- The cold breath out of the seal when it pops (one burst, roblox-vfx: Rate 0 + Emit):
+-- the same heavy, matte cryogenic vapour as the lab's bench, smaller.
+local function sealPuff(baseShell: BasePart): ParticleEmitter
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "SealSeam"
+	-- at the seam on the handle side, aimed out of the lid face (an Attachment's emitter
+	-- emits along the Attachment's up axis)
+	attachment.CFrame = CFrame.fromMatrix(Vector3.new(0, 0.5, 0.23), Vector3.xAxis, Vector3.zAxis)
+	attachment.Parent = baseShell
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "SealBreath"
+	emitter.Texture = "rbxasset://textures/particles/smoke_main.dds" -- built in, no upload
+	emitter.Rate = 0
+	emitter.Color = ColorSequence.new(Color3.fromRGB(236, 244, 248), Color3.fromRGB(205, 220, 228))
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.08),
+		NumberSequenceKeypoint.new(0.4, 0.3, 0.06),
+		NumberSequenceKeypoint.new(1, 0.5, 0.1),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.15, 0.65),
+		NumberSequenceKeypoint.new(0.5, 0.8),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Lifetime = NumberRange.new(0.7, 1.1)
+	emitter.Speed = NumberRange.new(0.6, 1.4)
+	emitter.SpreadAngle = Vector2.new(55, 55)
+	emitter.Drag = 3
+	emitter.Acceleration = Vector3.new(0, -0.8, 0) -- heavier than air: it sinks
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.RotSpeed = NumberRange.new(-25, 25)
+	emitter.LightEmission = 0
+	emitter.LightInfluence = 1
+	emitter.Parent = attachment
+	return emitter
+end
+
+-- The last ground case taken from the floor next to `root` (just now), if any.
+local function takenNear(root: BasePart): Taken?
+	local now = os.clock()
+	for index = #takenCases, 1, -1 do
+		local taken = takenCases[index]
+		if now - taken.at > PICK_UP_WINDOW then
+			table.remove(takenCases, index)
+		elseif (taken.cframe.Position - root.Position).Magnitude <= PICK_UP_RANGE then
+			table.remove(takenCases, index)
+			return taken
+		end
+	end
+	return nil
+end
+
+local function standingUp(character: Model): boolean
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	return humanoid ~= nil
+		and humanoid.Health > 0
+		and character:GetAttribute("KnockedOut") ~= true
+		and character:GetAttribute("Ragdolled") ~= true
+end
+
+local function attach(character: Model, pickedUp: boolean?)
 	if held[character] then
 		return
 	end
 	local arm = character:WaitForChild("Left Arm", 5)
-	local torso = character:WaitForChild("Torso", 5)
 	local root = character:WaitForChild("HumanoidRootPart", 5)
 	-- (still carrying once the parts are here? the attribute may have gone meanwhile)
 	if
 		arm == nil
 		or not arm:IsA("BasePart")
-		or torso == nil
-		or not torso:IsA("BasePart")
 		or root == nil
 		or not root:IsA("BasePart")
 		or character:GetAttribute("Carrying") ~= "Case"
@@ -279,6 +515,8 @@ local function attach(character: Model)
 	end
 	local hitbox = model.PrimaryPart :: BasePart
 	local baseShell = model:FindFirstChild("BaseShell") :: BasePart
+	local latches = hingedLatches(model)
+	local puff = sealPuff(baseShell)
 	local c0 = CaseModel.heldCFrame(nil)
 	model:PivotTo(arm.CFrame * c0)
 	local weld = Instance.new("Weld")
@@ -287,7 +525,55 @@ local function attach(character: Model)
 	weld.Part1 = hitbox
 	weld.C0 = c0
 	weld.Parent = hitbox
-	model.Parent = heldFolder()
+
+	local now = os.clock()
+	-- Already selling when we see it (streamed in, joined): on the server's timeline, the
+	-- events already past are skipped (no replayed opening, no late sounds).
+	local openAt = character:GetAttribute("CaseOpenAt")
+	local opened: number? = nil
+	local openEvent = 1
+	if character:GetAttribute("CaseOpen") == true then
+		opened = if typeof(openAt) == "number" then openAt else workspace:GetServerTimeNow()
+		local elapsed = workspace:GetServerTimeNow() - (opened :: number)
+		while OPEN_EVENTS[openEvent] and OPEN_EVENTS[openEvent].t <= elapsed do
+			local event = OPEN_EVENTS[openEvent]
+			if event.latch and latches[event.latch] then
+				latches[event.latch].open = true
+				latches[event.latch].changedAt = -100
+			end
+			openEvent += 1
+		end
+	end
+
+	-- Picked up from the floor here: the crouch, the case in the hand at the contact (a
+	-- stand-in on the floor until then).
+	local taken = if pickedUp and standingUp(character) then takenNear(root) else nil
+	local standIn: Model? = nil
+	if taken then
+		local copy = CaseModel.build({
+			lidAngle = taken.lid,
+			interior = taken.lid > 0,
+			cradles = taken.cradles,
+		})
+		copy.Name = "PickUpStandIn"
+		for _, descendant in copy:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+				descendant.CanQuery = false
+				descendant.CanTouch = false
+			end
+		end
+		copy:PivotTo(taken.cframe)
+		copy.Parent = heldFolder()
+		standIn = copy
+		CharacterAnimationController.playAction(character, "CasePickUp")
+	else
+		model.Parent = heldFolder()
+		if pickedUp then
+			SoundController.play("CasePickup", character)
+		end
+	end
 
 	local entry: Held = {
 		character = character,
@@ -296,23 +582,34 @@ local function attach(character: Model)
 		baseShell = baseShell,
 		weld = weld,
 		arm = arm,
-		torso = torso,
 		root = root,
 		mine = character == player.Character,
+		latches = latches,
+		puff = puff,
+		far = false,
 		swing = Vector2.zero,
 		swingSpeed = Vector2.zero,
 		lastVelocity = nil,
 		accel = Vector3.zero,
 		weight = 0,
+		react = 1,
+		shield = 0,
 		gripShift = 0,
-		nextGripAt = os.clock()
-			+ random:NextNumber(CarryClips.GRIP_EVERY_MIN, CarryClips.GRIP_EVERY_MAX),
+		nextGripAt = now + random:NextNumber(CarryClips.GRIP_EVERY_MIN, CarryClips.GRIP_EVERY_MAX),
 		gripStartedAt = nil,
 		releaseUntil = 0,
-		openedAt = if character:GetAttribute("CaseOpen") == true then os.clock() else nil,
+		setDownAt = nil,
+		letGo = false,
+		detachAtContact = false,
+		pickUpAt = if taken then now else nil,
+		standIn = standIn,
+		hiddenGround = {},
+		openedAt = opened,
 		closedAt = nil,
+		openEvent = openEvent,
 		present = 0,
 		lid = 0,
+		shownLid = 0,
 		lidAtClose = 0,
 		capsules = nil,
 	}
@@ -377,26 +674,73 @@ local function updatePendulum(entry: Held, dt: number)
 	entry.swingSpeed = speed
 end
 
-local function updateOpening(entry: Held, now: number)
+-- Fires one opening / closing event (sound at the case, latch flip, cold breath).
+local function fireEvent(entry: Held, event: CaseEvent, now: number)
+	if event.sound and not entry.far then
+		SoundController.play(event.sound, entry.character)
+	end
+	local latch = if event.latch then entry.latches[event.latch] else nil
+	if latch and latch.open ~= event.latchOpen then
+		latch.open = event.latchOpen == true
+		latch.changedAt = now
+	end
+	if event.puff and not entry.far then
+		entry.puff:Emit(6)
+	end
+end
+
+-- The latch tongues: a quick flip (mechanical: fast, no easing back) to open / shut.
+local function updateLatches(entry: Held, now: number)
+	for _, latch in entry.latches do
+		local t = math.clamp((now - latch.changedAt) / LATCH_FLIP_TIME, 0, 1)
+		local open = if latch.open then t else 1 - t
+		if open ~= latch.shown then
+			latch.shown = open
+			-- turns about its lid-side edge: the free end lifts off the lock
+			latch.weld.C0 = latch.rest
+				* CFrame.new(0, 0, 0.03)
+				* CFrame.Angles(math.rad(LATCH_OPEN_ANGLE * open), 0, 0)
+				* CFrame.new(0, 0, -0.03)
+		end
+	end
+end
+
+-- Selling, on the server's clock (`serverNow`); `now` = os.clock() for the local effects.
+local function updateOpening(entry: Held, serverNow: number, now: number)
 	local opened = entry.openedAt
 	local closed = entry.closedAt
 	if opened and closed == nil then
-		local t = now - opened
+		local t = math.max(0, serverNow - opened)
 		entry.present = math.clamp(t / PRESENT_TIME, 0, 1)
 		entry.lid = LID_OPEN_ANGLE * easeOut((t - LID_OPEN_AT) / LID_OPEN_TIME)
+		while OPEN_EVENTS[entry.openEvent] and t >= OPEN_EVENTS[entry.openEvent].t do
+			fireEvent(entry, OPEN_EVENTS[entry.openEvent], now)
+			entry.openEvent += 1
+		end
 	elseif closed then
-		local t = now - closed
+		local t = math.max(0, serverNow - closed)
 		entry.lid = entry.lidAtClose * (1 - smooth(t / LID_CLOSE_TIME))
 		entry.present =
 			math.min(entry.present, 1 - math.clamp((t - LOWER_AFTER_CLOSE) / PRESENT_TIME, 0, 1))
-		if entry.present <= 0 and entry.lid <= 0 then
+		while CLOSE_EVENTS[entry.openEvent] and t >= CLOSE_EVENTS[entry.openEvent].t do
+			fireEvent(entry, CLOSE_EVENTS[entry.openEvent], now)
+			entry.openEvent += 1
+		end
+		if entry.present <= 0 and entry.lid <= 0 and CLOSE_EVENTS[entry.openEvent] == nil then
 			entry.openedAt = nil
 			entry.closedAt = nil
 			entry.present = 0
 			entry.lid = 0
 		end
 	end
-	CaseModel.setLid(entry.model, entry.lid)
+	if #entry.latches > 0 then
+		updateLatches(entry, now)
+	end
+	-- (setLid only on a change: it also walks the interior parts)
+	if entry.lid ~= entry.shownLid then
+		entry.shownLid = entry.lid
+		CaseModel.setLid(entry.model, entry.lid)
+	end
 	if entry.lid > 5 and entry.closedAt == nil then
 		showCapsules(entry)
 	elseif entry.lid <= 5 then
@@ -412,29 +756,122 @@ local function updateOpening(entry: Held, now: number)
 	end
 end
 
+-- Set down / pick up: the case leaves / joins the hand at the clip's contact marker.
+local function updateHandOff(entry: Held, now: number): boolean
+	local setDownAt = entry.setDownAt
+	if setDownAt then
+		if not entry.letGo then
+			-- (the ground case the server spawns stays hidden until the hand is down)
+			hideGroundCasesNear(entry.root.Position, entry.hiddenGround)
+			if now - setDownAt >= CarryClips.SET_DOWN_CONTACT then
+				entry.letGo = true
+				entry.model.Parent = nil
+				showGroundCases(entry.hiddenGround)
+				SoundController.play("CaseSetDown", entry.character)
+				if entry.detachAtContact then
+					detach(entry.character)
+					return false
+				end
+			end
+		elseif now - setDownAt >= SET_DOWN_REFUSED then
+			-- the server said no (still carrying): back in the hand
+			entry.setDownAt = nil
+			entry.letGo = false
+			entry.model.Parent = heldFolder()
+		end
+	end
+	local pickUpAt = entry.pickUpAt
+	if pickUpAt and now - pickUpAt >= CarryClips.PICK_UP_CONTACT then
+		entry.pickUpAt = nil
+		entry.model.Parent = heldFolder()
+		if entry.standIn then
+			entry.standIn:Destroy()
+			entry.standIn = nil
+		end
+		SoundController.play("CasePickup", entry.character)
+	end
+	return true
+end
+
+-- A dropped case: shut while it falls, the lid pops ajar on the first impact (its vertical
+-- speed stops going down), a damped spring: a little past the angle, then settles.
+local function updateAjar(dt: number, now: number)
+	for model, ajar in ajarCases do
+		if model.Parent == nil then
+			ajarCases[model] = nil
+			continue
+		end
+		if not ajar.hit then
+			local velocityY = ajar.hitbox.AssemblyLinearVelocity.Y
+			if
+				(ajar.lastVelocityY < -1 and velocityY > ajar.lastVelocityY * 0.5)
+				or ajar.hitbox.Anchored
+				or now - ajar.since > LID_POP_WAIT
+			then
+				ajar.hit = true
+			end
+			ajar.lastVelocityY = velocityY
+			continue
+		end
+		local stiffness = LID_POP_FREQUENCY * LID_POP_FREQUENCY
+		local damping = 2 * LID_POP_DAMPING * LID_POP_FREQUENCY
+		local remaining = math.min(dt, 0.1)
+		while remaining > 1e-6 do
+			local step = math.min(remaining, 1 / 120)
+			remaining -= step
+			ajar.speed += ((ajar.target - ajar.angle) * stiffness - ajar.speed * damping) * step
+			ajar.angle += ajar.speed * step
+		end
+		if math.abs(ajar.target - ajar.angle) < 0.05 and math.abs(ajar.speed) < 0.5 then
+			ajar.angle = ajar.target
+			ajarCases[model] = nil
+		end
+		CaseModel.setLid(model, math.max(0, ajar.angle))
+	end
+end
+
 local function onPreSimulation(dt: number)
 	local now = os.clock()
+	local serverNow = workspace:GetServerTimeNow()
+	local camera = workspace.CurrentCamera
+	local eye = if camera then camera.CFrame.Position else nil
 	for character, entry in held do
+		local waiting = entry.letGo or entry.pickUpAt ~= nil
 		if
 			character.Parent == nil
 			or entry.arm.Parent ~= character
-			or entry.model.Parent == nil
+			or (entry.model.Parent == nil and not waiting)
 		then
 			-- (the arm came off, the character is gone: no floating case)
 			detach(character)
 			continue
 		end
+		if not updateHandOff(entry, now) then
+			continue
+		end
+		entry.far = eye ~= nil and (eye - entry.root.Position).Magnitude > DETAIL_DISTANCE
+		updateOpening(entry, serverNow, now)
+		if entry.far then
+			-- (too far to see it swing: no pendulum, the case keeps its last place in the hand)
+			entry.lastVelocity = nil
+			continue
+		end
 		updatePendulum(entry, dt)
-		updateOpening(entry, now)
-		local hang = CaseModel.heldCFrame(CFrame.Angles(entry.swing.X, 0, entry.swing.Y))
+		-- Always in the arm's space, the handle in the fist: only its turn in the fist changes
+		-- (hanging and swinging, lying flat to sell, up as a shield).
+		local turn = CaseModel.heldCFrame(CFrame.Angles(entry.swing.X, 0, entry.swing.Y)).Rotation
 		local present = smooth(entry.present)
 		if present > 0 then
-			-- Selling: the case lies flat in front of the hip (torso space), whatever the arm does.
-			local lying = entry.arm.CFrame:Inverse() * entry.torso.CFrame * CarryClips.PRESENT_CASE
-			entry.weld.C0 = hang:Lerp(lying, present)
-		else
-			entry.weld.C0 = hang
+			turn = turn:Lerp(CarryClips.PRESENT_TURN, present)
 		end
+		local shield = smooth(entry.shield)
+		if shield > 0 then
+			turn = turn:Lerp(CarryClips.SHIELD_TURN, shield)
+		end
+		entry.weld.C0 = CFrame.new(CaseModel.HAND) * turn * CFrame.new(-CaseModel.GRIP)
+	end
+	if next(ajarCases) then
+		updateAjar(dt, now)
 	end
 end
 
@@ -445,29 +882,40 @@ end
 local function onCarryingChanged(character: Model, owner: Player)
 	local carrying = character:GetAttribute("Carrying") == "Case"
 	if carrying then
-		SoundController.play("CasePickup", character)
-		task.spawn(attach, character)
-	else
-		local had = held[character] ~= nil
+		-- (the pick-up crouch and its sound: attach, at the contact)
+		task.spawn(attach, character, true)
+		if owner == player then
+			CaseController.refreshPrompts()
+		end
+		return
+	end
+	local entry = held[character]
+	if entry == nil then
+		if owner == player then
+			CaseController.refreshPrompts()
+		end
+		return
+	end
+	if not standingUp(character) then
+		-- knocked out / dead: it falls out of the hand now
 		detach(character)
-		if had then
-			-- (knocked out / dead: it falls; else it is put down)
-			local down = character:GetAttribute("KnockedOut") == true
-				or character:GetAttribute("Ragdolled") == true
-			SoundController.play(if down then "CaseDrop" else "CaseSetDown", character)
-		end
-		-- Someone else put it down (standing, alive, not knocked out): show the crouch.
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if
-			had
-			and owner ~= player
-			and humanoid
-			and humanoid.Health > 0
-			and character:GetAttribute("KnockedOut") ~= true
-			and character:GetAttribute("Ragdolled") ~= true
-		then
-			CharacterAnimationController.playAction(character, "CaseSetDown")
-		end
+		SoundController.play("CaseDrop", character)
+	elseif entry.letGo or entry.pickUpAt then
+		-- our own set-down: the hand already put it on the floor (sound played there); or
+		-- taken away again before the hand even reached it
+		detach(character)
+	elseif entry.setDownAt then
+		-- our own set-down, the hand not down yet: it leaves the hand at the contact
+		entry.detachAtContact = true
+	else
+		-- someone else put it down (standing, alive): the crouch, then the case leaves the
+		-- hand when it reaches the floor (their ground case hidden here until then)
+		local now = os.clock()
+		CharacterAnimationController.playAction(character, "CaseSetDown")
+		entry.setDownAt = now
+		entry.releaseUntil = now + SET_DOWN_RELEASE
+		entry.detachAtContact = true
+		hideGroundCasesNear(entry.root.Position, entry.hiddenGround)
 	end
 	if owner == player then
 		CaseController.refreshPrompts()
@@ -479,15 +927,19 @@ local function onCaseOpenChanged(character: Model)
 	if entry == nil then
 		return
 	end
-	local now = os.clock()
+	local serverNow = workspace:GetServerTimeNow()
 	if character:GetAttribute("CaseOpen") == true then
-		entry.openedAt = now
+		-- (the server's start time: the timeline is the same on every screen; its events
+		-- fire from updateOpening when the timeline crosses them)
+		local openAt = character:GetAttribute("CaseOpenAt")
+		entry.openedAt = if typeof(openAt) == "number"
+			then math.min(openAt, serverNow)
+			else serverNow
 		entry.closedAt = nil
-		SoundController.play("CaseLatch", character)
-		SoundController.play("CaseLidOpen", character)
+		entry.openEvent = 1
 	elseif entry.openedAt then
-		SoundController.play("CaseLidClose", character)
-		entry.closedAt = now
+		entry.closedAt = serverNow
+		entry.openEvent = 1
 		entry.lidAtClose = entry.lid
 	end
 end
@@ -554,12 +1006,19 @@ function CaseController.trySetDown()
 	then
 		return
 	end
+	local entry = held[character]
+	if entry and (entry.setDownAt or entry.pickUpAt) then
+		return -- (already putting it down / still picking it up)
+	end
 	nextSetDownAt = now + Config.Case.SETDOWN_COOLDOWN
 	Remotes.CaseAction:FireServer("SetDown")
 	CharacterAnimationController.playAction(character, "CaseSetDown")
-	local entry = held[character]
 	if entry then
 		entry.releaseUntil = now + SET_DOWN_RELEASE
+		-- the case leaves the hand at the clip's contact marker (updateHandOff)
+		entry.setDownAt = now
+		entry.letGo = false
+		entry.detachAtContact = false
 	end
 end
 
@@ -607,6 +1066,59 @@ local function onPromptFound(instance: Instance)
 	end
 end
 
+-- A ground case that falls shut (LidAjar): its lid pops on the impact. One already lying
+-- there (settled, anchored) shows it ajar at once.
+local function watchGroundCase(model: Model)
+	local target = model:GetAttribute("LidAjar")
+	if typeof(target) ~= "number" or ajarCases[model] then
+		return
+	end
+	local hitbox = model.PrimaryPart or model:FindFirstChild("Hitbox")
+	if hitbox == nil or not hitbox:IsA("BasePart") then
+		return
+	end
+	if hitbox.Anchored then
+		CaseModel.setLid(model, target)
+		return
+	end
+	ajarCases[model] = {
+		model = model,
+		hitbox = hitbox,
+		target = target,
+		since = os.clock(),
+		lastVelocityY = hitbox.AssemblyLinearVelocity.Y,
+		hit = false,
+		angle = 0,
+		speed = 0,
+	}
+end
+
+-- A ground case leaving (picked up? streamed out?): remembered a moment, so a character
+-- that starts carrying right next to it shows the pick-up crouch over it.
+local function groundCaseLeaving(model: Model)
+	ajarCases[model] = nil
+	local hitbox = model.PrimaryPart
+	if hitbox == nil then
+		return
+	end
+	local lid = model:GetAttribute("LidAngle")
+	local plugs = 0
+	for _, part in model:GetChildren() do
+		if part.Name == "FoamPlug" then
+			plugs += 1
+		end
+	end
+	table.insert(takenCases, {
+		cframe = hitbox.CFrame,
+		lid = if typeof(lid) == "number" then lid else 0,
+		cradles = CaseModel.CRADLES - plugs,
+		at = os.clock(),
+	})
+	if #takenCases > 8 then
+		table.remove(takenCases, 1)
+	end
+end
+
 -- The server's folders appear once (and parts stream in / out): watch them when they come.
 local function watchFolder(name: string)
 	task.spawn(function()
@@ -616,15 +1128,29 @@ local function watchFolder(name: string)
 			found = workspace:FindFirstChild(name)
 		end
 		local where = found :: Instance
-		where.DescendantAdded:Connect(onPromptFound)
+		local cases = name == "ContrabandCases"
+		if cases then
+			groundFolder = where
+		end
+		where.DescendantAdded:Connect(function(instance)
+			onPromptFound(instance)
+			if cases and instance:IsA("Model") and instance.Parent == where then
+				watchGroundCase(instance)
+			end
+		end)
 		where.DescendantRemoving:Connect(function(instance)
 			if instance:IsA("ProximityPrompt") then
 				sellPrompts[instance] = nil
 				pickupPrompts[instance] = nil
+			elseif cases and instance:IsA("Model") and instance.Parent == where then
+				groundCaseLeaving(instance)
 			end
 		end)
 		for _, descendant in where:GetDescendants() do
 			onPromptFound(descendant)
+			if cases and descendant:IsA("Model") and descendant.Parent == where then
+				watchGroundCase(descendant)
+			end
 		end
 	end)
 end

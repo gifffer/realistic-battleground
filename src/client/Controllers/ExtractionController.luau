@@ -130,8 +130,7 @@ local pressing = false
 local wrongHintUntil = 0 -- os.clock(): the "Wrong fibre" hint shows until then
 -- The player's camera when we took it: its FOV, and where it was relative to his body (the
 -- way back goes to that spot around where the body is NOW).
-local savedCamera: { offset: CFrame?, cframe: CFrame, fov: number, kind: Enum.CameraType }? =
-	nil
+local savedCamera: { offset: CFrame?, cframe: CFrame, fov: number, kind: Enum.CameraType }? = nil
 local cameraStart = 0
 local cameraOut: { from: CFrame, start: number }? = nil
 local outroStart = 0
@@ -298,14 +297,16 @@ local function hideOwnBody(hidden: boolean)
 	end
 	for _, descendant in character:GetDescendants() do
 		if hideable(descendant) then
-			table.insert(hiddenParts, descendant)
-			(descendant :: any).LocalTransparencyModifier = 1
+			local part: any = descendant
+			table.insert(hiddenParts, part)
+			part.LocalTransparencyModifier = 1
 		end
 	end
 	hideConnection = character.DescendantAdded:Connect(function(descendant)
 		if hideable(descendant) then
-			table.insert(hiddenParts, descendant)
-			(descendant :: any).LocalTransparencyModifier = 1
+			local part: any = descendant
+			table.insert(hiddenParts, part)
+			part.LocalTransparencyModifier = 1
 		end
 	end)
 end
@@ -385,13 +386,13 @@ local function enterStep(step: number)
 	if current == nil or scene == nil then
 		return
 	end
-	current.shown = step
-	current.sentStep = 0
 	-- (a normal step after the one we just did: what the server re-applies glides there;
 	-- the first step, a jump or a step back = a resync: it snaps)
-	local resync = previous == 0 or step ~= previous + 1
-	local keepUnlocked = gesture.unlocked
 	local previous = current.shown
+	local resync = previous == 0 or step ~= previous + 1
+	current.shown = step
+	current.sentStep = 0
+	local keepUnlocked = gesture.unlocked
 	gesture = newGesture()
 	pressing = false
 	local info = STEPS[step]
@@ -1070,10 +1071,10 @@ local function updateOutro(now: number, scene: BenchVisual.Bench, parts: LabCont
 		local slide = (t - 1.4) / CHUTE_TIME
 		BenchVisual.place(scene, BenchVisual.chuteRoot(scene, chute.CFrame, math.min(slide, 1)))
 		if slide > 0.8 then
-			BenchVisual.fade(scene, 1 - (slide - 0.8) / 0.2)
+			BenchVisual.fade(scene, 1 - smooth((slide - 0.8) / 0.2))
 		end
 	elseif t >= 1.4 then
-		BenchVisual.fade(scene, 1 - (t - 1.4) / 1)
+		BenchVisual.fade(scene, 1 - smooth(t - 1.4))
 	end
 	if t >= 1.4 + CHUTE_TIME + 0.2 then
 		stopLocal()

@@ -149,18 +149,26 @@ local function getOrBuildLab(player: Player): LabInfo
 	return info :: LabInfo
 end
 
+-- Seconds between the door starting to open and the teleport (≈ 85 % open).
+local DOOR_OPEN_WAIT = 0.21
+
 local function clearZone(player: Player)
 	player:SetAttribute("InLab", nil)
 	player:SetAttribute("ZoneLook", nil)
 end
 
 -- Moves the character to `cframe` after asking Roblox to stream the area in (no fall into the
--- void when StreamingEnabled is on). Returns false if the body is gone meanwhile, or if
--- `stillOk` (checked AFTER the wait) says no.
+-- void when StreamingEnabled is on) and letting the door open (DOOR_OPEN_WAIT). Returns false
+-- if the body is gone meanwhile, or if `stillOk` (checked AFTER the waits) says no.
 local function teleport(player: Player, cframe: CFrame, stillOk: (() -> boolean)?): boolean
 	pcall(function()
 		player:RequestStreamAroundAsync(cframe.Position, 3)
 	end)
+	-- The door has just started to swing (CityDoors.pulse: 0.35 s, Quad Out): the body goes
+	-- through once it is mostly open, not while it is still shut; the player's screen fades
+	-- around the cut meanwhile (ZoneLookController, "DoorCut").
+	Guard.send(player, "DoorCut", {})
+	task.wait(DOOR_OPEN_WAIT)
 	local character, root = Guard.body(player)
 	if character == nil or root == nil then
 		return false

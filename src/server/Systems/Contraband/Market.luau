@@ -66,6 +66,7 @@ local function endSale(player: Player)
 	local character = player.Character
 	if character then
 		character:SetAttribute("CaseOpen", nil)
+		character:SetAttribute("CaseOpenAt", nil)
 	end
 end
 
@@ -169,6 +170,9 @@ local function onSell(player: Player, prompt: ProximityPrompt)
 		interrupted = false,
 	}
 	sales[player] = sale
+	-- (the start on the server's clock, set first: every client plays the opening on the
+	-- same timeline, and one who streams in mid-sale joins it instead of replaying it)
+	character:SetAttribute("CaseOpenAt", workspace:GetServerTimeNow())
 	character:SetAttribute("CaseOpen", true)
 	Guard.send(player, "SaleStarted", { endsAt = workspace:GetServerTimeNow() + M.OPEN_TIME })
 	task.spawn(function()

@@ -182,8 +182,14 @@ type Layer = {
 	fadeIn: number,
 	fadeOut: number,
 	pose: { [string]: CFrame }, -- sampled each frame (reused table)
-	rate: number?, -- fixed playback speed (overrides playbackRate), e.g. a re-timed punch
+	warp: Warp?, -- a re-timed clip (the right cross thrown for a left punch, see playAction)
 }
+
+-- A clip re-timed around its impact ("marker"): real time 0..impactReal plays clip time
+-- 0..impactClip, then impactReal..endReal plays the rest of the clip. So the fist lands on
+-- the server's hit time AND the recovery ends when the next click may come, instead of one
+-- speed-up compressing the whole clip, recovery included.
+type Warp = { impactClip: number, impactReal: number, endReal: number, elapsed: number }
 
 -- One channel = a list of layers (the newest is the one playing; older ones
 -- are fading out).
@@ -228,7 +234,8 @@ type Tracked = {
 	-- Combat feel (see the header).
 	combatUntil: number, -- os.clock() until which the guard stays up
 	freezeUntil: number, -- hit-stop: the action clip is paused until then
-	lastAction: string?, -- last one-shot clip played (which punch was thrown)
+	lastAction: string?, -- last one-shot clip asked for (which punch of the combo)
+	lastShown: string?, -- the clip it really showed (a left punch thrown as a right cross)
 	flinch: Vector3, -- spring position: extra head rotation, degrees
 	flinchSpeed: Vector3, -- spring speed, degrees per second
 	-- To know if Roblox's Animator rewrote a joint this frame (see compose()).
@@ -496,7 +503,20 @@ local function advanceChannel(entry: Tracked, channel: Channel, dt: number, oneS
 	end
 	for index = #channel, 1, -1 do
 		local layer = channel[index]
-		layer.time += dt * (layer.rate or playbackRate(entry, layer.name))
+		local warp = layer.warp
+		if warp then
+			warp.elapsed += dt
+			local real = warp.elapsed
+			if real <= warp.impactReal then
+				layer.time = real * warp.impactClip / warp.impactReal
+			else
+				local after = (layer.clip.length - warp.impactClip)
+					/ (warp.endReal - warp.impactReal)
+				layer.time = warp.impactClip + (real - warp.impactReal) * after
+			end
+		else
+			layer.time += dt * playbackRate(entry, layer.name)
+		end
 
 		-- Our own climb / vault: follow the body's real progress exactly.
 		if layer.target == 1 and isLocal(entry) then
@@ -1104,16 +1124,20 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	local entry = tracked[model]
 	local clip = findClip(name)
 	-- Holding something in the LEFT hand (the case): the left-hand punches (hits 1 and 3) are
-	-- thrown with the right-hand one (hit 2), sped up so its impact lands on the same frame
-	-- as the server's hit (Config.Combat.M1_HIT_DELAY). The layer keeps the asked name.
-	local rate: number? = nil
+	-- thrown with the right-hand one (hit 2), re-timed around its impact (Warp): the fist
+	-- lands on the server's hit (Config.Combat.M1_HIT_DELAY) and the recovery fills the time
+	-- until the next click (M1_INTERVAL). The layer keeps the asked name (the combo checks),
+	-- lastShown says what was really thrown (the victim's reaction follows THAT fist).
+	local warp: Warp? = nil
 	if holds[model] and LEFT_HAND_PUNCHES[name] then
 		local right = findClip(RIGHT_HAND_PUNCH)
+		local hit = LEFT_HAND_PUNCHES[name]
 		local delays = Config.Combat.M1_HIT_DELAY
-		local own = delays[LEFT_HAND_PUNCHES[name]]
-		if right and own and own > 0 then
+		local own = delays[hit]
+		local interval = Config.Combat.M1_INTERVAL[hit]
+		if right and own and own > 0 and interval and interval > own then
 			clip = right
-			rate = delays[2] / own
+			warp = { impactClip = delays[2], impactReal = own, endReal = interval, elapsed = 0 }
 		end
 	end
 	if clip == nil then
@@ -1135,9 +1159,10 @@ function CharacterAnimationController.playAction(model: Model, name: string)
 	end
 	local fadeIn = if REACTIONS[name] then REACTION_FADE_IN else ACTION_FADE_IN
 	local layer = newLayer(name, clip :: R6Pose.Clip, fadeIn, ACTION_FADE_OUT)
-	layer.rate = rate
+	layer.warp = warp
 	table.insert(entry.action, layer)
 	entry.lastAction = name
+	entry.lastShown = if warp then RIGHT_HAND_PUNCH else name
 	-- (An emote is not a fight: no fists up after it.)
 	if string.sub(name, 1, 6) ~= "Emote_" then
 		entry.combatUntil = os.clock() + COMBAT_STANCE_TIME
@@ -1194,6 +1219,40 @@ end
 function CharacterAnimationController.getLastAction(model: Model): string?
 	local entry = tracked[model]
 	return if entry then entry.lastAction else nil
+end
+
+-- The clip `model` really showed for its last one-shot (differs from getLastAction when a
+-- left punch was thrown as a right cross because the left hand holds the case). Use it for
+-- anything that follows the motion seen (the victim's reaction, the flinch's direction).
+function CharacterAnimationController.getLastShownClip(model: Model): string?
+	local entry = tracked[model]
+	return if entry then entry.lastShown or entry.lastAction else nil
+end
+
+-- Is `model` blocking (the server's "Blocking", or our own block before it arrives)?
+function CharacterAnimationController.isBlocking(model: Model): boolean
+	if model:GetAttribute("Blocking") == true then
+		return true
+	end
+	local entry = tracked[model]
+	return predictedBlock and entry ~= nil and isLocal(entry)
+end
+
+-- What the body of `model` is busy with: "Reaction" (a hit reaction plays), "Action" (any
+-- other one-shot: a punch, a dash...), "Guard" (none, but the fists are still up after a
+-- fight), or nil. An overlay (setHoldPose) yields to these.
+function CharacterAnimationController.actionState(model: Model): string?
+	local entry = tracked[model]
+	if entry == nil then
+		return nil
+	end
+	for index = #entry.action, 1, -1 do
+		local layer = entry.action[index]
+		if layer.target == 1 then
+			return if REACTIONS[layer.name] then "Reaction" else "Action"
+		end
+	end
+	return if os.clock() < entry.combatUntil then "Guard" else nil
 end
 
 -- This frame's value of `joint` in the action clip `name` playing on
@@ -1322,6 +1381,7 @@ local function track(model: Model, owner: Player?)
 		combatUntil = 0,
 		freezeUntil = 0,
 		lastAction = nil,
+		lastShown = nil,
 		flinch = Vector3.zero,
 		flinchSpeed = Vector3.zero,
 		lastWritten = {},

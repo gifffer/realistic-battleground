@@ -16,12 +16,21 @@
 -- (The park is NOT handled here: it keeps its own controller. A lab and the park never
 -- overlap, and the park writes after us in the frame anyway.)
 --
+-- A CUT (the server's ContrabandEvent "DoorCut": a lab door teleport is coming): the screen
+-- fades to black (0.15 s, Sine In), stays black until the body has moved (or 0.7 s), then
+-- fades back (0.25 s, Sine Out). A look that changes during a cut SNAPS (no 0.6 s blend of
+-- the street's fog inside the lab: a blend is for walking across a border, not for a cut).
+--
 --   ZoneLookController.current()  the look being shown (or blending out), nil = none
 --   ZoneLookController.blend()    0 (city look) → 1 (full zone look), eased
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 local ZoneLookController = {}
 
@@ -162,17 +171,115 @@ local function wantedLook(): string?
 	return nil
 end
 
+------------------------------------------------------------------------------
+-- Cuts (lab doors): a black fade around the teleport, the look snaps meanwhile
+------------------------------------------------------------------------------
+
+local CUT_OUT = 0.15 -- to black
+local CUT_IN = 0.25 -- back
+local CUT_HOLD_MAX = 0.7 -- the longest it stays black waiting for the teleport
+local CUT_MOVED = 20 -- studs: the body has been teleported
+local cutting = false -- a cut is on: any look change snaps
+local cutToken = 0
+local cutTween: Tween? = nil
+local cutFrame: Frame? = nil
+
+local function blackFrame(): Frame
+	local existing = cutFrame
+	if existing and existing.Parent then
+		return existing
+	end
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "DoorCut"
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.DisplayOrder = 50
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BackgroundColor3 = Color3.new(0, 0, 0)
+	frame.BackgroundTransparency = 1
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+	gui.Parent = player:WaitForChild("PlayerGui")
+	cutFrame = frame
+	return frame
+end
+
+local function fadeTo(
+	frame: Frame,
+	transparency: number,
+	seconds: number,
+	direction: Enum.EasingDirection
+): Tween
+	if cutTween then
+		cutTween:Cancel()
+	end
+	local tween = TweenService:Create(
+		frame,
+		TweenInfo.new(seconds, Enum.EasingStyle.Sine, direction),
+		{ BackgroundTransparency = transparency }
+	)
+	cutTween = tween
+	tween:Play()
+	return tween
+end
+
+local function rootPosition(): Vector3?
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	return if root and root:IsA("BasePart") then root.Position else nil
+end
+
+local function startCut()
+	cutToken += 1
+	local token = cutToken
+	cutting = true
+	local frame = blackFrame()
+	local from = rootPosition()
+	fadeTo(frame, 0, CUT_OUT, Enum.EasingDirection.In)
+	task.spawn(function()
+		local started = os.clock()
+		while os.clock() - started < CUT_HOLD_MAX do
+			task.wait()
+			if token ~= cutToken then
+				return
+			end
+			local now = rootPosition()
+			if
+				from
+				and now
+				and (now - from).Magnitude > CUT_MOVED
+				and os.clock() - started >= CUT_OUT
+			then
+				break
+			end
+		end
+		task.wait(0.05) -- (a frame or two for the look / streaming to land behind the black)
+		if token ~= cutToken then
+			return
+		end
+		local tween = fadeTo(frame, 1, CUT_IN, Enum.EasingDirection.Out)
+		tween.Completed:Wait()
+		if token == cutToken then
+			cutting = false
+		end
+	end)
+end
+
 local function update(deltaTime: number)
 	local wanted = wantedLook()
 	local target = 0
 	if wanted ~= nil then
-		if shownLook == nil or shownLook == wanted then
+		if shownLook == nil or shownLook == wanted or cutting then
 			shownLook = wanted
 			target = 1
 		end
 		-- (another look is still shown: blend it out first, then blend the new one in)
 	end
-	if blendValue ~= target then
+	if cutting and blendValue ~= target then
+		-- a cut: no blend across it
+		blendValue = target
+	elseif blendValue ~= target then
 		local step = deltaTime / BLEND_TIME
 		blendValue = if target > blendValue
 			then math.min(target, blendValue + step)
@@ -211,6 +318,11 @@ end
 function ZoneLookController.start()
 	-- Just before ParkAtmosphereController (Last): after everything else that touches Lighting.
 	RunService:BindToRenderStep("ZoneLook", Enum.RenderPriority.Last.Value - 1, update)
+	Remotes.ContrabandEvent.OnClientEvent:Connect(function(kind: string)
+		if kind == "DoorCut" then
+			startCut()
+		end
+	end)
 end
 
 return ZoneLookController

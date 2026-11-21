@@ -15,7 +15,8 @@
 --                  ×STAMINA_DRAIN_MULT, no mantle (Movement). Kit moves / Awakening / finishers
 --                  are refused by Combat while Carrying is set.
 --   Set down (G)   Remotes.CaseAction("SetDown"): upright on the floor in front of you.
---   KO / death     it falls out: lying flat, lid ajar DROP_LID_ANGLE°, a sliver of the cold
+--   KO / death     it falls out: lying flat, shut, and its lid pops ajar DROP_LID_ANGLE° when
+--                  it hits the ground (each client, attribute LidAjar), a sliver of the cold
 --                  interior light (the SAME empty or full). Anyone can pick it up. (A knockout
 --                  only drops it when a PLAYER dealt it: a dummy / NPC knockout does not.)
 --   Leave          in the city: it stays where you stand (or last stood on the floor). In your
@@ -33,7 +34,7 @@
 --                  with its cores if the server stops (by design).
 --
 -- NEVER REPLICATED: what is in a case. A ground case only shows the attributes CaseId (an
--- opaque name, not a core id), LidAngle and LabOwner. The grades go to the HOLDER only
+-- opaque name, not a core id), LidAngle (LidAjar) and LabOwner. The grades go to the HOLDER only
 -- (ContrabandEvent "CaseState"): a thief learns them when he picks it up.
 
 local Players = game:GetService("Players")
@@ -255,6 +256,7 @@ local function applyCarry(player: Player, on: boolean, cradles: number?)
 		character:SetAttribute("Carrying", if on then "Case" else nil)
 		if not on then
 			character:SetAttribute("CaseOpen", nil)
+			character:SetAttribute("CaseOpenAt", nil)
 		end
 	end
 	Movement.setSpeedModifier(player, "Case", if on then C.SPEED_MULT else nil)
@@ -379,11 +381,21 @@ end
 -- Builds the ground model of a case at `cframe` with the "Pick up" prompt.
 local function placeModel(record: CaseRecord, cframe: CFrame, lidAngle: number, physics: boolean)
 	destroyModel(record)
-	local model =
-		CaseModel.build({ lidAngle = lidAngle, interior = true, cradles = record.cradles })
+	-- A dropped case is built SHUT and falls shut: each client pops its lid ajar when it hits
+	-- the ground (attribute "LidAjar", CaseController: a latch giving on the impact). The
+	-- true angle stays in "LidAngle".
+	local popsOpen = physics and lidAngle > 0
+	local model = CaseModel.build({
+		lidAngle = if popsOpen then 0 else lidAngle,
+		interior = true,
+		cradles = record.cradles,
+	})
 	model.Name = "Case"
 	model:SetAttribute("CaseId", record.id)
 	model:SetAttribute("LidAngle", lidAngle)
+	if popsOpen then
+		model:SetAttribute("LidAjar", lidAngle)
+	end
 	model:SetAttribute("LabOwner", record.labOwner)
 	model:SetAttribute("Unbreakable", true)
 	model:PivotTo(cframe)

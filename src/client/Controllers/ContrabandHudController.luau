@@ -51,6 +51,10 @@ local TEAL = Color3.fromRGB(90, 200, 190)
 
 local gui: ScreenGui
 local caseGroup: CanvasGroup
+local caseShown = false -- what the case block shows (it may still be fading out)
+local caseTween: Tween? = nil
+local openingTween: Tween? = nil
+local openingToken = 0
 local pipsRow: Frame
 local countLabel: TextLabel
 local openingGroup: CanvasGroup
@@ -107,7 +111,14 @@ local function toast(text: string, color: Color3?)
 		if line.Parent == nil then
 			return
 		end
-		local out = Theme.tween(line, 0.4, { TextTransparency = 1, TextStrokeTransparency = 1 })
+		-- (an exit: eases IN, it leaves gently and finishes fast)
+		local out = Theme.tween(
+			line,
+			0.4,
+			{ TextTransparency = 1, TextStrokeTransparency = 1 },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
 		out.Completed:Once(function()
 			line:Destroy()
 		end)
@@ -174,13 +185,35 @@ local function redrawCase()
 	end
 	countLabel.Text = `{#grades}/{cradles}`
 	local show = holding and CaseController.isCarrying()
-	if show and not caseGroup.Visible then
+	if show == caseShown then
+		return
+	end
+	caseShown = show
+	-- (each fade cancels the other one still running; hidden only once faded out)
+	if caseTween then
+		caseTween:Cancel()
+	end
+	if show then
+		if not caseGroup.Visible then
+			caseGroup.GroupTransparency = 1
+		end
 		caseGroup.Visible = true
-		caseGroup.GroupTransparency = 1
-		Theme.tween(caseGroup, Theme.NORMAL, { GroupTransparency = 0 })
-	elseif not show and caseGroup.Visible then
-		caseGroup.Visible = false
+		caseTween = Theme.tween(caseGroup, Theme.NORMAL, { GroupTransparency = 0 })
+	else
 		setDownButton.reset()
+		local tween = Theme.tween(
+			caseGroup,
+			Theme.FAST,
+			{ GroupTransparency = 1 },
+			Enum.EasingStyle.Quad,
+			Enum.EasingDirection.In
+		)
+		caseTween = tween
+		tween.Completed:Once(function(playback)
+			if playback == Enum.PlaybackState.Completed and not caseShown then
+				caseGroup.Visible = false
+			end
+		end)
 	end
 end
 
@@ -219,19 +252,32 @@ local function redrawCulture()
 	cultureLabel.TextColor3 = C.Ink2
 end
 
+-- The opening bar's tween and its safety timer belong to one sale (token): a new sale or a
+-- hide cancels them, an old timer can't hide a newer bar.
 local function hideOpening()
+	openingToken += 1
+	if openingTween then
+		openingTween:Cancel()
+		openingTween = nil
+	end
 	openingGroup.Visible = false
 end
 
 local function showOpening(endsAt: number)
-	local left = math.clamp(endsAt - workspace:GetServerTimeNow(), 0, Config.Market.OPEN_TIME + 1)
+	hideOpening()
+	local token = openingToken
+	local total = Config.Market.OPEN_TIME
+	local left = math.clamp(endsAt - workspace:GetServerTimeNow(), 0, total + 1)
 	openingGroup.Visible = true
 	openingGroup.GroupTransparency = 0
-	openingFill.Size = UDim2.new(0, 0, 1, 0)
-	Theme.tween(openingFill, left, { Size = UDim2.new(1, 0, 1, 0) }, Enum.EasingStyle.Linear)
+	-- (from where the server's timeline is now: a late message doesn't restart the bar)
+	openingFill.Size = UDim2.new(math.clamp(1 - left / total, 0, 1), 0, 1, 0)
+	-- (Linear: a timer bar is the one place constant speed is right)
+	openingTween =
+		Theme.tween(openingFill, left, { Size = UDim2.new(1, 0, 1, 0) }, Enum.EasingStyle.Linear)
 	task.delay(left + 0.6, function()
 		-- (no result came: don't leave the bar up)
-		if openingGroup.Visible and openingFill.Size.X.Scale >= 1 then
+		if token == openingToken then
 			hideOpening()
 		end
 	end)

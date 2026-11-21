@@ -991,7 +991,8 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 	-- Clamp levers let go: they settle to their target (no snap).
 	for _, clamp in bench.clamps do
 		if clamp.turn ~= clamp.target then
-			local turn = clamp.turn + (clamp.target - clamp.turn) * (1 - math.exp(-dt * CLAMP_SETTLE))
+			local turn = clamp.turn
+				+ (clamp.target - clamp.turn) * (1 - math.exp(-dt * CLAMP_SETTLE))
 			if math.abs(clamp.target - turn) < 0.002 then
 				turn = clamp.target
 			end
