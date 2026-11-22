@@ -1,0 +1,553 @@
+{
+ "id": "Pistol",
+ "units": "m",
+ "axes": "+X muzzle, +Y left, +Z up",
+ "roblox": "roblox gun space (studs) = (-y, z, -x) / 0.28",
+ "massKg": 0.85,
+ "dims": {
+  "length": 0.1841,
+  "barrel": 0.102,
+  "height": 0.1285,
+  "width": 0.0309,
+  "slideStroke": 0.028
+ },
+ "parts": {
+  "Frame": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer",
+    "PolymerStipple"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 1,
+   "tris": 1728
+  },
+  "Slide": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Polymer",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 856
+  },
+  "SightRear": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SightPaint"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "parent": "Slide",
+   "tris": 200
+  },
+  "SightFront": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SightPaint"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "parent": "Slide",
+   "tris": 156
+  },
+  "Extractor": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "parent": "Slide",
+   "tris": 56
+  },
+  "Barrel": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore",
+    "SteelBare"
+   ],
+   "origin": [
+    0.022,
+    0.0,
+    -0.009
+   ],
+   "fit": 2,
+   "tris": 284
+  },
+  "Trigger": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer"
+   ],
+   "origin": [
+    0.0035,
+    0.0,
+    -0.031
+   ],
+   "fit": 3,
+   "tris": 248
+  },
+  "SlideStop": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.023,
+    0.0134,
+    -0.015
+   ],
+   "tris": 156
+  },
+  "MagRelease": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer"
+   ],
+   "origin": [
+    -0.0126,
+    0.0146,
+    -0.0468
+   ],
+   "tris": 108
+  },
+  "Pins": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 312
+  },
+  "Magazine": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer",
+    "SteelBlued",
+    "Brass"
+   ],
+   "origin": [
+    -0.017,
+    0.0,
+    -0.014
+   ],
+   "fit": 4,
+   "tris": 508
+  },
+  "MagRoundTop": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Nickel",
+    "Copper"
+   ],
+   "origin": [
+    -0.0189,
+    0.002,
+    -0.0176
+   ],
+   "parent": "Magazine",
+   "tris": 176
+  },
+  "MagFollower": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer"
+   ],
+   "origin": [
+    -0.017,
+    0.0,
+    -0.014
+   ],
+   "parent": "Magazine",
+   "tris": 44
+  }
+ },
+ "groups": {
+  "Slide": [
+   "SightRear",
+   "SightFront",
+   "Extractor"
+  ],
+  "Magazine": [
+   "MagRoundTop",
+   "MagFollower"
+  ]
+ },
+ "hinges": {
+  "Slide": {
+   "type": "slide",
+   "pivot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.028,
+   "lockBackOnEmpty": true
+  },
+  "Barrel": {
+   "type": "rotate",
+   "pivot": [
+    0.022,
+    0.0,
+    -0.009
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -2.5,
+   "max": 0.0,
+   "note": "breech drops as the slide unlocks"
+  },
+  "Trigger": {
+   "type": "rotate",
+   "pivot": [
+    0.0035,
+    0.0,
+    -0.031
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 10.0
+  },
+  "SlideStop": {
+   "type": "rotate",
+   "pivot": [
+    -0.023,
+    0.0134,
+    -0.015
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -6.0,
+   "max": 0.0,
+   "note": "front end up = slide locked"
+  },
+  "MagRelease": {
+   "type": "slide",
+   "pivot": [
+    -0.0126,
+    0.0146,
+    -0.0468
+   ],
+   "axis": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.003
+  },
+  "Magazine": {
+   "type": "detach",
+   "pivot": [
+    -0.017,
+    0.0,
+    -0.014
+   ],
+   "axis": [
+    -0.35021,
+    0.0,
+    -0.93667
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.10729999999999999,
+   "note": "drops along MagWell +X"
+  }
+ },
+ "markers": {
+  "Muzzle": {
+   "p": [
+    0.102,
+    0.0,
+    0.0
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "EjectionPort": {
+   "p": [
+    0.0085,
+    -0.006,
+    0.008
+   ],
+   "x": [
+    -0.28017,
+    -0.76975,
+    0.57358
+   ],
+   "z": [
+    0.661,
+    0.27859,
+    0.69675
+   ]
+  },
+  "CasingSpawn": {
+   "p": [
+    0.0085,
+    -0.015,
+    0.009
+   ],
+   "x": [
+    0.95885,
+    -0.21974,
+    0.17978
+   ],
+   "z": [
+    -0.17524,
+    0.04016,
+    0.98371
+   ]
+  },
+  "MagWell": {
+   "p": [
+    -0.017,
+    0.0,
+    -0.014
+   ],
+   "x": [
+    -0.35021,
+    0.0,
+    -0.93667
+   ],
+   "z": [
+    0.93667,
+    0.0,
+    -0.35021
+   ]
+  },
+  "GripR": {
+   "p": [
+    -0.036,
+    0.0,
+    -0.046
+   ],
+   "x": [
+    -0.26455,
+    -0.05629,
+    0.96273
+   ],
+   "z": [
+    -0.79512,
+    -0.55217,
+    -0.25078
+   ]
+  },
+  "GripL": {
+   "p": [
+    -0.038,
+    0.017,
+    -0.054
+   ],
+   "x": [
+    -0.26895,
+    0.23822,
+    0.93323
+   ],
+   "z": [
+    -0.6986,
+    0.61876,
+    -0.35928
+   ]
+  },
+  "SightEye": {
+   "p": [
+    -0.361,
+    0.0,
+    0.0142
+   ],
+   "x": [
+    1.0,
+    0.0,
+    -0.00066
+   ],
+   "z": [
+    0.00066,
+    0.0,
+    1.0
+   ]
+  },
+  "CoM": {
+   "p": [
+    -0.016,
+    0.0,
+    -0.03
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "HolsterMount": {
+   "p": [
+    0.02,
+    0.0,
+    -0.02
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "MagGrab": {
+   "p": [
+    -0.05318,
+    0.0,
+    -0.11076
+   ],
+   "x": [
+    -0.35021,
+    0.0,
+    -0.93667
+   ],
+   "z": [
+    0.83671,
+    0.4495,
+    -0.31283
+   ]
+  },
+  "SlideGrip": {
+   "p": [
+    -0.046,
+    0.0,
+    0.003
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.61465,
+    0.7888
+   ]
+  },
+  "MagRelease": {
+   "p": [
+    -0.0126,
+    0.0161,
+    -0.0468
+   ],
+   "x": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "SlideStop": {
+   "p": [
+    -0.0146,
+    0.0147,
+    -0.0131
+   ],
+   "x": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "z": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  }
+ },
+ "separate": {
+  "Case": "Pistol_Case.fbx",
+  "Round": "Pistol_Round.fbx",
+  "Mag": "Pistol_Mag.fbx",
+  "MagEmpty": "Pistol_MagEmpty.fbx"
+ },
+ "colliders": {
+  "Magazine": {
+   "size": [
+    0.1073,
+    0.0235,
+    0.037
+   ],
+   "axes": "magazine local: +X down the mag (extraction), +Y left, +Z its front",
+   "massKg": 0.25,
+   "massEmptyKg": 0.07
+  }
+ },
+ "tris": {
+  "total": 4832,
+  "gunFbx": 4788,
+  "magFbx": 684,
+  "case": 150,
+  "round": 176
+ }
+}

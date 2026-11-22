@@ -1,0 +1,490 @@
+{
+ "id": "Rifle",
+ "units": "studs",
+ "space": "Roblox; HRP space for gunInHRP, Torso space for gunInTorso, Right Arm space for weld (the gun's Roblox gun space frame: -Z muzzle, +X right, +Y up)",
+ "hand": [
+  0.0,
+  -0.92,
+  0.0
+ ],
+ "eye": [
+  0.0,
+  0.1,
+  -0.42
+ ],
+ "joints": "degrees, CFrame.Angles(rx, ry, rz) order; Root also has (x, y, z) studs (R6Pose convention)",
+ "stances": {
+  "Aim": {
+   "name": "Aim",
+   "cost": 9.18545,
+   "pose": {
+    "Root": [
+     1.03,
+     -59.79,
+     -5.12,
+     0.0,
+     -0.0,
+     0.0
+    ],
+    "Neck": [
+     -25.51,
+     11.2,
+     -10.74
+    ],
+    "RightShoulder": [
+     83.08,
+     -24.56,
+     -79.86
+    ],
+    "LeftShoulder": [
+     106.88,
+     -0.29,
+     8.35
+    ],
+    "RightHip": [
+     -9.43,
+     0.0,
+     4.0
+    ],
+    "LeftHip": [
+     12.97,
+     0.0,
+     -4.0
+    ]
+   },
+   "wrist": [
+    -12.04,
+    5.2,
+    8.54
+   ],
+   "weld": [
+    0.19595,
+    -1.5279,
+    0.11897,
+    0.90999,
+    -0.199,
+    -0.36375,
+    0.22519,
+    -0.49942,
+    0.83658,
+    -0.34815,
+    -0.8432,
+    -0.40965
+   ],
+   "gunInTorso": [
+    -0.75364,
+    1.04005,
+    -1.11533,
+    0.49204,
+    -0.12859,
+    0.86102,
+    0.05364,
+    0.99163,
+    0.11744,
+    -0.86892,
+    -0.0116,
+    0.49482
+   ],
+   "gunInHRP": [
+    0.63293,
+    1.12328,
+    -1.10963,
+    0.99991,
+    -0.0099,
+    0.00908,
+    0.0097,
+    0.99971,
+    0.02218,
+    -0.0093,
+    -0.02209,
+    0.99971
+   ],
+   "aim": {
+    "yaw": 0.0,
+    "pitch": 0.0,
+    "cant": 0.0
+   },
+   "residuals": {
+    "right": 0.0,
+    "rightAngleDeg": 13.1,
+    "wristDeg": 15.7,
+    "left": 0.0133,
+    "leftAngleDeg": 9.2,
+    "eyeToSightLine": 0.0106,
+    "eyeAlongSight": -0.038,
+    "buttInTorso": [
+     0.675,
+     0.993,
+     -0.309
+    ],
+    "boreYawPitch": [
+     0.52,
+     -1.27
+    ],
+    "cantDeg": -0.56,
+    "rootRollDeg": -5.12
+   }
+  },
+  "Ready": {
+   "name": "Ready",
+   "cost": 2.95135,
+   "pose": {
+    "Root": [
+     0.07,
+     -61.82,
+     -3.91,
+     0.0,
+     -0.0,
+     0.0
+    ],
+    "Neck": [
+     -17.58,
+     57.75,
+     -2.74
+    ],
+    "RightShoulder": [
+     87.31,
+     -16.74,
+     -71.28
+    ],
+    "LeftShoulder": [
+     94.08,
+     -0.44,
+     9.87
+    ],
+    "RightHip": [
+     -7.27,
+     0.0,
+     4.0
+    ],
+    "LeftHip": [
+     11.93,
+     0.0,
+     -4.0
+    ]
+   },
+   "wrist": [
+    -4.01,
+    6.62,
+    -0.06
+   ],
+   "weld": [
+    0.09305,
+    -1.54437,
+    0.15359,
+    0.97485,
+    -0.12898,
+    -0.18174,
+    0.09578,
+    -0.49387,
+    0.86424,
+    -0.20123,
+    -0.85991,
+    -0.4691
+   ],
+   "gunInTorso": [
+    -0.71615,
+    0.79827,
+    -1.23313,
+    0.44444,
+    -0.23991,
+    0.86309,
+    0.03455,
+    0.96734,
+    0.2511,
+    -0.89514,
+    -0.08178,
+    0.43821
+   ],
+   "gunInHRP": [
+    0.7752,
+    0.84671,
+    -1.16313,
+    0.99955,
+    -0.0098,
+    0.02852,
+    0.00419,
+    0.98169,
+    0.19042,
+    -0.02986,
+    -0.19021,
+    0.98129
+   ],
+   "aim": {
+    "yaw": 0.0,
+    "pitch": -10.0,
+    "cant": 0.0
+   },
+   "residuals": {
+    "right": 0.0,
+    "rightAngleDeg": 7.7,
+    "wristDeg": 7.7,
+    "left": 0.0253,
+    "leftAngleDeg": 4.1,
+    "eyeToSightLine": 0.6315,
+    "eyeAlongSight": 0.044,
+    "buttInTorso": [
+     0.743,
+     0.975,
+     -0.502
+    ],
+    "boreYawPitch": [
+     1.66,
+     -10.98
+    ],
+    "cantDeg": -0.24,
+    "rootRollDeg": -3.91
+   }
+  },
+  "LowReady": {
+   "name": "LowReady",
+   "cost": 2.37993,
+   "pose": {
+    "Root": [
+     -15.23,
+     -64.07,
+     3.34,
+     0.0,
+     -0.0,
+     0.0
+    ],
+    "Neck": [
+     11.4,
+     63.46,
+     -9.44
+    ],
+    "RightShoulder": [
+     86.01,
+     5.34,
+     -70.13
+    ],
+    "LeftShoulder": [
+     72.1,
+     -0.92,
+     8.38
+    ],
+    "RightHip": [
+     9.23,
+     0.0,
+     4.0
+    ],
+    "LeftHip": [
+     25.23,
+     0.0,
+     -4.0
+    ]
+   },
+   "wrist": [
+    0.01,
+    -9.96,
+    -9.64
+   ],
+   "weld": [
+    0.04402,
+    -1.56772,
+    -0.02475,
+    0.99752,
+    -0.00111,
+    -0.07033,
+    0.06842,
+    -0.21641,
+    0.9739,
+    -0.0163,
+    -0.9763,
+    -0.2158
+   ],
+   "gunInTorso": [
+    -0.75448,
+    0.27672,
+    -1.20166,
+    0.40006,
+    -0.29384,
+    0.86811,
+    -0.01011,
+    0.94574,
+    0.32477,
+    -0.91644,
+    -0.1387,
+    0.37538
+   ],
+   "gunInHRP": [
+    0.7442,
+    -0.09565,
+    -1.23564,
+    0.99907,
+    -0.02764,
+    0.03315,
+    0.00195,
+    0.79622,
+    0.60501,
+    -0.04312,
+    -0.60438,
+    0.79553
+   ],
+   "aim": {
+    "yaw": 0.0,
+    "pitch": -38.0,
+    "cant": 0.0
+   },
+   "residuals": {
+    "right": 0.0,
+    "rightAngleDeg": 10.0,
+    "wristDeg": 13.9,
+    "left": 0.0269,
+    "leftAngleDeg": 18.6,
+    "eyeToSightLine": 1.1524,
+    "eyeAlongSight": -0.303,
+    "buttInTorso": [
+     0.726,
+     0.578,
+     -0.559
+    ],
+    "boreYawPitch": [
+     2.39,
+     -37.23
+    ],
+    "cantDeg": -0.11,
+    "rootRollDeg": 3.34
+   }
+  },
+  "ReloadMag": {
+   "name": "ReloadMag",
+   "cost": 1.23836,
+   "pose": {
+    "Root": [
+     -12.52,
+     -47.22,
+     0.89,
+     0.0,
+     -0.0,
+     0.0
+    ],
+    "Neck": [
+     -25.06,
+     15.16,
+     -1.53
+    ],
+    "RightShoulder": [
+     85.5,
+     -14.59,
+     -61.75
+    ],
+    "LeftShoulder": [
+     89.39,
+     -0.26,
+     36.18
+    ],
+    "RightHip": [
+     5.32,
+     0.0,
+     4.0
+    ],
+    "LeftHip": [
+     24.52,
+     0.0,
+     -4.0
+    ]
+   },
+   "wrist": [
+    -4.08,
+    -15.4,
+    -16.79
+   ],
+   "weld": [
+    0.09404,
+    -1.55866,
+    -0.07325,
+    0.9838,
+    0.13894,
+    -0.11329,
+    0.13079,
+    -0.12409,
+    0.98361,
+    0.1226,
+    -0.98249,
+    -0.14026
+   ],
+   "gunInTorso": [
+    -0.46436,
+    0.83799,
+    -1.52897,
+    0.53126,
+    0.20539,
+    0.82193,
+    -0.32733,
+    0.94459,
+    -0.02448,
+    -0.78142,
+    -0.25604,
+    0.56906
+   ],
+   "gunInHRP": [
+    0.79804,
+    0.50975,
+    -1.53587,
+    0.93779,
+    0.3174,
+    0.14073,
+    -0.34113,
+    0.91777,
+    0.20329,
+    -0.06463,
+    -0.23865,
+    0.96895
+   ],
+   "aim": {
+    "yaw": 8.0,
+    "pitch": -12.0,
+    "cant": 20.0
+   },
+   "residuals": {
+    "right": 0.0,
+    "rightAngleDeg": 15.9,
+    "wristDeg": 23.1,
+    "left": 0.007,
+    "leftAngleDeg": 24.1,
+    "eyeToSightLine": 0.702,
+    "eyeAlongSight": 0.097,
+    "buttInTorso": [
+     0.821,
+     0.572,
+     -0.544
+    ],
+    "boreYawPitch": [
+     8.26,
+     -11.73
+    ],
+    "cantDeg": 19.95,
+    "rootRollDeg": 0.89
+   }
+  }
+ },
+ "note": "Solved by tools/guns/rifle_ak.py (RifleHoldSolver = gunkit.HoldSolver + rifle posture limits: root roll <= 5, neck pitch <= 25, neck roll <= 10 deg, cant band per stance). R6: rigid arms, hand point (0,-0.92,0) in arm space; the weld is the only wrist. Shouldered stances keep the Shoulder marker in the stance pocket (Torso space). Aim: cheek weld on the comb, cant ~0, eye on the sight line. ReloadMag: stock low on the shoulder, gun canted 20 deg on purpose, the left hand on the seated magazine (MagGrab) about to rock it out. residuals.cantDeg = solved cant (+ = top right).",
+ "markers": {
+  "GripR": [
+   -0.176,
+   0.0,
+   -0.046
+  ],
+  "GripL": [
+   0.176,
+   0.0,
+   -0.009
+  ],
+  "SightEye": [
+   -0.253,
+   0.0,
+   0.05285
+  ],
+  "Shoulder": [
+   -0.45472,
+   0.0,
+   -0.067
+  ],
+  "MagGrab": [
+   0.00771,
+   0.0,
+   -0.10552
+  ]
+ }
+}

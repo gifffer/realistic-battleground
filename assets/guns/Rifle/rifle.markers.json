@@ -1,0 +1,700 @@
+{
+ "id": "Rifle",
+ "units": "m",
+ "axes": "+X muzzle, +Y left, +Z up",
+ "roblox": "roblox gun space (studs) = (-y, z, -x) / 0.28",
+ "massKg": 3.9,
+ "dims": {
+  "length": 0.8803,
+  "barrel": 0.415,
+  "height": 0.2583,
+  "width": 0.0796,
+  "carrierStroke": 0.12,
+  "sightRadius": 0.361
+ },
+ "parts": {
+  "Receiver": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore",
+    "SteelBare"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 1,
+   "tris": 2082
+  },
+  "DustCover": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SteelBare"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 260
+  },
+  "Barrel": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore",
+    "SteelBare"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 2,
+   "tris": 2172
+  },
+  "MuzzleDevice": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "parent": "Barrel",
+   "tris": 242
+  },
+  "CleaningRod": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SteelBare"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 134
+  },
+  "HandguardLower": {
+   "paint": "Wood",
+   "mats": [
+    "Wood",
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 808
+  },
+  "HandguardUpper": {
+   "paint": "Wood",
+   "mats": [
+    "Wood"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 380
+  },
+  "PistolGrip": {
+   "paint": "Wood",
+   "mats": [
+    "WoodGrip",
+    "SteelBare",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 456
+  },
+  "Stock": {
+   "paint": "Wood",
+   "mats": [
+    "WoodStock",
+    "SteelBlued",
+    "SteelBare",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 1020
+  },
+  "ButtPlate": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SteelBare",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 424
+  },
+  "SightFront": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    0.388,
+    0.0,
+    0.014
+   ],
+   "parent": "Barrel",
+   "tris": 160
+  },
+  "SightRear": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SteelBare"
+   ],
+   "origin": [
+    0.088,
+    0.0,
+    0.046
+   ],
+   "parent": "Barrel",
+   "tris": 356
+  },
+  "BoltCarrier": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "SteelBare"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.013
+   ],
+   "tris": 516
+  },
+  "ChargingHandle": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    0.013,
+    -0.0185,
+    0.0185
+   ],
+   "parent": "BoltCarrier",
+   "tris": 324
+  },
+  "Selector": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.153,
+    -0.0195,
+    0.003
+   ],
+   "tris": 348
+  },
+  "Trigger": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.091,
+    0.0,
+    -0.012
+   ],
+   "fit": 3,
+   "tris": 380
+  },
+  "MagRelease": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.073,
+    0.0,
+    -0.022
+   ],
+   "tris": 320
+  },
+  "Magazine": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelMag",
+    "SteelBare"
+   ],
+   "origin": [
+    -0.038,
+    0.0,
+    -0.008
+   ],
+   "fit": 4,
+   "tris": 1132
+  },
+  "MagRoundTop": {
+   "paint": "SteelLacquer",
+   "mats": [
+    "SteelLacquer",
+    "Brass",
+    "Copper"
+   ],
+   "origin": [
+    -0.06499,
+    0.0034,
+    -0.01558
+   ],
+   "parent": "Magazine",
+   "tris": 182
+  },
+  "MagFollower": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.038,
+    0.0,
+    -0.008
+   ],
+   "parent": "Magazine",
+   "tris": 88
+  }
+ },
+ "groups": {
+  "Barrel": [
+   "MuzzleDevice",
+   "SightFront",
+   "SightRear"
+  ],
+  "BoltCarrier": [
+   "ChargingHandle"
+  ],
+  "Magazine": [
+   "MagRoundTop",
+   "MagFollower"
+  ]
+ },
+ "hinges": {
+  "BoltCarrier": {
+   "type": "slide",
+   "pivot": [
+    0.0,
+    0.0,
+    0.013
+   ],
+   "axis": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.12,
+   "note": "carries ChargingHandle; cycles each shot"
+  },
+  "Selector": {
+   "type": "rotate",
+   "pivot": [
+    -0.153,
+    -0.0195,
+    0.003
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 20.0,
+   "min": 0.0,
+   "max": 20.0,
+   "detents": {
+    "SAFE": 0.0,
+    "AUTO": 10.0,
+    "SEMI": 20.0
+   },
+   "note": "exported on SEMI (rest 20)"
+  },
+  "MagRelease": {
+   "type": "rotate",
+   "pivot": [
+    -0.073,
+    0.0,
+    -0.022
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -12.0,
+   "max": 0.0,
+   "note": "paddle pushed forward"
+  },
+  "Magazine": {
+   "type": "rotate",
+   "pivot": [
+    -0.004,
+    0.0,
+    -0.01
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -25.0,
+   "max": 0.0,
+   "then": "detach",
+   "note": "rocks forward about MagRockPivot (front lug), then comes free"
+  },
+  "Trigger": {
+   "type": "rotate",
+   "pivot": [
+    -0.091,
+    0.0,
+    -0.012
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 14.0
+  },
+  "SightRear": {
+   "type": "rotate",
+   "pivot": [
+    0.088,
+    0.0,
+    0.046
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 8.0,
+   "note": "the leaf hinges at its FRONT on the block, so raising the notch is positive here (ARCHITECTURE lists RearSight 0 -> -8 for a rear pivot)",
+   "alias": "RearSight"
+  }
+ },
+ "markers": {
+  "Muzzle": {
+   "p": [
+    0.418,
+    0.0,
+    0.0
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "EjectionPort": {
+   "p": [
+    -0.052,
+    -0.0195,
+    0.013
+   ],
+   "x": [
+    0.5455,
+    -0.77906,
+    0.30902
+   ],
+   "z": [
+    -0.55733,
+    -0.06182,
+    0.82798
+   ]
+  },
+  "CasingSpawn": {
+   "p": [
+    -0.04,
+    -0.0275,
+    0.012
+   ],
+   "x": [
+    0.97063,
+    -0.17011,
+    0.17011
+   ],
+   "z": [
+    -0.16756,
+    0.02937,
+    0.98542
+   ]
+  },
+  "MagWell": {
+   "p": [
+    -0.038,
+    0.0,
+    -0.008
+   ],
+   "x": [
+    0.14436,
+    0.0,
+    -0.98953
+   ],
+   "z": [
+    0.98953,
+    0.0,
+    0.14436
+   ]
+  },
+  "MagRockPivot": {
+   "p": [
+    -0.004,
+    0.0,
+    -0.01
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "GripR": {
+   "p": [
+    -0.176,
+    0.0,
+    -0.046
+   ],
+   "x": [
+    -0.36551,
+    -0.19377,
+    0.91042
+   ],
+   "z": [
+    -0.9231,
+    -0.05017,
+    -0.38128
+   ]
+  },
+  "GripL": {
+   "p": [
+    0.176,
+    0.0,
+    -0.009
+   ],
+   "x": [
+    -0.04037,
+    0.11376,
+    0.99269
+   ],
+   "z": [
+    -0.33196,
+    0.93554,
+    -0.12071
+   ]
+  },
+  "Shoulder": {
+   "p": [
+    -0.45472,
+    0.0,
+    -0.067
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "SightEye": {
+   "p": [
+    -0.253,
+    0.0,
+    0.05285
+   ],
+   "x": [
+    0.99998,
+    0.0,
+    -0.00554
+   ],
+   "z": [
+    0.00554,
+    0.0,
+    0.99998
+   ]
+  },
+  "CoM": {
+   "p": [
+    -0.055,
+    0.0,
+    -0.022
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "BackMount": {
+   "p": [
+    -0.06,
+    0.0,
+    0.0
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "MagGrab": {
+   "p": [
+    0.00771,
+    0.0,
+    -0.10552
+   ],
+   "x": [
+    0.14436,
+    0.0,
+    -0.98953
+   ],
+   "z": [
+    0.24858,
+    0.96793,
+    0.03626
+   ]
+  },
+  "ChargeHandle": {
+   "p": [
+    0.011,
+    -0.043,
+    0.027
+   ],
+   "x": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    -0.50702,
+    0.86193
+   ]
+  },
+  "MagRelease": {
+   "p": [
+    -0.083,
+    0.0,
+    -0.055
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "Selector": {
+   "p": [
+    -0.05,
+    -0.0235,
+    -0.008
+   ],
+   "x": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "z": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  }
+ },
+ "separate": {
+  "Case": "Rifle_Case.fbx",
+  "Round": "Rifle_Round.fbx",
+  "Mag": "Rifle_Mag.fbx",
+  "MagEmpty": "Rifle_MagEmpty.fbx"
+ },
+ "colliders": {
+  "Magazine": {
+   "size": [
+    0.2,
+    0.029,
+    0.075
+   ],
+   "axes": "magazine local: +X down the mag (MagWell +X), +Y left, +Z its front",
+   "massKg": 0.8,
+   "massEmptyKg": 0.33
+  }
+ },
+ "tris": {
+  "total": 11784,
+  "gunFbx": 11696,
+  "magFbx": 1314,
+  "case": 152,
+  "round": 182
+ },
+ "aliases": {
+  "RearSight": "SightRear"
+ },
+ "atlases": {
+  "Rifle": "steel parts, magazine (Rifle_*.png)",
+  "Rifle_Wood": "Stock, PistolGrip, HandguardLower, HandguardUpper (Rifle_Wood_*.png)"
+ }
+}

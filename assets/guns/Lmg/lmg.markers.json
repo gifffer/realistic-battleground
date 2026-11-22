@@ -1,0 +1,1140 @@
+{
+ "id": "Lmg",
+ "units": "m",
+ "axes": "+X muzzle, +Y left, +Z up",
+ "roblox": "roblox gun space (studs) = (-y, z, -x) / 0.28",
+ "massKg": 10.1,
+ "dims": {
+  "length": 0.8944,
+  "barrel": 0.349,
+  "height": 0.2799,
+  "heightNote": "carry handle top to grip bottom (no optic, pouch, belt, sling)",
+  "heightAll": 0.3603,
+  "width": 0.1436,
+  "lengthCollapsed": 0.7944,
+  "chargeStroke": 0.14,
+  "opticAxisAboveBore": 0.08,
+  "linkPitch": 0.010199999999999999
+ },
+ "parts": {
+  "Receiver": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate",
+    "Bore",
+    "SteelBare",
+    "Polymer",
+    "PolymerStipple",
+    "Aluminium",
+    "Stamp"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 1,
+   "tris": 5986
+  },
+  "Barrel": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate",
+    "Bore",
+    "SteelBare",
+    "Polymer"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 2,
+   "tris": 2378
+  },
+  "FeedCover": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate",
+    "SteelBare",
+    "Bore",
+    "Aluminium"
+   ],
+   "origin": [
+    0.034,
+    0.0,
+    0.03
+   ],
+   "tris": 1174
+  },
+  "Optic": {
+   "paint": "Aluminium",
+   "mats": [
+    "Aluminium",
+    "SteelBare",
+    "Glow",
+    "Bore",
+    "Rubber"
+   ],
+   "origin": [
+    -0.074,
+    0.0,
+    0.0574
+   ],
+   "parent": "FeedCover",
+   "tris": 1732
+  },
+  "OpticLens": {
+   "paint": "Lens",
+   "mats": [
+    "Lens",
+    "Reticle"
+   ],
+   "origin": [
+    -0.142,
+    0.0,
+    0.08
+   ],
+   "parent": "Optic",
+   "tris": 236
+  },
+  "FeedTray": {
+   "paint": "SteelBare",
+   "mats": [
+    "SteelBare",
+    "SteelPhosphate"
+   ],
+   "origin": [
+    -0.08,
+    0.0,
+    0.006
+   ],
+   "tris": 244
+  },
+  "Stock": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer",
+    "Rubber",
+    "SteelPhosphate",
+    "SteelBare",
+    "Bore"
+   ],
+   "origin": [
+    -0.235,
+    0.0,
+    -0.01
+   ],
+   "tris": 2137
+  },
+  "Trigger": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate"
+   ],
+   "origin": [
+    -0.12,
+    0.0,
+    -0.05
+   ],
+   "fit": 3,
+   "tris": 224
+  },
+  "ChargingHandle": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate",
+    "SteelBare"
+   ],
+   "origin": [
+    0.042,
+    -0.028,
+    -0.007
+   ],
+   "tris": 240
+  },
+  "BipodLegL": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate",
+    "Polymer"
+   ],
+   "origin": [
+    0.283,
+    0.0,
+    -0.044
+   ],
+   "tris": 380
+  },
+  "BipodLegR": {
+   "paint": "SteelPhosphate",
+   "mats": [
+    "SteelPhosphate",
+    "Polymer"
+   ],
+   "origin": [
+    0.283,
+    0.0,
+    -0.044
+   ],
+   "tris": 380
+  },
+  "AmmoPouch": {
+   "paint": "FabricCamo",
+   "mats": [
+    "FabricCamo",
+    "Fabric",
+    "Polymer",
+    "SteelBare"
+   ],
+   "origin": [
+    -0.014,
+    0.02,
+    -0.04
+   ],
+   "tris": 1876
+  },
+  "Belt01": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.001,
+    0.013
+   ],
+   "tris": 228
+  },
+  "Belt02": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.0112,
+    0.01303
+   ],
+   "tris": 228
+  },
+  "Belt03": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.0214,
+    0.01297
+   ],
+   "tris": 228
+  },
+  "Belt04": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.03156,
+    0.01224
+   ],
+   "tris": 228
+  },
+  "Belt05": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.04083,
+    0.00832
+   ],
+   "tris": 228
+  },
+  "Belt06": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.04689,
+    0.00022
+   ],
+   "tris": 228
+  },
+  "Belt07": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.04967,
+    -0.00955
+   ],
+   "tris": 228
+  },
+  "Belt08": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.0496,
+    -0.01972
+   ],
+   "tris": 228
+  },
+  "Belt09": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.04709,
+    -0.02958
+   ],
+   "tris": 228
+  },
+  "Belt10": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.04263,
+    -0.03875
+   ],
+   "tris": 228
+  },
+  "Belt11": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.03791,
+    -0.04779
+   ],
+   "tris": 228
+  },
+  "Belt12": {
+   "paint": "Brass",
+   "mats": [
+    "Brass",
+    "Copper",
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.0377,
+    0.03446,
+    -0.05735
+   ],
+   "tris": 204
+  }
+ },
+ "groups": {
+  "FeedCover": [
+   "Optic"
+  ],
+  "Optic": [
+   "OpticLens"
+  ]
+ },
+ "hinges": {
+  "FeedCover": {
+   "type": "rotate",
+   "pivot": [
+    0.034,
+    0.0,
+    0.03
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 70.0,
+   "note": "FRONT hinge on the trunnion (the real class); +70 lifts the rear (latch) edge; carries Optic and OpticLens"
+  },
+  "FeedTray": {
+   "type": "rotate",
+   "pivot": [
+    -0.08,
+    0.0,
+    0.006
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -20.0,
+   "max": 0.0,
+   "note": "rear hinge, lifts with the cover for cleaning"
+  },
+  "ChargingHandle": {
+   "type": "slide",
+   "pivot": [
+    0.042,
+    -0.028,
+    -0.007
+   ],
+   "axis": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.14,
+   "note": "right side, non-reciprocating"
+  },
+  "Stock": {
+   "type": "slide",
+   "pivot": [
+    -0.235,
+    0.0,
+    -0.01
+   ],
+   "axis": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.1,
+   "note": "0 = extended (exported), +0.100 collapsed"
+  },
+  "BipodLegL": {
+   "type": "rotate",
+   "pivot": [
+    0.283,
+    0.0,
+    -0.044
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -90.0,
+   "max": 0.0,
+   "note": "folded back under the handguard at rest; -90 swings the leg down (splay 4 deg baked)"
+  },
+  "BipodLegR": {
+   "type": "rotate",
+   "pivot": [
+    0.283,
+    0.0,
+    -0.044
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": -90.0,
+   "max": 0.0,
+   "note": "folded back under the handguard at rest; -90 swings the leg down (splay 4 deg baked)"
+  },
+  "Trigger": {
+   "type": "rotate",
+   "pivot": [
+    -0.12,
+    0.0,
+    -0.05
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 12.0
+  },
+  "AmmoPouch": {
+   "type": "slide",
+   "pivot": [
+    -0.014,
+    0.02,
+    -0.04
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.04,
+   "then": "detach",
+   "note": "unhooks down off the adapter, then free (Magazines.luau, pouch_drop)"
+  },
+  "Belt01": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.001,
+    0.013
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 1; twitch one pitch along the belt per shot"
+  },
+  "Belt02": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.0112,
+    0.01303
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 2; twitch one pitch along the belt per shot"
+  },
+  "Belt03": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.0214,
+    0.01297
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 3; twitch one pitch along the belt per shot"
+  },
+  "Belt04": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.03156,
+    0.01224
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 4; twitch one pitch along the belt per shot"
+  },
+  "Belt05": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.04083,
+    0.00832
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 5; twitch one pitch along the belt per shot"
+  },
+  "Belt06": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.04689,
+    0.00022
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 6; twitch one pitch along the belt per shot"
+  },
+  "Belt07": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.04967,
+    -0.00955
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 7; twitch one pitch along the belt per shot"
+  },
+  "Belt08": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.0496,
+    -0.01972
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 8; twitch one pitch along the belt per shot"
+  },
+  "Belt09": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.04709,
+    -0.02958
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 9; twitch one pitch along the belt per shot"
+  },
+  "Belt10": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.04263,
+    -0.03875
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 10; twitch one pitch along the belt per shot"
+  },
+  "Belt11": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.03791,
+    -0.04779
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 11; twitch one pitch along the belt per shot"
+  },
+  "Belt12": {
+   "type": "show",
+   "pivot": [
+    -0.0377,
+    0.03446,
+    -0.05735
+   ],
+   "axis": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "note": "visible while the rounds left >= 12; twitch one pitch along the belt per shot"
+  }
+ },
+ "markers": {
+  "Muzzle": {
+   "p": [
+    0.395,
+    0.0,
+    0.0
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "EjectionPort": {
+   "p": [
+    -0.032,
+    -0.014,
+    -0.0405
+   ],
+   "x": [
+    0.1695,
+    -0.13585,
+    -0.97612
+   ],
+   "z": [
+    -0.76168,
+    0.61046,
+    -0.21722
+   ]
+  },
+  "CasingSpawn": {
+   "p": [
+    -0.032,
+    -0.014,
+    -0.049
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    -0.28735,
+    -0.95783
+   ]
+  },
+  "LinkPort": {
+   "p": [
+    -0.031,
+    -0.0285,
+    0.012
+   ],
+   "x": [
+    0.0,
+    -0.98481,
+    -0.17365
+   ],
+   "z": [
+    0.0,
+    -0.17365,
+    0.98481
+   ]
+  },
+  "LinkSpawn": {
+   "p": [
+    -0.031,
+    -0.035,
+    0.012
+   ],
+   "x": [
+    0.0,
+    -0.98481,
+    -0.17365
+   ],
+   "z": [
+    0.0,
+    -0.17365,
+    0.98481
+   ]
+  },
+  "FeedTrayEntry": {
+   "p": [
+    -0.031,
+    0.03,
+    0.013
+   ],
+   "x": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "PouchMount": {
+   "p": [
+    -0.014,
+    0.02,
+    -0.04
+   ],
+   "x": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "z": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  "GripR": {
+   "p": [
+    -0.17,
+    0.0,
+    -0.092
+   ],
+   "x": [
+    -0.13014,
+    -0.20022,
+    0.97107
+   ],
+   "z": [
+    -0.94459,
+    -0.27264,
+    -0.18281
+   ]
+  },
+  "GripL": {
+   "p": [
+    0.196,
+    0.0,
+    -0.05
+   ],
+   "x": [
+    -0.04037,
+    0.11376,
+    0.99269
+   ],
+   "z": [
+    -0.33196,
+    0.93554,
+    -0.12071
+   ]
+  },
+  "Shoulder": {
+   "p": [
+    -0.498,
+    0.0,
+    -0.031
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "SightEye": {
+   "p": [
+    -0.18,
+    0.0,
+    0.08
+   ],
+   "x": [
+    1.0,
+    0.0,
+    -0.0008
+   ],
+   "z": [
+    0.0008,
+    0.0,
+    1.0
+   ]
+  },
+  "CoM": {
+   "p": [
+    -0.02,
+    0.008,
+    -0.04
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "BackMount": {
+   "p": [
+    -0.06,
+    0.0,
+    -0.01
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "ChargeHandle": {
+   "p": [
+    0.042,
+    -0.052,
+    -0.007
+   ],
+   "x": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  "FeedCoverLatch": {
+   "p": [
+    -0.124,
+    0.0,
+    0.046
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "CarryHandle": {
+   "p": [
+    0.15,
+    0.0,
+    0.088
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "BipodPivot": {
+   "p": [
+    0.283,
+    0.0,
+    -0.044
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  "BipodFoot": {
+   "p": [
+    0.289,
+    0.02817,
+    -0.26147
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  "PouchGrab": {
+   "p": [
+    -0.005,
+    0.0805,
+    -0.152
+   ],
+   "x": [
+    0.0,
+    0.0,
+    -1.0
+   ],
+   "z": [
+    -0.21693,
+    0.97619,
+    0.0
+   ]
+  },
+  "BeltGrab": {
+   "p": [
+    -0.031,
+    0.074,
+    0.016
+   ],
+   "x": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "z": [
+    -0.6,
+    0.0,
+    -0.8
+   ]
+  },
+  "SlingFront": {
+   "p": [
+    0.274,
+    0.014,
+    -0.038
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  "SlingRear": {
+   "p": [
+    -0.466,
+    0.0,
+    -0.107
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  }
+ },
+ "separate": {
+  "Case": "Lmg_Case.fbx",
+  "Round": "Lmg_Round.fbx",
+  "Link": "Lmg_Link.fbx",
+  "BeltSegment": "Lmg_BeltSegment.fbx",
+  "Pouch": "Lmg_Pouch.fbx",
+  "PouchEmpty": "Lmg_PouchEmpty.fbx",
+  "Sling": "Lmg_Sling.fbx"
+ },
+ "colliders": {
+  "AmmoPouch": {
+   "size": [
+    0.16,
+    0.091,
+    0.212
+   ],
+   "axes": "model axes at PouchMount (centre offset [0.009, 0.014, -0.112] m)",
+   "massKg": 3.0,
+   "massEmptyKg": 0.35
+  }
+ },
+ "tris": {
+  "total": 19699,
+  "gunFbx": 19699,
+  "belt": 2712,
+  "Lmg_Case": 114,
+  "Lmg_Round": 156,
+  "Lmg_Link": 168,
+  "Lmg_BeltSegment": 2256,
+  "Lmg_Sling": 664,
+  "Lmg_PouchEmpty": 1876,
+  "Lmg_Pouch": 1876
+ },
+ "atlases": {
+  "Lmg": "metal + polymer + optic + bipod (Lmg_*.png)",
+  "Lmg_Soft": "AmmoPouch (= Lmg_Pouch), Lmg_PouchEmpty, Lmg_Sling (Lmg_Soft_*.png)",
+  "Lmg_Ammo": "Belt01..Belt12, Lmg_Case, Lmg_Round, Lmg_Link, Lmg_BeltSegment (512)"
+ },
+ "notes": {
+  "EjectionPort": "cases DOWN out of the bottom port: forward 10 deg, right 8 deg (clears the pouch)",
+  "LinkSpawn": "links out of the right-side port: right, down 10 deg",
+  "PouchMount": "+X = belt travel out of the pouch mouth (up); the pouch drops along -X",
+  "BeltGrab": "solver frame: the support hand laying the belt on the tray (cover open)",
+  "PouchGrab": "support hand on the pouch outer face (reload: seat / strip the pouch)",
+  "Sling": "NOT in Lmg.fbx (review): the game drives the strap between SlingFront and SlingRear (rope / Beam, tan FabricTan); Lmg_Sling.fbx is the rest-pose strap hanging under gravity (pickup / display), origin at SlingFront",
+  "FeedCover": "front hinge (amended contract \u00a75.2): the latches and FeedCoverLatch are on the rear edge",
+  "Belt": "Belt01 is the round on the feed tray (fires next); Belt12 dives into the pouch mouth"
+ }
+}

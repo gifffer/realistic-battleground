@@ -1,0 +1,699 @@
+{
+ "id": "Shotgun",
+ "units": "m",
+ "axes": "+X muzzle, +Y left, +Z up",
+ "roblox": "roblox gun space (studs) = (-y, z, -x) / 0.28",
+ "massKg": 3.6,
+ "dims": {
+  "length": 0.98,
+  "barrel": 0.474,
+  "height": 0.2038,
+  "heightNoOptic": 0.1857,
+  "width": 0.0568,
+  "boltStroke": 0.075
+ },
+ "parts": {
+  "Receiver": {
+   "paint": "Aluminium",
+   "mats": [
+    "Aluminium",
+    "Bore",
+    "RaceInner"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 1,
+   "tris": 829
+  },
+  "Barrel": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore",
+    "SteelBare"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 2,
+   "tris": 608
+  },
+  "SightFront": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Glow"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 176
+  },
+  "MagTube": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "fit": 4,
+   "tris": 336
+  },
+  "MagCap": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    0.455,
+    0.0,
+    -0.032
+   ],
+   "tris": 342
+  },
+  "BarrelClamp": {
+   "paint": "Aluminium",
+   "mats": [
+    "Aluminium",
+    "Bore",
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 360
+  },
+  "Forend": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer",
+    "PolymerStipple",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 1004
+  },
+  "Stock": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer",
+    "PolymerStipple",
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 1220
+  },
+  "RecoilPad": {
+   "paint": "Rubber",
+   "mats": [
+    "RubberRibbed"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 156
+  },
+  "TriggerGuard": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 332
+  },
+  "Trigger": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.146,
+    0.0,
+    -0.044
+   ],
+   "fit": 3,
+   "tris": 236
+  },
+  "Safety": {
+   "paint": "Polymer",
+   "mats": [
+    "Polymer"
+   ],
+   "origin": [
+    -0.15,
+    0.0,
+    0.0138
+   ],
+   "tris": 136
+  },
+  "Bolt": {
+   "paint": "Nickel",
+   "mats": [
+    "Nickel",
+    "Bore",
+    "SteelBlued"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 352
+  },
+  "ChargingHandle": {
+   "paint": "Nickel",
+   "mats": [
+    "Nickel"
+   ],
+   "origin": [
+    -0.016,
+    -0.009,
+    0.0
+   ],
+   "parent": "Bolt",
+   "tris": 130
+  },
+  "Lifter": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore"
+   ],
+   "origin": [
+    -0.101,
+    0.0,
+    -0.0395
+   ],
+   "tris": 128
+  },
+  "BoltRelease": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued"
+   ],
+   "origin": [
+    -0.02,
+    -0.0155,
+    -0.027
+   ],
+   "tris": 44
+  },
+  "Optic": {
+   "paint": "Aluminium",
+   "mats": [
+    "Aluminium",
+    "Glow",
+    "SteelBlued",
+    "Bore"
+   ],
+   "origin": [
+    -0.107,
+    0.0,
+    0.0176
+   ],
+   "tris": 716
+  },
+  "OpticLens": {
+   "paint": "Lens",
+   "mats": [
+    "Lens"
+   ],
+   "origin": [
+    -0.092,
+    0.0,
+    0.029
+   ],
+   "parent": "Optic",
+   "tris": 44
+  },
+  "Pins": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Bore"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 192
+  }
+ },
+ "groups": {
+  "Bolt": [
+   "ChargingHandle"
+  ],
+  "Optic": [
+   "OpticLens"
+  ]
+ },
+ "hinges": {
+  "Bolt": {
+   "type": "slide",
+   "pivot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "axis": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.075,
+   "lockBackOnEmpty": true,
+   "note": "ChargingHandle rides with it (reciprocating)"
+  },
+  "BoltRelease": {
+   "type": "slide",
+   "pivot": [
+    -0.02,
+    -0.0155,
+    -0.027
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.003
+  },
+  "Lifter": {
+   "type": "rotate",
+   "pivot": [
+    -0.101,
+    0.0,
+    -0.0395
+   ],
+   "axis": [
+    0.0,
+    -1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 12.0,
+   "note": "shell carrier: rest flush in the loading port, FRONT UP about its rear pin (axis -Y) to lift a shell to the chamber (ARCHITECTURE \u00a75.2 amended)"
+  },
+  "Trigger": {
+   "type": "rotate",
+   "pivot": [
+    -0.146,
+    0.0,
+    -0.044
+   ],
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 12.0
+  },
+  "Safety": {
+   "type": "slide",
+   "pivot": [
+    -0.15,
+    0.0,
+    0.0138
+   ],
+   "axis": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "rest": 0.0,
+   "min": 0.0,
+   "max": 0.005,
+   "note": "tang safety: rest = SAFE (rear), +X 5 mm = FIRE (ARCHITECTURE \u00a75.2 amended: tang slider, as the reference class)"
+  }
+ },
+ "markers": {
+  "Muzzle": {
+   "p": [
+    0.474,
+    0.0,
+    0.0
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "EjectionPort": {
+   "p": [
+    -0.052,
+    -0.0155,
+    0.0005
+   ],
+   "x": [
+    0.16318,
+    -0.92542,
+    0.34202
+   ],
+   "z": [
+    -0.12033,
+    0.32541,
+    0.93788
+   ]
+  },
+  "CasingSpawn": {
+   "p": [
+    -0.04,
+    -0.028,
+    0.003
+   ],
+   "x": [
+    0.9194,
+    -0.34977,
+    0.17988
+   ],
+   "z": [
+    -0.16813,
+    0.06396,
+    0.98369
+   ]
+  },
+  "ShellPort": {
+   "p": [
+    -0.034,
+    0.0,
+    -0.045
+   ],
+   "x": [
+    0.82111,
+    0.0,
+    0.57077
+   ],
+   "z": [
+    0.0,
+    1.0,
+    0.0
+   ]
+  },
+  "LoadingPort": {
+   "p": [
+    -0.056,
+    0.0,
+    -0.044
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  "PortLoad": {
+   "p": [
+    -0.038,
+    -0.022,
+    0.002
+   ],
+   "x": [
+    0.0,
+    0.94038,
+    -0.34014
+   ],
+   "z": [
+    1.0,
+    0.0,
+    0.0
+   ]
+  },
+  "GripR": {
+   "p": [
+    -0.228,
+    0.0,
+    -0.055
+   ],
+   "x": [
+    -0.385,
+    -0.345,
+    0.85601
+   ],
+   "z": [
+    -0.92195,
+    0.10137,
+    -0.37381
+   ]
+  },
+  "GripL": {
+   "p": [
+    0.15,
+    0.0,
+    -0.042
+   ],
+   "x": [
+    0.86155,
+    0.35898,
+    -0.35898
+   ],
+   "z": [
+    -0.50767,
+    0.60921,
+    -0.60921
+   ]
+  },
+  "Shoulder": {
+   "p": [
+    -0.506,
+    0.0,
+    -0.1065
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "SightEye": {
+   "p": [
+    -0.307,
+    0.0,
+    0.02933
+   ],
+   "x": [
+    1.0,
+    0.0,
+    -0.00116
+   ],
+   "z": [
+    0.00116,
+    0.0,
+    1.0
+   ]
+  },
+  "CoM": {
+   "p": [
+    -0.035,
+    0.0,
+    -0.024
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "BackMount": {
+   "p": [
+    -0.06,
+    0.0,
+    -0.02
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "ChargeHandle": {
+   "p": [
+    -0.016,
+    -0.034,
+    0.0
+   ],
+   "x": [
+    -1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    -1.0,
+    0.0
+   ]
+  },
+  "BoltRelease": {
+   "p": [
+    -0.02,
+    -0.0174,
+    -0.027
+   ],
+   "x": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "Safety": {
+   "p": [
+    -0.15,
+    0.0,
+    0.0176
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  },
+  "SlingFront": {
+   "p": [
+    0.4615,
+    0.0,
+    -0.054
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  "SlingRear": {
+   "p": [
+    -0.407,
+    0.0,
+    -0.14714
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    -1.0
+   ]
+  },
+  "MagCap": {
+   "p": [
+    0.4698,
+    0.0,
+    -0.032
+   ],
+   "x": [
+    1.0,
+    0.0,
+    0.0
+   ],
+   "z": [
+    0.0,
+    0.0,
+    1.0
+   ]
+  }
+ },
+ "separate": {
+  "Case": "Shotgun_Case.fbx",
+  "Round": "Shotgun_Round.fbx",
+  "RoundGreen": "Shotgun_RoundGreen.fbx"
+ },
+ "colliders": {
+  "Shell": {
+   "size": [
+    0.065,
+    0.0226,
+    0.0226
+   ],
+   "massKg": 0.032,
+   "axes": "shell local: +X toward the mouth"
+  }
+ },
+ "tris": {
+  "total": 7341,
+  "gunFbx": 7341,
+  "case": 144,
+  "round": 192,
+  "roundGreen": 192
+ },
+ "capacity": {
+  "tube": 7,
+  "chamber": 1
+ },
+ "feed": "tube (shell by shell into ShellPort; port load into the open bolt at PortLoad)"
+}
