@@ -8,6 +8,13 @@
 -- hair (fringe, bun, long...), caps with a brim and a button, beanies with a fold, flat caps,
 -- headphones, glasses with frames and lenses, the bartender's apron (straps, pocket) and towel,
 -- the clerks' lanyard badge, watches, earrings, necklaces (see addAccessories).
+-- Down the alleys east of the ring there are two more kinds of people, dressed in layers
+-- with real clothes' details (see addDealerOutfit / addVagrantOutfit): the DEALER of the
+-- black market (a worn biker jacket open on a tee, or a hoodie with the hood up; a gold
+-- chain, rings, a gold watch, a cigarette, a sling bag, dark jeans, black boots, a duffel at
+-- his feet) and the VAGRANT of the squat (a long dirty coat over a hoodie, a striped scarf,
+-- a ribbed beanie, a beard, fingerless gloves, patched and torn trousers, worn-out boots; the
+-- client adds his blanket, his sign, his backpack, a book and his paper cup).
 -- They never move and can't be hurt:
 --   • the HumanoidRootPart is anchored: nobody can push them, gravity does nothing;
 --   • no name or health bar above them (Humanoid display distance 0);
@@ -19,10 +26,15 @@
 -- Where they stand: the city data has invisible marker parts named "NpcSpot" (Size 1,
 -- Transparency 1). Each marker gives:
 --   CFrame position = the floor point between the feet, LookVector = where they face;
---   attributes NpcRole ("Bartender" | "Clerk" | "Patron"), NpcName ("Duffy"...),
---   NpcPose ("Idle" | "WipeCounter" | "LeanBar" | "SitStool" | "ArmsCrossed" | "Phone"),
---   NpcSeed (a number: picks the colours), SeatHeight (sitting poses: seat top above the floor),
---   SeatBack (optional, sitting poses: how far behind the spot the seat's centre is; 1).
+--   attributes NpcRole ("Bartender" | "Clerk" | "Patron" | "Dealer" | "Vagrant"),
+--   NpcName ("Duffy"...), NpcPose ("Idle" | "WipeCounter" | "LeanBar" | "SitStool" |
+--   "ArmsCrossed" | "Phone" | "SitGround"; anything else: "Idle"),
+--   NpcSeed (a number: picks the colours), SeatHeight (sitting poses: seat top above the floor;
+--   SitGround: 0 = the floor itself), SeatBack (optional, sitting poses: how far behind the
+--   spot the seat's centre is; SitStool 1, SitGround 0).
+-- SitGround (sitting on the floor, back against a wall, legs stretched out): the spot is the
+-- floor point under the hips, facing AWAY from the wall, about 0.8 studs out from the wall's
+-- face (the shoulders and the back of the head then rest just off it).
 --
 -- The server only places each body STANDING on its spot (and copies the marker's
 -- attributes onto the model, plus Npc = true). The pose (sitting, leaning, arms crossed...),
@@ -65,6 +77,44 @@ local TROUSERS = {
 	Color3.fromRGB(86, 74, 58), -- khaki
 	Color3.fromRGB(58, 60, 64), -- charcoal
 }
+-- The alley people (see makeLook): worn, dark, dirty colours.
+local DEALER_LEATHER = {
+	Color3.fromRGB(34, 28, 25),
+	Color3.fromRGB(46, 34, 28),
+	Color3.fromRGB(26, 25, 26),
+}
+local DEALER_HOODIES = {
+	Color3.fromRGB(30, 30, 33),
+	Color3.fromRGB(40, 42, 38),
+	Color3.fromRGB(42, 38, 46),
+}
+local DEALER_TROUSERS = {
+	Color3.fromRGB(30, 34, 46), -- dark indigo denim
+	Color3.fromRGB(28, 28, 31), -- black denim
+	Color3.fromRGB(44, 48, 58), -- washed-out denim
+}
+local VAGRANT_COATS = {
+	Color3.fromRGB(74, 64, 48), -- brown
+	Color3.fromRGB(62, 66, 50), -- olive drab
+	Color3.fromRGB(70, 70, 68), -- grey
+	Color3.fromRGB(56, 46, 40), -- dark brown
+}
+local VAGRANT_HOODIES = {
+	Color3.fromRGB(92, 38, 34), -- faded red
+	Color3.fromRGB(60, 64, 72), -- faded navy
+	Color3.fromRGB(96, 92, 84), -- dirty grey
+}
+local VAGRANT_TROUSERS = {
+	Color3.fromRGB(52, 50, 46),
+	Color3.fromRGB(60, 54, 42),
+	Color3.fromRGB(44, 48, 56),
+}
+local VAGRANT_KNITS = {
+	Color3.fromRGB(40, 40, 42),
+	Color3.fromRGB(78, 42, 36),
+	Color3.fromRGB(62, 66, 52),
+	Color3.fromRGB(96, 82, 60),
+}
 local HAIRS = {
 	Color3.fromRGB(28, 22, 18),
 	Color3.fromRGB(70, 46, 30),
@@ -75,7 +125,9 @@ local HAIRS = {
 -- Hair cuts (block hair, built in layers: a top, the back, the sides, maybe a fringe).
 type HairStyle = "Short" | "Fringe" | "Side" | "Bun" | "Long" | "Buzz"
 -- What some wear on the head (instead of showing all their hair).
-type Headwear = "Cap" | "Beanie" | "FlatCap" | "Headphones"
+type Headwear = "Cap" | "Beanie" | "FlatCap" | "Headphones" | "Hood"
+-- An outer layer worn over the shirt (alley people): its details are added on the torso.
+type Jacket = "Leather" | "Hoodie" | "Coat"
 
 type Look = {
 	skin: Color3,
@@ -93,6 +145,16 @@ type Look = {
 	earrings: boolean,
 	watch: boolean,
 	necklace: boolean,
+	-- (alley people only; nil / false for everyone else)
+	jacket: Jacket?,
+	undershirt: Color3, -- what shows under an open jacket or coat
+	cloth: Enum.Material?, -- the material of the torso and sleeves (leather, worn fabric)
+	beard: Color3?,
+	gloves: Color3?,
+	scar: boolean,
+	scarf: Color3?,
+	grime: boolean, -- stains on the clothes, dirt on the skin
+	detail: number, -- (alley people) a last roll, 0..1, for the small things (rings, patches...)
 }
 
 local HAIR_STYLES: { HairStyle } = { "Short", "Fringe", "Side", "Bun", "Long", "Buzz" }
@@ -128,6 +190,15 @@ local function makeLook(role: string, seed: number): Look
 		earrings = random:NextNumber() < 0.2,
 		watch = random:NextNumber() < 0.45,
 		necklace = random:NextNumber() < 0.2,
+		jacket = nil,
+		undershirt = INK,
+		cloth = nil,
+		beard = nil,
+		gloves = nil,
+		scar = false,
+		scarf = nil,
+		grime = false,
+		detail = 0,
 	}
 	local glassesRoll = random:NextNumber()
 	if glassesRoll < 0.2 then
@@ -157,6 +228,62 @@ local function makeLook(role: string, seed: number): Look
 			look.headwear = "Cap"
 			look.headwearColor = Color3.fromRGB(28, 28, 30)
 		end
+	elseif role == "Dealer" then
+		-- A fence of stolen goods: dark, worn, a bit of gold. A worn biker jacket open on a
+		-- dark tee, or a hoodie (the hood up, most of the time). Dark jeans, black boots, a
+		-- beanie or a black cap, sometimes a scar across the cheek, stubble. Bare hands (rings,
+		-- a gold watch), a gold chain, a cigarette, a sling bag, a duffel at his feet
+		-- (see addDealerOutfit).
+		-- (These rolls come after the common ones: the other roles keep their looks.)
+		if random:NextNumber() < 0.5 then
+			look.jacket = "Leather"
+			look.shirt = pick(DEALER_LEATHER, random)
+			look.cloth = Enum.Material.Leather
+			look.headwear = if random:NextNumber() < 0.6 then "Beanie" else "Cap"
+		else
+			look.jacket = "Hoodie"
+			look.shirt = pick(DEALER_HOODIES, random)
+			look.cloth = Enum.Material.Fabric
+			look.headwear = if random:NextNumber() < 0.7 then "Hood" else "Beanie"
+		end
+		look.sleeves = look.shirt
+		look.undershirt = if random:NextNumber() < 0.6 then INK else Color3.fromRGB(64, 64, 66)
+		look.trousers = pick(DEALER_TROUSERS, random)
+		look.headwearColor = if look.headwear == "Hood"
+			then look.shirt
+			else pick({ INK, Color3.fromRGB(38, 38, 40), Color3.fromRGB(46, 42, 38) }, random)
+		look.gloves = nil -- (bare hands: the rings and the watch show)
+		look.watch = false -- (his own gold one: see addDealerOutfit)
+		look.necklace = false -- (his own chain)
+		look.earrings = false
+		look.glasses = if random:NextNumber() < 0.15 then "Dark" else nil
+		look.scar = random:NextNumber() < 0.45
+		look.beard = if random:NextNumber() < 0.35 then darker(pick(HAIRS, random), 0.1) else nil
+		look.hair = look.hair or pick(HAIRS, random)
+		look.detail = random:NextNumber()
+	elseif role == "Vagrant" then
+		-- A man who sleeps out here: layers of dirty clothes (a long coat over a hoodie, a
+		-- scarf), a beanie, knitted gloves, a beard (often grey), stains, grime on the skin.
+		look.jacket = "Coat"
+		look.shirt = pick(VAGRANT_COATS, random)
+		look.sleeves = look.shirt
+		look.cloth = Enum.Material.Fabric
+		look.undershirt = pick(VAGRANT_HOODIES, random)
+		look.trousers = pick(VAGRANT_TROUSERS, random)
+		look.headwear = "Beanie"
+		look.headwearColor = pick(VAGRANT_KNITS, random)
+		look.scarf = pick(VAGRANT_KNITS, random)
+		look.gloves = darker(pick(VAGRANT_KNITS, random), 0.25)
+		look.hair = if random:NextNumber() < 0.5 then HAIRS[4] else pick(HAIRS, random)
+		look.hairStyle = "Long"
+		look.beard = look.hair
+		look.skin = look.skin:Lerp(Color3.fromRGB(70, 52, 40), 0.15) -- weathered, dirty
+		look.grime = true
+		look.glasses = nil
+		look.earrings = false
+		look.watch = false
+		look.necklace = false
+		look.detail = random:NextNumber()
 	else
 		local roll = random:NextNumber()
 		if roll < 0.2 then
@@ -351,14 +478,18 @@ local function addHair(model: Model, head: BasePart, look: Look, covered: boolea
 		shade,
 		fabric
 	)
-	-- the sides (sideburns, or long strands)
+	-- the sides (sideburns, or long strands). Under a hat they stop below its edge (they
+	-- reach 0.69 out: a hair wider than a beanie's body or a cap's crown, they poked through
+	-- their sides).
+	local sideTop = if covered then 0.34 else (if long then 0.58 else 0.57)
+	local sideBottom = if long then -0.32 else 0.15
 	for _, side in { -1, 1 } do
 		addBlock(
 			model,
 			head,
 			if side < 0 then "HairLeft" else "HairRight",
-			Vector3.new(0.12, if long then 0.9 else 0.42, if long then 1.0 else 0.82),
-			CFrame.new(side * 0.63, if long then 0.13 else 0.36, if long then 0.1 else 0.18),
+			Vector3.new(0.12, sideTop - sideBottom, if long then 1.0 else 0.82),
+			CFrame.new(side * 0.63, (sideTop + sideBottom) / 2, if long then 0.1 else 0.18),
 			shade,
 			fabric
 		)
@@ -489,6 +620,50 @@ local function addHeadwear(model: Model, head: BasePart, look: Look, shopColor: 
 				* CFrame.Angles(math.rad(-5), 0, 0)
 				* CFrame.new(0, 0.12, 0),
 			darker(color, 0.25)
+		)
+	elseif kind == "Hood" then
+		-- a hoodie's hood, up: a shell around the head, open at the face, its top edge
+		-- jutting over the forehead (the face stays in its shadow), falling onto the shoulders
+		local shade = darker(color, 0.12)
+		addBlock(
+			model,
+			head,
+			"HoodTop",
+			Vector3.new(1.46, 0.2, 1.4),
+			CFrame.new(0, 0.72, 0.06),
+			color,
+			fabric
+		)
+		addBlock(
+			model,
+			head,
+			"HoodBack",
+			-- (its top 0.02 under HoodTop's, its sides 0.1 inside the side panels: no flicker)
+			Vector3.new(1.46, 1.28, 0.22),
+			CFrame.new(0, 0.16, 0.66),
+			shade,
+			fabric
+		)
+		for _, side in { -1, 1 } do
+			addBlock(
+				model,
+				head,
+				if side < 0 then "HoodLeft" else "HoodRight",
+				Vector3.new(0.2, 1.24, 1.2),
+				CFrame.new(side * 0.73, 0.12, 0.02),
+				color,
+				fabric
+			)
+		end
+		-- the dark inside of the hood, seen under its edge on the forehead
+		addBlock(
+			model,
+			head,
+			"HoodShade",
+			Vector3.new(1.2, 0.12, 0.1),
+			CFrame.new(0, 0.56, -0.6),
+			darker(color, 0.6),
+			fabric
 		)
 	elseif kind == "Headphones" then
 		-- big headphones: the band over the head, two padded cups on the ears.
@@ -645,6 +820,1633 @@ local function addGlasses(model: Model, head: BasePart, kind: "Clear" | "Dark")
 	)
 end
 
+------------------------------------------------------------------------------
+-- The alley people's clothes (the dealer of the black market, the vagrant of the squat).
+--
+-- Built like real clothes, in layers, on the R6 blocks (torso 2 × 2 × 1, arms and legs
+-- 1 × 2 × 1, the head a rounded 1.25 block): the body part is the outer garment's colour,
+-- then come what shows under it (the tee in an open jacket), the garment's own parts
+-- (lapels, collar, zips, cuffs, hems, pockets, seams), what is worn over it (a strap, a
+-- scarf), and the wear (rubbed elbows and knees, stains, patches, frayed edges).
+-- Same rules as the rest of this file: a flat thing lies with its back ON the cloth, a part
+-- over another is 0.005-0.01 prouder or wider (no two visible faces in one plane: no
+-- flicker). Bands around a leg are flush with its INNER side (the two legs touch: two bands
+-- 0.02 wider on both sides would overlap there) and 0.02 proud on the other three.
+------------------------------------------------------------------------------
+
+local FABRIC = Enum.Material.Fabric
+local LEATHER = Enum.Material.Leather
+local METAL = Enum.Material.Metal
+
+local function bodyPart(model: Model, name: string): BasePart?
+	local part = model:FindFirstChild(name)
+	return if part and part:IsA("BasePart") then part else nil
+end
+
+-- A band around a leg (see above): `height` tall at `y`, 0.02 proud (`grow` more if given).
+local function legBand(
+	model: Model,
+	leg: BasePart,
+	side: number,
+	name: string,
+	y: number,
+	height: number,
+	color: Color3,
+	material: Enum.Material?,
+	grow: number?
+): BasePart
+	local extra = grow or 0.02
+	return addBlock(
+		model,
+		leg,
+		name,
+		Vector3.new(1 + extra, height, 1 + extra * 2),
+		CFrame.new(side * extra / 2, y, 0),
+		color,
+		material
+	)
+end
+
+-- A small anchored prop standing on the floor next to an NPC (not welded: it never moves).
+local function floorProp(
+	model: Model,
+	name: string,
+	size: Vector3,
+	cframe: CFrame,
+	color: Color3,
+	material: Enum.Material?,
+	shape: Enum.PartType?
+): BasePart
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = shape or Enum.PartType.Block
+	part.Size = size
+	part.Color = color
+	part.Material = material or Enum.Material.SmoothPlastic
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = size.X > 0.3 and size.Y > 0.3
+	part.CFrame = cframe
+	part.Parent = model
+	return part
+end
+
+-- Work boots on both legs (the leg is 1 × 2 × 1, its bottom on the floor at -1): the shaft
+-- around the ankle, a toe cap sticking out in front (R6 legs have no feet), the welt, a
+-- thick sole with a heel and treads (seen from the front when he sits, legs stretched out),
+-- the tongue, the laces through their eyelets, a bow, the pull tab at the back.
+-- `worn`: scuffed toes, the right sole coming off at the toe, a strip of tape round the left
+-- boot, odd laces.
+local function addBoots(model: Model, upper: Color3, sole: Color3, laces: Color3, worn: boolean)
+	for _, side in { -1, 1 } do
+		local leg = bodyPart(model, if side < 0 then "Left Leg" else "Right Leg")
+		if leg == nil then
+			continue
+		end
+		local s = if side < 0 then "L" else "R"
+		local x = side * 0.02 -- (flush inside, 0.04 proud outside)
+		legBand(model, leg, side, "BootShaft" .. s, -0.6, 0.6, upper, LEATHER)
+		addBlock(
+			model,
+			leg,
+			"BootToe" .. s,
+			Vector3.new(0.94, 0.3, 0.34),
+			CFrame.new(x, -0.74, -0.64),
+			upper,
+			LEATHER
+		)
+		addBlock(
+			model,
+			leg,
+			"BootToeTip" .. s,
+			Vector3.new(0.8, 0.22, 0.1),
+			CFrame.new(x, -0.78, -0.85),
+			darker(upper, 0.08),
+			LEATHER
+		)
+		addBlock(
+			model,
+			leg,
+			"BootWelt" .. s,
+			Vector3.new(1.045, 0.035, 1.505),
+			CFrame.new(x, -0.875, -0.2),
+			darker(upper, 0.35),
+			LEATHER
+		)
+		local soleRight = worn and side > 0
+		addBlock(
+			model,
+			leg,
+			"BootSole" .. s,
+			-- (the right one of a worn pair: only its back part, the front comes off below)
+			if soleRight then Vector3.new(1.04, 0.12, 0.98) else Vector3.new(1.04, 0.12, 1.5),
+			CFrame.new(x, -0.94, if soleRight then 0.06 else -0.2),
+			sole,
+			Enum.Material.Rubber
+		)
+		if soleRight then
+			-- the sole's front, come unstuck: hinged at the ball of the foot, gaping open
+			-- (the dark gap shows between it and the upper)
+			addBlock(
+				model,
+				leg,
+				"SoleFlap",
+				Vector3.new(1.04, 0.1, 0.52),
+				CFrame.new(x, -0.94, -0.43)
+					* CFrame.Angles(math.rad(-10), 0, 0)
+					* CFrame.new(0, -0.01, -0.26),
+				sole,
+				Enum.Material.Rubber
+			)
+			addBlock(
+				model,
+				leg,
+				"SoleGap",
+				Vector3.new(0.96, 0.06, 0.42),
+				CFrame.new(x, -0.92, -0.68),
+				Color3.fromRGB(12, 10, 9)
+			)
+		end
+		addBlock(
+			model,
+			leg,
+			"BootHeel" .. s,
+			Vector3.new(1.0, 0.1, 0.42),
+			CFrame.new(x, -0.99, 0.3), -- (0.04 under the sole: a heel seen from the front)
+			darker(sole, 0.2),
+			Enum.Material.Rubber
+		)
+		for index, z in { -0.78, -0.56, -0.34 } do
+			if soleRight and index < 3 then
+				continue -- (on the flap: no treads there)
+			end
+			addBlock(
+				model,
+				leg,
+				"Tread",
+				Vector3.new(0.94, 0.03, 0.07),
+				CFrame.new(x, -1.01, z),
+				darker(sole, 0.3),
+				Enum.Material.Rubber
+			)
+		end
+		-- the tongue over the instep, the laces (four bars) and their eyelets, a bow
+		addBlock(
+			model,
+			leg,
+			"BootTongue" .. s,
+			Vector3.new(0.34, 0.32, 0.04),
+			CFrame.new(side * 0.01, -0.48, -0.53),
+			darker(upper, 0.12),
+			LEATHER
+		)
+		local laceColor = if worn and side < 0 then Color3.fromRGB(150, 138, 112) else laces
+		for row = 0, 3 do
+			local y = -0.37 - row * 0.06
+			addBlock(
+				model,
+				leg,
+				"Lace",
+				Vector3.new(0.42, 0.03, 0.03),
+				CFrame.new(side * 0.01, y, -0.555)
+					* CFrame.Angles(0, 0, math.rad(if row % 2 == 0 then 6 else -6)),
+				laceColor,
+				FABRIC
+			)
+			for _, edge in { -1, 1 } do
+				addBlock(
+					model,
+					leg,
+					"Eyelet",
+					Vector3.new(0.05, 0.05, 0.02),
+					CFrame.new(side * 0.01 + edge * 0.22, y, -0.53),
+					Color3.fromRGB(120, 112, 96),
+					METAL
+				)
+			end
+		end
+		addBlock(
+			model,
+			leg,
+			"LaceKnot",
+			Vector3.new(0.1, 0.07, 0.04),
+			CFrame.new(side * 0.01, -0.35, -0.565),
+			laceColor,
+			FABRIC
+		)
+		for _, edge in { -1, 1 } do
+			addBlock(
+				model,
+				leg,
+				"LaceLoop",
+				Vector3.new(0.05, 0.17, 0.025),
+				CFrame.new(side * 0.01 + edge * 0.07, -0.43, -0.575)
+					* CFrame.Angles(0, 0, math.rad(edge * 28)),
+				laceColor,
+				FABRIC
+			)
+		end
+		addBlock(
+			model,
+			leg,
+			"PullTab" .. s,
+			Vector3.new(0.2, 0.16, 0.03),
+			CFrame.new(side * 0.01, -0.26, 0.535),
+			darker(upper, 0.25),
+			LEATHER
+		)
+		if worn then
+			-- scuffed toe leather (lighter, rubbed), and grey tape round the left boot's ankle
+			addBlock(
+				model,
+				leg,
+				"ToeScuff",
+				Vector3.new(0.5, 0.01, 0.2),
+				CFrame.new(x - side * 0.1, -0.587, -0.68),
+				upper:Lerp(Color3.fromRGB(150, 140, 120), 0.35),
+				LEATHER
+			)
+			if side < 0 then
+				legBand(
+					model,
+					leg,
+					side,
+					"Tape",
+					-0.68,
+					0.12,
+					Color3.fromRGB(128, 128, 124),
+					FABRIC,
+					0.03
+				)
+			end
+		end
+	end
+end
+
+-- Bare hands: the bottom 0.42 of the arm in skin (an R6 arm is all the sleeve's colour).
+local function addHand(model: Model, arm: BasePart, skin: Color3): BasePart
+	return addBlock(model, arm, "Hand", Vector3.new(1.02, 0.42, 1.02), CFrame.new(0, -0.8, 0), skin)
+end
+
+-- The curled fingers seen on the end of a fist (the bottom of the arm, 0.01 under it).
+local function addKnuckles(model: Model, arm: BasePart, skin: Color3)
+	for _, x in { -0.2, 0.02, 0.22 } do
+		addBlock(
+			model,
+			arm,
+			"Knuckle",
+			Vector3.new(0.015, 0.01, 0.8),
+			CFrame.new(x, -1.012, 0.05),
+			darker(skin, 0.45)
+		)
+	end
+end
+
+-- A chunky gold curb chain lying on the chest (two strands from the sides of the neck down
+-- to a cross), on a surface at depth `surface` (torso space: -0.5 the torso's own front).
+local function addChain(model: Model, torso: BasePart, surface: number, top: number, bottom: number)
+	for _, side in { -1, 1 } do
+		local a = Vector3.new(side * 0.21, top, 0)
+		local b = Vector3.new(side * 0.025, bottom, 0)
+		local delta = b - a
+		local count = math.max(2, math.floor(delta.Magnitude / 0.07))
+		local angle = math.atan2(-delta.X, delta.Y)
+		for index = 0, count do
+			local point = a + delta * (index / count)
+			-- links alternate wide-flat and narrow-proud: it reads as a twisted curb chain
+			local wide = index % 2 == 0
+			local depth = if wide then 0.025 else 0.032
+			addBlock(
+				model,
+				torso,
+				"ChainLink",
+				Vector3.new(if wide then 0.075 else 0.048, 0.085, depth),
+				CFrame.new(point.X, point.Y, surface - depth / 2) * CFrame.Angles(0, 0, angle),
+				GOLD,
+				METAL
+			)
+		end
+	end
+	-- the cross (the crossbar 0.005 prouder than the upright), on a ring
+	addBlock(
+		model,
+		torso,
+		"CrossRing",
+		Vector3.new(0.05, 0.05, 0.03),
+		CFrame.new(0, bottom - 0.02, surface - 0.015),
+		GOLD,
+		METAL
+	)
+	addBlock(
+		model,
+		torso,
+		"Cross",
+		Vector3.new(0.06, 0.24, 0.03),
+		CFrame.new(0, bottom - 0.16, surface - 0.015),
+		GOLD,
+		METAL
+	)
+	addBlock(
+		model,
+		torso,
+		"CrossBar",
+		Vector3.new(0.16, 0.05, 0.035),
+		CFrame.new(0, bottom - 0.11, surface - 0.0175),
+		GOLD,
+		METAL
+	)
+end
+
+-- A lit cigarette at the corner of the mouth, pointing down and out: the filter in the lips,
+-- the paper, the glowing end (Neon, a faint orange light on the face), the ash, a thin wisp
+-- of smoke.
+local function addCigarette(model: Model, head: BasePart)
+	local lip = Vector3.new(0.16, -0.3, -0.56) -- (inside the round head's face: the lips)
+	local tip = Vector3.new(0.38, -0.43, -0.96)
+	local direction = (tip - lip).Unit
+	local length = (tip - lip).Magnitude
+	local function along(from: number, to: number): CFrame
+		local middle = lip + direction * ((from + to) / 2)
+		return CFrame.lookAt(middle, middle + direction)
+	end
+	addBlock(
+		model,
+		head,
+		"CigFilter",
+		Vector3.new(0.05, 0.05, 0.11),
+		along(0, 0.11),
+		Color3.fromRGB(196, 142, 84)
+	)
+	addBlock(
+		model,
+		head,
+		"CigPaper",
+		Vector3.new(0.045, 0.045, length - 0.16),
+		along(0.11, length - 0.05),
+		Color3.fromRGB(232, 228, 216)
+	)
+	local ember = addBlock(
+		model,
+		head,
+		"CigEmber",
+		Vector3.new(0.05, 0.05, 0.025),
+		along(length - 0.05, length - 0.025),
+		Color3.fromRGB(255, 108, 40),
+		Enum.Material.Neon
+	)
+	local ash = addBlock(
+		model,
+		head,
+		"CigAsh",
+		Vector3.new(0.043, 0.043, 0.03),
+		along(length - 0.025, length + 0.005),
+		Color3.fromRGB(120, 116, 110)
+	)
+	local glow = Instance.new("PointLight")
+	glow.Color = Color3.fromRGB(255, 120, 50)
+	glow.Range = 2.2
+	glow.Brightness = 0.7
+	glow.Shadows = false
+	glow.Parent = ember
+	local smoke = Instance.new("ParticleEmitter")
+	smoke.Name = "CigSmoke"
+	smoke.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	smoke.Color = ColorSequence.new(Color3.fromRGB(170, 168, 162))
+	smoke.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.15, 0.82),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	smoke.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.06),
+		NumberSequenceKeypoint.new(1, 0.7),
+	})
+	smoke.Lifetime = NumberRange.new(1.8, 2.8)
+	smoke.Rate = 4
+	smoke.Speed = NumberRange.new(0.2, 0.45)
+	smoke.SpreadAngle = Vector2.new(18, 18)
+	smoke.Acceleration = Vector3.new(0, 0.5, 0)
+	smoke.Rotation = NumberRange.new(0, 360)
+	smoke.RotSpeed = NumberRange.new(-25, 25)
+	smoke.EmissionDirection = Enum.NormalId.Top
+	smoke.LightInfluence = 1
+	smoke.Parent = ash
+end
+
+-- The dealer (role "Dealer", look from makeLook).
+local function addDealerOutfit(model: Model, look: Look)
+	local torso = bodyPart(model, "Torso")
+	local head = bodyPart(model, "Head")
+	if torso == nil or head == nil then
+		return
+	end
+	local base = look.shirt
+	local cloth = look.cloth or FABRIC
+	local seamColor = darker(base, 0.35)
+	-- rubbed-in wear: leather and black cotton go grey-brown where they rub
+	local worn = base:Lerp(Color3.fromRGB(112, 104, 94), 0.2)
+	local steel = Color3.fromRGB(150, 150, 152)
+	local leather = look.jacket == "Leather"
+	local hoodUp = look.headwear == "Hood"
+
+	if leather then
+		-- A worn biker jacket, open: the tee in the opening (its neckline), the jacket's
+		-- front edges with their zips (one pull hanging at the bottom), wide lapels with a
+		-- snap at each tip, a collar round the back and sides of the neck, epaulettes with a
+		-- stud, a chest zip pocket, two slanted pockets, the waistband, a yoke seam behind.
+		local half = 0.25
+		addBlock(
+			model,
+			torso,
+			"Undershirt",
+			Vector3.new(half * 2, 1.86, 0.02),
+			CFrame.new(0, -0.06, -0.51),
+			look.undershirt,
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"TeeNeck",
+			Vector3.new(half * 2 - 0.02, 0.05, 0.012),
+			CFrame.new(0, 0.83, -0.524),
+			darker(look.undershirt, -0.15),
+			FABRIC
+		)
+		for _, side in { -1, 1 } do
+			local s = if side < 0 then "L" else "R"
+			addBlock(
+				model,
+				torso,
+				"JacketEdge" .. s,
+				Vector3.new(0.07, 1.98, 0.04),
+				CFrame.new(side * (half + 0.025), 0, -0.52),
+				darker(base, 0.18),
+				cloth
+			)
+			addBlock(
+				model,
+				torso,
+				"Zip" .. s,
+				Vector3.new(0.03, 1.84, 0.045),
+				CFrame.new(side * half, -0.06, -0.5225),
+				steel,
+				METAL
+			)
+			local lapel = CFrame.new(side * 0.47, 0.6, -0.525)
+				* CFrame.Angles(0, 0, math.rad(-side * 16))
+			addBlock(
+				model,
+				torso,
+				"Lapel" .. s,
+				Vector3.new(0.36, 0.62, 0.05),
+				lapel,
+				darker(base, 0.06),
+				cloth
+			)
+			addBlock(
+				model,
+				torso,
+				"LapelSnap" .. s,
+				Vector3.new(0.06, 0.06, 0.02),
+				lapel * CFrame.new(-side * 0.09, -0.24, -0.03),
+				steel,
+				METAL
+			)
+			addBlock(
+				model,
+				torso,
+				"CollarSide" .. s,
+				Vector3.new(0.16, 0.26, 1.0),
+				CFrame.new(side * 0.64, 0.99, 0),
+				darker(base, 0.1),
+				cloth
+			)
+			addBlock(
+				model,
+				torso,
+				"Epaulette" .. s,
+				Vector3.new(0.42, 0.04, 0.2),
+				CFrame.new(side * 0.76, 1.02, 0),
+				darker(base, 0.1),
+				cloth
+			)
+			addBlock(
+				model,
+				torso,
+				"EpauletteStud" .. s,
+				Vector3.new(0.07, 0.03, 0.07),
+				CFrame.new(side * 0.6, 1.045, 0),
+				steel,
+				METAL
+			)
+			-- slanted hand-warmer pockets: a welt and its zip
+			addStrip(
+				model,
+				torso,
+				"Pocket" .. s,
+				Vector3.new(side * 0.5, -0.74, -0.515),
+				Vector3.new(side * 0.76, -0.34, -0.515),
+				0.06,
+				0.03,
+				seamColor,
+				cloth
+			)
+		end
+		addBlock(
+			model,
+			torso,
+			"ZipPull",
+			Vector3.new(0.06, 0.13, 0.025),
+			CFrame.new(-half, -0.86, -0.5575),
+			steel,
+			METAL
+		)
+		addBlock(
+			model,
+			torso,
+			"CollarBack",
+			Vector3.new(1.44, 0.26, 0.16),
+			CFrame.new(0, 0.99, 0.46),
+			darker(base, 0.1),
+			cloth
+		)
+		addBlock(
+			model,
+			torso,
+			"ChestZip",
+			Vector3.new(0.36, 0.03, 0.012),
+			CFrame.new(-0.66, 0.06, -0.506),
+			steel,
+			METAL
+		)
+		addBlock(
+			model,
+			torso,
+			"ChestZipPull",
+			Vector3.new(0.04, 0.1, 0.02),
+			CFrame.new(-0.49, 0.02, -0.51),
+			steel,
+			METAL
+		)
+		addBlock(
+			model,
+			torso,
+			"JacketHem",
+			Vector3.new(2.02, 0.16, 1.02),
+			CFrame.new(0, -0.92, 0),
+			darker(base, 0.15),
+			cloth
+		)
+		addBlock(
+			model,
+			torso,
+			"YokeSeam",
+			Vector3.new(2.0, 0.03, 0.012),
+			CFrame.new(0, 0.45, 0.506),
+			seamColor,
+			cloth
+		)
+		-- rubbed shoulders (the leather goes matt and grey on top)
+		for _, side in { -1, 1 } do
+			addBlock(
+				model,
+				torso,
+				"ShoulderWear",
+				Vector3.new(0.3, 0.012, 0.6),
+				CFrame.new(side * 0.42, 1.006, 0.06),
+				worn,
+				cloth
+			)
+		end
+		-- the belt in the opening (black leather, a steel buckle)
+		addBlock(
+			model,
+			torso,
+			"Belt",
+			Vector3.new(half * 2, 0.12, 0.02),
+			CFrame.new(0, -0.82, -0.525),
+			INK,
+			LEATHER
+		)
+		addBlock(
+			model,
+			torso,
+			"Buckle",
+			Vector3.new(0.14, 0.12, 0.025),
+			CFrame.new(0.02, -0.82, -0.5475),
+			steel,
+			METAL
+		)
+		addChain(model, torso, -0.52, 0.86, 0.66)
+	else
+		-- A heavy black hoodie: the kangaroo pocket (its slanted openings, the seam on top), the
+		-- ribbed hem, the drawstrings with metal tips, a faded print on the chest.
+		addBlock(
+			model,
+			torso,
+			"HoodiePocket",
+			Vector3.new(1.2, 0.5, 0.04),
+			CFrame.new(0, -0.6, -0.52),
+			darker(base, 0.06),
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"PocketSeam",
+			Vector3.new(0.86, 0.025, 0.01),
+			CFrame.new(0, -0.37, -0.545),
+			seamColor,
+			FABRIC
+		)
+		for _, side in { -1, 1 } do
+			addStrip(
+				model,
+				torso,
+				"PocketOpening",
+				Vector3.new(side * 0.44, -0.37, -0.545),
+				Vector3.new(side * 0.58, -0.82, -0.545),
+				0.05,
+				0.02,
+				darker(base, 0.45),
+				FABRIC
+			)
+		end
+		addBlock(
+			model,
+			torso,
+			"HoodieHem",
+			Vector3.new(2.02, 0.16, 1.02),
+			CFrame.new(0, -0.93, 0),
+			darker(base, 0.15),
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"Print",
+			Vector3.new(0.56, 0.2, 0.008),
+			CFrame.new(0, 0.04, -0.504),
+			base:Lerp(Color3.fromRGB(150, 146, 136), 0.35),
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"PrintLine",
+			Vector3.new(0.4, 0.04, 0.008),
+			CFrame.new(0, -0.12, -0.504),
+			base:Lerp(Color3.fromRGB(150, 146, 136), 0.25),
+			FABRIC
+		)
+		addChain(model, torso, -0.5, 0.98, 0.66)
+		for _, side in { -1, 1 } do
+			addStrip(
+				model,
+				torso,
+				if side < 0 then "DrawstringL" else "DrawstringR",
+				Vector3.new(side * 0.16, 0.98, -0.53),
+				Vector3.new(side * 0.2, 0.42, -0.53),
+				0.05,
+				0.03,
+				Color3.fromRGB(150, 146, 138),
+				FABRIC
+			)
+			addBlock(
+				model,
+				torso,
+				"Aglet",
+				Vector3.new(0.055, 0.09, 0.035),
+				CFrame.new(side * 0.2, 0.38, -0.5325),
+				steel,
+				METAL
+			)
+		end
+		if not hoodUp then
+			-- the hood, down, lying on the upper back and over the top of the shoulders
+			addBlock(
+				model,
+				torso,
+				"HoodDown",
+				Vector3.new(1.24, 0.5, 0.2),
+				CFrame.new(0, 0.74, 0.6),
+				darker(base, 0.1),
+				FABRIC
+			)
+			addBlock(
+				model,
+				torso,
+				"HoodDownTop",
+				Vector3.new(1.24, 0.14, 0.5),
+				CFrame.new(0, 1.06, 0.46),
+				darker(base, 0.1),
+				FABRIC
+			)
+		end
+	end
+
+	-- The cross-body sling bag: its strap from the right shoulder, over everything on the
+	-- chest, down to the bag on the left hip; it goes over the shoulder and down the back.
+	local bagColor = if look.detail < 0.5
+		then Color3.fromRGB(30, 32, 30)
+		else Color3.fromRGB(52, 50, 44)
+	local strapColor = darker(bagColor, 0.2)
+	addStrip(
+		model,
+		torso,
+		"SlingStrap",
+		Vector3.new(0.62, 1.0, -0.54),
+		Vector3.new(-0.62, -0.4, -0.54),
+		0.13,
+		0.08,
+		strapColor,
+		FABRIC
+	)
+	addStrip(
+		model,
+		torso,
+		"SlingStrapBack",
+		Vector3.new(0.62, 1.0, 0.54),
+		Vector3.new(-0.7, -0.38, 0.54),
+		0.13,
+		0.08,
+		strapColor,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"SlingStrapTop",
+		Vector3.new(0.14, 0.06, 1.16),
+		CFrame.new(0.62, 1.02, 0),
+		strapColor,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"SlingBuckle",
+		Vector3.new(0.17, 0.12, 0.03),
+		CFrame.new(0.17, 0.5, -0.59) * CFrame.Angles(0, 0, math.atan2(1.24, -1.4)),
+		INK,
+		Enum.Material.Plastic
+	)
+	addBlock(
+		model,
+		torso,
+		"SlingBag",
+		Vector3.new(0.8, 0.56, 0.26),
+		CFrame.new(-0.56, -0.66, -0.63),
+		bagColor,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"SlingFlap",
+		Vector3.new(0.82, 0.32, 0.03),
+		CFrame.new(-0.56, -0.53, -0.7725),
+		darker(bagColor, 0.12),
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"SlingClip",
+		Vector3.new(0.14, 0.1, 0.03),
+		CFrame.new(-0.56, -0.66, -0.7975),
+		INK,
+		Enum.Material.Plastic
+	)
+	addBlock(
+		model,
+		torso,
+		"SlingZip",
+		Vector3.new(0.7, 0.025, 0.02),
+		CFrame.new(-0.56, -0.9, -0.77),
+		steel,
+		METAL
+	)
+
+	-- Arms: a seam round the top of the sleeve, the cuff (leather: a zip on its outer side;
+	-- hoodie: a ribbed band), a rubbed elbow, then the bare hand: gold rings, a gold watch on
+	-- the left wrist.
+	for _, side in { -1, 1 } do
+		local arm = bodyPart(model, if side < 0 then "Left Arm" else "Right Arm")
+		if arm == nil then
+			continue
+		end
+		addBlock(
+			model,
+			arm,
+			"ShoulderSeam",
+			Vector3.new(1.02, 0.035, 1.02),
+			CFrame.new(0, 0.78, 0),
+			seamColor,
+			cloth
+		)
+		addBlock(
+			model,
+			arm,
+			"Cuff",
+			Vector3.new(1.04, if leather then 0.14 else 0.2, 1.04),
+			CFrame.new(0, -0.5, 0),
+			darker(base, 0.12),
+			cloth
+		)
+		if leather then
+			addBlock(
+				model,
+				arm,
+				"CuffZip",
+				Vector3.new(0.014, 0.32, 0.03),
+				CFrame.new(side * 0.522, -0.38, 0.1),
+				steel,
+				METAL
+			)
+		else
+			for rib = -2, 2 do
+				addBlock(
+					model,
+					arm,
+					"CuffRib",
+					Vector3.new(0.025, 0.2, 0.01),
+					CFrame.new(rib * 0.18, -0.5, -0.522),
+					darker(base, 0.25),
+					FABRIC
+				)
+			end
+		end
+		addBlock(
+			model,
+			arm,
+			"ElbowWear",
+			Vector3.new(0.56, 0.4, 0.012),
+			CFrame.new(0, -0.05, 0.506),
+			worn,
+			cloth
+		)
+		-- creases bunched in the sleeve above the cuff
+		for index, y in { -0.12, -0.24 } do
+			addBlock(
+				model,
+				arm,
+				"Crease",
+				Vector3.new(1.025, 0.035, 1.025),
+				CFrame.new(0, y, 0) * CFrame.Angles(0, 0, math.rad(if index == 1 then 5 else -4)),
+				darker(base, 0.3),
+				cloth
+			)
+		end
+		addHand(model, arm, look.skin)
+		addKnuckles(model, arm, look.skin)
+		for _, x in { -0.2, 0.02, 0.22 } do
+			addBlock(
+				model,
+				arm,
+				"FingerGap",
+				Vector3.new(0.015, 0.2, 0.01),
+				CFrame.new(x, -0.9, -0.515),
+				darker(look.skin, 0.45)
+			)
+		end
+		-- rings across the front of the fingers (their backs sunk 0.005 in the hand)
+		local rings: { number } = if side > 0
+			then { -0.14, 0.12 }
+			else if look.detail > 0.3 then { 0.16 } else {}
+		for _, x in rings do
+			addBlock(
+				model,
+				arm,
+				"Ring",
+				Vector3.new(0.13, 0.06, 0.02),
+				CFrame.new(x, -0.88, -0.515),
+				GOLD,
+				METAL
+			)
+		end
+		if side > 0 then
+			-- a signet ring: a flat gold top
+			addBlock(
+				model,
+				arm,
+				"Signet",
+				Vector3.new(0.12, 0.1, 0.025),
+				CFrame.new(-0.14, -0.88, -0.5275),
+				darker(GOLD, 0.15),
+				METAL
+			)
+			-- a loose gold curb bracelet, slipped down on the wrist
+			addBlock(
+				model,
+				arm,
+				"Bracelet",
+				Vector3.new(1.035, 0.08, 1.035),
+				CFrame.new(0, -0.62, 0) * CFrame.Angles(math.rad(5), 0, math.rad(-7)),
+				GOLD,
+				METAL
+			)
+		else
+			-- the gold watch: the bracelet round the wrist, the case and its dark dial on the
+			-- back of the wrist (the outer side)
+			addBlock(
+				model,
+				arm,
+				"WatchBand",
+				Vector3.new(1.03, 0.12, 1.03),
+				CFrame.new(0, -0.6, 0),
+				GOLD,
+				METAL
+			)
+			addBlock(
+				model,
+				arm,
+				"WatchCase",
+				Vector3.new(0.05, 0.28, 0.3),
+				CFrame.new(-0.535, -0.6, 0),
+				GOLD,
+				METAL
+			)
+			addBlock(
+				model,
+				arm,
+				"WatchDial",
+				Vector3.new(0.02, 0.2, 0.22),
+				CFrame.new(-0.565, -0.6, 0),
+				Color3.fromRGB(16, 18, 22),
+				Enum.Material.Glass
+			)
+		end
+	end
+
+	-- Dark jeans: the outer seams, the front pocket openings (a phone in the left one), the
+	-- washed-out thighs and knees, the hems stacked on the boots; black boots.
+	local denimSeam = look.trousers:Lerp(Color3.fromRGB(150, 130, 96), 0.35)
+	local fade = look.trousers:Lerp(Color3.fromRGB(110, 118, 132), 0.12)
+	local fadeMore = look.trousers:Lerp(Color3.fromRGB(110, 118, 132), 0.2)
+	for _, side in { -1, 1 } do
+		local leg = bodyPart(model, if side < 0 then "Left Leg" else "Right Leg")
+		if leg == nil then
+			continue
+		end
+		addBlock(
+			model,
+			leg,
+			"OuterSeam",
+			Vector3.new(0.012, 1.3, 0.04),
+			CFrame.new(side * 0.505, 0.35, 0),
+			denimSeam,
+			FABRIC
+		)
+		addStrip(
+			model,
+			leg,
+			"JeansPocket",
+			Vector3.new(side * 0.1, 0.98, -0.51),
+			Vector3.new(side * 0.47, 0.6, -0.51),
+			0.04,
+			0.02,
+			darker(look.trousers, 0.35),
+			FABRIC
+		)
+		addBlock(
+			model,
+			leg,
+			"ThighFade",
+			Vector3.new(0.7, 0.62, 0.008),
+			CFrame.new(side * 0.04, 0.36, -0.504) * CFrame.Angles(0, 0, math.rad(side * 5)),
+			fade,
+			FABRIC
+		)
+		addBlock(
+			model,
+			leg,
+			"KneeFade",
+			Vector3.new(0.44, 0.3, 0.01),
+			CFrame.new(-side * 0.04, -0.06, -0.505) * CFrame.Angles(0, 0, math.rad(-side * 8)),
+			fadeMore,
+			FABRIC
+		)
+		legBand(model, leg, side, "JeansHem", -0.28, 0.12, darker(look.trousers, 0.1), FABRIC, 0.03)
+		if side < 0 then
+			-- the phone's top out of the pocket (its back to us, the camera at the corner)
+			local phone = CFrame.new(-0.25, 0.8, -0.515) * CFrame.Angles(0, 0, math.rad(-24))
+			addBlock(
+				model,
+				leg,
+				"PocketPhone",
+				Vector3.new(0.3, 0.32, 0.03),
+				phone,
+				Color3.fromRGB(26, 26, 30),
+				Enum.Material.Glass
+			)
+			addBlock(
+				model,
+				leg,
+				"PhoneCamera",
+				Vector3.new(0.08, 0.08, 0.012),
+				phone * CFrame.new(0.07, 0.08, -0.021),
+				Color3.fromRGB(70, 72, 80),
+				METAL
+			)
+		end
+	end
+	addBoots(model, Color3.fromRGB(24, 22, 21), Color3.fromRGB(30, 28, 27), INK, false)
+
+	addCigarette(model, head)
+
+	-- At his feet, by the left boot: a black duffel bag, half unzipped (a white box shows:
+	-- what fell off the truck), its handles flopped on top, the shoulder strap on the floor.
+	local root = bodyPart(model, "HumanoidRootPart")
+	if root then
+		local floor = root.CFrame
+			* CFrame.new(-2.05, -ROOT_HEIGHT, -0.2)
+			* CFrame.Angles(0, math.rad(14), 0)
+		local nylon = Color3.fromRGB(30, 32, 30)
+		local function prop(
+			name: string,
+			size: Vector3,
+			offset: CFrame,
+			color: Color3,
+			material: Enum.Material?,
+			shape: Enum.PartType?
+		)
+			floorProp(model, name, size, floor * offset, color, material or FABRIC, shape)
+		end
+		-- (a Cylinder's axis is its X: the bag lies along X)
+		prop(
+			"Duffel",
+			Vector3.new(1.7, 0.8, 0.8),
+			CFrame.new(0, 0.38, 0),
+			nylon,
+			nil,
+			Enum.PartType.Cylinder
+		)
+		prop(
+			"DuffelBottom",
+			Vector3.new(1.62, 0.22, 0.66),
+			CFrame.new(0, 0.11, 0),
+			darker(nylon, 0.1)
+		)
+		for _, side in { -1, 1 } do
+			prop(
+				"DuffelEnd",
+				Vector3.new(0.06, 0.84, 0.84),
+				CFrame.new(side * 0.83, 0.38, 0),
+				darker(nylon, 0.2),
+				nil,
+				Enum.PartType.Cylinder
+			)
+			prop(
+				"DuffelHandle",
+				Vector3.new(0.12, 0.05, 0.4),
+				CFrame.new(side * 0.28, 0.79, 0.02),
+				INK
+			)
+		end
+		prop(
+			"DuffelGrip",
+			Vector3.new(0.66, 0.09, 0.16),
+			CFrame.new(0, 0.82, 0.05) * CFrame.Angles(0, math.rad(8), 0),
+			INK
+		)
+		prop(
+			"DuffelZip",
+			Vector3.new(1.0, 0.03, 0.045),
+			CFrame.new(-0.3, 0.785, -0.1),
+			steel,
+			METAL
+		)
+		prop(
+			"DuffelGap",
+			Vector3.new(0.5, 0.02, 0.12),
+			CFrame.new(0.48, 0.782, -0.1),
+			Color3.fromRGB(8, 8, 8)
+		)
+		prop(
+			"Shoebox",
+			Vector3.new(0.34, 0.16, 0.26),
+			CFrame.new(0.48, 0.77, -0.08) * CFrame.Angles(math.rad(-8), math.rad(10), math.rad(6)),
+			Color3.fromRGB(226, 222, 212),
+			Enum.Material.SmoothPlastic
+		)
+		prop(
+			"DuffelPocket",
+			Vector3.new(0.6, 0.36, 0.08),
+			CFrame.new(-0.3, 0.36, -0.4),
+			darker(nylon, 0.08)
+		)
+		prop(
+			"PocketZip",
+			Vector3.new(0.5, 0.025, 0.02),
+			CFrame.new(-0.3, 0.5, -0.445),
+			steel,
+			METAL
+		)
+		prop(
+			"Strap",
+			Vector3.new(0.12, 0.025, 0.7),
+			CFrame.new(0.95, 0.0125, -0.55) * CFrame.Angles(0, math.rad(32), 0),
+			INK
+		)
+		prop(
+			"Strap",
+			Vector3.new(0.12, 0.025, 0.55),
+			CFrame.new(1.22, 0.0125, -1.05) * CFrame.Angles(0, math.rad(-12), 0),
+			INK
+		)
+		prop("StrapClip", Vector3.new(0.16, 0.04, 0.1), CFrame.new(1.28, 0.02, -1.32), steel, METAL)
+	end
+end
+
+-- The vagrant (role "Vagrant", look from makeLook). He always sits on the floor against a
+-- wall, legs stretched out under a blanket (the client adds the blanket and his things):
+-- what shows is the upper body, the shins, the boots' soles.
+local function addVagrantOutfit(model: Model, look: Look)
+	local torso = bodyPart(model, "Torso")
+	local head = bodyPart(model, "Head")
+	if torso == nil or head == nil then
+		return
+	end
+	local coat = look.shirt
+	local seamColor = darker(coat, 0.35)
+	local grime = Color3.fromRGB(40, 34, 28)
+	local stained = coat:Lerp(grime, 0.45)
+	local thread = coat:Lerp(Color3.fromRGB(170, 160, 136), 0.35) -- frayed ends, pale
+	local patch = Color3.fromRGB(86, 66, 48)
+	local half = 0.32
+
+	-- Under the open coat: a hoodie (the top of its pocket, one drawstring left).
+	addBlock(
+		model,
+		torso,
+		"Undershirt",
+		Vector3.new(half * 2, 1.86, 0.02),
+		CFrame.new(0, -0.06, -0.51),
+		look.undershirt,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"HoodiePocketTop",
+		Vector3.new(half * 2 - 0.04, 0.04, 0.015),
+		CFrame.new(0, -0.44, -0.525),
+		darker(look.undershirt, 0.3),
+		FABRIC
+	)
+	addStrip(
+		model,
+		torso,
+		"Drawstring",
+		Vector3.new(0.12, 0.84, -0.53),
+		Vector3.new(0.15, 0.36, -0.53),
+		0.045,
+		0.02,
+		look.undershirt:Lerp(Color3.fromRGB(180, 172, 156), 0.5),
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"HoodieStain",
+		Vector3.new(0.26, 0.2, 0.01),
+		CFrame.new(-0.08, -0.12, -0.524),
+		look.undershirt:Lerp(grime, 0.4),
+		FABRIC
+	)
+	-- The coat: front edges, wide notched lapels, the collar turned up behind the neck,
+	-- buttons on the left (one is missing: its thread), buttonholes on the right, a seam on
+	-- each shoulder, stains.
+	for _, side in { -1, 1 } do
+		local s = if side < 0 then "L" else "R"
+		addBlock(
+			model,
+			torso,
+			"CoatEdge" .. s,
+			Vector3.new(0.07, 1.98, 0.04),
+			CFrame.new(side * (half + 0.025), 0, -0.52),
+			darker(coat, 0.18),
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"Lapel" .. s,
+			Vector3.new(0.34, 0.66, 0.05),
+			CFrame.new(side * 0.52, 0.5, -0.525) * CFrame.Angles(0, 0, math.rad(-side * 13)),
+			darker(coat, 0.08),
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"Notch" .. s,
+			Vector3.new(0.16, 0.12, 0.052),
+			CFrame.new(side * 0.71, 0.79, -0.525) * CFrame.Angles(0, 0, math.rad(side * 20)),
+			darker(coat, 0.14),
+			FABRIC
+		)
+		addBlock(
+			model,
+			torso,
+			"CollarUp" .. s,
+			Vector3.new(0.14, 0.34, 0.86),
+			CFrame.new(side * 0.66, 1.04, 0.06),
+			darker(coat, 0.12),
+			FABRIC
+		)
+	end
+	addBlock(
+		model,
+		torso,
+		"CollarUpBack",
+		Vector3.new(1.46, 0.36, 0.12),
+		CFrame.new(0, 1.05, 0.48),
+		darker(coat, 0.12),
+		FABRIC
+	)
+	for index, y in { 0.08, -0.3 } do
+		addBlock(
+			model,
+			torso,
+			"Button",
+			Vector3.new(0.13, 0.13, 0.03),
+			CFrame.new(-0.52, y, -0.515),
+			Color3.fromRGB(46, 36, 28),
+			Enum.Material.Wood
+		)
+		addBlock(
+			model,
+			torso,
+			"Buttonhole",
+			Vector3.new(0.12, 0.025, 0.01),
+			CFrame.new(0.52, y + (if index == 1 then 0.02 else -0.01), -0.505),
+			seamColor,
+			FABRIC
+		)
+	end
+	-- the third button is gone: a tuft of thread where it was
+	addBlock(
+		model,
+		torso,
+		"LostButton",
+		Vector3.new(0.03, 0.07, 0.02),
+		CFrame.new(-0.52, -0.66, -0.51) * CFrame.Angles(0, 0, math.rad(12)),
+		thread,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"CoatStain",
+		Vector3.new(0.34, 0.28, 0.012),
+		CFrame.new(-0.74, -0.2, -0.506),
+		stained,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"CoatStain2",
+		Vector3.new(0.22, 0.3, 0.012),
+		CFrame.new(0.72, 0.02, -0.506) * CFrame.Angles(0, 0, math.rad(20)),
+		stained,
+		FABRIC
+	)
+	-- The scarf: knitted, two turns round the neck (a darker stripe), a knot at the front, two
+	-- ends down the chest, frayed into a fringe.
+	local scarf = look.scarf or coat
+	-- (a faded mustard stripe knitted in: the scarf reads as a scarf, not another dark layer)
+	local stripe = scarf:Lerp(Color3.fromRGB(150, 116, 52), 0.55)
+	addBlock(
+		model,
+		torso,
+		"ScarfWrap",
+		Vector3.new(1.38, 0.22, 1.14),
+		CFrame.new(0, 0.9, 0) * CFrame.Angles(0, 0, math.rad(2)),
+		scarf,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"ScarfStripe",
+		Vector3.new(1.39, 0.05, 1.15),
+		CFrame.new(0, 0.88, 0) * CFrame.Angles(0, 0, math.rad(2)),
+		stripe,
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"ScarfWrap2",
+		Vector3.new(1.3, 0.2, 1.08),
+		CFrame.new(0, 1.06, -0.02) * CFrame.Angles(0, 0, math.rad(-3)),
+		darker(scarf, 0.08),
+		FABRIC
+	)
+	addBlock(
+		model,
+		torso,
+		"ScarfKnot",
+		Vector3.new(0.3, 0.24, 0.16),
+		CFrame.new(0.2, 0.86, -0.6),
+		darker(scarf, 0.04),
+		FABRIC
+	)
+	local ends: { { cf: CFrame, size: Vector3 } } = {
+		{
+			cf = CFrame.new(0.3, 0.38, -0.575) * CFrame.Angles(0, 0, math.rad(-5)),
+			size = Vector3.new(0.3, 0.78, 0.07),
+		},
+		{
+			cf = CFrame.new(0.08, 0.5, -0.645) * CFrame.Angles(0, 0, math.rad(9)),
+			size = Vector3.new(0.26, 0.5, 0.07),
+		},
+	}
+	for _, scarfEnd in ends do
+		local cf, size = scarfEnd.cf, scarfEnd.size
+		addBlock(model, torso, "ScarfEnd", size, cf, scarf, FABRIC)
+		addBlock(
+			model,
+			torso,
+			"ScarfEndStripe",
+			Vector3.new(size.X + 0.01, 0.05, size.Z + 0.01),
+			cf * CFrame.new(0, -size.Y / 2 + 0.14, 0),
+			stripe,
+			FABRIC
+		)
+		-- the end worn ragged: two uneven tongues of knit
+		for index, x in { -0.07, 0.08 } do
+			addBlock(
+				model,
+				torso,
+				"ScarfRag",
+				Vector3.new(size.X / 2 - 0.02, 0.06 + index * 0.04, size.Z - 0.01),
+				cf * CFrame.new(x * size.X / 0.3, -size.Y / 2 - 0.02 - index * 0.02, 0),
+				darker(scarf, 0.12),
+				FABRIC
+			)
+		end
+	end
+
+	-- Sleeves: a shoulder seam, a frayed turned-back cuff with loose threads, a leather patch
+	-- sewn on the elbow; fingerless knitted gloves (the dirty fingers come out, one hole).
+	local gloves = look.gloves or INK
+	local skin = look.skin
+	for _, side in { -1, 1 } do
+		local arm = bodyPart(model, if side < 0 then "Left Arm" else "Right Arm")
+		if arm == nil then
+			continue
+		end
+		addBlock(
+			model,
+			arm,
+			"ShoulderSeam",
+			Vector3.new(1.02, 0.035, 1.02),
+			CFrame.new(0, 0.8, 0),
+			seamColor,
+			FABRIC
+		)
+		addBlock(
+			model,
+			arm,
+			"Cuff",
+			Vector3.new(1.06, 0.16, 1.06),
+			CFrame.new(0, -0.48, 0),
+			darker(coat, 0.12),
+			FABRIC
+		)
+		for index, x in { -0.28, 0.06, 0.3 } do
+			addBlock(
+				model,
+				arm,
+				"Thread",
+				Vector3.new(0.05, 0.08 + index * 0.03, 0.02),
+				CFrame.new(x, -0.58 - index * 0.015, -0.54)
+					* CFrame.Angles(0, 0, math.rad((index - 2) * 14)),
+				thread,
+				FABRIC
+			)
+		end
+		addBlock(
+			model,
+			arm,
+			"ElbowPatch",
+			Vector3.new(0.64, 0.56, 0.02),
+			CFrame.new(0, -0.08, 0.51),
+			patch,
+			LEATHER
+		)
+		addBlock(
+			model,
+			arm,
+			"Glove",
+			Vector3.new(1.04, 0.3, 1.04),
+			CFrame.new(0, -0.67, 0),
+			gloves,
+			FABRIC
+		)
+		local fingers = addBlock(
+			model,
+			arm,
+			"Fingers",
+			Vector3.new(1.02, 0.2, 1.02),
+			CFrame.new(0, -0.91, 0),
+			skin:Lerp(grime, 0.25)
+		)
+		fingers.CastShadow = true
+		addKnuckles(model, arm, skin)
+		for _, x in { -0.2, 0.02, 0.22 } do
+			addBlock(
+				model,
+				arm,
+				"FingerGap",
+				Vector3.new(0.015, 0.17, 0.01),
+				CFrame.new(x, -0.92, -0.515),
+				darker(skin, 0.5)
+			)
+		end
+		-- ribs knitted in the glove, a hole on the knuckles (skin shows)
+		for _, x in { -0.3, -0.1, 0.1, 0.3 } do
+			addBlock(
+				model,
+				arm,
+				"GloveRib",
+				Vector3.new(0.025, 0.28, 0.01),
+				CFrame.new(x, -0.67, -0.525),
+				darker(gloves, 0.25),
+				FABRIC
+			)
+		end
+		if side > 0 then
+			addBlock(
+				model,
+				arm,
+				"GloveHole",
+				Vector3.new(0.13, 0.1, 0.012),
+				CFrame.new(0.2, -0.74, -0.526),
+				skin
+			)
+		end
+	end
+
+	-- The trousers: worn through at one knee (the long johns show, the edges frayed), a
+	-- patch sewn on the other (big cross stitches), frayed hems on the boots. Old brown work boots, worn out (see addBoots).
+	local torn = if look.detail < 0.5 then -1 else 1
+	for _, side in { -1, 1 } do
+		local leg = bodyPart(model, if side < 0 then "Left Leg" else "Right Leg")
+		if leg == nil then
+			continue
+		end
+		if side == torn then
+			addBlock(
+				model,
+				leg,
+				"KneeHole",
+				Vector3.new(0.42, 0.26, 0.012),
+				CFrame.new(0.04, -0.1, -0.506),
+				Color3.fromRGB(104, 44, 38),
+				FABRIC
+			)
+			for index, offset in
+				{
+					Vector3.new(-0.2, 0.12, 0),
+					Vector3.new(0.1, 0.13, 0),
+					Vector3.new(0.24, -0.06, 0),
+					Vector3.new(-0.12, -0.13, 0),
+				}
+			do
+				addBlock(
+					model,
+					leg,
+					"Frayed",
+					Vector3.new(
+						if index % 2 == 0 then 0.03 else 0.1,
+						if index % 2 == 0 then 0.1 else 0.03,
+						0.01
+					),
+					CFrame.new(0.04 + offset.X, -0.1 + offset.Y, -0.508),
+					look.trousers:Lerp(Color3.fromRGB(176, 166, 144), 0.45),
+					FABRIC
+				)
+			end
+		else
+			addBlock(
+				model,
+				leg,
+				"KneePatch",
+				Vector3.new(0.56, 0.46, 0.015),
+				CFrame.new(-side * 0.02, -0.04, -0.5075) * CFrame.Angles(0, 0, math.rad(side * 4)),
+				patch:Lerp(Color3.fromRGB(70, 74, 64), 0.5),
+				FABRIC
+			)
+			for _, corner in
+				{
+					Vector3.new(-0.2, 0.15, 0),
+					Vector3.new(0.2, 0.17, 0),
+					Vector3.new(-0.18, -0.23, 0),
+					Vector3.new(0.21, -0.22, 0),
+				}
+			do
+				for _, angle in { 45, -45 } do
+					addBlock(
+						model,
+						leg,
+						"Stitch",
+						Vector3.new(0.11, 0.018, 0.01),
+						CFrame.new(-side * 0.02 + corner.X, corner.Y, -0.519)
+							* CFrame.Angles(0, 0, math.rad(angle)),
+						Color3.fromRGB(176, 164, 132),
+						FABRIC
+					)
+				end
+			end
+		end
+		legBand(
+			model,
+			leg,
+			side,
+			"FrayedHem",
+			-0.27,
+			0.14,
+			darker(look.trousers, 0.12),
+			FABRIC,
+			0.035
+		)
+		for index, x in { -0.25, 0.02, 0.28 } do
+			addBlock(
+				model,
+				leg,
+				"HemThread",
+				Vector3.new(0.04, 0.08, 0.02),
+				CFrame.new(side * 0.0175 + x, -0.37 - (index % 2) * 0.03, -0.54),
+				look.trousers:Lerp(Color3.fromRGB(150, 140, 120), 0.3),
+				FABRIC
+			)
+		end
+		-- the coat's tails over the thighs (split in the middle, 0.02 wider than the leg
+		-- outside; under the blanket when he sits)
+		addBlock(
+			model,
+			leg,
+			if side < 0 then "CoatTailL" else "CoatTailR",
+			Vector3.new(1.02, 0.9, 1.04),
+			CFrame.new(side * 0.02, 0.56, 0),
+			coat,
+			FABRIC
+		)
+	end
+	addBoots(
+		model,
+		Color3.fromRGB(72, 52, 36),
+		Color3.fromRGB(38, 34, 30),
+		Color3.fromRGB(58, 40, 28),
+		true
+	)
+
+	-- The head: ribs knitted in the beanie's fold, the beard gone wild (tufts under the chin).
+	if look.headwear == "Beanie" then
+		for rib = -4, 4 do
+			addBlock(
+				model,
+				head,
+				"BeanieRib",
+				Vector3.new(0.035, 0.2, 0.02),
+				CFrame.new(rib * 0.15, 0.36, -0.715),
+				darker(look.headwearColor, 0.3),
+				FABRIC
+			)
+		end
+	end
+	if look.beard then
+		addBlock(
+			model,
+			head,
+			"BeardTuft",
+			Vector3.new(0.26, 0.18, 0.14),
+			CFrame.new(0.1, -0.64, -0.5) * CFrame.Angles(0, 0, math.rad(8)),
+			look.beard,
+			FABRIC
+		)
+		addBlock(
+			model,
+			head,
+			"BeardTuft2",
+			Vector3.new(0.2, 0.14, 0.12),
+			CFrame.new(-0.16, -0.62, -0.48) * CFrame.Angles(0, 0, math.rad(-10)),
+			darker(look.beard, 0.15),
+			FABRIC
+		)
+	end
+end
+
 local function addAccessories(model: Model, role: string, look: Look, shopColor: Color3?)
 	local head = model:FindFirstChild("Head") :: BasePart?
 	local torso = model:FindFirstChild("Torso") :: BasePart?
@@ -652,8 +2454,10 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 	if head == nil or torso == nil then
 		return
 	end
-	-- Head (hair under any hat, the hat, glasses, earrings).
-	addHair(model, head, look, look.headwear ~= nil and look.headwear ~= "Headphones")
+	-- Head (hair under any hat — none shows under a hood —, the hat, glasses, earrings).
+	if look.headwear ~= "Hood" then
+		addHair(model, head, look, look.headwear ~= nil and look.headwear ~= "Headphones")
+	end
 	addHeadwear(model, head, look, if role == "Clerk" then shopColor else nil)
 	if look.glasses then
 		addGlasses(model, head, look.glasses)
@@ -670,6 +2474,54 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 				Enum.Material.Metal
 			)
 		end
+	end
+
+	if look.beard then
+		-- A rough beard: a block on the chin, the jaw on both sides, a moustache over the
+		-- mouth. (The head is round: the jaw blocks stand a little proud at the front, which
+		-- reads as the volume of a beard.)
+		local beard = look.beard
+		local fabric = Enum.Material.Fabric
+		addBlock(
+			model,
+			head,
+			"BeardChin",
+			Vector3.new(0.78, 0.36, 0.22),
+			CFrame.new(0, -0.44, -0.52),
+			beard,
+			fabric
+		)
+		for _, side in { -1, 1 } do
+			addBlock(
+				model,
+				head,
+				if side < 0 then "BeardJawL" else "BeardJawR",
+				Vector3.new(0.16, 0.5, 0.62),
+				CFrame.new(side * 0.53, -0.3, -0.12),
+				darker(beard, 0.12),
+				fabric
+			)
+		end
+		addBlock(
+			model,
+			head,
+			"Moustache",
+			Vector3.new(0.5, 0.09, 0.08),
+			CFrame.new(0, -0.2, -0.635),
+			beard,
+			fabric
+		)
+	end
+	if look.scar then
+		-- an old scar across the right cheek, down from the eyebrow (its back sunk in the face)
+		addBlock(
+			model,
+			head,
+			"Scar",
+			Vector3.new(0.04, 0.34, 0.03),
+			CFrame.new(0.26, 0.04, -0.567) * CFrame.Angles(0, 0, math.rad(16)),
+			look.skin:Lerp(Color3.fromRGB(122, 58, 56), 0.55)
+		)
 	end
 
 	-- Torso: the torso is 2 wide, 2 tall, 1 deep: its front is 0.5 in front (-Z), its top 1.0
@@ -940,6 +2792,15 @@ local function addAccessories(model: Model, role: string, look: Look, shopColor:
 			Enum.Material.Metal
 		)
 	end
+	-- The alley people wear their own clothes, layer by layer (see addDealerOutfit /
+	-- addVagrantOutfit).
+	if role == "Dealer" then
+		addDealerOutfit(model, look)
+		return
+	elseif role == "Vagrant" then
+		addVagrantOutfit(model, look)
+		return
+	end
 	if look.watch and leftArm then
 		-- a wristwatch near the left hand (the arm is 1 × 2 × 1: the wrist is 0.65 below)
 		addBlock(
@@ -981,6 +2842,16 @@ local function buildBody(name: string, look: Look): Model?
 	end
 	local model = result :: Model
 	model.Name = name
+	-- worn clothes: the torso and sleeves in leather or rough fabric (alley people)
+	local cloth = look.cloth
+	if cloth then
+		for _, partName in { "Torso", "Left Arm", "Right Arm" } do
+			local part = model:FindFirstChild(partName)
+			if part and part:IsA("BasePart") then
+				part.Material = cloth
+			end
+		end
+	end
 	-- No scripts (no default Animate), no Animator: the client poses the joints itself.
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("LuaSourceContainer") or descendant:IsA("Animator") then
@@ -1069,6 +2940,16 @@ local function spawnNpc(spot: BasePart, folder: Instance, city: Instance, index:
 
 	local shop = if roleText == "Clerk" then shopNear(city, floor) else nil
 	addAccessories(model, roleText, look, if shop then SHOP_COLORS[shop] else nil)
+	-- A seated NPC is drawn lower by the client; its standing torso and head
+	-- (where the server keeps them) must not stop bodies in the air above him.
+	if poseText == "SitGround" or poseText == "SitStool" then
+		for _, partName in { "Torso", "Head" } do
+			local part = model:FindFirstChild(partName)
+			if part and part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
 
 	-- What the client needs to pose it.
 	model:SetAttribute("Npc", true)

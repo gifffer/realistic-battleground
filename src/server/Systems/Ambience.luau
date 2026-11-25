@@ -29,6 +29,15 @@
 --   CitySteam       steam vents: twice as much in the rain, half in the fog.
 --   CityGutter      drainpipe shoes: a few spout water in the rain.
 --
+-- FAULTY (aging) lights: any light part of the city (a CityLamp, CityBulkhead, CityNeon,
+-- CityShopLight... or an untagged part with a child light) can have the attribute
+-- Faulty = 0..1 (how worn it is). Ambience tags those parts "CityFaulty" once the city is built
+-- (and as tagged lights stream in), and skips its own old Flicker loop on them; the effect
+-- itself (slow drift, short dips, very brief cut-outs, the bulb's glow following) runs on each
+-- client, the same for everyone, only while the server has the light ON: see
+-- Client/Controllers/FaultyLightController. Optional attribute FaultySeed (integer) = a
+-- different rhythm for two lights at the same spot.
+--
 -- The weather EVENTS (rain, fog, power cut, thunder) are decided by Server/Systems/Weather,
 -- which calls the functions at the bottom of this file. The weather is applied ON TOP of the
 -- day / night look: target = base look of the phase, then the weather changes it.
@@ -67,6 +76,9 @@ local WINDOW_COLORS: { [string]: Color3 } = {
 }
 
 local random = Random.new()
+
+-- The tag of the faulty lights (read by Client/Controllers/FaultyLightController).
+local FAULTY_TAG = "CityFaulty"
 
 ------------------------------------------------------------------------------
 -- State
@@ -377,6 +389,17 @@ local function tagged(tag: string): { BasePart }
 	return parts
 end
 
+-- A part with the attribute Faulty (a number) gets the CityFaulty tag (see the header).
+local function isFaulty(part: Instance): boolean
+	return typeof(part:GetAttribute("Faulty")) == "number"
+end
+
+local function tagFaulty(part: Instance)
+	if isFaulty(part) and not CollectionService:HasTag(part, FAULTY_TAG) then
+		CollectionService:AddTag(part, FAULTY_TAG)
+	end
+end
+
 ------------------------------------------------------------------------------
 -- Lights: each kind
 ------------------------------------------------------------------------------
@@ -491,6 +514,11 @@ end
 local function setWindow(window: BasePart, level: string)
 	remember(window)
 	window:SetAttribute("LitLevel", level)
+	-- A window with its own room light (the alleys' lit windows) goes dark with it.
+	local roomLight = lightOf(window)
+	if roomLight then
+		roomLight.Enabled = level ~= "off"
+	end
 	if level == "off" then
 		window.Material = builtMaterial(window)
 		window.Color = builtColor(window)
@@ -553,6 +581,7 @@ end
 
 -- The shop interior lights are on the "Shelf" parts next to the ceiling lights (no tag):
 -- found once the city is built.
+-- (The same pass tags the Faulty light parts CityFaulty.)
 local shelfLights: { Light } = {}
 
 local function findShelfLights()
@@ -562,6 +591,9 @@ local function findShelfLights()
 		return
 	end
 	for _, descendant in city:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			tagFaulty(descendant)
+		end
 		if
 			descendant:IsA("PointLight")
 			and descendant.Parent
@@ -755,6 +787,11 @@ local function watchTag(tag: string)
 			litWindows[part] = true
 		end
 		applyOne(part, tag)
+		tagFaulty(part)
+		-- (a Faulty light has the client's aging behaviour instead of the old Flicker)
+		if isFaulty(part) then
+			return
+		end
 		if tag == "CityLamp" and part:GetAttribute("Flicker") == true then
 			task.spawn(flickerLamp, part)
 		elseif tag == "CityNeon" and part:GetAttribute("Flicker") == "random" then
@@ -766,12 +803,12 @@ end
 -- Same as watchTag, for the parts that already exist.
 local function startExisting()
 	for _, head in tagged("CityLamp") do
-		if head:GetAttribute("Flicker") == true then
+		if head:GetAttribute("Flicker") == true and not isFaulty(head) then
 			task.spawn(flickerLamp, head)
 		end
 	end
 	for _, sign in tagged("CityNeon") do
-		if sign:GetAttribute("Flicker") == "random" then
+		if sign:GetAttribute("Flicker") == "random" and not isFaulty(sign) then
 			task.spawn(flickerNeon, sign)
 		end
 	end

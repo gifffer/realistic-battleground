@@ -42,6 +42,7 @@ local TweenService = game:GetService("TweenService")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local CityZones = require(ReplicatedStorage.Shared.Util.CityZones)
+local FaultyLightController = require(script.Parent.FaultyLightController)
 local ParkAtmosphereController = require(script.Parent.ParkAtmosphereController)
 local LensRain = require(script.Parent.Parent.UI.LensRain)
 local SoundController = require(script.Parent.SoundController)
@@ -522,6 +523,7 @@ end
 -- The street lamps that stutter (attribute Flicker, server: Ambience) give a short, faint
 -- electric crackle when they cut out, if you are close (the PowerBuzz sound, very quiet).
 -- Each lamp near the camera is watched (its light's Enabled), the far ones are forgotten.
+-- The Faulty lights (FaultyLightController) call it themselves when they cut out.
 local CRACKLE_RANGE = 26 -- studs: heard only this close
 local CRACKLE_WATCH_RANGE = 60
 local CRACKLE_VOLUME = 0.3 -- share of PowerBuzz's volume
@@ -674,6 +676,8 @@ function WeatherFxController.start()
 	buildGroundFog()
 	workspace:GetAttributeChangedSignal("Weather"):Connect(onWeatherChanged)
 	onWeatherChanged()
+	-- the aging lights (attribute Faulty) crackle too when one of their cut-outs starts
+	FaultyLightController.onCutOut(crackle)
 	RunService.Heartbeat:Connect(update)
 end
 
