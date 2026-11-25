@@ -46,6 +46,9 @@
 --   Combat.setKit(model, kitId)        the kit used by keys 1–4 / G (Kits system)
 --   Combat.environmentHit(model, damage, velocity, knockdownTime, cause)
 --                                      a hit from the WORLD, no attacker (the train)
+--   Combat.firearmHit(attacker, victim, hit)
+--                                      a validated bullet / pellet (Systems/Firearms):
+--                                      the same resolveHit, with HitSpec.bullet
 --
 -- Kit moves (keys 1–4) and the Awakening (G) are in Combat/Moves.luau. Every
 -- hit, M1 or move, is decided by resolveHit below from a HitSpec (State.luau).
@@ -250,7 +253,8 @@ local function dealDamage(
 	victim: CombatState,
 	attacker: CombatState?,
 	amount: number,
-	source: Model?
+	source: Model?,
+	furyScale: number?
 )
 	local attackerModel = if attacker then attacker.model else (source or victim.bleedSource)
 	if attackerModel then
@@ -267,9 +271,10 @@ local function dealDamage(
 	else
 		victim.humanoid.Health -= amount
 	end
-	addFury(victim, amount * KC.FURY_PER_DAMAGE_TAKEN)
+	local fury = furyScale or 1
+	addFury(victim, amount * KC.FURY_PER_DAMAGE_TAKEN * fury)
 	if attacker then
-		addFury(attacker, amount * KC.FURY_PER_DAMAGE_DEALT)
+		addFury(attacker, amount * KC.FURY_PER_DAMAGE_DEALT * fury)
 		damaged.fire({ victim = victim.model, attacker = attacker.model, amount = amount })
 	end
 end
@@ -954,7 +959,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	-- Awakened attackers hit harder.
 	local damage = spec.damage
 	local awakening = Kits.get(attacker.kitId)
-	if isAwakened(attacker) and awakening and awakening.awakening then
+	if not spec.bullet and isAwakened(attacker) and awakening and awakening.awakening then
 		damage *= awakening.awakening.damageMultiplier
 	end
 	-- A clone hits for a share of its owner.
@@ -1006,7 +1011,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 
 	-- 1. Dash dodge frames: the hit misses. (Caught where he was a moment
 	-- ago: dodge frames at any time since then count, see HitSpec.rewound.)
-	if time - (spec.rewound or 0) < victim.invulnerableUntil then
+	if not spec.bullet and time - (spec.rewound or 0) < victim.invulnerableUntil then
 		event("Dodged", false, false)
 		return false
 	end
@@ -1032,7 +1037,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		-- 2a. A grab: hands, not a blow. Nothing to parry, it goes through
 		-- the guard (only a hit that stuns him first, or a dash, beats it).
 		stopBlocking(victim)
-	elseif victim.blocking and isInFrontOf(victim, from) then
+	elseif victim.blocking and not spec.bullet and isInFrontOf(victim, from) then
 		-- 2. Parry: block started just before the hit → attacker is stunned.
 		if
 			not spec.from
@@ -1071,7 +1076,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 	end
 
 	-- 4. Normal hit.
-	dealDamage(victim, credit, damage)
+	dealDamage(victim, credit, damage, nil, spec.furyScale)
 
 	-- Blood: rolled here, so every client shows the same thing. Fists rarely
 	-- draw blood; the bottle's moves set their own (high) chance. The 4th M1
@@ -1160,7 +1165,7 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		zone :: Types.HitZone,
 		damage,
 		side,
-		spec.cuts == nil and not spec.burns
+		spec.cuts == nil and not spec.burns and not spec.bullet
 	)
 
 	-- Awakened fighters have "hyper armor": hits hurt but don't stop them.
@@ -1199,6 +1204,8 @@ local function resolveHit(attacker: CombatState, victim: CombatState, spec: HitS
 		elseif pull then
 			-- Grabbed: dragged toward the attacker (stops at arm's length).
 			Push.apply(victim.root, -away * pull, C.HIT_PUSH_TIME)
+		elseif spec.bullet then
+			-- (a bullet doesn't shove a body: the flinch is the client's reaction)
 		elseif time >= victim.knockbackUntil then
 			-- Small push: the body is moved by the blow (no "punch through it"
 			-- look). Not during a knockback (a new push would replace it).
@@ -2912,6 +2919,52 @@ end
 -- The kit `model` fights with (keys 1–4, G). Unknown or not yet available
 -- kits fall back to the default one. Visible to clients as the "Kit"
 -- attribute (the HUD shows that kit's moves).
+-- A bullet or pellet that the firearms system (Systems/Firearms) has already
+-- validated (rate, ammo, origin, walls, rewound body). It goes through the same
+-- resolveHit as every other hit: damage, bleeding, leg damage, KO, kill credit,
+-- CombatEvent (blood, reactions, kill feed) - with HitSpec.bullet (no dodge,
+-- block, parry or push; spawn protection, duels and the safe zone still apply).
+-- `hit.zone` "Arms" counts as the torso for the reactions (its damage multiplier
+-- is already in `hit.damage`). Returns true if it landed on the body.
+export type FirearmHit = {
+	damage: number,
+	zone: "Head" | "Torso" | "Arms" | "Legs",
+	from: Vector3, -- the muzzle
+	weaponId: string,
+}
+function Combat.firearmHit(attackerModel: Model, victimModel: Model, hit: FirearmHit): boolean
+	local attacker = states[attackerModel]
+	local victim = states[victimModel]
+	if attacker == nil or victim == nil or attacker == victim then
+		return false
+	end
+	if not isAlive(attacker) or not isAlive(victim) then
+		return false
+	end
+	local FC = Config.Firearms
+	local zone: Types.HitZone = if hit.zone == "Head"
+		then "Head"
+		elseif hit.zone == "Legs" then "Legs"
+		else "Torso"
+	local spec: HitSpec = {
+		damage = hit.damage,
+		zone = zone,
+		stun = FC.HIT_STUN,
+		headStun = false,
+		legSlow = true,
+		kind = "Hit",
+		blockCost = 0,
+		bloodChance = FC.BLOOD_CHANCE,
+		moveId = "Gun:" .. hit.weaponId,
+		from = hit.from,
+		bullet = true,
+		furyScale = FC.FURY_SCALE,
+	}
+	-- (firing ends the shooter's spawn protection, like an attack)
+	Knockout.endProtection(attackerModel)
+	return resolveHit(attacker, victim, spec)
+end
+
 function Combat.setKit(model: Model, kitId: string)
 	local state = states[model]
 	if state == nil then

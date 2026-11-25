@@ -113,6 +113,10 @@ return table.freeze({
 		-- where one dummy finishes another with any kit's finisher, to watch
 		-- them from outside (Server/Systems/TestTools).
 		TEST_TOOLS = true,
+		-- In Studio only, and only when true: Firearms.DEV_CYCLE_KEY gives the local
+		-- player the next of the five guns (then none), checked by the server
+		-- (Server/Systems/Firearms). There is no other way to get a gun yet.
+		FIREARMS_TEST = false,
 	}),
 
 	-- Basic combat (M1 combo, block, parry, dash). Times are in seconds.
@@ -1030,6 +1034,56 @@ return table.freeze({
 		-- You can also force one: in the Studio command bar (server), type
 		-- workspace:SetAttribute("TrainForce", true)
 		STUDIO_FAST = true,
+	}),
+
+	-- Firearms (Shared/Firearms, Server/Systems/Firearms, Client/Firearms;
+	-- docs/firearms/ARCHITECTURE.md, CORE.md). Each gun's own numbers are in
+	-- Shared/Firearms/Defs/<Gun>; these are the global ones.
+	Firearms = table.freeze({
+		-- Every bullet / pellet's damage × this (the balance question of
+		-- ARCHITECTURE §20: realistic lethality = 1).
+		DAMAGE_SCALE = 1,
+		-- Gun damage fills the Awakening gauges at this share of a punch's rate.
+		FURY_SCALE = 0.25,
+		-- Stun of a bullet hit (seconds): a flinch, not a stagger.
+		HIT_STUN = 0.12,
+		-- Chance of visible blood per zone of a bullet hit (Combat.firearmHit).
+		BLOOD_CHANCE = table.freeze({ Head = 1, Torso = 1, Legs = 1 }),
+		-- Server shot checks (ARCHITECTURE §9.3).
+		ORIGIN_SPEED_SLACK = 0.1, -- extra studs of muzzle-to-head distance per stud/s of speed
+		HIT_SLACK_H = 0.35, -- rest-pose boxes inflated (studs) horizontally...
+		HIT_SLACK_V = 0.6, -- ...and vertically (vertical motion disagrees most)
+		AIM_TOLERANCE = 25, -- degrees between the shot and the aim stream's pitch
+		YAW_TOLERANCE = 60, -- degrees between the shot and the body's facing
+		PELLET_TOLERANCE = 0.5, -- degrees between a claimed hit and its bullet / pellet
+		SPREAD_LOW = 0.6, -- the server's spread estimate × this ... × SPREAD_HIGH (+0.3 deg)
+		SPREAD_HIGH = 1.6, -- is the range a claimed shot may have used
+		MAX_HITS = 8, -- claimed hits per FireShot
+		FUTURE_SLACK = 0.05, -- a shot time at most this far in the future (seconds)
+		RATE_BURST = 2, -- token bucket per weapon: capacity...
+		RATE_MARGIN = 1.2, -- ...refilled at rpm / 60 × this
+		MIN_INTERVAL = 0.8, -- accepted shots at least this × 60 / rpm apart
+		SPRINT_FIRE = 0.7, -- after a sprint, firing waits sprintToFire × this
+		AIM_RATE = 15, -- Hz of the GunAim stream (and its relay)
+		-- Client effects budgets (ARCHITECTURE §10.3, §11, §12, §16).
+		CASING_MAX = 150,
+		LINK_MAX = 60,
+		CASING_AIRBORNE_MAX = 60,
+		CASING_LIFETIME = 45,
+		CASING_NEAR = 80, -- studs: every casing, with sound...
+		CASING_FAR = 150, -- ...to here every other one, silent; beyond: none
+		CASING_SOUNDS_PER_SECOND = 12,
+		MAG_MAX = 20,
+		MAG_LIFETIME = 90,
+		HOLE_MAX = 200,
+		HOLE_LIFETIME = 120,
+		LIGHTS_MAX = 4,
+		TRACERS_MAX = 40,
+		-- Gravity of debris at our scale (1 stud = 0.28 m: 9.81 m/s² = 35 studs/s²;
+		-- Roblox's 196.2 is 5.6× too strong for small things).
+		DEBRIS_GRAVITY = 35,
+		-- Studio-only test key (Dev.FIREARMS_TEST): next gun.
+		DEV_CYCLE_KEY = Enum.KeyCode.Nine,
 	}),
 
 	-- The hidden park (Shared/Util/SafeZone, Server/Systems/Combat): nobody fights there.

@@ -41,6 +41,21 @@ local function event(name: string): RemoteEvent
 	return remote
 end
 
+-- An UnreliableRemoteEvent (may drop / reorder; for streams and cosmetic replays).
+local function unreliable(name: string): UnreliableRemoteEvent
+	if not IS_SERVER then
+		return folder:WaitForChild(name) :: UnreliableRemoteEvent
+	end
+	local existing = folder:FindFirstChild(name)
+	if existing and existing:IsA("UnreliableRemoteEvent") then
+		return existing
+	end
+	local remote = Instance.new("UnreliableRemoteEvent")
+	remote.Name = name
+	remote.Parent = folder
+	return remote
+end
+
 return table.freeze({
 	-- server → client  (snapshot: Types.ProfileSnapshot)
 	-- The player's save, sent when it loads and after each change.
@@ -239,4 +254,37 @@ return table.freeze({
 	-- Molotov flying / breaking, a fire pool and its cells, a cone of flame
 	-- or of petrol. Kinds and data: Server/Systems/Combat/Gadgets.luau (top).
 	PyroFx = event("PyroFx"),
+
+	-- Firearms (Server/Systems/Firearms; docs/firearms/ARCHITECTURE.md §9, CORE.md).
+	-- client → server  (shotId: number, weaponId: string, shotTime: number, origin: Vector3,
+	--                   direction: Vector3, hits: { { model: Model, part: string,
+	--                   at: Vector3, pellet: number } })
+	-- One trigger pull (pellets batched). shotTime = workspace:GetServerTimeNow() at the
+	-- shot; the spread seed is Ballistics.seed(the "GunSalt" attribute, shotId). The
+	-- server checks everything (Firearms/Validate) and answers ShotRefused when it says no.
+	FireShot = event("FireShot"),
+
+	-- client → server  (action: string, arg: any, requestId: number)
+	-- "Draw" / "Holster" / "Reload" / "ReloadCancel" / "Cycle" / "Mode" / "Bipod" /
+	-- "DevCycle" (Studio test key only). Started at once on the client; the server
+	-- runs the same timeline and sets the attributes (GunAction...).
+	GunAction = event("GunAction"),
+
+	-- client → server  (pitch: number, bits: number)  ~15 Hz while drawn
+	-- The aim's pitch (degrees) and stance bits (Firearms/Validate.BITS).
+	GunAim = unreliable("GunAim"),
+
+	-- server → clients  (aims: { [Model]: { number } })  15 Hz: each armed fighter's
+	-- { pitch, bits }, so everyone poses the others' guns.
+	GunAimRelay = unreliable("GunAimRelay"),
+
+	-- server → other clients  (shooter: Model, weaponId: string, origin: Vector3,
+	--                          ends: { Vector3 }, shotIndex: number)
+	-- A validated shot, for the look only: flash, sound, casing, tracers, impacts.
+	ShotFired = unreliable("ShotFired"),
+
+	-- server → ONE client  (shotId: number, reason: string, mag: number?, chambered: boolean,
+	--                       reserve: number)
+	-- "Your shot was refused": the counters to resync to (no visual rollback).
+	ShotRefused = event("ShotRefused"),
 })

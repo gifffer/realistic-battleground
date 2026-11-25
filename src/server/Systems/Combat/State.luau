@@ -130,6 +130,11 @@ export type HitSpec = {
 	-- A blast (an explosion, a shockwave): pushed away from this point,
 	-- not from the attacker.
 	pushFrom: Vector3?,
+	-- A bullet (Combat.firearmHit): no dodge frames, no block, no parry, no
+	-- slip, no push, no bruise; the kit's Awakening doesn't multiply it.
+	bullet: boolean?,
+	-- The Awakening gauges fill at this share of the usual rate (nil = 1).
+	furyScale: number?,
 }
 
 return nil

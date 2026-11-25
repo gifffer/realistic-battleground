@@ -174,6 +174,7 @@ local function onCombatEvent(info: Combat.CombatEventInfo)
 			and not string.find(moveId, "_FollowUp", 1, true)
 			and not string.find(moveId, "_Hold", 1, true)
 			and Weapons.byMove(moveId) == nil -- (something thrown, not a kit move)
+			and string.sub(moveId, 1, 4) ~= "Gun:" -- (a bullet, not a kit move)
 		then
 			local counted = lastMoveCounted[attackerPlayer]
 			if counted == nil then
