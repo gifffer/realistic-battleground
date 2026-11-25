@@ -454,6 +454,16 @@ local function rotateFrom(
 	instance:PivotTo(turn * base)
 end
 
+-- The REAL pivot of a server-built model (the hook, the fan hub, a sheet's top edge). The
+-- server writes it in the "Pivot" attribute too: a pivot set by a server script is not sent
+-- to the clients (here GetPivot() is the PrimaryPart's centre or the bounding box's). We only
+-- read it to know WHERE to turn; the turns themselves are relative (turn × GetPivot()), so
+-- they are right whatever the client thinks the pivot is.
+local function realPivot(instance: PVInstance): CFrame
+	local pivot = instance:GetAttribute("Pivot")
+	return if typeof(pivot) == "CFrame" then pivot else instance:GetPivot()
+end
+
 export type Rig = {
 	update: (deltaTime: number) -> (),
 	reset: () -> (), -- back to how it was built
@@ -466,7 +476,7 @@ export type Swinger = Rig & { swing: () -> () }
 
 function AptFx.swinger(model: Model, axis: Vector3): Swinger
 	local base = model:GetPivot()
-	local hook = base.Position
+	local hook = realPivot(model).Position
 	local time = math.huge
 	local amplitude = math.rad(4)
 	local function update(deltaTime: number)
@@ -492,11 +502,12 @@ end
 -- The box fan blades: 1.5 turns per second around the pivot's own X axis (into the room).
 function AptFx.spinner(model: Model): Rig
 	local base = model:GetPivot()
+	local hub = realPivot(model)
 	local angle = 0
 	return {
 		update = function(deltaTime: number)
 			angle = (angle + deltaTime * 1.5 * 2 * math.pi) % (2 * math.pi)
-			model:PivotTo(base * CFrame.Angles(angle, 0, 0))
+			rotateFrom(model, base, hub.Position, hub.RightVector, angle)
 		end,
 		reset = function()
 			model:PivotTo(base)
@@ -516,7 +527,7 @@ function AptFx.sway(instance: PVInstance, seed: number): Rig
 			then instance.CFrame.RightVector
 			else instance.CFrame.LookVector
 	else
-		point = base.Position
+		point = realPivot(instance).Position
 		local boxCFrame, boxSize = (instance :: Model):GetBoundingBox()
 		along = if boxSize.X >= boxSize.Z then boxCFrame.RightVector else boxCFrame.LookVector
 	end

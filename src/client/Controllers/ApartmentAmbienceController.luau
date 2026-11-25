@@ -796,7 +796,10 @@ local function doorPitch(door: Model): number
 end
 
 local function doorPoint(door: Model): Vector3
-	return door:GetPivot().Position + Vector3.new(0, 3.5, 0)
+	-- (the hinge on the floor: GetPivot() on a client is not the hinge, see ApartmentController)
+	local hinge = door:GetAttribute("ClosedPivot")
+	local base = if typeof(hinge) == "CFrame" then hinge.Position else door:GetPivot().Position
+	return base + Vector3.new(0, 3.5, 0)
 end
 
 local function onDoorOpened(door: Model)

@@ -14,7 +14,13 @@
 --     never shoves your character; it is solid again the moment it stops.
 --       Prompt  a local "Open" / "Close" prompt (the kitchen fridge).
 --       Locked  a local "Try" prompt: the leaf rattles and "Locked." shows for 1.5 s.
---     Doors are turned with PivotTo(ClosedPivot * angle) around their hinge, on this screen only.
+--     Doors are turned around their hinge (the ClosedPivot attribute), on this screen only.
+--     WHY NOT model:PivotTo(ClosedPivot * angle): the hinge pivot is set by a SERVER script
+--     (Model.WorldPivot -> the leaf's PivotOffset), and Roblox does not send that offset to the
+--     clients. Here a door's pivot is the leaf's CENTRE, so PivotTo(hinge) put the middle of the
+--     leaf on the floor: the door sank by half its height and its prompt ended near the floor.
+--     So we measure, once per door, where the client's own pivot is relative to the real hinge
+--     (`hingeToPivot`) and always move with PivotTo(hinge * angle * hingeToPivot).
 --     Leaving the flat puts every door back the way it was built.
 --   • SIGNALS for the ambience (sounds, VFX) and the extraction (Shared/Util/Signal, `.connect`):
 --       ApartmentController.model()                 my flat once it is streamed in (nil outside)
@@ -62,6 +68,7 @@ type DoorState = {
 	model: Model,
 	mode: string,
 	closed: CFrame, -- the hinge at angle 0
+	hingeToPivot: CFrame, -- the client's pivot of this model, seen from its hinge
 	rest: number, -- the angle it was built at
 	openAngle: number,
 	trigger: number,
@@ -104,9 +111,20 @@ local function quadOut(t: number): number
 	return 1 - (1 - t) * (1 - t)
 end
 
+-- The angle (degrees) each door model was last LEFT at by this script: a door we already
+-- moved (an earlier visit, same instance) is not at its RestAngle any more. (weak keys: a
+-- door streamed out and back in is a new instance, built at its RestAngle.)
+local lastAngle: { [Model]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Puts the door at `angle` degrees (0 = shut) about its real hinge.
+local function poseAt(state: DoorState, angle: number)
+	state.model:PivotTo(state.closed * CFrame.Angles(0, math.rad(angle), 0) * state.hingeToPivot)
+	lastAngle[state.model] = angle
+end
+
 local function pose(state: DoorState, angle: number)
 	state.angle = angle
-	state.model:PivotTo(state.closed * CFrame.Angles(0, math.rad(angle), 0))
+	poseAt(state, angle)
 end
 
 ------------------------------------------------------------------------------
@@ -232,10 +250,14 @@ local function setUpDoor(model: Model)
 		return
 	end
 	local rest = numberAttribute(model, "RestAngle", 0)
+	-- Where the hinge is NOW (the server built the door at its RestAngle; we may have moved it
+	-- since), and from there where the client puts this model's pivot (see the header).
+	local hingeNow = closed * CFrame.Angles(0, math.rad(lastAngle[model] or rest), 0)
 	local state: DoorState = {
 		model = model,
 		mode = tostring(model:GetAttribute("Mode") or "Locked"),
 		closed = closed,
+		hingeToPivot = hingeNow:Inverse() * model:GetPivot(),
 		rest = rest,
 		openAngle = numberAttribute(model, "OpenAngle", 0),
 		trigger = numberAttribute(model, "TriggerDistance", DEFAULT_TRIGGER),
@@ -317,9 +339,7 @@ local function stepDoors()
 			else
 				-- a few fast small shakes, dying out (the leaf hits its lock)
 				local shake = math.sin(t * math.pi * 6) * RATTLE_DEGREES * (1 - t)
-				state.model:PivotTo(
-					state.closed * CFrame.Angles(0, math.rad(state.angle + shake), 0)
-				)
+				poseAt(state, state.angle + shake)
 			end
 		end
 	end

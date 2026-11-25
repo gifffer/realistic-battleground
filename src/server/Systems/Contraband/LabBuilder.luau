@@ -973,6 +973,8 @@ function LabBuilder.build(slot: number, owner: number): Model
 		holder.Name = `Sheet_{i}`
 		sheet.Parent = holder
 		holder.WorldPivot = sheet.CFrame * CF(0, sheet.Size.Y / 2, 0)
+		-- (clients never get a pivot set by a script: they read this attribute, see AptFx)
+		holder:SetAttribute("Pivot", holder.WorldPivot)
 		holder.Parent = anim
 	end
 	local curtain = AptProps.stripCurtain(anim, L(11.4, 0, 15, "W"), rng, 7)
@@ -1367,6 +1369,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 		shadows = true,
 	})
 	pendant.WorldPivot = L(-8, CEILING, -19)
+	pendant:SetAttribute("Pivot", pendant.WorldPivot) -- (for the client, see AptFx)
 	pendant.Parent = anim
 	part(
 		props.Entry,

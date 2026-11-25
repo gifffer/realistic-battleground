@@ -3780,6 +3780,7 @@ function AptProps.foilWindow(parent: Instance, at: CFrame, _rng: Random): (Model
 	-- the pivot: at the hub, its X axis pointing into the room (local -Z of the window)
 	local intoRoom = at.LookVector
 	blades.WorldPivot = CFrame.fromMatrix(hub.Position, intoRoom, Vector3.yAxis)
+	blades:SetAttribute("Pivot", blades.WorldPivot) -- (for the client, see AptFx)
 	blades.Parent = parent
 	return model, blades
 end
