@@ -73,6 +73,7 @@ type DoorState = {
 	open: boolean,
 	rattleAt: number?, -- os.clock() of the last "Try"
 	prompt: ProximityPrompt?,
+	solidPending: boolean, -- the swing ended inside your body: solid again once you step out
 }
 
 local flat: Model? = nil
@@ -168,6 +169,35 @@ local function setSolid(state: DoorState, solid: boolean)
 	if leaf then
 		leaf.CanCollide = solid
 	end
+	state.solidPending = false
+end
+
+-- Is your own body inside the leaf right now? (a leaf that turns solid inside you would
+-- shove you out, maybe through a thin wall)
+local overlap = OverlapParams.new()
+overlap.FilterType = Enum.RaycastFilterType.Include
+overlap.MaxParts = 1
+local function bodyInLeaf(state: DoorState): boolean
+	local leaf = state.model.PrimaryPart
+	local character = player.Character
+	if leaf == nil or character == nil then
+		return false
+	end
+	overlap.FilterDescendantsInstances = { character }
+	return #workspace:GetPartsInPart(leaf, overlap) > 0
+end
+
+-- The end of a swing (or a leave): solid at once, or as soon as you are out of the leaf.
+local function settle(state: DoorState)
+	if bodyInLeaf(state) then
+		local leaf = state.model.PrimaryPart
+		if leaf then
+			leaf.CanCollide = false
+		end
+		state.solidPending = true
+	else
+		setSolid(state, true)
+	end
 end
 
 local function swing(state: DoorState, target: number)
@@ -218,8 +248,10 @@ local function setUpDoor(model: Model)
 		open = false,
 		rattleAt = nil,
 		prompt = nil,
+		solidPending = false,
 	}
 	pose(state, rest)
+	setSolid(state, true) -- (a leaf left passable by an earlier visit is solid again)
 	local label = tostring(model:GetAttribute("Label") or "Door")
 	if state.mode == "Prompt" then
 		local prompt = Instance.new("ProximityPrompt")
@@ -271,8 +303,10 @@ local function stepDoors()
 			pose(state, state.from + (state.to - state.from) * quadOut(t))
 			if t >= 1 then
 				state.angle = state.to -- (exactly, so the swing ends)
-				setSolid(state, true)
+				settle(state)
 			end
+		elseif state.solidPending and not bodyInLeaf(state) then
+			setSolid(state, true)
 		end
 		local rattleAt = state.rattleAt
 		if rattleAt then
@@ -368,7 +402,16 @@ local function leave()
 		end
 		if state.model.Parent ~= nil then
 			pose(state, state.rest)
-			setSolid(state, true)
+			-- (you are leaving the flat: you are not in the leaf; if you somehow are, it
+			-- stays passable rather than shoving you)
+			if bodyInLeaf(state) then
+				local leaf = state.model.PrimaryPart
+				if leaf then
+					leaf.CanCollide = false
+				end
+			else
+				setSolid(state, true)
+			end
 		end
 	end
 	table.clear(doors)

@@ -76,9 +76,10 @@ local CELL = (SEAM_TOP - SEAM_BOTTOM) / CELLS
 local PANEL_OPEN = math.rad(170) -- (at 150° the near panel hid the bottom row)
 local ELEMENT_SCALE = 0.7
 local MAX_SCRATCHES = 8
-local GLOW_FADE = 3 -- s: the teal glow of a cut cell fades from 0.6 to 0.85 (never out)
+local GLOW_FADE = 3 -- s: the teal glow of a cut cell fades from 0.35 to 0.65 (never out)
 
 BenchVisual.CELLS = CELLS
+BenchVisual.CELL = CELL -- studs per cell along the seam
 BenchVisual.ELEMENT_SCALE = ELEMENT_SCALE
 BenchVisual.PANEL_OPEN = PANEL_OPEN
 
@@ -314,6 +315,12 @@ function BenchVisual.new(
 
 	-- The shell (SHELL look, chest open under the panels).
 	CloneModel.buildShell(bench.rig, folder, true)
+	-- (the shell's "SYN-04 NO ID" stencil stays, but small: in this close shot the full-size
+	-- one read as the loudest thing on the trolley)
+	local stencil = folder:FindFirstChild("Stencil")
+	if stencil and stencil:IsA("BasePart") then
+		stencil.Size = Vector3.new(0.8, 0.14, stencil.Size.Z)
+	end
 
 	-- Cavity: a dark wet lining on the floor and the 4 inner walls (inset from the shell's own
 	-- walls by 0.006: no shared faces).
@@ -402,9 +409,10 @@ function BenchVisual.new(
 			track(bench, wet, CFrame.identity)
 			table.insert(wets, wet)
 		end
+		-- (narrower than the dark split: a teal core glowing at the bottom of the cut)
 		local glow = Parts.part({
 			Name = "CutGlow",
-			Size = Vector3.new(0.008, CELL, 0.004),
+			Size = Vector3.new(0.014, CELL, 0.004),
 			Material = Enum.Material.Neon,
 			Color = GLOW,
 			Transparency = 1,
@@ -527,7 +535,7 @@ function BenchVisual.new(
 	local light = Instance.new("PointLight")
 	light.Name = "CutLight"
 	light.Color = GLOW
-	light.Range = 1.5
+	light.Range = 2
 	light.Brightness = 0
 	light.Shadows = false
 	light.Parent = lightHost
@@ -557,7 +565,9 @@ function BenchVisual.layoutPanels(bench: Bench)
 		for s = 1, 2 do
 			local side = if s == 1 then -1 else 1
 			local panel = panelCFrame(side, bench.panelOpen[s], bench.panelTremble[s])
-			local width = if cell.depth >= 2 then 0.025 else 0.007
+			-- (each half of the slit: together a dark split 0.044 wide after the skin, 0.07 through
+			-- the membrane; thinner read as a hairline at WORK distance)
+			local width = if cell.depth >= 2 then 0.035 else 0.022
 			Parts.setLocal(bench.rig, cell.splits[s], panel * onEdge(side, k, width, 0.004))
 			cell.splits[s].Size = Vector3.new(width, CELL + 0.004, 0.008)
 			-- the wet milky edge: just outside the split, a little proud
@@ -626,14 +636,14 @@ function BenchVisual.cutCell(bench: Bench, k: number, depth: number): boolean
 		cell.splits[s].Transparency = 0
 		cell.wets[s].Transparency = if cell.depth >= 2 then 0.15 else 1
 	end
-	cell.glow.Transparency = if cell.depth >= 2 then 1 else 0.6
+	cell.glow.Transparency = if cell.depth >= 2 then 1 else 0.35
 	BenchVisual.layoutPanels(bench)
 	-- the small cold light follows the last cut cell
 	local host = bench.cutLight.Parent
 	if host and host:IsA("BasePart") then
 		host.CFrame = CFrame.new(BenchVisual.seamPoint(bench, k - 0.5, 0, 0.05))
 	end
-	bench.cutLight.Brightness = 0.4
+	bench.cutLight.Brightness = 0.8
 	-- a milky bead wells up on every 2nd cell of the skin cut (it grows, then stays)
 	if cell.depth == 1 and k % 2 == 0 then
 		local side = if k % 4 == 0 then 1 else -1
@@ -1006,7 +1016,7 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 	for _, cell in bench.cells do
 		local at = cell.cutAt
 		if at and cell.depth == 1 then
-			local wanted = Parts.fade(0.6 + 0.25 * smooth((now - at) / GLOW_FADE), bench.visible)
+			local wanted = Parts.fade(0.35 + 0.3 * smooth((now - at) / GLOW_FADE), bench.visible)
 			if math.abs(cell.glow.Transparency - wanted) > 0.01 then
 				cell.glow.Transparency = wanted
 			end
@@ -1097,7 +1107,7 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 		runoff.CFrame = bench.anchor
 			* CFrame.new(
 				drain.centre.X,
-				drain.centre.Y + 0.004,
+				drain.centre.Y + drain.size.Y / 2 + 0.001, -- (its bottom just inside the strip)
 				drain.centre.Z - drain.size.Z * 0.45 + length / 2
 			)
 	end

@@ -4,7 +4,9 @@
 -- the clone, the screen text).
 --
 -- THE LOOK (the first concept the player loved: direction/art/02_clone_stages_vats.png, made by
--- direction/art/src/lab.py `vat()`, at 0.92 scale so it fits under the 11-stud ceiling):
+-- direction/art/src/lab.py `vat()`, at 0.92 width; the column is 1 stud shorter than a straight
+-- scale so the cap, the cables rising off it and the light bar all sit in a standing view under
+-- the lab's tent sheet, as in the concept):
 --   a squat glass column on a dark steel plinth with a thin orange line at its foot, a dark
 --   steel cap with a lighter collar, three black cables from the cap up to the ceiling, a small
 --   black monitor on a floor stand at the front-right, and a cold neon bar above the vat.
@@ -32,7 +34,9 @@
 -- Cosmetic parts go to the model's "Props_Lab" folder (or the model) and the neon bar to its
 -- "Fixtures" folder (Flicker "None"), when those folders exist.
 --
---   VatBuilder.build(at, model)  → the VatCore part
+--   VatBuilder.build(at, model, floorTop?)  → the VatCore part
+--   (floorTop: the height of the room's floor covering above `at`, the monitor's foot stands
+--   on it; the plinth's base sits just inside it)
 
 local AptProps = require(script.Parent.AptProps)
 
@@ -56,6 +60,11 @@ local CORE_HEIGHT = 4.05 -- VatCore above the floor
 -- sheets to the battens; the light bar hangs under the sheets.
 local TENT_UNDERSIDE = 10.4
 local CABLE_TOP = 10.85
+-- The column, bottom to top (heights above the floor, see 1. below).
+local GLASS_BOTTOM = 1.23
+local GLASS_TOP = 8.05
+local CAP_TOP = GLASS_TOP + 0.8
+VatBuilder.GLASS_TOP = GLASS_TOP
 
 -- The colours of the concept (lab.py: dark steel, hazard orange, black cables).
 local DARK_STEEL = look(M.Metal, 46, 48, 52)
@@ -64,7 +73,8 @@ local HAZARD = look(M.SmoothPlastic, 190, 110, 30)
 local CABLE = look(M.SmoothPlastic, 22, 22, 24)
 local MONITOR = look(M.Metal, 24, 26, 28)
 
-function VatBuilder.build(at: CFrame, model: Instance): BasePart
+function VatBuilder.build(at: CFrame, model: Instance, floorTop: number?): BasePart
+	local floor = floorTop or 0
 	local props: Instance = model:FindFirstChild("Props_Lab") or model
 	local fixtures: Instance = model:FindFirstChild("Fixtures") or model
 
@@ -102,27 +112,29 @@ function VatBuilder.build(at: CFrame, model: Instance): BasePart
 		return made
 	end
 
-	-- 1. The shell, bottom to top. Heights never share a face with a neighbour's visible face:
-	-- plinth 0–1.1, orange line 1.1–1.22 (narrower than the plinth), the glass floor disc
-	-- 1.22–1.24 (inside the glass), glass 1.23–9.05, collar 8.93–9.05 (wider than the glass,
-	-- around it), cap 9.05–9.85.
+	-- 1. The shell, bottom to top. Heights never share a face with a neighbour's visible face,
+	-- and no two near-level tops sit closer than 0.08 (a thin gap flickers from afar):
+	-- plinth 0–1.1, orange line 1.10–1.16 (narrower than the plinth), the glass floor disc
+	-- 1.16–1.24 (narrower still; the glass's own bottom at 1.23 is hidden inside it), glass
+	-- 1.23–8.05, collar 7.93–8.05 (wider than the glass, around it), cap 8.05–8.85.
 	column(model, "VatBase", 6.1, 1.1, 0.55, AptProps.solid(DARK_STEEL))
-	column(props, "VatHazard", 5.8, 0.12, 1.16, HAZARD)
+	column(props, "VatHazard", 5.8, 0.06, 1.13, HAZARD)
+	local glassHeight = GLASS_TOP - GLASS_BOTTOM
 	local glass = column(
 		model,
 		"VatGlass",
 		5.5,
-		7.82,
-		5.14,
+		glassHeight,
+		GLASS_BOTTOM + glassHeight / 2,
 		AptProps.solid(look(M.SmoothPlastic, 200, 220, 225, 0.88, 0.15))
 	)
 	glass.CastShadow = false
 	glass.CanQuery = false -- (prompts and clicks reach what is inside through it)
 	-- the glass floor: a dark steel disc just inside the glass (without it the orange line's
 	-- top showed through the fluid as an orange floor)
-	column(props, "VatFloor", 5.44, 0.02, 1.23, look(M.Metal, 70, 74, 78))
-	column(props, "VatCapLip", 5.75, 0.12, 8.99, COLLAR)
-	local cap = column(model, "VatCap", 6.1, 0.8, 9.45, AptProps.solid(DARK_STEEL))
+	column(props, "VatFloor", 5.44, 0.08, 1.20, look(M.Metal, 70, 74, 78))
+	column(props, "VatCapLip", 5.75, 0.12, GLASS_TOP - 0.06, COLLAR)
+	local cap = column(model, "VatCap", 6.1, 0.8, GLASS_TOP + 0.4, AptProps.solid(DARK_STEEL))
 	-- a weak cold light from the cap down into the column: a rim on the clone (no shadows)
 	local rim = Instance.new("SpotLight")
 	rim.Name = "VatRimLight"
@@ -141,8 +153,8 @@ function VatBuilder.build(at: CFrame, model: Instance): BasePart
 	for _, angle in { 0.6, 2.2, 4.0 } do
 		local c, s = math.cos(angle), math.sin(angle)
 		-- (-X: the concept's layout seen from the front, see SPACE above)
-		local p0 = P(-1.5 * c, 9.85, 1.5 * s) -- on the cap
-		local h0 = P(-1.75 * c, 10.5, 1.75 * s) -- leaves the cap straight up...
+		local p0 = P(-1.5 * c, CAP_TOP, 1.5 * s) -- on the cap
+		local h0 = P(-1.75 * c, CAP_TOP + 1.0, 1.75 * s) -- leaves the cap straight up...
 		local h1 = P(-2.5 * c, CABLE_TOP, 2.4) -- ...and bends back...
 		local p1 = P(-3 * c, CABLE_TOP, 3.2) -- ...up through the tent's sheet, behind the vat
 		local points = {}
@@ -174,8 +186,16 @@ function VatBuilder.build(at: CFrame, model: Instance): BasePart
 	-- 3. The monitor: a small black box on a floor stand, front-right, low (the concept's
 	-- "MATRIX 18%" box; -X = the right as you face the vat). The screen pokes 0.03 out of
 	-- the housing's front (no shared face).
-	part(props, "MonitorFoot", V(0.7, 0.06, 0.5), frame(-3.0, 0.03, -3.0), MONITOR)
-	part(props, "MonitorStem", V(0.14, 1.64, 0.14), frame(-3.0, 0.88, -3.0), MONITOR)
+	-- (the foot stands ON the floor covering; the stem from the foot's top up to the box)
+	part(props, "MonitorFoot", V(0.7, 0.06, 0.5), frame(-3.0, floor + 0.03, -3.0), MONITOR)
+	local stemBottom = floor + 0.05
+	part(
+		props,
+		"MonitorStem",
+		V(0.14, 1.72 - stemBottom, 0.14),
+		frame(-3.0, (1.72 + stemBottom) / 2, -3.0),
+		MONITOR
+	)
 	part(props, "VatMonitor", V(1.7, 1.0, 0.3), frame(-3.0, 2.2, -3.1), AptProps.solid(MONITOR))
 	local screen = part(
 		model,
@@ -187,8 +207,9 @@ function VatBuilder.build(at: CFrame, model: Instance): BasePart
 	screen.CastShadow = false
 
 	-- 4. The cold neon bar above the vat, a little in front (the concept's top light): a metal
-	-- housing hung under the tent's sheet on two rods, the tube under it, a soft light down.
-	local barTop = TENT_UNDERSIDE - 0.1
+	-- housing hung from the tent's battens on two rods, low enough to be in a standing view
+	-- with the cap, the tube under it, a soft light down.
+	local barTop = TENT_UNDERSIDE - 0.7
 	for _, x in { -2.6, 2.6 } do
 		part(
 			props,

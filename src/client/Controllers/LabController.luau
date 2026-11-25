@@ -45,7 +45,7 @@ export type LabParts = {
 	benchAnchor: BasePart,
 	chuteMouth: BasePart?,
 	stashShelf: BasePart?,
-	cutterDock: BasePart?, -- where the extraction's cutter sleeps (its charger)
+	cutterDock: BasePart?, -- a marker by the charger (unused by the v3 scalpel extraction)
 	scanScreen: BasePart?, -- the small CRT beside the trolley (the extraction's readout)
 	chargerLed: BasePart?, -- the charger's LED (ExtractionController sets "Busy" on it)
 }

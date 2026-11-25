@@ -24,9 +24,10 @@
 --   VatPrompt     on VatPromptPoint (front-left of the vat, standing height; VatCore in an
 --                 older flat) "Plant culture" (Empty) / "Extract" (Ready); off otherwise
 --   RackPrompt    on RackSpot    "Take case" (a new empty courier case in hand)
---   LoadPrompt    on BenchAnchor "Load cores": stash cores → free cradles of the case you hold
+--   LoadPrompt    on BenchAnchor's "BenchPrompts" attachment (1.2 above the trolley's top)
+--                 "Load cores": stash cores → free cradles of the case you hold
 --                 (shown only while you hold a case with a free cradle and the stash has cores)
---   UnloadPrompt  on BenchAnchor "Unload cores" (key T): cores of the case you hold → stash
+--   UnloadPrompt  beside it (same attachment, key T) "Unload cores": case cores → stash
 --                 (shown only while the case you hold has cores)
 --
 -- LabState (ContrabandEvent, to the owner only, never with ids) is sent when he joins, enters /
@@ -189,13 +190,15 @@ function updateBenchPrompts(player: Player)
 	end
 	local record = Case.held(player)
 	local owner = player.UserId
-	local load = anchor:FindFirstChild("LoadPrompt")
+	-- (both prompts hang on the "BenchPrompts" attachment above the trolley)
+	local host: Instance = anchor:FindFirstChild("BenchPrompts") or anchor
+	local load = host:FindFirstChild("LoadPrompt")
 	if load and load:IsA("ProximityPrompt") then
 		load.Enabled = record ~= nil
 			and Ledger.benchCount(owner) > 0
 			and Ledger.freeSlot(record.id) ~= nil
 	end
-	local unload = anchor:FindFirstChild("UnloadPrompt")
+	local unload = host:FindFirstChild("UnloadPrompt")
 	if unload and unload:IsA("ProximityPrompt") then
 		unload.Enabled = record ~= nil and Ledger.caseCount(record.id) > 0
 	end
@@ -337,14 +340,16 @@ local function attach(player: Player, model: Model)
 		object: string,
 		hold: number,
 		handler: (Player) -> (),
-		key: Enum.KeyCode?
-	)
+		key: Enum.KeyCode?,
+		host: Instance?
+	): ProximityPrompt?
 		local part = model:FindFirstChild(partName)
 		if part == nil or not part:IsA("BasePart") then
 			warn(`[Contraband] lab part {partName} missing`)
-			return
+			return nil
 		end
-		local made = Guard.makePrompt(part, name, action, object, hold, L.PROMPT_DISTANCE, false)
+		local made =
+			Guard.makePrompt(host or part, name, action, object, hold, L.PROMPT_DISTANCE, false)
 		if key then
 			made.KeyboardKeyCode = key
 		end
@@ -353,14 +358,40 @@ local function attach(player: Player, model: Model)
 				handler(who)
 			end
 		end)
+		return made
 	end
 	-- (the vat's prompt sits beside the vat, never over the glass or the monitor's text)
 	local vatHost = if model:FindFirstChild("VatPromptPoint") then "VatPromptPoint" else "VatCore"
 	prompt(vatHost, "VatPrompt", "Plant culture", "Culture vat", 0.6, onVat, nil)
 	prompt("RackSpot", "RackPrompt", "Take case", "Case rack", 0.4, onRack, nil)
-	prompt("BenchAnchor", "LoadPrompt", "Load cores", "Bench", 0.4, onLoad, nil)
-	-- (Load and Unload sit on the same part: two different keys, so one press never fires both)
-	prompt("BenchAnchor", "UnloadPrompt", "Unload cores", "Bench", 0.4, onUnload, Enum.KeyCode.T)
+	-- Load and Unload: on an attachment 1.2 above the trolley's top (on BenchAnchor itself
+	-- they sat inside the trolley), side by side on screen (UIOffset), two different keys so
+	-- one press never fires both
+	local anchor = model:FindFirstChild("BenchAnchor")
+	local benchHost: Attachment? = nil
+	if anchor and anchor:IsA("BasePart") then
+		local made = Instance.new("Attachment")
+		made.Name = "BenchPrompts"
+		made.Position = Vector3.new(0, 1.2, 0)
+		made.Parent = anchor
+		benchHost = made
+	end
+	local load =
+		prompt("BenchAnchor", "LoadPrompt", "Load cores", "Bench", 0.4, onLoad, nil, benchHost)
+	local unload = prompt(
+		"BenchAnchor",
+		"UnloadPrompt",
+		"Unload cores",
+		"Bench",
+		0.4,
+		onUnload,
+		Enum.KeyCode.T,
+		benchHost
+	)
+	if load and unload then
+		load.UIOffset = Vector2.new(-90, 0)
+		unload.UIOffset = Vector2.new(90, 0)
+	end
 	updateVatPrompt(player)
 	updateBenchPrompts(player)
 end

@@ -129,6 +129,8 @@ export type Box = {
 	mist: ParticleEmitter,
 	puffSource: BasePart,
 	puff: ParticleEmitter,
+	bayLight: PointLight, -- lights the capsule bay behind the window during a transfer
+	funnelLight: PointLight, -- lights the funnel from inside while the element goes down it
 	display: TextLabel?,
 	transfer: Transfer?,
 	sealed: number,
@@ -278,12 +280,32 @@ function PassBox.new(kit: Instance?, anchor: CFrame, parent: Instance, slots: nu
 		ENAMEL,
 		Enum.Material.SmoothPlastic
 	)
+	-- the gasket: a black rubber RING round the underside's edge (a full black plate made the
+	-- open lid read as a thin wire frame round a hole); the enamel shows inside it
+	local lidX, lidZ = hinge.X - 0.35, hinge.Z
+	for _, ring in
+		{
+			{ Vector3.new(0.66, 0.02, 0.05), Vector3.new(0, 0, -0.305) },
+			{ Vector3.new(0.66, 0.02, 0.05), Vector3.new(0, 0, 0.305) },
+			{ Vector3.new(0.05, 0.02, 0.56), Vector3.new(-0.305, 0, 0) },
+			{ Vector3.new(0.05, 0.02, 0.56), Vector3.new(0.305, 0, 0) },
+		}
+	do
+		lidPart(
+			"LidGasket",
+			ring[1],
+			Vector3.new(lidX, 0.16, lidZ) + ring[2],
+			rgb(24, 24, 24),
+			Enum.Material.Rubber
+		)
+	end
+	-- the underside's enamel panel, a shade darker than the top (it is in the lid's shadow)
 	lidPart(
-		"LidGasket",
-		Vector3.new(0.66, 0.02, 0.66),
-		Vector3.new(hinge.X - 0.35, 0.16, hinge.Z),
-		rgb(24, 24, 24),
-		Enum.Material.Rubber
+		"LidUnder",
+		Vector3.new(0.56, 0.012, 0.56),
+		Vector3.new(lidX, 0.164, lidZ),
+		rgb(184, 182, 172),
+		Enum.Material.SmoothPlastic
 	)
 	lidPart(
 		"LidHandle",
@@ -373,6 +395,29 @@ function PassBox.new(kit: Instance?, anchor: CFrame, parent: Instance, slots: nu
 		Parent = folder,
 	})
 
+	-- Two small cold lights, on only during a transfer (roblox-vfx: the action lit, the box
+	-- dark otherwise): one in the capsule bay behind the window, one inside the funnel's
+	-- mouth, so the element is seen going down instead of vanishing into a black hole.
+	local function coldLight(name: string, at: Vector3, range: number): PointLight
+		local host = Parts.part({
+			Name = name,
+			Size = Vector3.new(0.1, 0.1, 0.1),
+			Transparency = 1,
+			CFrame = local_(at),
+			Parent = folder,
+		})
+		local light = Instance.new("PointLight")
+		light.Color = rgb(215, 240, 245)
+		light.Brightness = 0
+		light.Range = range
+		light.Shadows = false
+		light.Parent = host
+		return light
+	end
+	local bayLight = coldLight("BayLight", BenchLayout.socket(0) + Vector3.new(0, 0.45, -0.18), 1.8)
+	local funnelLight =
+		coldLight("FunnelLight", Vector3.new(pb.centre.X, -0.05, pb.centre.Z - 0.1), 1.2)
+
 	-- The strip display's text (the static one; we only change it on our screen).
 	local display: TextLabel? = nil
 	local displayPart = if kit then kit:FindFirstChild("PassDisplay", true) else nil
@@ -409,6 +454,8 @@ function PassBox.new(kit: Instance?, anchor: CFrame, parent: Instance, slots: nu
 		mist = mistEmitter(mistSource),
 		puffSource = puffSource,
 		puff = puffEmitter(puffSource),
+		bayLight = bayLight,
+		funnelLight = funnelLight,
 		display = display,
 		transfer = nil,
 		sealed = 0,
@@ -582,8 +629,8 @@ local function fire(box: Box, name: string, item: Transfer, now: number)
 		end
 		local tube = capsule.model:FindFirstChild("Tube")
 		if tube and tube:IsA("BasePart") then
-			tube.Color = rgb(236, 244, 248) -- frosted
-			tube.Transparency = 0.4
+			tube.Color = rgb(236, 244, 248) -- frosted (the element still shows through)
+			tube.Transparency = 0.5
 		end
 	elseif name == "Turn" then
 		box.turnFrom = box.carouselAngle
@@ -638,6 +685,17 @@ function PassBox.step(box: Box, dt: number, now: number)
 	-- the transfer timeline
 	local item = box.transfer
 	local grateGoal = 0
+	-- (the two cold lights: up as the grate opens, the funnel one down once the element has
+	-- landed, the bay one once the lid is shut)
+	local bayGoal, funnelGoal = 0, 0
+	if item then
+		local lit = now - item.start
+		bayGoal = if lit >= 0.1 and lit < 2.0 then 1.4 else 0
+		funnelGoal = if lit >= 0.1 and lit < 0.8 then 1.1 else 0
+	end
+	local glide = 1 - math.exp(-dt * 12)
+	box.bayLight.Brightness += (bayGoal - box.bayLight.Brightness) * glide
+	box.funnelLight.Brightness += (funnelGoal - box.funnelLight.Brightness) * glide
 	if item then
 		local elapsed = now - item.start
 		while TIMELINE[item.next] and elapsed >= TIMELINE[item.next].t do

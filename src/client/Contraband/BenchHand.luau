@@ -39,9 +39,11 @@ end
 
 local GLOVE = rgb(70, 98, 124) -- blue-grey nitrile
 local GLOVE_DARK = rgb(58, 82, 104)
-local SLEEVE = rgb(34, 36, 40)
+local SLEEVE = rgb(78, 84, 92) -- a mid-grey sleeve (a dark one read as a black beam)
 local SCALE = 0.6 -- the whole hand (as in v2: a real hand next to a 2-stud-wide torso)
 local POSE_BLEND = 0.12 -- s (half-life of the curl spring)
+local SLEEVE_SOLID = 1.3 -- studs of solid forearm after the cuff (then it fades out)
+local SLEEVE_FADE = 0.45 -- studs of each of the two fading rings
 
 export type PoseName = "Open" | "Pen" | "Grip" | "Press" | "Clip"
 
@@ -106,7 +108,7 @@ export type Tool = {
 -- Where the grip point sits on a held scalpel (scalpel space: tip at the origin, handle +Z):
 -- the pinch is a little behind the blade, on the handle. BenchHand.place(hand,
 -- scalpel * PEN_FROM_TIP) puts the hand on it (the hand's -Z toward the tip).
-BenchHand.PEN_FROM_TIP = CFrame.new(-0.04, 0.03, 0.3)
+BenchHand.PEN_FROM_TIP = CFrame.new(-0.04, 0.03, 0.36) -- (the blade well ahead of the fingertips)
 	* CFrame.Angles(math.rad(-12), 0, math.rad(80))
 -- On a held clip (clip space: hooks at the origin, rings at +Z): the pinch at the rings.
 BenchHand.CLIP_FROM_TOOL = CFrame.new(0, 0.05, 0.32)
@@ -165,7 +167,18 @@ function BenchHand.new(folder: Instance): Hand
 	end
 	arm(piece(folder, "Cuff", Vector3.new(0.48, 0.3, 0.14), GLOVE), 0.04)
 	arm(piece(folder, "CuffRoll", Vector3.new(0.52, 0.34, 0.06), GLOVE_DARK), 0.12)
-	arm(piece(folder, "Sleeve", Vector3.new(0.56, 0.5, 3.2), SLEEVE, Enum.Material.Fabric), 1.75)
+	-- (a SHORT round sleeve: a cylinder along its X, turned along the arm in step, then two
+	-- short see-through rings that fade it out. A sleeve running all the way out of the frame
+	-- crossed the whole shot over the work, as a plank; a box read as a plank too)
+	for k, name in { "Sleeve", "SleeveFade", "SleeveFadeEnd" } do
+		local sleeve =
+			piece(folder, name, Vector3.new(3.2, 0.44, 0.44), SLEEVE, Enum.Material.Fabric)
+		if sleeve:IsA("Part") then
+			sleeve.Shape = Enum.PartType.Cylinder
+		end
+		sleeve:SetAttribute("Fade", ({ 0, 0.45, 0.8 })[k])
+		arm(sleeve, 1.75)
+	end
 	local segments = {}
 	for _, finger in FINGERS do
 		local a = piece(folder, "Finger", Vector3.new(0.1, 0.09, finger.l1 + 0.02), GLOVE)
@@ -212,12 +225,13 @@ function BenchHand.show(hand: Hand, on: boolean)
 	end
 	hand.shown = on
 	for _, part in hand.parts do
-		part.Transparency = if on then 0 else 1
+		local fade = part:GetAttribute("Fade")
+		part.Transparency = if not on then 1 elseif typeof(fade) == "number" then fade else 0
 	end
 end
 
 -- Rebuilds the finger locals from the (blended) curls and moves the rig.
-function BenchHand.step(hand: Hand, dt: number, camera: CFrame?)
+function BenchHand.step(hand: Hand, dt: number, camera: CFrame?, fov: number?)
 	local k = 1 - 2 ^ (-dt / POSE_BLEND)
 	for i, wanted in hand.target do
 		hand.curls[i] += (wanted - hand.curls[i]) * k
@@ -251,27 +265,48 @@ function BenchHand.step(hand: Hand, dt: number, camera: CFrame?)
 	local direction: Vector3
 	local length = 3.2 * SCALE
 	if camera then
-		local shoulder = camera.Position
-			+ camera.RightVector * 0.9
-			- camera.UpVector * 0.75
-			+ camera.LookVector * 0.3
-		local reach = shoulder - wrist
+		-- First person: the forearm points from the wrist toward the BOTTOM edge of the screen,
+		-- right of centre (toward your own body). That point is taken closer to the camera
+		-- than the wrist (3/4 of its depth), so the sleeve rises toward you, foreshortened.
+		-- Only 1.3 studs of it are solid, then it fades out over 0.9: it never runs across the
+		-- whole frame over the work (a long beam to a far shoulder hid the trays).
+		local depth = math.max((wrist - camera.Position):Dot(camera.LookVector), 0.5)
+		local exitDepth = depth * 0.75
+		local tanV = math.tan(math.rad((fov or 40) / 2))
+		local exit = camera.Position
+			+ camera.LookVector * exitDepth
+			+ camera.RightVector * (exitDepth * tanV * 0.8)
+			- camera.UpVector * (exitDepth * tanV * 1.25)
+		local reach = exit - wrist
 		direction = reach.Unit
-		length = math.clamp(reach.Magnitude, 1, 6)
+		length = math.clamp(reach.Magnitude + 0.3, 0.8, 4)
 	else
 		local back = -grip.LookVector
 		local flat = Vector3.new(back.X, 0, back.Z)
 		direction = ((if flat.Magnitude > 1e-3 then flat.Unit else back) + Vector3.yAxis * 0.14).Unit
 	end
+	-- (only the first stretch is drawn solid: see the sleeve pieces in new)
+	length = math.min(length, SLEEVE_SOLID)
 	local frame = CFrame.lookAt(wrist, wrist - direction)
 	local inverse = grip:Inverse()
 	for _, item in hand.forearm do
 		local at = item.at
-		if item.part.Name == "Sleeve" then
-			if math.abs(item.part.Size.Z - length) > 0.05 then
-				item.part.Size = Vector3.new(item.part.Size.X, item.part.Size.Y, length)
+		local name = item.part.Name
+		if name == "Sleeve" or name == "SleeveFade" or name == "SleeveFadeEnd" then
+			-- the solid sleeve, then the two fading rings after it, end to end
+			local size = if name == "Sleeve" then length else SLEEVE_FADE
+			local from = 0.16 * SCALE
+				+ (
+					if name == "Sleeve"
+						then 0
+						elseif name == "SleeveFade" then length
+						else length + SLEEVE_FADE
+				)
+			if math.abs(item.part.Size.X - size) > 0.01 then
+				item.part.Size = Vector3.new(size, item.part.Size.Y, item.part.Size.Z)
 			end
-			at = CFrame.new(0, 0, 0.16 * SCALE + length / 2)
+			-- (the cylinder's axis is its X: turned to run along the arm, +Z)
+			at = CFrame.new(0, 0, from + size / 2) * CFrame.Angles(0, math.rad(90), 0)
 		end
 		Parts.setLocal(hand.rig, item.part, inverse * frame * at)
 	end
@@ -279,7 +314,7 @@ function BenchHand.step(hand: Hand, dt: number, camera: CFrame?)
 end
 
 -- A grip CFrame at `at` (world) for a hand whose arm comes in from the bottom-right of the
--- screen (about 40° to the side, never covering what it works on), the fingers pitched down
+-- screen (about 48° to the side, never covering what it works on), the fingers pitched down
 -- by `pitch` degrees.
 function BenchHand.frame(at: Vector3, camera: CFrame, pitch: number, up: Vector3?): CFrame
 	local worldUp = up or Vector3.yAxis
@@ -288,7 +323,7 @@ function BenchHand.frame(at: Vector3, camera: CFrame, pitch: number, up: Vector3
 	local back = if toCamera.Magnitude > 1e-3 then toCamera.Unit else -camera.LookVector
 	local side = camera.RightVector - worldUp * camera.RightVector:Dot(worldUp)
 	side = if side.Magnitude > 1e-3 then side.Unit else Vector3.xAxis
-	local angle = math.rad(40)
+	local angle = math.rad(48) -- (about the way the sleeve runs to your shoulder: see step)
 	local arm = (back * math.cos(angle) + side * math.sin(angle)).Unit -- fingers → wrist
 	return CFrame.lookAt(at, at - arm, worldUp) * CFrame.Angles(-math.rad(pitch), 0, 0)
 end

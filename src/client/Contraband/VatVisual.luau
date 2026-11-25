@@ -12,7 +12,9 @@
 --              round bubble texture); the fluid in front fogs them. They grow in at the bottom
 --              and flatten and shrink as they break at the surface (never pop on / off). Rate
 --              per stage: Matrix 2/s, Frame 4/s, Shell 1/s, phase shift 20/s (40 in the pool).
---   lights     GlowSource (inside, lights the clone) + FrontWash (OUTSIDE the glass, in front:
+--   lights     GlowSource (inside, lights the clone's front) + BackGlow (inside, behind the
+--              clone: its outline stands out on a lit back wall of fluid) + a weak FrontWash
+--              (OUTSIDE the glass, in front:
 --              Roblox draws only the front faces of a part, so a light inside a cylinder never
 --              lights the skin we look at; FrontWash lights it and pools colour on the floor).
 --              No shadows.
@@ -76,6 +78,8 @@ export type Vat = {
 	light: PointLight,
 	washPart: BasePart,
 	wash: PointLight,
+	backPart: BasePart,
+	back: PointLight,
 	bubbles: { Bubble },
 	spawnDebt: number,
 	moved: { BasePart }, -- reused every frame (no table per frame)
@@ -109,12 +113,12 @@ local MATRIX_END = 0.25
 local FRAME_END = 0.75
 local SHIFT_TIME = 2
 
--- The fluid, relative to VatCore (4.05 above the floor). The glass inside runs 1.23..9.05
+-- The fluid, relative to VatCore (4.05 above the floor). The glass inside runs 1.23..8.05
 -- above the floor and is 5.5 wide: the fluid is 0.1 clear of it on every side, its bottom
 -- 0.04 above the glass floor, its full top 0.58 under the cap.
 local FLUID_DIAMETER = 5.3
 local FLUID_BOTTOM = -2.78
-local FLUID_HEIGHT = 7.2
+local FLUID_HEIGHT = 6.2
 local DRAINED = 0.3
 
 local MAX_BUBBLES = 40
@@ -124,7 +128,12 @@ local BUBBLE_RADIUS = 2.3 -- how far from the axis bubbles start (the fluid's ra
 
 local GLOW_RANGE = 6.5
 local WASH_RANGE = 9
-local WASH_BRIGHTNESS = 0.7
+local WASH_BRIGHTNESS = 0.35 -- (low: brighter lit the fluid's skin into a flat opaque column)
+-- BackGlow: a second, small light INSIDE, behind the clone, so its outline and the scaffold
+-- stand out against a lit back of the column (the concept's backlit look)
+local BACK_RANGE = 4.5
+local BACK_SHARE = 0.7 -- of GlowSource's brightness
+local BACK_OFFSET = Vector3.new(0, 0.6, 1.7)
 -- FrontWash's place, relative to VatCore: outside the glass, 4.5 studs in front, at the
 -- clone's head (≈ 5.6 studs above the floor: it reaches the column's top too).
 local WASH_OFFSET = Vector3.new(0, 1.6, -4.5)
@@ -147,7 +156,7 @@ type Look = {
 local LOOKS: { [string]: Look } = {
 	MATRIX = {
 		color = rgb(232, 168, 98),
-		transparency = 0.25,
+		transparency = 0.45, -- (0.25 hid the scaffold and lobes: a solid peach column)
 		light = rgb(255, 170, 95),
 		brightness = 0.5, -- (lower: close to the lobes it made a hot orange spot)
 		-- (in FRONT of the lobes' cluster: a light inside the opaque lobes would leave their
@@ -156,17 +165,19 @@ local LOOKS: { [string]: Look } = {
 	},
 	FRAME = {
 		color = rgb(115, 190, 180),
-		transparency = 0.28,
+		transparency = 0.5,
 		light = rgb(120, 225, 205),
 		brightness = 0.9,
 		glowAt = Vector3.new(0, 0.4, 0),
 	},
 	SHELL = {
 		color = rgb(165, 200, 210),
-		transparency = 0.35,
+		transparency = 0.58, -- (0.35 read as a milky column: the body must show)
 		light = rgb(185, 230, 250),
-		brightness = 0.9,
-		glowAt = Vector3.new(0, 0.9, -1.0), -- (in front of the body, as in the concept)
+		brightness = 0.75,
+		-- (in front of the body, as in the concept, but near the glass: 1 stud from the chest
+		-- it burnt a white spot on the port)
+		glowAt = Vector3.new(0, 1.2, -1.9),
 	},
 	DRAINED = {
 		color = rgb(110, 118, 122),
@@ -323,6 +334,13 @@ function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): 
 		CFrame = vatCore.CFrame * CFrame.new(WASH_OFFSET),
 		Parent = folder,
 	})
+	local backPart = Parts.part({
+		Name = "BackGlow",
+		Size = Vector3.new(0.2, 0.2, 0.2),
+		Transparency = 1,
+		CFrame = vatCore.CFrame * CFrame.new(BACK_OFFSET),
+		Parent = folder,
+	})
 
 	local vat: Vat = {
 		core = vatCore,
@@ -335,6 +353,8 @@ function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): 
 		light = pointLight(lightPart, GLOW_RANGE, drained.light),
 		washPart = washPart,
 		wash = pointLight(washPart, WASH_RANGE, drained.light),
+		backPart = backPart,
+		back = pointLight(backPart, BACK_RANGE, drained.light),
 		bubbles = {},
 		spawnDebt = 0,
 		moved = {},
@@ -493,6 +513,7 @@ function VatVisual.setCulled(vat: Vat, culled: boolean)
 	vat.culled = culled
 	vat.light.Enabled = not culled
 	vat.wash.Enabled = not culled
+	vat.back.Enabled = not culled
 	if culled then
 		vat.fillLine.Transparency = 1
 		for _, bubble in vat.bubbles do
@@ -687,9 +708,14 @@ function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
 	if vat.wash.Brightness ~= washBrightness then
 		vat.wash.Brightness = washBrightness
 	end
+	local backBrightness = brightness * BACK_SHARE
+	if vat.back.Brightness ~= backBrightness then
+		vat.back.Brightness = backBrightness
+	end
 	if vat.light.Color ~= vat.lightColor then
 		vat.light.Color = vat.lightColor
 		vat.wash.Color = vat.lightColor
+		vat.back.Color = vat.lightColor
 	end
 	local glowAt = vat.core.CFrame * CFrame.new(vat.lightOffset)
 	if vat.lightPart.CFrame ~= glowAt then

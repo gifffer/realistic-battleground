@@ -42,7 +42,7 @@
 -- the step, the element's state, the least time). A refused one counts as invalid and the
 -- server sends the client a fresh ExtractState (it snaps back to the server's state); more
 -- than MAX_INVALID refused ones abort the session. RateLimiter: burst 12, 2 per s (a whole
--- run is about 16 messages in 25 s).
+-- run is about 16 messages in 25 s); a message it drops is not counted as invalid.
 --
 -- A TRANSFER is real at once: the core is made in the Ledger right away (a free cradle of a
 -- case lying in the lab, else the stash; never lost: over the stash limit if it must), the
@@ -342,6 +342,8 @@ function Extraction.abort(player: Player, why: string)
 	Extraction.pushState(player)
 	if why == "cooling bar ran out" then
 		Guard.notice(player, "The tissue cooled. The vat is still ready.")
+	elseif why == "timed out" then
+		Guard.notice(player, "Too slow: the vat is still ready.")
 	end
 	Guard.debug(`{player.Name}: extraction stopped ({why})`)
 end
@@ -417,11 +419,17 @@ function Extraction.begin(player: Player)
 		Guard.notice(player, "Set the case down first (G).")
 		return
 	end
+	-- (measured from the prompt the player actually used: the "Extract" prompt hangs on
+	-- VatPromptPoint, about 4 studs off the vat's axis, and Lab accepts it from up to
+	-- PROMPT_DISTANCE + 2; the bench anchor also counts)
 	local bench = Apartments.labPart(player, "BenchAnchor")
-	local vat = Apartments.labPart(player, "VatCore")
-	local nearBench = bench ~= nil and Guard.near(player, bench.Position, E.START_DISTANCE)
-	local nearVat = vat ~= nil and Guard.near(player, vat.Position, E.START_DISTANCE)
+	local point = Apartments.labPart(player, "VatPromptPoint")
+		or Apartments.labPart(player, "VatCore")
+	local reach = math.max(E.START_DISTANCE, Config.Lab.PROMPT_DISTANCE + 2)
+	local nearBench = bench ~= nil and Guard.near(player, bench.Position, reach)
+	local nearVat = point ~= nil and Guard.near(player, point.Position, reach)
 	if not nearBench and not nearVat then
+		Guard.notice(player, "Step closer to the vat.")
 		return
 	end
 	local free = room(player)
@@ -651,8 +659,11 @@ local function onAction(player: Player, sessionId: any, action: any, arg: any)
 	-- place while his own screen has already given the camera back)
 	local ending = action == "Done" or action == "Stop"
 	if not ending and not actionLimiter.allow(player) then
+		-- (a dropped message is NOT counted as a bad one: an honest but fidgety player who
+		-- grabs and lets go fast must never lose the session; he just gets the state back)
 		session.acked += 1
-		refuse(session, "rate limit")
+		Guard.debug(`{player.Name}: ExtractAction dropped (rate limit)`)
+		Extraction.pushState(player)
 		return
 	end
 	if not isWhole(sessionId, 1, 2 ^ 31) or sessionId ~= session.id then
@@ -673,7 +684,13 @@ local function onAction(player: Player, sessionId: any, action: any, arg: any)
 		return
 	end
 	if ending then
-		Extraction.abort(player, if action == "Done" then "done" else "stopped by the player")
+		-- (the client also stops by itself when its cooling bar runs out: tell the player why)
+		local cool = session.coolEnds
+		local why = if cool and os.clock() >= cool - 0.5
+			then "cooling bar ran out"
+			elseif action == "Done" then "done"
+			else "stopped by the player"
+		Extraction.abort(player, why)
 		return
 	end
 	local now = os.clock()
@@ -737,10 +754,16 @@ function Extraction.start()
 		for player, session in sessions do
 			local cool = session.coolEnds
 			if player.Parent == nil then
+				-- (normally onLeaving already ended it; if that failed, end it properly here
+				-- so a session with sealed capsules still settles the culture)
+				-- (pcall: the player is gone, so sending him his state may fail)
+				pcall(Extraction.abort, player, "left the game")
 				sessions[player] = nil
 			elseif cool and now >= cool + END_GRACE then
 				Extraction.abort(player, "cooling bar ran out")
-			elseif now - session.startedAt > E.TIMEOUT then
+			elseif cool == nil and now - session.startedAt > E.TIMEOUT then
+				-- (the safety timeout only covers the opening steps: once the panels are
+				-- open, the cooling bar above is the only clock)
 				Extraction.abort(player, "timed out")
 			elseif player:GetAttribute("InLab") ~= true then
 				Extraction.abort(player, "left the lab")

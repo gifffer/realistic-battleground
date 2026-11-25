@@ -117,16 +117,22 @@ function Guard.promptAllowed(player: Player, prompt: ProximityPrompt): boolean
 	if not promptLimiter.allow(player) or not Guard.canAct(player) then
 		return false
 	end
-	local part = prompt.Parent
-	if part == nil or not part:IsA("BasePart") then
+	-- (a prompt hangs on a part or on an Attachment of a part)
+	local host = prompt.Parent
+	local position: Vector3
+	if host and host:IsA("BasePart") then
+		position = host.Position
+	elseif host and host:IsA("Attachment") then
+		position = host.WorldPosition
+	else
 		return false
 	end
-	return Guard.near(player, part.Position, prompt.MaxActivationDistance + 2)
+	return Guard.near(player, position, prompt.MaxActivationDistance + 2)
 end
 
 -- Makes a server ProximityPrompt (E by default).
 function Guard.makePrompt(
-	parent: BasePart,
+	parent: Instance, -- a BasePart or an Attachment
 	name: string,
 	actionText: string,
 	objectText: string,

@@ -70,16 +70,20 @@ Tous les sons viennent du Creator Store (presque tous **ProSoundEffects** ou **R
 | `LabDrip` | Goutte | 3D au seau du couloir et au bac du labo (synchro avec la goutte visible), au robinet de la salle de bain (toutes les 4–10 s) | 9120510269, 9120511536 |
 | `LabSpark` | Petit arc électrique (**nouveau**) | 3D à la multiprise brûlée, avec l'étincelle (toutes les 45–120 s, jamais pendant une extraction) | 9114237693 |
 | `VatBubbleSurge` | Grosses bulles qui remontent | 3D à la cuve : quand tu lances une culture, puis à 25 % et 75 % si tu es là | 9120559955, 9120494621, 9120559328 |
-| `VatReadyChime` | Bip de moniteur, 2 fois | 3D au vieil écran du labo quand la culture devient PRÊTE | 9113880400 |
+| `VatReadyChime` | Bip de moniteur, 2 fois | 3D à l’écran de la cuve (sur pied, devant la cuve) quand la culture devient PRÊTE (le seul signal sonore dans le labo : le HUD y est caché) | 9113880400 |
 
 ### L'extraction (2D, toi seul)
 
 | Nom | Moment | Id(s) |
 |---|---|---|
-| `CutterPickup` | La main prend le cutter | 9125461450, 9125461439 |
-| `CutterArm` | Le fil chauffe (clic) | 9119717529 |
-| `CutterBurn` | Le fil suit la couture (boucle, le pitch suit la vitesse) | 9114542867 |
-| `SeamPop` | Fin de la couture | 9126209045, 9113266090 |
+| `ScalpelPickup` | La main prend le scalpel (tintement d'acier) | 9116902317 |
+| `ScalpelSkin` | La lame passe la peau (toutes les 3 cellules) | 138772034497598, 72475389234606, 100089328974443 |
+| `ScalpelMembrane` | La lame passe la membrane (chaque cellule, humide) | 71972357334329 |
+| `ScalpelPress` | Lame immobile : un cran plus profond | 9125619646 |
+| `ScalpelSkid` | La lame dérape / raye hors de la couture | 9116902704 |
+| `SeamPop` | La membrane est ouverte | 9126209045, 9113266090 |
+| `PanelStretch` | Un panneau tiré (boucle, le pitch suit l'ouverture) | 9118744344 |
+| `RetractorClick` | L'écarteur se clipse sur le panneau | 9125921369 |
 | `PanelsOpen` | Les panneaux s'ouvrent | 9120627864, 9120627902 |
 | `ColdBreath` | Souffle froid qui sort | 9116495722 |
 | `ScanLock` | L'écran verrouille la lecture d'un élément | 9119973132 |
@@ -87,10 +91,17 @@ Tous les sons viennent du Creator Store (presque tous **ProSoundEffects** ou **R
 | `ElementStrain` | L'élément résiste (boucle) | 9118744344 |
 | `ElementRelease` | Il se détache | 9113537815, 9119669074 |
 | `ElementCrumble` | Une husk s'effrite | 9117088526, 9117206088 |
+| `MilkDrip` | Une perle laiteuse tombe | 9113464190, 9113464198 |
+| `TraySet` | L'élément posé sur l'acier | 94238955194144 |
+| `HatchOpen` | Le couvercle de la boîte froide s'ouvre (pneumatique) | 9125560652 |
+| `GrateSlide` | La grille s'écarte / se referme, le volet du puits | 9116902704 |
+| `CapsuleDrop` | L'élément tombe dans la capsule | 2053476174 |
+| `CarouselTurn` | Le carrousel tourne | 9119717529 |
+| `HatchClose` | Le couvercle se ferme | 9117526627 |
 | `CapsuleSeal` + `CapsuleHiss` | Bouchon de capsule + chuintement | 9125921369 + 9125560652 |
 | `SealFrost` | Givre sur la capsule | 9125611419 |
 | `TimerLow` | Les 4 dernières secondes | 9119193999 |
-| `ToolTraySetDown` | Le cutter reposé | 9116902704, 9116902317 |
+| `ToolTraySetDown` | Le scalpel reposé, la coque posée sur le chariot | 9116902704, 9116902317 |
 | `ChuteSlide` | La coque dans la goulotte | 16480576087 |
 | `UiSelect` / `UiConfirm` / `UiCancel` / `UiError` | Survol, DONE, Stop, refusé | 15675032796 / 15675059323 / 15675075163 / 9113880475 |
 

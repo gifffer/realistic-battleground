@@ -20,7 +20,7 @@
 -- Space: the clone's root is the vat's centre (VatCore). The clone stands on local Y, faces
 -- local -Z (the vat screen side), feet at y = -2.5, head top at y = 2.7 (R6 adult: torso
 -- 2×2×1, arms / legs 1×2×1, head ~1.2). VatCore is 4.05 above the floor, the cap's underside
--- 5.0 above VatCore.
+-- 4.0 above VatCore (VatBuilder: glass top 8.05).
 --
 -- INSIDE THE VAT every part is OPAQUE (the vat's fluid around it is the one see-through part):
 -- a see-through part inside another see-through part flips its draw order as the camera turns
@@ -105,7 +105,7 @@ local WIRE = 0.06
 local FRAME_INSET = 0.08 -- studs each FRAME box is shrunk by on every side (gaps between limbs)
 local FRAME_ARM_OPEN = 5 -- degrees the FRAME arms are opened away from the torso
 local FRAME_RIBS = 3 -- horizontal ribs per FRAME limb
-local SUPPORT_TOP = 5.0 -- the cap's underside above VatCore (where the rod and cables end)
+local SUPPORT_TOP = 4.0 -- the cap's underside above VatCore (where the rod and cables end)
 
 -- Where a FRAME box sits (clone space): its centre, the arms turned out around the shoulder.
 local function frameBoxCFrame(box: Box): CFrame
@@ -155,10 +155,23 @@ function CloneModel.buildShell(rig: Parts.Rig, parent: Instance, cavity: boolean
 		track(items, rig, part, CFrame.new(at))
 	end
 
-	-- Limbs.
+	-- Limbs: each a little narrower than its R6 box, moved out, and the legs a little shorter
+	-- at the hip, so a 0.05 dark gap runs between the arms, the legs and the torso (flush boxes
+	-- read as one white slab from a distance).
+	local GAP = 0.05
 	for _, box in BOXES do
 		if box.name ~= "Torso" and box.name ~= "Head" then
-			body(box.name, box.size, CFrame.new(box.centre))
+			local out = if box.centre.X < 0 then -1 else 1
+			local isLeg = box.centre.Y < 0
+			local size = box.size
+				- Vector3.new(if isLeg then GAP / 2 else GAP, if isLeg then GAP else 0, 0)
+			local centre = box.centre
+				+ Vector3.new(
+					out * (if isLeg then GAP / 4 else GAP / 2),
+					if isLeg then -GAP / 2 else 0,
+					0
+				)
+			body(box.name, size, CFrame.new(centre))
 		end
 	end
 	-- Torso.

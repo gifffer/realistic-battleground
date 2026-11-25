@@ -12,7 +12,8 @@
 --   LabBuilder  builds a lab room from parts
 --   Apartments  the lab doors in the city, the labs, going in and out
 --   Lab         the vat culture, the stash, the lab prompts
---   Extraction  the extraction: automatic cut, then pick the bio-elements (ExtractAction)
+--   Extraction  the extraction: the player cuts with the scalpel, opens the shell, pulls the
+--               bio-elements onto the tray and seals them in the pass-box (ExtractAction)
 --   Market      the buyer at the van in the Yard
 --
 -- It also wires the player's save (PlayerData.onLoaded → Lab.load; onLeaving → every module's
@@ -20,10 +21,14 @@
 --
 -- Remotes (Shared/Remotes): ContrabandEvent (server → ONE client), ContrabandSync,
 -- ExtractAction, CaseAction (client → server, all validated and rate-limited).
--- Studio check of the bio-core ledger (command bar, server):
---   require(game.ServerScriptService.Server.Systems.Contraband.Ledger).verify()
+-- Studio check of the LIVE bio-core ledger (command bar, server side, during a Play test):
+--   game.ServerStorage.ContrabandVerify:Invoke()   → true (or false + why)
+-- (a `require(...Ledger).verify()` typed in the command bar gets its own fresh copy of the
+-- module, with an empty ledger: it always says true. The BindableFunction runs the real one.)
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local ServerStorage = game:GetService("ServerStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local PlayerData = require(script.Parent.PlayerData)
@@ -82,6 +87,15 @@ end
 
 function Contraband.start()
 	Remotes.ContrabandSync.OnServerEvent:Connect(onSync)
+	-- (Studio only: the command bar's way to check the live ledger, see the header)
+	if RunService:IsStudio() then
+		local verify = Instance.new("BindableFunction")
+		verify.Name = "ContrabandVerify"
+		verify.OnInvoke = function()
+			return Ledger.verify()
+		end
+		verify.Parent = ServerStorage
+	end
 	PlayerData.onLoaded(Lab.load)
 	for _, run in
 		{ TripLog.start, Case.start, Apartments.start, Lab.start, Extraction.start, Market.start }

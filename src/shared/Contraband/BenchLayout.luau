@@ -70,16 +70,19 @@ BenchLayout.TRAY_FLOOR = 0.012 -- the trays' floor thickness (their inside floor
 -- (the scalpel lies on its handle on the towel, tip toward -X; the clips on the bare steel,
 -- rings toward the camera)
 BenchLayout.SCALPEL_REST = CF(-2.75, 0.04, -1.22) * ANG(0, rad(90), 0)
+-- (hooks at z -1.1, rings at z -1.4: the whole clip lies inside the tray, clear of the
+-- trolley's near lip at z -1.5)
 BenchLayout.CLIP_RESTS = table.freeze({
-	CF(-1.8, 0.04, -1.26) * ANG(0, math.pi, 0),
-	CF(-1.6, 0.04, -1.26) * ANG(0, math.pi, 0),
+	CF(-1.8, 0.04, -1.1) * ANG(0, math.pi, 0),
+	CF(-1.6, 0.04, -1.1) * ANG(0, math.pi, 0),
 })
 
 -- Specimen tray (beside the head, near side).
 BenchLayout.SPECIMEN_TRAY = table.freeze({ centre = V(1.88, 0, -1.05), size = V(1.1, 0.07, 0.5) })
 BenchLayout.MAT_TOP = 0.036 -- the ribbed mat's top (the element rests on it)
 BenchLayout.SPECIMEN_REST = V(1.8, 0.036, -1.05) -- the element's bottom goes here
-BenchLayout.DRAIN = table.freeze({ centre = V(2.33, 0.013, -1.05), size = V(0.12, 0.002, 0.42) })
+-- (the drain strip is sunk into the tray floor: y 0.004..0.024, never level with it)
+BenchLayout.DRAIN = table.freeze({ centre = V(2.33, 0.014, -1.05), size = V(0.12, 0.02, 0.42) })
 
 -- The cold pass-box (on the floor at the trolley's +X end; the floor is at -3.35).
 local BOX_X, BOX_Z = 4.2, -0.55
@@ -105,7 +108,9 @@ BenchLayout.CAROUSEL =
 	table.freeze({ centre = V(BOX_X, -1.715, BOX_Z), radius = 0.32, height = 0.05 })
 BenchLayout.CAPSULE_Y = -1.12 -- capsule centres (their bottom sits on the carousel)
 -- The window on the camera face, the strip display under it.
-BenchLayout.WINDOW = table.freeze({ centre = V(BOX_X, -1.02, BOX_Z - 0.7), size = V(0.8, 1.1, 0) })
+-- (tall enough to show the funnel's exit at its top: the element is seen coming out of the
+-- funnel and dropping into its capsule, not vanishing between the grate and the capsule)
+BenchLayout.WINDOW = table.freeze({ centre = V(BOX_X, -0.92, BOX_Z - 0.7), size = V(0.8, 1.3, 0) })
 BenchLayout.DISPLAY = table.freeze({ centre = V(BOX_X, -1.8, BOX_Z - 0.7), size = V(0.5, 0.1, 0) })
 -- Where the hand lets an element go to drop it in (the grate's centre) and how close counts.
 BenchLayout.GRATE_CENTRE = V(BOX_X, 0.15, BOX_Z)
@@ -144,9 +149,9 @@ BenchLayout.SCALPEL = table.freeze({
 		name = "Blade",
 		size = V(0.012, 0.07, 0.2),
 		at = CF(-0.035, 0, 0.1) * ANG(0, 0, rad(90)),
-		color = rgb(206, 210, 214),
+		color = rgb(232, 236, 240), -- (bright steel: it must read against the pale shell)
 		material = Enum.Material.Metal,
-		reflectance = 0.45,
+		reflectance = 0.5,
 		shape = "Wedge",
 	},
 	{
@@ -161,7 +166,7 @@ BenchLayout.SCALPEL = table.freeze({
 		name = "Handle",
 		size = V(0.06, 0.035, 0.55),
 		at = CF(-0.05, 0, 0.475),
-		color = STEEL,
+		color = rgb(70, 74, 78), -- (a dark handle, a bright blade: the tool reads at a glance)
 		material = Enum.Material.Metal,
 		reflectance = 0.3,
 	},
@@ -346,11 +351,14 @@ function BenchLayout.buildStatic(parent: Instance, anchor: CFrame): Model
 			false,
 			extra
 		)
+		-- (the lips stand ON the floor: from its top up, so no face is shared with it)
+		local lipHeight = size.Y - floor
+		local lipY = floor + lipHeight / 2
 		for _, side in { -1, 1 } do
 			box(
 				"Lip",
-				V(size.X, size.Y, lip),
-				CF(centre + V(0, size.Y / 2, side * (size.Z / 2 - lip / 2))),
+				V(size.X, lipHeight, lip),
+				CF(centre + V(0, lipY, side * (size.Z / 2 - lip / 2))),
 				steel,
 				Enum.Material.Metal,
 				model,
@@ -359,8 +367,8 @@ function BenchLayout.buildStatic(parent: Instance, anchor: CFrame): Model
 			)
 			box(
 				"Lip",
-				V(lip, size.Y, size.Z - lip * 2),
-				CF(centre + V(side * (size.X / 2 - lip / 2), size.Y / 2, 0)),
+				V(lip, lipHeight, size.Z - lip * 2),
+				CF(centre + V(side * (size.X / 2 - lip / 2), lipY, 0)),
 				steel,
 				Enum.Material.Metal,
 				model,
@@ -377,8 +385,9 @@ function BenchLayout.buildStatic(parent: Instance, anchor: CFrame): Model
 	local instruments = tray("InstrumentTray", it.centre, it.size)
 	box(
 		"Towel",
-		V(1.0, 0.01, 0.34),
-		CF(V(-2.35, BenchLayout.TRAY_FLOOR + 0.005, it.centre.Z)),
+		-- (its top at 0.022; its bottom 0.003 inside the tray floor: no shared face)
+		V(1.0, 0.013, 0.34),
+		CF(V(-2.35, BenchLayout.TRAY_FLOOR + 0.0035, it.centre.Z)),
 		rgb(88, 104, 96),
 		Enum.Material.Fabric,
 		instruments
@@ -397,41 +406,31 @@ function BenchLayout.buildStatic(parent: Instance, anchor: CFrame): Model
 	local st = BenchLayout.SPECIMEN_TRAY
 	local specimen = tray("SpecimenTray", st.centre, st.size)
 	local matTop = BenchLayout.MAT_TOP
-	local matBase = 0.014
+	local matBase = 0.01 -- (its top 0.014 under the ribs' tops: no near-level faces)
 	box(
 		"Mat",
-		V(0.86, matBase, 0.42),
-		CF(st.centre + V(-0.09, BenchLayout.TRAY_FLOOR + matBase / 2, 0)),
+		-- (0.003 sunk into the tray floor, like the towel)
+		V(0.86, matBase + 0.003, 0.42),
+		CF(st.centre + V(-0.09, BenchLayout.TRAY_FLOOR + (matBase - 0.003) / 2, 0)),
 		rgb(44, 48, 50),
 		Enum.Material.Rubber,
 		specimen
 	)
+	-- (the ribs are moulded INTO the mat: they start 0.004 inside it, so the mat's top face and
+	-- the ribs' bottoms never meet on one plane)
+	local ribBottom = BenchLayout.TRAY_FLOOR + matBase - 0.004
 	for k = 1, 5 do
 		box(
 			"Rib",
-			V(0.84, matTop - BenchLayout.TRAY_FLOOR - matBase, 0.03),
-			CF(
-				st.centre
-					+ V(
-						-0.09,
-						(BenchLayout.TRAY_FLOOR + matBase + matTop) / 2,
-						-0.16 + (k - 1) * 0.08
-					)
-			),
+			V(0.84, matTop - ribBottom, 0.03),
+			CF(st.centre + V(-0.09, (ribBottom + matTop) / 2, -0.16 + (k - 1) * 0.08)),
 			rgb(52, 56, 58),
 			Enum.Material.Rubber,
 			specimen
 		)
 	end
 	local drain = BenchLayout.DRAIN
-	box(
-		"Drain",
-		V(drain.size.X, 0.004, drain.size.Z),
-		CF(drain.centre),
-		rgb(70, 74, 78),
-		Enum.Material.Metal,
-		specimen
-	)
+	box("Drain", drain.size, CF(drain.centre), rgb(70, 74, 78), Enum.Material.Metal, specimen)
 
 	-- The pass-box.
 	local pb = BenchLayout.PASS_BOX

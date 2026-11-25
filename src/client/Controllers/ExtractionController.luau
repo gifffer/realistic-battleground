@@ -111,6 +111,14 @@ local FRAMINGS: { [string]: Framing } = {
 		look = Vector3.new(3.4, -0.25, -0.6),
 		fov = 40,
 	},
+	-- DROP: while the pass-box takes an element: in front of the box, above the window,
+	-- looking down so the open grate (top) AND the window over the capsule (below) are both in
+	-- shot: the player follows the element from the grate down into its capsule.
+	Drop = {
+		position = Vector3.new(3.9, 1.6, -3.4),
+		look = Vector3.new(4.2, -0.6, -0.9),
+		fov = 40,
+	},
 	Well = {
 		position = Vector3.new(4.05, -0.55, -3.5),
 		look = Vector3.new(4.2, -1.05, -0.6),
@@ -164,6 +172,7 @@ type Session = {
 	layer: number, -- seam layers done (0..2)
 	zip: { layer: number, next: number, at: number }?,
 	stroke: number,
+	strokeAt: number, -- when the current stroke started (the blade never skids in its first 0.12 s)
 	cellStroke: { number }, -- the last stroke that cut each cell (one layer per cell per stroke)
 	strokeCells: number, -- cells cut in this stroke (a slice sound every 3)
 	cutFrom: { s: number, e: number, world: Vector3, t: number }?,
@@ -724,6 +733,7 @@ local function begin(data: Types.ExtractStatePayload)
 		layer = 0,
 		zip = nil,
 		stroke = 0,
+		strokeAt = now,
 		cellStroke = table.create(BenchVisual.CELLS, 0),
 		strokeCells = 0,
 		cutFrom = nil,
@@ -1100,7 +1110,10 @@ local function updateCut(
 		return
 	end
 	local moved = (tip - from.world).Magnitude
-	current.speed += (moved / math.max(dt, 1e-3) - current.speed) * follow(dt, 0.05)
+	-- (the speed ALONG the seam: the blade settling onto the skin at the start of a stroke,
+	-- or moving across it, is not "too fast")
+	local along = math.abs(s - from.s) * BenchVisual.CELL
+	current.speed += (along / math.max(dt, 1e-3) - current.speed) * follow(dt, 0.05)
 	local target = current.layer + 1
 	if math.abs(e) > E.SEAM_TOLERANCE then
 		-- off the guide: a pale scratch, a squeak, no cut
@@ -1114,7 +1127,7 @@ local function updateCut(
 			end
 			current.scratchFrom = tip
 		end
-	elseif current.speed > E.SKID_SPEED and moved > 0.002 then
+	elseif current.speed > E.SKID_SPEED and moved > 0.002 and now - current.strokeAt > 0.12 then
 		-- too fast: the blade skids (no cut), the hand chatters
 		current.scratchFrom = nil
 		if now - current.skidAt > 0.33 then
@@ -1236,6 +1249,7 @@ local function pointerDown()
 	end
 	if current.step == "Incise" then
 		current.stroke += 1
+		current.strokeAt = now
 		current.strokeCells = 0
 		current.cutFrom = nil
 		current.scratchFrom = nil
@@ -1446,7 +1460,7 @@ local function pointerUp()
 			start = os.clock(),
 		}
 		queueSend("Tray", index, { { ref = "Hand", gap = MIN.Tray } })
-		hint(if current.sealed > 0 then HINTS.Next else HINTS.ToBox)
+		hint(HINTS.ToBox)
 	elseif kind == "Full" then
 		status("The tray is full.")
 		play("UiError")
@@ -1810,6 +1824,12 @@ local function updateHand(current: Session, scene: BenchVisual.Bench, now: numbe
 		elseif carry then
 			goal = BenchHand.frame(carry.position + up * BenchHand.HOLD_DROP, cam, 30)
 			pose = "Grip"
+		elseif passBox and PassBox.busy(passBox) then
+			-- the element is let go over the grate: the hand pulls back out of the shot while
+			-- the pass-box takes it (the arm would hide the window and the drop), then comes
+			-- back for the next one
+			local grate = anchor * BenchLayout.GRATE_CENTRE
+			goal = BenchHand.frame(grate + cam.RightVector * 2.6 - cam.UpVector * 1.8, cam, 20)
 		else
 			goal = BenchHand.frame(pointed, cam, 20)
 		end
@@ -1824,7 +1844,7 @@ local function updateHand(current: Session, scene: BenchVisual.Bench, now: numbe
 	BenchHand.setPose(h, pose)
 	BenchHand.place(h, handGrip)
 	BenchHand.show(h, current.outroStart == nil or current.beat ~= nil)
-	BenchHand.step(h, dt, cam)
+	BenchHand.step(h, dt, cam, workspace.CurrentCamera and workspace.CurrentCamera.FieldOfView)
 	if scalpelAt then
 		BenchHand.placeTool(tool, scalpelAt)
 	end
@@ -2007,14 +2027,17 @@ local function updateElements(current: Session, scene: BenchVisual.Bench, now: n
 		end
 	end
 
-	-- the camera back to WORK when nothing goes to the box
+	-- the camera follows the drop while the pass-box works, then back to WORK when nothing
+	-- goes to the box
 	local box = passBox
-	if
+	if box and PassBox.busy(box) and current.held == nil and current.framing == "Transfer" then
+		current.framing = "Drop"
+	elseif
 		current.held == nil
 		and current.beat == nil
 		and box
 		and not PassBox.busy(box)
-		and current.framing == "Transfer"
+		and (current.framing == "Transfer" or current.framing == "Drop")
 	then
 		current.framing = "Work"
 	end

@@ -226,14 +226,16 @@ local function specs(
 	-- Recessed inset panel (a thin dark groove frame under a slightly darker plate).
 	add("Base", {
 		name = "InsetGroove",
-		size = Vector3.new(1.24, 0.79, 0.01),
-		at = Vector3.new(0, 0, -0.203),
+		-- (its back 0.004 inside the shell, its face 0.012 out from the shell's face; the
+		-- panel's face 0.012 out from the groove's: no two faces closer than 0.012)
+		size = Vector3.new(1.24, 0.79, 0.016),
+		at = Vector3.new(0, 0, -0.204),
 		color = GROOVE,
 	})
 	add("Base", {
 		name = "InsetPanel",
-		size = Vector3.new(1.2, 0.75, 0.012),
-		at = Vector3.new(0, 0, -0.207),
+		size = Vector3.new(1.2, 0.75, 0.016),
+		at = Vector3.new(0, 0, -0.216),
 		color = ALU_PANEL,
 		reflectance = 0.04,
 	})
@@ -307,8 +309,9 @@ local function specs(
 	-- Cold vent on the +X end: a faint cold glow behind 6 dark slats.
 	add("Base", {
 		name = "VentGlow",
-		size = Vector3.new(0.01, 0.36, 0.13),
-		at = Vector3.new(0.752, 0, -0.085),
+		-- (its face 0.015 out from the end wall's, the slats' faces 0.02 out from it)
+		size = Vector3.new(0.016, 0.36, 0.13),
+		at = Vector3.new(0.757, 0, -0.085),
 		color = COLD,
 		material = Enum.Material.Neon,
 		transparency = 0.4,
@@ -316,8 +319,8 @@ local function specs(
 	for slat = 0, 5 do
 		add("Base", {
 			name = "VentSlat",
-			size = Vector3.new(0.02, 0.025, 0.15),
-			at = Vector3.new(0.762, -0.15 + slat * 0.06, -0.085),
+			size = Vector3.new(0.024, 0.025, 0.15),
+			at = Vector3.new(0.775, -0.15 + slat * 0.06, -0.085),
 			color = SLAT,
 		})
 	end
@@ -360,22 +363,24 @@ local function specs(
 	end
 	add("Lid", {
 		name = "InsetGroove",
-		size = Vector3.new(1.24, 0.79, 0.01),
-		at = Vector3.new(0, 0, 0.203),
+		-- (its back 0.004 inside the shell, its face 0.012 out from the shell's face; the
+		-- panel's face 0.012 out from the groove's: no two faces closer than 0.012)
+		size = Vector3.new(1.24, 0.79, 0.016),
+		at = Vector3.new(0, 0, 0.204),
 		color = GROOVE,
 	})
 	add("Lid", {
 		name = "InsetPanel",
-		size = Vector3.new(1.2, 0.75, 0.012),
-		at = Vector3.new(0, 0, 0.207),
+		size = Vector3.new(1.2, 0.75, 0.016),
+		at = Vector3.new(0, 0, 0.216),
 		color = ALU_PANEL,
 		reflectance = 0.04,
 	})
 	-- Blank engraved plate (no brand), near the handle.
 	add("Lid", {
 		name = "Plate",
-		size = Vector3.new(0.3, 0.1, 0.01),
-		at = Vector3.new(0.4, 0.27, 0.216),
+		size = Vector3.new(0.3, 0.1, 0.016),
+		at = Vector3.new(0.4, 0.27, 0.228), -- (its face 0.012 out from the panel's)
 		color = PLATE,
 		reflectance = 0.15,
 	})

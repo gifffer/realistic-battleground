@@ -627,7 +627,9 @@ function AptProps.door(
 	-- 2 hinge knuckles on the hinge line, and the knob (both sides)
 	local brass = look(M.Metal, 138, 120, 84)
 	for _, y in { 1.0, 6.6 } do
-		add("Hinge", V(0.5, 0.12, 0.12), CF(0, y, -half) * UP, brass, CYL)
+		-- (thin knuckles just inside the leaf's edge, 0.015 proud of its -Z face: thicker
+		-- ones on the hinge line itself went 0.04 into the casing at every angle)
+		add("Hinge", V(0.5, 0.07, 0.07), CF(0.015, y, -half + 0.02) * UP, brass, CYL)
 	end
 	for _, side in { -1, 1 } do
 		add("Knob", V(0.24, 0.24, 0.24), CF(3.9, 3.4, side * 0.24), brass, BALL)
@@ -671,7 +673,8 @@ function AptProps.doorPadlock(door: Model, side: number)
 	local plate = part(
 		door,
 		"Scrawl",
-		V(2.6, 0.8, 0.01),
+		-- (about 60 % of the first size, well inside the leaf's edges)
+		V(1.6, 0.5, 0.01),
 		hinge * CF(2.1, 5.9, side * 0.18) * ANG(0, 0, rad(-3)),
 		look(M.Wood, 98, 84, 66, 1)
 	)
@@ -757,9 +760,18 @@ function AptProps.doorLabDetails(door: Model, side: number)
 	local foil = look(M.Foil, 196, 198, 200, 0, 0.15)
 	-- (0.03 proud of the panels' faces, which are 0.03 proud of the leaf)
 	local wrap = DOOR_LEAF.thickness + 4 * LAYER.STEP
-	part(door, "FoilTape", V(4.3, 0.3, wrap), hinge * CF(2.2, 0.27, 0), foil)
-	part(door, "FoilTape", V(4.3, 0.22, wrap), hinge * CF(2.2, 7.21, 0), foil)
-	part(door, "FoilTape", V(0.22, 6.68, wrap), hinge * CF(0.12, 3.76, 0), foil)
+	-- (all of it stays 0.5 clear of the hinge edge: open, that part of the leaf lies against
+	-- the wall's casing, and tape wrapped round it there cut into the casing)
+	part(door, "FoilTape", V(3.67, 0.3, wrap), hinge * CF(2.515, 0.27, 0), foil)
+	part(door, "FoilTape", V(3.67, 0.22, wrap), hinge * CF(2.515, 7.21, 0), foil)
+	-- (the hinge-side strip: 0.5 in from the edge, thinner, 0.045 proud of each face)
+	part(
+		door,
+		"FoilTape",
+		V(0.18, 6.68, DOOR_LEAF.thickness + 3 * LAYER.STEP),
+		hinge * CF(0.59, 3.76, 0),
+		foil
+	)
 	-- (the foam is on the latch EDGE: 0.02 thick, between the leaf and the casing)
 	part(
 		door,
@@ -768,16 +780,16 @@ function AptProps.doorLabDetails(door: Model, side: number)
 		hinge * CF(4.41, 3.76, 0),
 		look(M.Fabric, 70, 70, 66)
 	)
-	-- paint chips knocked off the leaf (the old brown under the cream), one level above the
-	-- leaf's own chips
-	for _, chip in { V(3.3, 2.4, 0), V(0.9, 5.6, 0), V(2.8, 6.4, 0), V(3.8, 1.1, 0) } do
+	-- paint chips knocked off the dark leaf: the old cream paint showing under it (dark chips
+	-- on a dark leaf read as black stickers), one level above the leaf's own chips
+	for _, chip in { V(3.3, 2.4, 0), V(0.9, 5.6, 0), V(3.8, 1.1, 0) } do
 		overlay(
 			door,
 			"PaintChip",
-			Vector2.new(0.2, 0.12),
+			Vector2.new(0.16, 0.09),
 			onFace(chip.X, chip.Y) * ANG(0, 0, rad(chip.X * 20)),
 			2 * LAYER.STEP,
-			look(M.Wood, 100, 84, 64)
+			look(M.SmoothPlastic, 176, 164, 136)
 		)
 	end
 end
@@ -901,6 +913,57 @@ end
 
 -- Coat hooks on a wall with two sagging jackets. `at`: on the floor against the wall, local -Z
 -- = out of the wall.
+-- The glove station by the trolley: a steel wire shelf screwed through the tent's plastic,
+-- three open boxes of nitrile gloves (blue-grey, the size the player's glove is) standing on
+-- it, a cuff poking out of each, and a roll of blue paper wipes on a rod under it. `at`: on the
+-- wall at the shelf's height (y in `at` is the floor), local -Z = out of the wall.
+function AptProps.gloveRack(parent: Instance, at: CFrame, rng: Random): Model
+	local model, add = begin(parent, "GloveRack", at)
+	local wire = look(M.Metal, 168, 170, 168, 0, 0.1)
+	local y = 4.4 -- the shelf's top
+	add("ShelfBase", V(3.4, 0.05, 0.55), CF(0, y - 0.025, -0.3), wire)
+	add("ShelfLip", V(3.4, 0.18, 0.04), CF(0, y + 0.05, -0.58), wire) -- (bottom above the base's)
+	for _, x in { -1.5, 1.5 } do
+		add("Bracket", V(0.05, 0.5, 0.05), CF(x, y - 0.3, -0.05), wire)
+		add("Bracket", V(0.05, 0.05, 0.55), CF(x, y - 0.075, -0.3), wire)
+	end
+	-- (the boxes stand on the shelf: from its top up, a small gap between them)
+	local boxLooks = {
+		look(M.Cardboard, 90, 118, 150),
+		look(M.Cardboard, 214, 214, 208),
+		look(M.Cardboard, 142, 126, 168),
+	}
+	local glove = look(M.SmoothPlastic, 70, 98, 124)
+	for i, x in { -1.05, 0, 1.05 } do
+		local h = 0.5
+		add("GloveBox", V(0.95, h, 0.45), CF(x, y + h / 2, -0.3), tint(boxLooks[i], rng, 3))
+		-- the oval opening on the front (an overlay just proud of the box's face)
+		overlay(
+			model,
+			"BoxSlot",
+			Vector2.new(0.5, 0.2),
+			at * CF(x, y + 0.3, -0.525),
+			LAYER.STEP,
+			look(M.SmoothPlastic, 30, 34, 38)
+		)
+		-- the cuff of the next glove, pulled half out
+		add(
+			"GloveCuff",
+			V(0.22, 0.16, 0.12),
+			CF(x + rng:NextNumber(-0.08, 0.08), y + 0.34, -0.6)
+				* ANG(rad(-25), 0, rad(rng:NextNumber(-10, 10))),
+			glove
+		)
+	end
+	-- the wipes roll under the shelf
+	add("RollRod", V(1.2, 0.04, 0.04), CF(0, y - 0.55, -0.32), wire)
+	for _, x in { -0.56, 0.56 } do
+		add("RollHanger", V(0.04, 0.5, 0.04), CF(x, y - 0.3, -0.32), wire)
+	end
+	add("WipesRoll", V(1.0, 0.42, 0.42), CF(0, y - 0.55, -0.32), look(M.Fabric, 96, 150, 196), CYL)
+	return model
+end
+
 function AptProps.coatHooks(parent: Instance, at: CFrame, rng: Random): Model
 	local model, add = begin(parent, "CoatHooks", at)
 	add("HookBoard", V(3, 0.3, 0.12), CF(0, 5.5, -0.06), look(M.Wood, 120, 96, 70))
@@ -1665,7 +1728,8 @@ function AptProps.cordBundle(
 	points: { Vector3 },
 	counts: { number },
 	rng: Random,
-	tapeEvery: number?
+	tapeEvery: number?,
+	loopToward: Vector3? -- (a point in the room: stray loops go to that side, never into a wall)
 ): Model
 	-- (cheap on parts: per run, ONE thick taped bundle + one loose cord beside it, a stray
 	-- cord looping off the bundle every ~10 studs on long runs, tape every `tapeEvery` x 2)
@@ -1697,7 +1761,11 @@ function AptProps.cordBundle(
 			while t < length - 2 do
 				local from = a + direction * t
 				local to = from + direction * 1.6
-				local out = side * (if rng:NextNumber() < 0.5 then -1 else 1) * 0.5
+				local sign = if rng:NextNumber() < 0.5 then -1 else 1
+				if loopToward then
+					sign = if side:Dot(loopToward - from) >= 0 then 1 else -1
+				end
+				local out = side * sign * 0.5
 				path(
 					model,
 					"Cord",
@@ -2388,28 +2456,32 @@ function AptProps.whiteboard(parent: Instance, at: CFrame, _rng: Random): Model
 		)
 		writeOn(strip, Enum.NormalId.Front, text, marker, Enum.Font.PermanentMarker, 50)
 	end
-	line("MATRIX", -1.3, 3.85, 0.9, 0.26)
-	line("FRAME", -0.15, 3.85, 0.9, 0.26)
-	line("SHELL", 1.0, 3.85, 0.9, 0.26)
-	line("BATCH 14 → FAILED", 0.85, 5.85, 1.6, 0.3, -2)
-	-- the growth curve itself: a few marker strokes (clear of the title line)
+	-- (the phase labels 0.35 above the tray's top, the title clear of the curve: "->", not an
+	-- arrow glyph the font may not have)
+	line("MATRIX", -1.3, 4.0, 0.9, 0.24)
+	line("FRAME", -0.15, 4.0, 0.9, 0.24)
+	line("SHELL", 1.0, 4.0, 0.9, 0.24)
+	line("BATCH 14 -> FAILED", 0.85, 5.88, 1.6, 0.28, -2)
+	-- the growth curve itself: a few thin marker strokes (above the labels, under the title)
 	local stroke = look(M.SmoothPlastic, 40, 60, 90)
 	local points = {
-		V(-1.8, 4.15, 0),
-		V(-1.25, 4.25, 0),
-		V(-0.75, 4.55, 0),
-		V(-0.25, 5.05, 0),
-		V(0.2, 5.3, 0),
-		V(0.5, 5.4, 0),
+		V(-1.8, 4.3, 0),
+		V(-1.25, 4.38, 0),
+		V(-0.75, 4.65, 0),
+		V(-0.25, 5.1, 0),
+		V(0.2, 5.38, 0),
+		V(0.5, 5.48, 0),
 	}
 	for i = 1, #points - 1 do
-		-- (board-centre space: its face is at z -0.02, a 0.04 stroke centred at -0.04)
-		local a = (board.CFrame * CF(-points[i].X, points[i].Y - 4.9, -0.04)).Position
-		local b = (board.CFrame * CF(-points[i + 1].X, points[i + 1].Y - 4.9, -0.04)).Position
-		rod(model, "Stroke", a, b, 0.04, stroke)
+		-- (board-centre space: its face is at z -0.02, a 0.025 stroke centred at -0.031 rests
+		-- just on it)
+		local a = (board.CFrame * CF(-points[i].X, points[i].Y - 4.9, -0.031)).Position
+		local b = (board.CFrame * CF(-points[i + 1].X, points[i + 1].Y - 4.9, -0.031)).Position
+		rod(model, "Stroke", a, b, 0.025, stroke)
 	end
 	for _, x in { -0.72, 0.42 } do
-		add("PhaseMark", V(0.03, 1.6, 0.03), CF(-x, 4.75, inkZ), stroke)
+		-- (short ticks on the time axis, not tall bars: tall ones made the curve read as an "N")
+		add("PhaseMark", V(0.02, 0.28, 0.03), CF(-x, 4.3, inkZ), stroke)
 	end
 	add("Tray", V(3.4, 0.1, 0.3), CF(0, 3.47, -0.27), look(M.Metal, 150, 150, 146))
 	add("Marker", V(0.6, 0.08, 0.08), CF(0.8, 3.56, -0.29), look(M.Plastic, 30, 40, 80), CYL)
@@ -2670,12 +2742,15 @@ function AptProps.plasticTent(
 	-- the sheets that close the "airlock" by the door (W side, next to the strip curtain)
 	sheet(V(11.4, 5.4, 18.2), 1.4, 10.8, Vector3.xAxis, 0)
 	sheet(V(11.4, 5.4, 12.3), 1.4, 10.8, Vector3.xAxis, 0)
-	-- taped seams (vertical strips on a few joins, on the sheet in front)
+	-- taped seams (vertical strips on a few joins, on the sheet in front). The sheets hang up
+	-- to 0.5° off true, so over their height their face moves ±0.05: the tape stands 0.08 in
+	-- front of the front sheet's middle plane, never on (or flickering through) its face.
+	local TAPE_OUT = 0.12 + 0.08
 	for _, x in { 13, 19, 25 } do
-		add("SeamTape", V(0.3, 10.2, 0.03), CF(x, 5.3, 23.6 - 0.12 - 0.03), TAPE)
+		add("SeamTape", V(0.3, 10.2, 0.03), CF(x, 5.3, 23.6 - TAPE_OUT), TAPE)
 	end
 	for _, z in { 6, 12, 18 } do
-		add("SeamTape", V(0.03, 10.2, 0.3), CF(27.76 - 0.12 - 0.03, 5.3, z), TAPE)
+		add("SeamTape", V(0.03, 10.2, 0.3), CF(27.76 - TAPE_OUT, 5.3, z), TAPE)
 	end
 	-- the ceiling: every 3-stud bay sags between its battens (one sheet per bay, hanging lower
 	-- than the battens and a little skewed; neighbours at alternating heights). The bays over
@@ -2685,8 +2760,9 @@ function AptProps.plasticTent(
 		bay += 1
 		local centreX = x + 1.5
 		local overVat = centreX > 14.5 and centreX < 23.5
-		-- (between the S and N wall battens, never under them)
-		local z0, z1 = 0.7, 23.55
+		-- (between the S and N wall sheets' tops, never touching them: they hang up to 0.05
+		-- off true)
+		local z0, z1 = 0.98, 23.4 -- (0.98: clear of the short sheet over the window, z 0.9)
 		if overVat then
 			z1 = 16.6
 		end
@@ -3400,11 +3476,12 @@ function AptProps.powerBoard(parent: Instance, at: CFrame, _rng: Random): (Model
 end
 
 -- The biomass bin at the table's W end: a grey two-wheeled bin, its lid swung up against the
--- wall ("ChuteFlap", moved to the root by LabBuilder), and the steel ramp hinged at the table's
--- end, stored folded up (the spent shell slides down it into the bin). `at`: the bin's centre on
--- the floor, local -Z = toward the table (the bin's open side faces it), its back on the wall.
--- `rampHinge`: the ramp's hinge line (world), local +X = along the hinge.
-function AptProps.biomassBin(parent: Instance, at: CFrame, rng: Random, rampHinge: CFrame): Model
+-- wall ("ChuteFlap", moved to the root by LabBuilder), and the loose steel ramp the spent
+-- shell slides down, stored leaning on the bin's front between uses (stood up on the
+-- trolley's end it read as a random board stuck on the bench). `at`: the bin's centre on the
+-- floor, local -Z = toward the table (the bin's open side faces it), its back on the wall.
+-- (`_rampHinge`: where the ramp hooks on the table's end when in use; kept for the scene.)
+function AptProps.biomassBin(parent: Instance, at: CFrame, rng: Random, _rampHinge: CFrame): Model
 	local model, add = begin(parent, "BiomassBin", at)
 	local grey = tint(look(M.Plastic, 78, 84, 86), rng, 4)
 	add("Body", V(2.2, 3.0, 2.0), CF(0, 1.62, 0), solid(grey))
@@ -3430,10 +3507,13 @@ function AptProps.biomassBin(parent: Instance, at: CFrame, rng: Random, rampHing
 	local steel = look(M.Metal, 140, 142, 140, 0, 0.06)
 	-- (attribute SceneHidden: the extractor's client may hide them while it swings its own copy
 	-- down for the shell's slide, like BenchLayout's moving parts)
-	local ramp = part(model, "ChuteRamp", V(1.2, 1.6, 0.06), rampHinge * CF(0, 0.8, 0.06), steel)
+	-- (tilted 12° back onto the bin: its foot just above the floor plastic, its top edge on
+	-- the bin's front face)
+	local lean = at * CF(0, 0.87, -1.2) * ANG(rad(12), 0, 0)
+	local ramp = part(model, "ChuteRamp", V(1.2, 1.6, 0.06), lean, steel)
 	ramp:SetAttribute("SceneHidden", true)
 	for _, x in { -0.62, 0.62 } do
-		local rail = part(model, "RampRail", V(0.04, 1.6, 0.12), rampHinge * CF(x, 0.8, 0.0), steel)
+		local rail = part(model, "RampRail", V(0.04, 1.6, 0.12), lean * CF(x, 0, -0.06), steel)
 		rail:SetAttribute("SceneHidden", true)
 	end
 	return model
