@@ -284,6 +284,11 @@ local function tryStartClimb(now: number)
 	local edge = ledge.edge
 	local vault = Ledge.isVault(ledge)
 	local kind: Action = if vault then "Vault" else "Climb"
+	-- Carrying the case (the server's "Carrying" attribute): no mantle, a low vault is fine.
+	-- (The server refuses the mantle too: Movement.setClimbLock.)
+	if kind == "Climb" and character:GetAttribute("Carrying") ~= nil then
+		return
+	end
 
 	-- Mantle key positions (see the phases at the top of this file).
 	local wallSide = edge - ledge.facing * HANG_DISTANCE

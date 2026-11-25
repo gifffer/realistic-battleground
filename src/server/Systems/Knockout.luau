@@ -35,6 +35,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Remotes = require(ReplicatedStorage.Shared.Remotes)
 local Kits = require(ReplicatedStorage.Shared.Kits)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Corpses = require(script.Parent.Corpses)
 local PlayerData = require(script.Parent.PlayerData)
 local Ragdoll = require(script.Parent.Ragdoll)
@@ -78,7 +79,24 @@ export type Elimination = {
 	killerPlayer: Player?, -- nil: no player gets the kill
 }
 local eliminationCallbacks: { (Elimination) -> () } = {}
-local interceptor: ((victim: Model, attacker: Model?) -> boolean)? = nil
+
+-- Sent right AFTER a fighter is knocked out (KO state set, body ragdolled).
+-- Not sent when an interceptor handled the KO, nor for a death without a KO.
+export type KnockedOutInfo = {
+	victim: Model,
+	victimPlayer: Player?,
+	attacker: Model?, -- whoever dealt the blow (player or dummy), if any
+	attackerPlayer: Player?,
+}
+local knockedOutSignal = Signal.new() :: Signal.Signal<KnockedOutInfo>
+
+-- Interceptors: other systems that may decide what 0 HP means (Duels: the
+-- round ends instead). Asked in `order` (smallest first; same order = the one
+-- added first). The first one that returns true stops the knockout.
+export type Interceptor = (victim: Model, attacker: Model?) -> boolean
+type InterceptorEntry = { name: string, order: number, serial: number, handler: Interceptor }
+local interceptors: { InterceptorEntry } = {}
+local interceptorSerial = 0
 
 local function now(): number
 	return os.clock()
@@ -424,8 +442,11 @@ function Knockout.knockOut(victim: Model, attacker: Model?)
 		return
 	end
 	-- Another system decides what 0 HP means here (a duel round ends).
-	if interceptor and interceptor(victim, attacker) then
-		return
+	-- (Copy: a handler may add / remove interceptors while we loop.)
+	for _, entry in table.clone(interceptors) do
+		if entry.handler(victim, attacker) then
+			return
+		end
 	end
 	if attacker then
 		Knockout.noteHit(victim, attacker)
@@ -452,6 +473,14 @@ function Knockout.knockOut(victim: Model, attacker: Model?)
 			getUp(info)
 		end
 	end)
+
+	-- Tell the other systems (the contraband case falls out of the hand...).
+	knockedOutSignal.fire({
+		victim = victim,
+		victimPlayer = info.player,
+		attacker = attacker,
+		attackerPlayer = if attacker then Players:GetPlayerFromCharacter(attacker) else nil,
+	})
 end
 
 -- A KO'd fighter that `attacker` can finish right now (close, in front,
@@ -539,12 +568,47 @@ function Knockout.killByEnvironment(victim: Model, cause: Types.KillFeedKind): b
 	return true
 end
 
--- `callback(model)` when a KO'd fighter gets back up.
--- `handler(victim, attacker)` is asked first each time someone would be
--- knocked out; returning true means "handled, don't knock them out"
--- (Duels: in a duel, 0 HP ends the round instead).
-function Knockout.setInterceptor(handler: (victim: Model, attacker: Model?) -> boolean)
-	interceptor = handler
+-- Adds an interceptor: `handler(victim, attacker)` is asked each time
+-- someone would be knocked out; returning true means "handled, don't knock
+-- them out" (Duels: in a duel, 0 HP ends the round instead).
+-- Interceptors are asked by `order`, smallest first (Duels = 10, room for
+-- Police = 20 later). Adding the same `name` again replaces the old one.
+-- Returns a function that removes it.
+function Knockout.addInterceptor(name: string, order: number, handler: Interceptor): () -> ()
+	for index, entry in interceptors do
+		if entry.name == name then
+			table.remove(interceptors, index)
+			break
+		end
+	end
+	interceptorSerial += 1
+	local mine: InterceptorEntry =
+		{ name = name, order = order, serial = interceptorSerial, handler = handler }
+	table.insert(interceptors, mine)
+	table.sort(interceptors, function(a: InterceptorEntry, b: InterceptorEntry): boolean
+		if a.order ~= b.order then
+			return a.order < b.order
+		end
+		return a.serial < b.serial
+	end)
+	return function()
+		local index = table.find(interceptors, mine)
+		if index then
+			table.remove(interceptors, index)
+		end
+	end
+end
+
+-- Old single-interceptor API, kept for compatibility: same as
+-- addInterceptor("Default", 100, handler) (replaces an older "Default").
+function Knockout.setInterceptor(handler: Interceptor)
+	Knockout.addInterceptor("Default", 100, handler)
+end
+
+-- `callback(info)` right after a fighter is knocked out (see KnockedOutInfo).
+-- The callback runs in its own thread (Signal): it may yield.
+function Knockout.onKnockedOut(callback: (KnockedOutInfo) -> ()): Signal.Connection
+	return knockedOutSignal.connect(callback)
 end
 
 -- os.clock() of the last hit `model` took (from anyone), -inf if never.

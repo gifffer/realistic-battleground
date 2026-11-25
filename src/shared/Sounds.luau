@@ -590,6 +590,415 @@ local sounds: { [string]: SoundInfo } = {
 	-- The can dropping into the tray (one shot, in 3D at the machine).
 	SpezColaDrop = { ids = { 124906885034839 }, volume = 0.8, pitch = 1, pitchVariation = 0.05 },
 
+	-- Contraband (the flat, the lab, extraction, case) ------------------------------------
+	-- Ids found on the Creator Store (ProSoundEffects / Roblox, free), downloaded and measured;
+	-- volumes are levelled to a loudness target and `trims` evens out the variants (list and
+	-- how to replace an id: docs/SOUNDS_LAB_FR.md).
+	-- WHERE they play: the flat's ambience (beds, hums, drips, doors, creaks) is played by
+	-- Client/Controllers/ApartmentAmbienceController: the two `Apt...Tone` beds in 2D (cross-
+	-- faded by room), everything else IN 3D at a point of the flat (muffled when it is in
+	-- another room). Extraction and UI sounds are 2D, heard only by the lab's owner. Case
+	-- sounds are 3D on the carrier.
+	-- The flat (2D beds per room + 3D sources; Client/Contraband/AptAudio, ApartmentAmbienceController)
+	AptEntranceTone = {
+		ids = { 9112775375 },
+		volume = 0.88,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	}, -- Entrance / stairwell: low, slow rumble of the building (slowed traffic, loop)
+	AptCorridorTone = {
+		ids = { 9112759541 },
+		volume = 0.35,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	}, -- Corridor: city night wash heard through the walls (distant traffic, pass-bys)
+	AptNeighbours = {
+		ids = { 9112760276, 9113851615 },
+		volume = 2.24,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+		trims = { [9112760276] = { gain = 0.76 }, [9113851615] = { gain = 1.32 } },
+	}, -- Neighbours behind a locked door: party voices HEARD THROUGH A WALL, no music
+	AptBuildingCreak = {
+		ids = { 9113135641, 9117659573 },
+		volume = 0.32,
+		pitch = 1,
+		pitchVariation = 0.05,
+		length = 6,
+		fadeOut = 1.5,
+		trims = {
+			[9113135641] = { start = 1.32, gain = 1.32 },
+			[9117659573] = { start = 0.12, gain = 0.76 },
+		},
+	}, -- Random building noises: wooden bumps / creaks, a pipe rattling (one-shots every 20-45 s)
+	PlasticSheetBrush = {
+		ids = { 9113606679, 9113606680 },
+		volume = 3.89,
+		pitch = 1,
+		pitchVariation = 0.06,
+		length = 1.3,
+		fadeOut = 0.4,
+		trims = {
+			[9113606679] = { start = 0.3, gain = 0.92 },
+			[9113606680] = { start = 0.21, gain = 1.08 },
+		},
+	}, -- Brushing through the plastic sheeting curtain into the lab
+	LabRevealDrone = {
+		ids = { 9125400975 },
+		volume = 0.79,
+		pitch = 1,
+		pitchVariation = 0,
+		length = 8,
+		fadeOut = 3,
+	}, -- One-shot unsettling low swell the first time you step into the lab room
+	FloorCreak = {
+		ids = { 9114493461, 9114493393, 9114493656, 9114493567 },
+		volume = 6.22,
+		pitch = 1,
+		pitchVariation = 0.08,
+		trims = {
+			[9114493461] = { gain = 0.82 },
+			[9114493393] = { gain = 0.91 },
+			[9114493656] = { gain = 0.9 },
+			[9114493567] = { start = 0.61, gain = 1.48 },
+		},
+	}, -- Loose floorboards in the corridor (one-shot when a foot lands on one)
+	LightSwitch = {
+		ids = { 9116283546, 9120484192 },
+		volume = 1.15,
+		pitch = 1,
+		pitchVariation = 0.05,
+		trims = {
+			[9116283546] = { start = 0.13, gain = 1.11 },
+			[9120484192] = { start = 0, gain = 0.9 },
+		},
+	}, -- Wall light switch click
+	-- Doors and appliances (3D at the door / the appliance)
+	AptDoorOpen = {
+		ids = { 9120839364, 9120838740 },
+		volume = 3.43,
+		pitch = 1,
+		pitchVariation = 0.06,
+		length = 2.4,
+		fadeOut = 0.4,
+		trims = { [9120839364] = { gain = 0.88 }, [9120838740] = { gain = 1.14 } },
+	}, -- Flat door / bedroom door creaking open
+	AptDoorClose = { ids = { 9114829600 }, volume = 1.91, pitch = 1, pitchVariation = 0.06 }, -- Door shut, latch catches
+	AptDoorLocked = {
+		ids = { 9120839581, 9114129572 },
+		volume = 1.71,
+		pitch = 1,
+		pitchVariation = 0.06,
+		trims = {
+			[9120839581] = { start = 0.42, gain = 2.13 },
+			[9114129572] = { start = 0, gain = 0.47 },
+		},
+	}, -- Locked door: knob fiddled and rattled, won't open
+	AptDoorUnlock = {
+		ids = { 9114144071, 9116168670 },
+		volume = 0.85,
+		pitch = 1,
+		pitchVariation = 0.05,
+		trims = {
+			[9114144071] = { start = 0.26, gain = 1.5 },
+			[9116168670] = { start = 0.6, gain = 0.67 },
+		},
+	}, -- Key turned / deadbolt (entering the flat)
+	FridgeOpen = { ids = { 365549814 }, volume = 1.15, pitch = 1, pitchVariation = 0.05 }, -- Old fridge door opened (stash)
+	FridgeClose = { ids = { 365572712 }, volume = 0.79, pitch = 1, pitchVariation = 0.05 }, -- Old fridge door closed
+	FreezerLidOpen = { ids = { 9114531382 }, volume = 1.66, pitch = 1, pitchVariation = 0.05 }, -- Freezer / cooler lid opened: rusty latch, squeak
+	FreezerLidClose = {
+		ids = { 9117526627, 9117534186 },
+		volume = 0.8,
+		pitch = 1,
+		pitchVariation = 0.05,
+		trims = { [9117526627] = { gain = 1.44 }, [9117534186] = { start = 0.22, gain = 0.7 } },
+	}, -- Cooler lid set down / shut (plastic)
+	-- The lab room (3D loops and one-shots on the flat's Sfx hosts)
+	LabFridgeHum = {
+		ids = { 125605115496003 },
+		volume = 0.32,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	}, -- Old fridge / freezer hum (very steady loop, 204 s)
+	LabFluoBuzz = {
+		ids = { 9112823813, 9112823811 },
+		volume = 2.63,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+		trims = { [9112823813] = { gain = 0.98 }, [9112823811] = { gain = 1.02 } },
+	}, -- Fluorescent tube buzz (steady loop)
+	LabFluoFlicker = { ids = { 115768564143330 }, volume = 0.4, pitch = 1, pitchVariation = 0.05 }, -- A tube stuttering / flickering (one-shot, synced with the light flicker)
+	LabPumpBubble = {
+		ids = { 9125410132 },
+		volume = 0.25,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	}, -- Aquarium air pump bubbling in the vat (gurgly loop)
+	LabDrip = {
+		ids = { 9120510269, 9120511536 },
+		volume = 1.37,
+		pitch = 1,
+		pitchVariation = 0.1,
+		trims = { [9120510269] = { gain = 0.36 }, [9120511536] = { gain = 2.8 } },
+	}, -- A drip from the tubing into a pan (one-shots every 3-9 s)
+	LabSpark = {
+		ids = { 9114237693 },
+		volume = 0.45,
+		pitch = 1,
+		pitchVariation = 0.08,
+		length = 0.8,
+		fadeOut = 0.2,
+		trims = { [9114237693] = { start = 0.31 } },
+	}, -- A rare spark from the scorched power strip (Electric Arcing 5, ProSoundEffects; measured: 1.78 s, blank 0.31 s cut, Mmax -23.9 LUFS)
+	VatHum = { ids = { 9112889082 }, volume = 1.97, pitch = 1, pitchVariation = 0, looped = true }, -- (existing slot) vat electronics: steady transformer hum
+	VatBubbleSurge = {
+		ids = { 9120559955, 9120494621, 9120559328 },
+		volume = 1.33,
+		pitch = 1,
+		pitchVariation = 0.05,
+		length = 3,
+		fadeOut = 0.8,
+		trims = {
+			[9120559955] = { start = 0.47, gain = 0.41 },
+			[9120494621] = { start = 0.14, gain = 0.9 },
+			[9120559328] = { start = 0.19, gain = 2.69 },
+		},
+	}, -- Deep bubbles surging up in the vat (stage change, planting)
+	VatReadyChime = { ids = { 9113880400 }, volume = 1.57, pitch = 1, pitchVariation = 0 }, -- (existing slot) culture ready: small heart-monitor-like beep
+	-- Extraction (2D for the owner, played by ExtractionController on its own timeline)
+	ToolTraySetDown = {
+		ids = { 9116902704, 9116902317 },
+		volume = 0.15,
+		pitch = 1.15,
+		pitchVariation = 0.06,
+		length = 0.6,
+		fadeOut = 0.2,
+		trims = { [9116902704] = { gain = 1.28 }, [9116902317] = { start = 0.11, gain = 0.78 } },
+	}, -- Metal tool tray knocked / set down
+	-- (v3: the scalpel, the panels, the pass-box. Ids reused from the slots above and from the
+	-- autopsy video's checked public sounds; levels to be tuned in Studio.)
+	ScalpelPickup = {
+		ids = { 9116902317 },
+		volume = 0.35,
+		pitch = 1.4,
+		pitchVariation = 0.05,
+		length = 0.3,
+		fadeOut = 0.1,
+	}, -- Taking the scalpel off the tray: light steel clink
+	ScalpelSkin = {
+		ids = { 138772034497598, 72475389234606, 100089328974443 },
+		volume = 0.35,
+		pitch = 1.15,
+		pitchVariation = 0.06,
+	}, -- Scalpel through the synthetic skin: crisp, light slice (every 3 cells)
+	ScalpelMembrane = {
+		ids = { 71972357334329 },
+		volume = 0.4,
+		pitch = 1,
+		pitchVariation = 0.06,
+		length = 0.5,
+		fadeOut = 0.15,
+	}, -- Scalpel through the milky membrane: short wet slit
+	ScalpelPress = {
+		ids = { 9125619646 },
+		volume = 0.3,
+		pitch = 1.1,
+		pitchVariation = 0.05,
+		length = 0.3,
+		fadeOut = 0.1,
+	}, -- Blade held still and pressed: one layer deeper
+	ScalpelSkid = {
+		ids = { 9116902704 },
+		volume = 0.12,
+		pitch = 1.9,
+		pitchVariation = 0.08,
+		length = 0.25,
+		fadeOut = 0.08,
+	}, -- Blade skidding / scratching off the seam: small metal squeak
+	PanelStretch = {
+		ids = { 9118744344 },
+		volume = 0.5,
+		pitch = 0.8,
+		pitchVariation = 0,
+		looped = true,
+	}, -- A panel pulled open: rubbery stretch (loop, pitch follows the opening)
+	RetractorClick = {
+		ids = { 9125921369 },
+		volume = 0.55,
+		pitch = 1.5,
+		pitchVariation = 0.05,
+		trims = { [9125921369] = { start = 0.33 } },
+	}, -- Retractor clip snapped onto the panel: small ratchet click
+	MilkDrip = {
+		ids = { 9113464190, 9113464198 },
+		volume = 0.15,
+		pitch = 1.1,
+		pitchVariation = 0.1,
+	}, -- A milky bead landing
+	TraySet = {
+		ids = { 94238955194144 },
+		volume = 0.3,
+		pitch = 1.2,
+		pitchVariation = 0.08,
+	}, -- An element set down on steel: soft wet tap
+	HatchOpen = {
+		ids = { 9125560652 },
+		volume = 0.35,
+		pitch = 0.7,
+		pitchVariation = 0.04,
+	}, -- The pass-box lid opens: pneumatic hiss
+	GrateSlide = {
+		ids = { 9116902704 },
+		volume = 0.22,
+		pitch = 0.75,
+		pitchVariation = 0.05,
+		length = 0.4,
+		fadeOut = 0.1,
+	}, -- The pass-box grate halves slide apart / together: metal on metal
+	CapsuleDrop = {
+		ids = { 2053476174 },
+		volume = 0.25,
+		pitch = 1.3,
+		pitchVariation = 0.06,
+	}, -- The element lands in the capsule: small soft thunk inside metal
+	CarouselTurn = {
+		ids = { 9119717529 },
+		volume = 0.6,
+		pitch = 0.7,
+		pitchVariation = 0.04,
+	}, -- The capsule carousel turns: small motor + detent click
+	HatchClose = {
+		ids = { 9117526627 },
+		volume = 0.8,
+		pitch = 1.05,
+		pitchVariation = 0.04,
+		trims = { [9117526627] = { gain = 1.44 } },
+	}, -- The pass-box lid shuts: gasket thump
+	SeamPop = {
+		ids = { 9126209045, 9113266090 },
+		volume = 1.98,
+		pitch = 1,
+		pitchVariation = 0.06,
+		trims = {
+			[9126209045] = { start = 0.14, gain = 0.8 },
+			[9113266090] = { start = 0, gain = 1.25 },
+		},
+	}, -- End of the seam: soft wet cracking release
+	PanelsOpen = {
+		ids = { 9120627864, 9120627902 },
+		volume = 0.53,
+		pitch = 1,
+		pitchVariation = 0.06,
+	}, -- Panels opening: wet sticky release + plastic hinge squeak
+	ColdBreath = {
+		ids = { 9116495722 },
+		volume = 0.62,
+		pitch = 0.85,
+		pitchVariation = 0.04,
+		length = 2.5,
+		fadeOut = 1,
+	}, -- Cold air breathing out of the open shell: low hiss
+	ScanLock = { ids = { 9119973132 }, volume = 1.05, pitch = 1, pitchVariation = 0.05 }, -- Element hovered / scanned: CRT-style click
+	ElementStrain = {
+		ids = { 9118744344 },
+		volume = 0.63,
+		pitch = 1,
+		pitchVariation = 0,
+		looped = true,
+	}, -- Holding an element: rubbery stretching pressure (loop while held)
+	ElementRelease = {
+		ids = { 9113537815, 9119669074 },
+		volume = 0.83,
+		pitch = 1,
+		pitchVariation = 0.06,
+		trims = { [9113537815] = { gain = 1.22 }, [9119669074] = { start = 0.29, gain = 0.82 } },
+	}, -- Element comes free: soft wet pop (non-gross)
+	ElementCrumble = {
+		ids = { 9117088526, 9117206088 },
+		volume = 2.54,
+		pitch = 1,
+		pitchVariation = 0.06,
+		length = 1.4,
+		fadeOut = 0.3,
+		trims = { [9117088526] = { gain = 2.19 }, [9117206088] = { start = 0.51, gain = 0.46 } },
+	}, -- Husk crumbling: dry papery rustle
+	CorePickup = { ids = { 9120646567 }, volume = 1.06, pitch = 1.1, pitchVariation = 0.06 }, -- Bio-core lifted out (light wet lift)
+	CapsuleSeal = {
+		ids = { 9125921369 },
+		volume = 0.75,
+		pitch = 1,
+		pitchVariation = 0.05,
+		trims = { [9125921369] = { start = 0.33 } },
+	}, -- (existing slot) capsule cap clicked shut
+	CapsuleHiss = { ids = { 9125560652 }, volume = 0.21, pitch = 1, pitchVariation = 0.06 }, -- Capsule seal hiss (pneumatic burst)
+	SealFrost = {
+		ids = { 9125611419 },
+		volume = 0.06,
+		pitch = 1.1,
+		pitchVariation = 0.05,
+		length = 1.2,
+		fadeOut = 0.4,
+		trims = { [9125611419] = { start = 0.21 } },
+	}, -- Frost forming on the capsule: tiny crackle
+	ChuteSlide = { ids = { 16480576087 }, volume = 0.24, pitch = 0.8, pitchVariation = 0.05 }, -- (existing slot) capsule sliding down the chute
+	TimerLow = { ids = { 9119193999 }, volume = 0.45, pitch = 1, pitchVariation = 0.04 }, -- Last 4 s: fridge compressor stutter (not a beep)
+	-- Case (3D on the carrier; CaseController plays them on its own timeline: wheels 0-0.26 s,
+	-- latches 0.4 / 0.5 s, seal pop + lid 0.6 s)
+	CaseWheelTick = {
+		ids = { 9126029394, 9118727853 },
+		volume = 1.11,
+		pitch = 1,
+		pitchVariation = 0.1,
+		trims = { [9126029394] = { gain = 1.06 }, [9118727853] = { gain = 0.94 } },
+	}, -- (existing) lock wheel ticks
+	CaseLatch = {
+		ids = { 9113590871, 9116722779 },
+		volume = 0.93,
+		pitch = 1,
+		pitchVariation = 0.05,
+		trims = { [9113590871] = { gain = 1.93 }, [9116722779] = { gain = 0.52 } },
+	}, -- (existing) latch snap
+	CaseSealPop = { ids = { 9119669065 }, volume = 1.3, pitch = 1, pitchVariation = 0.05 }, -- (existing) seal pop
+	CaseLidOpen = { ids = { 9113591012 }, volume = 2.95, pitch = 1, pitchVariation = 0.05 }, -- (existing) lid opened
+	CaseLidClose = { ids = { 9113590871 }, volume = 1.8, pitch = 0.9, pitchVariation = 0.05 }, -- (existing) lid closed
+	CaseHum = {
+		ids = { 9112889525 },
+		volume = 1.26,
+		pitch = 1.3,
+		pitchVariation = 0,
+		looped = true,
+	}, -- (existing) faint electric hum of the case (loop)
+	CasePickup = {
+		ids = { 9113589476, 9113589623 },
+		volume = 5.59,
+		pitch = 1,
+		pitchVariation = 0.08,
+		length = 1,
+		fadeOut = 0.2,
+		trims = { [9113589476] = { gain = 0.87 }, [9113589623] = { gain = 1.15 } },
+	}, -- (existing) case grabbed
+	CaseSetDown = {
+		ids = { 9119670016 },
+		volume = 0.93,
+		pitch = 1,
+		pitchVariation = 0.08,
+		length = 1,
+		fadeOut = 0.2,
+	}, -- (existing) case set down
+	CaseDrop = { ids = { 9113589156 }, volume = 0.82, pitch = 1, pitchVariation = 0.08 }, -- (existing) case dropped (KO)
+	-- Mini-game UI (2D)
+	UiSelect = { ids = { 15675032796 }, volume = 2.02, pitch = 1, pitchVariation = 0.04 }, -- Mini-game: select / hover element
+	UiConfirm = { ids = { 15675059323 }, volume = 0.6, pitch = 1, pitchVariation = 0.03 }, -- Confirm / Done
+	UiCancel = { ids = { 15675075163 }, volume = 0.68, pitch = 1, pitchVariation = 0.03 }, -- Cancel / Stop
+	UiError = { ids = { 9113880475 }, volume = 1.29, pitch = 0.6, pitchVariation = 0 }, -- Refused / error: low dull beep
+
 	-- >>> Pyromaniac sounds (generated)
 	-- Pyromaniac (Shared/Kits/Pyromaniac) --------------------------------------------------
 	-- A kit sound is a cue of up to FIVE layers played together (Shared/SoundCues: when each

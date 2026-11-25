@@ -42,6 +42,9 @@
 -- player's own computer (Client/Controllers/CityNpcController): the server stays cheap.
 --
 -- Everything goes into Workspace > City > Npcs.
+--
+-- Other systems can add one NPC of their own with CityNpcs.spawnExtra(spec) (the contraband
+-- buyer "Marlow"): same body, attributes and client posing as the ones from the city data.
 
 local Players = game:GetService("Players")
 
@@ -2906,7 +2909,7 @@ local SHOP_COLORS: { [string]: Color3 } = {
 	Emote = Color3.fromRGB(196, 58, 70), -- REWIND red
 }
 
-local function spawnNpc(spot: BasePart, folder: Instance, city: Instance, index: number)
+local function spawnNpc(spot: BasePart, folder: Instance, city: Instance, index: number): Model?
 	local role = spot:GetAttribute("NpcRole")
 	local name = spot:GetAttribute("NpcName")
 	local pose = spot:GetAttribute("NpcPose")
@@ -2920,12 +2923,12 @@ local function spawnNpc(spot: BasePart, folder: Instance, city: Instance, index:
 	local look = makeLook(roleText, seedNumber)
 	local model = buildBody(nameText, look)
 	if model == nil then
-		return
+		return nil
 	end
 	local root = model:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if root == nil then
 		model:Destroy()
-		return
+		return nil
 	end
 	model.PrimaryPart = root
 	-- Standing on the spot, facing its LookVector (flat).
@@ -2968,6 +2971,19 @@ local function spawnNpc(spot: BasePart, folder: Instance, city: Instance, index:
 		model:SetAttribute("SeatBack", seatBack)
 	end
 	model.Parent = folder
+	return model
+end
+
+-- The city's Npcs folder (made on first use: the city's own NPCs and the extra ones share it).
+local function getFolder(city: Instance): Instance
+	local existing = city:FindFirstChild(FOLDER_NAME)
+	if existing then
+		return existing
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = FOLDER_NAME
+	folder.Parent = city
+	return folder
 end
 
 local function waitForCity(): Instance?
@@ -2995,12 +3011,55 @@ function CityNpcs.start()
 	if #spots == 0 then
 		return
 	end
-	local folder = Instance.new("Folder")
-	folder.Name = FOLDER_NAME
-	folder.Parent = city
+	local folder = getFolder(city)
 	for index, spot in spots do
 		spawnNpc(spot, folder, city, index)
 	end
+end
+
+-- One extra NPC placed by another system (not in the city data).
+--   cframe  position = the floor point between the feet, LookVector = where they face
+--   role    "Bartender" | "Clerk" | "Patron" (what they say, their clothes)
+--   name    shown in their chat lines ("Marlow")
+--   pose    "Idle" | "WipeCounter" | "LeanBar" | "SitStool" | "ArmsCrossed" | "Phone"
+--   seed    picks the colours (the same every server)
+export type ExtraSpec = { cframe: CFrame, role: string, name: string, pose: string, seed: number }
+
+local extraCount = 0
+
+-- Builds that NPC in Workspace > City > Npcs and returns its model. YIELDS until the city is
+-- built (at most 120 s); nil if there is no city by then, or if Roblox could not build the body.
+function CityNpcs.spawnExtra(spec: ExtraSpec): Model?
+	local deadline = os.clock() + 120
+	local city = workspace:WaitForChild("City", 120)
+	if city == nil then
+		return nil
+	end
+	while city:GetAttribute("Built") ~= true do
+		if os.clock() > deadline then
+			warn(`[CityNpcs] spawnExtra({spec.name}): the city was not built in time`)
+			return nil
+		end
+		task.wait(0.5)
+	end
+	-- A temporary invisible marker, exactly like the city data's NpcSpot parts.
+	local spot = Instance.new("Part")
+	spot.Name = "ExtraNpcSpot"
+	spot.Size = Vector3.one
+	spot.Transparency = 1
+	spot.Anchored = true
+	spot.CanCollide = false
+	spot.CanQuery = false
+	spot.CanTouch = false
+	spot.CFrame = spec.cframe
+	spot:SetAttribute("NpcRole", spec.role)
+	spot:SetAttribute("NpcName", spec.name)
+	spot:SetAttribute("NpcPose", spec.pose)
+	spot:SetAttribute("NpcSeed", spec.seed)
+	extraCount += 1
+	local model = spawnNpc(spot, getFolder(city), city, 1000 + extraCount)
+	spot:Destroy()
+	return model
 end
 
 return CityNpcs

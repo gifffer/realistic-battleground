@@ -410,7 +410,8 @@ local function chooseReaction(
 	end
 	if zone == "Head" then
 		if side == "Front" then
-			local punch = CharacterAnimationController.getLastAction(attacker)
+			-- (the fist really thrown: a left punch is a right cross while carrying the case)
+			local punch = CharacterAnimationController.getLastShownClip(attacker)
 			return (if punch then REACTION_BY_PUNCH[punch] else nil) or "HitJab"
 		end
 		return HEAD_REACTION_BY_SIDE[side]
@@ -432,7 +433,7 @@ local function flinchKick(
 	end
 	local direction = HEAD_FLINCH[side]
 	if side == "Front" then
-		local punch = CharacterAnimationController.getLastAction(attacker)
+		local punch = CharacterAnimationController.getLastShownClip(attacker)
 		if punch == "Brawler_M1_2" then
 			direction = Vector3.new(1, -0.6, -0.3) -- right cross → head to the victim's right
 		elseif punch == "Brawler_M1_3" then

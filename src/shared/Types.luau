@@ -37,6 +37,8 @@ export type PlayerProfile = {
 	-- (Shared/Cosmetics ids; "" = none).
 	ownedCosmetics: { [string]: boolean },
 	equipped: { Title: string, Outfit: string, KillEffect: string, Emote: string },
+	-- Contraband prototype: the lab culture, the bio-cores in the stash, the case.
+	contraband: ContrabandProfile,
 }
 
 export type QuestState = {
@@ -135,5 +137,138 @@ export type KillFeedDetails = {
 	victimId: number?,
 	killerId: number?,
 }
+
+-- ===================== Contraband prototype =====================
+-- (Server/Systems/Contraband). Labs, clones, bio-cores, the courier case.
+
+-- How good an extracted bio-core is (Shared/Contraband/Grades).
+export type CoreGrade = "A" | "B" | "C"
+
+-- One bio-core kept in the lab stash (saved). No id: ids only exist for one
+-- server session (Ledger) and never leave the server.
+export type StashCore = {
+	grade: CoreGrade,
+	score: number, -- 0..100, the extraction score that gave the grade
+	madeAt: number, -- os.time() when it was extracted
+	kind: string?, -- ElementKind it came from (older saves have none: it follows the grade)
+}
+
+-- The bio-elements an extraction shows (stylised lab specimens, never organs).
+--   Cluster  fused amber lobes      Pod   ribbed violet seed pod
+--   Coil     glossy green spiral    Husk  a dried-out decoy: worth nothing
+export type ElementKind = "Cluster" | "Pod" | "Coil" | "Husk"
+export type ElementCondition = "Intact" | "Bruised" | "Ruptured"
+
+-- One element as the player sees it (the exact score stays on the server).
+export type ExtractElement = {
+	kind: ElementKind,
+	condition: ElementCondition, -- (a Husk is always "Intact": ignored)
+	viability: number, -- 0..3 bars shown on the monitor (coarse, from the score band)
+	state: ElementState?, -- where it is in the extraction (ExtractState only)
+}
+
+-- The extraction's steps (server FSM, mirrored by the client) and where each element is.
+--   Nest     in its gel nest in the shell      Pulling  grabbed, being pulled free
+--   Held     in the gloved hand                Loose    set down on the trolley top
+--   OnTray   in the steel specimen tray        Sealed   dropped into the pass-box, capsule sealed
+export type ExtractStep = "Intro" | "Incise" | "Spread" | "Harvest"
+export type ElementState = "Nest" | "Pulling" | "Held" | "Loose" | "OnTray" | "Sealed"
+
+-- The saved contraband part of a player's save (PlayerProfile.contraband).
+export type ContrabandProfile = {
+	-- grown = seconds of online growth so far; seed = what the culture holds (Extraction rolls
+	-- the elements from it, so stopping an extraction never rerolls them; 0 = none yet)
+	culture: { active: boolean, grown: number, seed: number },
+	stash: { StashCore },
+	caseTier: string, -- "Courier" (2 cradles); "MkII" later
+	log: { extractions: number, sales: number, coinsEarned: number, casesLost: number },
+}
+
+-- Where the culture in the lab vat is.
+export type CultureStage = "Empty" | "Growing" | "Ready" | "Extracting"
+
+-- server → owner (ContrabandEvent "LabState")
+export type LabStatePayload = {
+	inLab: boolean,
+	stage: CultureStage,
+	grown: number, -- seconds grown at server time `at`
+	total: number, -- seconds needed (Config.Lab.CULTURE_TIME or the fast value)
+	at: number, -- workspace:GetServerTimeNow() when `grown` was measured
+	running: boolean, -- true = grows at 1 s per s from `at`
+	bench: { CoreGrade }, -- stash cores, in order (NO ids)
+	kinds: { string }, -- their ElementKind, parallel to `bench`
+	stashMax: number,
+}
+
+-- server → owner (ContrabandEvent "ExtractState")
+-- Times are workspace:GetServerTimeNow() (the client compares with the same clock).
+export type ExtractStatePayload = {
+	active: boolean,
+	sessionId: number,
+	step: ExtractStep?, -- (nil when not active)
+	layer: number, -- 0..2 seam layers cut (Incise)
+	spread: { boolean }, -- the two panels open
+	coolEnds: number?, -- the cooling bar runs out (nil until the panels are open)
+	slots: number, -- capsules to fill (1..Config.Extraction.CAPSULES)
+	sealed: number, -- capsules sealed so far
+	elements: { ExtractElement }, -- by index (the client lays them out in the cavity), with state
+	acked: number, -- ExtractAction messages the server has handled so far in this session
+}
+
+-- server → the case HOLDER only (ContrabandEvent "CaseState")
+export type CaseStatePayload = {
+	holding: boolean,
+	tier: string,
+	cradles: number,
+	grades: { CoreGrade },
+	kinds: { string }, -- their ElementKind, parallel to `grades`
+}
+
+-- server → seller (ContrabandEvent "SaleResult")
+export type SaleResultPayload = {
+	ok: boolean,
+	coins: number,
+	sold: { CoreGrade },
+	reason: string?,
+}
+
+-- server → owner (ContrabandEvent "ExtractPicked"): one element was transferred and sealed.
+-- inert = it was a husk (the capsule is wasted, no core, no grade).
+export type ExtractPickedPayload = {
+	index: number,
+	slot: number, -- which capsule (1..slots), in the order they were sealed
+	inert: boolean,
+	kind: ElementKind,
+	grade: CoreGrade?,
+	toCase: boolean, -- the core went into a case lying in the lab (else the stash)
+}
+
+-- End of an extraction: the cores made (kind, grade, what each is worth at the buyer), how
+-- many capsules were wasted on husks, and where they went.
+export type ExtractDonePayload = {
+	cores: { { kind: ElementKind, grade: CoreGrade, worth: number } },
+	inert: number,
+	toCase: boolean,
+}
+
+-- Messages from the server to one player (Remotes.ContrabandEvent):
+--   LabState      LabStatePayload
+--   ExtractState  ExtractStatePayload
+--   ExtractPicked ExtractPickedPayload
+--   ExtractDone   ExtractDonePayload
+--   CaseState     CaseStatePayload
+--   SaleStarted   { endsAt: number }   (server time)
+--   SaleResult    SaleResultPayload
+--   Notice        { text: string }     (short English line, written by the server)
+export type ContrabandEventKind =
+	"LabState"
+	| "ExtractState"
+	| "ExtractPicked"
+	| "ExtractDone"
+	| "CaseState"
+	| "SaleStarted"
+	| "SaleResult"
+	| "Notice"
+	| "DoorCut" -- (no data) a lab door teleport is coming: the client fades the screen
 
 return nil
