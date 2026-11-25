@@ -196,6 +196,19 @@ return table.freeze({
 		FINISHER_STUN = 0.8,
 		KNOCKBACK_SPEED = 45, -- studs/s, 4th hit only
 		KNOCKBACK_TIME = 0.2,
+		-- Thrown through a wall: a body sent flying at least this fast
+		-- (studs/s, horizontally) by a knockdown or a knockback crashes
+		-- through what it hits, if that is tagged "Breakable" (a fence, a
+		-- shop front...). A wall with a "Health" attribute above 50 needs
+		-- THROUGH_WALL_PER_HEALTH studs/s more per point (wood 50: 35,
+		-- metal 90: 43, brick 120: 49, concrete 160: 57).
+		THROUGH_WALL_SPEED = 35,
+		THROUGH_WALL_PER_HEALTH = 0.2,
+		THROUGH_WALL_WATCH = 0.6, -- seconds the flight is watched for a wall
+		THROUGH_WALL_MAX = 2, -- walls one throw goes through, at most
+		THROUGH_WALL_RADIUS = 3.5, -- studs: the hole a body makes
+		THROUGH_WALL_PUSH = 0.7, -- the debris fly at this × the body's speed
+		THROUGH_WALL_KEEP = 0.85, -- the body keeps this × its speed through it
 		-- Every other hit pushes the victim a little too (about 1 stud): the
 		-- body is moved by the fist instead of the fist going through it.
 		HIT_PUSH_SPEED = 9,

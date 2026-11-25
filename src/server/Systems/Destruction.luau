@@ -12,6 +12,10 @@
 --     prompts off), not destroyed: the original comes back RESTORE_AFTER
 --     seconds after the last hit on it (when nobody stands inside it), and
 --     its pieces go then.
+--   • A city prop swapped for its kit mesh (City/PropKit) breaks through its
+--     invisible collision proxies (attribute KitProxy): the first one hit
+--     hides the whole prop, its mesh layers (KitMesh) and its other proxies,
+--     and they all come back together. Its debris take the mesh's colour.
 -- Every client throws the debris (Remotes.WallBroken, Client KitVFX). The
 -- debris collide with the map but not with fighters (collision groups).
 --
@@ -19,6 +23,12 @@
 --       break what's within `radius` studs of `centre`; `push` = the
 --       direction × strength the debris fly (studs/s); `attacker`: the
 --       fighter (his feet tell where the floor is; never his own body).
+--       `options` (optional): feetY = where the floor is instead (a body
+--       thrown into a wall: the floor it flew from), only = what may break
+--       (a piece of a cut wall is judged by its wall).
+--   Destruction.bodyBreakable(part, feetY) → the wall a thrown body hitting
+--       `part` breaks (the part, or the wall a piece was cut from), or nil:
+--       only walls tagged "Breakable" (Breakable.tagged).
 
 local CollectionService = game:GetService("CollectionService")
 local PhysicsService = game:GetService("PhysicsService")
@@ -49,6 +59,7 @@ type Saved = {
 	canQuery: boolean,
 	canTouch: boolean,
 	toggles: { Toggle },
+	group: { BasePart }, -- the rest of a kit prop, hidden with it
 }
 type Broken = {
 	part: BasePart,
@@ -74,6 +85,66 @@ local function toggle(saved: Saved, instance: Instance, property: string, value:
 	(instance :: any)[property] = value
 end
 
+-- The kit prop marker (City/PropKit) a collision proxy belongs to, or nil.
+local function kitMarker(part: BasePart): Instance?
+	if part:GetAttribute("KitProxy") ~= true then
+		return nil
+	end
+	local node = part.Parent
+	while node and node ~= workspace do
+		if node.Name == "MeshProp" and node:GetAttribute("MeshApplied") == true then
+			return node
+		end
+		node = node.Parent
+	end
+	return nil
+end
+
+-- The look of what `part` shows: a kit proxy shows its prop's biggest mesh layer.
+local function looks(part: BasePart): (Color3, Enum.Material)
+	local marker = kitMarker(part)
+	if marker then
+		local best: BasePart? = nil
+		local bestVolume = -1
+		for _, child in marker:GetChildren() do
+			if child:IsA("BasePart") and child:GetAttribute("KitMesh") == true then
+				local volume = child.Size.X * child.Size.Y * child.Size.Z
+				if volume > bestVolume then
+					best, bestVolume = child, volume
+				end
+			end
+		end
+		if best then
+			return best.Color, best.Material
+		end
+	end
+	return part.Color, part.Material
+end
+
+local function hideRest(saved: Saved, part: BasePart, marker: Instance)
+	for _, item in marker:GetDescendants() do
+		if item == part or item:IsDescendantOf(part) then
+			continue
+		end
+		if item:IsA("BasePart") and item:GetAttribute("KitMesh") == true then
+			toggle(saved, item, "Transparency", 1)
+			toggle(saved, item, "CanQuery", false)
+			for _, child in item:GetChildren() do
+				if child:IsA("Light") or child:IsA("ParticleEmitter") then
+					toggle(saved, child, "Enabled", false)
+				end
+			end
+		elseif item:IsA("BasePart") and item:GetAttribute("KitProxy") == true then
+			toggle(saved, item, "CanCollide", false)
+			toggle(saved, item, "CanQuery", false)
+			toggle(saved, item, "CanTouch", false)
+			-- (marked broken too: a client that let its charge through it puts it back otherwise)
+			item:SetAttribute("Broken", true)
+			table.insert(saved.group, item)
+		end
+	end
+end
+
 local function hide(part: BasePart): Saved
 	local saved: Saved = {
 		transparency = part.Transparency,
@@ -81,14 +152,25 @@ local function hide(part: BasePart): Saved
 		canQuery = part.CanQuery,
 		canTouch = part.CanTouch,
 		toggles = {},
+		group = {},
 	}
+	local marker = kitMarker(part)
+	if marker then
+		hideRest(saved, part, marker)
+	end
 	part.Transparency = 1
 	part.CanCollide = false
 	part.CanQuery = false
 	part.CanTouch = false
 	part:SetAttribute("Broken", true)
 	for _, child in part:GetDescendants() do
-		if child:IsA("Decal") then
+		if child:IsA("BasePart") then
+			-- (decoration parented under the wall - rails, plinths, sills - goes with it)
+			toggle(saved, child, "Transparency", 1)
+			toggle(saved, child, "CanCollide", false)
+			toggle(saved, child, "CanQuery", false)
+			toggle(saved, child, "CanTouch", false)
+		elseif child:IsA("Decal") then
 			toggle(saved, child, "Transparency", 1)
 		elseif
 			child:IsA("SurfaceGui")
@@ -213,11 +295,17 @@ local overlap = OverlapParams.new()
 overlap.FilterType = Enum.RaycastFilterType.Exclude
 overlap.RespectCanCollide = true
 
+export type BlastOptions = {
+	feetY: number?,
+	only: ((BasePart) -> boolean)?,
+}
+
 function Destruction.blast(
 	centre: Vector3,
 	radius: number,
 	push: Vector3,
-	attacker: Model?
+	attacker: Model?,
+	options: BlastOptions?
 ): boolean
 	local root = attacker and attacker:FindFirstChild("HumanoidRootPart")
 	local fighters = CollectionService:GetTagged(Config.Combat.TAG)
@@ -227,6 +315,10 @@ function Destruction.blast(
 		feetY = root.Position.Y - 3
 		under = Breakable.support(root, fighters)
 	end
+	if options and options.feetY then
+		feetY = options.feetY
+	end
+	local only = if options then options.only else nil
 	overlap.FilterDescendantsInstances = fighters
 	local blast: Blast =
 		{ centre = centre, reach = radius * 0.85, feetY = feetY, thrown = {}, now = os.clock() }
@@ -236,6 +328,9 @@ function Destruction.blast(
 			return -- (never what he stands on)
 		end
 		local original = pieceOf[part]
+		if only and not only(original or part) then
+			return
+		end
 		if original then
 			-- a piece of an already cut wall: it goes for good
 			if
@@ -267,12 +362,13 @@ function Destruction.blast(
 			return
 		end
 		if how == "whole" then
+			local color, material = looks(part) -- (before it hides)
 			record(part, blast.now)
 			table.insert(blast.thrown, {
 				cframe = part.CFrame,
 				size = part.Size,
-				color = part.Color,
-				material = part.Material,
+				color = color,
+				material = material,
 			})
 			return
 		end
@@ -293,12 +389,35 @@ function Destruction.blast(
 	return #blast.thrown > 0
 end
 
+function Destruction.bodyBreakable(part: BasePart, feetY: number): BasePart?
+	local original = pieceOf[part]
+	if original then
+		return if Breakable.tagged(original) then original else nil
+	end
+	if Breakable.tagged(part) and Breakable.check(part, feetY) ~= nil then
+		return part
+	end
+	return nil
+end
+
 -- Is a fighter standing inside `part`? (don't trap them in it)
 local occupiedParams = OverlapParams.new()
 occupiedParams.FilterType = Enum.RaycastFilterType.Include
-local function occupied(part: BasePart): boolean
+local function occupied(entry: Broken): boolean
 	occupiedParams.FilterDescendantsInstances = CollectionService:GetTagged(Config.Combat.TAG)
-	return #workspace:GetPartBoundsInBox(part.CFrame, part.Size, occupiedParams) > 0
+	local part = entry.part
+	if #workspace:GetPartBoundsInBox(part.CFrame, part.Size, occupiedParams) > 0 then
+		return true
+	end
+	for _, other in entry.saved.group do
+		if
+			other.Parent ~= nil
+			and #workspace:GetPartBoundsInBox(other.CFrame, other.Size, occupiedParams) > 0
+		then
+			return true
+		end
+	end
+	return false
 end
 
 local function restore(entry: Broken)
@@ -325,6 +444,9 @@ local function restore(entry: Broken)
 		end
 	end
 	part:SetAttribute("Broken", nil)
+	for _, other in entry.saved.group do
+		other:SetAttribute("Broken", nil)
+	end
 end
 
 -- Fighters in their collision group (debris go through them).
@@ -376,7 +498,7 @@ function Destruction.start()
 		nextCheck = now + 1
 		for _, entry in broken do
 			if now - entry.lastHit >= RESTORE_AFTER then
-				if occupied(entry.part) then
+				if occupied(entry) then
 					entry.lastHit = now - RESTORE_AFTER + 1 -- (try again in a second)
 				else
 					restore(entry)

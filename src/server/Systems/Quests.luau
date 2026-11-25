@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local QuestDefs = require(ReplicatedStorage.Shared.Quests)
 local Types = require(ReplicatedStorage.Shared.Types)
+local Weapons = require(ReplicatedStorage.Shared.Weapons)
 local Combat = require(script.Parent.Combat)
 local PlayerData = require(script.Parent.PlayerData)
 local Progression = require(script.Parent.Progression)
@@ -172,7 +173,7 @@ local function onCombatEvent(info: Combat.CombatEventInfo)
 			and not string.find(moveId, "_Counter", 1, true)
 			and not string.find(moveId, "_FollowUp", 1, true)
 			and not string.find(moveId, "_Hold", 1, true)
-			and moveId ~= "BoneThrow" -- (a thrown bone, not a kit move)
+			and Weapons.byMove(moveId) == nil -- (something thrown, not a kit move)
 		then
 			local counted = lastMoveCounted[attackerPlayer]
 			if counted == nil then
