@@ -37,6 +37,7 @@ import math
 import bmesh
 import bpy
 from mathutils import Vector
+from mathutils import Matrix  # noqa: E402
 from mathutils.bvhtree import BVHTree
 
 import kitlib
@@ -358,7 +359,7 @@ def sedan_lower_rings(bay=False):
     return rings
 
 
-def _wheel_cutters(zs=(-WHEEL_Z, WHEEL_Z), r=ARCH_R, cx=2.95, length=1.5, cy=WHEEL_R, segs=28):
+def _wheel_cutters(zs=(-WHEEL_Z, WHEEL_Z), r=ARCH_R, cx=2.95, length=1.5, cy=WHEEL_R, segs=22):
     out = []
     for z in zs:
         for sx in (-1, 1):
@@ -372,7 +373,7 @@ def _arch_liner(ctx, z, sx, r=ARCH_R, cy=WHEEL_R, floor=0.8, x_in=2.21, x_lip=3.
     """The black wheel-well liner: an arched band just inside the cut (its front edge a lip
     0.02-0.05 proud of the body side) and the inner wall closing the well."""
     th0 = math.asin(max(-1.0, min(1.0, (floor - cy) / (r - 0.02))))
-    arc = [th0 + (math.pi - 2 * th0) * k / 9 for k in range(10)]
+    arc = [th0 + (math.pi - 2 * th0) * k / 7 for k in range(8)]
     ro, ri = r - 0.02, r - 0.08
     poly = [(cy + ro * math.sin(a), z + ro * math.cos(a)) for a in arc]
     poly += [(cy + ri * math.sin(a), z + ri * math.cos(a)) for a in reversed(arc)]
@@ -478,13 +479,15 @@ class Greenhouse:
 
 
 # ---------------------------------------------------------------------------------- wheels
-def _tyre(flat=0.0, segs=15, r=WHEEL_R, hw=0.43, bead=0.8):
-    """A tyre round X, centred: rounded shoulders, bulging sidewalls; the bottom pressed flat on
-    the road (flat > 0: a flat tyre, its sidewall bulging out)."""
+def _tyre(flat=0.0, segs=22, r=WHEEL_R, hw=0.43, bead=0.8):
+    """A tyre round X, centred (+X the outer face): a flat tread band with rounded shoulders,
+    the outer sidewall bulging past the rim (a real 70-series tyre's balloon), a plainer inner
+    side nobody sees; the bottom pressed flat on the road (flat > 0: a flat tyre, its sidewall
+    bulging out). 22 sides: the outline stays round at eye level."""
     k = r / 1.2
-    prof = [(bead, -hw * 0.84), (bead + 0.2 * k, -hw * 1.03), (r - 0.04 * k, -hw * 0.86),
-            (r, hw * 0.5), (r - 0.04 * k, hw * 0.86), (bead + 0.25 * k, hw * 1.02),
-            (bead + 0.1 * k, hw * 1.03), (bead, hw * 0.84)]
+    prof = [(bead, -hw * 0.82), (r - 0.07 * k, -hw * 0.97), (r, -hw * 0.5), (r, hw * 0.42),
+            (r - 0.04 * k, hw * 0.83), (r - 0.2 * k, hw * 1.03), (bead + 0.13 * k, hw * 1.02),
+            (bead, hw * 0.86)]
     bm = _rot_x_wheel(lathe(prof, segs))
     floor = -r + 0.03 + flat
     for v in bm.verts:
@@ -496,36 +499,124 @@ def _tyre(flat=0.0, segs=15, r=WHEEL_R, hw=0.43, bead=0.8):
     return bm
 
 
-def _wheel_cover():
-    """A 90s full wheel cover (chrome): domed centre, a ring of shallow dishes, the rim lip."""
-    prof = [(0.0, 0.47), (0.24, 0.44), (0.34, 0.41), (0.58, 0.44), (0.84, 0.405), (0.85, 0.3), (0.0, 0.3)]
-    return _rot_x_wheel(lathe(prof, 14))
+def _wheel_cover(segs=16):
+    """A 90s full wheel cover, pressed steel painted silver: a domed centre cap, a dished ring
+    falling from it, a raised ridge ring, the flat outer band and the rolled lip tucked into
+    the tyre's bead (its slots are added by _add_wheel)."""
+    prof = [(0.0, 0.5), (0.13, 0.49), (0.18, 0.42), (0.33, 0.385), (0.57, 0.39), (0.65, 0.47), (0.8, 0.425),
+            (0.86, 0.33), (0.0, 0.33)]
+    return _rot_x_wheel(lathe(prof, segs))
 
 
 def _steel_wheel(segs=16):
-    """A plain pressed-steel wheel: rim lip, dish, hub, (lug nuts added separately)."""
+    """A plain pressed-steel wheel: rim lip, the dish stepping in to the hub face, a ring of
+    ventilation holes (dark, added by _add_wheel), the hub (lug nuts added separately)."""
     prof = [(0.0, 0.3), (0.22, 0.37), (0.34, 0.31), (0.55, 0.31), (0.84, 0.43), (0.86, 0.36), (0.0, 0.3)]
     return _rot_x_wheel(lathe(prof, segs))
 
 
-def _add_wheel(add, x, z, style, sx, flat=0.0, cy=WHEEL_R, tyre_layer="Rubber", k=1.0, segs=None, nuts=5):
-    """One road wheel at (x, cy, z) on side sx (+1 right): tyre + cover / steel wheel (k: size)."""
+def _wheel_slots(add, m, n, rad, axial, size, layer="Black", a0=0.0):
+    """n dark slots / holes on a wheel face (lathe space: axial along Y), turned onto X."""
+    for j in range(n):
+        a = a0 + 2 * math.pi * j / n
+        bm = _kbox(size[0], 0.03, size[1])
+        bmesh.ops.transform(bm, matrix=Matrix.Rotation(-a, 4, "Y"), verts=bm.verts)
+        bmesh.ops.translate(bm, vec=Vector((rad * math.cos(a), axial, rad * math.sin(a))), verts=bm.verts)
+        add(layer, _rot_x_wheel(bm), m)
+
+
+def _add_wheel(add, x, z, style, sx, flat=0.0, cy=WHEEL_R, tyre_layer="Rubber", k=1.0, segs=None, nuts=5, holes=0,
+               tyre_segs=None):
+    """One road wheel at (x, cy, z) on side sx (+1 right): tyre + cover / steel wheel (k: size).
+    Wheels are mid-grey steel (Metal), never chrome-white: the brake dust and road grime are
+    the wheel layer's vertex colours (see _wheel_wear)."""
     m = T(x, cy, z) @ (R(0, 180, 0) if sx < 0 else R()) @ S(k)
-    add(tyre_layer, _tyre(flat=flat, segs=segs or 15), m)
+    add(tyre_layer, _tyre(flat=flat, segs=tyre_segs or segs or 22), m)
     if style == "cover":
-        add("Chrome", _wheel_cover(), m @ T(-0.0, 0, 0))
+        add("Metal", _wheel_cover(), m)
+        _wheel_slots(add, m, 6, 0.46, 0.392, (0.2, 0.075), a0=0.2)
     elif style in ("steel", "rusty"):
-        add("Rust" if style == "rusty" else "Metal", _steel_wheel(segs or 16), m)
+        add("Metal", _steel_wheel(segs or 16), m)
+        if holes:
+            _wheel_slots(add, m, holes, 0.47, 0.316, (0.12, 0.1))
         hub = _rot_x_wheel(cyl(0.14, 0.12, 8))
         add("Rust" if style == "rusty" else "Black", hub, m @ T(0.38, 0, 0))
         for j in range(nuts):
             a = 2 * math.pi * j / max(nuts, 1)
             nut = _rot_x_wheel(cyl(0.045, 0.08, 5))
             add("Metal", nut, m @ T(0.39, 0.25 * math.cos(a), 0.25 * math.sin(a)))
-    elif style == "hubcap":  # (a steel wheel with a small chrome dog-dish cap)
-        add("Metal", _steel_wheel(), m)
-        cap = _rot_x_wheel(lathe([(0.0, 0.47), (0.26, 0.45), (0.4, 0.38), (0.4, 0.3), (0.0, 0.3)], 12))
-        add("Chrome", cap, m)
+        if style == "rusty":  # (rust weeping from the holes and the rim over the dark steel)
+            for j, (a, ln) in enumerate(((0.4, 0.18), (1.9, 0.13), (3.5, 0.16), (5.0, 0.12))):
+                bm = _kbox(ln, 0.03, 0.05)
+                bmesh.ops.translate(bm, vec=Vector((ln / 2, 0, 0)), verts=bm.verts)
+                bmesh.ops.transform(bm, matrix=Matrix.Rotation(-a, 4, "Y"), verts=bm.verts)
+                bmesh.ops.translate(bm, vec=Vector((0.36 * math.cos(a), 0.322, 0.36 * math.sin(a))), verts=bm.verts)
+                add("Rust", _rot_x_wheel(bm), m)
+    elif style == "hubcap":  # (a steel wheel with a small domed dog-dish cap, satin steel)
+        # (only the outer ring of the wheel shows round the cap: its middle is left plain)
+        add("Metal", _rot_x_wheel(lathe([(0.0, 0.31), (0.55, 0.31), (0.84, 0.43), (0.86, 0.36), (0.0, 0.3)], 18)), m)
+        cap = _rot_x_wheel(lathe([(0.0, 0.5), (0.2, 0.485), (0.36, 0.43), (0.43, 0.34), (0.0, 0.32)], 18))
+        add("Metal", cap, m)
+
+
+def _tyre_wear(wheels, cy, noise):
+    """Tyres: the tread band darker and greasy, the sidewalls a little dusty toward the road."""
+
+    def fn(p):
+        best = 0.0
+        for wx, wz in wheels:
+            if abs(abs(p.co.x) - wx) < 0.7:
+                best = max(best, math.hypot(p.co.y - cy, p.co.z - wz))
+        tread = smoothstep(WHEEL_R - 0.09, WHEEL_R - 0.02, best) if best else 0.0
+        low = 1 - 0.18 * (1 - smoothstep(0.0, 0.8, p.co.y - cy + WHEEL_R))
+        cav = 1 - 0.25 * smoothstep(0.0, 0.45, -p.convex)
+        return (1 - 0.3 * tread) * low * cav * (0.92 + 0.08 * noise.n(p.co * 9.0))
+
+    return fn
+
+
+def _rust_wear(noise, mask=None):
+    """Rust: dark brown in the heart of a patch (the metal eaten through), the brighter orange
+    only along its ragged edge where the paint is still lifting; loose rusty parts (a hub, a
+    hanging bumper) dark with orange streaks. `mask(p)` is how deep inside a body patch p is
+    (0 at its edge), or None for parts that are not body patches."""
+
+    def fn(p):
+        cav = 1 - 0.3 * smoothstep(0.0, 0.45, -p.convex)
+        m = mask(p.co) if mask else None
+        if m is None:
+            streak = smoothstep(0.1, 0.6, noise.fbm(Vector((p.co.x * 5, p.co.y * 0.8, p.co.z * 5)), 2))
+            k = 0.62 + 0.38 * streak
+        else:
+            k = 0.82 - 0.4 * smoothstep(0.02, 0.12, m) + 0.06 * noise.n(p.co * 11.0)
+        return (k * cav, k * 0.94 * cav, k * 0.9 * cav)
+
+    return fn
+
+
+def _wheel_wear(wheels, cy, level, noise, rusty=False):
+    """The wheels' vertex colours (the Metal layer, also its other small steel parts): brake
+    dust and road grime darkening toward the rim (brown-grey), cleaner toward the centre; a rusty
+    wheel goes dark steel. Parts away from the wheels: grime in creases."""
+
+    def fn(p):
+        best = None
+        for wx, wz in wheels:
+            if abs(abs(p.co.x) - wx) < 0.7:
+                d = math.hypot(p.co.y - cy, p.co.z - wz)
+                if d < 1.0 and (best is None or d < best):
+                    best = d
+        cav = 1 - 0.3 * smoothstep(0.0, 0.45, -p.convex)
+        if best is None:
+            return cav * (1 - 0.2 * level)
+        dust = smoothstep(0.35, 0.86, best) * (0.75 + 0.25 * noise.n(p.co * 6.0))
+        k = (1 - (0.25 + 0.3 * level) * dust) * 0.8  # (satin steel, never bright: ~105 grey)
+        c = (k * 1.0, k * 0.93, k * 0.84)  # (brake dust is brown)
+        if rusty:
+            c = (c[0] * 0.55, c[1] * 0.52, c[2] * 0.5)
+        return tuple(v * cav for v in c)
+
+    return fn
 
 
 def _brake(add, x, z, sx, cy):
@@ -644,27 +735,68 @@ def sedan(ctx, kind="clean"):
                 card("Chrome", (sx * 3.0, 1.71, c), (0, 0, (z1 - z0) / 2), (0, 0.018, 0), (-sx, 0, 0),
                      max(2, int((z1 - z0) / 1.1)), 1, off0=-0.01, off1=0.04)
 
-    # rust scabs and the primer fender (worn / wrecked)
+    # rust (worn / wrecked): ragged patches where water sits on a real car - along the sills,
+    # round the wheel-arch lips, at the bottom of the door seams, on the deck lid - never round
+    # spots in the middle of a panel. Each patch is dark in its heart and orange only along its
+    # edge (_rust_wear reads rust_mask: how deep inside a patch a point is).
+    patches = []
+
+    def scab(c, ua, va, seed, n=7):
+        c, ua, va = Vector(c), Vector(ua), Vector(va)
+        d = Vector((-1 if c.x > 0 else 1, 0, 0)) if abs(c.x) > 2.5 else Vector((0, -1, 0))
+        bm = _blob(bvh, c, ua, va, d, noise, seed, n=n)
+        if bm.verts:
+            add("Rust", bm)
+            patches.append((c, ua, va))
+        else:
+            bm.free()
+
     if worn:
-        k = 1.0 if kind == "wrecked" else 0.6
-        spots = [(3.0, 1.15, -6.4, 0.5, 0.32), (-3.0, 1.1, 6.35, 0.55, 0.3), (3.0, 0.95, 2.4, 0.9, 0.16),
-                 (-3.0, 0.95, -2.0, 1.2, 0.15), (3.0, 1.5, 3.4, 0.25, 0.45)]
-        if kind == "wrecked":
-            spots += [(-3.0, 1.9, -6.2, 0.7, 0.5), (3.0, 1.9, -0.6, 0.6, 0.45), (-3.0, 1.6, 2.4, 0.8, 0.5)]
-        for x, y, z, hz, hy in spots:
-            sx = 1 if x > 0 else -1
-            two = hz > 0.7 and kind == "wrecked"
-            for j in range(2 if two else 1):  # (a long run of rust: two scabs)
-                zz = z + (j - 0.5) * hz * 0.9 if two else z
-                bm = _blob(bvh, (x, y, zz), (0, 0, hz * (0.6 if two else 1.0) * k ** 0.5), (0, hy * k ** 0.5, 0),
-                           (-sx, 0, 0), noise, (x, y * 3 + j, zz), n=11 if two or kind == "wrecked" else 9)
-                add("Rust", bm) if bm.verts else bm.free()
-        for z, x, hx, hz in ((6.3, -1.2, 1.1, 0.8),) if kind == "wrecked" else ((-6.3, 2.2, 0.5, 0.4),):
+        wreck = kind == "wrecked"
+        for sx in (-1, 1):
+            x = sx * 3.0
+            # sills: long ragged runs between the arches, lifting the paint above them
+            runs = ((-2.0, 1.25), (0.6, 1.1), (2.5, 0.65)) if wreck else ((-1.4 * sx, 0.8),)
+            for k, (z, hz) in enumerate(runs):
+                scab((x, 1.08 if wreck else 1.02, z), (0, 0, hz), (0, 0.3 if wreck else 0.14, 0), (x, 1.0 + k, z))
+            # arch lips: short patches following the arc just outside the cut
+            for wz in (-WHEEL_Z, WHEEL_Z):
+                angs = (55, 125) if wreck else ((150,) if wz < 0 else (40,))
+                for a in angs:
+                    t = math.radians(a)
+                    rr = ARCH_R + 0.14
+                    c = (x, WHEEL_R + rr * math.sin(t), wz + rr * math.cos(t))
+                    tang = (0, 0.42 * math.cos(t), -0.42 * math.sin(t))
+                    nrm = (0, 0.18 * math.sin(t), 0.18 * math.cos(t))
+                    scab(c, tang, nrm, (x, a * 0.1, wz))
+            if wreck:  # the bottoms of the door seams, rust running up them
+                for zz in ((-3.15,) if sx < 0 else (-0.2,)):
+                    scab((x, 1.25, zz), (0, 0.32, 0), (0, 0, 0.12), (x, 7.0, zz), n=6)
+        for z, x, hx, hz in ((6.3, -1.2, 1.1, 0.8),) if wreck else ((-6.3, 2.2, 0.5, 0.4),):
             bm = _blob(bvh, (x, 3.2, z), (hx, 0, 0), (0, 0, hz), (0, -1, 0), noise, (x, 9.0, z), n=12, rings=(0.55, 1.0))
-            add("Rust", bm) if bm.verts else bm.free()
+            if bm.verts:
+                add("Rust", bm)
+                patches.append((Vector((x, 3.2, z)), Vector((hx, 0, 0)), Vector((0, 0, hz))))
+            else:
+                bm.free()
+
+    def rust_mask(q):
+        best = None
+        for c, ua, va in patches:
+            dq = q - Vector((0, lift, 0)) - c
+            if abs(dq.x) > 0.4 and abs(c.x) > 2.5:
+                continue
+            ea = dq.dot(ua) / ua.length_squared
+            eb = dq.dot(va) / va.length_squared
+            e = math.hypot(ea, eb)
+            if e < 1.15:
+                m = (1 - e) * min(ua.length, va.length) + 0.02
+                best = m if best is None else max(best, m)
+        return best
+
     if kind == "worn":
         # the front-left fender from a scrapyard: grey primer, side and top
-        card("Concrete", (-3.0, 1.9, -5.35), (0, 0, 2.0), (0, 0.9, 0), (1, 0, 0), 12, 5,
+        card("Concrete", (-3.0, 1.9, -5.35), (0, 0, 2.0), (0, 0.9, 0), (1, 0, 0), 9, 4,
              lambda a, b: not (a > 0.92 and b < 0.0), off0=-0.006, off1=0.016)
         card("Concrete", (-2.83, 3.0, -5.9), (0.25, 0, 0), (0, 0, 1.45), (0, -1, 0), 2, 6, off0=-0.006, off1=0.016)
 
@@ -822,7 +954,9 @@ def sedan(ctx, kind="clean"):
             if kind == "worn" and sx < 0 and zz < 0:
                 st = "hubcap"  # (the odd one: a different wheel)
             flat = 0.32 if (kind == "wrecked" and sx < 0 and zz < 0) else 0.0
-            _add_wheel(add, sx * WHEEL_X, zz, st, sx, flat=flat)
+            _add_wheel(add, sx * WHEEL_X, zz, st, sx, flat=flat, nuts=4,
+                       tyre_layer="RubberWorn" if kind == "wrecked" else "Rubber",
+                       tyre_segs={"wrecked": 16, "taxi": 20, "worn": 20}.get(kind, 22))
 
     # ---- kind specials
     if kind == "taxi":
@@ -840,9 +974,12 @@ def sedan(ctx, kind="clean"):
     ctx.wear("Glass", _glass_wear(ctx, g, level, lift))
     ctx.wear("Chrome", kitlib.mul(kitlib.ground_dirt(1.0 + lift, 0.3, noise), kitlib.cavity(0.3),
                                   kitlib.scuffs(noise, 0.25 * level, 5.0)))
-    ctx.wear("Rubber", kitlib.mul(kitlib.ground_dirt(0.9 + lift, 0.25, noise), kitlib.cavity(0.2)))
+    tyre = _tyre_wear(wheels, WHEEL_R + lift, noise)
+    ctx.wear("Rubber", tyre)
+    ctx.wear("RubberWorn", tyre)
+    ctx.wear("Metal", _wheel_wear(wheels, WHEEL_R + lift, level, noise, rusty=(kind == "wrecked")))
     ctx.wear("Black", kitlib.mul(kitlib.cavity(0.3), kitlib.ground_dirt(1.0 + lift, 0.2, noise)))
-    ctx.wear("Rust", kitlib.mul(kitlib.cavity(0.3), kitlib.scuffs(noise, 0.35, 6.0, 0.5)))
+    ctx.wear("Rust", _rust_wear(noise, rust_mask))
     ctx.budget = 8000
 
 
@@ -875,8 +1012,8 @@ def _taxi_sign(add, g):
 
 def _checker(card):
     """The taxi's checker band along both sides: two rows of black squares, 0.02 proud."""
-    q = 0.16
-    n = 18  # squares along z over 6.4 studs
+    q = 0.2
+    n = 14  # squares along z over 5.6 studs
     for sx in (-1, 1):
         card("Black", (sx * 3.0, 2.27, -0.05), (0, 0, n * q / 2), (0, q, 0), (-sx, 0, 0), n, 2,
              lambda a, b: (int((a + 1) / 2 * n) + int((b + 1) / 2 * 2)) % 2 == 0, off0=-0.008, off1=0.02)
@@ -1170,8 +1307,17 @@ def box_van(ctx, worn=False):
             add("Metal", tube([(sx * 3.5, yy, -6.35), (sx * 3.5, yy, 1.55)], 0.07, 6))
         for z in (-5.9, -2.4, 1.2):
             add("Metal", box(0.6, 0.9, 0.1), T(sx * 3.2, 1.75, z))
-    step = "Rust" if worn else "Metal"
-    add(step, box(6.8, 0.42, 0.62, bevel=0.04), T(0, 1.45, VB_Z1 + 0.32))
+    # the rear step / under-run bar: a C-channel of black-painted steel (open side in), the worn
+    # van's with rust only where water sits: along the bottom flange's edge and drips down the web
+    zb = VB_Z1 + 0.32
+    add("Black", box(6.8, 0.42, 0.05, bevel=0.0), T(0, 1.45, zb + 0.285))  # web (facing back)
+    for yy in (1.645, 1.255):
+        add("Black", box(6.8, 0.05, 0.62, bevel=0.0), T(0, yy, zb))  # top / bottom flanges
+    if worn:
+        for x0, x1 in ((-3.3, -1.6), (-0.4, 0.5), (1.9, 3.3)):
+            add("Rust", box(x1 - x0, 0.035, 0.08, bevel=0.0), T((x0 + x1) / 2, 1.255, zb + 0.29))
+        for x, ln in ((-2.6, 0.22), (-1.9, 0.14), (0.1, 0.18), (2.4, 0.26), (2.9, 0.12)):
+            add("Rust", box(0.05, ln, 0.012, bevel=0.0), T(x, 1.28 + ln / 2, zb + 0.312))
     for sx in (-1, 1):
         add("Metal", box(0.16, 1.4, 0.16), T(sx * 1.6, 2.1, VB_Z1 + 0.1))
     add("Paper", box(1.6, 0.48, 0.05), T(0, 2.25, VB_Z1 + 0.27))
@@ -1288,7 +1434,7 @@ def box_van(ctx, worn=False):
 
     ctx.wear("MetalPainted", box_wear)
     ctx.wear("Metal", kitlib.mul(kitlib.ground_dirt(3.0, 0.3, noise), kitlib.cavity(0.35),
-                                 kitlib.streaks(noise, 0.2 * level, 4.0)))
+                                 kitlib.streaks(noise, 0.2 * level, 4.0), lambda p: (0.8, 0.77, 0.72)))
     ctx.wear("Glass", _glass_wear(ctx, g, level))
     ctx.wear("Rubber", kitlib.mul(kitlib.ground_dirt(1.2, 0.3, noise), kitlib.cavity(0.2)))
     ctx.wear("Black", kitlib.mul(kitlib.cavity(0.3), kitlib.ground_dirt(1.5, 0.25, noise)))

@@ -23,8 +23,10 @@ city moved a car, the old parts stay.
                                                SurfaceGui would be hidden): the sign part turns
                                                invisible, the text stays, 0.05 off the new box.
 
-Tints: each car's own body colour from the data, weathered a little per copy (meshprop
-variation from its position), the wreck a faded paint so its rust reads.
+Tints: a faded street palette for the parked cars (maroon, beige, sun-bleached red, off-white,
+deep green: no longer five near-black cars), the taxi's yellow and Ferro's car from the data,
+weathered a little per copy (meshprop variation from its position), the wreck a faded paint so
+its rust reads. The parked ones also sit up to 1.1 degrees off square.
 """
 
 import math
@@ -40,13 +42,22 @@ CAR_PARTS = {"CarBody", "CarDeck", "HoodNose", "BootLip", "CarCabin", "Windscree
 VAN_PARTS = {"VanBody", "VanCab", "CabGlass", "CabRoof", "Windscreen", "Seam", "ArchLip", "RubStrip", "Mirror",
              "DoorSplit", "DoorHandle", "Plate", "TailLight", "Grille", "Headlight", "Wheel", "Rim", "Bumper"}
 
+# Faded street paint (sRGB): a real street mixes bodies and colours, and sun and years wash
+# them out. The data's cars were five near-black ones out of eight; the parked ones get these
+# instead (the taxi keeps its yellow, the wreck its faded sage, Ferro's car its own colour).
+FADED_MAROON = (92, 38, 40)
+OLD_BEIGE = (150, 136, 108)
+SUN_RED = (140, 60, 52)
+OFF_WHITE = (172, 170, 160)
+DEEP_GREEN = (44, 66, 54)
+
 # (folder, CarBody centre (x, z), piece, tint or None = the data's body colour)
 CARS = (
-    ("Props/Cars", (-12.0, -115.0), "Sedan", None),
-    ("Props/Cars", (12.0, 38.0), "SedanWorn", None),
-    ("Zones/Lot9", (92.5, -109.5), "Sedan", None),
-    ("Zones/Lot9", (92.5, -94.5), "SedanWorn", None),
-    ("Zones/Lot9", (52.5, -111.5), "Sedan", None),
+    ("Props/Cars", (-12.0, -115.0), "Sedan", FADED_MAROON),
+    ("Props/Cars", (12.0, 38.0), "SedanWorn", OLD_BEIGE),
+    ("Zones/Lot9", (92.5, -109.5), "Sedan", OFF_WHITE),
+    ("Zones/Lot9", (92.5, -94.5), "SedanWorn", SUN_RED),
+    ("Zones/Lot9", (52.5, -111.5), "Sedan", DEEP_GREEN),
     ("Zones/Lot9", (71.5, -89.5), "SedanWrecked", (98, 108, 96)),
     ("Zones/Crossroads", (10.6, -89.0), "SedanTaxi", None),
     ("Zones/Ferro", (-87.5, -77.5), "SedanOnJacks", None),
@@ -105,7 +116,10 @@ def cars(O):
         v = variation("city_vehicles", folder, at[0], at[1])
         ground = body[Y] - BODY_ABOVE_GROUND - (JACK_LIFT if piece == "SedanOnJacks" else 0.0)
         colour = weathered(tint or _color(O, body), v, 5, 0.08)
-        O.wrap(ms, piece, (body[X], round(ground, 3), body[Z]), ry=body[RY], tint=colour,
+        # (parked a little crooked: at most 1.1 degrees, so the 15.7-stud body stays within 0.15
+        # of its proxy; the car on stands and the taxi stay square)
+        jit = 0.0 if piece in ("SedanOnJacks", "SedanTaxi") else round(v.uniform(-1.1, 1.1), 2)
+        O.wrap(ms, piece, (body[X], round(ground, 3), body[Z]), ry=body[RY] + jit, tint=colour,
                size=_size(piece, (6.7, 6.4 if piece == "SedanOnJacks" else 5.2, 15.8)),
                name=f"car_{folder.split('/')[-1]}_{at[0]}_{at[1]}")
 

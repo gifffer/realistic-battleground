@@ -47,6 +47,10 @@ EXTENT = {
     "TreePlaneYoung": ((-3.404, -0.101, -3.893), (4.146, 12.493, 3.627)),
     "VendingMachine": ((-1.85, 0.0, -1.575), (1.85, 7.46, 1.4)),
     "VendingMachineWorn": ((-1.85, 0.0, -1.575), (1.85, 7.46, 1.4)),
+    "FlowerClumpA": ((-0.461, -0.019, -0.464), (0.461, 0.677, 0.509)),
+    "FlowerClumpB": ((-0.461, -0.019, -0.464), (0.473, 0.377, 0.509)),
+    "FlowerClumpC": ((-0.516, -0.023, -0.519), (0.525, 0.377, 0.570)),
+    "FlowerClumpD": ((-0.479, -0.021, -0.605), (0.644, 0.510, 0.529)),
 }
 # The default colour of each piece's tintable layer (pieces.json "tint"): the marker always
 # carries a Tint (PropKit's LOOKS grey otherwise).
@@ -58,7 +62,7 @@ TINT = {
     "ParkBenchCast": (34, 46, 40),
     "ParkBenchCastWorn": (30, 32, 30),
     "ParkBinCast": (34, 50, 40),
-    "TreeAutumn": (176, 104, 42),
+    "TreeAutumn": (150, 90, 45),
     "TreeLimeYoung": (60, 88, 42),
     "TreePlaneYoung": (66, 92, 44),
     "VendingMachine": (172, 26, 32),
@@ -160,7 +164,7 @@ def lamps(O):
 
 # ---------------------------------------------------------------------------------- trees
 LEAF_SUMMER = ((66, 92, 44), (58, 86, 40), (74, 98, 48), (62, 90, 50))
-LEAF_AUTUMN = ((176, 104, 42), (164, 78, 38), (184, 132, 52))
+LEAF_AUTUMN = ((150, 90, 45), (120, 70, 35), (142, 100, 50))  # (dull ochre / rust browns, not cartoon orange)
 
 
 def trees(O):
@@ -202,7 +206,7 @@ def trees(O):
             if autumn.index(t) < 3:
                 piece, tint = "TreeAutumn", weathered(v.choice(LEAF_AUTUMN), v, 8, 0.05)
             else:  # (a lime turns butter-yellow, still in full leaf)
-                piece, tint = "TreeLimeYoung", weathered((178, 150, 58), v, 8, 0.05)
+                piece, tint = "TreeLimeYoung", weathered((140, 122, 56), v, 8, 0.05)
         else:
             piece = "TreeLimeYoung" if (balls or stacked) else "TreePlaneYoung"
             tint = weathered(v.choice(LEAF_SUMMER), v, 5, 0.05)
@@ -296,6 +300,10 @@ def spezcola(O):
         wrapped = [body] + [m for m in parts if m.name not in SPEZ_KEEP and m is not body]
         v = vr("spez", folder)
         tint = weathered(color(O, body), v, 3, 0.04)
+        # (the body is the machine's PrimaryPart and, swapped, a KitProxy that would break
+        # whole: the mesh would vanish and leave the lit Panel and the Button, which stay outside
+        # the marker, floating. The machine is made unbreakable instead.)
+        O.set(body, attrs={"Unbreakable": True})
         wrap(O, wrapped, piece, Fr((bx, bottom(O, plinth), bz), ry=r[RY]), tint=tint,
              name=f"spezcola_{folder.rsplit('_', 1)[-1]}",
              force="park.py spezcola(): marker inside the Model, Button / Dispenser / Hum / Panel kept out")
@@ -323,6 +331,41 @@ def footbridge(O):
             O.set(m, color=weathered(rgb, v, amount, 0.0))
 
 
+# ---------------------------------------------------------------------------------- flower beds
+# Each bed is planted with one kind (council bedding), the odd clump a different one; per copy:
+# leaf tint, yaw, scale from the old cube's height (taller cube, taller clump).
+BED_KIND = {(-166.5, 106.75): "A", (-166.5, 138.75): "C", (-159.5, 116.5): "B", (-196.75, 113.0): "D",
+            (-149.75, 139.0): "B"}
+LEAF_TINTS = ((58, 82, 42), (54, 78, 40), (64, 86, 44), (70, 84, 46), (50, 72, 38))
+
+
+def flower_beds(O):
+    """The 33 'Flowers' cubes on the five beds' soil: a FlowerClump each (pure decoration:
+    the cubes did not collide either)."""
+    soils = rows_named(O, "Park", ("BedSoil",))
+    for m in rows_named(O, "Park", ("Flowers",)):
+        x, y, z = pos(O, m)
+        h = size(O, m)[1]
+        bed = None
+        for sm in soils:
+            sx_, sy_, sz_ = pos(O, sm)
+            w = size(O, sm)
+            if abs(x - sx_) <= w[0] / 2 and abs(z - sz_) <= w[2] / 2:
+                bed = (sm, (sx_, sz_), sy_ + w[1] / 2, min(w[0], w[2]))
+        if bed is None:
+            O.warn(f"park: flowers {m} not on a bed")
+            continue
+        sm, key, top, narrow = bed
+        v = vr("flowers", x, z)
+        kind = BED_KIND.get((round(key[0], 2), round(key[1], 2)), "A")
+        if v.random() < 0.15:
+            kind = v.choice("ABCD")
+        scale = max(0.85, min(1.12 if narrow > 1.5 else 1.0, 0.85 + (h - 0.4) * 0.9 + v.uniform(-0.05, 0.05)))
+        tint = weathered(v.choice(LEAF_TINTS), v, 4, 0.08)
+        wrap(O, [m], f"FlowerClump{kind}", Fr((x + v.uniform(-0.06, 0.06), top, z + v.uniform(-0.06, 0.06)),
+             ry=v.uniform(0, 360)), tint=tint, scale=round(scale, 3), name=f"flowers_{x:.2f}_{z:.2f}")
+
+
 def edits(O):
     benches(O)
     lamps(O)
@@ -333,4 +376,5 @@ def edits(O):
     bandstand(O)
     spezcola(O)
     footbridge(O)
+    flower_beds(O)
 

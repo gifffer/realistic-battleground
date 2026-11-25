@@ -491,7 +491,12 @@ def crt_wall(O):
                 wrap_at(O, [crt, ctl, led], "CrtTv", fr, tint=tint, scale=s)
                 sx = -0.79 * s - 0.015  # (local z of the slab's middle: its back on the glass's crown)
                 centre = fr.world((0, 0.88 * s, sx))
-                O.set(screen, pos=centre, rot=(0, fr.angles[1] + 90, 0), size=(0.03, 1.02 * s, 1.40 * s))
+                # (its built colour, what shows when Ambience does not light it and in the city
+                # renders: a switched-on CRT's dim, desaturated glow, blue-grey 'no signal' or a
+                # dull warm picture, never the data's saturated magenta / teal cards)
+                glow = v.choice(((52, 62, 76), (46, 56, 70), (60, 66, 72), (72, 62, 50)))
+                O.set(screen, pos=centre, rot=(0, fr.angles[1] + 90, 0), size=(0.03, 1.02 * s, 1.40 * s),
+                      color=weathered(glow, v, 4, 0.05))
 
 
 JACKETS = ("Jacket1", "Jacket1Brown", "Jacket2")

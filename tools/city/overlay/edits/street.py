@@ -292,12 +292,14 @@ def road(O):
     from the grate's Fx), the manholes cast-iron sewer covers, each a little proud of the road."""
     for m in O.box("Props/Steam", "SteamVent"):
         x, y, z = pos(O, m)
-        g = ground(O, x, z, y - 0.09, y - 0.1)
+        # (the old part's centre is just above the road: the road / alley floor top under it
+        # is the surface the piece sits on, its pivot on that surface)
+        g = ground(O, x, z, y, y - 0.05)
         v = vr("grate", x, z)
         wrap(O, [m], "StreetGrate", Fr((x, g, z), ry=v.choice((0, 90, 180, 270))), name=f"grate_{x}_{z}")
     for m in O.box("Ground/Manholes", "Manhole"):
         x, y, z = pos(O, m)
-        g = ground(O, x, z, y - 0.09, y - 0.1)
+        g = ground(O, x, z, y, y - 0.05)
         v = vr("manhole", x, z)
         wrap(O, [m], "ManholeCover", Fr((x, g, z), ry=v.uniform(0, 360)), tint=weathered((48, 46, 44), v, 4, 0.1),
              name=f"manhole_{x}_{z}")

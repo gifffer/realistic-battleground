@@ -22,7 +22,8 @@ game measures them to undo whatever scale / axes the importer applied.
 
 Checks (the build fails on any): layer names from kitlib.LAYERS, each layer mesh < 10 000
 triangles, each piece within its ctx.budget (default 3 000, hero props up to 8 000), piece names
-letters and digits only, and NO name containing "bottle" (the player's absolute rule).
+letters and digits only, and NO name containing "bottle" (the player's absolute rule; the one
+exception is DECOR_OK below: Duffy's back-bar decor rows, which the player allowed).
 """
 
 import hashlib
@@ -58,6 +59,10 @@ EXPORT = OUT is not None and (not ONLY or "--export" in args)
 GAP = 4.0  # studs between pieces in the kit
 LAYER_TRIS = 10000
 HERO_TRIS = 8000
+# The ONE exception to the no-bottle rule: Duffy's back-bar shelf decor (pieces/bar.py), which the
+# player allowed as pure decoration (never pickable or usable, no tag, no prompt). Exactly these
+# names; every other name containing "bottle" still fails the build.
+DECOR_OK = {"DecoBottleRowA", "DecoBottleRowB", "DecoBottleRowC"}
 
 
 def load_pieces():
@@ -81,7 +86,7 @@ def seed_of(name):
 def check_name(name):
     if not re.fullmatch(r"[A-Z][A-Za-z0-9]*", name):
         raise SystemExit(f"bad piece name {name!r}: letters and digits, starting with a capital")
-    if "bottle" in name.lower():
+    if "bottle" in name.lower() and name not in DECOR_OK:
         raise SystemExit(f"{name}: no bottles of any kind (the player's rule)")
 
 
@@ -125,7 +130,7 @@ def main():
         rows.append((name, module, sorted(stats), total, lo, hi, sorted(ctx.markers), doc, dict(ctx.tints)))
         objects += objs
     for ob in objects:
-        if "bottle" in ob.name.lower():
+        if "bottle" in ob.name.lower() and ob.name.split("_")[0] not in DECOR_OK:
             raise SystemExit(f"{ob.name}: no bottles")
     for name, at in (("Kit_Origin", (0, -4, 0)), ("Kit_Up", (0, -3, 0)), ("Kit_Out", (0, -4, 1))):
         objects.append(kitlib.marker(name, Vector(at)))

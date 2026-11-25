@@ -72,6 +72,13 @@ LAYERS = {
     "Black": ((16, 16, 17), 0.0, 0.7, False, False, False),
     "Glow": ((255, 200, 140), 0.0, 0.5, False, False, True),
     "Soil": ((66, 54, 42), 0.0, 1.0, False, False, False),
+    # (wave 1 of the city props)
+    "LensRed": ((150, 24, 22), 0.0, 0.2, False, False, False),  # tail / stop lamp lenses (unlit)
+    "LensAmber": ((214, 120, 30), 0.0, 0.2, False, False, False),  # indicator / marker lenses
+    "Brass": ((150, 118, 62), 0.85, 0.35, False, False, False),  # foot rails, taps, lamp fittings
+    "Vinyl": ((70, 24, 24), 0.0, 0.4, True, False, False),  # bar upholstery (tinted per copy)
+    "Leaves": ((66, 92, 44), 0.0, 0.7, True, True, False),  # leaf cards (two-sided, tinted per tree)
+    "Bark": ((92, 82, 70), 0.0, 0.95, False, False, False),  # tree trunks and limbs
 }
 LAYER_NAMES = tuple(LAYERS)
 MARKER_SUFFIXES = ("Pivot", "Light", "Fx")

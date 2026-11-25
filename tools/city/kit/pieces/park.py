@@ -18,8 +18,8 @@ Floor pieces: origin at the centre of the footprint on the ground. Each piece ta
 footprint of the city parts it replaces (tools/city/overlay/edits/park.py wraps them; the old
 colliding parts stay as invisible proxies, the mesh within ~0.3 stud of them; the numbers are
 noted at each piece). Only ONE kind of tintable layer per piece (the marker's Tint goes to every
-tintable layer). Leaves are the Tarp layer (tintable, two-sided sheets: the leaf cards are
-modelled with both faces); bark is Wood / WoodDark; stone is Concrete. No bottles of any kind.
+tintable layer). Leaves are the Leaves layer (tintable, two-sided sheets: the leaf cards are
+modelled with both faces); bark is Bark, stakes WoodDark; stone is Concrete. No bottles of any kind.
 """
 
 import math
@@ -59,6 +59,12 @@ from fixtures import (  # noqa: F401  (the kit's shared shape helpers, read-only
     _nut,
     _dome,
 )
+import kitlib  # noqa: E402
+
+# Leaves and bark have their own layers (kitlib.LAYERS / PropKit LOOKS: LeafyGrass, Wood);
+# older kits without them used Tarp (two-sided, tintable) and Wood.
+LEAF = "Leaves" if "Leaves" in kitlib.LAYERS else "Tarp"
+BARK = "Bark" if "Bark" in kitlib.LAYERS else "Wood"
 
 TAU = 2 * math.pi
 
@@ -699,10 +705,11 @@ def _tree(ctx, kind):
     ctx.budget = 8000
     autumn = kind == "autumn"
     lime = kind == "lime"
-    bark = "Wood"
+    bark = BARK
     # ---- trunk with a root flare, a gentle bend, bark ridges
-    bend_x = rng.uniform(-0.15, 0.15)
-    bend_z = rng.uniform(-0.15, 0.15)
+    # (a visible lean and bend, kept within ~0.2 of the old trunk proxy: r 0.55)
+    bend_x = rng.choice((-1, 1)) * rng.uniform(0.12, 0.2)
+    bend_z = rng.choice((-1, 1)) * rng.uniform(0.08, 0.16)
     top = 7.2 if not lime else 7.6
 
     def axis(y):
@@ -710,8 +717,8 @@ def _tree(ctx, kind):
         return Vector((bend_x * math.sin(t * math.pi), y, bend_z * math.sin(t * math.pi * 1.3)))
 
     def trunk_r(a, r, y):
-        flare = 0.32 * (1 - smoothstep(0.0, 0.9, y)) * (0.6 + 0.4 * max(0.0, math.cos(5 * a + 0.7)) ** 2)
-        ridge = (0.012 if lime else 0.006) * math.cos(17 * a + 2 * math.sin(y * 3))
+        flare = 0.36 * (1 - smoothstep(0.0, 1.0, y)) * (0.5 + 0.5 * max(0.0, math.cos(5 * a + 0.7)) ** 2)
+        ridge = (0.018 if lime else 0.01) * math.cos(9 * a + 2 * math.sin(y * 3))
         return r + flare + ridge
 
     prof = [(0.0, -0.05)]
@@ -719,7 +726,7 @@ def _tree(ctx, kind):
         y = top * (k / 12) ** 1.1
         prof.append((lerp(0.47, 0.3, (y / top) ** 1.4), max(y, -0.04)))
     prof.append((0.0, top + 0.05))
-    tr = lathe(prof, segs=14, radius_fn=trunk_r)
+    tr = lathe(prof, segs=18, radius_fn=trunk_r)
     for v in tr.verts:
         c = axis(v.co.y)
         v.co.x += c.x
@@ -776,7 +783,7 @@ def _tree(ctx, kind):
         near = min(skeleton, key=lambda q: (q - c).length)
         mid = near.lerp(c, 0.5) + Vector((0, 0.15, 0))
         ctx.add(bark, _taper_tube([tuple(near), tuple(mid), tuple(c - (c - near).normalized() * r * 0.5)], 0.045, 0.018, 4))
-    per = (900 if not autumn else 860) // max(1, len(clumps))
+    per = (850 if not autumn else 860) // max(1, len(clumps))
     for ci, (c, r) in enumerate(clumps):
         out = c - crown_c
         out = Vector((out.x / rx, out.y / ry, out.z / rx))
@@ -802,7 +809,7 @@ def _tree(ctx, kind):
             rr = 0.6 + abs(rng.gauss(0, 1.6))
             p = Vector((math.cos(a) * rr, 0.03 + rng.uniform(0, 0.02), math.sin(a) * rr))
             _leaf_card(leaves, p, (rng.uniform(-0.3, 0.3), 1, rng.uniform(-0.3, 0.3)), rng.uniform(0.14, 0.22), rng)
-    ctx.add("Tarp", leaves)
+    ctx.add(LEAF, leaves)
     # ---- the young plane's stakes and tree ties
     if kind == "plane":
         for sgn in (-1, 1):
@@ -842,14 +849,16 @@ def _tree(ctx, kind):
         lite = 0.55 + 0.35 * depth + 0.15 * smoothstep(-1.0, 2.5, rel.y)
         under = 1 - 0.2 * smoothstep(0.0, -0.8, p.normal.y)
         h = noise.fbm(p.co * 0.55 + Vector((2.0, 0, 7.0)), 2)
-        if autumn:
-            c = (1.0, lerp(0.62, 1.0, smoothstep(-0.4, 0.4, h)), lerp(0.5, 0.85, smoothstep(-0.2, 0.5, h)))
+        if autumn:  # (dull, mixed: browns and ochres, a few still green-yellow; dark inside)
+            c = (lerp(0.78, 1.0, smoothstep(-0.5, 0.5, h)), lerp(0.62, 1.0, smoothstep(-0.4, 0.4, h)),
+                 lerp(0.55, 0.85, smoothstep(-0.2, 0.5, h)))
+            lite = 0.4 + 0.45 * depth + 0.15 * smoothstep(-1.0, 2.5, rel.y)
         else:
             c = (lerp(0.82, 1.0, smoothstep(-0.5, 0.5, h)), 1.0, lerp(0.75, 1.0, smoothstep(-0.2, 0.6, -h)))
         k = min(1.0, lite * under)
         return tuple(v * k for v in c)
 
-    ctx.wear("Tarp", leaf_c)
+    ctx.wear(LEAF, leaf_c)
     ctx.wear("WoodDark", mul(ground_dirt(0.8, 0.35, noise), cavity(0.3)))
     ctx.wear("Rubber", lambda p: 0.9)
 
@@ -875,21 +884,21 @@ def tree_plane_young(ctx):
     """Young London plane, ~4 m: flaking camouflage bark, broad crown on ascending limbs, two
     timber stakes with rubber ties."""
     _tree(ctx, "plane")
-    ctx.tint("Tarp", (66, 92, 44))
+    ctx.tint(LEAF, (66, 92, 44))
 
 
 def tree_lime_young(ctx):
     """Young small-leaved lime, ~4.3 m: dark ridged bark, dense ovoid crown, leafy epicormic
     shoots round the foot."""
     _tree(ctx, "lime")
-    ctx.tint("Tarp", (60, 88, 42))
+    ctx.tint(LEAF, (60, 88, 42))
 
 
 def tree_autumn(ctx):
     """A young plane in autumn: thinner crown in orange, rust and yellow with the limbs showing
     through, fallen leaves on the grass round it."""
     _tree(ctx, "autumn")
-    ctx.tint("Tarp", (176, 104, 42))
+    ctx.tint(LEAF, (150, 90, 45))
 
 
 # ==============================================================================================
@@ -1299,6 +1308,177 @@ def vending_machine_worn(ctx):
     ctx.tint("MetalPainted", (160, 30, 34))
 
 
+# ==============================================================================================
+# FlowerClump A-D. Real reference: a council flower bed's bedding plants, one clump per old
+# "Flowers" cube (1 x 0.4-0.7 x 1 studs, 33 of them in five beds): a low mound of bark mulch,
+# a rosette of leaves spilling out over it, stems carrying the heads at 0.3-0.7 studs (10-20 cm).
+#   A  zonal geraniums: rounded leaves, tight balls of brick-red florets on bare stalks;
+#   B  French marigolds: low, ferny leaves, orange-yellow double heads;
+#   C  petunias: sprawling, sticky leaves, magenta-purple trumpets spilling over the edge;
+#   D  a tired clump of white daisies late in the season: some heads gone brown, stems lying.
+# Leaves and stems are the Leaves layer (tinted per copy), petals Paper coloured per kind by
+# vertex colour (muted, never candy), centres LensAmber or Soil, mulch Soil. Pure decoration:
+# nothing collides (the old cubes did not either). Footprint ~1.1 x 1.1 at scale 1 (the
+# narrowest bed's soil is 1.2 wide), origin on the soil's top.
+# ==============================================================================================
+FLOWER_KINDS = {
+    #     petal rgb mul      heads  stem h       leaves  petals spread  centre
+    "A": ((0.74, 0.26, 0.22), 10, (0.28, 0.48), 46, 0, 0.5, None),
+    "B": ((1.0, 0.66, 0.24), 16, (0.14, 0.28), 60, 8, 0.5, "LensAmber"),
+    "C": ((0.6, 0.3, 0.62), 18, (0.1, 0.24), 52, 5, 0.56, None),
+    "D": ((0.95, 0.93, 0.86), 13, (0.22, 0.45), 40, 9, 0.52, "LensAmber"),
+}
+
+
+def _blade(bm, base, d, length, width, rng, droop=0.25):
+    """A leaf blade from `base` along direction d (both faces): a pointed oval bent down along
+    its midrib, 5 points."""
+    d = Vector(d).normalized()
+    side = d.cross(Vector((0, 1, 0)))
+    if side.length < 1e-3:
+        side = Vector((1, 0, 0))
+    side.normalize()
+    up = side.cross(d).normalized()
+    mid = base + d * length * 0.5 + up * length * 0.06 - Vector((0, droop * length * 0.15, 0))
+    tip = base + d * length - Vector((0, droop * length * 0.5, 0))
+    w = width * rng.uniform(0.8, 1.1)
+    pts = [base, mid + side * w * 0.5, tip, mid - side * w * 0.5]
+    pts = [p.copy() for p in pts]
+    pts.insert(1, base + d * length * 0.22 + side * w * 0.32)
+    pts.append(base + d * length * 0.22 - side * w * 0.32)
+    front = [bm.verts.new(p) for p in pts]
+    bm.faces.new(front)
+    back = [bm.verts.new(p - up * 0.004) for p in pts]
+    bm.faces.new(list(reversed(back)))
+
+
+def _head(bm, c, n, r, petals, rng, cup=0.0):
+    """A flower head facing n at c: `petals` rounded petals as one star outline (both faces);
+    cup > 0 turns the petal tips up (a trumpet / a cupped head)."""
+    n = Vector(n).normalized()
+    u = n.cross(Vector((0, 0, 1)) if abs(n.z) < 0.9 else Vector((1, 0, 0))).normalized()
+    w = n.cross(u)
+    a0 = rng.uniform(0, TAU)
+    pts = []
+    step = TAU / petals
+    for k in range(petals):
+        a = a0 + step * k
+        rr = r * rng.uniform(0.88, 1.08)
+        # (valley, shoulder, tip, shoulder: a rounded petal, not a star point)
+        for da, f, up in ((-0.5, 0.42, 0.0), (-0.22, 0.92, 0.8), (0.0, 1.0, 1.0), (0.22, 0.92, 0.8)):
+            q = a + da * step
+            pts.append(c + (u * math.cos(q) + w * math.sin(q)) * rr * f + n * cup * rr * f * up)
+    front = [bm.verts.new(p) for p in pts]
+    bm.faces.new(front)
+    back = [bm.verts.new(p - n * 0.004) for p in pts]
+    bm.faces.new(list(reversed(back)))
+
+
+def _flower_clump(ctx, kind):
+    noise, rng = ctx.noise, ctx.rng
+    col, heads, stem_h, n_leaves, petals, spread, centre = FLOWER_KINDS[kind]
+    ctx.smooth_angle = 80.0
+    # mulch mound (bark chips: lumpy, dark), a little proud of the bed's soil
+    prof = [(0.0, 0.07)] + [(spread * k / 4, 0.07 * (1 - (k / 4) ** 2) - 0.012) for k in range(1, 5)] + [(0.0, -0.012)]
+
+    def lump(a, r, y):
+        return r * (1 + 0.12 * noise.n(Vector((math.cos(a) * 2, y * 9, math.sin(a) * 2)))), y + 0.012 * noise.n(Vector((a, r * 7, 1.0)))
+
+    ctx.add("Soil", lathe(prof, 12, radius_fn=lump))
+    leaves = bmesh.new()
+    # the rosette: blades from near the centre spilling outward and down over the mulch
+    for k in range(n_leaves):
+        a = TAU * k / n_leaves + rng.uniform(-0.2, 0.2)
+        rr = rng.uniform(0.02, 0.18)
+        base = Vector((math.cos(a) * rr, rng.uniform(0.04, 0.12) + (0.06 if k % 3 == 0 else 0.0), math.sin(a) * rr))
+        rise = rng.uniform(0.15, 0.7) if kind != "C" else rng.uniform(0.0, 0.35)
+        d = Vector((math.cos(a), rise, math.sin(a)))
+        length = rng.uniform(0.2, 0.28) if kind == "A" else rng.uniform(0.22, 0.36) * (1.15 if kind == "C" else 1.0)
+        width = {"A": 0.26, "B": 0.09, "C": 0.15, "D": 0.08}[kind]
+        _blade(leaves, base, d, length, width, rng, droop=0.35 if kind in ("C", "D") else 0.2)
+    flowers = bmesh.new()
+    middles = bmesh.new()
+    dead = bmesh.new()
+    for k in range(heads):
+        a = rng.uniform(0, TAU)
+        rr = math.sqrt(rng.random()) * spread * 0.72
+        h = rng.uniform(*stem_h)
+        tilt = Vector((math.cos(a), 0, math.sin(a))) * (rr / spread) * 0.5
+        top = Vector((math.cos(a) * rr, 0.08 + h, math.sin(a) * rr)) + tilt * h * 0.4
+        drooping = kind == "D" and rng.random() < 0.3
+        if drooping:  # (a stem gone over: lying out over the edge)
+            top = Vector((math.cos(a) * (rr + 0.25), 0.1 + h * 0.3, math.sin(a) * (rr + 0.25)))
+        base = Vector((math.cos(a) * rr * 0.3, 0.06, math.sin(a) * rr * 0.3))
+        mid = base.lerp(top, 0.5) + Vector((0, 0.03, 0))
+        merge_into(leaves, tube([tuple(base), tuple(mid), tuple(top)], 0.011, 3, cap=False))
+        face = (top - base).normalized().lerp(Vector((0, 1, 0)), 0.6)
+        if kind == "A":  # a ball of florets: three crossed star cards
+            for j in range(3):
+                nn = Vector((rng.uniform(-1, 1), rng.uniform(0.2, 1), rng.uniform(-1, 1)))
+                _head(flowers, top + Vector((0, 0.05, 0)), nn, 0.08, 5, rng, cup=0.3)
+            continue
+        is_dead = kind == "D" and rng.random() < 0.28
+        r = {"B": 0.075, "C": 0.08, "D": 0.07}[kind]
+        _head(dead if is_dead else flowers, top, face, r * (0.7 if is_dead else 1.0), petals, rng,
+              cup=0.5 if kind == "C" else 0.12)
+        if centre and not is_dead:
+            _head(middles, top + face * 0.012, face, r * 0.3, 4, rng)
+    ctx.add(LEAF, leaves)
+    ctx.add("Paper", flowers)
+    if middles.verts:
+        ctx.add(centre, middles)
+    else:
+        middles.free()
+    if dead.verts:
+        ctx.add("Soil", dead)
+    else:
+        dead.free()
+
+    def leaf_c(p):
+        y = p.co.y
+        lite = 0.6 + 0.4 * smoothstep(0.0, 0.3, y)
+        h = noise.n(p.co * 7.0)
+        yellow = 1.0 + (0.12 if kind == "D" else 0.04) * h
+        return (min(1.0, lite * yellow), lite, lite * (0.85 + 0.1 * h))
+
+    def petal_c(p):
+        h = 0.88 + 0.12 * noise.n(p.co * 13.0)
+        return tuple(min(1.0, c * h) for c in col)
+
+    ctx.wear(LEAF, leaf_c)
+    ctx.wear("Paper", petal_c)
+    ctx.wear("Soil", lambda p: 0.75 + 0.2 * noise.n(p.co * 9.0))
+    ctx.wear("LensAmber", lambda p: 0.85)
+    ctx.budget = 2500
+
+
+def flower_clump_a(ctx):
+    """Bedding geraniums: a rosette of rounded leaves on a mulch mound, balls of brick-red
+    florets on bare stalks."""
+    _flower_clump(ctx, "A")
+    ctx.tint(LEAF, (58, 82, 42))
+
+
+def flower_clump_b(ctx):
+    """French marigolds: a low clump of fine leaves, orange-yellow heads with darker centres."""
+    _flower_clump(ctx, "B")
+    ctx.tint(LEAF, (56, 80, 40))
+
+
+def flower_clump_c(ctx):
+    """Petunias: sprawling leaves spilling over the bed's edge, muted magenta trumpets."""
+    _flower_clump(ctx, "C")
+    ctx.tint(LEAF, (60, 84, 44))
+
+
+def flower_clump_d(ctx):
+    """A tired clump of white daisies late in the season: some heads gone brown, stems lying
+    out over the mulch, the leaves yellowing."""
+    _flower_clump(ctx, "D")
+    ctx.tint(LEAF, (74, 84, 46))
+
+
+
 PIECES = {
     "ParkBenchCast": park_bench_cast,
     "ParkBenchCastWorn": park_bench_cast_worn,
@@ -1313,4 +1493,8 @@ PIECES = {
     "BandstandVictorian": bandstand_victorian,
     "VendingMachine": vending_machine,
     "VendingMachineWorn": vending_machine_worn,
+    "FlowerClumpA": flower_clump_a,
+    "FlowerClumpB": flower_clump_b,
+    "FlowerClumpC": flower_clump_c,
+    "FlowerClumpD": flower_clump_d,
 }

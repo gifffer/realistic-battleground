@@ -16,8 +16,12 @@
 -- built, does for every marker whose piece is in the kit:
 --   * clones the piece's layers there (anchored, no collision / touch, attribute KitMesh),
 --     each coloured from LOOKS below (a tintable layer takes the marker's Tint), sized by
---     Scale. A layer at least QUERY_SIZE studs big is queryable (CanQuery): the client's
---     raycasts (blood landing, rain stopping) hit the surface that shows; physics never does;
+--     Scale. A layer at least QUERY_SIZE studs big is queryable (CanQuery) when the prop
+--     was solid before (one of its old visible parts collided or was queried): the client's
+--     raycasts (blood landing, rain stopping) hit the surface that shows; physics never does.
+--     A prop that was pure decoration (window frames, awnings, tree crowns, lamp heads)
+--     stays out of every query, as before, and so do the NO_QUERY layers (leaf cards, glass,
+--     bulbs, paper sheets): a hollow or sprawling layer must not stop blood or rain in the air;
 --   * the old parts that collide or are queried (CanCollide / CanQuery) become invisible
 --     collision proxies (attribute KitProxy), so collisions and the server's hit detection
 --     do not change. They stay breakable: Shared/Util/Breakable lets a KitProxy break although
@@ -62,6 +66,8 @@ local PER_CHUNK = 60
 local SHADOW_SIZE = 1.2
 -- Mesh layers at least this big (studs, largest side once scaled) are queryable (see the top).
 local QUERY_SIZE = 1
+-- Layers never queryable (thin, hollow or sprawling: their collision box is mostly air).
+local NO_QUERY: { [string]: boolean } = { Leaves = true, Glass = true, Glow = true, Paper = true }
 
 -- How each layer looks: colour (sRGB), material, shine (Reflectance), whether the marker's
 -- Tint replaces the colour, whether it is a thin sheet seen from both sides, whether it may
@@ -123,6 +129,13 @@ local LOOKS: { [string]: Look } = {
 	Black = look(16, 16, 17, Enum.Material.SmoothPlastic),
 	Glow = look(255, 200, 140, Enum.Material.Neon, 0, false, false, false),
 	Soil = look(66, 54, 42, Enum.Material.Ground),
+	-- (wave 1 of the city props)
+	LensRed = look(150, 24, 22, Enum.Material.SmoothPlastic, 0.1), -- (tail / stop lamp lenses)
+	LensAmber = look(214, 120, 30, Enum.Material.SmoothPlastic, 0.1), -- (indicator lenses)
+	Brass = look(150, 118, 62, Enum.Material.Metal, 0.08), -- (foot rails, taps, fittings)
+	Vinyl = look(70, 24, 24, Enum.Material.Leather, 0.04, true), -- (bar upholstery)
+	Leaves = look(66, 92, 44, Enum.Material.LeafyGrass, 0, true, true), -- (leaf cards)
+	Bark = look(92, 82, 70, Enum.Material.Wood),
 }
 local DEFAULT_LOOK: Look = LOOKS.Plastic
 -- The Glow layer of a lamp whose light is not there (no light part in the data): dirty glass.
@@ -453,6 +466,18 @@ local function swap(marker: BasePart, all: { [string]: Piece }): boolean
 	local tint = readTint(marker)
 	local pivot = marker.CFrame
 	local shadows = piece.extent * scale >= SHADOW_SIZE
+	-- (was the prop solid before: one of its old visible parts collided or was queried)
+	local solid = false
+	for _, item in marker:GetDescendants() do
+		if
+			item:IsA("BasePart")
+			and item.Transparency < 1
+			and (item.CanCollide or item.CanQuery)
+		then
+			solid = true
+			break
+		end
+	end
 	local meshes: { [Instance]: boolean } = {}
 	local glow: BasePart? = nil
 	for _, layer in piece.layers do
@@ -467,7 +492,9 @@ local function swap(marker: BasePart, all: { [string]: Piece }): boolean
 		part.CanCollide = false
 		part.CanTouch = false
 		part.Size = layer.size * scale
-		part.CanQuery = math.max(part.Size.X, part.Size.Y, part.Size.Z) >= QUERY_SIZE
+		part.CanQuery = solid
+			and not NO_QUERY[layer.name]
+			and math.max(part.Size.X, part.Size.Y, part.Size.Z) >= QUERY_SIZE
 		part:SetAttribute("KitMesh", true)
 		part.Massless = true
 		part.CastShadow = shadows and style.shadow

@@ -1045,9 +1045,11 @@ local function build(city: Folder, data: CityData)
 			warn(`[City] {pending.part:GetFullName()}: parent cycle, left in its folder`)
 		end
 	end
+	-- (the kit's invisible MeshProp markers don't count: PropKit removes more decoration than
+	-- it adds, and without the kit they are only empty markers)
 	local count = 0
 	for _, descendant in city:GetDescendants() do
-		if descendant:IsA("BasePart") then
+		if descendant:IsA("BasePart") and descendant.Name ~= "MeshProp" then
 			count += 1
 		end
 	end
@@ -1058,7 +1060,9 @@ local function build(city: Folder, data: CityData)
 	-- tag, so the SpezCola systems find a whole machine (Button, Dispenser, Hum all there).
 	for _, descendant in city:GetDescendants() do
 		if descendant:IsA("Model") and descendant.Name == "SpezColaMachine" then
-			local body = descendant:FindFirstChild("Body")
+			-- (recursive: the kit overlay parents Body under the machine's MeshProp marker,
+			-- where PropKit keeps it as the invisible collision proxy)
+			local body = descendant:FindFirstChild("Body", true)
 			if body and body:IsA("BasePart") then
 				descendant.PrimaryPart = body
 			end

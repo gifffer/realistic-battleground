@@ -14,8 +14,12 @@
 --
 --   • A city prop swapped for its kit mesh (Server/Systems/City/PropKit): its
 --     old parts stay as invisible collision proxies with the attribute
---     KitProxy = true. They break like the visible parts they replace, and
---     always whole (the server hides the whole prop with them).
+--     KitProxy = true. They break whole (the server hides the whole prop with
+--     them), and only when small enough (WHOLE_MAX): a big proxy (a car, a
+--     lamp column, a roller door, a bar counter) can't have a hole punched in
+--     its mesh, and making it vanish whole would look wrong, so it stands,
+--     unless it is tagged "Breakable" (a shop shutter, a roller door: torn off
+--     whole, the dark room behind shows as before).
 --
 --   • A body THROWN into a wall only breaks it if it (or a parent) has the
 --     CollectionService tag "Breakable" (fences, shop fronts, the city's
@@ -139,7 +143,10 @@ function Breakable.check(part: BasePart, feetY: number): string?
 		return nil
 	end
 	if kitProxy then
-		return "whole" -- (its mesh can't be cut: the whole prop goes)
+		-- (its mesh can't be cut: the whole prop goes, or nothing when it is big)
+		-- (a panel tagged Breakable, a shop shutter or a roller door, still gives way: it
+		-- comes off whole)
+		return if biggest <= Breakable.WHOLE_MAX or Breakable.tagged(part) then "whole" else nil
 	end
 	if
 		part.ClassName == "Part"

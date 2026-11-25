@@ -208,8 +208,15 @@ def _lamp_column(ctx, rusty=False, dead=False):
     noise, rng = ctx.noise, ctx.rng
     # ---- flange plate (square, chamfered corners) and its four anchor bolts
     plate_layer = "Rust" if rusty else "MetalPainted"
-    ctx.add(plate_layer, rbox(0.98, 0.07, 0.98, r=0.025, m=1, n=(2, 1, 2)), T(0, 0.025, 0) @ R(0, 45 if rusty else 0, 0))
-    ring_bolts(ctx, "Metal" if not rusty else "Rust", 4, 0.56, 0.06, r=0.05, h=0.05, a0=math.pi / 4 + (0 if rusty else math.pi / 4) - math.pi / 4)
+    # (square to the column's frame, the bolts in its corners: the plate stays inside the old
+    # 1.2 base on the kerb-side columns, no corner over the kerb edge)
+    # (set 0.12 back from the arm's side: the kerb-side columns' old base reaches the kerb edge,
+    # the plate now stops short of it)
+    ctx.add(plate_layer, rbox(0.98, 0.07, 0.92, r=0.025, m=1, n=(2, 1, 2)), T(0, 0.025, 0.1))
+    bolt = "Metal" if not rusty else "Rust"
+    for bx, bz in ((-0.38, 0.44), (0.38, 0.44), (-0.44, -0.22), (0.44, -0.22)):
+        ctx.add(bolt, _nut(0.05, 0.05), T(bx, 0.06, bz))
+        ctx.add(bolt, cyl(0.0225, 0.045, segs=6), T(bx, 0.1275, bz))
     # ---- cast base shroud + conical shaft: ONE lathe (rings every ~0.6 for the wear gradient)
     prof = [(0.0, 0.06), (0.47, 0.06), (0.47, 0.13), (0.44, 0.17), (0.43, 0.24), (0.4, 0.28), (0.395, 0.34)]
     for k in range(9):  # (the base's gentle taper)

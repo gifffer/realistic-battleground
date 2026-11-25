@@ -64,12 +64,21 @@ local function isCharacterPart(instance: Instance): boolean
 	return model ~= nil and model:FindFirstChildOfClass("Humanoid") ~= nil
 end
 
--- Raycast that ignores characters (retries past them, a few times at most).
+-- A city prop's mesh layer (Server/Systems/City/PropKit: attribute KitMesh). It never
+-- collides: the old parts under it stay as the invisible collision proxies, and those are
+-- what a climb must find (a tree crown, an awning or a lamp head must not block one).
+local function isKitMesh(instance: Instance): boolean
+	return instance:GetAttribute("KitMesh") == true
+end
+
+-- Raycast that ignores characters and kit meshes (retries past them, a few times at most).
 local function cast(origin: Vector3, direction: Vector3, params: RaycastParams): RaycastResult?
 	local ignored = table.clone(params.FilterDescendantsInstances)
-	for _ = 1, 4 do
+	for _ = 1, 8 do
 		local result = workspace:Raycast(origin, direction, params)
-		if result == nil or not isCharacterPart(result.Instance) then
+		if
+			result == nil or not (isCharacterPart(result.Instance) or isKitMesh(result.Instance))
+		then
 			return result
 		end
 		table.insert(ignored, result.Instance)
