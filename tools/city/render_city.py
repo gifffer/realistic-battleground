@@ -8,7 +8,8 @@ applyOverlay (tools/city/overlay/apply.py), then PropKit simulated (--mode kit) 
     venv/bin/python -I tools/city/render_city.py --list
     options: --mode kit|fallback, --night, --samples 12, --size 880x550, --fov 70,
              --region x0,x1,z0,z1 (only parts whose centre is inside: faster), --no-overlay,
-             --no-signs
+             --no-signs, --kit other/CityProps.fbx (repeatable: a partial kit's pieces on top of
+             the committed assets/cityprops one)
 
 Writes <out>/<cam>_<mode>_<day|night>.png. LOOK at every image. The alleys' named cameras
 (render_alleys.py) are here too, as alley_<name>.
@@ -42,6 +43,7 @@ from overlay import citydata as C  # noqa: E402
 from overlay.core import FACES, rotm  # noqa: E402
 
 FONT_DIR = os.path.join(HERE, "fonts")
+EXTRA_KITS = []  # (--kit)
 FONTS = {"Oswald": "Oswald.ttf", "Arimo": "Arimo.ttf", "Arial": "Arimo.ttf", "Gotham": "Arimo.ttf",
          "GothamBold": "Arimo.ttf", "SourceSans": "Arimo.ttf", "PermanentMarker": "PermanentMarker-Regular.ttf",
          "Kalam": "Kalam-Regular.ttf", "SpecialElite": "SpecialElite-Regular.ttf",
@@ -335,6 +337,12 @@ def build(data, mode="kit", night=False, world=None, samples=12, size=(880, 550)
         return region[0] <= r[1] <= region[1] and region[2] <= r[3] <= region[3]
 
     kit = RA.load_kit(bpy, Vector) if mode == "kit" else {}
+    if mode == "kit":
+        committed = RA.KIT_FBX
+        for path in EXTRA_KITS:  # (--kit: a partial kit's pieces added to / replacing the committed ones)
+            RA.KIT_FBX = path
+            kit.update(RA.load_kit(bpy, Vector))
+        RA.KIT_FBX = committed
     swapped = {}  # row index -> piece (the markers PropKit swaps)
     for i, r in enumerate(parts):
         if i in skip or C.name_of(data, r) != "MeshProp":
@@ -594,7 +602,11 @@ def main():
     ap.add_argument("--exposure", type=float, default=1.0)
     ap.add_argument("--ambient", type=float)
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--kit", action="append", default=[],
+                    help="an extra CityProps.fbx (repeatable; e.g. build_city_kit.py --only ... --export): its "
+                    "pieces are added to, or replace, the committed kit's")
     a = ap.parse_args()
+    EXTRA_KITS[:] = a.kit
     if a.list:
         for n, c in CAMS.items():
             print(f"{n:24s} eye {c[0]}  look {c[1]}  fov {c[2]}")
