@@ -2,22 +2,29 @@
 -- CloneModel: the synthetic clone growing in the lab vat, built from parts (ART_V2 §5).
 --
 -- Three looks, two changes:
---   MATRIX (0–25 %)  a steel scaffold rod + 3 rings with 5 amber gel lobes clustered on it.
---                    No limbs, no head. The lobes swell from 0.6 to 1.0 of their size.
+--   MATRIX (0–25 %)  a thin steel scaffold rod + 4 rings with 5 cream-amber gel lobes
+--                    clustered on it and a small warm core glowing on their front (the
+--                    concept's lab.py `stage1`). No limbs, no head. The lobes swell from 0.6
+--                    to 1.0 of their size.
 --   FRAME (25–75 %)  an ADULT-sized R6 lattice of thin white bars (5 boxes × 12 edges, each
 --                    box inset so the limbs read apart, 3 ribs per limb, the arms opened 5°,
 --                    the head a cage of 3 rings), there at full size at once, filling with
 --                    milky gel from the feet up.
 --   SHELL (75–100 %) a finished pearl-grey synthetic body: smooth faceless head with a
 --                    mould seam, panel seams, a steel chest port with an LED, the stencil
---                    "SYN-04 NO ID". It fades in (transparency 0.6 → 0) across the stage.
--- Held by a spine rod and two cables at the BACK (never straps). It never moves a limb, never
+--                    "SYN-04 NO ID". Opaque from the start (see "inside the vat" below).
+-- Held by a spine rod and two cables at the BACK (never straps), up to the vat's cap. It never moves a limb, never
 -- breathes, makes no sound: it only drifts a little with the fluid. No face, never small,
 -- no blood, no anatomy.
 --
 -- Space: the clone's root is the vat's centre (VatCore). The clone stands on local Y, faces
 -- local -Z (the vat screen side), feet at y = -2.5, head top at y = 2.7 (R6 adult: torso
--- 2×2×1, arms / legs 1×2×1, head ~1.2).
+-- 2×2×1, arms / legs 1×2×1, head ~1.2). VatCore is 4.05 above the floor, the cap's underside
+-- 5.0 above VatCore.
+--
+-- INSIDE THE VAT every part is OPAQUE (the vat's fluid around it is the one see-through part):
+-- a see-through part inside another see-through part flips its draw order as the camera turns
+-- (flicker). Only the short phase-shift flicker (VatVisual `visible`) fades parts.
 --
 --   CloneModel.new(parent)                         → Clone
 --   CloneModel.update(clone, stage, t, visible, led, now)
@@ -63,11 +70,13 @@ CloneModel.COLORS = table.freeze({
 	seam = rgb(60, 60, 64), -- (dark enough to draw the body against the pale fluid)
 	port = rgb(150, 152, 156),
 	stencil = rgb(60, 60, 64),
-	wire = rgb(225, 228, 230),
-	gel = rgb(232, 234, 228), -- milky gel (FRAME fill, membranes, droplets)
-	amber = rgb(210, 140, 50), -- MATRIX lobes
-	amberPin = rgb(255, 190, 90),
+	wire = rgb(200, 205, 210),
+	gel = rgb(232, 234, 228), -- milky gel (membranes, droplets on the bench)
+	gelFill = rgb(215, 220, 222), -- the FRAME lattice's milky fill (opaque, inside the fluid)
+	amber = rgb(225, 190, 135), -- MATRIX lobes (cream-amber, as in the concept)
+	amberPin = rgb(255, 160, 70), -- the MATRIX core
 	steel = rgb(120, 124, 128),
+	scaffold = rgb(178, 182, 186), -- the MATRIX rod and rings (light: they must read through the amber)
 	cable = rgb(30, 30, 32),
 	ledGrowing = rgb(255, 170, 70),
 	ledReady = rgb(120, 220, 200),
@@ -96,6 +105,7 @@ local WIRE = 0.06
 local FRAME_INSET = 0.08 -- studs each FRAME box is shrunk by on every side (gaps between limbs)
 local FRAME_ARM_OPEN = 5 -- degrees the FRAME arms are opened away from the torso
 local FRAME_RIBS = 3 -- horizontal ribs per FRAME limb
+local SUPPORT_TOP = 5.0 -- the cap's underside above VatCore (where the rod and cables end)
 
 -- Where a FRAME box sits (clone space): its centre, the arms turned out around the shoulder.
 local function frameBoxCFrame(box: Box): CFrame
@@ -280,52 +290,55 @@ function CloneModel.new(parent: Instance): Clone
 		lastKey = "",
 	}
 
-	-- MATRIX: scaffold rod, 3 rings, 5 gel lobes, a warm pinpoint in the biggest lobe.
-	local rod = Parts.disc(0.3, 6, {
+	-- MATRIX (the concept's stage1): a thin scaffold rod, 4 rings, 5 opaque gel lobes merged
+	-- round the rod, and a small warm core on the FRONT of the cluster (so the opaque lobes
+	-- don't hide it).
+	local rod = Parts.disc(0.14, 6.2, {
 		Name = "ScaffoldRod",
 		Material = Enum.Material.Metal,
-		Color = C.steel,
+		Color = C.scaffold,
 		Parent = model,
 	})
-	track(clone.matrix, rig, rod, Parts.UPRIGHT)
-	for _, y in { -1.4, 0.2, 1.8 } do
+	track(clone.matrix, rig, rod, CFrame.new(0, 0.8, 0) * Parts.UPRIGHT)
+	for _, y in { -1.65, -0.25, 1.15, 2.55 } do
 		for _, part in
-			Parts.ring(rig, CFrame.new(0, y, 0), 0.8, 0.08, 10, {
+			Parts.ring(rig, CFrame.new(0, y, 0), 0.9, 0.07, 14, {
 				Name = "ScaffoldRing",
 				Material = Enum.Material.Metal,
-				Color = C.steel,
+				Color = C.scaffold,
 				Parent = model,
 			})
 		do
 			table.insert(clone.matrix, { part = part, base = 0 })
 		end
 	end
+	-- (centre, diameter; each lobe 1.15 × taller than wide; the concept's cluster, with X
+	-- mirrored because the clone faces -Z: seen from the front, +X is on the viewer's left)
 	local LOBES = {
-		{ at = Vector3.new(0.25, -0.55, -0.2), d = 1.6 },
-		{ at = Vector3.new(-0.38, 0.35, 0.12), d = 1.3 },
-		{ at = Vector3.new(0.22, 0.95, 0.3), d = 1.1 },
-		{ at = Vector3.new(-0.22, -1.25, 0.28), d = 1.2 },
-		{ at = Vector3.new(0.4, 0.3, -0.42), d = 1.0 },
+		{ at = Vector3.new(0, 0.55, 0), d = 1.5 },
+		{ at = Vector3.new(-0.45, 1.05, 0.2), d = 1.0 },
+		{ at = Vector3.new(0.4, 0.15, -0.15), d = 1.1 },
+		{ at = Vector3.new(-0.2, -0.05, -0.35), d = 0.84 },
+		{ at = Vector3.new(0.25, 1.25, 0.3), d = 0.8 },
 	}
 	for i, lobe in LOBES do
-		local size = Vector3.new(lobe.d, lobe.d * 0.86, lobe.d * 0.92)
+		local size = Vector3.new(lobe.d, lobe.d * 1.15, lobe.d)
 		local part = Parts.ellipsoid(size, {
 			Name = "GelLobe",
 			Color = C.amber,
-			Transparency = 0.35,
 			Reflectance = 0.1,
 			Parent = model,
 		})
-		track(clone.matrix, rig, part, CFrame.new(lobe.at) * CFrame.Angles(0, i * 0.9, i * 0.3))
+		track(clone.matrix, rig, part, CFrame.new(lobe.at) * CFrame.Angles(0, i * 0.9, 0))
 		table.insert(clone.lobes, { part = part, size = size })
 	end
-	local pin = Parts.ball(0.08, {
-		Name = "MatrixPin",
+	local pin = Parts.ball(0.3, {
+		Name = "MatrixCore",
 		Material = Enum.Material.Neon,
 		Color = C.amberPin,
 		Parent = model,
 	})
-	track(clone.matrix, rig, pin, CFrame.new(LOBES[1].at))
+	track(clone.matrix, rig, pin, CFrame.new(-0.05, 0.55, -0.6))
 
 	-- FRAME: an open lattice per box (each box inset FRAME_INSET so the limbs read apart, the
 	-- arms opened FRAME_ARM_OPEN° from the torso), horizontal ribs on the limbs, a cage of 3
@@ -346,17 +359,26 @@ function CloneModel.new(parent: Instance): Clone
 		local inner = box.size - Vector3.one * (FRAME_INSET * 2)
 		local h = inner / 2
 		if isHead then
-			-- the head: 2 vertical rings and 1 horizontal ring (a cage, not a cube)
+			-- the head: a wire globe like the concept's (4 meridians 45° apart + the equator and
+			-- two latitudes). From the front it reads as a round head, not a crosshair.
 			local radius = CloneModel.LAYOUT.HEAD_DIAMETER / 2
-			for _, turn in
-				{
-					CFrame.identity,
-					CFrame.Angles(math.rad(90), 0, 0),
-					CFrame.Angles(0, 0, math.rad(90)),
-				}
-			do
+			local hoops: { { turn: CFrame, radius: number } } = {}
+			for k = 0, 3 do
+				table.insert(hoops, {
+					turn = CFrame.Angles(0, math.rad(45 * k), 0)
+						* CFrame.Angles(math.rad(90), 0, 0),
+					radius = radius,
+				})
+			end
+			for _, latitude in { -0.5, 0, 0.5 } do
+				table.insert(hoops, {
+					turn = CFrame.new(0, latitude * radius, 0),
+					radius = radius * math.sqrt(1 - latitude * latitude),
+				})
+			end
+			for _, hoop in hoops do
 				for _, part in
-					Parts.ring(rig, pose * turn, radius, WIRE, 12, {
+					Parts.ring(rig, pose * hoop.turn, hoop.radius, WIRE, 10, {
 						Name = "Lattice",
 						Color = C.wire,
 						Reflectance = 0.05,
@@ -411,8 +433,8 @@ function CloneModel.new(parent: Instance): Clone
 		local fill = Parts.part({
 			Name = "GelFill",
 			Size = Vector3.new(inner.X * fillScale - 0.06, 0.05, inner.Z * fillScale - 0.06),
-			Color = C.gel,
-			Transparency = 0.35,
+			Color = C.gelFill,
+			Transparency = 1, -- (shown by update(), opaque)
 			Reflectance = 0.05,
 			Parent = model,
 		})
@@ -422,7 +444,7 @@ function CloneModel.new(parent: Instance): Clone
 
 	-- Support (FRAME and SHELL): spine rod behind the back, a bracket, two cables up to the cap.
 	local spine, spineCFrame =
-		Parts.rod(Vector3.new(0, -1.6, 0.85), Vector3.new(0, 4.4, 0.85), 0.25, {
+		Parts.rod(Vector3.new(0, -1.6, 0.85), Vector3.new(0, SUPPORT_TOP, 0.85), 0.25, {
 			Name = "SpineRod",
 			Material = Enum.Material.Metal,
 			Color = C.steel,
@@ -440,7 +462,7 @@ function CloneModel.new(parent: Instance): Clone
 	for _, side in { -1, 1 } do
 		local cable, cableCFrame = Parts.rod(
 			Vector3.new(side * 0.2, 0.95, 0.55),
-			Vector3.new(side * 0.75, 4.3, 0.95),
+			Vector3.new(side * 0.75, SUPPORT_TOP, 0.95),
 			0.12,
 			{ Name = "Cable", Color = C.cable, Parent = model }
 		)
@@ -523,7 +545,7 @@ function CloneModel.update(
 		if stage ~= "FRAME" or height <= 0.01 then
 			fill.part.Transparency = 1
 		else
-			fill.part.Transparency = Parts.fade(0.35, visible)
+			fill.part.Transparency = Parts.fade(0, visible)
 			fill.part.Size =
 				Vector3.new(inner.X * fillScale - 0.06, height, inner.Z * fillScale - 0.06)
 			-- (in the box's own space: an opened arm's gel follows the arm)
@@ -535,11 +557,9 @@ function CloneModel.update(
 		end
 	end
 
-	-- SHELL: fades in from 0.6 transparency to solid across the stage.
-	local shellVisible = 0
-	if stage == "SHELL" then
-		shellVisible = visible * (1 - 0.6 * (1 - t)) -- 0.4 .. 1 opacity across the stage
-	end
+	-- SHELL: opaque from the start (the vat's fluid clearing from teal to clear around it is
+	-- the progress); only the phase shift's flicker fades it.
+	local shellVisible = if stage == "SHELL" then visible else 0
 	setGroup(clone.shell, shellVisible)
 	local stencil = clone.stencil
 	if stencil then

@@ -1,46 +1,41 @@
 --!strict
--- BenchVisual: the extraction scene on the lab trolley, on the extractor's screen only.
+-- BenchVisual: the shell on the lab trolley during an extraction, on the extractor's screen
+-- only (v3: everything is done BY HAND; ExtractionController moves the hand and calls this).
 --
--- The finished shell lies on the trolley (on its back, head toward +X of the bench anchor).
--- Its chest is closed by two pale PANELS meeting on a seam (no wound, no anatomy). A home-made
--- hot-wire CUTTER (parts: a taped soldering-iron handle, a steel fork, a thin wire) sleeps on
--- its charger at the CutterDock. Under the panels: a cavity lined with milky gel, and 4–6
--- stylised BIO-ELEMENTS (CoreModel.element) each in its own gel nest. Beside the head: a
--- small steel rack of open capsules (one per slot). Everything inside is milky / teal /
--- amber / violet, never red.
+-- The finished shell lies on its back on the trolley's underpad, head toward +X of the bench
+-- anchor. Its chest is closed by two pale PANELS meeting on a seam; a faint dashed GUIDE runs
+-- down the seam (no text, no wound, no anatomy). Under the panels: a cavity lined with milky
+-- gel, and 4–6 stylised BIO-ELEMENTS (CoreModel.element), each in its own gel nest. Everything
+-- inside is milky / teal / amber / violet, never red.
 --
--- ExtractionController drives it (its own clock, events from its timeline table):
---   setCutter(cframe?)    the cutter in the hand (nil = asleep in its dock); setWire(heat 0..1)
---   setHand(cframe?, grip) the gloved hand (worn yellow-grey dish glove) — handAt() aims it
---   cut(t)                the seam 0..1 (neck → waist): glows dull amber behind the tip, then
---                         cools to a dark scorched line in 0.6 s and STAYS; returns the tip
---   wisp()                one thin cold vapour wisp at the tip (call every 0.1 s while cutting)
---   openPanels(t)         the panels unfold 0..1 (Quad Out by the caller); breath() = the heavy
---                         cold mist spilling out when they open
---   lightUp(index)        an element's inner light comes on (the 80 ms stagger is the caller's)
---   hover(index?)         one Highlight on the hovered element (moved, never one per element)
---   lift(index, t)        held: it rises (0.15 stud) and trembles, 3 milky strands stretch
---   letGo(index)          let go early: it sinks back, the strands shrink back
---   release(index, slot)  the soft pop (mist puff), strands shrink back in 0.2 s, the element
---                         glides 0.35 s into capsule `slot`, the cap drops 0.25 s (step() does
---                         it; events "Landed", "Crumble", "Sealed", "Frost" come out of
---                         takeEvents(), so the sounds play on the frame they belong to)
---   seal(slot, grade?, inert)  the server's answer: grade light + frost ring (when the cap is
---                         down; earlier answers wait for it)
---   closePanels(t)        the outro: panels fold back, leftovers dim and sink
---   chuteRoot / place / fade / destroy  as before (the shell slides into the chute)
--- A husk lifts with no resistance and crumbles to 8 dry beige flakes in its capsule (they stay).
--- A ruptured element leaves a milky pool in its nest and 2–3 beads on its way (they stay).
+-- What the controller drives:
+--   THE SEAM   12 cells, each cut 0..2 deep (1 = the synthetic skin: a thin dark split with a
+--              cold teal light leaking from it, a milky bead every 2nd cell; 2 = the membrane:
+--              the split widens, wet milky edges, a cold breath). Only where the blade
+--              passes: cutCell(k, depth). Scratches off the seam stay (scratch).
+--   THE PANELS setPanel(side, open, tremble): each opens on its outer hinge; clipFrame(side)
+--              is where a retractor clip bites its rim.
+--   ELEMENTS   in the nest (pulled by setPull), or free in the world (setFree: held, loose,
+--              on the tray), or handed to the pass-box (takeModel). Strands stretch from the
+--              nest while pulled, then thin, sag and retract (release); a milky drop falls
+--              back into the nest and stays. A ruptured one leaves a pool in its nest and
+--              beads on its way (bead), which land and STAY.
+--   THE TRAY   runoff(): the element's gel coat drains into the tray's channel (it stays).
+-- Persistence (art direction): the split, the glow (fading to 0.85, never to nothing), the
+-- beads, the drops and the scratches stay until the shell goes down the chute.
 --
--- Effects (roblox-vfx rules: Rate 0 + Emit bursts, built-in smoke texture, lit by the room,
--- fade in and out, never a pop): ≤ 3 emitters (cold vapour Box, seal-ring Disc, tip wisps),
--- 3 Beams (strands, reused), 1 Highlight, all destroyed with the scene.
+-- Effects (roblox-vfx: Rate 0 + Emit bursts, built-in smoke texture, lit by the room, fade in
+-- and out, never a pop): 1 vapour emitter (cold breath / release puff), 3 Beams (strands),
+-- 1 Highlight (moved between targets), 1 small PointLight on the cut; all destroyed with the
+-- scene. The pass-box (PassBox) has its own 2.
 --
--- Space: the shell is built STANDING (like CloneModel: feet y -2.5, chest = -Z) and laid
--- down by `root` (lyingRoot). "Out of the cavity" is body -Z (world up once lying).
+-- Space: the shell is built STANDING (like CloneModel: feet y -2.5, chest = -Z) and laid down
+-- by `root` (lyingRoot). "Out of the cavity" is body -Z (world up once lying). Body X runs
+-- across the chest (anchor Z), body Y along the body (anchor X).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BenchLayout = require(ReplicatedStorage.Shared.Contraband.BenchLayout)
 local Types = require(ReplicatedStorage.Shared.Types)
 
 local CloneModel = require(script.Parent.CloneModel)
@@ -57,43 +52,36 @@ local COLORS = CloneModel.COLORS
 local LINING = rgb(118, 136, 128) -- wet grey-green gel lining (never a white tray)
 local CAVITY_FLOOR = rgb(86, 104, 98)
 local NEST_GEL = rgb(190, 198, 172)
-local GLOVE = rgb(178, 170, 122) -- a worn yellow-grey dish glove
-local GLOVE_CUFF = rgb(150, 142, 100)
-local GLOVE_WORN = rgb(140, 132, 96)
-local SEAM_HOT = rgb(255, 150, 70)
-local SEAM_COLD = rgb(40, 34, 30)
-local WIRE_HOT = rgb(200, 240, 235)
-local WIRE_COLD = rgb(120, 122, 124)
+local SPLIT = rgb(30, 36, 38)
+local GLOW = rgb(120, 210, 200)
+local GUIDE = rgb(190, 194, 190)
+local MILK = rgb(226, 228, 214)
+local SCRATCH = rgb(204, 204, 196)
 local VAPOUR = rgb(236, 244, 248)
 local VAPOUR_DEEP = rgb(205, 220, 228)
-local HUSK_FLAKE = rgb(160, 150, 132)
-local STEEL = rgb(150, 154, 158)
 local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds" -- built in, no upload
 local GRAVITY = 30 -- studs/s² (real gravity at 1 stud = 0.28 m: things don't float)
-local HAND_SCALE = 0.6
-local HAND_SIDE_ANGLE = 40 -- degrees: the hand comes in from the screen's side
 
 -- The torso's middle (standing space), the chest surface depth and the opening.
 local TORSO = Vector3.new(0, 0.5, 0)
 local CHEST_Z = -0.5
+local PANEL_Z = CHEST_Z - 0.025 -- the panels' middle (0.05 thick, on the chest)
+local PANEL_FRONT = CHEST_Z - 0.05 -- the panels' outer face
 local OPENING = 1.2 -- the chest opening (square), y -0.1 .. 1.1
 local FLOOR_Z = CHEST_Z + 0.64
 local SEAM_TOP = 1.1 -- neck end of the seam (body Y)
 local SEAM_BOTTOM = -0.1 -- waist end
-local SEAM_PIECES = 12
-local SEAM_COOL = 0.6 -- seconds from amber to scorched
+local CELLS = 12
+local CELL = (SEAM_TOP - SEAM_BOTTOM) / CELLS
 local PANEL_OPEN = math.rad(170) -- (at 150° the near panel hid the bottom row)
 local ELEMENT_SCALE = 0.7
-local CAPSULE_SCALE = 0.55 -- the element's size inside a capsule
-local LIFT_HEIGHT = 0.45 -- (high enough to read as a lift from the camera)
-local GLIDE_TIME = 0.35
-local CAP_TIME = 0.25
-local STRAND_BACK = 0.2
--- Capsule rack slots (bench anchor space): on the trolley top beside the shell's head, on the
--- camera's side, in the lower-left of the close-up. (Not on the far side: the shell's arm lies
--- there. The lab keeps anchor x 1.2..2.95, z -1.35..-0.45 clear on the trolley top for them.)
-local RACK =
-	{ Vector3.new(1.45, 0.62, -1.1), Vector3.new(2.1, 0.62, -1.1), Vector3.new(2.7, 0.62, -0.7) }
+local MAX_SCRATCHES = 8
+local GLOW_FADE = 3 -- s: the teal glow of a cut cell fades from 0.6 to 0.85 (never out)
+
+BenchVisual.CELLS = CELLS
+BenchVisual.ELEMENT_SCALE = ELEMENT_SCALE
+BenchVisual.PANEL_OPEN = PANEL_OPEN
+
 -- Nest layouts (body space x, y offsets from the torso's middle) for 4, 5 and 6 elements:
 -- a little irregular, never a perfect grid.
 local LAYOUTS: { [number]: { Vector2 } } = {
@@ -125,45 +113,34 @@ local YAW_JITTER = { 6, -9, 4, -5, 11, -3 } -- degrees, per nest
 -- chest (-Z) faces up (+Y).
 local LYING = CFrame.fromMatrix(Vector3.zero, Vector3.new(0, 0, -1), Vector3.new(1, 0, 0))
 
--- The extraction camera: steeply down over the open chest from the room's camera side
--- (-Z of the anchor). The cavity sits right of centre (about a third of the width), the
--- capsule rack lower left. FOV 40.
-BenchVisual.CAMERA_FOV = 40
-function BenchVisual.cameraCFrame(anchor: CFrame): CFrame
-	local target = anchor * Vector3.new(0.9, 0.5, -0.1)
-	local position = anchor * Vector3.new(0.6, 3.4, -1.8)
-	return CFrame.lookAt(position, target, anchor.UpVector)
+function BenchVisual.lyingRoot(anchor: CFrame): CFrame
+	-- (on its back on the underpad, the torso's middle over the anchor)
+	return anchor * CFrame.new(-0.5, 0.5 + BenchLayout.SHELL_LIFT, 0) * LYING
 end
 
-function BenchVisual.lyingRoot(anchor: CFrame): CFrame
-	-- (back on the trolley top, the torso's middle over the anchor)
-	return anchor * CFrame.new(-0.5, 0.5, 0) * LYING
-end
+export type ElementMode = "Nest" | "Free" | "Gone"
 
 type Element = {
 	model: Model,
 	kind: string,
 	condition: string,
 	nest: CFrame, -- body space (the shell's root)
-	state: "Nest" | "Held" | "Glide" | "Sealed",
-	lift: number, -- 0..1 (shown)
+	mode: ElementMode,
+	pull: Vector3, -- world offset from the nest while pulled
 	lit: boolean,
-	glideFrom: CFrame?,
-	glideStart: number,
-	slot: number,
 	pool: BasePart?,
-	trail: number, -- beads dropped on the way (ruptured)
 	sink: number, -- outro: 0..1
+	half: number, -- half its thickness lying down (studs)
+	glossy: boolean,
 }
 
-type Capsule = {
-	model: Model,
-	at: CFrame,
-	cap: number, -- 1 = open .. 0 = shut
-	closing: number?, -- clock when the cap started to drop
-	sealed: boolean,
-	answer: { grade: string?, inert: boolean }?, -- the server's, applied once sealed
-	answered: boolean,
+type Cell = {
+	depth: number,
+	guide: BasePart,
+	splits: { BasePart }, -- one per panel edge (side -1, +1)
+	wets: { BasePart },
+	glow: BasePart,
+	cutAt: number?,
 }
 
 type Falling = {
@@ -175,6 +152,7 @@ type Falling = {
 	rest: Vector3?, -- once landed on the shell: in the shell's root space (it follows it)
 	onShell: boolean,
 	flat: Vector3, -- its size once landed
+	sound: boolean,
 }
 
 export type Bench = {
@@ -183,38 +161,31 @@ export type Bench = {
 	folder: Folder,
 	rig: Parts.Rig,
 	panels: { BasePart },
-	seam: { { part: BasePart, side: number, y: number, at: number? } },
-	panelOpen: number,
+	panelOpen: { number },
+	panelTremble: { number },
+	cells: { Cell },
+	scratches: number,
+	riders: { { part: BasePart, side: number, at: CFrame } }, -- beads / scratches on a panel
 	elements: { Element },
-	capsules: { Capsule },
 	highlight: Highlight,
-	hovered: number?,
 	strandBase: BasePart,
 	strandTip: BasePart,
 	beams: { Beam },
-	strandsFor: number?, -- element index the strands hang from
-	strandsBack: number?, -- clock when they started shrinking back
-	cutter: Parts.Rig,
-	cutterParts: { BasePart },
-	wire: BasePart,
-	wireLight: PointLight,
-	cord: { BasePart },
-	dock: CFrame,
-	cutterAt: CFrame?, -- nil = in the dock
-	hand: Parts.Rig,
-	handParts: { BasePart },
-	handShown: boolean,
+	strandsFor: number?,
+	strandsBack: number?, -- clock when they started to thin and retract
+	strandStretch: number,
 	vapourSource: BasePart,
 	vapour: ParticleEmitter,
-	mistSource: BasePart,
-	mist: ParticleEmitter,
-	tipSource: BasePart,
-	wisps: ParticleEmitter,
+	cutLight: PointLight,
+	runoff: BasePart?,
+	runoffGrow: number,
+	runoffBorn: number,
 	falling: { Falling },
-	events: { { name: string, slot: number } },
+	landed: number, -- beads landed since the last takeLanded()
 	random: Random,
 	visible: number,
 	fadeBase: { [BasePart]: number }?,
+	kit: Model?, -- a fallback static kit (the lab had none)
 }
 
 local function smooth(x: number): number
@@ -222,22 +193,12 @@ local function smooth(x: number): number
 	return x * x * (3 - 2 * x)
 end
 
-local function easeIn(x: number): number
-	x = math.clamp(x, 0, 1)
-	return x * x * x
-end
-
-local function easeOut(x: number): number
-	x = math.clamp(x, 0, 1)
-	return 1 - (1 - x) * (1 - x)
-end
-
 ------------------------------------------------------------------------------
--- Emitters (built-in smoke texture, bursts only)
+-- Emitter (built-in smoke texture, bursts only)
 ------------------------------------------------------------------------------
 
--- Cold vapour: heavier than air, it spills, slows (Drag) and sinks; soft, matte, lit by
--- the room (not a glow), fades in and out.
+-- Cold vapour: heavier than air, it spills, slows (Drag) and sinks; soft, matte, lit by the
+-- room (not a glow), fades in and out.
 local function vapourEmitter(parent: BasePart): ParticleEmitter
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Name = "ColdVapour"
@@ -245,21 +206,21 @@ local function vapourEmitter(parent: BasePart): ParticleEmitter
 	emitter.Rate = 0
 	emitter.Color = ColorSequence.new(VAPOUR, VAPOUR_DEEP)
 	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.15),
-		NumberSequenceKeypoint.new(0.4, 0.55, 0.1),
-		NumberSequenceKeypoint.new(1, 0.9, 0.15),
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.4, 0.8, 0.1),
+		NumberSequenceKeypoint.new(1, 1.2, 0.15),
 	})
 	emitter.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.12, 0.6),
-		NumberSequenceKeypoint.new(0.5, 0.78),
+		NumberSequenceKeypoint.new(0.12, 0.65),
+		NumberSequenceKeypoint.new(0.5, 0.85),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	emitter.Lifetime = NumberRange.new(1.0, 1.6)
-	emitter.Speed = NumberRange.new(0.4, 1.2)
+	emitter.Lifetime = NumberRange.new(1.6, 2.4)
+	emitter.Speed = NumberRange.new(0.2, 0.5)
 	emitter.SpreadAngle = Vector2.new(40, 40)
-	emitter.Drag = 3
-	emitter.Acceleration = Vector3.new(0, -0.8, 0)
+	emitter.Drag = 2
+	emitter.Acceleration = Vector3.new(0, -0.6, 0)
 	emitter.Rotation = NumberRange.new(0, 360)
 	emitter.RotSpeed = NumberRange.new(-20, 20)
 	emitter.LightEmission = 0
@@ -272,170 +233,6 @@ local function vapourEmitter(parent: BasePart): ParticleEmitter
 	return emitter
 end
 
--- The thin ring of cold mist at a capsule's cap seam (one burst when the grade light comes on).
-local function mistEmitter(parent: BasePart): ParticleEmitter
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Name = "SealMist"
-	emitter.Texture = SMOKE_TEXTURE
-	emitter.Rate = 0
-	emitter.Color = ColorSequence.new(VAPOUR)
-	emitter.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.1),
-		NumberSequenceKeypoint.new(1, 0.3, 0.05),
-	})
-	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.2, 0.7),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	emitter.Lifetime = NumberRange.new(0.6, 0.9)
-	emitter.Speed = NumberRange.new(0.2, 0.5)
-	emitter.Drag = 4
-	emitter.Acceleration = Vector3.new(0, -0.6, 0)
-	emitter.Rotation = NumberRange.new(0, 360)
-	emitter.RotSpeed = NumberRange.new(-30, 30)
-	emitter.LightEmission = 0
-	emitter.LightInfluence = 1
-	emitter.ZOffset = 0.1
-	emitter.Shape = Enum.ParticleEmitterShape.Disc
-	emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
-	emitter.ShapeInOut = Enum.ParticleEmitterShapeInOut.Outward
-	emitter.ShapePartial = 0.85
-	emitter.EmissionDirection = Enum.NormalId.Top
-	emitter.Parent = parent
-	return emitter
-end
-
--- Thin wisps at the cutter's tip (the hot wire meeting the cold shell).
-local function wispEmitter(parent: BasePart): ParticleEmitter
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Name = "TipWisps"
-	emitter.Texture = SMOKE_TEXTURE
-	emitter.Rate = 0
-	emitter.Color = ColorSequence.new(VAPOUR)
-	emitter.Size = NumberSequence.new(0.15, 0.5)
-	emitter.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.15, 0.75),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	emitter.Lifetime = NumberRange.new(0.6, 0.9)
-	emitter.Speed = NumberRange.new(0.2, 0.5)
-	emitter.SpreadAngle = Vector2.new(25, 25)
-	emitter.Drag = 2
-	emitter.Acceleration = Vector3.new(0, 0.3, 0) -- (warm at the wire: a wisp rises a little)
-	emitter.Rotation = NumberRange.new(0, 360)
-	emitter.RotSpeed = NumberRange.new(-25, 25)
-	emitter.LightEmission = 0
-	emitter.LightInfluence = 1
-	emitter.ZOffset = 0.15
-	emitter.EmissionDirection = Enum.NormalId.Top
-	emitter.Parent = parent
-	return emitter
-end
-
-------------------------------------------------------------------------------
--- Tools: the gloved hand and the cutter (local frames: the tip at the origin)
-------------------------------------------------------------------------------
-
-local function buildHand(folder: Folder): (Parts.Rig, { BasePart })
-	local rig = Parts.newRig()
-	local list: { BasePart } = {}
-	local function piece(name: string, size: Vector3, at: CFrame, color: Color3)
-		local part = Parts.part({
-			Name = name,
-			Size = size * HAND_SCALE,
-			Color = color,
-			Material = Enum.Material.SmoothPlastic,
-			Reflectance = 0.06,
-			Transparency = 1,
-			Parent = folder,
-		})
-		Parts.add(rig, part, CFrame.new(at.Position * HAND_SCALE) * at.Rotation)
-		table.insert(list, part)
-	end
-	piece("Palm", Vector3.new(0.5, 0.16, 0.5), CFrame.new(0, 0.14, 0.55), GLOVE)
-	for index = 1, 4 do
-		local x = -0.18 + (index - 1) * 0.12
-		piece(
-			"Finger",
-			Vector3.new(0.1, 0.09, 0.34),
-			CFrame.new(x, 0.07, 0.17) * CFrame.Angles(math.rad(-10), 0, 0),
-			if index == 2 then GLOVE_WORN else GLOVE -- (a worn, darker fingertip)
-		)
-	end
-	piece(
-		"Thumb",
-		Vector3.new(0.1, 0.09, 0.28),
-		CFrame.new(-0.3, 0.1, 0.45) * CFrame.Angles(0, math.rad(-35), 0),
-		GLOVE
-	)
-	piece("Cuff", Vector3.new(0.42, 0.27, 0.36), CFrame.new(0, 0.22, 0.93), GLOVE_CUFF)
-	return rig, list
-end
-
--- The SEAM CUTTER: a taped soldering-iron handle, a small steel fork, a thin wire between
--- the fork tips (the tip = the wire's middle, at the origin; the handle runs along +Z).
-local function buildCutter(folder: Folder): (Parts.Rig, { BasePart }, BasePart, PointLight)
-	local rig = Parts.newRig()
-	local list: { BasePart } = {}
-	local function add(part: BasePart, at: CFrame)
-		part.Parent = folder
-		Parts.add(rig, part, at)
-		table.insert(list, part)
-	end
-	-- the fork: two prongs from the tips back to the tape
-	for _, side in { -1, 1 } do
-		local tip = Vector3.new(side * 0.075, 0, 0)
-		local base = Vector3.new(side * 0.035, 0.03, 0.3)
-		local prong, at = Parts.rod(tip, base, 0.028, {
-			Name = "Prong",
-			Material = Enum.Material.Metal,
-			Color = rgb(168, 170, 172),
-			Reflectance = 0.25,
-		})
-		add(prong, at)
-	end
-	local wire, wireAt = Parts.rod(Vector3.new(-0.075, 0, 0), Vector3.new(0.075, 0, 0), 0.018, {
-		Name = "Wire",
-		Material = Enum.Material.Metal,
-		Color = WIRE_COLD,
-	})
-	add(wire, wireAt)
-	local tape = Parts.part({
-		Name = "Tape",
-		Size = Vector3.new(0.13, 0.11, 0.1),
-		Material = Enum.Material.Fabric,
-		Color = rgb(122, 122, 116),
-	})
-	add(tape, CFrame.new(0, 0.03, 0.33))
-	local handle, handleAt =
-		Parts.rod(Vector3.new(0, 0.03, 0.36), Vector3.new(0, 0.03, 0.9), 0.11, {
-			Name = "Handle",
-			Color = rgb(26, 26, 28),
-			Reflectance = 0.05,
-		})
-	add(handle, handleAt)
-	for k = 1, 3 do
-		local rib = Parts.disc(0.125, 0.025, { Name = "Grip", Color = rgb(44, 44, 46) })
-		add(rib, CFrame.new(0, 0.03, 0.5 + k * 0.09) * CFrame.Angles(0, math.rad(90), 0))
-	end
-	local light = Instance.new("PointLight")
-	light.Name = "WireGlow"
-	light.Color = WIRE_HOT
-	light.Range = 2
-	light.Brightness = 0
-	light.Shadows = false
-	light.Enabled = false
-	light.Parent = wire
-	return rig, list, wire, light
-end
-
--- Where the cutter sleeps: flat on its charger, handle toward the camera side.
-local function dockRest(dock: CFrame): CFrame
-	return dock * CFrame.new(0, 0.07, 0) * CFrame.Angles(0, math.rad(-60), 0)
-end
-
 ------------------------------------------------------------------------------
 -- Building
 ------------------------------------------------------------------------------
@@ -444,19 +241,29 @@ local function track(bench: Bench, part: BasePart, localCFrame: CFrame)
 	Parts.add(bench.rig, part, localCFrame)
 end
 
-local function panelCFrame(side: number, open: number): CFrame
+-- A panel (side -1 / +1) at `open` 0..1: hinged on its OUTER edge (body x = ±0.6).
+local function panelCFrame(side: number, open: number, tremble: number?): CFrame
 	local angle = PANEL_OPEN * math.clamp(open, 0, 1)
-	return CFrame.new(side * OPENING / 2, TORSO.Y, CHEST_Z - 0.025)
+	return CFrame.new(side * OPENING / 2, TORSO.Y, PANEL_Z)
 		* CFrame.Angles(0, -side * angle, 0)
-		* CFrame.new(-side * OPENING / 4, 0, 0)
+		* CFrame.new(-side * OPENING / 4, 0, (tremble or 0))
+end
+
+local function cellY(k: number): number
+	return SEAM_TOP - (k - 0.5) * CELL
+end
+
+-- Where a piece on panel `side`'s meeting edge sits (in the panel's space), `width` wide,
+-- `lift` in front of the panel's outer face.
+local function onEdge(side: number, k: number, width: number, lift: number): CFrame
+	return CFrame.new(-side * (OPENING / 4 - width / 2), cellY(k) - TORSO.Y, -0.025 - lift)
 end
 
 function BenchVisual.new(
 	anchor: CFrame,
 	parent: Instance,
 	elements: { Types.ExtractElement },
-	slots: number,
-	dock: CFrame?
+	needKit: boolean
 ): Bench
 	local folder = Instance.new("Folder")
 	folder.Name = "BenchVisual"
@@ -468,95 +275,91 @@ function BenchVisual.new(
 	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.Enabled = false
 	highlight.Parent = folder
-	local cutter, cutterParts, wire, wireLight = buildCutter(folder)
-	local hand, handParts = buildHand(folder)
 	local bench: Bench = {
 		anchor = anchor,
 		root = BenchVisual.lyingRoot(anchor),
 		folder = folder,
 		rig = Parts.newRig(),
 		panels = {},
-		seam = {},
-		panelOpen = 0,
+		panelOpen = { 0, 0 },
+		panelTremble = { 0, 0 },
+		cells = {},
+		scratches = 0,
+		riders = {},
 		elements = {},
-		capsules = {},
 		highlight = highlight,
-		hovered = nil,
 		strandBase = nil :: any,
 		strandTip = nil :: any,
 		beams = {},
 		strandsFor = nil,
 		strandsBack = nil,
-		cutter = cutter,
-		cutterParts = cutterParts,
-		wire = wire,
-		wireLight = wireLight,
-		cord = {},
-		dock = dock or anchor * CFrame.new(3, 0.15, 1.1),
-		cutterAt = nil,
-		hand = hand,
-		handParts = handParts,
-		handShown = false,
+		strandStretch = 0,
 		vapourSource = nil :: any,
 		vapour = nil :: any,
-		mistSource = nil :: any,
-		mist = nil :: any,
-		tipSource = nil :: any,
-		wisps = nil :: any,
+		cutLight = nil :: any,
+		runoff = nil,
+		runoffGrow = 0,
+		runoffBorn = 0,
 		falling = {},
-		events = {},
+		landed = 0,
 		random = Random.new(),
 		visible = 1,
 		fadeBase = nil,
+		kit = nil,
 	}
+	if needKit then
+		-- (the lab has no static bench kit: build one for this scene only)
+		bench.kit = BenchLayout.buildStatic(folder, anchor)
+	end
 
 	-- The shell (SHELL look, chest open under the panels).
 	CloneModel.buildShell(bench.rig, folder, true)
 
-	-- Cavity: a dark wet lining on the floor and the 4 inner walls.
+	-- Cavity: a dark wet lining on the floor and the 4 inner walls (inset from the shell's own
+	-- walls by 0.006: no shared faces).
 	local half = OPENING / 2
 	local depth = 0.64
 	track(
 		bench,
 		Parts.part({
 			Name = "CavityFloor",
-			Size = Vector3.new(OPENING, OPENING, 0.02),
+			Size = Vector3.new(OPENING - 0.02, OPENING - 0.02, 0.02),
 			Color = CAVITY_FLOOR,
 			Reflectance = 0.25,
 			Parent = folder,
 		}),
-		CFrame.new(TORSO.X, TORSO.Y, FLOOR_Z - 0.01)
+		CFrame.new(TORSO.X, TORSO.Y, FLOOR_Z - 0.016)
 	)
 	for _, side in { -1, 1 } do
 		track(
 			bench,
 			Parts.part({
 				Name = "Lining",
-				Size = Vector3.new(0.01, OPENING, depth),
+				Size = Vector3.new(0.01, OPENING - 0.02, depth - 0.02),
 				Color = LINING,
 				Reflectance = 0.35,
 				Parent = folder,
 			}),
-			CFrame.new(side * (half - 0.006), TORSO.Y, CHEST_Z + depth / 2)
+			CFrame.new(side * (half - 0.011), TORSO.Y, CHEST_Z + depth / 2)
 		)
 		track(
 			bench,
 			Parts.part({
 				Name = "Lining",
-				Size = Vector3.new(OPENING, 0.01, depth),
+				Size = Vector3.new(OPENING - 0.04, 0.01, depth - 0.02),
 				Color = LINING,
 				Reflectance = 0.35,
 				Parent = folder,
 			}),
-			CFrame.new(0, TORSO.Y + side * (half - 0.006), CHEST_Z + depth / 2)
+			CFrame.new(0, TORSO.Y + side * (half - 0.011), CHEST_Z + depth / 2)
 		)
 	end
 
-	-- The two chest panels and the seam pieces on their meeting edges (they move with them).
+	-- The two chest panels.
 	for _, side in { -1, 1 } do
 		local panel = Parts.part({
 			Name = "ChestPanel",
-			Size = Vector3.new(OPENING / 2, OPENING, 0.05),
+			Size = Vector3.new(OPENING / 2 - 0.004, OPENING - 0.004, 0.05),
 			Color = COLORS.pearl,
 			Reflectance = 0.15,
 			Parent = folder,
@@ -564,26 +367,60 @@ function BenchVisual.new(
 		track(bench, panel, panelCFrame(side, 0))
 		table.insert(bench.panels, panel)
 	end
-	for k = 1, SEAM_PIECES do
-		local y = SEAM_TOP + (SEAM_BOTTOM - SEAM_TOP) * (k - 0.5) / SEAM_PIECES
-		for _, side in { -1, 1 } do
-			local piece = Parts.part({
-				Name = "Seam",
-				Size = Vector3.new(0.022, (SEAM_TOP - SEAM_BOTTOM) / SEAM_PIECES + 0.01, 0.012),
-				Material = Enum.Material.Neon,
-				Color = SEAM_HOT,
+
+	-- The seam: per cell a guide dash (on the -1 panel's edge, over the meeting line), two
+	-- split halves and two wet edges (one per panel edge, they ride the panels), and the teal
+	-- glow strip over the line. All hidden until cut (the guide until then only).
+	for _ = 1, CELLS do
+		local guide = Parts.part({
+			Name = "SeamGuide",
+			Size = Vector3.new(0.008, CELL * 0.6, 0.004),
+			Color = GUIDE,
+			Transparency = 0.45,
+			Parent = folder,
+		})
+		track(bench, guide, CFrame.identity)
+		local splits, wets = {}, {}
+		for _ = 1, 2 do
+			local split = Parts.part({
+				Name = "Split",
+				Size = Vector3.new(0.014, CELL + 0.004, 0.008),
+				Color = SPLIT,
 				Transparency = 1,
 				Parent = folder,
 			})
-			track(
-				bench,
-				piece,
-				panelCFrame(side, 0)
-					* CFrame.new(-side * (OPENING / 4 - 0.011), y - TORSO.Y, -0.031)
-			)
-			table.insert(bench.seam, { part = piece, side = side, y = y, at = nil })
+			track(bench, split, CFrame.identity)
+			table.insert(splits, split)
+			local wet = Parts.part({
+				Name = "WetEdge",
+				Size = Vector3.new(0.012, CELL + 0.004, 0.012),
+				Color = MILK,
+				Reflectance = 0.3,
+				Transparency = 1,
+				Parent = folder,
+			})
+			track(bench, wet, CFrame.identity)
+			table.insert(wets, wet)
 		end
+		local glow = Parts.part({
+			Name = "CutGlow",
+			Size = Vector3.new(0.008, CELL, 0.004),
+			Material = Enum.Material.Neon,
+			Color = GLOW,
+			Transparency = 1,
+			Parent = folder,
+		})
+		track(bench, glow, CFrame.identity)
+		table.insert(bench.cells, {
+			depth = 0,
+			guide = guide,
+			splits = splits,
+			wets = wets,
+			glow = glow,
+			cutAt = nil,
+		})
 	end
+	BenchVisual.layoutPanels(bench)
 
 	-- Nests and elements.
 	local layout = LAYOUTS[math.clamp(#elements, 4, 6)] or LAYOUTS[6]
@@ -601,7 +438,7 @@ function BenchVisual.new(
 				Reflectance = 0.2,
 				Parent = folder,
 			}),
-			CFrame.new(at.X, at.Y, FLOOR_Z - 0.04) * CFrame.Angles(0, 0, yaw)
+			CFrame.new(at.X, at.Y, FLOOR_Z - 0.05) * CFrame.Angles(0, 0, yaw)
 		)
 		-- (a husk takes the silhouette of one of the real kinds, by its index)
 		local shapes = { "Cluster", "Pod", "Coil" }
@@ -613,47 +450,19 @@ function BenchVisual.new(
 			shapes[(index % 3) + 1]
 		)
 		model.Parent = folder
-		local record: Element = {
+		local _, size = model:GetBoundingBox()
+		table.insert(bench.elements, {
 			model = model,
 			kind = info.kind :: string,
 			condition = info.condition :: string,
 			nest = nest,
-			state = "Nest",
-			lift = 0,
+			mode = "Nest",
+			pull = Vector3.zero,
 			lit = false,
-			glideFrom = nil,
-			glideStart = 0,
-			slot = 0,
 			pool = nil,
-			trail = 0,
 			sink = 0,
-		}
-		table.insert(bench.elements, record)
-	end
-
-	-- The capsule rack: a steel ring holder per slot, an open capsule in it.
-	for slot = 1, math.clamp(slots, 1, #RACK) do
-		local at = anchor * CFrame.new(RACK[slot])
-		local holder = Parts.disc(0.6, 0.18, {
-			Name = "RackHolder",
-			Material = Enum.Material.Metal,
-			Color = STEEL,
-			Reflectance = 0.15,
-			CFrame = anchor * CFrame.new(RACK[slot].X, 0.09, RACK[slot].Z) * Parts.UPRIGHT,
-			Parent = folder,
-		})
-		holder:SetAttribute("Rack", true)
-		local capsule = CoreModel.capsule(nil, at, true)
-		capsule.Parent = folder
-		CoreModel.setCapOpen(capsule, 1)
-		table.insert(bench.capsules, {
-			model = capsule,
-			at = at,
-			cap = 1,
-			closing = nil,
-			sealed = false,
-			answer = nil,
-			answered = false,
+			half = math.min(size.X, size.Z) / 2,
+			glossy = false,
 		})
 	end
 
@@ -682,12 +491,12 @@ function BenchVisual.new(
 		beam.Name = "Strand"
 		beam.Attachment0 = bench.strandBase:FindFirstChild(`A{k}`) :: Attachment
 		beam.Attachment1 = bench.strandTip:FindFirstChild(`A{k}`) :: Attachment
-		beam.Color = ColorSequence.new(COLORS.gel)
-		beam.Transparency = NumberSequence.new(0.3, 0.8)
-		beam.Width0 = 0.03
-		beam.Width1 = 0.01
-		beam.CurveSize0 = 0.05 * (if k == 2 then -1 else 1)
-		beam.CurveSize1 = -0.04
+		beam.Color = ColorSequence.new(rgb(228, 232, 220))
+		beam.Transparency = NumberSequence.new(0.3)
+		beam.Width0 = 0.035
+		beam.Width1 = 0.021
+		beam.CurveSize0 = 0.1 * (if k == 2 then -1 else 1)
+		beam.CurveSize1 = -0.08
 		beam.Segments = 8
 		beam.FaceCamera = true
 		beam.LightEmission = 0
@@ -697,7 +506,7 @@ function BenchVisual.new(
 		table.insert(bench.beams, beam)
 	end
 
-	-- Emitters on small invisible parts (Box / Disc shapes need a part parent).
+	-- The vapour emitter on a small invisible part (Box shape needs a part parent).
 	local vapourSource = Parts.part({
 		Name = "VapourSource",
 		Size = Vector3.new(0.7, 0.05, 0.7),
@@ -707,199 +516,229 @@ function BenchVisual.new(
 	})
 	bench.vapourSource = vapourSource
 	bench.vapour = vapourEmitter(vapourSource)
-	local mistSource = Parts.part({
-		Name = "SealMistSource",
-		Size = Vector3.new(0.5, 0.05, 0.5),
-		Transparency = 1,
-		CFrame = anchor,
-		Parent = folder,
-	})
-	bench.mistSource = mistSource
-	bench.mist = mistEmitter(mistSource)
-	local tipSource = Parts.part({
-		Name = "TipSource",
+	-- The small cold light that follows the cut (then rests on the seam's middle, dim).
+	local lightHost = Parts.part({
+		Name = "CutLightHost",
 		Size = Vector3.new(0.05, 0.05, 0.05),
 		Transparency = 1,
 		CFrame = anchor,
 		Parent = folder,
 	})
-	bench.tipSource = tipSource
-	bench.wisps = wispEmitter(tipSource)
-
-	-- The cutter's coiled cord: a chain of small dark rods (placed every frame).
-	for _ = 1, 8 do
-		table.insert(
-			bench.cord,
-			Parts.part({
-				Name = "Cord",
-				Shape = Enum.PartType.Cylinder,
-				Size = Vector3.new(0.1, 0.035, 0.035),
-				Color = rgb(30, 30, 32),
-				Parent = folder,
-			})
-		)
-	end
+	local light = Instance.new("PointLight")
+	light.Name = "CutLight"
+	light.Color = GLOW
+	light.Range = 1.5
+	light.Brightness = 0
+	light.Shadows = false
+	light.Parent = lightHost
+	bench.cutLight = light
 
 	folder.Parent = parent
 	BenchVisual.place(bench, bench.root)
-	BenchVisual.setCutter(bench, nil)
 	return bench
 end
 
 ------------------------------------------------------------------------------
--- Tools
+-- Seam and panels
 ------------------------------------------------------------------------------
 
-local function placeCord(bench: Bench)
-	local from = (bench.cutterAt or dockRest(bench.dock)) * Vector3.new(0, 0.03, 0.92)
-	local to = bench.dock * Vector3.new(0.2, 0, 0.15)
-	local floorY = bench.anchor.Position.Y + 0.02
-	local sag = 0.15 + 0.08 * (to - from).Magnitude
-	local count = #bench.cord
-	local previous = from
-	local cframes = table.create(count)
-	for k = 1, count do
-		local f = k / count
-		local point = from:Lerp(to, f) - Vector3.new(0, sag * 4 * f * (1 - f), 0)
-		point = Vector3.new(point.X, math.max(point.Y, floorY), point.Z)
-		local length = (point - previous).Magnitude
-		bench.cord[k].Size = Vector3.new(math.max(length + 0.02, 0.04), 0.035, 0.035)
-		cframes[k] = Parts.between(previous, point)
-		previous = point
-	end
-	workspace:BulkMoveTo(bench.cord, cframes, Enum.BulkMoveMode.FireCFrameChanged)
-end
-
--- The cutter in the hand at `cframe` (world, tip = wire middle), or nil = asleep in its dock.
-function BenchVisual.setCutter(bench: Bench, cframe: CFrame?)
-	bench.cutterAt = cframe
-	Parts.place(bench.cutter, cframe or dockRest(bench.dock))
-	placeCord(bench)
-end
-
--- The cutter's rest pose in its dock (world), for the controller's reach / return glides.
-function BenchVisual.dockCFrame(bench: Bench): CFrame
-	return dockRest(bench.dock)
-end
-
--- The wire's heat: 0 = cold grey .. 1 = cold white-teal Neon with a small light.
-function BenchVisual.setWire(bench: Bench, heat: number)
-	local h = math.clamp(heat, 0, 1)
-	bench.wire.Material = if h > 0.05 then Enum.Material.Neon else Enum.Material.Metal
-	bench.wire.Color = WIRE_COLD:Lerp(WIRE_HOT, h)
-	bench.wireLight.Enabled = h > 0.05 and bench.visible > 0.5
-	bench.wireLight.Brightness = 0.6 * h
-end
-
--- The gloved hand at `cframe` (world; its fingers along -Z), or hidden (nil).
-function BenchVisual.setHand(bench: Bench, cframe: CFrame?, seeThrough: boolean?)
-	local shown = cframe ~= nil and bench.visible > 0.5
-	local value = if not shown then 1 elseif seeThrough then 0.35 else 0
-	for _, part in bench.handParts do
-		if part.Transparency ~= value then
-			part.Transparency = value
-		end
-	end
-	bench.handShown = shown
-	if cframe then
-		Parts.place(bench.hand, cframe)
-	end
-end
-
--- Where the hand goes to work at `at` (world): it comes in from the bottom-right of the
--- screen, the wrist about 40° to the side (never covering what it works on).
-function BenchVisual.handAt(bench: Bench, at: Vector3, camera: CFrame, pressing: boolean): CFrame
-	local up = bench.anchor.UpVector
-	local toCamera = camera.Position - at
-	toCamera -= up * toCamera:Dot(up)
-	local back = if toCamera.Magnitude > 1e-3 then toCamera.Unit else -bench.anchor.LookVector
-	local side = camera.RightVector - up * camera.RightVector:Dot(up)
-	side = if side.Magnitude > 1e-3 then side.Unit else bench.anchor.RightVector
-	local angle = math.rad(HAND_SIDE_ANGLE)
-	local from = (back * math.cos(angle) + side * math.sin(angle)).Unit
-	local grip = at + side * (if pressing then 0.2 else 0) + up * (if pressing then 0.03 else 0.14)
-	return CFrame.lookAt(grip, grip - from, up)
-end
-
--- The hand holding the cutter (by its handle).
-function BenchVisual.handOnCutter(cutter: CFrame): CFrame
-	return cutter * CFrame.new(0, 0.1, 0.68) * CFrame.Angles(0, math.rad(180), 0)
-end
-
-------------------------------------------------------------------------------
--- The cut
-------------------------------------------------------------------------------
-
--- The tip's world point at seam progress t (0 = neck, 1 = waist).
-function BenchVisual.seamPoint(bench: Bench, t: number): Vector3
-	local y = SEAM_TOP + (SEAM_BOTTOM - SEAM_TOP) * math.clamp(t, 0, 1)
-	return bench.root * Vector3.new(0, y, CHEST_Z - 0.04)
-end
-
--- The cutter's pose at seam progress t: the wire on the seam, the handle up and back toward
--- the camera (about 40°).
-function BenchVisual.cutterPose(bench: Bench, t: number, camera: CFrame): CFrame
-	local at = BenchVisual.seamPoint(bench, t)
-	local up = bench.anchor.UpVector
-	local toCamera = camera.Position - at
-	toCamera -= up * toCamera:Dot(up)
-	local back = if toCamera.Magnitude > 1e-3 then toCamera.Unit else -bench.anchor.LookVector
-	return CFrame.lookAt(at, at - back, up) * CFrame.Angles(math.rad(-40), 0, 0)
-end
-
--- The seam up to t: pieces light up (dull amber) as the tip passes, then cool (step()).
-function BenchVisual.cut(bench: Bench, t: number): Vector3
-	local y = SEAM_TOP + (SEAM_BOTTOM - SEAM_TOP) * math.clamp(t, 0, 1)
-	local now = os.clock()
-	for _, piece in bench.seam do
-		if piece.at == nil and piece.y >= y then
-			piece.at = now
-		end
-	end
-	local tip = BenchVisual.seamPoint(bench, t)
-	bench.tipSource.CFrame = CFrame.new(tip) * bench.anchor.Rotation
-	return tip
-end
-
--- One thin cold wisp at the tip (the caller emits every 0.1 s while cutting).
-function BenchVisual.wisp(bench: Bench)
-	if bench.visible > 0 then
-		bench.wisps:Emit(bench.random:NextInteger(1, 2))
-	end
-end
-
--- A burst of cold vapour over a square around `at` (world).
-local function puffAt(bench: Bench, at: Vector3, count: number, spread: number, slow: boolean?)
-	if bench.visible <= 0 then
-		return
-	end
-	local source = bench.vapourSource
-	source.Size = Vector3.new(spread * 2, 0.05, spread * 2)
-	source.CFrame = CFrame.new(at) * bench.anchor.Rotation
-	bench.vapour.Speed = if slow then NumberRange.new(0.2, 0.5) else NumberRange.new(0.4, 1.2)
-	bench.vapour:Emit(count)
-end
-
--- The panels unfold (0 = shut .. 1 = open).
-function BenchVisual.openPanels(bench: Bench, t: number)
-	bench.panelOpen = math.clamp(t, 0, 1)
+-- Places the panels and everything riding them (call after a change of open / tremble).
+function BenchVisual.layoutPanels(bench: Bench)
 	for i, panel in bench.panels do
 		local side = if i == 1 then -1 else 1
-		Parts.setLocal(bench.rig, panel, panelCFrame(side, bench.panelOpen))
-	end
-	for _, piece in bench.seam do
 		Parts.setLocal(
 			bench.rig,
-			piece.part,
-			panelCFrame(piece.side, bench.panelOpen)
-				* CFrame.new(-piece.side * (OPENING / 4 - 0.011), piece.y - TORSO.Y, -0.031)
+			panel,
+			panelCFrame(side, bench.panelOpen[i], bench.panelTremble[i])
+		)
+	end
+	local shut = bench.panelOpen[1] < 0.02 and bench.panelOpen[2] < 0.02
+	for k, cell in bench.cells do
+		for s = 1, 2 do
+			local side = if s == 1 then -1 else 1
+			local panel = panelCFrame(side, bench.panelOpen[s], bench.panelTremble[s])
+			local width = if cell.depth >= 2 then 0.025 else 0.007
+			Parts.setLocal(bench.rig, cell.splits[s], panel * onEdge(side, k, width, 0.004))
+			cell.splits[s].Size = Vector3.new(width, CELL + 0.004, 0.008)
+			-- the wet milky edge: just outside the split, a little proud
+			Parts.setLocal(
+				bench.rig,
+				cell.wets[s],
+				panel * onEdge(side, k, 0.012, 0.006) * CFrame.new(side * width, 0, 0)
+			)
+		end
+		local panelA = panelCFrame(-1, bench.panelOpen[1], bench.panelTremble[1])
+		Parts.setLocal(
+			bench.rig,
+			cell.guide,
+			panelA * CFrame.new(OPENING / 4, cellY(k) - TORSO.Y, -0.025 - 0.002)
+		)
+		Parts.setLocal(bench.rig, cell.glow, CFrame.new(0, cellY(k), PANEL_FRONT - 0.009))
+		if not shut and cell.glow.Transparency < 1 then
+			cell.glow.Transparency = 1 -- (the panels are apart: no line left to glow)
+		end
+	end
+	-- beads and scratches on a panel ride it
+	for _, rider in bench.riders do
+		local side = if rider.side == 1 then -1 else 1
+		Parts.setLocal(
+			bench.rig,
+			rider.part,
+			panelCFrame(side, bench.panelOpen[rider.side], bench.panelTremble[rider.side])
+				* rider.at
 		)
 	end
 end
 
--- The heavy cold breath spilling out of the opened chest.
-function BenchVisual.breath(bench: Bench)
-	puffAt(bench, bench.root * Vector3.new(TORSO.X, TORSO.Y, CHEST_Z - 0.1), 10, 0.45)
+-- The chest plane (world): a point on it and its normal (out of the chest = up).
+function BenchVisual.chestPlane(bench: Bench): (Vector3, Vector3)
+	return bench.root * Vector3.new(0, TORSO.Y, PANEL_FRONT),
+		bench.root:VectorToWorldSpace(Vector3.new(0, 0, -1))
+end
+
+-- A world point → seam coordinates: `s` in cells (0 = neck end .. CELLS = waist end) and the
+-- lateral distance `e` from the seam (studs, body X).
+function BenchVisual.toSeam(bench: Bench, world: Vector3): (number, number)
+	local p = bench.root:PointToObjectSpace(world)
+	return (SEAM_TOP - p.Y) / CELL, p.X
+end
+
+-- Seam coordinates → a world point on the panels' surface (`lift` above it).
+function BenchVisual.seamPoint(bench: Bench, s: number, e: number, lift: number?): Vector3
+	return bench.root * Vector3.new(e, SEAM_TOP - s * CELL, PANEL_FRONT - (lift or 0))
+end
+
+function BenchVisual.cellDepth(bench: Bench, k: number): number
+	local cell = bench.cells[k]
+	return if cell then cell.depth else 0
+end
+
+-- Cuts cell `k` to `depth` (1 skin, 2 membrane). Returns true if it got deeper.
+function BenchVisual.cutCell(bench: Bench, k: number, depth: number): boolean
+	local cell = bench.cells[k]
+	if cell == nil or depth <= cell.depth then
+		return false
+	end
+	cell.depth = math.min(depth, 2)
+	cell.cutAt = os.clock()
+	cell.guide.Transparency = 1
+	for s = 1, 2 do
+		cell.splits[s].Transparency = 0
+		cell.wets[s].Transparency = if cell.depth >= 2 then 0.15 else 1
+	end
+	cell.glow.Transparency = if cell.depth >= 2 then 1 else 0.6
+	BenchVisual.layoutPanels(bench)
+	-- the small cold light follows the last cut cell
+	local host = bench.cutLight.Parent
+	if host and host:IsA("BasePart") then
+		host.CFrame = CFrame.new(BenchVisual.seamPoint(bench, k - 0.5, 0, 0.05))
+	end
+	bench.cutLight.Brightness = 0.4
+	-- a milky bead wells up on every 2nd cell of the skin cut (it grows, then stays)
+	if cell.depth == 1 and k % 2 == 0 then
+		local side = if k % 4 == 0 then 1 else -1
+		local beadPart = Parts.ball(0.01, {
+			Name = "SeamBead",
+			Color = MILK,
+			Reflectance = 0.12,
+			Parent = bench.folder,
+		})
+		beadPart:SetAttribute("Born", os.clock())
+		local at = onEdge(side, k, 0.05, 0.02) * CFrame.new(side * 0.02, 0, 0)
+		track(bench, beadPart, panelCFrame(side, 0) * at)
+		table.insert(bench.riders, { part = beadPart, side = if side < 0 then 1 else 2, at = at })
+	end
+	return true
+end
+
+-- A pale scratch left by the blade off the seam, from `a` to `b` (world). At most 8, they stay.
+function BenchVisual.scratch(bench: Bench, a: Vector3, b: Vector3): boolean
+	if bench.scratches >= MAX_SCRATCHES or (b - a).Magnitude < 0.04 then
+		return false
+	end
+	bench.scratches += 1
+	local pa = bench.root:PointToObjectSpace(a)
+	local pb = bench.root:PointToObjectSpace(b)
+	local flatA = Vector3.new(pa.X, pa.Y, 0)
+	local flatB = Vector3.new(pb.X, pb.Y, 0)
+	local middle = (flatA + flatB) / 2
+	local along = flatB - flatA
+	local length = math.min(along.Magnitude, 0.4)
+	local part = Parts.part({
+		Name = "Scratch",
+		Size = Vector3.new(0.006, length, 0.002),
+		Color = SCRATCH,
+		Transparency = 0.2,
+		Parent = bench.folder,
+	})
+	local angle = math.atan2(-along.X, along.Y)
+	-- (on the chest wall or a panel: 0.003 above the outer surface of whichever it is on)
+	local onPanel = math.abs(middle.X) < OPENING / 2
+		and middle.Y > SEAM_BOTTOM
+		and middle.Y < SEAM_TOP
+	local z = if onPanel then PANEL_FRONT - 0.002 else CHEST_Z - 0.002
+	local body = CFrame.new(middle.X, middle.Y, z) * CFrame.Angles(0, 0, angle)
+	track(bench, part, body)
+	if onPanel then
+		local which = if middle.X < 0 then 1 else 2
+		local panel = panelCFrame(if which == 1 then -1 else 1, bench.panelOpen[which], 0)
+		table.insert(bench.riders, { part = part, side = which, at = panel:Inverse() * body })
+	end
+	return true
+end
+
+-- Panel `side` (1 = body -X, 2 = body +X) open 0..1, with a small tremble (studs).
+function BenchVisual.setPanel(bench: Bench, side: number, open: number, tremble: number)
+	bench.panelOpen[side] = math.clamp(open, 0, 1)
+	bench.panelTremble[side] = tremble
+	BenchVisual.layoutPanels(bench)
+end
+
+function BenchVisual.panelOpen(bench: Bench, side: number): number
+	return bench.panelOpen[side]
+end
+
+-- Where a retractor clip bites panel `side`'s rim (world; the clip's +Z points away from the
+-- chest, its hooks on the rim).
+function BenchVisual.clipFrame(bench: Bench, side: number): CFrame
+	local s = if side == 1 then -1 else 1
+	local panel = panelCFrame(s, bench.panelOpen[side], 0)
+	local rim = bench.root * panel * CFrame.new(-s * OPENING / 4, 0.05, -0.03)
+	local outward = (bench.root * Vector3.new(s * 1.2, TORSO.Y, CHEST_Z)) - bench.root.Position
+	local up = bench.root:VectorToWorldSpace(Vector3.new(0, 0, -1))
+	local flat = outward - up * outward:Dot(up)
+	local look = if flat.Magnitude > 1e-3 then flat.Unit else bench.anchor.LookVector
+	return CFrame.lookAt(rim.Position, rim.Position - look, up)
+end
+
+-- The middle of the chest opening (world) and whether `world` is over it.
+function BenchVisual.overOpening(bench: Bench, world: Vector3): boolean
+	local p = bench.root:PointToObjectSpace(world)
+	return math.abs(p.X) < OPENING / 2
+		and p.Y > TORSO.Y - OPENING / 2
+		and p.Y < TORSO.Y + OPENING / 2
+end
+
+-- The panel the point `world` grabs (within `reach` of the seam, on one side), or nil.
+function BenchVisual.panelAt(bench: Bench, world: Vector3, reach: number): number?
+	local p = bench.root:PointToObjectSpace(world)
+	if p.Y < SEAM_BOTTOM or p.Y > SEAM_TOP or math.abs(p.X) > reach then
+		return nil
+	end
+	return if p.X < 0 then 1 else 2
+end
+
+-- The heavy cold breath spilling out of the opened seam (count = particles).
+function BenchVisual.breath(bench: Bench, count: number, at: Vector3?, spread: number?)
+	if bench.visible <= 0 then
+		return
+	end
+	local source = bench.vapourSource
+	local size = spread or 0.45
+	source.Size = Vector3.new(size * 2, 0.05, size * 2)
+	source.CFrame = CFrame.new(at or (bench.root * Vector3.new(0, TORSO.Y, CHEST_Z - 0.1)))
+		* bench.anchor.Rotation
+	bench.vapour:Emit(count)
 end
 
 ------------------------------------------------------------------------------
@@ -913,202 +752,178 @@ function BenchVisual.lightUp(bench: Bench, index: number)
 	end
 end
 
--- World point of element `index` (where the pointer aims).
-function BenchVisual.elementPoint(bench: Bench, index: number): Vector3
-	local element = bench.elements[index]
-	if element == nil then
-		return bench.root.Position
-	end
-	return element.model.WorldPivot.Position
-end
-
 function BenchVisual.elementCount(bench: Bench): number
 	return #bench.elements
 end
 
--- Can element `index` still be picked (in its nest)?
-function BenchVisual.isFree(bench: Bench, index: number): boolean
+function BenchVisual.mode(bench: Bench, index: number): ElementMode?
 	local element = bench.elements[index]
-	return element ~= nil and (element.state == "Nest" or element.state == "Held")
+	return if element then element.mode else nil
 end
 
-function BenchVisual.hover(bench: Bench, index: number?)
-	if bench.hovered == index then
-		return
+-- The element's current pivot (world).
+function BenchVisual.elementCFrame(bench: Bench, index: number): CFrame
+	local element = bench.elements[index]
+	return if element then element.model:GetPivot() else bench.root
+end
+
+-- Its nest pose (world, not pulled).
+function BenchVisual.nestCFrame(bench: Bench, index: number): CFrame
+	local element = bench.elements[index]
+	return if element then bench.root * element.nest else bench.root
+end
+
+-- Half its thickness lying down (to rest it ON something).
+function BenchVisual.halfHeight(bench: Bench, index: number): number
+	local element = bench.elements[index]
+	return if element then element.half else 0.1
+end
+
+-- In the nest, pulled by `offset` (world).
+function BenchVisual.setPull(bench: Bench, index: number, offset: Vector3)
+	local element = bench.elements[index]
+	if element then
+		element.mode = "Nest"
+		element.pull = offset
 	end
-	bench.hovered = index
-	local element = if index then bench.elements[index] else nil
-	if element and element.state ~= "Sealed" then
-		bench.highlight.Adornee = element.model
-		bench.highlight.Enabled = true
-	else
+end
+
+-- Free in the world at `cframe` (held, loose, on the tray).
+function BenchVisual.setFree(bench: Bench, index: number, cframe: CFrame)
+	local element = bench.elements[index]
+	if element and element.mode ~= "Gone" then
+		element.mode = "Free"
+		element.model:PivotTo(cframe)
+	end
+end
+
+-- The element leaves the bench for good (the pass-box takes its model).
+function BenchVisual.takeModel(bench: Bench, index: number): Model?
+	local element = bench.elements[index]
+	if element == nil or element.mode == "Gone" then
+		return nil
+	end
+	element.mode = "Gone"
+	if bench.highlight.Adornee == element.model then
 		bench.highlight.Enabled = false
 		bench.highlight.Adornee = nil
 	end
+	return element.model
 end
 
-local function strandsOn(bench: Bench, index: number?)
-	bench.strandsFor = index
-	bench.strandsBack = nil
-	for _, beam in bench.beams do
-		beam.Enabled = index ~= nil and bench.visible > 0.5
-	end
-end
-
--- Held: t 0..1 of the hold. Real elements rise against resistance with strands; a husk
--- comes up at once, dry, no strands.
-function BenchVisual.lift(bench: Bench, index: number, t: number)
-	local element = bench.elements[index]
-	if element == nil or (element.state ~= "Nest" and element.state ~= "Held") then
+-- The one outline, on `target` (an element model, a tool model...) or nothing.
+function BenchVisual.outline(bench: Bench, target: Instance?)
+	if target == nil or bench.visible <= 0.5 then
+		bench.highlight.Enabled = false
+		bench.highlight.Adornee = nil
 		return
 	end
-	if element.state == "Nest" then
-		element.state = "Held"
-		if element.kind ~= "Husk" then
-			strandsOn(bench, index)
-		end
-		if element.condition == "Ruptured" and element.pool == nil then
-			-- milky gel seeps into its nest: a flat pool that grows (step()) and STAYS
-			local pool = Parts.disc(0.05, 0.012, {
-				Name = "GelPool",
-				Color = COLORS.gel,
-				Transparency = 0.2,
-				Reflectance = 0.3,
-				Parent = bench.folder,
-			})
-			pool:SetAttribute("Born", os.clock())
-			element.pool = pool
-		end
+	if bench.highlight.Adornee ~= target then
+		bench.highlight.Adornee = target
 	end
-	element.lift = if element.kind == "Husk" then smooth(t * 3) else easeOut(t)
+	bench.highlight.Enabled = true
 end
 
--- Let go before the release: it sinks back into its nest, the strands shrink back.
-function BenchVisual.letGo(bench: Bench, index: number)
+function BenchVisual.elementModel(bench: Bench, index: number): Model?
 	local element = bench.elements[index]
-	if element == nil or element.state ~= "Held" then
-		return
-	end
-	element.state = "Nest"
-	if bench.strandsFor == index then
-		bench.strandsBack = os.clock()
-	end
+	return if element and element.mode ~= "Gone" then element.model else nil
 end
 
--- The release: a soft pop of cold mist, the strands shrink back, the element glides into
--- capsule `slot`.
-function BenchVisual.release(bench: Bench, index: number, slot: number)
+-- Pulled out of its nest: the strands stretch to it (a husk has none: dry, no tension). A
+-- ruptured one starts seeping into its nest (a pool that grows and stays).
+function BenchVisual.grab(bench: Bench, index: number)
 	local element = bench.elements[index]
-	local capsule = bench.capsules[slot]
-	if
-		element == nil
-		or capsule == nil
-		or element.state == "Glide"
-		or element.state == "Sealed"
-	then
+	if element == nil then
 		return
-	end
-	if bench.hovered == index then
-		BenchVisual.hover(bench, nil)
-	end
-	element.state = "Glide"
-	element.slot = slot
-	element.glideFrom = element.model.WorldPivot
-	element.glideStart = os.clock()
-	if bench.strandsFor == index then
-		bench.strandsBack = os.clock()
 	end
 	if element.kind ~= "Husk" then
-		puffAt(bench, element.model.WorldPivot.Position, 4, 0.12, true)
-	end
-end
-
--- The server's answer for capsule `slot` (applied once the cap is down).
-function BenchVisual.seal(bench: Bench, slot: number, grade: string?, inert: boolean)
-	local capsule = bench.capsules[slot]
-	if capsule and not capsule.answered then
-		capsule.answer = { grade = grade, inert = inert }
-	end
-end
-
--- Has the cap of every slot that was used come down (the outro can start)?
-function BenchVisual.isSettled(bench: Bench): boolean
-	for _, element in bench.elements do
-		if element.state == "Glide" then
-			return false
+		bench.strandsFor = index
+		bench.strandsBack = nil
+		for _, beam in bench.beams do
+			beam.Enabled = bench.visible > 0.5
 		end
 	end
-	for _, capsule in bench.capsules do
-		if capsule.closing and not capsule.sealed then
-			return false
-		end
-	end
-	return true
-end
-
--- Events since the last call ("Landed", "Crumble", "Sealed", "Frost" with their slot).
-function BenchVisual.takeEvents(bench: Bench): { { name: string, slot: number } }
-	local list = bench.events
-	bench.events = {}
-	return list
-end
-
--- Outro: t 0..1, the panels fold back over the cavity, the leftovers dim and sink.
-function BenchVisual.closePanels(bench: Bench, t: number)
-	BenchVisual.openPanels(bench, 1 - smooth(t))
-	for _, element in bench.elements do
-		if element.state == "Nest" or element.state == "Held" then
-			element.state = "Nest"
-			element.lift = 0
-			element.lit = false
-			element.sink = math.max(element.sink, smooth(t))
-		end
-	end
-	if t > 0 then
-		BenchVisual.hover(bench, nil)
-		if bench.strandsFor then
-			bench.strandsBack = bench.strandsBack or os.clock()
-		end
+	if element.condition == "Ruptured" and element.pool == nil then
+		local pool = Parts.disc(0.05, 0.012, {
+			Name = "GelPool",
+			Color = COLORS.gel,
+			Transparency = 0.2,
+			Reflectance = 0.3,
+			Parent = bench.folder,
+		})
+		pool:SetAttribute("Born", os.clock())
+		element.pool = pool
 	end
 end
 
-------------------------------------------------------------------------------
--- Falling bits (ruptured beads, husk flakes): real gravity, they land and STAY
-------------------------------------------------------------------------------
+-- The strands give: 0.15 s thinning, then they sag and retract into the nest (0.3 s); a milky
+-- drop falls back into the nest and stays. `freed` = it came free (else let go: no drop).
+function BenchVisual.releaseStrands(bench: Bench, index: number, freed: boolean)
+	if bench.strandsFor ~= index or bench.strandsBack then
+		return
+	end
+	bench.strandsBack = os.clock()
+	local element = bench.elements[index]
+	if freed and element then
+		local at = element.model:GetPivot().Position
+		local part = Parts.ellipsoid(Vector3.new(0.06, 0.06, 0.06), {
+			Name = "MilkDrop",
+			Color = MILK,
+			Reflectance = 0.2,
+			CFrame = CFrame.new(at),
+			Parent = bench.folder,
+		})
+		local floor = bench.root
+			* Vector3.new(element.nest.Position.X, element.nest.Position.Y, FLOOR_Z - 0.1)
+		table.insert(bench.falling, {
+			part = part,
+			position = at,
+			velocity = Vector3.zero,
+			floorY = floor.Y,
+			landed = false,
+			rest = nil,
+			onShell = true,
+			flat = Vector3.new(0.09, 0.02, 0.09),
+			sound = true,
+		})
+	end
+end
 
--- The height (world Y) something falling at `point` lands on: the shell's body or the trolley.
+-- How far the strands stretch (0..1): their width and sag follow it.
+function BenchVisual.setStretch(bench: Bench, stretch: number)
+	bench.strandStretch = math.clamp(stretch, 0, 1)
+end
+
+-- What the surface under `world` is (world Y of the top, and whether it is the shell).
 local function groundAt(bench: Bench, point: Vector3): (number, boolean)
 	local p = bench.anchor:PointToObjectSpace(point)
 	local top = bench.anchor.Position.Y
-	if p.X >= -3 and p.X <= 1.0 and math.abs(p.Z) <= 2 then
-		return top + 1.0, true -- (chest, arms, legs: 1 stud thick lying down)
+	local lift = BenchLayout.SHELL_LIFT
+	local st = BenchLayout.SPECIMEN_TRAY
+	local it = BenchLayout.INSTRUMENT_TRAY
+	if p.X >= -3 and p.X <= 1.0 and math.abs(p.Z) <= 2 and (math.abs(p.Z) <= 1 or p.X >= -1) then
+		return top + lift + 1.0, true -- (chest, arms, legs: 1 stud thick lying down)
 	elseif p.X > 1.0 and p.X <= 2.2 and math.abs(p.Z) <= 0.58 then
-		return top + 1.08, true -- (the head)
+		return top + lift + 1.08, true -- (the head)
+	elseif
+		math.abs(p.X - st.centre.X) <= st.size.X / 2
+		and math.abs(p.Z - st.centre.Z) <= st.size.Z / 2
+	then
+		return top + BenchLayout.MAT_TOP, false
+	elseif
+		math.abs(p.X - it.centre.X) <= it.size.X / 2
+		and math.abs(p.Z - it.centre.Z) <= it.size.Z / 2
+	then
+		return top + BenchLayout.TRAY_FLOOR + 0.01, false
+	elseif math.abs(p.X) <= 3.5 and math.abs(p.Z) <= 1.5 then
+		return top + 0.002, false
 	end
-	return top + 0.01, false
+	return top - 3.35 + 0.002, false -- (the floor)
 end
 
-local function drop(bench: Bench, part: BasePart, at: Vector3, floorY: number?, flat: Vector3)
-	local ground, onShell = groundAt(bench, at)
-	table.insert(bench.falling, {
-		part = part,
-		position = at,
-		velocity = Vector3.new(
-			bench.random:NextNumber(-0.3, 0.3),
-			0.2,
-			bench.random:NextNumber(-0.3, 0.3)
-		),
-		floorY = floorY or ground,
-		landed = false,
-		rest = nil,
-		onShell = floorY == nil and onShell,
-		flat = flat,
-	})
-end
-
--- A milky bead falling from `at` (ruptured element on its way).
-local function bead(bench: Bench, at: Vector3)
-	local d = bench.random:NextNumber(0.05, 0.08)
+-- A milky bead falling from `at` (a ruptured element on its way). It lands and stays.
+function BenchVisual.bead(bench: Bench, at: Vector3)
+	local d = bench.random:NextNumber(0.04, 0.07)
 	local part = Parts.ellipsoid(Vector3.new(d, d, d), {
 		Name = "Bead",
 		Color = COLORS.gel,
@@ -1117,52 +932,55 @@ local function bead(bench: Bench, at: Vector3)
 		CFrame = CFrame.new(at),
 		Parent = bench.folder,
 	})
-	drop(bench, part, at, nil, Vector3.new(d * 1.6, d * 0.35, d * 1.6))
+	local ground, onShell = groundAt(bench, at)
+	table.insert(bench.falling, {
+		part = part,
+		position = at,
+		velocity = Vector3.new(
+			bench.random:NextNumber(-0.2, 0.2),
+			0,
+			bench.random:NextNumber(-0.2, 0.2)
+		),
+		floorY = ground,
+		landed = false,
+		rest = nil,
+		onShell = onShell,
+		flat = Vector3.new(d * 1.6, d * 0.35, d * 1.6),
+		sound = true,
+	})
 end
 
--- 8 dry beige flakes falling into a capsule (a husk crumbling).
-local function crumble(bench: Bench, at: Vector3, capsule: Capsule)
-	local bottom = (capsule.at * Vector3.new(0, -0.42, 0)).Y
-	for _ = 1, 8 do
-		local size = Vector3.new(
-			bench.random:NextNumber(0.04, 0.08),
-			0.04,
-			bench.random:NextNumber(0.05, 0.09)
-		)
-		local part = Instance.new("WedgePart")
-		part.Name = "Flake"
-		part.Size = size
-		part.Anchored = true
-		part.CanCollide = false
-		part.CanQuery = false
-		part.CanTouch = false
-		part.CastShadow = false
-		part.Material = Enum.Material.Sand
-		part.Color = HUSK_FLAKE
-		local start = at
-			+ Vector3.new(
-				bench.random:NextNumber(-0.08, 0.08),
-				0,
-				bench.random:NextNumber(-0.08, 0.08)
-			)
-		part.CFrame = CFrame.new(start)
-		part.Parent = bench.folder
-		local fallen = {
-			part = part :: BasePart,
-			position = start,
-			velocity = Vector3.new(
-				bench.random:NextNumber(-0.2, 0.2),
-				0,
-				bench.random:NextNumber(-0.2, 0.2)
-			),
-			floorY = bottom + bench.random:NextNumber(0, 0.05),
-			landed = false,
-			rest = nil,
-			onShell = false,
-			flat = size,
-		}
-		table.insert(bench.falling, fallen)
+-- Beads / drops that landed since the last call (the controller plays MilkDrip, ≤ 4 per s).
+function BenchVisual.takeLanded(bench: Bench): number
+	local n = bench.landed
+	bench.landed = 0
+	return n
+end
+
+-- The element set on the specimen tray drains: its gel coat slides into the tray's channel
+-- (a milky runoff that grows and stays), and it gets glossier.
+function BenchVisual.runoff(bench: Bench, index: number)
+	local element = bench.elements[index]
+	if element and not element.glossy then
+		element.glossy = true
+		for _, descendant in element.model:GetDescendants() do
+			if descendant:IsA("BasePart") and descendant.Material ~= Enum.Material.Neon then
+				descendant.Reflectance = math.min(descendant.Reflectance + 0.12, 0.5)
+			end
+		end
 	end
+	if bench.runoff == nil then
+		bench.runoff = Parts.part({
+			Name = "Runoff",
+			Size = Vector3.new(0.09, 0.006, 0.02),
+			Color = rgb(214, 222, 210),
+			Transparency = 0.35,
+			Reflectance = 0.3,
+			Parent = bench.folder,
+		})
+	end
+	bench.runoffGrow = math.min(bench.runoffGrow + 0.5, 1)
+	bench.runoffBorn = os.clock()
 end
 
 ------------------------------------------------------------------------------
@@ -1173,100 +991,46 @@ end
 function BenchVisual.place(bench: Bench, root: CFrame)
 	bench.root = root
 	Parts.place(bench.rig, root)
-	local now = os.clock()
-	for index, element in bench.elements do
-		if element.state == "Nest" or element.state == "Held" then
-			local rise = LIFT_HEIGHT * element.lift
-			-- (held: a small tremble, stronger as the strands strain)
-			local shake = Vector3.zero
-			if element.state == "Held" and element.kind ~= "Husk" then
-				local k = 0.012 * element.lift
-				shake =
-					Vector3.new(math.noise(now * 13, index) * k, math.noise(index, now * 11) * k, 0)
-			end
+	for _, element in bench.elements do
+		if element.mode == "Nest" then
 			local sinkBy = 0.1 * element.sink
 			element.model:PivotTo(
-				root * CFrame.new(shake + Vector3.new(0, 0, -rise + sinkBy)) * element.nest
+				CFrame.new(element.pull) * root * CFrame.new(0, 0, sinkBy) * element.nest
 			)
 		end
 	end
 end
 
 function BenchVisual.step(bench: Bench, dt: number, now: number)
-	-- Seam: amber behind the tip, then it cools to a dark scorched line that stays.
-	for _, piece in bench.seam do
-		local at = piece.at
-		if at then
-			local cool = math.clamp((now - at) / SEAM_COOL, 0, 1)
-			local part = piece.part
-			if cool < 1 then
-				part.Material = Enum.Material.Neon
-				part.Color = SEAM_HOT:Lerp(SEAM_COLD, smooth(cool))
-			elseif part.Material ~= Enum.Material.SmoothPlastic then
-				part.Material = Enum.Material.SmoothPlastic
-				part.Color = SEAM_COLD
+	-- Cut cells: the teal glow fades to 0.85 (never out); beads grow in.
+	for _, cell in bench.cells do
+		local at = cell.cutAt
+		if at and cell.depth == 1 then
+			local wanted = Parts.fade(0.6 + 0.25 * smooth((now - at) / GLOW_FADE), bench.visible)
+			if math.abs(cell.glow.Transparency - wanted) > 0.01 then
+				cell.glow.Transparency = wanted
 			end
-			local wanted = Parts.fade(0, bench.visible)
-			if part.Transparency ~= wanted then
-				part.Transparency = wanted
+		end
+	end
+	bench.cutLight.Brightness = math.max(0.15, bench.cutLight.Brightness - dt * 0.2)
+		* (if bench.visible > 0.5 then 1 else 0)
+	for _, part in bench.rig.parts do
+		if part.Name == "SeamBead" then
+			local born = part:GetAttribute("Born")
+			if typeof(born) == "number" then
+				local d = 0.01 + 0.04 * smooth((now - born) / 0.4)
+				if part.Size.X < 0.05 - 1e-3 then
+					part.Size = Vector3.new(d, d, d)
+				end
 			end
 		end
 	end
 
-	-- Elements: breathing lights, gliding into their capsule.
+	-- Elements: breathing lights; the pool of a ruptured one grows in its nest (and stays).
 	for _, element in bench.elements do
-		if element.state == "Nest" and element.lift > 0 then
-			-- (let go early: it settles back into its nest, it doesn't snap)
-			element.lift = math.max(0, element.lift - dt * 4)
+		if element.mode ~= "Gone" then
+			CoreModel.animate(element.model, now, element.lit and bench.visible > 0.5)
 		end
-		if element.state == "Glide" then
-			local capsule = bench.capsules[element.slot]
-			local from = element.glideFrom
-			if capsule == nil or from == nil then
-				element.state = "Sealed"
-				continue
-			end
-			local t = (now - element.glideStart) / GLIDE_TIME
-			local goal = capsule.at * CFrame.new(0, -0.03, 0)
-			local over = capsule.at * CFrame.new(0, 0.75, 0)
-			local s = smooth(t)
-			local position = from.Position:Lerp(over.Position, s)
-				+ Vector3.new(0, math.sin(s * math.pi) * 0.3, 0)
-			if t >= 0.85 then
-				position = over.Position:Lerp(goal.Position, smooth((t - 0.85) / 0.15))
-			end
-			local rotation = from.Rotation:Lerp(goal.Rotation, s)
-			local scale = 1 + (CAPSULE_SCALE / ELEMENT_SCALE - 1) * s
-			element.model:ScaleTo(scale)
-			element.model:PivotTo(CFrame.new(position) * rotation)
-			-- a ruptured one leaves 2–3 milky beads on its way
-			if
-				element.condition == "Ruptured"
-				and element.trail < 3
-				and s > (element.trail + 1) * 0.22
-			then
-				element.trail += 1
-				bead(bench, position)
-			end
-			if t >= 1 then
-				element.state = "Sealed"
-				element.model:PivotTo(goal)
-				capsule.closing = now
-				table.insert(bench.events, { name = "Landed", slot = element.slot })
-				if element.kind == "Husk" then
-					-- it crumbles to dry flakes in the capsule (they stay)
-					crumble(bench, goal.Position + Vector3.new(0, 0.1, 0), capsule)
-					element.model:Destroy()
-					table.insert(bench.events, { name = "Crumble", slot = element.slot })
-				else
-					element.model.Parent = capsule.model
-				end
-			end
-		elseif element.state ~= "Sealed" then
-			local lit = element.lit and bench.visible > 0.5
-			CoreModel.animate(element.model, now, lit)
-		end
-		-- the milky pool of a ruptured element grows in its nest (and stays)
 		local pool = element.pool
 		if pool then
 			local born = pool:GetAttribute("Born")
@@ -1275,67 +1039,67 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 			if math.abs(pool.Size.Y - d) > 1e-3 then
 				pool.Size = Vector3.new(0.012, d, d)
 			end
-			local nest = bench.root
-				* CFrame.new(element.nest.Position.X, element.nest.Position.Y, FLOOR_Z - 0.06)
-			pool.CFrame = nest * CFrame.Angles(0, math.rad(90), 0)
+			pool.CFrame = bench.root
+				* CFrame.new(element.nest.Position.X, element.nest.Position.Y, FLOOR_Z - 0.032)
+				* CFrame.Angles(0, math.rad(90), 0)
 		end
 	end
 
-	-- Capsule caps: drop (spring-loaded: accelerating, ease-in) once the element is in.
-	for slot, capsule in bench.capsules do
-		local closing = capsule.closing
-		if closing and not capsule.sealed then
-			local t = (now - closing) / CAP_TIME
-			capsule.cap = 1 - easeIn(t)
-			CoreModel.setCapOpen(capsule.model, capsule.cap)
-			if t >= 1 then
-				capsule.sealed = true
-				table.insert(bench.events, { name = "Sealed", slot = slot })
-				puffAt(bench, capsule.at.Position + Vector3.new(0, 0.5, 0), 3, 0.12, true)
-			end
-		end
-		local answer = capsule.answer
-		if capsule.sealed and answer and not capsule.answered then
-			capsule.answered = true
-			CoreModel.setGradeLight(capsule.model, answer.grade, answer.inert)
-			local tube = capsule.model:FindFirstChild("Tube")
-			if tube and tube:IsA("BasePart") then
-				tube.Color = rgb(236, 244, 248) -- frosted
-				tube.Transparency = 0.4
-			end
-			if not answer.inert and bench.visible > 0 then
-				bench.mistSource.CFrame = capsule.at * CFrame.new(0, 0.45, 0)
-				bench.mist:Emit(10)
-			end
-			table.insert(bench.events, { name = "Frost", slot = slot })
-		end
-		if capsule.sealed then
-			CoreModel.animate(capsule.model, now, bench.visible > 0.5)
-		end
-	end
-
-	-- Strands: from the nest to the held element; shrinking back after a release / let go.
+	-- Strands: from the nest to the pulled element, thinner as they stretch; after a release
+	-- they thin (0.15 s), then sag and retract into the nest (0.3 s). No snap, no flash.
 	local index = bench.strandsFor
 	if index then
 		local element = bench.elements[index]
 		local base = bench.root
 			* CFrame.new(element.nest.Position.X, element.nest.Position.Y, FLOOR_Z - 0.08)
-		local tip = element.model.WorldPivot
+		local tip = element.model:GetPivot().Position
+		local width = 0.035 * (1 - 0.6 * bench.strandStretch)
+		local curve = 0.1 * (1 - bench.strandStretch)
+		local transparency = 0.3 + 0.3 * bench.strandStretch
 		local back = bench.strandsBack
 		if back then
-			local t = (now - back) / STRAND_BACK
-			-- (they shrink back into the nest, thinning, no snapping flash)
-			tip = CFrame.new(tip.Position:Lerp(base.Position, smooth(t)))
-			if t >= 1 then
-				strandsOn(bench, nil)
+			local t = now - back
+			width *= 0.3
+			if t > 0.15 then
+				local r = smooth((t - 0.15) / 0.3)
+				tip = tip:Lerp(base.Position, r)
+				curve = 0.25 * (1 - r)
+				transparency = 0.6 + 0.4 * r
+			end
+			if t >= 0.45 then
+				bench.strandsFor = nil
+				bench.strandsBack = nil
+				for _, beam in bench.beams do
+					beam.Enabled = false
+				end
 			end
 		end
 		bench.strandBase.CFrame = base
-		bench.strandTip.CFrame = CFrame.new(tip.Position) * base.Rotation
-		local stretch = (tip.Position - base.Position).Magnitude
-		for _, beam in bench.beams do
-			beam.Width0 = math.clamp(0.035 - stretch * 0.05, 0.012, 0.035)
+		bench.strandTip.CFrame = CFrame.new(tip) * base.Rotation
+		for k, beam in bench.beams do
+			beam.Width0 = width
+			beam.Width1 = width * 0.6
+			beam.CurveSize0 = curve * (if k == 2 then -1 else 1)
+			beam.Transparency = NumberSequence.new(transparency)
 		end
+	end
+
+	-- The tray runoff: grows along the drain channel (and stays).
+	local runoff = bench.runoff
+	if runoff then
+		local grow = bench.runoffGrow * smooth((now - bench.runoffBorn) / 1.2)
+			+ math.max(0, bench.runoffGrow - 0.5) * (1 - smooth((now - bench.runoffBorn) / 1.2))
+		local drain = BenchLayout.DRAIN
+		local length = math.max(0.02, drain.size.Z * 0.9 * grow)
+		if math.abs(runoff.Size.Z - length) > 1e-3 then
+			runoff.Size = Vector3.new(0.09, 0.006, length)
+		end
+		runoff.CFrame = bench.anchor
+			* CFrame.new(
+				drain.centre.X,
+				drain.centre.Y + 0.004,
+				drain.centre.Z - drain.size.Z * 0.45 + length / 2
+			)
 	end
 
 	-- Falling bits: real gravity, they land and stay (on the shell they follow it).
@@ -1351,6 +1115,9 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 				position = Vector3.new(position.X, item.floorY, position.Z)
 				item.landed = true
 				item.part.Size = item.flat
+				if item.sound then
+					bench.landed += 1
+				end
 				if item.onShell then
 					item.rest = bench.root:PointToObjectSpace(position)
 				end
@@ -1358,6 +1125,26 @@ function BenchVisual.step(bench: Bench, dt: number, now: number)
 		end
 		item.position = position
 		item.part.CFrame = CFrame.new(position)
+	end
+end
+
+-- Outro: t 0..1, the panels fold back over the cavity, the leftovers dim and sink.
+function BenchVisual.closePanels(bench: Bench, t: number, from: { number })
+	local s = smooth(t)
+	bench.panelOpen[1] = from[1] * (1 - s)
+	bench.panelOpen[2] = from[2] * (1 - s)
+	bench.panelTremble[1] = 0
+	bench.panelTremble[2] = 0
+	BenchVisual.layoutPanels(bench)
+	for _, element in bench.elements do
+		if element.mode == "Nest" then
+			element.pull = Vector3.zero
+			element.lit = false
+			element.sink = math.max(element.sink, s)
+		end
+	end
+	if t > 0 then
+		BenchVisual.outline(bench, nil)
 	end
 end
 
@@ -1384,16 +1171,21 @@ function BenchVisual.chuteRoot(bench: Bench, chute: CFrame, t: number): CFrame
 	return CFrame.new(position) * rotation
 end
 
--- Fades the whole scene (0 = gone, 1 = as designed). `onlyShell`: the capsule rack and what
--- was sealed stay (the shell goes into the chute first).
-function BenchVisual.fade(bench: Bench, visible: number, onlyShell: boolean?)
+-- Fades the shell and what lies on the trolley (0 = gone, 1 = as designed). The pass-box,
+-- the hand and the tools are not in this folder (they stay).
+function BenchVisual.fade(bench: Bench, visible: number)
 	bench.visible = math.clamp(visible, 0, 1)
 	local base = bench.fadeBase
 	if base == nil then
-		-- (the first fade: remember every part's own transparency once)
+		-- (the first fade: remember every part's own transparency once; the fallback kit, if
+		-- any, stays as it is)
 		local made: { [BasePart]: number } = {}
 		for _, descendant in bench.folder:GetDescendants() do
-			if descendant:IsA("BasePart") and descendant.Transparency < 1 then
+			if
+				descendant:IsA("BasePart")
+				and descendant.Transparency < 1
+				and (bench.kit == nil or not descendant:IsDescendantOf(bench.kit :: Model))
+			then
 				made[descendant] = descendant.Transparency
 			end
 		end
@@ -1401,18 +1193,9 @@ function BenchVisual.fade(bench: Bench, visible: number, onlyShell: boolean?)
 		base = made
 	end
 	for part, own in base :: { [BasePart]: number } do
-		if part.Parent == nil then
-			continue
+		if part.Parent ~= nil then
+			part.Transparency = Parts.fade(own, bench.visible)
 		end
-		if onlyShell then
-			local inRack = part:FindFirstAncestor("Capsule") ~= nil
-				or part:GetAttribute("Rack") == true
-				or part.Name == "Flake"
-			if inRack then
-				continue
-			end
-		end
-		part.Transparency = Parts.fade(own, bench.visible)
 	end
 	local stencil = bench.folder:FindFirstChild("Text", true)
 	if stencil and stencil:IsA("TextLabel") then
@@ -1423,12 +1206,10 @@ function BenchVisual.fade(bench: Bench, visible: number, onlyShell: boolean?)
 		for _, beam in bench.beams do
 			beam.Enabled = false
 		end
-		bench.wireLight.Enabled = false
+		bench.cutLight.Enabled = false
 	end
 	if bench.visible <= 0 then
 		bench.vapour:Clear()
-		bench.mist:Clear()
-		bench.wisps:Clear()
 	end
 end
 

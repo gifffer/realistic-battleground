@@ -9,7 +9,8 @@
 --             their hinge line (the leaf's vertical edge on the hinge side). The hinge X is the
 --             leaf's own X (the doors face ±X).
 --   outward   the direction of the street (a door opens the OTHER way, into the building)
---   promptAt  where the invisible "Enter" prompt part goes (in front of the door, street side)
+--   promptAt  where the invisible "Enter" prompt part goes (in front of the door, street side;
+--             its height is re-measured from the floor under it by Apartments)
 --   exitAt    where a player comes out (the ground under it is found with a raycast)
 -- The positions come from the city data (citygen); check them in Studio if the city changes.
 -- A door whose parts are not found is skipped with one warning (the others still work).
@@ -50,7 +51,9 @@ Sites.DOORS = table.freeze({
 			table.freeze({ position = Vector3.new(-28.0, 5.6, -110.65), hingeZ = -111.9 }),
 		}),
 		outward = Vector3.new(1, 0, 0),
-		promptAt = Vector3.new(-25.4, 4.6, -109.45),
+		-- (on the top step of the stoop, floor 3.0: Apartments puts the prompt 3.3 above the
+		-- floor it finds under this point)
+		promptAt = Vector3.new(-26.6, 6.3, -109.45),
 		exitAt = Vector3.new(-22.5, 4.6, -109.45),
 	}),
 	table.freeze({

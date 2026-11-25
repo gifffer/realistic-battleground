@@ -1,27 +1,38 @@
 --!strict
 -- VatVisual: what is INSIDE your lab's vat, on your screen only (the server builds the
--- empty glass vat; Server/Systems/Contraband/LabBuilder).
+-- empty vat: Server/Systems/Contraband/VatBuilder). The look is the first concept
+-- (direction/art/02_clone_stages_vats.png): a squat column of pastel fluid, amber → teal →
+-- clear, with the clone standing in its lower half and a small monitor at the front-right.
 --
---   fluid      a cylinder of liquid around the clone: amber (MATRIX), teal (FRAME), clear
---              (SHELL / READY), drained grey (EMPTY / EXTRACTING). Colour and level glide.
---   fill line  a thin bright disc at the FRAME gel height (the progress bar inside the vat)
---   bubbles    a pool of small glossy beads rising (parts, not particles: Roblox ships no
---              round bubble texture); they fade in at the bottom and flatten and thin out as
---              they break at the surface (never pop on / off), tinted by the fluid's light;
---              their rate tells the stage (Matrix 2/s, Frame 4/s, Shell 1/s, phase shift
---              20/s with faster bubbles: 40 in the pool is enough for the surge)
---   glow       one PointLight in the vat, coloured by the fluid (no shadows)
---   screen     a SurfaceGui on the server's "VatScreen" part: stage, %, time left, a bar
+--   fluid      ONE transparent cylinder: amber (MATRIX), teal (FRAME), clearing from teal to
+--              clear across SHELL (the clearing IS the progress), drained grey (EMPTY /
+--              EXTRACTING). Its top stays 0.58 under the cap: the dark band of the concept.
+--   fill line  a thin bright band at the FRAME gel height (the progress inside the lattice)
+--   bubbles    a pool of small OPAQUE beads rising (parts, not particles: Roblox ships no
+--              round bubble texture); the fluid in front fogs them. They grow in at the bottom
+--              and flatten and shrink as they break at the surface (never pop on / off). Rate
+--              per stage: Matrix 2/s, Frame 4/s, Shell 1/s, phase shift 20/s (40 in the pool).
+--   lights     GlowSource (inside, lights the clone) + FrontWash (OUTSIDE the glass, in front:
+--              Roblox draws only the front faces of a part, so a light inside a cylinder never
+--              lights the skin we look at; FrontWash lights it and pools colour on the floor).
+--              No shadows.
+--   screen     a SurfaceGui on the server's "VatScreen": ONE bold line in the concept's format
+--              ("MATRIX 18%", "FRAME 57%", "READY 100%"), a small line under it, a bar.
 --   clone      CloneModel, drifting ±0.05 stud with the fluid
 --
--- Phase shift (at 25 % and 75 %, ART_V2 §5.1), 2 s: bubble surge, light dims to 0.2 and
--- comes back, the screen glitches (3 × 0.3 s of random characters), the old form flickers out
+-- THE RULE THAT KEEPS IT READABLE AND STEADY: only two parts of the vat are see-through, the
+-- server's glass and this fluid. Everything inside is opaque (the fluid in front of it gives
+-- the washed look). Nested see-through parts flip their draw order as the camera turns
+-- (flicker), and Roblox's Glass material hides see-through parts behind it entirely.
+--
+-- Phase shift (at 25 % and 75 %, ART_V2 §5.1), 2 s: bubble surge, the lights dim to 0.2 and
+-- come back, the screen glitches (3 × 0.3 s of random characters), the old form flickers out
 -- and the new one resolves.
 --
 --   VatVisual.new(vatCore, screen, parent)   → Vat
 --   VatVisual.update(vat, view, dt, now)     view = { stage, progress, timeLeft, running, snap }
 --   VatVisual.setCloneHidden(vat, hidden)    (the extraction moves the shell to the bench)
---   VatVisual.setCulled(vat, culled)         far away: light off, bubbles cleared (call it on
+--   VatVisual.setCulled(vat, culled)         far away: lights off, bubbles cleared (call it on
 --                                            the change only; update() is not called then)
 --   VatVisual.destroy(vat)
 
@@ -49,9 +60,9 @@ type Bubble = {
 	y: number,
 	speed: number,
 	seed: number,
-	age: number, -- seconds since it left the bottom (fade in)
+	age: number, -- seconds since it left the bottom (grows in)
 	size: number, -- diameter
-	breaking: boolean, -- flattened at the surface (Size written while true)
+	shownScale: number, -- the scale last written to Size (skip identical writes)
 }
 
 export type Vat = {
@@ -60,33 +71,34 @@ export type Vat = {
 	clone: CloneModel.Clone,
 	cloneHidden: boolean,
 	fluid: BasePart,
-	surface: BasePart,
 	fillLine: BasePart,
-	bottomGlow: BasePart,
 	lightPart: BasePart,
 	light: PointLight,
+	washPart: BasePart,
+	wash: PointLight,
 	bubbles: { Bubble },
 	spawnDebt: number,
 	moved: { BasePart }, -- reused every frame (no table per frame)
 	cframes: { CFrame },
 	culled: boolean,
-	-- what was last written to the fluid parts (skip the writes when nothing changed)
+	-- what was last written to the fluid (skip the writes when nothing changed)
 	shownLevel: number,
 	shownColor: Color3,
 	shownTransparency: number,
 	shownAccent: Color3?,
 	shownFill: number,
-	-- smoothed fluid
+	-- smoothed fluid and light
 	level: number,
 	color: Color3,
 	transparency: number,
+	lightColor: Color3,
+	lightOffset: Vector3, -- GlowSource, relative to VatCore
 	-- phase
 	phase: CloneModel.Stage,
 	shiftFrom: CloneModel.Stage?,
 	shiftStart: number,
 	-- screen
 	gui: SurfaceGui?,
-	title: TextLabel?,
 	big: TextLabel?,
 	sub: TextLabel?,
 	bar: Frame?,
@@ -96,38 +108,85 @@ export type Vat = {
 local MATRIX_END = 0.25
 local FRAME_END = 0.75
 local SHIFT_TIME = 2
-local FLUID_DIAMETER = 4.2
-local FLUID_HEIGHT = 7.6
+
+-- The fluid, relative to VatCore (4.05 above the floor). The glass inside runs 1.23..9.05
+-- above the floor and is 5.5 wide: the fluid is 0.1 clear of it on every side, its bottom
+-- 0.04 above the glass floor, its full top 0.58 under the cap.
+local FLUID_DIAMETER = 5.3
+local FLUID_BOTTOM = -2.78
+local FLUID_HEIGHT = 7.2
 local DRAINED = 0.3
-local BOTTOM = -FLUID_HEIGHT / 2 -- relative to VatCore
+
 local MAX_BUBBLES = 40
-local BUBBLE_FADE_IN = 0.15 -- seconds
-local BUBBLE_BREAK = 0.3 -- studs under the surface where a bubble flattens and thins out
-local BUBBLE_TRANSPARENCY = 0.45
-local WHITE = Color3.new(1, 1, 1)
-local BOTTOM_GLOW_TRANSPARENCY = 0.9
+local BUBBLE_GROW = 0.25 -- seconds a new bubble takes to reach its size
+local BUBBLE_BREAK = 0.3 -- studs under the surface where a bubble flattens and shrinks
+local BUBBLE_RADIUS = 2.3 -- how far from the axis bubbles start (the fluid's radius is 2.65)
+
+local GLOW_RANGE = 6.5
+local WASH_RANGE = 9
+local WASH_BRIGHTNESS = 0.7
+-- FrontWash's place, relative to VatCore: outside the glass, 4.5 studs in front, at the
+-- clone's head (≈ 5.6 studs above the floor: it reaches the column's top too).
+local WASH_OFFSET = Vector3.new(0, 1.6, -4.5)
+
 local GLITCH = "#%&@$/\\|=+<>?*01"
 
 local function rgb(r: number, g: number, b: number): Color3
 	return Color3.fromRGB(r, g, b)
 end
 
--- Fluid colour and transparency per look.
-local FLUID = {
-	MATRIX = { color = rgb(200, 130, 40), transparency = 0.55, light = rgb(255, 170, 80) },
-	FRAME = { color = rgb(60, 140, 140), transparency = 0.55, light = rgb(110, 210, 200) },
-	SHELL = { color = rgb(200, 220, 225), transparency = 0.8, light = rgb(205, 230, 255) },
-	DRAINED = { color = rgb(110, 115, 118), transparency = 0.5, light = rgb(170, 190, 210) },
+type Look = {
+	color: Color3,
+	transparency: number,
+	light: Color3,
+	brightness: number, -- GlowSource's brightness (FrontWash follows it, see below)
+	glowAt: Vector3, -- GlowSource's place, relative to VatCore
 }
 
--- Screen accent per look (bar and big line).
+-- Fluid and lights per look (VAT_SPEC §4.1; the concept's pastel columns).
+local LOOKS: { [string]: Look } = {
+	MATRIX = {
+		color = rgb(232, 168, 98),
+		transparency = 0.25,
+		light = rgb(255, 170, 95),
+		brightness = 0.5, -- (lower: close to the lobes it made a hot orange spot)
+		-- (in FRONT of the lobes' cluster: a light inside the opaque lobes would leave their
+		-- outer faces dark)
+		glowAt = Vector3.new(0, 0.55, -1.3),
+	},
+	FRAME = {
+		color = rgb(115, 190, 180),
+		transparency = 0.28,
+		light = rgb(120, 225, 205),
+		brightness = 0.9,
+		glowAt = Vector3.new(0, 0.4, 0),
+	},
+	SHELL = {
+		color = rgb(165, 200, 210),
+		transparency = 0.35,
+		light = rgb(185, 230, 250),
+		brightness = 0.9,
+		glowAt = Vector3.new(0, 0.9, -1.0), -- (in front of the body, as in the concept)
+	},
+	DRAINED = {
+		color = rgb(110, 118, 122),
+		transparency = 0.55,
+		light = rgb(170, 190, 210),
+		brightness = 0.25,
+		glowAt = Vector3.new(0, 0.4, 0),
+	},
+}
+
+-- Screen accent per look (the bar only: the big line stays one calm colour).
 local ACCENT = {
 	MATRIX = rgb(240, 170, 80),
 	FRAME = rgb(120, 220, 210),
-	SHELL = rgb(225, 235, 240),
+	SHELL = rgb(190, 230, 245),
 	READY = rgb(120, 220, 200),
 	IDLE = rgb(150, 160, 170),
 }
+local SCREEN_TEXT = rgb(225, 240, 235)
+local SCREEN_SUB = rgb(140, 160, 160)
 
 local function phaseOf(progress: number): CloneModel.Stage
 	if progress < MATRIX_END then
@@ -152,14 +211,19 @@ local function clock(seconds: number): string
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
+-- The monitor's face: 1.5 × 0.8 studs at 160 px per stud = 240 × 128 px.
+--   big line   y 0.14..0.52, bold, centred ("FRAME 57%")
+--   small line y 0.60..0.76, mono, dim ("3:42 LEFT")
+--   bar        y 0.85, thin, the stage's accent
+-- (Brightness 1: brighter made the lines bloom into each other.)
 local function buildScreen(vat: Vat, screen: BasePart)
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "VatScreenGui"
 	gui.Face = Enum.NormalId.Front
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 150
+	gui.PixelsPerStud = 160
 	gui.LightInfluence = 0
-	gui.Brightness = 1.4
+	gui.Brightness = 1
 	gui.ClipsDescendants = true
 	local back = Instance.new("Frame")
 	back.Name = "Back"
@@ -167,30 +231,38 @@ local function buildScreen(vat: Vat, screen: BasePart)
 	back.BackgroundColor3 = rgb(8, 12, 14)
 	back.BorderSizePixel = 0
 	back.Parent = gui
-	local function label(name: string, y: number, height: number, color: Color3): TextLabel
+	local function label(
+		name: string,
+		y: number,
+		height: number,
+		font: Enum.Font,
+		maxSize: number,
+		color: Color3
+	): TextLabel
 		local text = Instance.new("TextLabel")
 		text.Name = name
 		text.BackgroundTransparency = 1
-		text.Position = UDim2.fromScale(0.07, y)
-		text.Size = UDim2.fromScale(0.86, height)
-		text.Font = Enum.Font.RobotoMono
+		text.Position = UDim2.fromScale(0.06, y)
+		text.Size = UDim2.fromScale(0.88, height)
+		text.Font = font
 		text.TextScaled = true
-		text.TextXAlignment = Enum.TextXAlignment.Left
+		text.TextXAlignment = Enum.TextXAlignment.Center
+		text.TextYAlignment = Enum.TextYAlignment.Center
 		text.TextColor3 = color
 		text.Text = ""
+		local limit = Instance.new("UITextSizeConstraint")
+		limit.MaxTextSize = maxSize
+		limit.Parent = text
 		text.Parent = back
 		return text
 	end
-	local title = label("Title", 0.08, 0.14, rgb(120, 135, 140))
-	title.Text = "VAT 01 · CULTURE"
-	vat.title = title
-	vat.big = label("Big", 0.27, 0.3, rgb(240, 240, 240))
-	vat.sub = label("Sub", 0.6, 0.14, rgb(170, 185, 190))
+	vat.big = label("Big", 0.14, 0.38, Enum.Font.GothamBold, 44, SCREEN_TEXT)
+	vat.sub = label("Sub", 0.6, 0.16, Enum.Font.RobotoMono, 20, SCREEN_SUB)
 	local track = Instance.new("Frame")
 	track.Name = "Track"
-	track.Position = UDim2.fromScale(0.07, 0.84)
-	track.Size = UDim2.fromScale(0.86, 0.05)
-	track.BackgroundColor3 = rgb(40, 46, 50)
+	track.Position = UDim2.fromScale(0.08, 0.85)
+	track.Size = UDim2.fromScale(0.84, 0.04)
+	track.BackgroundColor3 = rgb(32, 38, 42)
 	track.BorderSizePixel = 0
 	track.Parent = back
 	local bar = Instance.new("Frame")
@@ -204,26 +276,26 @@ local function buildScreen(vat: Vat, screen: BasePart)
 	vat.gui = gui
 end
 
+local function pointLight(parent: BasePart, range: number, color: Color3): PointLight
+	local light = Instance.new("PointLight")
+	light.Brightness = 0
+	light.Range = range
+	light.Shadows = false
+	light.Color = color
+	light.Parent = parent
+	return light
+end
+
 function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): Vat
 	local folder = Instance.new("Folder")
 	folder.Name = "VatVisual"
-	local function at(y: number): CFrame
-		return vatCore.CFrame * CFrame.new(0, y, 0) * Parts.UPRIGHT
-	end
+	local drained = LOOKS.DRAINED
 	local fluid = Parts.disc(FLUID_DIAMETER, DRAINED, {
 		Name = "Fluid",
-		Color = FLUID.DRAINED.color,
-		Transparency = FLUID.DRAINED.transparency,
+		Color = drained.color,
+		Transparency = drained.transparency,
 		Reflectance = 0.05,
-		CFrame = at(BOTTOM + DRAINED / 2),
-		Parent = folder,
-	})
-	local surface = Parts.disc(FLUID_DIAMETER - 0.04, 0.03, {
-		Name = "Surface",
-		Color = rgb(235, 240, 240),
-		Transparency = 0.6,
-		Reflectance = 0.2,
-		CFrame = at(BOTTOM + DRAINED),
+		CFrame = vatCore.CFrame * CFrame.new(0, FLUID_BOTTOM + DRAINED / 2, 0) * Parts.UPRIGHT,
 		Parent = folder,
 	})
 	-- (a thin band inside the lattice's footprint only, resized with the height: a disc
@@ -234,31 +306,23 @@ function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): 
 		Color = rgb(230, 240, 240),
 		Size = Vector3.new(2, 0.025, 1),
 		Transparency = 1,
-		CFrame = at(0),
-		Parent = folder,
-	})
-	-- (a faint tint on the vat floor: SmoothPlastic, not Neon, so it never blooms into a
-	-- glowing plate; the PointLight does the glowing; ART_V2 "Neon only for pinpoints")
-	local bottomGlow = Parts.disc(3.6, 0.03, {
-		Name = "BottomGlow",
-		Color = FLUID.DRAINED.light,
-		Transparency = BOTTOM_GLOW_TRANSPARENCY,
-		CFrame = at(BOTTOM + 0.02),
+		CFrame = vatCore.CFrame,
 		Parent = folder,
 	})
 	local lightPart = Parts.part({
 		Name = "GlowSource",
 		Size = Vector3.new(0.2, 0.2, 0.2),
 		Transparency = 1,
-		CFrame = vatCore.CFrame,
+		CFrame = vatCore.CFrame * CFrame.new(drained.glowAt),
 		Parent = folder,
 	})
-	local light = Instance.new("PointLight")
-	light.Brightness = 0.6
-	light.Range = 8
-	light.Shadows = false
-	light.Color = FLUID.DRAINED.light
-	light.Parent = lightPart
+	local washPart = Parts.part({
+		Name = "FrontWash",
+		Size = Vector3.new(0.2, 0.2, 0.2),
+		Transparency = 1,
+		CFrame = vatCore.CFrame * CFrame.new(WASH_OFFSET),
+		Parent = folder,
+	})
 
 	local vat: Vat = {
 		core = vatCore,
@@ -266,42 +330,44 @@ function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): 
 		clone = CloneModel.new(folder),
 		cloneHidden = false,
 		fluid = fluid,
-		surface = surface,
 		fillLine = fillLine,
-		bottomGlow = bottomGlow,
 		lightPart = lightPart,
-		light = light,
+		light = pointLight(lightPart, GLOW_RANGE, drained.light),
+		washPart = washPart,
+		wash = pointLight(washPart, WASH_RANGE, drained.light),
 		bubbles = {},
 		spawnDebt = 0,
 		moved = {},
 		cframes = {},
 		culled = false,
 		shownLevel = -1,
-		shownColor = FLUID.DRAINED.color,
+		shownColor = drained.color,
 		shownTransparency = -1,
 		shownAccent = nil,
 		shownFill = -1,
 		level = DRAINED,
-		color = FLUID.DRAINED.color,
-		transparency = FLUID.DRAINED.transparency,
+		color = drained.color,
+		transparency = drained.transparency,
+		lightColor = drained.light,
+		lightOffset = drained.glowAt,
 		phase = "NONE",
 		shiftFrom = nil,
 		shiftStart = -100,
 		gui = nil,
-		title = nil,
 		big = nil,
 		sub = nil,
 		bar = nil,
 		random = Random.new(),
 	}
 	for i = 1, MAX_BUBBLES do
-		local d = 0.12 + 0.13 * ((i * 37) % 10) / 10
+		-- (0.08 .. 0.2 studs across, spread evenly over the pool)
+		local d = 0.08 + 0.12 * ((i * 37) % 10) / 9
 		-- (an ellipsoid, not a Ball: a Ball can't be flattened when it breaks at the surface)
 		local part = Parts.ellipsoid(Vector3.new(d, d, d), {
 			Name = "Bubble",
-			Color = rgb(245, 248, 248),
+			Color = rgb(235, 245, 245),
 			Transparency = 1,
-			Reflectance = 0.3,
+			Reflectance = 0.4,
 			CFrame = vatCore.CFrame,
 			Parent = folder,
 		})
@@ -315,7 +381,7 @@ function VatVisual.new(vatCore: BasePart, screen: BasePart?, parent: Instance): 
 			seed = i,
 			age = 0,
 			size = d,
-			breaking = false,
+			shownScale = 1,
 		})
 	end
 	if screen then
@@ -329,50 +395,60 @@ function VatVisual.setCloneHidden(vat: Vat, hidden: boolean)
 	vat.cloneHidden = hidden
 end
 
--- The look the fluid should have for a view.
-local function fluidTarget(view: View, phase: CloneModel.Stage): (string, number)
+-- The look the fluid should have for a view, its level, and (during SHELL) how far it has
+-- cleared from the FRAME teal toward the SHELL clear (0..1).
+local function fluidTarget(
+	view: View,
+	phase: CloneModel.Stage,
+	t: number
+): (Look, number, Look?, number)
 	if view.stage == "Empty" or view.stage == "Extracting" then
-		return "DRAINED", DRAINED
+		return LOOKS.DRAINED, DRAINED, nil, 0
 	end
 	if view.stage == "Ready" then
-		return "SHELL", FLUID_HEIGHT
+		return LOOKS.SHELL, FLUID_HEIGHT, nil, 0
 	end
-	return phase, FLUID_HEIGHT
+	if phase == "SHELL" then
+		-- the fluid clears from teal to clear across the stage: the clearing IS the progress
+		return LOOKS.SHELL, FLUID_HEIGHT, LOOKS.FRAME, 1 - math.clamp(t, 0, 1)
+	end
+	return LOOKS[phase] or LOOKS.DRAINED, FLUID_HEIGHT, nil, 0
 end
 
 local function retireBubble(bubble: Bubble)
 	bubble.active = false
 	bubble.part.Transparency = 1
-	if bubble.breaking then
-		bubble.breaking = false
+	if bubble.shownScale ~= 1 then
+		bubble.shownScale = 1
 		bubble.part.Size = Vector3.new(bubble.size, bubble.size, bubble.size)
 	end
 end
 
 local function updateBubbles(vat: Vat, rate: number, surge: boolean, dt: number, now: number)
 	vat.spawnDebt += rate * dt
-	local top = BOTTOM + vat.level - 0.1
+	local top = FLUID_BOTTOM + vat.level - 0.12
 	local moved, cframes = vat.moved, vat.cframes
 	table.clear(moved)
 	table.clear(cframes)
 	local base = vat.core.CFrame
 	-- (bubbles take a little of the fluid's light colour: amber / teal / pearl)
-	local tint = vat.light.Color:Lerp(WHITE, 0.7)
+	local tint = vat.lightColor:Lerp(Color3.new(1, 1, 1), 0.7)
 	for _, bubble in vat.bubbles do
 		if not bubble.active and vat.spawnDebt >= 1 and vat.level > 1 then
 			vat.spawnDebt -= 1
 			local angle = vat.random:NextNumber(0, math.pi * 2)
-			local radius = math.sqrt(vat.random:NextNumber()) * 1.75
+			local radius = math.sqrt(vat.random:NextNumber()) * BUBBLE_RADIUS
 			bubble.active = true
 			bubble.age = 0
 			bubble.x = math.cos(angle) * radius
 			bubble.z = math.sin(angle) * radius
-			bubble.y = BOTTOM + 0.15
+			bubble.y = FLUID_BOTTOM + 0.15
 			-- (the surge's bubbles are faster: 20/s then fits in the pool)
 			bubble.speed = if surge
 				then vat.random:NextNumber(3, 4)
 				else vat.random:NextNumber(1.3, 2.4)
 			bubble.part.Color = tint
+			bubble.part.Transparency = 0
 		end
 		if bubble.active then
 			bubble.age += dt
@@ -380,19 +456,20 @@ local function updateBubbles(vat: Vat, rate: number, surge: boolean, dt: number,
 			if bubble.y >= top then
 				retireBubble(bubble)
 			else
-				-- fade in at the bottom; at the surface, flatten and thin out (it breaks)
+				-- grows in at the bottom; at the surface, flattens and shrinks (it breaks).
+				-- (Size, not Transparency: an opaque bead inside the see-through fluid never
+				-- flips its draw order with the camera)
 				local below = top - bubble.y
-				local fadeIn = math.clamp(bubble.age / BUBBLE_FADE_IN, 0, 1)
+				local grow = math.clamp(bubble.age / BUBBLE_GROW, 0, 1)
 				local breakT = 1 - math.clamp(below / BUBBLE_BREAK, 0, 1)
-				local visible = fadeIn * (1 - breakT)
-				bubble.part.Transparency = 1 - (1 - BUBBLE_TRANSPARENCY) * visible
-				if breakT > 0 then
-					bubble.breaking = true
-					local d = bubble.size
+				local scale = math.floor((0.2 + 0.8 * grow) * (1 - 0.7 * breakT) * 50 + 0.5) / 50
+				if scale ~= bubble.shownScale or breakT > 0 then
+					bubble.shownScale = scale
+					local d = bubble.size * scale
 					bubble.part.Size = Vector3.new(
-						d * (1 + 0.3 * breakT),
-						d * (1 - 0.6 * breakT),
-						d * (1 + 0.3 * breakT)
+						d * (1 + 0.4 * breakT),
+						d * (1 - 0.5 * breakT),
+						d * (1 + 0.4 * breakT)
 					)
 				end
 				local wobble = math.sin(now * 5 + bubble.seed) * 0.06
@@ -407,15 +484,15 @@ local function updateBubbles(vat: Vat, rate: number, surge: boolean, dt: number,
 	end
 end
 
--- Far away (LabController stops calling update): the light goes off and the bubbles are
--- cleared, instead of freezing mid-fluid with the light on. Called on the change only.
+-- Far away (LabController stops calling update): the lights go off and the bubbles are
+-- cleared, instead of freezing mid-fluid with the lights on. Called on the change only.
 function VatVisual.setCulled(vat: Vat, culled: boolean)
 	if vat.culled == culled then
 		return
 	end
 	vat.culled = culled
 	vat.light.Enabled = not culled
-	vat.bottomGlow.Transparency = if culled then 1 else BOTTOM_GLOW_TRANSPARENCY
+	vat.wash.Enabled = not culled
 	if culled then
 		vat.fillLine.Transparency = 1
 		for _, bubble in vat.bubbles do
@@ -447,16 +524,15 @@ local function setScreen(
 		end
 		big = table.concat(chars)
 	end
+	-- (written only when they change: a SurfaceGui redraws on every property write)
 	if bigLabel.Text ~= big then
 		bigLabel.Text = big
 	end
 	if subLabel.Text ~= sub then
 		subLabel.Text = sub
 	end
-	-- (written only when they change: a SurfaceGui redraws on every property write)
 	if vat.shownAccent ~= accent then
 		vat.shownAccent = accent
-		bigLabel.TextColor3 = accent
 		bar.BackgroundColor3 = accent
 	end
 	local width = math.floor(math.clamp(fill, 0, 1) * 1000 + 0.5) / 1000
@@ -474,6 +550,10 @@ end
 local function smooth(t: number): number
 	local x = math.clamp(t, 0, 1)
 	return x * x * (3 - 2 * x)
+end
+
+local function closeColor(a: Color3, b: Color3): boolean
+	return math.abs(a.R - b.R) + math.abs(a.G - b.G) + math.abs(a.B - b.B) < 0.004
 end
 
 function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
@@ -527,31 +607,40 @@ function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
 		* CFrame.Angles(0, math.sin(now * 0.3) * 0.02, 0)
 	CloneModel.place(vat.clone, drift)
 
-	-- Fluid colour / level glide toward the look.
-	local look, targetLevel = fluidTarget(view, phase)
-	local fluidLook = FLUID[look]
+	-- Fluid colour / level glide toward the look (during SHELL: from teal toward clear).
+	local target, targetLevel, from, fromWeight = fluidTarget(view, phase, stageT(phase, progress))
+	local targetColor, targetTransparency = target.color, target.transparency
+	local targetLight = target.light
+	if from then
+		targetColor = target.color:Lerp(from.color, fromWeight)
+		targetTransparency += (from.transparency - target.transparency) * fromWeight
+		targetLight = target.light:Lerp(from.light, fromWeight)
+	end
 	local k = 1 - math.exp(-dt * (if view.snap then 60 else 1.4))
 	vat.level += (targetLevel - vat.level) * k
-	vat.color = vat.color:Lerp(fluidLook.color, k)
-	vat.transparency += (fluidLook.transparency - vat.transparency) * k
+	vat.color = vat.color:Lerp(targetColor, k)
+	vat.transparency += (targetTransparency - vat.transparency) * k
+	vat.lightColor = vat.lightColor:Lerp(targetLight, k)
+	vat.lightOffset = vat.lightOffset:Lerp(target.glowAt, k)
 	-- (the glide never quite arrives: snap the last hair so the writes below stop)
 	if math.abs(targetLevel - vat.level) < 0.002 then
 		vat.level = targetLevel
 	end
-	if math.abs(fluidLook.transparency - vat.transparency) < 0.002 then
-		vat.transparency = fluidLook.transparency
+	if math.abs(targetTransparency - vat.transparency) < 0.002 then
+		vat.transparency = targetTransparency
 	end
-	local c, t = vat.color, fluidLook.color
-	if math.abs(c.R - t.R) + math.abs(c.G - t.G) + math.abs(c.B - t.B) < 0.004 then
-		vat.color = t
+	if closeColor(vat.color, targetColor) then
+		vat.color = targetColor
+	end
+	if closeColor(vat.lightColor, targetLight) then
+		vat.lightColor = targetLight
 	end
 	if vat.level ~= vat.shownLevel then
 		vat.shownLevel = vat.level
 		vat.fluid.Size = Vector3.new(vat.level, FLUID_DIAMETER, FLUID_DIAMETER)
 		vat.fluid.CFrame = vat.core.CFrame
-			* CFrame.new(0, BOTTOM + vat.level / 2, 0)
+			* CFrame.new(0, FLUID_BOTTOM + vat.level / 2, 0)
 			* Parts.UPRIGHT
-		vat.surface.CFrame = vat.core.CFrame * CFrame.new(0, BOTTOM + vat.level, 0) * Parts.UPRIGHT
 	end
 	if vat.color ~= vat.shownColor then
 		vat.shownColor = vat.color
@@ -560,9 +649,6 @@ function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
 	if vat.transparency ~= vat.shownTransparency then
 		vat.shownTransparency = vat.transparency
 		vat.fluid.Transparency = vat.transparency
-	end
-	if vat.bottomGlow.Color ~= vat.light.Color then
-		vat.bottomGlow.Color = vat.light.Color
 	end
 
 	-- Fill line at the FRAME gel height.
@@ -577,34 +663,37 @@ function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
 		vat.fillLine.Transparency = 1
 	end
 
-	-- Glow: fluid-coloured, dims to 0.2 during a shift (Sine in / out: a light dimming).
-	local brightness = 0.6
+	-- Lights: stage-coloured; during a shift they dim to 0.2 and come back (Sine in / out: a
+	-- light dimming). FrontWash keeps the same share of its own brightness.
+	local base = target.brightness
+	local brightness = base
 	if shifting then
 		if shiftT < 0.3 then
-			brightness = 0.6 - 0.4 * sineInOut(shiftT / 0.3)
+			brightness = base - (base - 0.2) * sineInOut(shiftT / 0.3)
 		elseif shiftT < 1.6 then
 			brightness = 0.2 + (if math.sin(now * 23) > 0.6 then 0.15 else 0)
 		else
-			brightness = 0.2 + 0.4 * sineInOut((shiftT - 1.6) / 0.4)
+			brightness = 0.2 + (base - 0.2) * sineInOut((shiftT - 1.6) / 0.4)
 		end
-	elseif view.stage == "Empty" or view.stage == "Extracting" then
-		brightness = 0.25
 	end
+	-- (full while a culture is in, whatever its stage; it follows the shift's dimming, and a
+	-- drained vat only gets a little)
+	local washBrightness = if base < 0.5
+		then WASH_BRIGHTNESS * base / 0.9
+		else WASH_BRIGHTNESS * brightness / base
 	if vat.light.Brightness ~= brightness then
 		vat.light.Brightness = brightness
 	end
-	if vat.light.Color ~= fluidLook.light then
-		local lightColor = vat.light.Color:Lerp(fluidLook.light, k)
-		local l = fluidLook.light
-		if
-			math.abs(lightColor.R - l.R)
-				+ math.abs(lightColor.G - l.G)
-				+ math.abs(lightColor.B - l.B)
-			< 0.004
-		then
-			lightColor = l
-		end
-		vat.light.Color = lightColor
+	if vat.wash.Brightness ~= washBrightness then
+		vat.wash.Brightness = washBrightness
+	end
+	if vat.light.Color ~= vat.lightColor then
+		vat.light.Color = vat.lightColor
+		vat.wash.Color = vat.lightColor
+	end
+	local glowAt = vat.core.CFrame * CFrame.new(vat.lightOffset)
+	if vat.lightPart.CFrame ~= glowAt then
+		vat.lightPart.CFrame = glowAt
 	end
 
 	-- Bubbles.
@@ -618,25 +707,20 @@ function VatVisual.update(vat: Vat, view: View, dt: number, now: number)
 	end
 	updateBubbles(vat, rate, shifting, dt, now)
 
-	-- Screen.
+	-- Screen: one bold line in the concept's format, a small line, a bar.
 	local glitch = shifting and (shiftT % 0.6) < 0.3 and shiftT < 1.8
 	if view.stage == "Empty" then
-		setScreen(
-			vat,
-			"EMPTY · PLANT CULTURE",
-			clock(view.total) .. " TO GROW",
-			0,
-			ACCENT.IDLE,
-			false
-		)
+		setScreen(vat, "EMPTY", "PLANT CULTURE", 0, ACCENT.IDLE, false)
 	elseif view.stage == "Extracting" then
-		setScreen(vat, "EXTRACTING", "STAND BY", 1, ACCENT.IDLE, false)
+		setScreen(vat, "EXTRACTING", "", 1, ACCENT.IDLE, false)
 	elseif view.stage == "Ready" then
-		setScreen(vat, "READY 100 %", "READY · EXTRACT", 1, ACCENT.READY, false)
+		-- (no small line: the LED, the chime and the prompt already say "extract")
+		setScreen(vat, "READY 100%", "", 1, ACCENT.READY, false)
 	else
-		local percent = math.floor(progress * 100)
+		-- (+1e-6: 0.57 × 100 is 56.99999 in floating point)
+		local percent = math.floor(progress * 100 + 1e-6)
 		local sub = if view.running then clock(view.timeLeft) .. " LEFT" else "PAUSED"
-		setScreen(vat, `{phase} {percent} %`, sub, progress, ACCENT[phase] or ACCENT.IDLE, glitch)
+		setScreen(vat, `{phase} {percent}%`, sub, progress, ACCENT[phase] or ACCENT.IDLE, glitch)
 	end
 end
 

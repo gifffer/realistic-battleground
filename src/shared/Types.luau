@@ -164,7 +164,15 @@ export type ExtractElement = {
 	kind: ElementKind,
 	condition: ElementCondition, -- (a Husk is always "Intact": ignored)
 	viability: number, -- 0..3 bars shown on the monitor (coarse, from the score band)
+	state: ElementState?, -- where it is in the extraction (ExtractState only)
 }
+
+-- The extraction's steps (server FSM, mirrored by the client) and where each element is.
+--   Nest     in its gel nest in the shell      Pulling  grabbed, being pulled free
+--   Held     in the gloved hand                Loose    set down on the trolley top
+--   OnTray   in the steel specimen tray        Sealed   dropped into the pass-box, capsule sealed
+export type ExtractStep = "Intro" | "Incise" | "Spread" | "Harvest"
+export type ElementState = "Nest" | "Pulling" | "Held" | "Loose" | "OnTray" | "Sealed"
 
 -- The saved contraband part of a player's save (PlayerProfile.contraband).
 export type ContrabandProfile = {
@@ -197,12 +205,14 @@ export type LabStatePayload = {
 export type ExtractStatePayload = {
 	active: boolean,
 	sessionId: number,
-	phase: ("Cut" | "Select")?, -- (nil when not active)
-	revealAt: number, -- the seam is open: picks are accepted from then
-	endsAt: number, -- the cooling bar runs out
+	step: ExtractStep?, -- (nil when not active)
+	layer: number, -- 0..2 seam layers cut (Incise)
+	spread: { boolean }, -- the two panels open
+	coolEnds: number?, -- the cooling bar runs out (nil until the panels are open)
 	slots: number, -- capsules to fill (1..Config.Extraction.CAPSULES)
-	elements: { ExtractElement }, -- by index (the client lays them out in the cavity)
-	picked: { number }, -- indices already taken (for a resync)
+	sealed: number, -- capsules sealed so far
+	elements: { ExtractElement }, -- by index (the client lays them out in the cavity), with state
+	acked: number, -- ExtractAction messages the server has handled so far in this session
 }
 
 -- server → the case HOLDER only (ContrabandEvent "CaseState")
@@ -222,11 +232,11 @@ export type SaleResultPayload = {
 	reason: string?,
 }
 
--- server → owner (ContrabandEvent "ExtractPicked"): one element was lifted and sealed.
+-- server → owner (ContrabandEvent "ExtractPicked"): one element was transferred and sealed.
 -- inert = it was a husk (the capsule is wasted, no core, no grade).
 export type ExtractPickedPayload = {
 	index: number,
-	slot: number, -- which capsule of the rack (1..slots)
+	slot: number, -- which capsule (1..slots), in the order they were sealed
 	inert: boolean,
 	kind: ElementKind,
 	grade: CoreGrade?,

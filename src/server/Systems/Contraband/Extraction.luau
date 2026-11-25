@@ -1,33 +1,55 @@
 --!strict
--- Extraction (v2): the server side of taking bio-elements out of a ready shell.
+-- Extraction (v3, by hand): the server side of taking bio-elements out of a ready shell.
 --
--- What the player does (ExtractionController draws it):
---   hold E "Extract" on the ready vat → the cutter opens the shell's chest seam BY ITSELF
---   (no gesture) → 4 to 6 stylised bio-elements show in the cavity → the player lifts out the
---   ones he wants (click-and-hold), one per capsule, up to `slots` capsules → done.
+-- What the player does (ExtractionController and BenchVisual draw it, all by hand):
+--   hold E "Extract" on the ready vat → pick up the scalpel → drag it along the chest seam
+--   twice (the skin, then the membrane) → pull the two panels open (a clip holds each) → grab
+--   a bio-element and pull it free → set it in the steel specimen tray → lift it into the cold
+--   pass-box (it drops into a capsule that seals) → the next one, up to `slots`, or DONE.
 --
 -- What the SERVER decides (never the client):
---   • the contents: rolled from the culture's saved seed (Lab.seed). Stopping before any pick
---     puts the culture back to Ready with the SAME seed: cancelling never rerolls;
+--   • the contents: rolled from the culture's saved seed (Lab.seed). Stopping before any
+--     transfer puts the culture back to Ready with the SAME seed: cancelling never rerolls;
 --   • every score: KIND_BASE + CONDITION_SCORE + a small hidden roll fixed by (seed, index),
---     then the grade (Grades.fromScore). The client only ever sees kind, condition and a
---     coarse 0..3 "viability" (exactly what the player sees on screen);
---   • the timing: no pick before the seam is open (revealAt), at least PICK_MIN_GAP s between
---     two picks, the cooling bar (endsAt), a TIMEOUT safety;
+--     then the grade (Grades.fromScore). The client only sees kind, condition and a coarse
+--     0..3 "viability";
+--   • the ORDER of the steps and the least time between them (Config.Extraction.MIN), on its
+--     own clock: a step machine per session (below);
 --   • the slots: min(CAPSULES, room in the stash / lab cases) fixed at the start.
+-- No accuracy, speed or position sent by the client changes anything: a sloppy cut only costs
+-- time (and leaves scratches on the shell). Value comes only from the server's roll.
 --
--- The client sends Remotes.ExtractAction(sessionId, action, index?):
---   "Pick" index   lift element `index` (a whole number 1..#elements, not picked yet)
---   "Done"         finish now (≥ 1 pick) — with 0 picks it is the same as "Stop"
---   "Stop"         stop: 0 picks → culture Ready again (same contents); ≥ 1 pick → finished
--- Every message is checked (types, NaN, ranges, session id, own lab, alive); more than
--- MAX_INVALID bad ones abort the session; RateLimiter 6 burst, 0.6 per s.
+-- THE STEP MACHINE (per session):
+--   Intro ─Tool─▶ Incise(layer 0) ─Layer 1─▶ Incise(layer 1) ─Layer 2─▶ Spread
+--     ─Spread 1, Spread 2─▶ Harvest ─(all capsules sealed | Done | cooling bar over)─▶ end
+--   In Harvest, per element:
+--     Nest ─Grab─▶ Pulling ─Free─▶ Held ─Tray─▶ OnTray ─Lift─▶ Held (from the tray)
+--       ─Transfer─▶ Sealed
+--     Held ─Drop─▶ Loose ─Lift─▶ Held (NOT from the tray: it can't be transferred)
+--     Pulling / Held ─Let─▶ Nest (let go over the open chest)
+--   At most one element in the hand, at most 2 on the tray, and no Grab once
+--   sealed + on the tray + in the hand ≥ slots.
 --
--- A pick is REAL at once: the core is made in the Ledger right away (a free cradle of a case
--- lying in the lab, else the stash; never lost: over the stash limit if it must), the stash is
--- saved, and the client gets ExtractPicked { index, slot, inert, kind, grade?, toCase }. A
--- husk wastes its capsule (inert, no core). The end (all slots filled, Done, time out, Stop /
--- death / leaving after ≥ 1 pick): culture Empty, ExtractDone { cores, inert, toCase }.
+-- The client sends Remotes.ExtractAction(sessionId, action, arg?):
+--   "Tool"                       the scalpel is in the hand
+--   "Layer" 1..2                 a seam layer is cut through
+--   "Spread" 1..2                a panel is open (each once)
+--   "Grab" / "Free" / "Let" / "Tray" / "Drop" / "Lift" / "Transfer"  element index 1..#elements
+--   "Done"                       finish now (≥ 1 transfer; with 0 it is the same as "Stop")
+--   "Stop"                       stop: 0 transfers → culture Ready again (same contents);
+--                                ≥ 1 transfer → finished
+-- Every message is checked (types, NaN, whole numbers, ranges, session id, own lab, alive,
+-- the step, the element's state, the least time). A refused one counts as invalid and the
+-- server sends the client a fresh ExtractState (it snaps back to the server's state); more
+-- than MAX_INVALID refused ones abort the session. RateLimiter: burst 12, 2 per s (a whole
+-- run is about 16 messages in 25 s).
+--
+-- A TRANSFER is real at once: the core is made in the Ledger right away (a free cradle of a
+-- case lying in the lab, else the stash; never lost: over the stash limit if it must), the
+-- stash is saved, and the client gets ExtractPicked { index, slot, inert, kind, grade?,
+-- toCase } (it lights the capsule's grade LED). A husk wastes its capsule (inert, no core).
+-- The end (all slots sealed, Done, cooling bar over, time out, Stop / death / leaving after
+-- ≥ 1 transfer): culture Empty, ExtractDone { cores, inert, toCase }.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -48,20 +70,24 @@ local Lab = require(script.Parent.Lab)
 local Ledger = require(script.Parent.Ledger)
 
 local E = Config.Extraction
+local MIN = E.MIN
 
--- The client's intro before the cut starts (the hand takes the cutter): the seam is open
--- INTRO_TIME + CUT_TIME after the start. (Server clock: a little earlier than the client
--- sees it, which only makes the check more lenient, never stricter.)
-local INTRO_TIME = 0.9
 -- Seconds after the cooling bar ends before the server ends the session itself (the client
 -- normally sends "Done" on time; this covers a slow or silent client).
 local END_GRACE = 1.5
+-- An element left in the hand / on the tray this long after it came free is "warm"
+-- (only with E.WARM_PENALTY > 0).
+local WARM_AFTER = 15
+local MAX_ON_TRAY = 2
 
 type Element = {
 	kind: Types.ElementKind,
 	condition: Types.ElementCondition,
 	score: number, -- server only (never sent)
 	viability: number,
+	state: Types.ElementState,
+	fromTray: boolean, -- Held: lifted from the specimen tray (only those can be transferred)
+	freedAt: number, -- os.clock() when it came free of its nest (warming)
 }
 
 type Session = {
@@ -69,15 +95,19 @@ type Session = {
 	player: Player,
 	seed: number,
 	startedAt: number, -- os.clock()
-	revealAt: number, -- os.clock(): picks accepted from here
-	endsAt: number, -- os.clock(): the cooling bar runs out
-	revealServer: number, -- the same two moments on workspace:GetServerTimeNow() (client clock)
-	endsServer: number,
+	step: Types.ExtractStep,
+	layer: number, -- 0..2
+	spread: { boolean },
+	stepAt: number, -- os.clock() of the last step message (Tool, Layer, Spread)
+	handAt: number, -- os.clock() of the last element message
+	transferAt: number, -- os.clock() of the last transfer
+	coolEnds: number?, -- os.clock(): the cooling bar runs out (from Harvest on)
+	coolEndsServer: number?, -- the same on workspace:GetServerTimeNow() (the client's clock)
 	slots: number,
 	elements: { Element },
-	picked: { number },
-	lastPickAt: number,
+	sealed: { number }, -- element indices, in the order they were sealed
 	invalid: number,
+	acked: number, -- messages handled (the client knows its state is up to date when it matches)
 	cores: { { kind: Types.ElementKind, grade: Types.CoreGrade, worth: number } },
 	inert: number,
 	toCase: boolean,
@@ -87,7 +117,7 @@ local Extraction = {}
 
 local sessions: { [Player]: Session } = {}
 local nextSessionId = 0
-local actionLimiter = RateLimiter.new(6, 0.6) -- burst 6, then 6 per 10 s
+local actionLimiter = RateLimiter.new(12, 2) -- burst 12, then 2 per s
 
 ------------------------------------------------------------------------------
 -- Contents (pure: the same seed always gives the same elements)
@@ -155,10 +185,15 @@ function Extraction.roll(seed: number): { Element }
 	local elements: { Element } = {}
 	for index = 1, count do
 		if isHusk[index] then
-			table.insert(
-				elements,
-				{ kind = "Husk", condition = "Intact", score = 0, viability = 0 }
-			)
+			table.insert(elements, {
+				kind = "Husk",
+				condition = "Intact",
+				score = 0,
+				viability = 0,
+				state = "Nest",
+				fromTray = false,
+				freedAt = 0,
+			})
 		else
 			local kind: Types.ElementKind =
 				weighted(random, E.KIND_WEIGHT :: any, KIND_ORDER) :: any
@@ -171,6 +206,9 @@ function Extraction.roll(seed: number): { Element }
 				condition = condition,
 				score = math.clamp(baseScore(kind, condition) + roll, 0, 100),
 				viability = viabilityOf(kind, condition),
+				state = "Nest",
+				fromTray = false,
+				freedAt = 0,
 			}
 			table.insert(elements, element)
 		end
@@ -187,12 +225,14 @@ local function statePayload(session: Session?): Types.ExtractStatePayload
 		return {
 			active = false,
 			sessionId = 0,
-			phase = nil,
-			revealAt = 0,
-			endsAt = 0,
+			step = nil,
+			layer = 0,
+			spread = { false, false },
+			coolEnds = nil,
 			slots = 0,
+			sealed = 0,
 			elements = {},
-			picked = {},
+			acked = 0,
 		}
 	end
 	local shown: { Types.ExtractElement } = {}
@@ -202,17 +242,20 @@ local function statePayload(session: Session?): Types.ExtractStatePayload
 			kind = element.kind,
 			condition = element.condition,
 			viability = element.viability,
+			state = element.state,
 		})
 	end
 	return {
 		active = true,
 		sessionId = session.id,
-		phase = if os.clock() >= session.revealAt then "Select" else "Cut",
-		revealAt = session.revealServer,
-		endsAt = session.endsServer,
+		step = session.step,
+		layer = session.layer,
+		spread = table.clone(session.spread),
+		coolEnds = session.coolEndsServer,
 		slots = session.slots,
+		sealed = #session.sealed,
 		elements = shown,
-		picked = table.clone(session.picked),
+		acked = session.acked,
 	}
 end
 
@@ -257,7 +300,7 @@ local function room(player: Player): number
 	return free
 end
 
--- The normal end (≥ 1 pick): the culture is used up.
+-- The normal end (≥ 1 transfer): the culture is used up.
 local function finish(session: Session, why: string)
 	local player = session.player
 	if sessions[player] ~= session then
@@ -280,14 +323,14 @@ local function finish(session: Session, why: string)
 	Guard.debug(`{player.Name}: extraction done ({why}), {#session.cores} core(s)`)
 end
 
--- Ends a session. With no pick yet the culture goes back to Ready with the SAME seed (the
--- same elements next time); after a pick it is a normal end (the sealed cores stay).
+-- Ends a session. With no transfer yet the culture goes back to Ready with the SAME seed (the
+-- same elements next time); after a transfer it is a normal end (the sealed cores stay).
 function Extraction.abort(player: Player, why: string)
 	local session = sessions[player]
 	if session == nil then
 		return
 	end
-	if #session.picked > 0 then
+	if #session.sealed > 0 then
 		finish(session, why)
 		return
 	end
@@ -303,15 +346,17 @@ function Extraction.abort(player: Player, why: string)
 	Guard.debug(`{player.Name}: extraction stopped ({why})`)
 end
 
--- Lifts element `index` into the next capsule (all checks done by the caller).
-local function pick(session: Session, index: number)
+-- Seals element `index` into the next capsule (all checks done by the caller): the real pick.
+local function transfer(session: Session, index: number)
 	local player = session.player
 	local element = session.elements[index]
-	table.insert(session.picked, index)
-	session.lastPickAt = os.clock()
-	local slot = #session.picked
+	element.state = "Sealed"
+	element.fromTray = false
+	table.insert(session.sealed, index)
+	session.transferAt = os.clock()
+	local slot = #session.sealed
 	if slot == 1 then
-		-- (first element taken: the saved culture is used up NOW, before any core is created,
+		-- (first element sealed: the saved culture is used up NOW, before any core is created,
 		-- so a crash can never give back both the cores and the same culture)
 		Lab.consume(player)
 	end
@@ -321,26 +366,21 @@ local function pick(session: Session, index: number)
 		payload =
 			{ index = index, slot = slot, inert = true, kind = "Husk", grade = nil, toCase = false }
 	else
-		local grade: Types.CoreGrade = Grades.fromScore(element.score)
+		local score = element.score
+		if E.WARM_PENALTY > 0 and os.clock() - element.freedAt > WARM_AFTER then
+			score = math.max(0, score - E.WARM_PENALTY)
+		end
+		local grade: Types.CoreGrade = Grades.fromScore(score)
 		local owner = player.UserId
 		local location, toCase = destination(player)
 		local id: string? = nil
 		if location then
-			id =
-				Ledger.create(owner, grade, element.score, os.time(), location, false, element.kind)
+			id = Ledger.create(owner, grade, score, os.time(), location, false, element.kind)
 		end
 		if id == nil then
 			-- (no room after all: never lose a core, put it on the stash over the limit)
 			toCase = false
-			Ledger.create(
-				owner,
-				grade,
-				element.score,
-				os.time(),
-				Ledger.bench(owner),
-				true,
-				element.kind
-			)
+			Ledger.create(owner, grade, score, os.time(), Ledger.bench(owner), true, element.kind)
 		end
 		session.toCase = session.toCase or toCase
 		table.insert(session.cores, {
@@ -359,8 +399,8 @@ local function pick(session: Session, index: number)
 		Lab.benchChanged(player) -- (saved at once: a sealed core is never lost)
 	end
 	Guard.sendExtractPicked(player, payload)
-	if #session.picked >= session.slots then
-		finish(session, "all capsules filled")
+	if #session.sealed >= session.slots then
+		finish(session, "all capsules sealed")
 	end
 end
 
@@ -395,22 +435,24 @@ function Extraction.begin(player: Player)
 	end
 	nextSessionId += 1
 	local now = os.clock()
-	local serverNow = workspace:GetServerTimeNow()
-	local untilReveal = INTRO_TIME + E.CUT_TIME
 	sessions[player] = {
 		id = nextSessionId,
 		player = player,
 		seed = seed,
 		startedAt = now,
-		revealAt = now + untilReveal,
-		endsAt = now + untilReveal + E.SELECT_TIME,
-		revealServer = serverNow + untilReveal,
-		endsServer = serverNow + untilReveal + E.SELECT_TIME,
+		step = "Intro",
+		layer = 0,
+		spread = { false, false },
+		stepAt = now,
+		handAt = -math.huge,
+		transferAt = -math.huge,
+		coolEnds = nil,
+		coolEndsServer = nil,
 		slots = math.clamp(free, 1, E.CAPSULES),
 		elements = Extraction.roll(seed),
-		picked = {},
-		lastPickAt = -math.huge,
+		sealed = {},
 		invalid = 0,
+		acked = 0,
 		cores = {},
 		inert = 0,
 		toCase = false,
@@ -429,30 +471,197 @@ local function isWhole(value: any, low: number, high: number): boolean
 	return Guard.isFinite(value) and value % 1 == 0 and value >= low and value <= high
 end
 
-local function invalid(session: Session, why: string)
+-- A refused message: counted, logged, and the client gets the server's state back (so an
+-- element that moved on its screen snaps back to where the server has it).
+local function refuse(session: Session, why: string)
 	session.invalid += 1
-	Guard.debug(`{session.player.Name}: bad ExtractAction ({why})`)
+	Guard.debug(`{session.player.Name}: refused ExtractAction ({why})`)
 	if session.invalid > E.MAX_INVALID then
 		Extraction.abort(session.player, "too many bad messages")
+		return
 	end
+	Extraction.pushState(session.player)
 end
 
-local function onAction(player: Player, sessionId: any, action: any, index: any)
+-- Counts of elements per state (for the hand / tray / slot limits).
+local function countIn(session: Session, state: Types.ElementState): number
+	local n = 0
+	for _, element in session.elements do
+		if element.state == state then
+			n += 1
+		end
+	end
+	return n
+end
+
+local function inHand(session: Session): number
+	return countIn(session, "Pulling") + countIn(session, "Held")
+end
+
+-- The step messages (Tool, Layer, Spread). Returns why it is refused, or nil (done).
+local function stepAction(session: Session, action: string, arg: any, now: number): string?
+	local since = now - session.stepAt
+	if action == "Tool" then
+		if session.step ~= "Intro" then
+			return "Tool: wrong step"
+		end
+		if now - session.startedAt < MIN.Tool then
+			return "Tool: too early"
+		end
+		session.step = "Incise"
+		session.stepAt = now
+		return nil
+	elseif action == "Layer" then
+		if session.step ~= "Incise" or not isWhole(arg, 1, 2) or arg ~= session.layer + 1 then
+			return "Layer: wrong step or layer"
+		end
+		if since < (if arg == 1 then MIN.Layer1 else MIN.Layer2) then
+			return "Layer: too early"
+		end
+		session.layer = arg
+		session.stepAt = now
+		if arg == 2 then
+			session.step = "Spread"
+		end
+		return nil
+	end
+	-- "Spread"
+	if session.step ~= "Spread" or not isWhole(arg, 1, 2) or session.spread[arg] then
+		return "Spread: wrong step or side"
+	end
+	local first = not session.spread[1] and not session.spread[2]
+	if since < (if first then MIN.Spread else MIN.SpreadGap) then
+		return "Spread: too early"
+	end
+	session.spread[arg] = true
+	session.stepAt = now
+	if session.spread[1] and session.spread[2] then
+		session.step = "Harvest"
+		session.coolEnds = now + E.COOL_TIME
+		session.coolEndsServer = workspace:GetServerTimeNow() + E.COOL_TIME
+		-- (the client starts its cooling bar from this state)
+		Extraction.pushState(session.player)
+	end
+	return nil
+end
+
+-- The element messages (Harvest only). Returns why it is refused, or nil (done).
+local function elementAction(session: Session, action: string, arg: any, now: number): string?
+	if session.step ~= "Harvest" then
+		return `{action}: not harvesting yet`
+	end
+	if not isWhole(arg, 1, #session.elements) then
+		return `{action}: bad index`
+	end
+	local index = arg :: number
+	local element = session.elements[index]
+	local state = element.state
+	local since = now - session.handAt
+	if action == "Grab" then
+		if state ~= "Nest" then
+			return "Grab: not in its nest"
+		end
+		if inHand(session) > 0 then
+			return "Grab: the hand is full"
+		end
+		if #session.sealed + countIn(session, "OnTray") >= session.slots then
+			return "Grab: no capsule left for it"
+		end
+		if since < MIN.Grab then
+			return "Grab: too early"
+		end
+		element.state = "Pulling"
+	elseif action == "Free" then
+		if state ~= "Pulling" then
+			return "Free: not pulling"
+		end
+		if since < (if element.kind == "Husk" then MIN.FreeHusk else MIN.Free) then
+			return "Free: too early"
+		end
+		element.state = "Held"
+		element.fromTray = false
+		element.freedAt = now
+	elseif action == "Let" then
+		if state ~= "Pulling" and state ~= "Held" then
+			return "Let: not in the hand"
+		end
+		element.state = "Nest"
+		element.fromTray = false
+	elseif action == "Tray" then
+		if state ~= "Held" then
+			return "Tray: not in the hand"
+		end
+		if countIn(session, "OnTray") >= MAX_ON_TRAY then
+			return "Tray: the tray is full"
+		end
+		if since < MIN.Tray then
+			return "Tray: too early"
+		end
+		element.state = "OnTray"
+		element.fromTray = false
+	elseif action == "Drop" then
+		if state ~= "Held" then
+			return "Drop: not in the hand"
+		end
+		if since < MIN.Drop then
+			return "Drop: too early"
+		end
+		element.state = "Loose"
+		element.fromTray = false
+	elseif action == "Lift" then
+		if state ~= "OnTray" and state ~= "Loose" then
+			return "Lift: not on the tray or the trolley"
+		end
+		if inHand(session) > 0 then
+			return "Lift: the hand is full"
+		end
+		if since < MIN.Lift then
+			return "Lift: too early"
+		end
+		element.fromTray = state == "OnTray"
+		element.state = "Held"
+	else -- "Transfer"
+		if state ~= "Held" or not element.fromTray then
+			return "Transfer: not lifted from the tray"
+		end
+		if since < MIN.Transfer or now - session.transferAt < MIN.TransferGap then
+			return "Transfer: too early"
+		end
+		if #session.sealed >= session.slots then
+			return "Transfer: no capsule left"
+		end
+		session.handAt = now
+		transfer(session, index)
+		return nil
+	end
+	session.handAt = now
+	return nil
+end
+
+local STEP_ACTIONS = { Tool = true, Layer = true, Spread = true }
+local ELEMENT_ACTIONS =
+	{ Grab = true, Free = true, Let = true, Tray = true, Drop = true, Lift = true, Transfer = true }
+
+local function onAction(player: Player, sessionId: any, action: any, arg: any)
 	local session = sessions[player]
 	if session == nil then
 		return
 	end
-	-- (only picks are rate-limited: a dropped "Stop" would leave the player frozen in place
-	-- while his own screen has already given the camera back)
-	if action == "Pick" and not actionLimiter.allow(player) then
+	-- (Stop / Done are never rate-limited: a dropped "Stop" would leave the player frozen in
+	-- place while his own screen has already given the camera back)
+	local ending = action == "Done" or action == "Stop"
+	if not ending and not actionLimiter.allow(player) then
+		session.acked += 1
+		refuse(session, "rate limit")
 		return
 	end
 	if not isWhole(sessionId, 1, 2 ^ 31) or sessionId ~= session.id then
-		invalid(session, "session id")
+		refuse(session, "session id")
 		return
 	end
-	if action ~= "Pick" and action ~= "Done" and action ~= "Stop" then
-		invalid(session, "action")
+	session.acked += 1
+	if typeof(action) ~= "string" then
+		refuse(session, "action type")
 		return
 	end
 	if Guard.body(player) == nil then
@@ -463,37 +672,27 @@ local function onAction(player: Player, sessionId: any, action: any, index: any)
 		Extraction.abort(player, "left the lab")
 		return
 	end
-	if action == "Done" or action == "Stop" then
+	if ending then
 		Extraction.abort(player, if action == "Done" then "done" else "stopped by the player")
 		return
 	end
-	-- "Pick"
-	if not isWhole(index, 1, #session.elements) then
-		invalid(session, "index")
-		return
-	end
-	if table.find(session.picked, index) then
-		invalid(session, "already picked")
-		return
-	end
 	local now = os.clock()
-	if now < session.revealAt then
-		invalid(session, "before the seam is open")
-		return
+	local refused: string?
+	if STEP_ACTIONS[action] then
+		refused = stepAction(session, action, arg, now)
+	elseif ELEMENT_ACTIONS[action] then
+		local cool = session.coolEnds
+		if cool and now > cool + 0.5 then
+			refused = "cooling bar over"
+		else
+			refused = elementAction(session, action, arg, now)
+		end
+	else
+		refused = "unknown action"
 	end
-	if now > session.endsAt + 0.5 then
-		invalid(session, "cooling bar over")
-		return
+	if refused then
+		refuse(session, refused)
 	end
-	if now - session.lastPickAt < E.PICK_MIN_GAP then
-		invalid(session, "picks too fast")
-		return
-	end
-	if #session.picked >= session.slots then
-		invalid(session, "no capsule left")
-		return
-	end
-	pick(session, index :: number)
 end
 
 ------------------------------------------------------------------------------
@@ -536,9 +735,10 @@ function Extraction.start()
 		task.wait(0.5)
 		local now = os.clock()
 		for player, session in sessions do
+			local cool = session.coolEnds
 			if player.Parent == nil then
 				sessions[player] = nil
-			elseif now >= session.endsAt + END_GRACE then
+			elseif cool and now >= cool + END_GRACE then
 				Extraction.abort(player, "cooling bar ran out")
 			elseif now - session.startedAt > E.TIMEOUT then
 				Extraction.abort(player, "timed out")

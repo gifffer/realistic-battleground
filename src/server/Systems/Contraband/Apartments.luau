@@ -136,7 +136,7 @@ local function getOrBuildLab(player: Player): LabInfo
 			"Front door",
 			L.ENTER_HOLD,
 			L.PROMPT_DISTANCE,
-			false
+			true -- (not through the entry's walls)
 		)
 		prompt.Triggered:Connect(function(who: Player)
 			Apartments.leave(who, prompt)
@@ -423,6 +423,73 @@ local function markDoor(site: Sites.DoorSite, leaves: { BasePart })
 	light.Parent = strip
 end
 
+-- A ray straight down from `at` (8 studs long), ignoring `ignore` and every character: the hit,
+-- or nil. (`at` must be below any ceiling or awning and above the floor looked for.)
+local function floorBelow(at: Vector3, ignore: { Instance }): RaycastResult?
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local skip = table.clone(ignore)
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(skip, player.Character)
+		end
+	end
+	params.FilterDescendantsInstances = skip
+	return workspace:Raycast(at, Vector3.new(0, -8, 0), params)
+end
+
+-- How high the "Enter" prompt floats above the floor the player stands on: chest height.
+local PROMPT_HEIGHT = 3.3
+-- Gap kept between a leaf's foot and the floor it swings over.
+local SWEEP_GAP = 0.03
+
+-- citygen built these street doors with their foot at street level, but the dark room behind
+-- some of them has a raised floor: swinging INTO the room, the leaf's foot went through that
+-- floor. Before the leaf is tagged (CityDoors records its closed CFrame then), the floor just
+-- behind it is measured; if it is higher than the leaf's foot, the leaf is shortened from below
+-- and the gap is filled by a static sill (a doorstep, same wood) that never moves. Parts on the
+-- leaf (kick plate, handle) that reach below the new foot are shortened the same way.
+local function fitOverInsideFloor(leaf: BasePart, outward: Vector3)
+	local up = leaf.CFrame.UpVector
+	if up.Y < 0.99 then
+		return -- (only upright leaves)
+	end
+	local foot = leaf.Position.Y - leaf.Size.Y / 2
+	local behind = leaf.Position - outward * 1.5
+	local hit = floorBelow(Vector3.new(behind.X, foot + 2, behind.Z), { leaf })
+	if hit == nil then
+		return
+	end
+	local cut = hit.Position.Y + SWEEP_GAP - foot
+	if cut <= 0.01 or cut > leaf.Size.Y * 0.4 then
+		return
+	end
+	local sill = leaf:Clone()
+	sill:ClearAllChildren()
+	sill.Name = "DoorSill"
+	sill.Size = Vector3.new(leaf.Size.X, cut, leaf.Size.Z)
+	sill.CFrame = leaf.CFrame * CFrame.new(0, -leaf.Size.Y / 2 + cut / 2, 0)
+	sill:SetAttribute("Unbreakable", true)
+	for _, tag in sill:GetTags() do
+		sill:RemoveTag(tag)
+	end
+	sill.Parent = leaf.Parent
+	leaf.Size -= Vector3.new(0, cut, 0)
+	leaf.CFrame *= CFrame.new(0, cut / 2, 0)
+	local newFoot = foot + cut
+	for _, child in leaf:GetDescendants() do
+		if child:IsA("BasePart") and child.CFrame.UpVector.Y > 0.99 then
+			local bottom = child.Position.Y - child.Size.Y / 2
+			local top = child.Position.Y + child.Size.Y / 2
+			local trim = newFoot + SWEEP_GAP - bottom
+			if trim > 0 and top - trim > bottom + 0.05 then
+				child.Size -= Vector3.new(0, trim, 0)
+				child.CFrame *= CFrame.new(0, trim / 2, 0)
+			end
+		end
+	end
+end
+
 local function setUpDoor(site: Sites.DoorSite, byName: { [string]: { BasePart } }): boolean
 	local leaves: { BasePart } = {}
 	for _, leafInfo in site.leaves do
@@ -439,6 +506,14 @@ local function setUpDoor(site: Sites.DoorSite, byName: { [string]: { BasePart } 
 	for index, leaf in leaves do
 		local hingeZ = site.leaves[index].hingeZ
 		local angle = openAngleFor(leaf, hingeZ, site.outward)
+		if not leaf:HasTag(DOOR_TAG) then
+			fitOverInsideFloor(leaf, site.outward)
+		end
+		-- the hinge line on the leaf's INNER face (the face that leads the swing into the
+		-- building): the turning leaf then stays inside the doorway instead of sweeping its
+		-- thickness through the jamb
+		local halfDepth = (leaf.CFrame:VectorToWorldSpace(leaf.Size / 2)):Abs().X
+		local hingeX = leaf.Position.X - site.outward.X * halfDepth
 		local parts: { BasePart } = { leaf }
 		for _, child in leaf:GetDescendants() do
 			if child:IsA("BasePart") then
@@ -455,7 +530,7 @@ local function setUpDoor(site: Sites.DoorSite, byName: { [string]: { BasePart } 
 			end
 			-- attributes FIRST: CityDoors reads them when the tag is added
 			part:SetAttribute("DoorGroup", group)
-			part:SetAttribute("HingeX", leaf.Position.X)
+			part:SetAttribute("HingeX", hingeX)
 			part:SetAttribute("HingeZ", hingeZ)
 			part:SetAttribute("OpenAngle", angle)
 			part:SetAttribute("Locked", true)
@@ -474,9 +549,18 @@ local function setUpDoor(site: Sites.DoorSite, byName: { [string]: { BasePart } 
 		end
 	end
 	markDoor(site, leaves)
+	-- the prompt floats PROMPT_HEIGHT above the floor the player stands on there (a stoop, a
+	-- step or the pavement: measured, not guessed), so it is never at knee height
+	local at = site.promptAt
+	local ignore: { Instance } = {}
+	for _, leaf in leaves do
+		table.insert(ignore, leaf)
+	end
+	local ground = floorBelow(at + Vector3.new(0, 1, 0), ignore)
+	local promptY = if ground then ground.Position.Y + PROMPT_HEIGHT else at.Y
 	local promptPart = Guard.marker(
 		`LabDoor_{site.id}`,
-		CFrame.new(site.promptAt),
+		CFrame.new(at.X, promptY, at.Z),
 		Guard.worldFolder("ContrabandSites")
 	)
 	promptPart:SetAttribute("Unbreakable", true)

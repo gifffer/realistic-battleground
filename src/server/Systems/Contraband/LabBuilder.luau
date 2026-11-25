@@ -24,24 +24,27 @@
 --   Floor          the PrimaryPart (one slab under everything)
 --   Spawn          invisible, in the entry (LookVector = +Z, into the flat)
 --   ExitDoor       the front door leaf (Apartments puts "Leave" on it)
---   VatCore        invisible, the vat's centre (the vat prompt is on it); VatGlass, VatBase,
---                  VatCap (+ SpotLight VatRimLight), VatPipe ×2; VatScreen (faces -Z)
---   BenchAnchor    invisible, IDENTITY rotation, on the trolley top: the shell lies along +X
---   CutterDock     invisible, identity: the cutter's charger sits here
---   ChargerLed     the charger's LED (Neon); X / V recolour it (attribute "Busy" while the
---                  cutter is out, set by the client)
---   ScanScreen     the small CRT's glass on the crate (Front face = -Z)
+--   VatCore, VatPromptPoint, VatGlass, VatBase, VatCap (+ VatRimLight), VatScreen: made by
+--                  VatBuilder (see its header)
+--   BenchAnchor    invisible, IDENTITY rotation, on the trolley top: the shell lies along +X.
+--                  BenchLayout.buildStatic puts its static kit there (Props_Lab > BenchKit:
+--                  underpad, instrument + specimen trays, the cold pass-box at the +X end)
+--   CutterDock     invisible, identity: the scalpel's rest on the instrument tray
+--   ChargerLed     the LED of the UV blade steriliser on the S-wall sterilising worktop (Neon)
+--   ScanScreen     the scanner CRT's glass, on the stash freezer's lid (Front face = -Z)
 --   MonitorScreen  the station CRT's glass on the trestle (Front face = -X)
---   ChuteMouth     invisible, the chute hatch in the E wall (LookVector = into the wall)
---   ChuteFlap      the hatch's flap (side-hinged, open against the wall)
---   RackSpot       invisible, on the wire shelving (Take case); RackStencil "BX-7"
---   StashShelf     invisible, identity, INSIDE the glass-lid freezer (capsules sit on it)
+--   ChuteMouth     invisible, the biomass bin's mouth at the table's W end (LookVector = into
+--                  the bin, -X)
+--   ChuteFlap      the bin's lid (swung up against the wall)
+--   RackSpot       invisible, on the dispatch rack by the S wall (Take case); RackStencil "BX-7"
+--   StashShelf     invisible, identity, INSIDE the clear-lid stash freezer (capsules sit on it)
 --   TubeLight      the lab's fluorescent tube (SurfaceLight "Light", shadows, attr Flicker "Tube")
 --   LampHead       the work lamp's head over the bench (SpotLight "Light")
 --
 -- FOLDERS (contracts with ApartmentController / ApartmentAmbienceController, see DESIGN §1.4):
 --   Rooms     invisible boxes named Entry, Living, Corridor (×2), Bath, Bed2, Lab
---   Doors     Models Door_<Room>: Leaf (PrimaryPart), WorldPivot = hinge line on the floor;
+--   Doors     Models Door_<Room>: Leaf (PrimaryPart, SOLID), WorldPivot = hinge line on the floor
+--             (on the leaf's face that leads the swing, see AptProps.door);
 --             attributes Room, Mode ("Auto" | "Prompt" | "Locked"), RestAngle, OpenAngle (deg,
 --             a positive angle swings toward the hinge's local -Z), Label, ClosedPivot (CFrame),
 --             TriggerDistance (studs, Auto doors)
@@ -53,7 +56,10 @@
 --   Anim      Models the client moves: Pendant, FanBlades, Sheet_1..3, Curtain
 --   Shell, Props_<Room>   everything else (no contract)
 --
--- BUDGET: ~1000 parts, 5 shadow-casting lights (entry pendant, blind sodium, corridor bulb, bend
+-- Z-FIGHTING: no two visible faces share a plane. Flat details are AptProps overlays at fixed
+-- levels (AptProps.LAYER); the floor stacks are layered (see the floors below); panels butt.
+--
+-- BUDGET: ~1100 parts, 5 shadow-casting lights (entry pendant, blind sodium, corridor bulb, bend
 -- bulb, lab tube); every other light has a small Range (Future lights without shadows shine
 -- through walls).
 
@@ -61,6 +67,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local AptProps = require(script.Parent.AptProps)
+local VatBuilder = require(script.Parent.VatBuilder)
+local BenchLayout = require(ReplicatedStorage.Shared.Contraband.BenchLayout)
 
 type Look = AptProps.Look
 
@@ -71,6 +79,7 @@ LabBuilder.HALF_SIZE = Vector3.new(29.5, 7, 25.5)
 LabBuilder.CENTRE_HEIGHT = 5.5 -- the box centre is this far above the floor top
 
 local CEILING = 11 -- the ceiling's underside
+local LAB_FLOOR = 0.08 -- the top of the lab's floor plastic (things on the lab floor stand here)
 local DOOR_WIDTH = 4.5
 local DOOR_HEIGHT = 7.5
 
@@ -81,6 +90,7 @@ local ANG = CFrame.Angles
 local rad = math.rad
 local look = AptProps.look
 local part = AptProps.part
+local CORD_WHITE_LOOK = AptProps.look(Enum.Material.Plastic, 170, 166, 154)
 
 -- The CFrame of the floor-top centre of flat slot `slot` (1, 2, 3...).
 function LabBuilder.origin(slot: number): CFrame
@@ -389,7 +399,8 @@ function LabBuilder.build(slot: number, owner: number): Model
 	------------------------------------------------------------------------------
 
 	-- Entry: 2 × 2 checker tiles, 3 missing (concrete under), 2 lifted.
-	part(shell, "Screed", V(8, 0.02, 10), L(-8, 0.01, -19), look(M.Concrete, 100, 98, 92))
+	-- (the screed shows in the missing tiles' holes: 0..0.03, tiles 0.03..0.07)
+	part(shell, "Screed", V(8, 0.03, 10), L(-8, 0.015, -19), look(M.Concrete, 100, 98, 92))
 	local tileIndex = 0
 	for tx = -11, -5, 2 do
 		for tz = -23, -15, 2 do
@@ -406,8 +417,8 @@ function LabBuilder.build(slot: number, owner: number): Model
 				part(
 					shell,
 					"Tile",
-					V(1.96, 0.05, 1.96),
-					L(tx, 0.045, tz) * lift,
+					V(1.96, 0.04, 1.96),
+					L(tx, 0.05, tz) * lift,
 					AptProps.tint(tileLook, rng, 4)
 				)
 			end
@@ -425,40 +436,46 @@ function LabBuilder.build(slot: number, owner: number): Model
 		)
 	end
 	-- Lab: the old bedroom carpet still shows along the W and S walls (a band with its wooden
-	-- tack strip); the rest is a grey rubber mat + overlapping clear plastic taped down.
+	-- tack strip); the rest is a grey rubber mat with clear plastic sheets taped down over it.
+	-- Each layer has its own height (no two layers share a plane): carpet 0..0.03, tack strip
+	-- 0..0.08, mat 0..0.05, plastic 0.05..LAB_FLOOR (0.08), tape LAB_FLOOR..+0.03. The plastic
+	-- sheets BUTT (no overlap, no tilt) and the tape covers the joins.
 	local carpet = look(M.Fabric, 92, 78, 70)
 	part(shell, "OldCarpet", V(0.8, 0.03, 23.75), L(10.65, 0.015, 12.125), carpet)
-	part(shell, "OldCarpet", V(17.75, 0.03, 0.8), L(19.125, 0.015, 0.65), carpet)
+	part(shell, "OldCarpet", V(16.95, 0.03, 0.8), L(19.525, 0.015, 0.65), carpet)
 	local tack = look(M.Wood, 104, 86, 62)
-	part(shell, "TackStrip", V(0.12, 0.04, 22.9), L(11.0, 0.035, 12.55), tack)
-	part(shell, "TackStrip", V(16.9, 0.04, 0.12), L(19.5, 0.035, 1.0), tack)
+	part(shell, "TackStrip", V(0.12, 0.08, 22.9), L(11.0, 0.04, 12.55), tack)
+	part(shell, "TackStrip", V(16.9, 0.08, 0.12), L(19.5, 0.04, 1.0), tack)
 	part(
 		shell,
 		"LabMat",
-		V(16.95, 0.04, 22.95),
-		L(19.525, 0.02, 12.525),
+		V(16.95, 0.05, 22.95),
+		L(19.525, 0.025, 12.525),
 		look(M.Rubber, 46, 48, 48)
 	)
 	for i = 0, 3 do
 		local sheet = part(
 			shell,
 			"FloorPlastic",
-			V(5.2, 0.01, 23),
-			L(12.5 + i * 4.6, 0.045, 12) * ANG(0, rad(rng:NextNumber(-0.8, 0.8)), 0),
-			look(M.Glass, 200, 210, 210, 0.75)
+			V(4.15, LAB_FLOOR - 0.05, 22.3),
+			L(11.1 + 4.15 * (i + 0.5), (0.05 + LAB_FLOOR) / 2, 12.25),
+			look(M.SmoothPlastic, 200, 210, 210, 0.6, 0.08)
 		)
 		sheet.CastShadow = false
 	end
 	-- the tape on the plastic's joins: short torn pieces, a little crooked, with gaps
-	for i = 0, 2 do
+	for i = 1, 3 do
 		local z = 1.2 + rng:NextNumber(0, 0.6)
 		while z < 23.2 do
-			local length = math.min(rng:NextNumber(4.5, 7), 23.4 - z)
-			part(
+			local length = math.min(rng:NextNumber(4.5, 7), 23.3 - z)
+			AptProps.overlay(
 				shell,
 				"FloorTape",
-				V(0.22, 0.012, length),
-				L(14.9 + i * 4.6, 0.052, z + length / 2) * ANG(0, rad(rng:NextNumber(-1.5, 1.5)), 0),
+				Vector2.new(0.22, length),
+				L(11.1 + 4.15 * i, LAB_FLOOR, z + length / 2)
+					* ANG(0, rad(rng:NextNumber(-1.5, 1.5)), 0)
+					* ANG(rad(90), 0, 0),
+				AptProps.LAYER.STEP,
 				look(M.Fabric, 72, 74, 70)
 			)
 			z += length + rng:NextNumber(0.4, 1.4)
@@ -466,16 +483,23 @@ function LabBuilder.build(slot: number, owner: number): Model
 	end
 
 	-- Skirting runs: { x0, z0, x1, z1, out } on the wall faces of the warm rooms.
-	type Run = { a: Vector3, b: Vector3, out: Vector3, room: string }
+	-- (`skip`: stretches of the run, in studs from its start, with no wallpaper: a window)
+	type Run = { a: Vector3, b: Vector3, out: Vector3, room: string, skip: { NumberRange }? }
 	local X_PLUS, X_MINUS, Z_PLUS, Z_MINUS =
 		Vector3.xAxis, -Vector3.xAxis, Vector3.zAxis, -Vector3.zAxis
 	local runs: { Run } = {
 		-- entry
-		{ a = V(-12, 0, -24), b = V(-10.65, 0, -24), out = Z_PLUS, room = "Entry" },
-		{ a = V(-5.35, 0, -24), b = V(-4, 0, -24), out = Z_PLUS, room = "Entry" },
+		{ a = V(-11.75, 0, -24), b = V(-10.65, 0, -24), out = Z_PLUS, room = "Entry" },
+		{ a = V(-5.35, 0, -24), b = V(-4.25, 0, -24), out = Z_PLUS, room = "Entry" },
 		{ a = V(-4.25, 0, -24), b = V(-4.25, 0, -14.25), out = X_MINUS, room = "Entry" },
 		-- living
-		{ a = V(-28, 0, -24), b = V(-12.25, 0, -24), out = Z_PLUS, room = "Living" },
+		{
+			a = V(-28, 0, -24),
+			b = V(-12.25, 0, -24),
+			out = Z_PLUS,
+			room = "Living",
+			skip = { NumberRange.new(4.4, 12.1) }, -- (the blind window, frame included)
+		},
 		{ a = V(-28, 0, -24), b = V(-28, 0, -6.25), out = X_PLUS, room = "Living" },
 		{ a = V(-12.25, 0, -24), b = V(-12.25, 0, -21.9), out = X_MINUS, room = "Living" },
 		{ a = V(-12.25, 0, -16.1), b = V(-12.25, 0, -6.25), out = X_MINUS, room = "Living" },
@@ -503,6 +527,20 @@ function LabBuilder.build(slot: number, owner: number): Model
 		Living = { Color3.fromRGB(126, 118, 94), Color3.fromRGB(132, 124, 98) },
 		Corridor = { Color3.fromRGB(126, 118, 94), Color3.fromRGB(122, 116, 96) },
 	}
+	-- Two runs meet at an inside corner: the run on the X-facing wall stops short there (by each
+	-- element's depth, see AptProps.skirting) and butts against the other one.
+	local function endsOnZRun(point: Vector3): boolean
+		for _, other in runs do
+			if math.abs(other.out.Z) > 0.5 and math.abs(other.a.Z - point.Z) < 0.01 then
+				local lo = math.min(other.a.X, other.b.X) - 0.01
+				local hi = math.max(other.a.X, other.b.X) + 0.01
+				if point.X >= lo and point.X <= hi then
+					return true
+				end
+			end
+		end
+		return false
+	end
 	for _, run in runs do
 		local along = run.out:Cross(Vector3.yAxis)
 		local a, b = run.a, run.b
@@ -512,7 +550,16 @@ function LabBuilder.build(slot: number, owner: number): Model
 		local length = (b - a).Magnitude
 		local frame = wallFrame(a.X, 0, a.Z, run.out)
 		local parent = props[run.room] or shell
-		AptProps.skirting(parent, frame, length, rng, run.room == "Corridor" or run.room == "Entry")
+		local facesX = math.abs(run.out.X) > 0.5
+		AptProps.skirting(
+			parent,
+			frame,
+			length,
+			rng,
+			run.room == "Corridor" or run.room == "Entry",
+			facesX and endsOnZRun(a),
+			facesX and endsOnZRun(b)
+		)
 		local tones = WALLPAPER[run.room]
 		if tones then
 			local dado = run.room == "Corridor" or run.room == "Entry"
@@ -524,7 +571,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 				tones,
 				if length > 8 then 1 else 0,
 				rng,
-				nil,
+				run.skip,
 				if dado then 3.56 else nil
 			)
 		end
@@ -533,10 +580,10 @@ function LabBuilder.build(slot: number, owner: number): Model
 	-- Stains: the hand-height band along corridor A, damp by the bath door, a halo over the
 	-- living room radiator, one by the Bed1 door.
 	local corridorColor = CORRIDOR.look.color
-	for z = -11, 10, 6 do
+	for _, z in { -13, -3.5, 2.5, 8.5 } do
 		AptProps.stain(
 			props.Corridor,
-			wallFrame(-6.29, 3.5, z, X_MINUS),
+			wallFrame(-6.25, 2.4, z, X_MINUS),
 			Vector2.new(1.6, 0.9),
 			corridorColor,
 			rng
@@ -544,14 +591,14 @@ function LabBuilder.build(slot: number, owner: number): Model
 	end
 	AptProps.stain(
 		props.Corridor,
-		wallFrame(-11.71, 1.2, 2.6, X_PLUS),
+		wallFrame(-11.75, 1.2, 2.9, X_PLUS),
 		Vector2.new(1.8, 1.6),
 		corridorColor,
 		rng
 	)
 	AptProps.stain(
 		props.Corridor,
-		wallFrame(-11.71, 1.0, -4.4, X_PLUS),
+		wallFrame(-11.75, 1.0, -4.6, X_PLUS),
 		Vector2.new(1.4, 1.2),
 		corridorColor,
 		rng
@@ -559,39 +606,41 @@ function LabBuilder.build(slot: number, owner: number): Model
 	-- hand grime round the latch side of the Bed1 and bathroom doors
 	AptProps.stain(
 		props.Corridor,
-		wallFrame(-6.29, 3.4, -6.1, X_MINUS),
-		Vector2.new(0.9, 1.5),
+		wallFrame(-6.25, 2.6, -5.75, X_MINUS),
+		Vector2.new(0.9, 1.2),
 		corridorColor,
 		rng
 	)
 	AptProps.stain(
 		props.Corridor,
-		wallFrame(-11.71, 3.4, -3.9, X_PLUS),
-		Vector2.new(0.9, 1.5),
+		wallFrame(-11.75, 2.6, -4.15, X_PLUS),
+		Vector2.new(0.9, 1.2),
 		corridorColor,
 		rng
 	)
 	-- a wavy damp tide-mark rising from the skirting beside the bathroom door
 	for i = 0, 4 do
 		local height = 0.7 + math.sin(i * 1.7) * 0.25 + rng:NextNumber(0, 0.15)
-		part(
+		-- (marks over the damp stain: the MARK level; side by side, they butt)
+		AptProps.overlay(
 			props.Corridor,
 			"TideMark",
-			V(0.012, height, 0.62),
-			L(-11.7, 0.55 + height / 2, -6.4 + i * 0.55),
+			Vector2.new(0.55, height),
+			wallFrame(-11.75, 0.55 + height / 2, -6.4 + i * 0.55 + 0.275, X_PLUS),
+			AptProps.LAYER.MARK,
 			look(M.Plaster, 96, 90, 70)
 		)
 	end
 	AptProps.stain(
 		props.Living,
-		wallFrame(-14.5, 4.2, -23.96, Z_PLUS),
+		wallFrame(-14.5, 4.2, -24, Z_PLUS),
 		Vector2.new(3, 1.6),
 		LIVING.look.color,
 		rng
 	)
 	AptProps.stain(
 		props.Bed2,
-		wallFrame(-5.71, 9.0, 6, X_PLUS),
+		wallFrame(-5.75, 9.0, 6, X_PLUS),
 		Vector2.new(2.5, 2.2),
 		BED2.look.color,
 		rng
@@ -602,7 +651,9 @@ function LabBuilder.build(slot: number, owner: number): Model
 	------------------------------------------------------------------------------
 
 	-- A door in a doorway centred at (x, z), swinging toward `into` (a world-axis direction).
-	-- The hinge sits on the face on the `into` side so the leaf lies flat when open.
+	-- The hinge line is on the wall's `into` face (a 0.5 wall: 0.25 from its middle): shut, the
+	-- leaf fills the `into` half of the wall; open, it lies inside the doorway's width, clear of
+	-- the casing (see AptProps.door).
 	local function makeDoor(
 		name: string,
 		x: number,
@@ -612,7 +663,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 	): Model
 		local along = into:Cross(Vector3.yAxis) -- (from the hinge to the latch)
 		local centre = V(x, 0, z)
-		local hingePos = centre - along * 2.2 + into * 0.125
+		local hingePos = centre - along * (AptProps.DOOR_LEAF.width / 2) + into * 0.25
 		local hinge = origin * CFrame.fromMatrix(hingePos, along, Vector3.yAxis)
 		local made = AptProps.door(doors, name, hinge, spec, rng)
 		made:SetAttribute("ClosedPivot", hinge)
@@ -627,6 +678,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 		openAngle = 95,
 		label = "Bathroom",
 		paint = Color3.fromRGB(176, 170, 150),
+		floor = 0.05, -- (the bathroom's tiled floor)
 	})
 	AptProps.doorTowelHook(bathDoor, -1)
 	local bed1Door = makeDoor("Door_Bed1", -6, -9, X_PLUS, {
@@ -675,16 +727,18 @@ function LabBuilder.build(slot: number, owner: number): Model
 			made:PivotTo(closed * ANG(0, rad(angle), 0))
 		end
 	end
-	setRest(bathDoor, 35)
+	-- (the bathroom door stays wide open: the garden hose runs out under it)
+	setRest(bathDoor, 95)
 	setRest(bed2Door, 30)
 	setRest(labDoor, 14)
 
 	-- The front door (not in Doors: it never swings; "Leave" is on it).
+	-- (its bottom clears the entry tiles, top 0.07; its top clears the casing's head)
 	part(
 		model,
 		"ExitDoor",
-		V(4.4, 7.4, 0.25),
-		L(-8, 3.75, -23.85),
+		V(4.4, 7.36, 0.25),
+		L(-8, 0.09 + 7.36 / 2, -23.85),
 		AptProps.solid(look(M.Wood, 70, 52, 40))
 	)
 	AptProps.frontDoorDetails(props.Entry, L(-8, 0, -23.85, "N"), rng)
@@ -693,17 +747,21 @@ function LabBuilder.build(slot: number, owner: number): Model
 	-- ENTRY
 	------------------------------------------------------------------------------
 
-	AptProps.mailHeap(props.Entry, L(-7.6, 0, -22.9, "N"), rng)
+	-- (things on the entry floor stand on the tiles, top 0.07)
+	AptProps.mailHeap(props.Entry, L(-7.2, 0.07, -22.8, "N"), rng)
 	AptProps.coatHooks(props.Entry, L(-4.25, 0, -22.4, "W"), rng)
-	-- a worn doormat, kicked a little way in by the door
+	AptProps.keyHook(props.Entry, L(-4.25, 0, -20.3, "W"), rng)
+	-- a worn doormat, kicked a little way in by the door (it lies ON the tiles, top 0.07)
 	part(
 		props.Entry,
 		"Doormat",
 		V(2.6, 0.04, 1.6),
-		L(-8.3, 0.08, -21.4) * ANG(0, rad(5), 0),
+		L(-8.3, 0.09, -21.0) * ANG(0, rad(5), 0),
 		look(M.Fabric, 64, 56, 48)
 	)
-	AptProps.shoePile(props.Entry, L(-10.9, 0, -23.1, "N"), rng)
+	AptProps.shoePile(props.Entry, L(-9.95, 0.07, -23.0, "N"), rng)
+	-- a tied bin bag waiting by the door to go down (it never does)
+	AptProps.trashBag(props.Entry, L(-5.1, 0.07, -22.6), rng)
 	local _cupboard, cordExit = AptProps.meterCupboard(props.Entry, L(-4.25, 0, -16.25, "W"), rng)
 	AptProps.mirror(props.Entry, L(-11.75, 0, -22.8, "E"), rng)
 	AptProps.lightSwitch(props.Entry, L(-11.2, 0, -24, "N"), rng)
@@ -712,22 +770,36 @@ function LabBuilder.build(slot: number, owner: number): Model
 	-- LIVING ROOM + KITCHENETTE
 	------------------------------------------------------------------------------
 
-	AptProps.sofa(props.Living, L(-25.95, 0, -16.5, "E"), rng)
+	-- (the sofa, the rug, the low table and the TV share one axis, Z -15.2: he watches it
+	-- straight on; the eating corner is by the kitchen, the walk from the arch stays free)
+	local tvAxis = -15.2
+	AptProps.sofa(props.Living, L(-25.95, 0, tvAxis, "E"), rng)
 	AptProps.rug(
 		props.Living,
-		L(-22, 0, -16.5),
+		L(-22, 0, tvAxis),
 		rng,
 		Vector2.new(5, 4.2),
 		look(M.Fabric, 58, 56, 64)
 	)
-	AptProps.lowTable(props.Living, L(-22, 0.05, -16.5, "W"), rng)
-	AptProps.crtTV(props.Living, L(-13.6, 0, -10.75, "W"), rng)
+	AptProps.lowTable(props.Living, L(-22, 0.09, tvAxis, "W"), rng)
+	AptProps.crtTV(props.Living, L(-13.5, 0, tvAxis, "W"), rng)
+	AptProps.floorLamp(props.Living, L(-27.2, 0, -19.6), rng)
+	AptProps.wallClock(props.Living, L(-28, 7.0, tvAxis, "E"), rng)
 	AptProps.blindWindow(props.Living, L(-20.5, 0, -24, "N"), rng)
-	AptProps.kitchenCounter(props.Living, L(-23.5, 0, -7.45), rng)
-	AptProps.oldFridge(props.Living, L(-17.5, 0, -7.15), rng)
-	local fridgeHinge = origin * CFrame.fromMatrix(V(-18.6, 0, -8.2), Vector3.xAxis, Vector3.yAxis)
+	AptProps.laundryAirer(props.Living, L(-16.6, 0, -22.4), rng)
+	-- the kitchen run along the N wall: counter + sink, the cooker, the fridge, the bin
+	AptProps.kitchenCounter(props.Living, L(-24.9, 0, -7.45), rng)
+	AptProps.cooker(props.Living, L(-20.7, 0, -7.4), rng)
+	AptProps.oldFridge(props.Living, L(-18.3, 0, -7.35), rng)
+	-- (the door's hinge line is on its outer face, at the fridge's front-left corner)
+	local fridgeHinge = origin * CFrame.fromMatrix(V(-19.4, 0, -8.4), Vector3.xAxis, Vector3.yAxis)
 	AptProps.fridgeDoor(doors, fridgeHinge, rng):SetAttribute("ClosedPivot", fridgeHinge)
-	AptProps.foldTable(props.Living, L(-18.5, 0, -12.6, "N"), rng)
+	AptProps.pedalBin(props.Living, L(-16.4, 0, -7.4), rng, look(M.Plastic, 196, 194, 186))
+	-- the eating corner: the fold table against the W wall, two plastic chairs (one pushed back)
+	AptProps.foldTable(props.Living, L(-26.4, 0, -10.2, "E"), rng)
+	local chair = look(M.Plastic, 200, 198, 190)
+	AptProps.plasticChair(props.Living, L(-24.4, 0, -10.6, "W"), rng, chair)
+	AptProps.plasticChair(props.Living, L(-22.4, 0, -9.8) * ANG(0, rad(110), 0), rng, chair)
 	AptProps.radiator(props.Living, L(-14.5, 0, -24, "N"), rng)
 	AptProps.pipes(props.Living, { P(-27.6, 10.5, -6.6), P(-12.6, 10.5, -6.6) }, rng, nil)
 
@@ -736,12 +808,19 @@ function LabBuilder.build(slot: number, owner: number): Model
 	------------------------------------------------------------------------------
 
 	AptProps.runner(props.Corridor, L(-9, 0, -1.5), rng, 23)
-	AptProps.ceilingSag(props.Corridor, L(-9, CEILING, 5), rng, ceilingColor)
-	AptProps.bucket(props.Corridor, L(-8.4, 0, 5.2), rng, look(M.Plastic, 70, 90, 110), 0.8)
-	AptProps.mould(props.Corridor, L(-6.7, CEILING, 5.8), rng)
+	-- the leak sits by the E wall: the bucket under it leaves the walk 3.7 wide
+	AptProps.ceilingSag(
+		props.Corridor,
+		L(-7.975, CEILING, 5),
+		rng,
+		ceilingColor,
+		Vector2.new(3.35, 4.5)
+	)
+	AptProps.bucket(props.Corridor, L(-7.6, 0, 5.2), rng, look(M.Plastic, 70, 90, 110), 1)
+	AptProps.mould(props.Corridor, L(-6.3, CEILING, 9.5) * ANG(0, math.pi, 0), rng)
 	AptProps.pictureFrame(props.Corridor, L(-11.75, 0, -9.5, "E"), rng)
 	AptProps.deadPlant(props.Corridor, L(-11, 0, -7.2), rng)
-	AptProps.broom(props.Corridor, L(-11.35, 0, 1.9, "E"), rng)
+	AptProps.broom(props.Corridor, L(-11.35, 0, -4.4, "E"), rng)
 	AptProps.smokeDetector(props.Corridor, L(-9, CEILING, -8), rng)
 	AptProps.coatStand(props.Corridor, L(-11, 0, 16.6), rng)
 	AptProps.deadSocket(props.Corridor, L(0, CEILING, 15), rng)
@@ -753,6 +832,9 @@ function LabBuilder.build(slot: number, owner: number): Model
 		P(-6.6, 10.45, 4.8)
 	)
 	AptProps.lightSwitch(props.Corridor, L(-11.75, 0, -12.6, "E"), rng)
+	-- corridor B: how the gear came up the stairs (a sack truck, the flattened cartons)
+	AptProps.sackTruck(props.Corridor, L(7.0, 0, 16.5), rng)
+	AptProps.flatCartons(props.Corridor, L(-1.0, 0, 16.9), rng)
 
 	-- The cord bundle: from the meter cupboard, along corridor A's east skirting, across the
 	-- bend, along corridor B's north wall, up and into a hole drilled above the lab door.
@@ -770,13 +852,6 @@ function LabBuilder.build(slot: number, owner: number): Model
 		P(9.85, 8.6, 16.6),
 	}
 	AptProps.cordBundle(props.Corridor, cordPoints, { 5, 5, 4, 4, 3, 3, 3, 4, 4, 4 }, rng, 4)
-	-- ...and inside the lab, from the hole along the ceiling to the vat frame.
-	AptProps.cordBundle(props.Lab, {
-		P(10.4, 8.6, 16.6),
-		P(10.4, 10.5, 16.6),
-		P(17.2, 10.5, 16.6),
-		P(17.2, 9.85, 16.6),
-	}, { 4, 4, 4 }, rng, 4)
 	part(
 		props.Corridor,
 		"DrillHole",
@@ -786,42 +861,77 @@ function LabBuilder.build(slot: number, owner: number): Model
 		Enum.PartType.Cylinder
 	)
 
-	-- The garden hose: from the bathtub, out of the bathroom, along corridor A's west skirting,
-	-- round the bend, up with the cords into the lab, down into the vat.
-	AptProps.hose(props.Bath, {
-		P(-18.5, 0.85, -1.4),
-		P(-16.9, 2.25, -1.3),
-		P(-16.2, 0.12, -1.2),
-		P(-12.3, 0.12, -0.6),
-		P(-11.4, 0.12, 11.6),
-		P(-10.2, 0.12, 16.75),
-		P(4.6, 0.12, 16.85),
-		P(4.6, 8.95, 17.6),
-		P(10.4, 8.95, 16.95),
-		P(10.5, 10.3, 17.2),
-		P(18.6, 10.3, 18.4),
-		P(19.2, 9.85, 19.0),
-	}, rng)
-
 	------------------------------------------------------------------------------
 	-- BATHROOM
 	------------------------------------------------------------------------------
 
 	AptProps.bathtub(props.Bath, L(-18.1, 0.05, -1.95, "E"), rng)
-	AptProps.basinCabinet(props.Bath, L(-15, 0.05, 3.75, "S"), rng)
+	-- the tub's taps, shower and curtain on the W wall above its north end
+	local _fittings, spout = AptProps.tubFittings(props.Bath, L(-19.75, 0, 0.8, "E"), rng)
+	AptProps.toilet(props.Bath, L(-12.25, 0.05, 2.9, "W"), rng)
+	AptProps.basinCabinet(props.Bath, L(-15.8, 0.05, 3.75, "S"), rng)
 	AptProps.foldedSheeting(props.Bath, L(-15.2, 0.05, -4.6), rng)
 	AptProps.bucket(props.Bath, L(-13.2, 0.05, -4.9), rng, look(M.Plastic, 150, 150, 140), nil)
-	AptProps.gloves(props.Bath, L(-13.4, 1.55, -4.9, "E"), rng, look(M.Rubber, 186, 176, 110))
+	AptProps.gloves(props.Bath, L(-14.0, 1.6, -4.9, "E"), rng, look(M.Rubber, 186, 176, 110))
 	AptProps.towelRail(props.Bath, L(-17.5, 0, -5.75, "N"), rng)
-	AptProps.mould(props.Bath, L(-19.9, CEILING, 2.1), rng)
-	for _ = 1, 3 do
-		part(
+	AptProps.mould(props.Bath, L(-19.7, CEILING, 3.7) * ANG(0, math.pi / 2, 0), rng)
+	-- missing tiles: the grey tile adhesive shows (overlays: on the floor, on the W wall)
+	local adhesive = look(M.Concrete, 150, 146, 134)
+	for _, spot in { V(-16.0, 0, -2.6), V(-14.6, 0, -1.2), V(-13.4, 0, -2.9), V(-15.4, 0, 0.4) } do
+		AptProps.overlay(
+			props.Bath,
+			"MissingTile",
+			Vector2.new(1, 1),
+			L(spot.X, 0.05, spot.Z) * ANG(rad(90), 0, 0),
+			AptProps.LAYER.STEP,
+			adhesive
+		)
+	end
+	for i, z in { -4.2, -2.6, -0.9 } do
+		AptProps.overlay(
 			props.Bath,
 			"MissingWallTile",
-			V(0.9, 0.9, 0.02),
-			L(-19.74, rng:NextNumber(1.5, 4.8), rng:NextNumber(-4.5, 3)) * ANG(0, math.pi / 2, 0),
-			look(M.Concrete, 128, 124, 114)
+			Vector2.new(0.9, 0.9),
+			L(-19.75, 2.7 + (i % 2) * 1.1, z, "E"),
+			AptProps.LAYER.STEP,
+			adhesive
 		)
+	end
+
+	-- The garden hose (a lighter green, so the eye follows it): pushed onto the tub's spout,
+	-- over the tub's rim, out under the bathroom door (it keeps that door wide open), up on hooks
+	-- along corridor A's west wall, round the bend, up with the cords through the hole over the
+	-- lab door, along the lab's N wall on hooks and down into the feed carboy by the pumps.
+	local hosePoints = {
+		spout,
+		P(-18.7, 3.1, 0.55),
+		P(-17.3, 2.55, 0.3),
+		P(-16.75, 2.42, 0.2),
+		P(-16.3, 0.12, 0.0),
+		P(-12.6, 0.12, -0.5),
+		P(-11.3, 0.12, 0.9),
+		P(-11.3, 0.7, 1.9),
+		P(-11.3, 0.7, 7.4),
+		P(-11.4, 0.12, 8.3),
+		P(-11.4, 0.12, 11.6),
+		P(-10.2, 0.12, 16.75),
+		P(4.6, 0.12, 16.85),
+		P(4.6, 8.85, 17.6),
+		P(10.4, 8.85, 16.95),
+		P(10.6, 9.5, 17.4),
+		P(10.6, 9.5, 23.2),
+		P(26.9, 9.5, 23.2),
+		P(26.9, 9.5, 21.3),
+		P(26.9, 2.25, 21.3),
+	}
+	AptProps.hose(props.Bath, hosePoints, rng)
+	-- the hooks holding it up: corridor A's west wall, the lab's N wall
+	local hookLook = look(M.Metal, 120, 120, 116)
+	for _, z in { 3.2, 5.3, 7.2 } do
+		part(props.Corridor, "HoseHook", V(0.5, 0.2, 0.06), L(-11.5, 0.86, z), hookLook)
+	end
+	for _, x in { 12.5, 17, 21.5, 25.5 } do
+		part(props.Lab, "HoseHook", V(0.06, 0.2, 0.62), L(x, 9.66, 23.38), hookLook)
 	end
 
 	------------------------------------------------------------------------------
@@ -829,18 +939,32 @@ function LabBuilder.build(slot: number, owner: number): Model
 	------------------------------------------------------------------------------
 
 	AptProps.mattress(props.Bed2, L(-3.2, 0, 3.9), rng)
+	AptProps.duffelBag(props.Bed2, L(-3.2, 0, 7.6), rng)
+	AptProps.fanHeater(props.Bed2, L(-0.6, 0, 5.4, "W"), rng)
 	AptProps.alarmClock(props.Bed2, L(0.2, 0, 1.3), rng)
 	AptProps.chairClothes(props.Bed2, L(-3.7, 0, 10.2), rng)
 	AptProps.deskTable(props.Bed2, L(8.55, 0, 5, "W"), rng)
 	AptProps.whiteboard(props.Bed2, L(3, 0, 0.25, "N"), rng)
-	AptProps.supplyBoxes(props.Bed2, L(7.9, 0, 10.3, "W"), rng)
+	AptProps.supplyBoxes(props.Bed2, L(7.9, 0, 9.6, "W"), rng)
 	AptProps.calendar(props.Bed2, L(-5.75, 0, 8.8, "E"), rng)
 	AptProps.trashBag(props.Bed2, L(-1.6, 0, 10.9), rng)
-	AptProps.mould(props.Bed2, L(8.2, CEILING, 10.2), rng)
+	AptProps.mould(props.Bed2, L(9.7, CEILING, 11.7) * ANG(0, math.pi, 0), rng)
 
 	------------------------------------------------------------------------------
 	-- THE LAB
 	------------------------------------------------------------------------------
+	-- A believable clandestine biotech line, laid out clean → dirty with the work and the air:
+	--   CULTURE (north, Z 15..24): the vat, its pumps / filter / feed carboy / UPS, the media
+	--     fridge, the HEPA tower blowing filtered air over the vat; the gowning corner and the
+	--     power board by the door.
+	--   PROCESS (middle, Z 4.6..15): the extraction table under the range hood and its lamp, the
+	--     instrument and specimen trays and the cold pass-box (BenchLayout's static kit), the
+	--     stash freezer right behind the pass-box (with the scanner CRT on it), the biomass bin
+	--     and its ramp at the table's W end, the trestle station (log PC + seed incubator).
+	--   DIRTY (south, Z 0..4.6): the camp sink, the tool sterilising corner, the dispatch rack
+	--     with the cases and their ice-pack coolers, the bin; the window is the exhaust.
+	-- Every cord starts at the power board (fed by the fuse-box bundle through the hole over the
+	-- door) and runs on the ceiling cable tray or a skirting; every hose ends in a container.
 
 	local _tent, swayable = AptProps.plasticTent(props.Lab, toWorld, rng)
 	-- three of the sheets sway in the fan's draught (client): Anim/Sheet_n, pivot = top edge
@@ -853,119 +977,43 @@ function LabBuilder.build(slot: number, owner: number): Model
 	end
 	local curtain = AptProps.stripCurtain(anim, L(11.4, 0, 15, "W"), rng, 7)
 	curtain.Name = "Curtain"
-
-	-- The vat (same recipe as before, moved into the flat; the client builds the fluid inside).
-	local function cylinder(
-		name: string,
-		diameter: number,
-		height: number,
-		centre: Vector3,
-		l: Look
-	): Part
-		return part(
-			model,
-			name,
-			V(height, diameter, diameter),
-			L(centre.X, centre.Y, centre.Z) * ANG(0, 0, rad(90)),
-			l,
-			Enum.PartType.Cylinder
-		)
-	end
-	local metal = M.Metal
-	cylinder("VatBase", 5, 1, V(20, 0.5, 19.5), AptProps.solid(look(metal, 90, 94, 98)))
-	local glass = cylinder(
-		"VatGlass",
-		4.4,
-		8,
-		V(20, 5, 19.5),
-		AptProps.solid(look(M.Glass, 150, 176, 192, 0.6))
+	-- the tacky entry mat after the curtain (an overlay on the floor plastic)
+	AptProps.overlay(
+		props.Lab,
+		"StickyMat",
+		Vector2.new(1.8, 4.0),
+		L(12.6, LAB_FLOOR, 15) * ANG(rad(90), 0, 0),
+		AptProps.LAYER.STEP,
+		look(M.Rubber, 96, 112, 128)
 	)
-	glass.CastShadow = false
-	glass.CanQuery = false -- (prompts and clicks reach the vat's contents through it)
-	local cap =
-		cylinder("VatCap", 5, 0.8, V(20, 9.4, 19.5), AptProps.solid(look(metal, 70, 72, 76)))
-	-- a weak cold light from the cap down into the vat: a rim on the clone (no shadows)
-	local rim = Instance.new("SpotLight")
-	rim.Name = "VatRimLight"
-	rim.Face = Enum.NormalId.Left -- (the cylinder is turned: its -X face looks down)
-	rim.Brightness = 0.8
-	rim.Range = 9
-	rim.Angle = 50
-	rim.Color = Color3.fromRGB(200, 225, 245)
-	rim.Shadows = false
-	rim.Parent = cap
-	for _, offset in { -1.2, 1.2 } do
-		cylinder("VatPipe", 0.4, 1.4, V(20 + offset, 10.5, 19.5), look(metal, 80, 82, 86))
-	end
-	marker("VatCore", L(20, 5, 19.5))
-	part(model, "VatScreen", V(1.6, 1, 0.1), L(20, 2.4, 17.02), look(M.SmoothPlastic, 20, 22, 24))
-	AptProps.vatFrame(props.Lab, L(20, 0, 19.5), rng)
 
-	-- The bench (trolley), its anchor and the cutter's dock.
-	AptProps.trolleyBench(props.Lab, L(18, 0, 10.5), rng)
-	marker("BenchAnchor", L(18, 3.35, 10.5))
-	marker("CutterDock", L(21, 3.5, 11.6))
-	AptProps.cutterCharger(props.Lab, L(21, 3.5, 11.6), rng, P(20.5, 0.3, 11.4))
-	AptProps.scanCrate(props.Lab, L(13.4, 0, 11.0), rng)
-	AptProps.lampStand(props.Lab, P(22.6, 0, 12.6), P(19.5, 8.2, 11), rng)
+	-- CULTURE -----------------------------------------------------------------
 
-	-- The chute hatch in the E wall.
-	local chuteMouth = CFrame.lookAt(P(27.4, 2.5, 10), P(28.4, 2.5, 10))
-	marker("ChuteMouth", chuteMouth)
-	AptProps.chuteHatch(props.Lab, chuteMouth, rng)
-
-	-- The stash freezer, the fridge, the pumps, the wire shelving for the cases.
-	AptProps.stashFreezer(props.Lab, L(11.8, 0, 21.3, "E"), rng)
-	marker("StashShelf", L(11.8, 2.2, 21.3))
-	AptProps.labFridge(props.Lab, L(14.5, 0, 22.75), rng)
-	AptProps.pumpShelf(props.Lab, L(25.8, 0, 22.6), rng)
-	AptProps.wireShelf(props.Lab, L(11.5, 0, 6, "E"), rng)
-	marker("RackSpot", L(11.6, 3.3, 6))
-	AptProps.trestleTable(props.Lab, L(26.2, 0, 17.4, "W"), rng)
-	AptProps.utilitySink(props.Lab, L(13.3, 0, 1.7, "N"), rng)
-	local _window, fanBlades = AptProps.foilWindow(props.Lab, L(19, 0, 0.25, "N"), rng)
-	fanBlades.Parent = anim
-	AptProps.coolerStack(props.Lab, L(26.0, 0, 2.3, "W"), rng)
-	AptProps.toolCart(props.Lab, L(23.25, 0, 5.5, "W"), rng)
-	AptProps.labLitter(props.Lab, toWorld, rng)
-
-	-- Power strips + drooping cords (the E-wall one is scorched: the spark's source).
+	-- The vat: VatBuilder makes the empty column, its monitor, cables and light bar, and the
+	-- VatCore / VatPromptPoint / VatScreen markers (the client fills it).
+	VatBuilder.build(L(20, 0, 19.5), model)
+	-- (everything on the N wall stands with its back 0.03 in front of the hanging sheets)
+	AptProps.labFridge(props.Lab, L(14.5, 0, 22.49), rng)
+	AptProps.hepaTower(props.Lab, L(16.9, 0, 22.94), rng)
+	AptProps.ups(props.Lab, L(23.5, 0, 22.94), rng)
+	AptProps.pumpShelf(props.Lab, L(25.8, 0, 22.4), rng)
+	AptProps.feedCarboy(props.Lab, L(26.7, 0, 20.75), rng)
+	-- the pump-shelf strip (behind the tank) feeds the air pumps and the UPS
 	AptProps.powerStrip(
 		props.Lab,
-		L(13, 1.2, 0.3, "N"),
+		L(25.8, 6.5, 23.35, "S"),
 		rng,
-		{ P(17.6, 3.7, 0.6), P(13.4, 2.6, 1.0) },
+		{ P(24.9, 3.7, 22.3), P(23.5, 0.95, 22.9) },
 		false
 	)
-	AptProps.powerStrip(
-		props.Lab,
-		L(27.8, 1.2, 15, "W"),
-		rng,
-		{ P(27.3, 3.9, 16.4), P(27.0, 3.6, 19.8) },
-		true
-	)
-	AptProps.powerStrip(
-		props.Lab,
-		L(25, 6.5, 23.7, "S"),
-		rng,
-		{ P(24.9, 3.7, 22.5), P(23.0, 9.4, 21.6) },
-		false
-	)
-	-- the trolley's own cord, taped to the floor from the S-wall strip
-	AptProps.cordBundle(
-		props.Lab,
-		{ P(13.6, 0.07, 0.9), P(15.5, 0.07, 6.0), P(20.5, 0.07, 11.2) },
-		{ 1, 1 },
-		rng,
-		2.5
-	)
-	-- the tubing loops between the vat and the pumps (clear), the lowest one drips into a pan
+	-- the culture loop (clear tubing): two feeds from the pumps up to the vat's cap rim, the
+	-- drain from the plinth's side back to the circulation pump; its low point drips in a pan
 	local tubing = look(M.Glass, 210, 225, 220, 0.4)
 	AptProps.catenary(
 		props.Lab,
 		"Tubing",
-		P(22.9, 9.6, 21.0),
-		P(24.6, 7.1, 22.4),
+		P(22.6, 9.45, 20.9),
+		P(24.6, 7.1, 22.2),
 		0.9,
 		5,
 		0.15,
@@ -974,74 +1022,231 @@ function LabBuilder.build(slot: number, owner: number): Model
 	AptProps.catenary(
 		props.Lab,
 		"Tubing",
-		P(22.9, 8.8, 18.6),
-		P(24.3, 4.0, 21.9),
+		P(22.75, 9.45, 18.9),
+		P(24.3, 4.0, 21.7),
 		0.7,
 		5,
 		0.15,
 		tubing
 	)
 	AptProps.path(props.Lab, "Tubing", {
-		P(22.9, 4.6, 20.6),
-		P(23.9, 2.9, 20.9),
+		P(22.7, 0.8, 20.9),
+		P(23.7, 1.9, 21.0),
 		P(25.0, 2.15, 21.0),
-		P(25.6, 2.6, 21.3),
-		P(24.4, 3.35, 22.0),
+		P(25.3, 1.8, 21.5),
+		P(24.9, 1.35, 21.85),
 	}, 0.15, tubing)
 	part(
 		props.Lab,
 		"DripPan",
 		V(0.12, 1.2, 1.2),
-		L(25, 0.1, 21) * ANG(0, 0, rad(90)),
+		L(25, LAB_FLOOR + 0.06, 21) * ANG(0, 0, rad(90)),
 		look(M.Metal, 120, 122, 120),
 		Enum.PartType.Cylinder
 	)
 	part(
 		props.Lab,
 		"PanWater",
-		V(0.02, 1.0, 1.0),
-		L(25, 0.15, 21) * ANG(0, 0, rad(90)),
+		V(0.03, 1.0, 1.0),
+		L(25, LAB_FLOOR + 0.135, 21) * ANG(0, 0, rad(90)),
 		look(M.Glass, 170, 200, 196, 0.4, 0.1),
 		Enum.PartType.Cylinder
 	)
-	-- grime: old stains on the mat, a wet patch under the vat's drip tray, marks on the trolley
-	-- top (flat overlays: the top stays clear for the shell), the old bedroom's curtain rail
-	-- with a ragged curtain pushed aside, the bedroom's skirting showing under the plastic
-	for _, spot in { V(15.5, 0, 7.5), V(22.5, 0, 14.5), V(13.5, 0, 17.5) } do
+	-- the cartridge filter on the garden hose, just before the feed carboy
+	part(
+		props.Lab,
+		"HoseFilter",
+		V(1.4, 0.5, 0.5),
+		L(26.9, 5.2, 21.1) * ANG(0, 0, rad(90)),
+		look(M.SmoothPlastic, 226, 228, 222),
+		Enum.PartType.Cylinder
+	)
+	-- the gowning corner on the W wall (gear up before touching the culture)
+	AptProps.gowning(props.Lab, L(10.25, 0, 21.6, "E"), rng)
+
+	-- POWER -------------------------------------------------------------------
+
+	-- The power board on the W wall by the door. The fuse-box bundle comes through the hole
+	-- over the door and drops onto it; its cords go UP to the ceiling cable tray (and down the
+	-- tray's drops), and DOWN along the skirting to the fridge and the HEPA tower.
+	local _board, boardUp, boardDown = AptProps.powerBoard(props.Lab, L(10.25, 6.3, 18.8, "E"), rng)
+	AptProps.cordBundle(props.Lab, {
+		P(10.4, 8.6, 16.65),
+		P(10.5, 8.6, 18.0),
+		P(10.5, 7.7, 18.0),
+	}, { 4, 4 }, rng, 4)
+	local cordLook = look(M.Plastic, 38, 38, 36)
+	local TRAY_Y = 10.0
+	local TRAY_Z = 14.2
+	AptProps.path(props.Lab, "Cord", {
+		boardUp,
+		Vector3.new(boardUp.X, (origin * CF(0, TRAY_Y, 0)).Position.Y, boardUp.Z),
+		P(10.55, TRAY_Y, TRAY_Z),
+	}, 0.16, cordLook)
+	AptProps.path(props.Lab, "Cord", {
+		boardDown,
+		P(10.55, 0.7, (boardDown - origin.Position).Z),
+		P(10.55, 0.7, 23.3),
+		P(13.36, 0.7, 23.3),
+	}, 0.12, CORD_WHITE_LOOK)
+	-- (the HEPA tower's cord: from the fridge's back to the tower's side)
+	AptProps.path(
+		props.Lab,
+		"Cord",
+		{ P(15.64, 0.7, 23.3), P(16.26, 0.7, 23.3) },
+		0.12,
+		CORD_WHITE_LOOK
+	)
+	-- the ceiling cable tray (a slotted steel strip hung from the battens), the cords in it
+	part(
+		props.Lab,
+		"CableTray",
+		V(16.9, 0.05, 0.6),
+		L(19.05, TRAY_Y - 0.05, TRAY_Z),
+		look(M.Metal, 140, 142, 140)
+	)
+	AptProps.rod(
+		props.Lab,
+		"TrayCords",
+		P(10.6, TRAY_Y + 0.1, TRAY_Z),
+		P(27.4, TRAY_Y + 0.1, TRAY_Z),
+		0.18,
+		cordLook
+	)
+	for x = 11.5, 26.5, 3 do
+		part(
+			props.Lab,
+			"TrayHanger",
+			V(0.04, 0.72, 0.04),
+			L(x, TRAY_Y + 0.38, TRAY_Z),
+			look(M.Metal, 110, 110, 106)
+		)
+	end
+	-- the drops: to the hood (and its lamp), the freezer, the trestle strip on the E wall, the
+	-- sterilising corner and the window fan on the S wall
+	AptProps.path(props.Lab, "Cord", {
+		P(18.0, TRAY_Y, TRAY_Z - 0.3),
+		P(18.0, TRAY_Y, 11.8),
+		P(18.3, 9.72, 11.2),
+	}, 0.1, cordLook)
+	AptProps.path(props.Lab, "Cord", {
+		P(25.5, TRAY_Y, TRAY_Z - 0.3),
+		P(25.55, TRAY_Y, 12.75),
+		P(25.4, 1.0, 12.5),
+		P(25.2, 0.8, 11.5),
+	}, 0.1, cordLook)
+	AptProps.path(props.Lab, "Cord", {
+		P(27.4, TRAY_Y, TRAY_Z),
+		P(27.45, TRAY_Y, 14.0),
+		P(27.45, 1.2, 14.0),
+	}, 0.1, cordLook)
+	AptProps.path(props.Lab, "Cord", {
+		P(15.4, TRAY_Y, TRAY_Z - 0.3),
+		P(15.4, TRAY_Y, 0.95),
+		P(15.4, 3.1, 0.95),
+	}, 0.1, cordLook)
+	AptProps.path(props.Lab, "Cord", {
+		P(17.6, 3.6, 0.95),
+		P(16.3, 3.3, 0.95),
+		P(15.45, 3.15, 0.95),
+	}, 0.08, CORD_WHITE_LOOK)
+
+	-- PROCESS -----------------------------------------------------------------
+
+	-- The extraction table (trolley), its anchor, and BenchLayout's static kit on and around it
+	-- (the underpad, the instrument and specimen trays, the cold pass-box at its +X end).
+	AptProps.trolleyBench(props.Lab, L(18, 0, 10.5), rng)
+	local anchor = L(18, 3.35, 10.5)
+	marker("BenchAnchor", anchor)
+	BenchLayout.buildStatic(props.Lab, anchor)
+	-- (CutterDock: the scalpel's rest on the instrument tray, identity rotation)
+	marker("CutterDock", CFrame.new((anchor * BenchLayout.SCALPEL_REST).Position))
+	-- the range hood over the table, the work lamp clamped to its edge, the duct to the window
+	local _hood, ductStart = AptProps.hoodLamp(props.Lab, L(18.1, 9.2, 10.5), P(19.5, 8.2, 11), rng)
+	local duct = look(M.Foil, 180, 182, 184, 0, 0.05)
+	AptProps.path(props.Lab, "Duct", {
+		ductStart,
+		P(19.0, 10.05, 9.5),
+		P(19.0, 10.05, 1.4),
+		P(19.0, 7.9, 1.4),
+		P(19.0, 7.065, 0.62),
+	}, 0.7, duct, true)
+	-- the stash freezer right behind the pass-box (its long side along Z, its front toward the
+	-- table), the capsule shelf inside it, the scanner CRT standing on its north end
+	AptProps.stashFreezer(props.Lab, L(24.0, 0, 10.5, "W"), rng)
+	marker("StashShelf", L(24.0, 2.2, 10.5))
+	AptProps.scanMonitor(props.Lab, L(23.8, 3.14, 11.7), rng)
+	-- the biomass bin at the table's W end (the spent shell slides down the ramp into it)
+	local rampHinge = origin * CFrame.fromMatrix(V(14.4, 3.4, 10.5), Vector3.zAxis, Vector3.yAxis)
+	AptProps.biomassBin(props.Lab, L(11.6, 0, 10.4, "E"), rng, rampHinge)
+	marker("ChuteMouth", CFrame.lookAt(P(12.7, 3.3, 10.4), P(11.7, 3.3, 10.4)))
+	-- the trestle station: the log PC and the seed incubator; its stool
+	AptProps.trestleTable(props.Lab, L(26.2, 0, 16.6, "W"), rng)
+	AptProps.powerStrip(
+		props.Lab,
+		L(27.6, 1.2, 15, "W"),
+		rng,
+		{ P(27.2, 3.9, 16.4), P(26.9, 3.6, 19.2) },
+		true
+	)
+	local stool = look(M.Plastic, 60, 60, 60)
+	part(
+		props.Lab,
+		"StoolSeat",
+		V(0.15, 1.2, 1.2),
+		L(24.2, 2.0, 17.0) * ANG(0, 0, rad(90)),
+		AptProps.solid(stool),
+		Enum.PartType.Cylinder
+	)
+	for i = 1, 3 do
+		part(
+			props.Lab,
+			"StoolLeg",
+			V(0.12, 2.0, 0.12),
+			L(24.2, 1.0, 17.0) * ANG(0, rad(i * 120), 0) * CF(0, 0, 0.4) * ANG(rad(-10), 0, 0),
+			stool
+		)
+	end
+
+	-- DIRTY -------------------------------------------------------------------
+
+	AptProps.campSink(props.Lab, L(13.3, 0, 1.85, "N"), rng)
+	AptProps.toolBoiler(props.Lab, L(15.4, 0, 1.7, "N"), rng)
+	AptProps.pedalBin(props.Lab, L(20.7, LAB_FLOOR, 1.4), rng, look(M.Plastic, 150, 154, 150))
+	AptProps.wireShelf(props.Lab, L(24.75, 0, 1.7, "N"), rng)
+	marker("RackSpot", L(24.75, 3.3, 1.7))
+	local _window, fanBlades = AptProps.foilWindow(props.Lab, L(19, 0, 0.25, "N"), rng)
+	fanBlades.Parent = anim
+
+	-- GRIME AND LEFTOVERS -----------------------------------------------------
+
+	-- old stains on the floor plastic, and the wet patch in front of the vat: three overlapping
+	-- puddles (thin, each 0.03 above the last), not one black slab
+	for _, spot in { V(15.5, 0, 7.5), V(24.5, 0, 6.2), V(13.5, 0, 17.5) } do
 		AptProps.stain(
 			props.Lab,
-			L(spot.X, 0.06, spot.Z) * ANG(rad(90), 0, 0),
+			L(spot.X, LAB_FLOOR, spot.Z) * ANG(rad(90), 0, 0),
 			Vector2.new(rng:NextNumber(1.6, 2.6), rng:NextNumber(1.2, 2.0)),
-			Color3.fromRGB(62, 64, 62),
+			Color3.fromRGB(120, 126, 124), -- (the plastic-over-mat floor's own tone: grey marks, not black)
 			rng
 		)
 	end
-	-- the wet patch in front of the vat: three overlapping puddles, not one black slab
-	for _, puddle in
+	for i, puddle in
 		{
-			{ size = V(3.0, 0.01, 1.4), at = V(20.0, 0.065, 15.6), turn = 9 },
-			{ size = V(2.2, 0.01, 1.0), at = V(22.1, 0.066, 14.8), turn = -14 },
-			{ size = V(1.4, 0.01, 0.8), at = V(18.3, 0.067, 14.6), turn = 27 },
+			{ size = V(3.0, 0.02, 1.4), at = V(20.0, 0, 15.6), turn = 9 },
+			{ size = V(2.2, 0.02, 1.0), at = V(22.1, 0, 14.8), turn = -14 },
+			{ size = V(1.4, 0.02, 0.8), at = V(18.3, 0, 14.6), turn = 27 },
 		}
 	do
 		part(
 			props.Lab,
 			"WetPatch",
 			puddle.size,
-			L(puddle.at.X, puddle.at.Y, puddle.at.Z) * ANG(0, rad(puddle.turn), 0),
-			look(M.Glass, 70, 92, 90, 0.65, 0.3)
+			L(puddle.at.X, LAB_FLOOR + 0.05 + i * 0.03, puddle.at.Z) * ANG(0, rad(puddle.turn), 0),
+			look(M.SmoothPlastic, 70, 92, 90, 0.55, 0.3)
 		)
 	end
 	AptProps.bedroomLeftovers(props.Lab, toWorld, rng)
-	for _, mark in { CF(15.6, 3.351, 10.0), CF(19.2, 3.351, 11.3) } do
-		part(
-			props.Lab,
-			"TopStain",
-			V(rng:NextNumber(0.8, 1.4), 0.005, rng:NextNumber(0.5, 0.9)),
-			toWorld(mark * ANG(0, rng:NextNumber(0, 3), 0)),
-			look(M.Metal, 132, 136, 136)
-		)
-	end
 	part(
 		props.Lab,
 		"CurtainRail",
@@ -1210,6 +1415,18 @@ function LabBuilder.build(slot: number, owner: number): Model
 		shadows = true,
 	})
 
+	-- Living: the floor lamp by the sofa (the one warm practical at low level: the sofa corner
+	-- reads; no shadows, a small range)
+	local livingLamp = bulb(fixtures, "LivingLamp", -27.2, 5.55, -19.6, rgb(255, 200, 140))
+	livingLamp:SetAttribute("Flicker", "None")
+	addLight(livingLamp, {
+		class = "PointLight",
+		color = rgb(255, 176, 104),
+		brightness = 0.55,
+		range = 10,
+		shadows = false,
+	})
+
 	-- Corridor: the flickering bulb (A), the bend bulb in its cracked shade.
 	AptProps.rod(
 		props.Corridor,
@@ -1254,7 +1471,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 		fixtures,
 		"BathMirror",
 		V(1.6, 0.15, 0.2),
-		L(-15, 7.45, 3.5),
+		L(-15.8, 7.45, 3.5),
 		look(M.Neon, 220, 235, 200)
 	)
 	bathMirror:SetAttribute("Flicker", "Rare")
@@ -1360,7 +1577,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 		fixtures,
 		"AquariumStrip",
 		V(3, 0.06, 0.1),
-		L(25.8, 5.3, 22.4),
+		L(25.8, 5.3, 22.2),
 		look(M.Neon, 90, 200, 190)
 	)
 	aquarium:SetAttribute("Flicker", "None")
@@ -1397,7 +1614,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 	addLight(vatGlow, {
 		class = "PointLight",
 		color = rgb(80, 200, 190),
-		brightness = 0.5,
+		brightness = 0.35, -- (the client lights the fluid; this only tints the room)
 		range = 9,
 		shadows = false,
 	})
@@ -1422,7 +1639,7 @@ function LabBuilder.build(slot: number, owner: number): Model
 		fixtures,
 		"FridgeLight",
 		V(0.2, 0.2, 0.2),
-		L(-17.5, 5.2, -7.0),
+		L(-18.3, 5.2, -7.2),
 		look(M.SmoothPlastic, 0, 0, 0, 1)
 	)
 	fridgeLight.CastShadow = false
@@ -1434,6 +1651,24 @@ function LabBuilder.build(slot: number, owner: number): Model
 		range = 6,
 		shadows = false,
 		enabled = false,
+	})
+
+	-- the stash freezer's cold inside light: the capsules read through its clear lids
+	local freezerLight = part(
+		fixtures,
+		"FreezerLight",
+		V(0.2, 0.2, 0.2),
+		L(24.0, 2.75, 10.5),
+		look(M.SmoothPlastic, 0, 0, 0, 1)
+	)
+	freezerLight.CastShadow = false
+	freezerLight:SetAttribute("Flicker", "None")
+	addLight(freezerLight, {
+		class = "PointLight",
+		color = rgb(200, 230, 240),
+		brightness = 0.6,
+		range = 3,
+		shadows = false,
 	})
 
 	-- Move the contract parts the prop builders made to the model's root.
@@ -1528,17 +1763,18 @@ function LabBuilder.build(slot: number, owner: number): Model
 		"Fixture",
 		"CorridorBulb"
 	)
-	fxHost("Drip_Corridor", V(0.2, 0.2, 0.2), -8.4, 10.4, 5.2, "Corridor", "Drip"):SetAttribute(
+	fxHost("Drip_Corridor", V(0.2, 0.2, 0.2), -7.6, 10.4, 5.2, "Corridor", "Drip"):SetAttribute(
 		"LandAt",
-		P(-8.4, 0.8, 5.2)
+		P(-7.6, 1.33, 5.2)
 	)
 	aim(fxHost("Vapour_LabDoor", V(0.4, 0.2, 3.6), 9.6, 0.1, 15, "Corridor", "Vapour"), X_MINUS)
 	fxHost("Motes_Bend", V(4, 3, 4), -9, 7, 15, "Corridor", "Motes")
 	fxHost("Motes_LabDoor", V(3, 2, 3), 7.5, 2, 15, "Corridor", "Motes")
-	aim(fxHost("Bubbles_Tank", V(0.6, 0.1, 0.6), 25.8, 5.82, 22.6, "Lab", "Bubbles"), Vector3.yAxis)
-	aim(fxHost("Mist_Freezer", V(0.3, 0.1, 4.2), 12.95, 3.0, 21.3, "Lab", "Mist"), X_PLUS)
+	aim(fxHost("Bubbles_Tank", V(0.6, 0.1, 0.6), 25.8, 5.82, 22.4, "Lab", "Bubbles"), Vector3.yAxis)
+	-- (cold mist rolls off the stash freezer's lid, down its S end, toward the operator)
+	aim(fxHost("Mist_Freezer", V(2.0, 0.1, 0.3), 24.0, 3.0, 8.1, "Lab", "Mist"), Z_MINUS)
 	fxHost("Motes_Lamp", V(3, 3, 3), 19, 5.5, 11, "Lab", "Motes")
-	fxHost("Spark_Strip", V(0.3, 0.1, 0.3), 27.5, 1.2, 15.5, "Lab", "Spark")
+	fxHost("Spark_Strip", V(0.3, 0.1, 0.3), 27.2, 1.2, 14.5, "Lab", "Spark")
 	fxHost("Drip_Lab", V(0.2, 0.2, 0.2), 25, 2.0, 21, "Lab", "Drip"):SetAttribute(
 		"LandAt",
 		P(25, 0.16, 21)
@@ -1569,24 +1805,24 @@ function LabBuilder.build(slot: number, owner: number): Model
 		return made
 	end
 	sound("Neighbours", 0, 5, -19, "AptNeighbours", "Neighbour", 4, 30, 1, "Loop")
-	sound("KitchenFridge", -17.5, 1, -6.4, "LabFridgeHum", "Living", 3, 18, 0.8, "Loop")
+	sound("KitchenFridge", -18.3, 1, -6.6, "LabFridgeHum", "Living", 3, 18, 0.8, "Loop")
 	sound("CorridorBulb", -9, 10.2, -1, "LabFluoBuzz", "Corridor", 2, 12, 0.35, "Loop"):SetAttribute(
 		"Fixture",
 		"CorridorBulb"
 	)
-	sound("BathTap", -15, 3, 3.5, "LabDrip", "Bath", 2, 14, 0.6, "Random")
-	sound("CorridorDrip", -8.4, 0.8, 5.2, "LabDrip", "Corridor", 2, 16, 1, "Synced")
+	sound("BathTap", -19.3, 3.3, 0.8, "LabDrip", "Bath", 2, 14, 0.6, "Random")
+	sound("CorridorDrip", -7.6, 1.3, 5.2, "LabDrip", "Corridor", 2, 16, 1, "Synced")
 	sound("VatHum", 20, 1, 19.5, "VatHum", "Lab", 5, 40, 1, "Loop")
 	sound("TubeBuzz", 18, 9.8, 13, "LabFluoBuzz", "Lab", 3, 16, 1, "Loop"):SetAttribute(
 		"Fixture",
 		"TubeLight"
 	)
-	sound("LabFridge", 14.5, 1, 22.8, "LabFridgeHum", "Lab", 3, 18, 1, "Loop")
-	sound("FreezerHum", 11.8, 0.8, 21.3, "LabFridgeHum", "Lab", 3, 14, 0.7, "Loop", 0.85)
-	sound("Pumps", 25.8, 3.6, 22.6, "LabPumpBubble", "Lab", 3, 18, 1, "Loop")
+	sound("LabFridge", 14.5, 1, 22.5, "LabFridgeHum", "Lab", 3, 18, 1, "Loop")
+	sound("FreezerHum", 24.0, 0.8, 10.5, "LabFridgeHum", "Lab", 3, 14, 0.7, "Loop", 0.85)
+	sound("Pumps", 25.8, 3.6, 22.4, "LabPumpBubble", "Lab", 3, 18, 1, "Loop")
 	sound("LabDripPan", 25, 0.2, 21, "LabDrip", "Lab", 2, 14, 0.7, "Synced")
-	sound("Spark", 27.5, 1.2, 15.5, "LabSpark", "Lab", 2, 16, 1, "Synced")
-	sound("MonitorBeep", 26.9, 4.55, 17, "VatReadyChime", "Lab", 3, 20, 1, "Event")
+	sound("Spark", 27.2, 1.2, 14.5, "LabSpark", "Lab", 2, 16, 1, "Synced")
+	sound("MonitorBeep", 26.6, 4.64, 16.2, "VatReadyChime", "Lab", 3, 20, 1, "Event")
 
 	------------------------------------------------------------------------------
 	-- Markers for arriving

@@ -782,24 +782,105 @@ local sounds: { [string]: SoundInfo } = {
 		fadeOut = 0.2,
 		trims = { [9116902704] = { gain = 1.28 }, [9116902317] = { start = 0.11, gain = 0.78 } },
 	}, -- Metal tool tray knocked / set down
-	CutterPickup = {
-		ids = { 9125461450, 9125461439 },
-		volume = 2.24,
-		pitch = 1,
+	-- (v3: the scalpel, the panels, the pass-box. Ids reused from the slots above and from the
+	-- autopsy video's checked public sounds; levels to be tuned in Studio.)
+	ScalpelPickup = {
+		ids = { 9116902317 },
+		volume = 0.35,
+		pitch = 1.4,
 		pitchVariation = 0.05,
-		trims = {
-			[9125461450] = { start = 0.12, gain = 2.99 },
-			[9125461439] = { start = 0.79, gain = 0.33 },
-		},
-	}, -- Taking the CUTTER: plastic clack
-	CutterArm = { ids = { 9119717529 }, volume = 0.93, pitch = 1, pitchVariation = 0.05 }, -- Cutter armed: small switch click
-	CutterBurn = {
-		ids = { 9114542867 },
-		volume = 0.47,
+		length = 0.3,
+		fadeOut = 0.1,
+	}, -- Taking the scalpel off the tray: light steel clink
+	ScalpelSkin = {
+		ids = { 138772034497598, 72475389234606, 100089328974443 },
+		volume = 0.35,
+		pitch = 1.15,
+		pitchVariation = 0.06,
+	}, -- Scalpel through the synthetic skin: crisp, light slice (every 3 cells)
+	ScalpelMembrane = {
+		ids = { 71972357334329 },
+		volume = 0.4,
+		pitch = 1,
+		pitchVariation = 0.06,
+		length = 0.5,
+		fadeOut = 0.15,
+	}, -- Scalpel through the milky membrane: short wet slit
+	ScalpelPress = {
+		ids = { 9125619646 },
+		volume = 0.3,
 		pitch = 1.1,
+		pitchVariation = 0.05,
+		length = 0.3,
+		fadeOut = 0.1,
+	}, -- Blade held still and pressed: one layer deeper
+	ScalpelSkid = {
+		ids = { 9116902704 },
+		volume = 0.12,
+		pitch = 1.9,
+		pitchVariation = 0.08,
+		length = 0.25,
+		fadeOut = 0.08,
+	}, -- Blade skidding / scratching off the seam: small metal squeak
+	PanelStretch = {
+		ids = { 9118744344 },
+		volume = 0.5,
+		pitch = 0.8,
 		pitchVariation = 0,
 		looped = true,
-	}, -- Cutter running along the seam: quiet hissing sizzle (loop, pitch follows tip speed)
+	}, -- A panel pulled open: rubbery stretch (loop, pitch follows the opening)
+	RetractorClick = {
+		ids = { 9125921369 },
+		volume = 0.55,
+		pitch = 1.5,
+		pitchVariation = 0.05,
+		trims = { [9125921369] = { start = 0.33 } },
+	}, -- Retractor clip snapped onto the panel: small ratchet click
+	MilkDrip = {
+		ids = { 9113464190, 9113464198 },
+		volume = 0.15,
+		pitch = 1.1,
+		pitchVariation = 0.1,
+	}, -- A milky bead landing
+	TraySet = {
+		ids = { 94238955194144 },
+		volume = 0.3,
+		pitch = 1.2,
+		pitchVariation = 0.08,
+	}, -- An element set down on steel: soft wet tap
+	HatchOpen = {
+		ids = { 9125560652 },
+		volume = 0.35,
+		pitch = 0.7,
+		pitchVariation = 0.04,
+	}, -- The pass-box lid opens: pneumatic hiss
+	GrateSlide = {
+		ids = { 9116902704 },
+		volume = 0.22,
+		pitch = 0.75,
+		pitchVariation = 0.05,
+		length = 0.4,
+		fadeOut = 0.1,
+	}, -- The pass-box grate halves slide apart / together: metal on metal
+	CapsuleDrop = {
+		ids = { 2053476174 },
+		volume = 0.25,
+		pitch = 1.3,
+		pitchVariation = 0.06,
+	}, -- The element lands in the capsule: small soft thunk inside metal
+	CarouselTurn = {
+		ids = { 9119717529 },
+		volume = 0.6,
+		pitch = 0.7,
+		pitchVariation = 0.04,
+	}, -- The capsule carousel turns: small motor + detent click
+	HatchClose = {
+		ids = { 9117526627 },
+		volume = 0.8,
+		pitch = 1.05,
+		pitchVariation = 0.04,
+		trims = { [9117526627] = { gain = 1.44 } },
+	}, -- The pass-box lid shuts: gasket thump
 	SeamPop = {
 		ids = { 9126209045, 9113266090 },
 		volume = 1.98,

@@ -31,6 +31,8 @@
 -- GLASS doors, checked every 0.15 seconds:
 --   • someone's HumanoidRootPart within OPEN_RANGE studs of the doorway's centre → OPEN:
 --     the leaves stop colliding at once (nobody bumps into a moving door), then turn 90°.
+--     Once fully open they collide again (an open glass leaf is solid, like a real one), unless
+--     a body stands inside it: then they wait until it has moved away.
 --   • nobody within OPEN_RANGE → CLOSE: the leaves turn back, then collide again.
 --     A leaf is 4.6 long and its hinge is 4.6 from the centre, so a swinging leaf stays
 --     within 6.5 studs of the centre. The range (10) leaves room for a body's width (even a
@@ -61,6 +63,11 @@
 --   Attachment at the doorway: a sound the server plays replicates to every player, who hears
 --   it from the right place (louder when close).
 -- Done on the server: anchored parts moved by the server replicate to every player.
+--
+-- SMASHING: a door part can never be smashed (CityDoors marks every door part "Unbreakable" for
+-- Systems/Destruction). A smashed part is hidden and made non-solid by Destruction while this
+-- module keeps moving it and setting its collision: you would get invisible solid doors, or
+-- closed doors you walk through. As a second guard, a part marked "Broken" is never made solid.
 
 local CollectionService = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
@@ -114,6 +121,7 @@ type Door = {
 	saloon: boolean,
 	-- glass doors
 	isOpen: boolean,
+	settled: boolean, -- open and the opening swing has finished
 	passable: boolean, -- closed but not colliding yet (someone was near when it closed)
 	version: number, -- changes on every open / close (an old tween's callback is ignored)
 	-- saloon doors (degrees, degrees per second)
@@ -165,6 +173,8 @@ local function addPart(instance: Instance)
 		return
 	end
 	local openAngle = if typeof(angle) == "number" then angle else 90
+	-- (a moving door must never be smashed: see SMASHING at the top)
+	part:SetAttribute("Unbreakable", true)
 	local isSaloon = part:GetAttribute("DoorStyle") == "Saloon"
 	local door = doors[group]
 	if door == nil then
@@ -173,6 +183,7 @@ local function addPart(instance: Instance)
 			centre = part.Position,
 			saloon = isSaloon,
 			isOpen = false,
+			settled = false,
 			passable = false,
 			version = 0,
 			angle = 0,
@@ -318,21 +329,66 @@ end
 -- Glass doors
 ------------------------------------------------------------------------------
 
+-- Gives a leaf part its "closed" collision back (never on a part Destruction has smashed).
+local function restoreCollision(leaf: Leaf)
+	if leaf.part:GetAttribute("Broken") ~= true then
+		leaf.part.CanCollide = leaf.collides
+	end
+end
+
+-- Is a character's body inside this leaf part right now? (then it must stay passable)
+local function bodyInside(part: BasePart): boolean
+	local bodies: { Instance } = {}
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(bodies, player.Character)
+		end
+	end
+	if #bodies == 0 then
+		return false
+	end
+	local params = OverlapParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = bodies
+	params.MaxParts = 1
+	return #workspace:GetPartsInPart(part, params) > 0
+end
+
+-- An open, settled door: each leaf part that should be solid becomes solid again as soon as
+-- no body stands in it.
+local function solidifyOpen(door: Door)
+	for _, leaf in door.leaves do
+		if leaf.collides and not leaf.part.CanCollide and not bodyInside(leaf.part) then
+			restoreCollision(leaf)
+		end
+	end
+end
+
 -- Opens or closes one doorway.
 local function setOpen(door: Door, open: boolean)
 	door.isOpen = open
+	door.settled = false
 	door.passable = false
 	door.version += 1
 	playDoorSound(door, if open then "DoorGlassOpen" else "DoorGlassClose")
 	local version = door.version
 	for _, leaf in door.leaves do
-		if open then
-			leaf.part.CanCollide = false -- never push a player with a moving door
-		end
+		leaf.part.CanCollide = false -- never push a player with a moving door (either way)
 		local tween = TweenService:Create(leaf.part, TWEEN_INFO, {
 			CFrame = if open then leaf.opened else leaf.closed,
 		})
-		if not open then
+		if open then
+			tween.Completed:Connect(function()
+				-- fully open (and not closed again meanwhile): solid again where nobody stands
+				if door.version ~= version or leaf.part.Parent == nil then
+					return
+				end
+				door.settled = true
+				if leaf.collides and not bodyInside(leaf.part) then
+					restoreCollision(leaf)
+				end
+			end)
+		else
 			tween.Completed:Connect(function()
 				-- only if the door was not opened again while it was closing
 				if door.version ~= version or leaf.part.Parent == nil then
@@ -343,7 +399,7 @@ local function setOpen(door: Door, open: boolean)
 					-- next check opens the door again, or restores the collision in check)
 					door.passable = true
 				else
-					leaf.part.CanCollide = leaf.collides
+					restoreCollision(leaf)
 				end
 			end)
 		end
@@ -361,13 +417,19 @@ local function checkGlass()
 		local near = isPulsed(door) or (not isDoorLocked(door) and isSomeoneNear(door, positions))
 		if near and not door.isOpen then
 			setOpen(door, true)
+		elseif door.isOpen and door.settled then
+			-- open: leaves someone was standing in become solid once he has moved
+			solidifyOpen(door)
+			if not near then
+				setOpen(door, false)
+			end
 		elseif not near and door.isOpen then
 			setOpen(door, false)
 		elseif not near and door.passable then
 			-- closed while someone was in the doorway, and they left: collide again
 			door.passable = false
 			for _, leaf in door.leaves do
-				leaf.part.CanCollide = leaf.collides
+				restoreCollision(leaf)
 			end
 		end
 	end

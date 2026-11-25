@@ -8,7 +8,10 @@
 --     ZoneLookController.setRoomLook("Lab") in the lab, "Flat" everywhere else.
 --   • DOORS (the model's "Doors" folder; LabBuilder sets their attributes):
 --       Auto    swings open (0.45 s, Quad Out) when you come within TriggerDistance (default
---               4.5 studs) of its doorway, and stays open. The server never blocks these.
+--               4.5 studs) of its doorway, and stays open.
+--     Every leaf is SOLID (LabBuilder builds them so): a door at rest, ajar or open, blocks you
+--     like a real one. Only WHILE it swings is it let through (CanCollide off), so a moving door
+--     never shoves your character; it is solid again the moment it stops.
 --       Prompt  a local "Open" / "Close" prompt (the kitchen fridge).
 --       Locked  a local "Try" prompt: the leaf rattles and "Locked." shows for 1.5 s.
 --     Doors are turned with PivotTo(ClosedPivot * angle) around their hinge, on this screen only.
@@ -159,10 +162,19 @@ end
 -- Doors
 ------------------------------------------------------------------------------
 
+-- A leaf (and the parts that swing with it) lets characters through only while it moves.
+local function setSolid(state: DoorState, solid: boolean)
+	local leaf = state.model.PrimaryPart
+	if leaf then
+		leaf.CanCollide = solid
+	end
+end
+
 local function swing(state: DoorState, target: number)
 	state.from = state.angle
 	state.to = target
 	state.startedAt = os.clock()
+	setSolid(state, false)
 end
 
 local function openDoor(state: DoorState)
@@ -216,7 +228,8 @@ local function setUpDoor(model: Model)
 		prompt.ObjectText = label
 		prompt.HoldDuration = 0
 		prompt.MaxActivationDistance = PROMPT_DISTANCE
-		prompt.RequiresLineOfSight = false
+		-- (a wall between you and the door hides its prompt; the leaf itself never blocks it)
+		prompt.RequiresLineOfSight = true
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
 		prompt.Triggered:Connect(function()
 			if state.open then
@@ -236,7 +249,7 @@ local function setUpDoor(model: Model)
 		prompt.ObjectText = label
 		prompt.HoldDuration = 0
 		prompt.MaxActivationDistance = PROMPT_DISTANCE
-		prompt.RequiresLineOfSight = false
+		prompt.RequiresLineOfSight = true
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
 		prompt.Triggered:Connect(function()
 			state.rattleAt = os.clock()
@@ -256,6 +269,10 @@ local function stepDoors()
 		if state.angle ~= state.to then
 			local t = math.clamp((now - state.startedAt) / DOOR_TIME, 0, 1)
 			pose(state, state.from + (state.to - state.from) * quadOut(t))
+			if t >= 1 then
+				state.angle = state.to -- (exactly, so the swing ends)
+				setSolid(state, true)
+			end
 		end
 		local rattleAt = state.rattleAt
 		if rattleAt then
@@ -351,6 +368,7 @@ local function leave()
 		end
 		if state.model.Parent ~= nil then
 			pose(state, state.rest)
+			setSolid(state, true)
 		end
 	end
 	table.clear(doors)

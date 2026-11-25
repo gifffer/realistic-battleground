@@ -17,10 +17,12 @@
 -- contraband.stash (no ids) after every change, TOGETHER with the cores in the cases lying in the
 -- lab (and in the case held inside the lab): a crash or a shutdown loses none of them. Loaded
 -- from the save when the player joins (all on the bench; never more than keepMax()).
--- When a culture becomes Ready the owner gets a notice, wherever he is.
+-- When a culture becomes Ready the owner gets a notice if he is NOT in his lab (in the lab the
+-- vat monitor, its LED and the chime say it).
 --
 -- PROMPTS of a lab (made when Apartments builds it; all re-checked here, owner only):
---   VatPrompt     on VatCore     "Plant culture" (Empty) / "Extract" (Ready); off otherwise
+--   VatPrompt     on VatPromptPoint (front-left of the vat, standing height; VatCore in an
+--                 older flat) "Plant culture" (Empty) / "Extract" (Ready); off otherwise
 --   RackPrompt    on RackSpot    "Take case" (a new empty courier case in hand)
 --   LoadPrompt    on BenchAnchor "Load cores": stash cores → free cradles of the case you hold
 --                 (shown only while you hold a case with a free cradle and the stash has cores)
@@ -97,8 +99,9 @@ end
 
 local function updateVatPrompt(player: Player)
 	local culture = cultures[player]
-	local core = Apartments.labPart(player, "VatCore")
-	local prompt = if core then core:FindFirstChild("VatPrompt") else nil
+	local host = Apartments.labPart(player, "VatPromptPoint")
+		or Apartments.labPart(player, "VatCore")
+	local prompt = if host then host:FindFirstChild("VatPrompt") else nil
 	if prompt == nil or not prompt:IsA("ProximityPrompt") or culture == nil then
 		return
 	end
@@ -351,7 +354,9 @@ local function attach(player: Player, model: Model)
 			end
 		end)
 	end
-	prompt("VatCore", "VatPrompt", "Plant culture", "Vat", 0.6, onVat, nil)
+	-- (the vat's prompt sits beside the vat, never over the glass or the monitor's text)
+	local vatHost = if model:FindFirstChild("VatPromptPoint") then "VatPromptPoint" else "VatCore"
+	prompt(vatHost, "VatPrompt", "Plant culture", "Culture vat", 0.6, onVat, nil)
 	prompt("RackSpot", "RackPrompt", "Take case", "Case rack", 0.4, onRack, nil)
 	prompt("BenchAnchor", "LoadPrompt", "Load cores", "Bench", 0.4, onLoad, nil)
 	-- (Load and Unload sit on the same part: two different keys, so one press never fires both)
@@ -423,12 +428,10 @@ local function tick(dt: number)
 				culture.stage = "Ready"
 				saveCulture(player)
 				Lab.push(player)
-				Guard.notice(
-					player,
-					if player:GetAttribute("InLab") == true
-						then "Culture ready. Extract at the vat."
-						else "Culture ready. Back to your lab."
-				)
+				-- (in the lab the vat's monitor, its LED and the chime say it: no toast on top)
+				if player:GetAttribute("InLab") ~= true then
+					Guard.notice(player, "Culture ready. Back to your lab.")
+				end
 			elseif culture.sinceSave >= SAVE_EVERY then
 				saveCulture(player)
 			end

@@ -1098,14 +1098,13 @@ return table.freeze({
 		INTRUDER_CHECK = 1, -- seconds between "is someone else in my lab?" checks
 	}),
 
-	-- The extraction (v2): hold E on the ready vat → the cutter opens the shell's chest seam by
-	-- itself (CUT_TIME) → pick up to CAPSULES of the 4–6 bio-elements shown, before the cooling
-	-- bar runs out (SELECT_TIME). The SERVER decides the contents (from the culture's saved seed)
-	-- and every score; the client only says which element it picked.
+	-- The extraction (v3, by hand): hold E on the ready vat → take the scalpel, cut the chest
+	-- seam (skin, then membrane) by dragging, pull the two panels open, grab a bio-element and
+	-- pull it free, set it in the steel tray, then lift it into the cold pass-box (it drops into
+	-- a capsule, sealed). Up to CAPSULES of the 4–6 elements. The SERVER decides the contents
+	-- (from the culture's saved seed) and every score; the client only reports finished steps
+	-- and choices, which the server checks for order and minimum times (MIN).
 	Extraction = table.freeze({
-		CUT_TIME = 1.6, -- s: the automatic seam; the server refuses picks before it is open
-		SELECT_TIME = 18, -- s: the cooling bar
-		PICK_MIN_GAP = 0.9, -- s between two picks (the lift + seal take about 1.3 s)
 		CAPSULES = 2, -- capsule slots per extraction (fewer if the stash / case has less room)
 		ELEMENTS = table.freeze({ 4, 6 }), -- how many elements a culture shows (min, max)
 		-- What the elements are: how often each kind comes up, and its base score.
@@ -1117,11 +1116,40 @@ return table.freeze({
 		ROLL = 4, -- hidden ± score roll (server only, fixed by the seed)
 		GRADE_A = 85, -- score ≥ this = A
 		GRADE_B = 60, -- score ≥ this = B, else C
-		TIMEOUT = 40, -- s: safety, a session never lasts longer
-		MAX_INVALID = 8, -- bad ExtractAction messages before the session is aborted
+		COOL_TIME = 40, -- s: the cooling bar, from the panels open to the end
+		TIMEOUT = 90, -- s: safety, a session never lasts longer
+		MAX_INVALID = 10, -- refused ExtractAction messages before the session is aborted
 		START_DISTANCE = 8, -- studs from the bench / vat
-		HOLD_TIME = 0.45, -- client: hold on an element this long to lift it out
-		SCAN_TIME = 0.5, -- client: hover an element this long to lock the monitor's readout
+		-- Optional: score lost by an element left more than 15 s between "Free" and "Transfer"
+		-- (measured by the server; 0 = off).
+		WARM_PENALTY = 0,
+		-- Server: the least time (s) between a step and the one before it (always below the
+		-- client's own animation, with slack for lag).
+		MIN = table.freeze({
+			Tool = 0.8, -- since the start
+			Layer1 = 0.9, -- since Tool
+			Layer2 = 0.7, -- since Layer 1
+			Spread = 0.6, -- since Layer 2 (the scalpel goes back)
+			SpreadGap = 0.4, -- between the two panels
+			Grab = 0.2, -- since the last hand action
+			Free = 0.4, -- since Grab
+			FreeHusk = 0.1,
+			Tray = 0.3, -- since Free / Lift
+			Drop = 0.2,
+			Lift = 0.2, -- since Tray / Drop
+			Transfer = 0.3, -- since Lift
+			TransferGap = 1.0, -- between two transfers (the carousel turns)
+		}),
+		-- Client feel (never checked by the server).
+		SEAM_CELLS = 12, -- cells along the chest seam
+		SEAM_TOLERANCE = 0.12, -- studs off the seam guide = a scratch, no cut
+		SKID_SPEED = 2.6, -- studs/s along the seam: faster = the blade skids
+		DEEPEN_HOLD = 0.35, -- s held still on the seam = one layer deeper there
+		PULL_START = 0.8, -- studs of pull before the tension builds
+		PULL_FREE_TIME = 0.5, -- s of tension = free
+		PULL_FREE_DIST = 1.6, -- studs of pull = free at once
+		PANEL_LATCH = 0.6, -- a panel dragged this far open finishes by itself
+		SCAN_TIME = 0.5, -- s hovering an element before the monitor locks its reading
 	}),
 
 	-- The BX-7 courier case.

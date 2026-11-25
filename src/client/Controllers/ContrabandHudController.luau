@@ -16,7 +16,12 @@
 --   • "SaleStarted" → the OPENING bar fills until the server's end time; "SaleResult" →
 --     "+72 · SOLD 1 CORE" (gold) or "SALE FAILED · Interrupted"; "Notice" → the line as is.
 --   • CULTURE: from the server's "LabState" (grown / total / at / running), counted down here
---     every half second; "CULTURE READY" once ready; hidden when the vat is empty.
+--     every half second; "CULTURE READY" once ready; hidden when the vat is empty, and hidden
+--     IN the lab (player attribute InLab): there the vat's own monitor is the readout, so the
+--     two never say the same thing on screen at once.
+--   • Layout, bottom up, never overlapping: CASE block 0..48 px (only while holding), the
+--     CULTURE line in its own 14 px slot just above it (or at the bottom), OPENING 54..74 px
+--     (the culture line hides while it shows), toasts from 78 px up.
 -- The server decides everything; this only shows what it says.
 
 local Players = game:GetService("Players")
@@ -48,6 +53,8 @@ local GRADE_COLOR: { [string]: Color3 } = {
 	A = C.Gold, -- gold (+ a teal gradient on the diamond)
 }
 local TEAL = Color3.fromRGB(90, 200, 190)
+local CASE_HEIGHT = 48 -- the CASE block's height (px)
+local CULTURE_GAP = 6 -- px between the CASE block and the culture line above it
 
 local gui: ScreenGui
 local caseGroup: CanvasGroup
@@ -223,10 +230,18 @@ end
 
 local function redrawCulture()
 	local state = culture
-	-- (above the CASE block while we hold a case, else in its place)
-	cultureLabel.Position = UDim2.new(0, 2, 1, if holding then -52 else -16)
+	-- (its bottom edge sits CULTURE_GAP above the CASE block while we hold a case, else at the
+	-- bottom of the block: anchored by the bottom, so it can never reach into the case header)
+	cultureLabel.Position = UDim2.new(0, 2, 1, if holding then -(CASE_HEIGHT + CULTURE_GAP) else -2)
 	local selling = openingGroup.Visible
-	if state == nil or selling or state.stage == "Empty" or state.stage == "Extracting" then
+	local inLab = player:GetAttribute("InLab") == true
+	if
+		state == nil
+		or selling
+		or inLab
+		or state.stage == "Empty"
+		or state.stage == "Extracting"
+	then
 		cultureLabel.Visible = false
 		return
 	end
@@ -365,7 +380,7 @@ local function build()
 		Name = "Case",
 		AnchorPoint = Vector2.new(0, 1),
 		Position = UDim2.new(0, 0, 1, 0),
-		Size = UDim2.new(1, 0, 0, 48),
+		Size = UDim2.new(1, 0, 0, CASE_HEIGHT),
 		BackgroundTransparency = 1,
 		Visible = false,
 		Parent = block,
@@ -434,8 +449,8 @@ local function build()
 	-- The CULTURE line (moved above the CASE block while we hold a case).
 	cultureLabel = Theme.text({
 		Name = "Culture",
-		AnchorPoint = Vector2.new(0, 0),
-		Position = UDim2.new(0, 2, 1, -16),
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 2, 1, -2),
 		Size = UDim2.new(1, -4, 0, 14),
 		FontFace = Theme.Fonts.Number,
 		TextSize = 11,
@@ -511,6 +526,8 @@ end
 function ContrabandHudController.start()
 	build()
 	Remotes.ContrabandEvent.OnClientEvent:Connect(onContrabandEvent)
+	-- (walking into / out of the lab shows / hides the culture line at once)
+	player:GetAttributeChangedSignal("InLab"):Connect(redrawCulture)
 	player.CharacterAdded:Connect(function(character)
 		holding = false
 		grades = {}
