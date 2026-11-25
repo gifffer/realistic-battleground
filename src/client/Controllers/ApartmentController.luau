@@ -15,12 +15,11 @@
 --       Prompt  a local "Open" / "Close" prompt (the kitchen fridge).
 --       Locked  a local "Try" prompt: the leaf rattles and "Locked." shows for 1.5 s.
 --     Doors are turned around their hinge (the ClosedPivot attribute), on this screen only.
---     WHY NOT model:PivotTo(ClosedPivot * angle): the hinge pivot is set by a SERVER script
---     (Model.WorldPivot -> the leaf's PivotOffset), and Roblox does not send that offset to the
---     clients. Here a door's pivot is the leaf's CENTRE, so PivotTo(hinge) put the middle of the
---     leaf on the floor: the door sank by half its height and its prompt ended near the floor.
---     So we measure, once per door, where the client's own pivot is relative to the real hinge
---     (`hingeToPivot`) and always move with PivotTo(hinge * angle * hingeToPivot).
+--     We never trust the model's pivot here: what a client sees as a model's pivot set by a
+--     server script is not guaranteed (and Roblox ignores Model.WorldPivot once a PrimaryPart
+--     is set: that bug sank every leaf by half its height). So we measure, once per door, where
+--     this client's pivot is relative to the real hinge (`hingeToPivot`) and always move with
+--     PivotTo(hinge * angle * hingeToPivot).
 --     Leaving the flat puts every door back the way it was built.
 --   • SIGNALS for the ambience (sounds, VFX) and the extraction (Shared/Util/Signal, `.connect`):
 --       ApartmentController.model()                 my flat once it is streamed in (nil outside)

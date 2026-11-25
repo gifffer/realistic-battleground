@@ -43,7 +43,7 @@
 --
 -- FOLDERS (contracts with ApartmentController / ApartmentAmbienceController, see DESIGN §1.4):
 --   Rooms     invisible boxes named Entry, Living, Corridor (×2), Bath, Bed2, Lab
---   Doors     Models Door_<Room>: Leaf (PrimaryPart, SOLID), WorldPivot = hinge line on the floor
+--   Doors     Models Door_<Room>: Leaf (PrimaryPart, SOLID), pivot = hinge line on the floor
 --             (on the leaf's face that leads the swing, see AptProps.door);
 --             attributes Room, Mode ("Auto" | "Prompt" | "Locked"), RestAngle, OpenAngle (deg,
 --             a positive angle swings toward the hinge's local -Z), Label, ClosedPivot (CFrame),

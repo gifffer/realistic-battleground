@@ -561,15 +561,35 @@ local DOOR_LEAF = AptProps.DOOR_LEAF
 -- its thickness (+X toward the latch, ±Z = the leaf's two faces at ±thickness / 2). Call it while
 -- the door is shut (the builders do, before the rest angle is applied).
 function AptProps.leafBase(door: Model): CFrame
-	return door.WorldPivot * CF(0, 0, DOOR_LEAF.thickness / 2)
+	-- (the hinge the builder recorded; GetPivot() is the same hinge while the door is shut)
+	local closed = door:GetAttribute("ClosedPivot")
+	local hinge = if typeof(closed) == "CFrame" then closed else door:GetPivot()
+	return hinge * CF(0, 0, DOOR_LEAF.thickness / 2)
 end
+
+-- Makes `cframe` the pivot of a model that has a PrimaryPart. NEVER `model.WorldPivot = ...`
+-- on such a model: Roblox IGNORES WorldPivot once a PrimaryPart is set (the pivot is the
+-- PrimaryPart's own pivot: its centre + its PivotOffset). With WorldPivot the doors' pivot
+-- stayed the leaf's CENTRE, so PivotTo(hinge) put the middle of the leaf on the hinge: the
+-- leaf sank by half its height and slid half its width into the wall, while the details
+-- added afterwards (padlock, boards, robe) sat at the right place.
+function AptProps.setPivot(model: Model, cframe: CFrame)
+	local primary = model.PrimaryPart
+	if primary then
+		primary.PivotOffset = primary.CFrame:ToObjectSpace(cframe)
+	else
+		model.WorldPivot = cframe
+	end
+end
+local setPivot = AptProps.setPivot
 local leafBase = AptProps.leafBase
 
 -- A door leaf turning about `hinge` (world CFrame on the floor). +X runs from the hinge to the
 -- latch side; a POSITIVE angle swings the latch toward the hinge's local -Z. The hinge line is
 -- the leaf's edge ON ITS -Z FACE (the face that leads the swing), like a real butt hinge: the
 -- leaf body lies on +Z, so when open it stays inside the doorway's width and never cuts through
--- the casing. The Model's WorldPivot is that hinge line; the leaf is "Leaf" (PrimaryPart).
+-- the casing. The Model's pivot is that hinge line (the leaf's PivotOffset, see setPivot); the
+-- leaf is "Leaf" (PrimaryPart).
 -- The client turns the whole model with PivotTo(closedPivot * CFrame.Angles(0, angle, 0)).
 -- Every leaf is SOLID: ApartmentController only lets you through while it is moving.
 function AptProps.door(
@@ -634,7 +654,7 @@ function AptProps.door(
 	for _, side in { -1, 1 } do
 		add("Knob", V(0.24, 0.24, 0.24), CF(3.9, 3.4, side * 0.24), brass, BALL)
 	end
-	model.WorldPivot = hinge
+	setPivot(model, hinge)
 	model:SetAttribute("Room", spec.room)
 	model:SetAttribute("Mode", spec.mode)
 	model:SetAttribute("RestAngle", spec.restAngle)
@@ -1629,7 +1649,7 @@ function AptProps.fridgeDoor(parent: Instance, hinge: CFrame, rng: Random): Mode
 		2 * LAYER.STEP,
 		TAPE
 	)
-	model.WorldPivot = hinge
+	setPivot(model, hinge)
 	model:SetAttribute("Room", "Living")
 	model:SetAttribute("Mode", "Prompt")
 	model:SetAttribute("RestAngle", 0)
