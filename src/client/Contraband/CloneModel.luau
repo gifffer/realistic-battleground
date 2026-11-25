@@ -59,7 +59,7 @@ local function rgb(r: number, g: number, b: number): Color3
 end
 
 CloneModel.COLORS = table.freeze({
-	pearl = rgb(200, 198, 192), -- the shell
+	pearl = rgb(172, 170, 162), -- the shell (a dull pearl-grey: never clips to white under the lamp)
 	seam = rgb(60, 60, 64), -- (dark enough to draw the body against the pale fluid)
 	port = rgb(150, 152, 156),
 	stencil = rgb(60, 60, 64),

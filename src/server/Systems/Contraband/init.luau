@@ -12,14 +12,14 @@
 --   LabBuilder  builds a lab room from parts
 --   Apartments  the lab doors in the city, the labs, going in and out
 --   Lab         the vat culture, the stash, the lab prompts
---   Extraction  the 6-step extraction (ExtractStep)
+--   Extraction  the extraction: automatic cut, then pick the bio-elements (ExtractAction)
 --   Market      the buyer at the van in the Yard
 --
 -- It also wires the player's save (PlayerData.onLoaded → Lab.load; onLeaving → every module's
 -- clean-up, in the right order) and Remotes.ContrabandSync ("send me my state again").
 --
 -- Remotes (Shared/Remotes): ContrabandEvent (server → ONE client), ContrabandSync,
--- ExtractStep, CaseAction (client → server, all validated and rate-limited).
+-- ExtractAction, CaseAction (client → server, all validated and rate-limited).
 -- Studio check of the bio-core ledger (command bar, server):
 --   require(game.ServerScriptService.Server.Systems.Contraband.Ledger).verify()
 
@@ -55,7 +55,7 @@ end
 -- (PlayerData calls this synchronously; nothing in here yields.)
 local function onLeaving(player: Player)
 	local steps: { { name: string, run: (Player) -> () } } = {
-		{ name = "Extraction", run = Extraction.onLeaving }, -- a running extraction: culture back to Ready
+		{ name = "Extraction", run = Extraction.onLeaving }, -- a running extraction ends (picks kept)
 		{ name = "Market", run = Market.onLeaving },
 		{ name = "Case", run = Case.onLeaving }, -- held case dropped / lab cases → stash
 		{ name = "Lab", run = Lab.onLeaving }, -- culture + stash saved

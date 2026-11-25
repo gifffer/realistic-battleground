@@ -253,10 +253,11 @@ return table.freeze({
 	-- arrive before the client listens). Rate-limited.
 	ContrabandSync = event("ContrabandSync"),
 
-	-- client → server  (sessionId: number, step: number, data: { [string]: any }?)
-	-- One step of the extraction mini-game is done (step 0 = cancel). The
-	-- server checks the session, the order, the minimum times and the data.
-	ExtractStep = event("ExtractStep"),
+	-- client → server  (sessionId: number, action: string, index: number?)
+	-- The player's choice during an extraction: "Pick" (index = which bio-element),
+	-- "Done" or "Stop". Only a choice: the server checks the session, the timing,
+	-- the slots and the index, and decides every score itself. Rate-limited.
+	ExtractAction = event("ExtractAction"),
 
 	-- client → server  (action: string)
 	-- Something to do with the case I hold. Only "SetDown" (G) for now.

@@ -1060,7 +1060,9 @@ return table.freeze({
 		-- Lab slot 1 floor centre; slot n = ORIGIN + (n - 1) * SPACING on X.
 		-- Far from the city (about ±150) and the duel arenas (3000, 200, 3000).
 		ORIGIN = Vector3.new(-4000, 250, -4000),
-		SPACING = 400,
+		-- 1200 apart so that streaming never loads a neighbour's flat (~1300 parts, 5 shadow
+		-- lights each) around a player standing in his own one.
+		SPACING = 1200,
 		-- Seconds of ONLINE growth: MATRIX 0–25 %, FRAME 25–75 %, SHELL 75–100 %.
 		CULTURE_TIME = 480,
 		MATRIX_END = 0.25,
@@ -1083,29 +1085,30 @@ return table.freeze({
 		INTRUDER_CHECK = 1, -- seconds between "is someone else in my lab?" checks
 	}),
 
-	-- The extraction mini-game (6 steps: unlock, open, spread, cut, lift, seal).
+	-- The extraction (v2): hold E on the ready vat → the cutter opens the shell's chest seam by
+	-- itself (CUT_TIME) → pick up to CAPSULES of the 4–6 bio-elements shown, before the cooling
+	-- bar runs out (SELECT_TIME). The SERVER decides the contents (from the culture's saved seed)
+	-- and every score; the client only says which element it picked.
 	Extraction = table.freeze({
-		-- Minimum seconds per step (the server refuses faster), about 70 % of DESIGN_TIME.
-		MIN_TIME = table.freeze({ 1.4, 0.8, 1.6, 2.0, 1.5, 0.6 }),
-		DESIGN_TIME = table.freeze({ 3, 2, 3, 6, 4, 2 }), -- ≈ 20 s + camera moves ≈ 25 s
-		GUIDES = 6, -- fibre guides shown
-		CORRECT_GUIDES = 4, -- the ones to cut
-		CUT_MIN_GAP = 0.25, -- seconds between two cuts
-		LIFT_GOOD_TIME = 2.5, -- a lift faster than this loses grade
-		-- Score penalties (score starts at 100).
-		PENALTY = table.freeze({
-			unlock = 10,
-			spread = 15,
-			wrongCut = 12,
-			wrongCutMax = 2,
-			liftFast = 20,
-			liftRough = 10,
-		}),
+		CUT_TIME = 1.6, -- s: the automatic seam; the server refuses picks before it is open
+		SELECT_TIME = 18, -- s: the cooling bar
+		PICK_MIN_GAP = 0.9, -- s between two picks (the lift + seal take about 1.3 s)
+		CAPSULES = 2, -- capsule slots per extraction (fewer if the stash / case has less room)
+		ELEMENTS = table.freeze({ 4, 6 }), -- how many elements a culture shows (min, max)
+		-- What the elements are: how often each kind comes up, and its base score.
+		KIND_WEIGHT = table.freeze({ Cluster = 50, Pod = 35, Coil = 15 }),
+		KIND_BASE = table.freeze({ Cluster = 62, Pod = 74, Coil = 90 }),
+		-- Their condition: how often, and what it takes off the score.
+		CONDITION_WEIGHT = table.freeze({ Intact = 50, Bruised = 30, Ruptured = 20 }),
+		CONDITION_SCORE = table.freeze({ Intact = 0, Bruised = -15, Ruptured = -32 }),
+		ROLL = 4, -- hidden ± score roll (server only, fixed by the seed)
 		GRADE_A = 85, -- score ≥ this = A
 		GRADE_B = 60, -- score ≥ this = B, else C
-		TIMEOUT = 120, -- seconds before an extraction is abandoned
-		MAX_INVALID = 20, -- invalid ExtractStep messages before the session is aborted
+		TIMEOUT = 40, -- s: safety, a session never lasts longer
+		MAX_INVALID = 8, -- bad ExtractAction messages before the session is aborted
 		START_DISTANCE = 8, -- studs from the bench / vat
+		HOLD_TIME = 0.45, -- client: hold on an element this long to lift it out
+		SCAN_TIME = 0.5, -- client: hover an element this long to lock the monitor's readout
 	}),
 
 	-- The BX-7 courier case.

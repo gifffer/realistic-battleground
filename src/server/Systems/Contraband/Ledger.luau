@@ -8,6 +8,8 @@
 --   id        "c<salt>_<n>": made here, for THIS server session only. Never sent to a client,
 --             never saved (the stash is saved without ids, see stashOf / loadStash).
 --   grade     "A" | "B" | "C", score (0..100), madeAt (os.time), maker (userId)
+--   kind      the bio-element it came from: "Cluster" | "Pod" | "Coil" (Ledger.kindOf: a core
+--             from an old save without one gets the kind that matches its grade)
 --   location  one of:
 --               { kind = "Bench", owner = userId }            in that player's lab stash
 --               { kind = "Case", caseId = ..., slot = n }     in a cradle of a case (WHERE the case
@@ -25,6 +27,7 @@
 -- so two remote calls can never both move the same core: no duplication possible.
 
 export type CoreGrade = "A" | "B" | "C"
+export type CoreKind = "Cluster" | "Pod" | "Coil"
 
 export type Location = {
 	kind: "Bench" | "Case" | "Sold",
@@ -41,11 +44,12 @@ export type Core = {
 	score: number,
 	madeAt: number,
 	maker: number,
+	kind: CoreKind,
 	location: Location,
 }
 
 -- What the save keeps for a core on the bench (= Types.StashCore).
-export type StashCore = { grade: CoreGrade, score: number, madeAt: number }
+export type StashCore = { grade: CoreGrade, score: number, madeAt: number, kind: string? }
 
 type CaseInfo = { cradles: number, slots: { [number]: string } }
 
@@ -157,6 +161,15 @@ local function unplace(id: string, location: Location)
 	end
 end
 
+-- A valid core kind from anything (a save, an old core): unknown → the kind matching `grade`
+-- (C → Cluster, B → Pod, A → Coil).
+function Ledger.kindOf(value: any, grade: CoreGrade): CoreKind
+	if value == "Cluster" or value == "Pod" or value == "Coil" then
+		return value
+	end
+	return if grade == "A" then "Coil" elseif grade == "B" then "Pod" else "Cluster"
+end
+
 ------------------------------------------------------------------------------
 -- Settings and cases
 ------------------------------------------------------------------------------
@@ -203,7 +216,8 @@ function Ledger.create(
 	score: number,
 	madeAt: number,
 	location: Location,
-	allowOverflow: boolean?
+	allowOverflow: boolean?,
+	kind: string?
 ): string?
 	if grade ~= "A" and grade ~= "B" and grade ~= "C" then
 		return nil
@@ -220,6 +234,7 @@ function Ledger.create(
 		score = if score == score then math.clamp(score, 0, 100) else 0,
 		madeAt = madeAt,
 		maker = maker,
+		kind = Ledger.kindOf(kind, grade),
 		location = stored,
 	}
 	place(id, stored, allowOverflow == true)
@@ -259,6 +274,7 @@ function Ledger.get(id: string): Core?
 		score = core.score,
 		madeAt = core.madeAt,
 		maker = core.maker,
+		kind = core.kind,
 		location = table.freeze(copyLocation(core.location)),
 	})
 end
@@ -306,6 +322,22 @@ function Ledger.caseGrades(caseId: string): { CoreGrade }
 	return grades
 end
 
+-- The kinds in a case, in slot order (parallel to caseGrades).
+function Ledger.caseKinds(caseId: string): { string }
+	local kinds: { string } = {}
+	local info = cases[caseId]
+	if info then
+		for slot = 1, info.cradles do
+			local id = info.slots[slot]
+			local core = if id then cores[id] else nil
+			if core then
+				table.insert(kinds, core.kind)
+			end
+		end
+	end
+	return kinds
+end
+
 -- The cores in a case as the save keeps them (no ids), in slot order.
 function Ledger.caseStash(caseId: string): { StashCore }
 	local list: { StashCore } = {}
@@ -315,7 +347,12 @@ function Ledger.caseStash(caseId: string): { StashCore }
 			local id = info.slots[slot]
 			local core = if id then cores[id] else nil
 			if core then
-				table.insert(list, { grade = core.grade, score = core.score, madeAt = core.madeAt })
+				table.insert(list, {
+					grade = core.grade,
+					score = core.score,
+					madeAt = core.madeAt,
+					kind = core.kind :: string,
+				})
 			end
 		end
 	end
@@ -358,6 +395,18 @@ function Ledger.benchGrades(owner: number): { CoreGrade }
 	return grades
 end
 
+-- The kinds on a player's bench, in order (parallel to benchGrades).
+function Ledger.benchKinds(owner: number): { string }
+	local kinds: { string } = {}
+	local list = benches[owner]
+	if list then
+		for _, id in list do
+			table.insert(kinds, cores[id].kind)
+		end
+	end
+	return kinds
+end
+
 ------------------------------------------------------------------------------
 -- Saves
 ------------------------------------------------------------------------------
@@ -369,7 +418,12 @@ function Ledger.stashOf(owner: number): { StashCore }
 	if list then
 		for _, id in list do
 			local core = cores[id]
-			table.insert(stash, { grade = core.grade, score = core.score, madeAt = core.madeAt })
+			table.insert(stash, {
+				grade = core.grade,
+				score = core.score,
+				madeAt = core.madeAt,
+				kind = core.kind :: string,
+			})
 		end
 	end
 	return stash
@@ -404,7 +458,8 @@ function Ledger.loadStash(owner: number, list: { any }, keepMax: number?): numbe
 			if typeof(score) == "number" then score else 0,
 			if typeof(madeAt) == "number" then madeAt else 0,
 			Ledger.bench(owner),
-			true
+			true,
+			entry.kind
 		)
 		if id then
 			loaded += 1

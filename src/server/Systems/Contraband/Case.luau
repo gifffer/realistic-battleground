@@ -171,7 +171,7 @@ end
 -- State for the holder
 ------------------------------------------------------------------------------
 
--- Sends "CaseState" (the case he holds: tier, cradles, grades) to the player.
+-- Sends "CaseState" (the case he holds: tier, cradles, grades + kinds) to the player.
 function Case.pushState(player: Player)
 	local record = heldBy[player]
 	local payload: Types.CaseStatePayload = if record
@@ -180,8 +180,9 @@ function Case.pushState(player: Player)
 			tier = record.tier,
 			cradles = record.cradles,
 			grades = Ledger.caseGrades(record.id),
+			kinds = Ledger.caseKinds(record.id),
 		}
-		else { holding = false, tier = "", cradles = 0, grades = {} }
+		else { holding = false, tier = "", cradles = 0, grades = {}, kinds = {} }
 	Guard.sendCaseState(player, payload)
 end
 

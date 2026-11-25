@@ -44,7 +44,7 @@ local template: Types.PlayerProfile = {
 	equipped = { Title = "", Outfit = "", KillEffect = "", Emote = "EmoteShrug" },
 	-- Added with the contraband prototype: Reconcile() adds it to older saves.
 	contraband = {
-		culture = { active = false, grown = 0 },
+		culture = { active = false, grown = 0, seed = 0 }, -- seed: what the culture holds (0 = none yet)
 		stash = {},
 		caseTier = "Courier",
 		log = { extractions = 0, sales = 0, coinsEarned = 0, casesLost = 0 },

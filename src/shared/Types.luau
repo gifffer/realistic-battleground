@@ -150,11 +150,27 @@ export type StashCore = {
 	grade: CoreGrade,
 	score: number, -- 0..100, the extraction score that gave the grade
 	madeAt: number, -- os.time() when it was extracted
+	kind: string?, -- ElementKind it came from (older saves have none: it follows the grade)
+}
+
+-- The bio-elements an extraction shows (stylised lab specimens, never organs).
+--   Cluster  fused amber lobes      Pod   ribbed violet seed pod
+--   Coil     glossy green spiral    Husk  a dried-out decoy: worth nothing
+export type ElementKind = "Cluster" | "Pod" | "Coil" | "Husk"
+export type ElementCondition = "Intact" | "Bruised" | "Ruptured"
+
+-- One element as the player sees it (the exact score stays on the server).
+export type ExtractElement = {
+	kind: ElementKind,
+	condition: ElementCondition, -- (a Husk is always "Intact": ignored)
+	viability: number, -- 0..3 bars shown on the monitor (coarse, from the score band)
 }
 
 -- The saved contraband part of a player's save (PlayerProfile.contraband).
 export type ContrabandProfile = {
-	culture: { active: boolean, grown: number }, -- grown = seconds of online growth so far
+	-- grown = seconds of online growth so far; seed = what the culture holds (Extraction rolls
+	-- the elements from it, so stopping an extraction never rerolls them; 0 = none yet)
+	culture: { active: boolean, grown: number, seed: number },
 	stash: { StashCore },
 	caseTier: string, -- "Courier" (2 cradles); "MkII" later
 	log: { extractions: number, sales: number, coinsEarned: number, casesLost: number },
@@ -172,20 +188,21 @@ export type LabStatePayload = {
 	at: number, -- workspace:GetServerTimeNow() when `grown` was measured
 	running: boolean, -- true = grows at 1 s per s from `at`
 	bench: { CoreGrade }, -- stash cores, in order (NO ids)
+	kinds: { string }, -- their ElementKind, parallel to `bench`
 	stashMax: number,
 }
 
 -- server → owner (ContrabandEvent "ExtractState")
+-- Times are workspace:GetServerTimeNow() (the client compares with the same clock).
 export type ExtractStatePayload = {
 	active: boolean,
 	sessionId: number,
-	step: number, -- 1..6 (current), 7 = done
-	stepStartedAt: number, -- server time
-	guides: number, -- 6
-	correct: { number }, -- the fibre guides to cut (1..6), e.g. {1,3,4,6}
-	cut: { number }, -- guides already cut
-	clamps: { number }, -- clamps already unlocked (1, 2)
-	minTimes: { number }, -- copy of Config.Extraction.MIN_TIME
+	phase: ("Cut" | "Select")?, -- (nil when not active)
+	revealAt: number, -- the seam is open: picks are accepted from then
+	endsAt: number, -- the cooling bar runs out
+	slots: number, -- capsules to fill (1..Config.Extraction.CAPSULES)
+	elements: { ExtractElement }, -- by index (the client lays them out in the cavity)
+	picked: { number }, -- indices already taken (for a resync)
 }
 
 -- server → the case HOLDER only (ContrabandEvent "CaseState")
@@ -194,6 +211,7 @@ export type CaseStatePayload = {
 	tier: string,
 	cradles: number,
 	grades: { CoreGrade },
+	kinds: { string }, -- their ElementKind, parallel to `grades`
 }
 
 -- server → seller (ContrabandEvent "SaleResult")
@@ -204,18 +222,29 @@ export type SaleResultPayload = {
 	reason: string?,
 }
 
--- End of an extraction: the grade, where the core went, why points were lost (short English
--- lines from the server, e.g. "1 wrong fibre") and what the core is worth at the buyer.
+-- server → owner (ContrabandEvent "ExtractPicked"): one element was lifted and sealed.
+-- inert = it was a husk (the capsule is wasted, no core, no grade).
+export type ExtractPickedPayload = {
+	index: number,
+	slot: number, -- which capsule of the rack (1..slots)
+	inert: boolean,
+	kind: ElementKind,
+	grade: CoreGrade?,
+	toCase: boolean, -- the core went into a case lying in the lab (else the stash)
+}
+
+-- End of an extraction: the cores made (kind, grade, what each is worth at the buyer), how
+-- many capsules were wasted on husks, and where they went.
 export type ExtractDonePayload = {
-	grade: CoreGrade,
+	cores: { { kind: ElementKind, grade: CoreGrade, worth: number } },
+	inert: number,
 	toCase: boolean,
-	notes: { string },
-	worth: number,
 }
 
 -- Messages from the server to one player (Remotes.ContrabandEvent):
 --   LabState      LabStatePayload
 --   ExtractState  ExtractStatePayload
+--   ExtractPicked ExtractPickedPayload
 --   ExtractDone   ExtractDonePayload
 --   CaseState     CaseStatePayload
 --   SaleStarted   { endsAt: number }   (server time)
@@ -224,6 +253,7 @@ export type ExtractDonePayload = {
 export type ContrabandEventKind =
 	"LabState"
 	| "ExtractState"
+	| "ExtractPicked"
 	| "ExtractDone"
 	| "CaseState"
 	| "SaleStarted"

@@ -50,6 +50,7 @@ local Sounds = require(ReplicatedStorage.Shared.Sounds)
 local CityZones = require(ReplicatedStorage.Shared.Util.CityZones)
 local ParkAtmosphereController = require(script.Parent.ParkAtmosphereController)
 local WeatherController = require(script.Parent.WeatherController)
+local ZoneLookController = require(script.Parent.ZoneLookController)
 
 local CityAudioController = {}
 
@@ -449,8 +450,14 @@ local function update(deltaTime: number)
 	local inDuel = player:GetAttribute("InDuel") == true
 
 	-- 1. the outdoor bed
+	-- (inside your flat / lab, ZoneLook "Lab": the street is the flat's own beds, see
+	-- ApartmentAmbienceController; the outdoor bed and the rain fade out with the look)
+	local apartmentBlend = if ZoneLookController.current() == "Lab"
+		then ZoneLookController.blend()
+		else 0
 	local night = nightness()
-	local bedGain = musicLevel
+	local bedGain = (1 - apartmentBlend)
+		* musicLevel
 		* (1 - (1 - INDOOR_BED) * indoorLevel)
 		* (1 - park)
 		* (if inDuel then 0 else 1)
@@ -493,7 +500,12 @@ local function update(deltaTime: number)
 		end
 		setBedVolume(
 			rain,
-			rainSlot.volume * intensity * shelter * (1 - park) * (if inDuel then 0 else 1)
+			rainSlot.volume
+				* intensity
+				* shelter
+				* (1 - park)
+				* (if inDuel then 0 else 1)
+				* (1 - apartmentBlend)
 		)
 	end
 

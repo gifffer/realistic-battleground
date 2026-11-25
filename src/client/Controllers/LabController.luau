@@ -9,14 +9,16 @@
 --     "LabState" timestamps: progress = (grown + (now - at)) / total while running. The server
 --     never ticks the progress over the network; it only sends a new LabState when something
 --     changes (and every RESYNC_EVERY seconds while you are in the lab);
---   • your stash: one capsule per bio-core on the stash shelf, coloured by grade (the server
---     sends only the grades, never ids);
+--   • your stash: one capsule per bio-core in the freezer stash (StashShelf), showing its
+--     element kind and grade light (the server sends only grades + kinds, never ids);
 --   • the "Lab" lighting look is NOT done here: the server sets the ZoneLook attribute and
 --     ZoneLookController blends it.
 -- The extraction itself (bench, camera, gestures) is ExtractionController.
 --
 --   LabController.state()            the last LabState (or nil)
---   LabController.parts()            the lab's named parts once streamed in (or nil)
+--   LabController.parts()            the lab's named parts once streamed in (or nil); the
+--                                    optional ones (cutterDock, scanScreen, chargerLed...) may
+--                                    be nil while the flat streams in
 --   LabController.visuals()          the local Folder the lab visuals live in
 --   LabController.setCloneHidden(b)  hides the vat clone (it is on the bench meanwhile)
 --   LabController.progress()         culture progress now (0..1)
@@ -31,7 +33,6 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local Contraband = script.Parent.Parent.Contraband
 local CoreModel = require(Contraband.CoreModel)
 local VatVisual = require(Contraband.VatVisual)
-local SoundController = require(script.Parent.SoundController)
 
 local player = Players.LocalPlayer
 
@@ -44,6 +45,9 @@ export type LabParts = {
 	benchAnchor: BasePart,
 	chuteMouth: BasePart?,
 	stashShelf: BasePart?,
+	cutterDock: BasePart?, -- where the extraction's cutter sleeps (its charger)
+	scanScreen: BasePart?, -- the small CRT beside the trolley (the extraction's readout)
+	chargerLed: BasePart?, -- the charger's LED (ExtractionController sets "Busy" on it)
 }
 
 -- Draw the vat only when the camera is this close (studs): the labs are far from the city.
@@ -129,6 +133,9 @@ local function findLab()
 		benchAnchor = bench,
 		chuteMouth = findPart(model, "ChuteMouth"),
 		stashShelf = findPart(model, "StashShelf"),
+		cutterDock = findPart(model, "CutterDock"),
+		scanScreen = findPart(model, "ScanScreen"),
+		chargerLed = findPart(model, "ChargerLed"),
 	}
 	vat = VatVisual.new(vatCore, findPart(model, "VatScreen"), getFolder())
 	snapNext = true
@@ -145,7 +152,8 @@ local function updateShelf()
 		clearShelf()
 		return
 	end
-	local key = table.concat(current.bench, ",")
+	local kinds = if typeof(current.kinds) == "table" then current.kinds else {}
+	local key = table.concat(current.bench, ",") .. "|" .. table.concat(kinds, ",")
 	if key == shelfKey then
 		return
 	end
@@ -155,7 +163,12 @@ local function updateShelf()
 		if index > 8 then
 			break -- (overflow cores after a disconnect: only 8 places on the shelf)
 		end
-		local capsule = CoreModel.capsule(grade, CoreModel.shelfCFrame(shelfPart.CFrame, index))
+		local capsule = CoreModel.capsule(
+			grade,
+			CoreModel.shelfCFrame(shelfPart.CFrame, index),
+			false,
+			kinds[index]
+		)
 		capsule.Parent = getFolder()
 		table.insert(shelf, capsule)
 	end
@@ -254,9 +267,7 @@ function LabController.init()
 		end
 		local previous = state
 		state = data :: Types.LabStatePayload
-		if previous and previous.stage == "Growing" and data.stage == "Ready" then
-			SoundController.play2D("VatReadyChime")
-		end
+		-- (the "ready" chime is played in 3D at the lab monitor by ApartmentAmbienceController)
 		-- a new stage that is not just growing on (planted, extracted...): no phase shift
 		if previous == nil or previous.stage ~= data.stage then
 			snapNext = true

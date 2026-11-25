@@ -1,32 +1,33 @@
 --!strict
--- Extraction: the server side of the 6-step mini-game that takes the bio-core out of a ready
--- shell. The client (ExtractionController) plays the gestures; the SERVER decides the order,
--- the timing, the fibre guides and the grade.
+-- Extraction (v2): the server side of taking bio-elements out of a ready shell.
 --
---   1 UNLOCK  two chest clamps         ExtractStep(id, 1, { clamp = 1|2, accuracy = 0..1 })
---   2 OPEN    the hatch                ExtractStep(id, 2, {})
---   3 SPREAD  the membrane             ExtractStep(id, 3, { steadiness = 0..1 })
---   4 CUT     4 of the 6 fibre guides  ExtractStep(id, 4, { guide = 1..6 })  (once per cut)
---   5 LIFT    the bio-core             ExtractStep(id, 5, { smooth = 0..1 })
---   6 SEAL    into a capsule           ExtractStep(id, 6, {})
---   step 0 = the player stops (Esc).
+-- What the player does (ExtractionController draws it):
+--   hold E "Extract" on the ready vat → the cutter opens the shell's chest seam BY ITSELF
+--   (no gesture) → 4 to 6 stylised bio-elements show in the cavity → the player lifts out the
+--   ones he wants (click-and-hold), one per capsule, up to `slots` capsules → done.
 --
--- Rules:
---   • a step cannot end before Config.Extraction.MIN_TIME[step] seconds: an early "done" is
---     simply held until that time (the client just waits a little);
---   • cuts: a guide only once, at least CUT_MIN_GAP s apart; cutting a decoy costs points;
---   • every message is checked (numbers, ranges, NaN, table size, session, step); more than
---     MAX_INVALID bad ones abort the session; at most 12 messages per 10 s;
---   • the session ends after TIMEOUT s, if the player dies / respawns / leaves, or on step 0:
---     the culture goes back to Ready, nothing is lost.
--- Score = 100 − penalties (Config.Extraction.PENALTY), grade A ≥ 85, B ≥ 60, else C. Mouse
--- gestures can't be measured on the server, so the accuracy numbers come from the client, but
--- they can move the price by ±20 % at most (a perfect bot gains little).
+-- What the SERVER decides (never the client):
+--   • the contents: rolled from the culture's saved seed (Lab.seed). Stopping before any pick
+--     puts the culture back to Ready with the SAME seed: cancelling never rerolls;
+--   • every score: KIND_BASE + CONDITION_SCORE + a small hidden roll fixed by (seed, index),
+--     then the grade (Grades.fromScore). The client only ever sees kind, condition and a
+--     coarse 0..3 "viability" (exactly what the player sees on screen);
+--   • the timing: no pick before the seam is open (revealAt), at least PICK_MIN_GAP s between
+--     two picks, the cooling bar (endsAt), a TIMEOUT safety;
+--   • the slots: min(CAPSULES, room in the stash / lab cases) fixed at the start.
 --
--- At the end (one synchronous block): the core is made by the Ledger in the first free cradle
--- of a case lying in the lab, else on the bench (the space is checked BEFORE starting); the
--- culture is Empty again; the client gets ExtractDone { grade, toCase, notes, worth }: the notes
--- say why points were lost (taught on the result card), worth is the buyer's price.
+-- The client sends Remotes.ExtractAction(sessionId, action, index?):
+--   "Pick" index   lift element `index` (a whole number 1..#elements, not picked yet)
+--   "Done"         finish now (≥ 1 pick) — with 0 picks it is the same as "Stop"
+--   "Stop"         stop: 0 picks → culture Ready again (same contents); ≥ 1 pick → finished
+-- Every message is checked (types, NaN, ranges, session id, own lab, alive); more than
+-- MAX_INVALID bad ones abort the session; RateLimiter 6 burst, 0.6 per s.
+--
+-- A pick is REAL at once: the core is made in the Ledger right away (a free cradle of a case
+-- lying in the lab, else the stash; never lost: over the stash limit if it must), the stash is
+-- saved, and the client gets ExtractPicked { index, slot, inert, kind, grade?, toCase }. A
+-- husk wastes its capsule (inert, no core). The end (all slots filled, Done, time out, Stop /
+-- death / leaving after ≥ 1 pick): culture Empty, ExtractDone { cores, inert, toCase }.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,36 +48,135 @@ local Lab = require(script.Parent.Lab)
 local Ledger = require(script.Parent.Ledger)
 
 local E = Config.Extraction
-local P = E.PENALTY
 
-local STEPS = 6
-local MAX_DATA_KEYS = 4
-local NOTE_BELOW = 0.7 -- a gesture scored below this gets a line on the result card
+-- The client's intro before the cut starts (the hand takes the cutter): the seam is open
+-- INTRO_TIME + CUT_TIME after the start. (Server clock: a little earlier than the client
+-- sees it, which only makes the check more lenient, never stricter.)
+local INTRO_TIME = 0.9
+-- Seconds after the cooling bar ends before the server ends the session itself (the client
+-- normally sends "Done" on time; this covers a slow or silent client).
+local END_GRACE = 1.5
+
+type Element = {
+	kind: Types.ElementKind,
+	condition: Types.ElementCondition,
+	score: number, -- server only (never sent)
+	viability: number,
+}
 
 type Session = {
 	id: number,
 	player: Player,
-	step: number, -- 1..6
-	stepStartedAt: number, -- os.clock()
-	stepStartedServer: number, -- workspace:GetServerTimeNow()
-	startedAt: number,
-	pending: boolean, -- the step is done, waiting for its minimum time
-	clamps: { number },
-	accuracies: { number },
-	correct: { number },
-	cut: { number },
-	lastCutAt: number,
-	wrongCuts: number,
-	penalty: number,
+	seed: number,
+	startedAt: number, -- os.clock()
+	revealAt: number, -- os.clock(): picks accepted from here
+	endsAt: number, -- os.clock(): the cooling bar runs out
+	revealServer: number, -- the same two moments on workspace:GetServerTimeNow() (client clock)
+	endsServer: number,
+	slots: number,
+	elements: { Element },
+	picked: { number },
+	lastPickAt: number,
 	invalid: number,
-	notes: { string }, -- why points were lost (shown on the result card)
+	cores: { { kind: Types.ElementKind, grade: Types.CoreGrade, worth: number } },
+	inert: number,
+	toCase: boolean,
 }
 
 local Extraction = {}
 
 local sessions: { [Player]: Session } = {}
 local nextSessionId = 0
-local stepLimiter = RateLimiter.new(12, 1.2) -- burst 12, then 12 per 10 s
+local actionLimiter = RateLimiter.new(6, 0.6) -- burst 6, then 6 per 10 s
+
+------------------------------------------------------------------------------
+-- Contents (pure: the same seed always gives the same elements)
+------------------------------------------------------------------------------
+
+-- Picks a key of `weights` ({ name = weight }) with `random`, in a FIXED order (`order`), so
+-- the same seed gives the same result on every server.
+local function weighted(random: Random, weights: { [string]: number }, order: { string }): string
+	local total = 0
+	for _, name in order do
+		total += weights[name] or 0
+	end
+	local roll = random:NextNumber() * total
+	for _, name in order do
+		roll -= weights[name] or 0
+		if roll < 0 then
+			return name
+		end
+	end
+	return order[#order]
+end
+
+local KIND_ORDER = { "Cluster", "Pod", "Coil" }
+local CONDITION_ORDER = { "Intact", "Bruised", "Ruptured" }
+
+-- The score of a (non-husk) element before the hidden roll.
+local function baseScore(kind: string, condition: string): number
+	local bases: { [string]: number } = E.KIND_BASE :: any
+	local conditions: { [string]: number } = E.CONDITION_SCORE :: any
+	return (bases[kind] or 0) + (conditions[condition] or 0)
+end
+
+-- 0..3 bars for the monitor: coarse, from the score band (no roll in it).
+local function viabilityOf(kind: string, condition: string): number
+	if kind == "Husk" then
+		return 0
+	end
+	local score = baseScore(kind, condition)
+	if score >= E.GRADE_A then
+		return 3
+	elseif score >= E.GRADE_B then
+		return 2
+	end
+	return 1
+end
+
+-- The culture's elements: 4..6, husks 0 (4 elements), 1 (5) or 1–2 (6), always enough real
+-- ones to fill every capsule.
+function Extraction.roll(seed: number): { Element }
+	local random = Random.new(seed)
+	local count = random:NextInteger(E.ELEMENTS[1], E.ELEMENTS[2])
+	local husks = if count <= 4 then 0 elseif count == 5 then 1 else random:NextInteger(1, 2)
+	husks = math.clamp(husks, 0, math.max(0, count - E.CAPSULES))
+	-- which indices are husks
+	local isHusk: { [number]: boolean } = {}
+	local free: { number } = {}
+	for index = 1, count do
+		table.insert(free, index)
+	end
+	for _ = 1, husks do
+		local at = random:NextInteger(1, #free)
+		isHusk[free[at]] = true
+		table.remove(free, at)
+	end
+	local elements: { Element } = {}
+	for index = 1, count do
+		if isHusk[index] then
+			table.insert(
+				elements,
+				{ kind = "Husk", condition = "Intact", score = 0, viability = 0 }
+			)
+		else
+			local kind: Types.ElementKind =
+				weighted(random, E.KIND_WEIGHT :: any, KIND_ORDER) :: any
+			local condition: Types.ElementCondition =
+				weighted(random, E.CONDITION_WEIGHT :: any, CONDITION_ORDER) :: any
+			-- the hidden roll: its own generator per index (fixed whatever was picked before)
+			local roll = Random.new(seed + index):NextInteger(-E.ROLL, E.ROLL)
+			local element: Element = {
+				kind = kind,
+				condition = condition,
+				score = math.clamp(baseScore(kind, condition) + roll, 0, 100),
+				viability = viabilityOf(kind, condition),
+			}
+			table.insert(elements, element)
+		end
+	end
+	return elements
+end
 
 ------------------------------------------------------------------------------
 -- State to the client
@@ -87,25 +187,32 @@ local function statePayload(session: Session?): Types.ExtractStatePayload
 		return {
 			active = false,
 			sessionId = 0,
-			step = 0,
-			stepStartedAt = 0,
-			guides = E.GUIDES,
-			correct = {},
-			cut = {},
-			clamps = {},
-			minTimes = table.clone(E.MIN_TIME),
+			phase = nil,
+			revealAt = 0,
+			endsAt = 0,
+			slots = 0,
+			elements = {},
+			picked = {},
 		}
+	end
+	local shown: { Types.ExtractElement } = {}
+	for _, element in session.elements do
+		-- (never the score: only what the player can see)
+		table.insert(shown, {
+			kind = element.kind,
+			condition = element.condition,
+			viability = element.viability,
+		})
 	end
 	return {
 		active = true,
 		sessionId = session.id,
-		step = session.step,
-		stepStartedAt = session.stepStartedServer,
-		guides = E.GUIDES,
-		correct = table.clone(session.correct),
-		cut = table.clone(session.cut),
-		clamps = table.clone(session.clamps),
-		minTimes = table.clone(E.MIN_TIME),
+		phase = if os.clock() >= session.revealAt then "Select" else "Cut",
+		revealAt = session.revealServer,
+		endsAt = session.endsServer,
+		slots = session.slots,
+		elements = shown,
+		picked = table.clone(session.picked),
 	}
 end
 
@@ -122,22 +229,11 @@ local function clearPlayer(player: Player)
 	Movement.setSpeedModifier(player, "Extract", nil)
 end
 
--- Ends a session without a core (stopped, timed out, died...): the culture is Ready again.
-function Extraction.abort(player: Player, why: string)
-	local session = sessions[player]
-	if session == nil then
-		return
-	end
-	sessions[player] = nil
-	clearPlayer(player)
-	if Lab.stage(player) == "Extracting" then
-		Lab.setStage(player, "Ready")
-	end
-	Extraction.pushState(player)
-	Guard.debug(`{player.Name}: extraction stopped ({why})`)
+local function isPrivateServer(): boolean
+	return game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
 end
 
--- Where the new core will go: (location, toCase) or nil if there is no room.
+-- Where a new core goes: (location, toCase) or nil if there is no room.
 local function destination(player: Player): (Ledger.Location?, boolean)
 	local owner = player.UserId
 	local caseId, slot = Case.freeCradleInLab(owner)
@@ -150,77 +246,121 @@ local function destination(player: Player): (Ledger.Location?, boolean)
 	return nil, false
 end
 
-local function finish(session: Session)
+-- How many cores fit right now (at least the stash's free places, plus one if a lab case has
+-- a free cradle; picks can still go over the stash limit rather than be lost).
+local function room(player: Player): number
+	local owner = player.UserId
+	local free = math.max(0, Ledger.stashMax() - Ledger.benchCount(owner))
+	if Case.freeCradleInLab(owner) ~= nil then
+		free += 1
+	end
+	return free
+end
+
+-- The normal end (≥ 1 pick): the culture is used up.
+local function finish(session: Session, why: string)
 	local player = session.player
+	if sessions[player] ~= session then
+		return
+	end
 	sessions[player] = nil
 	clearPlayer(player)
-	local score = math.clamp(100 - session.penalty, 0, 100)
-	local grade: Types.CoreGrade = Grades.fromScore(score)
-	local location, toCase = destination(player)
-	local id: string? = nil
-	if location then
-		id = Ledger.create(player.UserId, grade, score, os.time(), location)
-	end
-	if id == nil then
-		-- (no room after all: never lose the core, put it on the bench over the limit)
-		toCase = false
-		id =
-			Ledger.create(player.UserId, grade, score, os.time(), Ledger.bench(player.UserId), true)
-	end
-	Lab.setStage(player, "Empty")
-	Lab.benchChanged(player)
+	Lab.setStage(player, "Empty") -- (also clears the culture's seed)
 	PlayerData.update(player, function(data)
 		data.contraband.log.extractions += 1
 	end)
 	Heat.record(player, "extractions")
-	local notes = table.clone(session.notes)
-	if session.wrongCuts > 0 then
-		table.insert(
-			notes,
-			1,
-			if session.wrongCuts == 1 then "1 wrong fibre" else `{session.wrongCuts} wrong fibres`
-		)
-	end
 	local payload: Types.ExtractDonePayload = {
-		grade = grade,
-		toCase = toCase,
-		notes = notes,
-		-- (the same price rule as Market: half on a real private server)
-		worth = Grades.priceOf(
-			grade,
-			game.PrivateServerId ~= "" and game.PrivateServerOwnerId ~= 0
-		),
+		cores = table.clone(session.cores),
+		inert = session.inert,
+		toCase = session.toCase,
 	}
 	Guard.sendExtractDone(player, payload)
 	Extraction.pushState(player)
-	Guard.debug(`{player.Name}: extraction done, score {math.floor(score)} → {grade}`)
+	Guard.debug(`{player.Name}: extraction done ({why}), {#session.cores} core(s)`)
 end
 
--- Moves to the next step (or finishes), no sooner than the step's minimum time.
-local function completeStep(session: Session)
-	if session.pending then
+-- Ends a session. With no pick yet the culture goes back to Ready with the SAME seed (the
+-- same elements next time); after a pick it is a normal end (the sealed cores stay).
+function Extraction.abort(player: Player, why: string)
+	local session = sessions[player]
+	if session == nil then
 		return
 	end
-	session.pending = true
-	local waitFor = E.MIN_TIME[session.step] - (os.clock() - session.stepStartedAt)
-	local function advance()
-		if sessions[session.player] ~= session then
-			return -- (aborted meanwhile)
-		end
-		session.pending = false
-		if session.step >= STEPS then
-			finish(session)
-			return
-		end
-		session.step += 1
-		session.stepStartedAt = os.clock()
-		session.stepStartedServer = workspace:GetServerTimeNow()
-		Extraction.pushState(session.player)
+	if #session.picked > 0 then
+		finish(session, why)
+		return
 	end
-	if waitFor > 0 then
-		task.delay(waitFor, advance)
+	sessions[player] = nil
+	clearPlayer(player)
+	if Lab.stage(player) == "Extracting" then
+		Lab.setStage(player, "Ready")
+	end
+	Extraction.pushState(player)
+	if why == "cooling bar ran out" then
+		Guard.notice(player, "The tissue cooled. The vat is still ready.")
+	end
+	Guard.debug(`{player.Name}: extraction stopped ({why})`)
+end
+
+-- Lifts element `index` into the next capsule (all checks done by the caller).
+local function pick(session: Session, index: number)
+	local player = session.player
+	local element = session.elements[index]
+	table.insert(session.picked, index)
+	session.lastPickAt = os.clock()
+	local slot = #session.picked
+	if slot == 1 then
+		-- (first element taken: the saved culture is used up NOW, before any core is created,
+		-- so a crash can never give back both the cores and the same culture)
+		Lab.consume(player)
+	end
+	local payload: Types.ExtractPickedPayload
+	if element.kind == "Husk" then
+		session.inert += 1
+		payload =
+			{ index = index, slot = slot, inert = true, kind = "Husk", grade = nil, toCase = false }
 	else
-		advance()
+		local grade: Types.CoreGrade = Grades.fromScore(element.score)
+		local owner = player.UserId
+		local location, toCase = destination(player)
+		local id: string? = nil
+		if location then
+			id =
+				Ledger.create(owner, grade, element.score, os.time(), location, false, element.kind)
+		end
+		if id == nil then
+			-- (no room after all: never lose a core, put it on the stash over the limit)
+			toCase = false
+			Ledger.create(
+				owner,
+				grade,
+				element.score,
+				os.time(),
+				Ledger.bench(owner),
+				true,
+				element.kind
+			)
+		end
+		session.toCase = session.toCase or toCase
+		table.insert(session.cores, {
+			kind = element.kind,
+			grade = grade,
+			worth = Grades.priceOf(grade, isPrivateServer()),
+		})
+		payload = {
+			index = index,
+			slot = slot,
+			inert = false,
+			kind = element.kind,
+			grade = grade,
+			toCase = toCase,
+		}
+		Lab.benchChanged(player) -- (saved at once: a sealed core is never lost)
+	end
+	Guard.sendExtractPicked(player, payload)
+	if #session.picked >= session.slots then
+		finish(session, "all capsules filled")
 	end
 end
 
@@ -244,40 +384,36 @@ function Extraction.begin(player: Player)
 	if not nearBench and not nearVat then
 		return
 	end
-	local location = destination(player)
-	if location == nil then
+	local free = room(player)
+	if free <= 0 or destination(player) == nil then
 		Guard.notice(player, "Stash full: load your case.")
 		return
 	end
-	-- The 4 guides to cut, out of 6, at random.
-	local pool: { number } = {}
-	for guide = 1, E.GUIDES do
-		table.insert(pool, guide)
+	local seed = Lab.seed(player)
+	if seed == 0 then
+		return -- (should not happen: a Ready culture always has a seed)
 	end
-	local correct: { number } = {}
-	for _ = 1, math.min(E.CORRECT_GUIDES, E.GUIDES) do
-		table.insert(correct, table.remove(pool, math.random(1, #pool)) :: number)
-	end
-	table.sort(correct)
 	nextSessionId += 1
 	local now = os.clock()
+	local serverNow = workspace:GetServerTimeNow()
+	local untilReveal = INTRO_TIME + E.CUT_TIME
 	sessions[player] = {
 		id = nextSessionId,
 		player = player,
-		step = 1,
-		stepStartedAt = now,
-		stepStartedServer = workspace:GetServerTimeNow(),
+		seed = seed,
 		startedAt = now,
-		pending = false,
-		clamps = {},
-		accuracies = {},
-		correct = correct,
-		cut = {},
-		lastCutAt = -math.huge,
-		wrongCuts = 0,
-		penalty = 0,
+		revealAt = now + untilReveal,
+		endsAt = now + untilReveal + E.SELECT_TIME,
+		revealServer = serverNow + untilReveal,
+		endsServer = serverNow + untilReveal + E.SELECT_TIME,
+		slots = math.clamp(free, 1, E.CAPSULES),
+		elements = Extraction.roll(seed),
+		picked = {},
+		lastPickAt = -math.huge,
 		invalid = 0,
-		notes = {},
+		cores = {},
+		inert = 0,
+		toCase = false,
 	}
 	player:SetAttribute("Extracting", true)
 	Movement.setSpeedModifier(player, "Extract", 0)
@@ -286,16 +422,8 @@ function Extraction.begin(player: Player)
 end
 
 ------------------------------------------------------------------------------
--- ExtractStep (client → server: untrusted)
+-- ExtractAction (client → server: untrusted)
 ------------------------------------------------------------------------------
-
--- A 0..1 number from the client (anything else counts as 0).
-local function unit(value: any): number
-	if not Guard.isFinite(value) then
-		return 0
-	end
-	return math.clamp(value :: number, 0, 1)
-end
 
 local function isWhole(value: any, low: number, high: number): boolean
 	return Guard.isFinite(value) and value % 1 == 0 and value >= low and value <= high
@@ -303,128 +431,69 @@ end
 
 local function invalid(session: Session, why: string)
 	session.invalid += 1
-	Guard.debug(`{session.player.Name}: bad ExtractStep ({why})`)
+	Guard.debug(`{session.player.Name}: bad ExtractAction ({why})`)
 	if session.invalid > E.MAX_INVALID then
 		Extraction.abort(session.player, "too many bad messages")
 	end
 end
 
-local function onStep(player: Player, sessionId: any, step: any, data: any)
-	if not stepLimiter.allow(player) then
-		return
-	end
+local function onAction(player: Player, sessionId: any, action: any, index: any)
 	local session = sessions[player]
 	if session == nil then
 		return
 	end
-	if not isWhole(sessionId, 1, math.huge - 1) or sessionId ~= session.id then
+	-- (only picks are rate-limited: a dropped "Stop" would leave the player frozen in place
+	-- while his own screen has already given the camera back)
+	if action == "Pick" and not actionLimiter.allow(player) then
+		return
+	end
+	if not isWhole(sessionId, 1, 2 ^ 31) or sessionId ~= session.id then
 		invalid(session, "session id")
 		return
 	end
-	if not isWhole(step, 0, STEPS) then
-		invalid(session, "step")
+	if action ~= "Pick" and action ~= "Done" and action ~= "Stop" then
+		invalid(session, "action")
 		return
 	end
-	if step == 0 then
-		Extraction.abort(player, "stopped by the player")
-		return
-	end
-	local fields: { [string]: any } = {}
-	if data ~= nil then
-		if typeof(data) ~= "table" then
-			invalid(session, "data")
-			return
-		end
-		local keys = 0
-		for key, value in data do
-			keys += 1
-			if keys > MAX_DATA_KEYS or typeof(key) ~= "string" then
-				invalid(session, "data keys")
-				return
-			end
-			fields[key] = value
-		end
-	end
-	if step ~= session.step or session.pending then
-		invalid(session, `step {step} while on {session.step}`)
+	if Guard.body(player) == nil then
+		Extraction.abort(player, "not alive")
 		return
 	end
 	if not Apartments.isInOwnLab(player) then
 		Extraction.abort(player, "left the lab")
 		return
 	end
-
-	if step == 1 then -- UNLOCK: each clamp once
-		local clamp = fields.clamp
-		if not isWhole(clamp, 1, 2) or table.find(session.clamps, clamp) then
-			invalid(session, "clamp")
-			return
-		end
-		table.insert(session.clamps, clamp)
-		table.insert(session.accuracies, unit(fields.accuracy))
-		if #session.clamps >= 2 then
-			local mean = (session.accuracies[1] + session.accuracies[2]) / 2
-			session.penalty += (1 - mean) * P.unlock
-			if mean < NOTE_BELOW then
-				table.insert(session.notes, "clamps forced")
-			end
-			completeStep(session)
-		else
-			Extraction.pushState(player)
-		end
-	elseif step == 2 or step == 6 then -- OPEN the hatch / SEAL the capsule: nothing to score
-		completeStep(session)
-	elseif step == 3 then -- SPREAD
-		local steadiness = unit(fields.steadiness)
-		session.penalty += (1 - steadiness) * P.spread
-		if steadiness < NOTE_BELOW then
-			table.insert(session.notes, "membrane torn")
-		end
-		completeStep(session)
-	elseif step == 4 then -- CUT: one guide per message
-		local guide = fields.guide
-		if not isWhole(guide, 1, E.GUIDES) or table.find(session.cut, guide) then
-			invalid(session, "guide")
-			return
-		end
-		local now = os.clock()
-		if now - session.lastCutAt < E.CUT_MIN_GAP then
-			invalid(session, "cuts too fast")
-			return
-		end
-		session.lastCutAt = now
-		table.insert(session.cut, guide)
-		if not table.find(session.correct, guide) then
-			session.wrongCuts += 1
-			if session.wrongCuts <= P.wrongCutMax then
-				session.penalty += P.wrongCut
-			end
-		end
-		local allCut = true
-		for _, needed in session.correct do
-			if not table.find(session.cut, needed) then
-				allCut = false
-				break
-			end
-		end
-		if allCut then
-			completeStep(session)
-		else
-			Extraction.pushState(player)
-		end
-	elseif step == 5 then -- LIFT: too fast or rough loses points
-		local took = os.clock() - session.stepStartedAt
-		local fast = math.clamp((E.LIFT_GOOD_TIME - took) / 1, 0, 1)
-		local smooth = unit(fields.smooth)
-		session.penalty += fast * P.liftFast
-		session.penalty += (1 - smooth) * P.liftRough
-		if fast > 0.25 then
-			table.insert(session.notes, "lifted too fast")
-		elseif smooth < NOTE_BELOW then
-			table.insert(session.notes, "rough lift")
-		end
-		completeStep(session)
+	if action == "Done" or action == "Stop" then
+		Extraction.abort(player, if action == "Done" then "done" else "stopped by the player")
+		return
 	end
+	-- "Pick"
+	if not isWhole(index, 1, #session.elements) then
+		invalid(session, "index")
+		return
+	end
+	if table.find(session.picked, index) then
+		invalid(session, "already picked")
+		return
+	end
+	local now = os.clock()
+	if now < session.revealAt then
+		invalid(session, "before the seam is open")
+		return
+	end
+	if now > session.endsAt + 0.5 then
+		invalid(session, "cooling bar over")
+		return
+	end
+	if now - session.lastPickAt < E.PICK_MIN_GAP then
+		invalid(session, "picks too fast")
+		return
+	end
+	if #session.picked >= session.slots then
+		invalid(session, "no capsule left")
+		return
+	end
+	pick(session, index :: number)
 end
 
 ------------------------------------------------------------------------------
@@ -456,21 +525,25 @@ function Extraction.init()
 	Lab.setExtractHandler(Extraction.begin)
 end
 
--- Lifecycle (Contraband/init calls it): remote, players, timeouts.
+-- Lifecycle (Contraband/init calls it): remote, players, the cooling bar and timeouts.
 function Extraction.start()
-	Remotes.ExtractStep.OnServerEvent:Connect(onStep)
+	Remotes.ExtractAction.OnServerEvent:Connect(onAction)
 	Players.PlayerAdded:Connect(watchPlayer)
 	for _, player in Players:GetPlayers() do
 		watchPlayer(player)
 	end
 	while true do
-		task.wait(1)
+		task.wait(0.5)
 		local now = os.clock()
 		for player, session in sessions do
 			if player.Parent == nil then
 				sessions[player] = nil
+			elseif now >= session.endsAt + END_GRACE then
+				Extraction.abort(player, "cooling bar ran out")
 			elseif now - session.startedAt > E.TIMEOUT then
 				Extraction.abort(player, "timed out")
+			elseif player:GetAttribute("InLab") ~= true then
+				Extraction.abort(player, "left the lab")
 			end
 		end
 	end

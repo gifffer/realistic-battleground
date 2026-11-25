@@ -13,7 +13,9 @@
 --
 -- THE LABS: with Config.Lab.ANY_DOOR every door opens YOUR lab (one per player, built from
 -- parts by LabBuilder the first time you go in, destroyed when you leave the server). A lab
--- takes the lowest free slot of the row far from the city.
+-- takes the lowest free slot of the row far from the city. Since the apartment rework the "lab"
+-- is a whole run-down flat with the lab hidden in its back bedroom: the prompts never say
+-- "lab" (the city door says "Enter" + the address, the flat's front door says "Leave").
 --   Enter    alive, standing, idle, not extracting / selling / in a duel / in a cutscene, not
 --            hit in the last NO_ENTRY_AFTER_HIT s and not in combat (CombatUntil: the ATTACKER
 --            too) ("Not while fighting."). Carrying a case is fine. All of it is checked again
@@ -130,8 +132,8 @@ local function getOrBuildLab(player: Player): LabInfo
 		local prompt = Guard.makePrompt(
 			leave,
 			"LeavePrompt",
-			"Leave lab",
-			"Lab door",
+			"Leave",
+			"Front door",
 			L.ENTER_HOLD,
 			L.PROMPT_DISTANCE,
 			false
@@ -481,7 +483,7 @@ local function setUpDoor(site: Sites.DoorSite, byName: { [string]: { BasePart } 
 	local prompt = Guard.makePrompt(
 		promptPart,
 		"LabDoorPrompt",
-		"Enter lab",
+		"Enter",
 		site.label,
 		L.ENTER_HOLD,
 		L.ENTER_DISTANCE,

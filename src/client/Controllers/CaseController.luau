@@ -195,6 +195,7 @@ local groundFolder: Instance? = nil -- workspace.ContrabandCases once found
 
 -- What the server told us about the case WE hold.
 local myGrades: { Types.CoreGrade } = {}
+local myKinds: { string } = {} -- their element kinds (parallel to myGrades, "" = from the grade)
 local myHolding = false
 local nextSetDownAt = 0
 
@@ -263,7 +264,7 @@ local function showCapsules(entry: Held)
 			break
 		end
 		local cradle = cradles[index]
-		local capsule = CoreModel.capsule(grade, cradle)
+		local capsule = CoreModel.capsule(grade, cradle, false, myKinds[index])
 		capsule:ScaleTo(CaseModel.CAPSULE_SCALE)
 		CoreModel.weldTo(capsule, entry.baseShell)
 		capsule.Parent = group
@@ -1166,17 +1167,23 @@ local function onContrabandEvent(kind: string, data: any)
 	if kind == "CaseState" then
 		myHolding = data.holding == true
 		local grades: { Types.CoreGrade } = {}
+		local kinds: { string } = {}
+		local sentKinds = if typeof(data.kinds) == "table" then data.kinds else {}
 		if myHolding and typeof(data.grades) == "table" then
-			for _, grade in data.grades do
+			for index, grade in data.grades do
 				if grade == "A" or grade == "B" or grade == "C" then
 					table.insert(grades, grade)
+					local sent = sentKinds[index]
+					table.insert(kinds, if typeof(sent) == "string" then sent else "")
 				end
 			end
 		end
 		myGrades = grades
+		myKinds = kinds
 	elseif kind == "SaleResult" and data.ok == true then
 		-- The buyer took them: the cradles are empty now.
 		myGrades = {}
+		myKinds = {}
 		local character = myCharacter()
 		local entry = character and held[character]
 		if entry then

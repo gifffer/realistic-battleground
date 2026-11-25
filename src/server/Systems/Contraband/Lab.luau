@@ -1,10 +1,13 @@
 --!strict
 -- Lab: the culture in each player's vat, his stash (the bench), and the prompts of his lab.
 --
--- CULTURE (one vat per player, saved in contraband.culture = { active, grown }):
+-- CULTURE (one vat per player, saved in contraband.culture = { active, grown, seed }):
 --   Empty → "Plant culture" → Growing: `grown` += 1 per second while the owner is ON THE SERVER
 --   (in his lab or not; offline = paused) → Ready once grown ≥ total → "Extract" (Extraction)
---   → Extracting → Empty again when the bio-core is out (or back to Ready if stopped).
+--   → Extracting → Empty again once at least one element was sealed (or back to Ready if the
+--   extraction stopped before any pick). `seed` is drawn when the culture is planted and saved
+--   with it: Extraction rolls the culture's bio-elements from it, so stopping and starting again
+--   shows the SAME elements (no reroll by cancelling). An old save without a seed gets one.
 --   total = Config.Lab.CULTURE_TIME (480 s); in Studio with CULTURE_FAST_IN_STUDIO the workspace
 --   attribute CultureFast = true is set and CULTURE_FAST_TIME (45 s) is used (set it to false in
 --   Studio to test the real time). Saved on every stage change, every SAVE_EVERY s while
@@ -46,6 +49,10 @@ local SAVE_EVERY = 30 -- seconds between two saves of a growing culture
 type Culture = {
 	stage: Types.CultureStage,
 	grown: number,
+	seed: number, -- what the culture holds (0 = none: Empty)
+	-- true once the first element was taken: the save then forgets the culture, so a crash
+	-- mid-extraction can never give back cores already in the stash AND the same culture
+	consumed: boolean,
 	sinceSave: number,
 	sinceResync: number,
 }
@@ -66,6 +73,17 @@ end
 function Lab.stage(player: Player): Types.CultureStage
 	local culture = cultures[player]
 	return if culture then culture.stage else "Empty"
+end
+
+-- A new culture seed (a whole number, never 0).
+local function newSeed(): number
+	return Random.new():NextInteger(1, 2 ^ 30)
+end
+
+-- The seed of the player's culture (0 if there is none).
+function Lab.seed(player: Player): number
+	local culture = cultures[player]
+	return if culture then culture.seed else 0
 end
 
 -- Extraction registers the function the "Extract" prompt calls.
@@ -111,6 +129,7 @@ function Lab.push(player: Player)
 		at = workspace:GetServerTimeNow(),
 		running = culture.stage == "Growing",
 		bench = Ledger.benchGrades(player.UserId),
+		kinds = Ledger.benchKinds(player.UserId),
 		stashMax = Ledger.stashMax(),
 	}
 	Guard.sendLabState(player, payload)
@@ -124,7 +143,7 @@ local function saveCulture(player: Player)
 		return
 	end
 	culture.sinceSave = 0
-	local active = culture.stage ~= "Empty"
+	local active = culture.stage ~= "Empty" and not culture.consumed
 	-- (an extraction under way is saved as a ready culture: nothing is lost if the server dies)
 	local grown = if culture.stage == "Extracting" or culture.stage == "Ready"
 		then math.max(culture.grown, Lab.totalTime())
@@ -133,6 +152,7 @@ local function saveCulture(player: Player)
 	PlayerData.update(player, function(data)
 		data.contraband.culture.active = active
 		data.contraband.culture.grown = grown
+		data.contraband.culture.seed = if active then culture.seed else 0
 	end)
 end
 
@@ -184,6 +204,17 @@ function Lab.benchChanged(player: Player)
 	Lab.push(player)
 end
 
+-- Called by Extraction on the FIRST element taken: from now on the save holds no culture
+-- (the element is already a core in the stash). Saved at once, before anything can yield.
+function Lab.consume(player: Player)
+	local culture = cultures[player]
+	if culture == nil or culture.consumed then
+		return
+	end
+	culture.consumed = true
+	saveCulture(player)
+end
+
 -- Extraction moves the culture between Ready and Extracting.
 function Lab.setStage(player: Player, stage: Types.CultureStage)
 	local culture = cultures[player]
@@ -191,8 +222,10 @@ function Lab.setStage(player: Player, stage: Types.CultureStage)
 		return
 	end
 	culture.stage = stage
+	culture.consumed = false
 	if stage == "Empty" then
 		culture.grown = 0
+		culture.seed = 0 -- (consumed: the next culture gets a new one)
 	end
 	saveCulture(player)
 	Lab.push(player)
@@ -222,6 +255,8 @@ local function onVat(player: Player)
 		end
 		culture.stage = "Growing"
 		culture.grown = 0
+		culture.consumed = false
+		culture.seed = newSeed()
 		saveCulture(player)
 		Lab.push(player)
 	elseif culture.stage == "Ready" then
@@ -344,9 +379,16 @@ function Lab.load(player: Player)
 	if saved.culture.active == true then
 		stage = if grown >= Lab.totalTime() then "Ready" else "Growing"
 	end
+	-- (a whole positive number, else a new one: old saves had no seed)
+	local seed = saved.culture.seed
+	if typeof(seed) ~= "number" or seed ~= seed or seed % 1 ~= 0 or seed < 1 or seed > 2 ^ 31 then
+		seed = newSeed()
+	end
 	cultures[player] = {
 		stage = stage,
 		grown = if stage == "Empty" then 0 else grown,
+		seed = if stage == "Empty" then 0 else seed,
+		consumed = false,
 		sinceSave = 0,
 		sinceResync = 0,
 	}

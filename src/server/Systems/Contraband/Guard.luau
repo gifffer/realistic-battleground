@@ -45,6 +45,10 @@ function Guard.sendExtractState(player: Player, payload: Types.ExtractStatePaylo
 	Guard.send(player, "ExtractState", payload :: any)
 end
 
+function Guard.sendExtractPicked(player: Player, payload: Types.ExtractPickedPayload)
+	Guard.send(player, "ExtractPicked", payload :: any)
+end
+
 function Guard.sendExtractDone(player: Player, payload: Types.ExtractDonePayload)
 	Guard.send(player, "ExtractDone", payload :: any)
 end
