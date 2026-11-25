@@ -26,7 +26,7 @@
     0.0
    ],
    "fit": 1,
-   "tris": 2082
+   "tris": 2072
   },
   "DustCover": {
    "paint": "SteelBlued",
@@ -39,7 +39,7 @@
     0.0,
     0.0
    ],
-   "tris": 260
+   "tris": 258
   },
   "Barrel": {
    "paint": "SteelBlued",
@@ -54,7 +54,7 @@
     0.0
    ],
    "fit": 2,
-   "tris": 2172
+   "tris": 1992
   },
   "MuzzleDevice": {
    "paint": "SteelBlued",
@@ -68,7 +68,7 @@
     0.0
    ],
    "parent": "Barrel",
-   "tris": 242
+   "tris": 240
   },
   "CleaningRod": {
    "paint": "SteelBlued",
@@ -81,7 +81,7 @@
     0.0,
     0.0
    ],
-   "tris": 134
+   "tris": 120
   },
   "HandguardLower": {
    "paint": "Wood",
@@ -94,7 +94,7 @@
     0.0,
     0.0
    ],
-   "tris": 808
+   "tris": 624
   },
   "HandguardUpper": {
    "paint": "Wood",
@@ -106,7 +106,7 @@
     0.0,
     0.0
    ],
-   "tris": 380
+   "tris": 284
   },
   "PistolGrip": {
    "paint": "Wood",
@@ -120,7 +120,7 @@
     0.0,
     0.0
    ],
-   "tris": 456
+   "tris": 444
   },
   "Stock": {
    "paint": "Wood",
@@ -135,7 +135,7 @@
     0.0,
     0.0
    ],
-   "tris": 1020
+   "tris": 828
   },
   "ButtPlate": {
    "paint": "SteelBlued",
@@ -149,7 +149,7 @@
     0.0,
     0.0
    ],
-   "tris": 424
+   "tris": 412
   },
   "SightFront": {
    "paint": "SteelBlued",
@@ -162,7 +162,7 @@
     0.014
    ],
    "parent": "Barrel",
-   "tris": 160
+   "tris": 150
   },
   "SightRear": {
    "paint": "SteelBlued",
@@ -189,7 +189,7 @@
     0.0,
     0.013
    ],
-   "tris": 516
+   "tris": 496
   },
   "ChargingHandle": {
    "paint": "SteelBlued",
@@ -202,7 +202,7 @@
     0.0185
    ],
    "parent": "BoltCarrier",
-   "tris": 324
+   "tris": 282
   },
   "Selector": {
    "paint": "SteelBlued",
@@ -214,7 +214,7 @@
     -0.0195,
     0.003
    ],
-   "tris": 348
+   "tris": 346
   },
   "Trigger": {
    "paint": "SteelBlued",
@@ -239,7 +239,7 @@
     0.0,
     -0.022
    ],
-   "tris": 320
+   "tris": 312
   },
   "Magazine": {
    "paint": "SteelBlued",
@@ -253,7 +253,7 @@
     -0.008
    ],
    "fit": 4,
-   "tris": 1132
+   "tris": 1004
   },
   "MagRoundTop": {
    "paint": "SteelLacquer",
@@ -268,7 +268,7 @@
     -0.01558
    ],
    "parent": "Magazine",
-   "tris": 182
+   "tris": 176
   },
   "MagFollower": {
    "paint": "SteelBlued",
@@ -684,11 +684,11 @@
   }
  },
  "tris": {
-  "total": 11784,
-  "gunFbx": 11696,
-  "magFbx": 1314,
-  "case": 152,
-  "round": 182
+  "total": 10864,
+  "gunFbx": 10776,
+  "magFbx": 1180,
+  "case": 148,
+  "round": 176
  },
  "aliases": {
   "RearSight": "SightRear"

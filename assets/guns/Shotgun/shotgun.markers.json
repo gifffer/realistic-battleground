@@ -26,7 +26,7 @@
     0.0
    ],
    "fit": 1,
-   "tris": 829
+   "tris": 714
   },
   "Barrel": {
    "paint": "SteelBlued",
@@ -41,7 +41,7 @@
     0.0
    ],
    "fit": 2,
-   "tris": 608
+   "tris": 544
   },
   "SightFront": {
    "paint": "SteelBlued",
@@ -54,7 +54,7 @@
     0.0,
     0.0
    ],
-   "tris": 176
+   "tris": 172
   },
   "MagTube": {
    "paint": "SteelBlued",
@@ -67,7 +67,7 @@
     0.0
    ],
    "fit": 4,
-   "tris": 336
+   "tris": 304
   },
   "MagCap": {
    "paint": "SteelBlued",
@@ -79,7 +79,7 @@
     0.0,
     -0.032
    ],
-   "tris": 342
+   "tris": 338
   },
   "BarrelClamp": {
    "paint": "Aluminium",
@@ -93,7 +93,7 @@
     0.0,
     0.0
    ],
-   "tris": 360
+   "tris": 328
   },
   "Forend": {
    "paint": "Polymer",
@@ -107,7 +107,7 @@
     0.0,
     0.0
    ],
-   "tris": 1004
+   "tris": 916
   },
   "Stock": {
    "paint": "Polymer",
@@ -121,7 +121,7 @@
     0.0,
     0.0
    ],
-   "tris": 1220
+   "tris": 892
   },
   "RecoilPad": {
    "paint": "Rubber",
@@ -184,7 +184,7 @@
     0.0,
     0.0
    ],
-   "tris": 352
+   "tris": 348
   },
   "ChargingHandle": {
    "paint": "Nickel",
@@ -197,7 +197,7 @@
     0.0
    ],
    "parent": "Bolt",
-   "tris": 130
+   "tris": 108
   },
   "Lifter": {
    "paint": "SteelBlued",
@@ -210,7 +210,7 @@
     0.0,
     -0.0395
    ],
-   "tris": 128
+   "tris": 112
   },
   "BoltRelease": {
    "paint": "SteelBlued",
@@ -237,7 +237,7 @@
     0.0,
     0.0176
    ],
-   "tris": 716
+   "tris": 644
   },
   "OpticLens": {
    "paint": "Lens",
@@ -263,7 +263,7 @@
     0.0,
     0.0
    ],
-   "tris": 192
+   "tris": 172
   }
  },
  "groups": {
@@ -685,11 +685,11 @@
   }
  },
  "tris": {
-  "total": 7341,
-  "gunFbx": 7341,
-  "case": 144,
-  "round": 192,
-  "roundGreen": 192
+  "total": 6540,
+  "gunFbx": 6540,
+  "case": 142,
+  "round": 186,
+  "roundGreen": 186
  },
  "capacity": {
   "tube": 7,

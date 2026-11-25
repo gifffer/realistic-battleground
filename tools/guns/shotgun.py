@@ -678,15 +678,15 @@ HEAD_ROLL_MAX = 15.0                 # hard caps on the head (world): a cheek we
 HEAD_PITCH_MIN = -20.0
 STANCES = [
     # head_clear 0: the cheek rests on the raised right arm block (the R6 'shoulder'); the head no longer has
-    # to roll away from it.  w_cant 3: the gun stays upright (under 10 deg of cant).
+    # to roll away from it.  w_cant 12 / 8 (as the rifle): w_cant 3 left the Aim canted 10 deg (consistency pass).
     dict(name='Aim', pitch=0.0, shoulder=True, pocket=POCKET, eye='line', w_eye=25.0, eye_t=(-0.25, 0.25),
-         blade=-55.0, blade_tol=20.0, lean=-8.0, lean_tol=5.0, wrist_limit=25.0, rs_ref=(80, 0, 20),
-         ls_ref=(85, 0, -40), front=14.0, w_left=16.0, head_clear=0.0, w_cant=3.0, lhand=SUPPORT_HAND, w_occl=3.0),
+         blade=-55.0, blade_tol=20.0, lean=-8.0, lean_tol=5.0, wrist_limit=25.0, w_wrist=8.0, rs_ref=(80, 0, 20),
+         ls_ref=(85, 0, -40), front=14.0, w_left=16.0, head_clear=0.0, w_cant=12.0, lhand=SUPPORT_HAND, w_occl=3.0),
     dict(name='Ready', pitch=-10.0, shoulder=True, pocket=POCKET, eye='over', eye_over=0.45, blade=-50.0,
-         blade_tol=20.0, lean=-5.0, wrist_limit=25.0, rs_ref=(70, 0, 20), ls_ref=(75, 0, -40), front=14.0,
-         w_left=16.0, head_pitch=-4.0, head_clear=0.0, w_cant=3.0, lhand=SUPPORT_HAND, w_occl=3.0),
-    dict(name='LowReady', pitch=-38.0, shoulder=True, pocket=(0.72, 0.85, -0.25), w_butt=4.0, blade=-38.0, w_cant=3.0,
-         blade_tol=20.0, lean=-6.0, head_pitch=-12.0, wrist_limit=25.0, rs_ref=(40, 0, 20), ls_ref=(45, 0, -35),
+         blade_tol=20.0, lean=-5.0, wrist_limit=25.0, w_wrist=8.0, rs_ref=(70, 0, 20), ls_ref=(75, 0, -40), front=14.0,
+         w_left=16.0, head_pitch=-4.0, head_clear=0.0, w_cant=8.0, lhand=SUPPORT_HAND, w_occl=3.0),
+    dict(name='LowReady', pitch=-38.0, shoulder=True, pocket=(0.72, 0.85, -0.25), w_butt=4.0, blade=-38.0, w_cant=8.0,
+         blade_tol=20.0, lean=-6.0, head_pitch=-12.0, wrist_limit=25.0, w_wrist=8.0, rs_ref=(40, 0, 20), ls_ref=(45, 0, -35),
          front=12.0, w_left=16.0, lhand=SUPPORT_HAND, w_occl=2.0),
     # reload key poses: the gun dropped to the belly, the stock under the right armpit, muzzle forward and a
     # little down (review P0-5), the right arm hanging forward-down instead of a T-pose.  The right-arm
@@ -695,11 +695,11 @@ STANCES = [
     # the hip and the left thumb cannot reach the port.  The port ends up at y -0.18 (ReloadShell) and 0.11
     # (PortLoad: the support hand over the open port holds it a little higher).
     dict(name='ReloadShell', pitch=-8.0, yaw=18.0, cant=75.0, w_cant=2.0, blade=-25.0, blade_tol=25.0, lean=-10.0,
-         lean_tol=8.0, look='LoadingPort', wrist_limit=35.0, rs_ref=(30, 0, -50), w_rs=12.0, ls_ref=(50, 0, -40),
+         lean_tol=8.0, look='LoadingPort', wrist_limit=35.0, w_wrist=8.0, rs_ref=(30, 0, -50), w_rs=12.0, ls_ref=(50, 0, -40),
          front=12.0, w_left=16.0, place=('LoadingPort', (0.35, -0.2, -1.2), 3.0), shell_load=True,
          left_limit=55.0),
     dict(name='PortLoad', pitch=-6.0, yaw=8.0, cant=-30.0, w_cant=2.0, blade=-45.0, blade_tol=25.0, lean=-8.0,
-         look='PortLoad', wrist_limit=30.0, rs_ref=(30, 0, -50), w_rs=12.0, ls_ref=(60, 0, -40), front=12.0,
+         look='PortLoad', wrist_limit=30.0, w_wrist=8.0, rs_ref=(30, 0, -50), w_rs=12.0, ls_ref=(60, 0, -40), front=12.0,
          w_left=16.0, place=('EjectionPort', (0.45, 0.0, -1.2), 8.0), port_load=True, left_limit=70.0),
 ]
 # 3/4 front camera direction (HRP space, from the gun toward the camera) for the visibility term
@@ -826,7 +826,10 @@ def solve_holds(gun, out_json):
         e = r['_eval']
         r['supportHand'] = list(st.get('lhand') or gk.HAND)
         r['residuals'].update({'headRollDeg': round(e['head_roll'], 1), 'headPitchDeg': round(e['head_pitch'], 1),
-                               'gunVisible34': round(e['visible'], 2), 'feetY': [round(v, 3) for v in e['feet']]})
+                               'gunVisible34': round(e['visible'], 2), 'feetY': [round(v, 3) for v in e['feet']],
+                               # reported as the other four guns do (consistency pass)
+                               'cantDeg': round(math.degrees(math.asin(max(-1.0, min(1.0, float(-e['right'][1]))))), 1),
+                               'rootRollDeg': r['pose']['Root'][2]})
         print('HOLD %-12s cost %.4f residuals %s pose %s wrist %s' % (r['name'], r['cost'], r['residuals'],
                                                                        r['pose'], r['wrist']), flush=True)
         results.append(r)
@@ -1217,6 +1220,8 @@ def main():
     empties = gun.empties(studio)
     check_lifter(objs)
     ammo, com = build_shells(col)
+    gk.finish_meshes(objs)          # triangulated, no degenerates (ARCHITECTURE §5.1)
+    gk.finish_meshes(ammo)
     tris = gk.tri_counts(objs)
     tri_gun = sum(tris[n] for n in gun.order)
     tri_ammo = gk.tri_counts(ammo)

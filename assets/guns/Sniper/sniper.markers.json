@@ -29,7 +29,7 @@
     0.0
    ],
    "fit": 1,
-   "tris": 3142
+   "tris": 3040
   },
   "Barrel": {
    "paint": "SteelBlued",
@@ -44,7 +44,7 @@
     0.0
    ],
    "fit": 2,
-   "tris": 860
+   "tris": 794
   },
   "MuzzleDevice": {
    "paint": "SteelBlued",
@@ -58,7 +58,7 @@
     0.0
    ],
    "parent": "Barrel",
-   "tris": 894
+   "tris": 890
   },
   "Stock": {
    "paint": "Polymer",
@@ -74,7 +74,7 @@
     0.0,
     0.0
    ],
-   "tris": 4354
+   "tris": 3858
   },
   "CheekPiece": {
    "paint": "Polymer",
@@ -88,7 +88,7 @@
     -0.012
    ],
    "parent": "Stock",
-   "tris": 412
+   "tris": 404
   },
   "ButtPad": {
    "paint": "Rubber",
@@ -103,7 +103,7 @@
     -0.064
    ],
    "parent": "Stock",
-   "tris": 760
+   "tris": 752
   },
   "Monopod": {
    "paint": "Aluminium",
@@ -118,7 +118,7 @@
     -0.131
    ],
    "parent": "Stock",
-   "tris": 500
+   "tris": 490
   },
   "Optic": {
    "paint": "Aluminium",
@@ -133,7 +133,7 @@
     0.0,
     0.0
    ],
-   "tris": 3284
+   "tris": 3222
   },
   "OpticLens": {
    "paint": "Lens",
@@ -147,7 +147,7 @@
     0.065
    ],
    "parent": "Optic",
-   "tris": 232
+   "tris": 224
   },
   "Bolt": {
    "paint": "SteelBare",
@@ -162,7 +162,7 @@
     0.0,
     0.0
    ],
-   "tris": 668
+   "tris": 656
   },
   "BoltHandle": {
    "paint": "SteelPhosphate",
@@ -175,7 +175,7 @@
     0.0
    ],
    "parent": "Bolt",
-   "tris": 604
+   "tris": 562
   },
   "Safety": {
    "paint": "SteelPhosphate",
@@ -187,7 +187,7 @@
     -0.0175,
     -0.003
    ],
-   "tris": 140
+   "tris": 136
   },
   "Trigger": {
    "paint": "Aluminium",
@@ -212,7 +212,7 @@
     0.0,
     -0.047
    ],
-   "tris": 176
+   "tris": 172
   },
   "BipodYoke": {
    "paint": "Aluminium",
@@ -227,7 +227,7 @@
     -0.061
    ],
    "parent": "Stock",
-   "tris": 220
+   "tris": 212
   },
   "BipodLegL": {
    "paint": "Aluminium",
@@ -241,7 +241,7 @@
     -0.061
    ],
    "parent": "BipodYoke",
-   "tris": 124
+   "tris": 116
   },
   "BipodExtL": {
    "paint": "Aluminium",
@@ -255,7 +255,7 @@
     -0.061
    ],
    "parent": "BipodLegL",
-   "tris": 340
+   "tris": 334
   },
   "BipodLegR": {
    "paint": "Aluminium",
@@ -269,7 +269,7 @@
     -0.061
    ],
    "parent": "BipodYoke",
-   "tris": 124
+   "tris": 116
   },
   "BipodExtR": {
    "paint": "Aluminium",
@@ -283,7 +283,7 @@
     -0.061
    ],
    "parent": "BipodLegR",
-   "tris": 340
+   "tris": 334
   },
   "Magazine": {
    "paint": "SteelBlued",
@@ -299,7 +299,7 @@
     -0.01
    ],
    "fit": 4,
-   "tris": 682
+   "tris": 672
   },
   "MagRoundTop": {
    "paint": "Brass",
@@ -854,9 +854,9 @@
   }
  },
  "tris": {
-  "total": 18620,
-  "gunFbx": 18532,
-  "magFbx": 1074,
+  "total": 17748,
+  "gunFbx": 17660,
+  "magFbx": 1064,
   "case": 150,
   "round": 196
  },

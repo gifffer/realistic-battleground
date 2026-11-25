@@ -5,7 +5,7 @@
  "roblox": "roblox gun space (studs) = (-y, z, -x) / 0.28",
  "massKg": 0.85,
  "dims": {
-  "length": 0.1841,
+  "length": 0.1839,
   "barrel": 0.102,
   "height": 0.1285,
   "width": 0.0309,
@@ -16,21 +16,7 @@
    "paint": "Polymer",
    "mats": [
     "Polymer",
-    "PolymerStipple"
-   ],
-   "origin": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "fit": 1,
-   "tris": 1728
-  },
-  "Slide": {
-   "paint": "SteelBlued",
-   "mats": [
-    "SteelBlued",
-    "Polymer",
+    "PolymerStipple",
     "Bore"
    ],
    "origin": [
@@ -38,7 +24,23 @@
     0.0,
     0.0
    ],
-   "tris": 856
+   "fit": 1,
+   "tris": 1588
+  },
+  "Slide": {
+   "paint": "SteelBlued",
+   "mats": [
+    "SteelBlued",
+    "Polymer",
+    "Bore",
+    "Stamp"
+   ],
+   "origin": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "tris": 668
   },
   "SightRear": {
    "paint": "SteelBlued",
@@ -52,7 +54,7 @@
     0.0
    ],
    "parent": "Slide",
-   "tris": 200
+   "tris": 192
   },
   "SightFront": {
    "paint": "SteelBlued",
@@ -66,7 +68,7 @@
     0.0
    ],
    "parent": "Slide",
-   "tris": 156
+   "tris": 152
   },
   "Extractor": {
    "paint": "SteelBlued",
@@ -89,12 +91,12 @@
     "SteelBare"
    ],
    "origin": [
-    0.022,
+    0.067,
     0.0,
-    -0.009
+    0.0
    ],
    "fit": 2,
-   "tris": 284
+   "tris": 280
   },
   "Trigger": {
    "paint": "Polymer",
@@ -107,7 +109,7 @@
     -0.031
    ],
    "fit": 3,
-   "tris": 248
+   "tris": 204
   },
   "SlideStop": {
    "paint": "SteelBlued",
@@ -119,7 +121,7 @@
     0.0134,
     -0.015
    ],
-   "tris": 156
+   "tris": 108
   },
   "MagRelease": {
    "paint": "Polymer",
@@ -131,7 +133,7 @@
     0.0146,
     -0.0468
    ],
-   "tris": 108
+   "tris": 96
   },
   "Pins": {
    "paint": "SteelBlued",
@@ -143,7 +145,7 @@
     0.0,
     0.0
    ],
-   "tris": 312
+   "tris": 248
   },
   "Magazine": {
    "paint": "Polymer",
@@ -158,7 +160,7 @@
     -0.014
    ],
    "fit": 4,
-   "tris": 508
+   "tris": 500
   },
   "MagRoundTop": {
    "paint": "Brass",
@@ -173,7 +175,7 @@
     -0.0176
    ],
    "parent": "Magazine",
-   "tris": 176
+   "tris": 170
   },
   "MagFollower": {
    "paint": "Polymer",
@@ -186,7 +188,7 @@
     -0.014
    ],
    "parent": "Magazine",
-   "tris": 44
+   "tris": 88
   }
  },
  "groups": {
@@ -221,9 +223,9 @@
   "Barrel": {
    "type": "rotate",
    "pivot": [
-    0.022,
+    0.067,
     0.0,
-    -0.009
+    0.0
    ],
    "axis": [
     0.0,
@@ -233,7 +235,7 @@
    "rest": 0.0,
    "min": -2.5,
    "max": 0.0,
-   "note": "breech drops as the slide unlocks"
+   "note": "breech drops 2.9 mm as the slide unlocks; pivot forward under the locked-back slide nose (the muzzle stays captured in the nose; ARCHITECTURE \u00a75.2 amendment, pistol review 2)"
   },
   "Trigger": {
    "type": "rotate",
@@ -407,9 +409,9 @@
   },
   "SightEye": {
    "p": [
-    -0.361,
+    -0.611,
     0.0,
-    0.0142
+    0.01437
    ],
    "x": [
     1.0,
@@ -544,10 +546,10 @@
   }
  },
  "tris": {
-  "total": 4832,
-  "gunFbx": 4788,
-  "magFbx": 684,
-  "case": 150,
-  "round": 176
+  "total": 4350,
+  "gunFbx": 4262,
+  "magFbx": 670,
+  "case": 146,
+  "round": 170
  }
 }

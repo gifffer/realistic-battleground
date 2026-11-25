@@ -101,7 +101,7 @@ LEAF_PIVOT = (88.0, 0.0, 46.0)
 HANDLED = [((-0.235, 0.0, -0.010), 0.045), ((-0.185, 0.0, -0.085), 0.050), ((0.120, 0.0, -0.030), 0.065)]
 
 
-def mat_wood_ak(name, light=(0.150, 0.042, 0.019), dark=(0.046, 0.013, 0.006), grain_deg=0.0, coat=0.1, rough=0.45):
+def mat_wood_ak(name, light=(0.175, 0.046, 0.018), dark=(0.046, 0.013, 0.006), grain_deg=0.0, coat=0.05, rough=0.45):
     """Shellacked birch / walnut AK furniture: growth rings along the part's own long axis (`grain_deg`: the
     grain direction's angle in the model XZ plane, + = front end up), strong ring contrast and figure,
     open pores, darker oily handled zones (HANDLED), lighter dented edges, a thin worn coat."""
@@ -121,6 +121,13 @@ def mat_wood_ak(name, light=(0.150, 0.042, 0.019), dark=(0.046, 0.013, 0.006), g
                          distortion=6.0, detail=3.0), 0.60, 0.95)
     base = m.mixc(m.mul(m.mask(g, 0.30, 0.70), 0.55), gk.C(*light), gk.C(*dark))
     base = m.mixc(m.mul(m.mask(fig, 0.35, 0.75), 0.45), base, gk.C(light[0] * 1.25, light[1] * 1.15, light[2] * 1.1))
+    # long light / dark streaks along the grain (the reference stock's figure reads as lengthwise bands of
+    # orange-red and deep brown, a few centimetres wide)
+    streak = m.mask(m.noise(1.0, 5, 0.6, vec=m.scaled((1.4, 13.0, 16.0), v), distort=0.8), 0.40, 0.60)
+    base = m.mixc(m.mul(m.math('SUBTRACT', 1.0, streak), 0.62), base,
+                  gk.C(dark[0] * 1.35, dark[1] * 1.15, dark[2] * 1.05))
+    base = m.mixc(m.mul(m.mask(streak, 0.70, 1.0), 0.45), base,
+                  gk.C(light[0] * 1.35, light[1] * 1.3, light[2] * 1.2))
     rings = m.mul(rings, m.mask(m.noise(2.5, 3, 0.5, vec=m.scaled((2, 40, 40), v)), 0.3, 0.7))   # uneven ring contrast
     base = m.mixc(m.mul(rings, 0.6), base, gk.C(dark[0] * 0.8, dark[1] * 0.7, dark[2] * 0.7))
     base = m.mixc(m.mul(fine, 0.14), base, gk.C(dark[0] * 0.9, dark[1] * 0.8, dark[2] * 0.75))
@@ -137,8 +144,14 @@ def mat_wood_ak(name, light=(0.150, 0.042, 0.019), dark=(0.046, 0.013, 0.006), g
     blotch = m.mask(m.noise(9, 5, 0.6), 0.58, 0.85)
     base = m.mixc(m.mul(m.mx(hand, m.mul(blotch, 0.6)), 0.75), base,
                   gk.C(dark[0] * 0.55, dark[1] * 0.45, dark[2] * 0.4))
+    # scuffs: short dark marks with the grain (handling, rifle racks), as the dark dashes on the reference stock
+    scuff = m.mask(m.noise(3.0, 5, 0.65, vec=m.scaled((4.0, 14.0, 14.0))), 0.60, 0.65)
+    base = m.mixc(m.mul(scuff, 0.7), base, gk.C(dark[0] * 0.45, dark[1] * 0.35, dark[2] * 0.3))
+    # oily grime darkening the rounded edges and the inletting lines (the photo's darker outline)
+    grime = m.edge(0.004, 0.04, 0.35)
+    base = m.mixc(m.mul(grime, 0.45), base, gk.C(dark[0] * 0.7, dark[1] * 0.55, dark[2] * 0.5))
     e = m.edge(0.0012, 0.03, 0.2)
-    dent = m.mul(e, m.mask(m.noise(70, 6, 0.6), 0.42, 0.58))
+    dent = m.mul(e, m.mask(m.noise(70, 6, 0.6), 0.48, 0.58))
     base = m.mixc(m.mul(dent, 0.8), base, gk.C(light[0] * 1.9, light[1] * 1.8, light[2] * 1.6))
     dings = m.mask(m.voronoi(160, out='Distance'), 0.0, 0.05)
     dings = m.mul(dings, m.mask(m.noise(6, 3, 0.5), 0.55, 0.7))
@@ -152,8 +165,8 @@ def mat_wood_ak(name, light=(0.150, 0.042, 0.019), dark=(0.046, 0.013, 0.006), g
     return m.m
 
 
-def mat_steel_ak(name, col=(0.050, 0.055, 0.066), rough=0.32, metal=0.88, edge_wear=1.0, flat_wear=0.6,
-                 worn=(0.46, 0.46, 0.47)):
+def mat_steel_ak(name, col=(0.056, 0.062, 0.076), rough=0.36, metal=0.88, edge_wear=1.0, flat_wear=0.6,
+                 worn=(0.52, 0.53, 0.55)):
     """Old hot-blued milled steel as the photo: blue-black oxide, oily (low, patchy roughness), bluing thinned
     to grey on the flats in broad soft patches (`flat_wear`), bright silver on the edges and high spots
     (`edge_wear`, a wide bevel-normal mask), lengthwise fine scratches, dark oily grime in the recesses."""
@@ -164,7 +177,7 @@ def mat_steel_ak(name, col=(0.050, 0.055, 0.066), rough=0.32, metal=0.88, edge_w
     var = m.noise(35, 5, 0.6)
     base = m.mixc(var, gk.C(*col), gk.C(col[0] * 1.25, col[1] * 1.28, col[2] * 1.35))
     # thinned bluing: broad grey patches on the flats, more toward the high spots (not in the recesses)
-    thin = m.mul(m.mask(big, 0.36, 0.70), flat_wear)
+    thin = m.mul(m.mask(big, 0.34, 0.68), flat_wear)
     thin = m.mul(thin, m.math('SUBTRACT', 1.0, cav))
     grey = gk.C(col[0] * 3.4, col[1] * 3.3, col[2] * 3.0)
     base = m.mixc(thin, base, grey)
@@ -221,8 +234,8 @@ def build_rifle_materials():
     brushing streaks), a darker, rougher magazine, and the reddish shellacked furniture with the grain along
     each part's axis (handguards along X, stock along its comb, grip along its rake)."""
     mat_steel_ak('SteelBlued')
-    mat_steel_ak('SteelMag', col=(0.032, 0.034, 0.039), rough=0.46, metal=0.82, edge_wear=0.9, flat_wear=0.25,
-                 worn=(0.26, 0.26, 0.27))
+    mat_steel_ak('SteelMag', col=(0.040, 0.043, 0.050), rough=0.46, metal=0.82, edge_wear=0.9, flat_wear=0.35,
+                 worn=(0.30, 0.30, 0.32))
     mat_wood_ak('Wood', grain_deg=0.0)
     mat_wood_ak('WoodStock', grain_deg=STOCK_GRAIN_DEG)
     mat_wood_ak('WoodGrip', light=(0.17, 0.038, 0.016), grain_deg=GRIP_GRAIN_DEG)
@@ -246,8 +259,10 @@ def build_receiver(gun):
     gk.section_x(bm, mm([(y, z) for z, y in sec]), mm(42.0), mm(55.0), end_bevel=mm(1.0), mi=St)
     # retainer lever (right side)
     gk.rbox(bm, mm(49.0, -22.6, -6.0), mm(7.0, 2.4, 22.0), mm(0.8), 1, mi=St)
-    # (no rear block: the wood wrist is inletted straight onto the receiver's rear face, as the milled AK-47;
-    #  the steel upper / lower tangs are thin straps on the wrist, built with the stock)
+    # rear trunnion socket: the short steel ferrule the wood wrist is seated in (the photo's steel collar
+    # between the receiver and the wood), lofted on the wrist's own section 1 mm proud so it tapers with it
+    sock = [stock_ring(x, grow=g) for x, g in ((-212.0, 1.1), (-222.0, 1.1), (-232.0, 1.0), (-236.5, 0.6))]
+    gk.loft(bm, sock, mi=St)
     # trigger guard (stamped loop, 10 wide)
     outer = [(-87, -26), (-88, -50), (-93, -58.5), (-140, -58.5), (-147, -52), (-151, -30), (-151, -26)]
     hole = [(-92, -28.5), (-93, -49), (-97, -54.5), (-137, -54.5), (-142, -49.5), (-146, -31), (-146, -28.5)]
@@ -362,7 +377,7 @@ def build_barrel(gun):
     gk.rbox(bm, mm(91.0, 0, 47.2), mm(7.0, 26.0, 3.0), mm(0.8), 1, mi=St)           # leaf hinge ears
     gk.pin(bm, mm(LEAF_PIVOT[0], 13.0, LEAF_PIVOT[2]), (0, 1, 0), mm(1.4), proud=mm(0.4), segs=6, mi=Ba, both=mm(26))
     # gas block with the tube socket, its lower lug for the cleaning rod, the front sling loop
-    gb = [(283, -11), (316, -11), (316, -2), (303, 15), (296, 26), (291, 30.5), (286, 31.5), (283, 29)]   # front slope as the reference
+    gb = [(283, -11), (316, -11), (316, -3), (301, 14), (293.5, 25.5), (289.5, 30.0), (285.5, 31.2), (283, 29)]   # front slope as the reference
     gk.profile(bm, mm(gk.fillet2(gb, 1.5, 1)), mm(24.0), bevel=mm(1.6), bevel_segs=1, mi=St)
     gk.rbox(bm, mm(302.0, 0, -13.5), mm(14.0, 10.0, 6.0), mm(1.0), 1, mi=St)
     gk.sling_swivel(bm, mm(300.0, 11.5, -6.0), axis_loop=(0, 1, 0), size=mm(17.0), mi=St)
@@ -381,7 +396,7 @@ def build_barrel(gun):
     gk.profile(bm, mm(gk.fillet2(fs, 1.5, 1)), mm(24.0), bevel=mm(1.6), bevel_segs=1, mi=St)
     # the ears must rise above the rear leaf's top edge as seen from the eye (51.3 at 280 mm -> > 53.1 at 640 mm)
     # or the sight picture loses them: kept at 54 although the photo reads ~3 mm lower
-    ear = [(378, 14), (398, 14), (398, 42), (394.5, 54.0), (382, 54.0), (378, 46)]
+    ear = [(378, 14), (399, 14), (397.5, 40), (393.0, 54.0), (381.5, 54.0), (377.5, 46)]
     for sy in (1, -1):
         y0, y1 = sy * 6.2, sy * 9.4
         gk.profile(bm, mm(gk.fillet2(ear, 1.0, 1, radii=[0, 0, 2, 1.5, 1.5, 2])), mm(3.2), y=mm((y0 + y1) / 2),
@@ -674,8 +689,8 @@ def build_magazine(gun):
     for sy in (1, -1):
         for d in (-0.33, -0.12, 0.09, 0.30):
             pts = []
-            for k in range(9):
-                s = mm(24.0) + (mm(MAG_BODY - 12.0) - mm(24.0)) * k / 8
+            for k in range(7):          # 6 spans: the mag FBX stays <= 1 200 triangles (§5.1)
+                s = mm(24.0) + (mm(MAG_BODY - 12.0) - mm(24.0)) * k / 6
                 p, a, f = frame_at(s)
                 q2 = p + f * (mm(MAG_DEPTH) * d)
                 pts.append(V((q2.x, sy * (mm(MAG_W) / 2 + 0.0003), q2.y)))
@@ -1297,6 +1312,8 @@ def main():
     for e_ in empties.values():
         e_.hide_render = True
     ammo = build_case_round(col)
+    gk.finish_meshes(objs)          # triangulated, no degenerates (ARCHITECTURE §5.1)
+    gk.finish_meshes(ammo)
     tris = gk.tri_counts(objs)
     gun_parts = [n for n in gun.order if n != 'MagFollower']
     tri_gun = sum(tris[n] for n in gun_parts)

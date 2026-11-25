@@ -6,10 +6,12 @@ rear (picatinny rail on top carrying a generic 4x prism sight on a low throw-lev
 and guides under it), the feed tray in an open feed well, a bottom ejection port (cases fall straight down) and
 a link port on the right side, a non-reciprocating charging handle in a slot on the right, a polymer trigger
 group with a large guard and an AR-type pistol grip, a quick-change barrel with its folding carry handle, gas
-block, front sight and a slotted flash hider, an aluminium rail handguard over the gas cylinder, a folding bipod
-(legs folded back under the handguard), a telescoping tube stock with a polymer butt and rubber pad, a 200-round
-soft pouch (oval padded cordura box in fine digital camo, binding tape, compression strap, polymer adapter hooked
-under the receiver) with a visible belt of linked rounds running up into the feed tray.  The tan sling is a
+block, front sight and a slotted flash hider, an aluminium rail handguard over the gas cylinder with a vertical
+foregrip, a folding bipod on canted hinges (legs folded back under the handguard either side of the foregrip,
+swinging down and out), a telescoping single-tube stock with a cheek comb, a solid polymer butt and rubber pad, a
+200-round soft drum pouch (round padded cordura bag in fine digital camo, binding tape, compression strap, polymer
+adapter hooked under the receiver, hung left of the bottom ejection port) with a visible belt of linked rounds
+hanging outside the left wall up into the feed tray.  The tan sling is a
 separate rest-pose model (Lmg_Sling) and two markers (SlingFront / SlingRear).  Original generic design: no
 logos, no copied markings.
 
@@ -26,7 +28,7 @@ in model space (+X muzzle, +Y the gun's left, +Z up; origin on the bore at the b
 
 Moving parts (ARCHITECTURE §5.2): FeedCover (+ child Optic, OpticLens) +70 deg about +Y at its FRONT hinge
 (rear edge rises); FeedTray -20 deg; ChargingHandle slides -X 140 mm; Stock slides +X 100 mm (collapsed);
-BipodLegL/R -90 deg about +Y at BipodPivot (folded back at rest, swing down); Trigger +12 deg; AmmoPouch
+BipodLegL/R -90 deg about their canted axes (+Y tilted 22 deg toward +-Z, JSON hinges); Trigger +12 deg; AmmoPouch
 detaches at PouchMount; Belt01..Belt12 shown / hidden by the round count (Belt01 = the round on the feed tray).
 
 Usage:
@@ -94,9 +96,17 @@ TRAY_PIVOT = (-80.0, 0.0, 6.0)
 HG_X = (116.0, 252.0)             # rail handguard
 HG_TOP, HG_BOT, HG_HY = 16.0, -40.0, 25.0
 GAS_Z = -27.0
-BIPOD_PIVOT = (283.0, 0.0, -44.0)
-BIPOD_LEG = 186.0
-SPLAY = 4.0
+# vertical foregrip on the handguard's bottom rail (the reference photo's second strongest shape after the drum):
+# polymer, 26 mm wide, from the rail clamp down 100 mm, its bottom raked 8 deg forward
+FG_TOP = (188.0, 0.0, -50.0)
+FG_BOT = (202.0, 0.0, -150.0)
+FG_HY = 13.0
+# folding bipod on the gas cylinder: two canted hinges (the real class), legs folded back under the handguard
+# straddling the foregrip at rest, swinging down AND out (22 deg splay) when deployed
+BIPOD_PIVOT = (300.0, 0.0, -46.0)  # the marker (yoke centre); each leg pivots at y = +-BIPOD_Y
+BIPOD_Y = 21.0
+BIPOD_LEG = 228.0                  # hinge axis -> foot contact
+SPLAY = 22.0
 TRIG_PIVOT = (-120.0, 0.0, -50.0)
 CH_X, CH_Z, CH_STROKE = 42.0, -7.0, 140.0       # charging handle rest x, height, travel
 STOCK_TRAVEL = 100.0
@@ -104,30 +114,37 @@ RAIL_TOP = COVER_TOP + 9.4        # top of the cover rail
 # 4x prism sight (generic, ACOG-class proportions): 147 mm long, objective bell 46 mm with a 7 mm sunshade,
 # ocular 36 mm, both lenses recessed; mounted straight on the cover rail with a low throw-lever base
 OPT_X = (-147.0, 0.0)             # ocular rim / objective (sunshade) rim
-OPT_Z = 80.0                      # optical axis above the bore (the real class: ~75-85 mm on a cover rail)
+OPT_Z = 95.0                      # optical axis above the bore: the cover rail (57 mm) + a 15 mm riser base (R6 head: see README)
 OPT_RELIEF = 38.0                 # eye relief behind the ocular lens
-POUCH_C = (-5.0, 34.0, -152.0)    # pouch centre
-POUCH_A, POUCH_B, POUCH_T = 80.0, 100.0, 85.0    # half length (x), half height (z), thickness (y)
-POUCH_TOP = -50.0
+# the 200-round soft pouch: a round drum-shaped bag as the reference photo (circular camo faces, a deep rounded
+# rim), its axis along Y, hung LEFT of the bottom ejection port so the falling cases clear it
+DRUM_C = (-8.0, 46.0, -146.0)     # centre
+DRUM_R, DRUM_D = 85.0, 88.0       # radius, depth (y)
+POUCH_TOP = DRUM_C[2] + DRUM_R    # -61
 STAMP_C, STAMP_W, STAMP_H = (-188.0, REC_HY + 0.2, -6.0), 58.0, 14.0   # stamp plate (left flat)
 SLING_LOOP = (274.0, 14.0, GAS_Z - 4.0)
 SLING_FRONT = (274.0, 14.0, GAS_Z - 11.0)   # strap attach points (bottom of the front loop / the butt swivel)
 SLING_REAR = (-466.0, 0.0, -107.0)
-POUCH_MOUNT = (-14.0, 20.0, -40.0)
+POUCH_MOUNT = (-14.0, 12.0, -40.0)
 ROUND_HEAD_X = -60.0              # case head of the belted rounds (bullet tip at -2.6)
 PITCH = 10.2                      # M27-type link pitch
-# the belt path in the (y, z) plane: from the feed position on the tray, out of the left side, down into the
-# pouch mouth
-BELT_PATH = [(1.0, 13.0), (14.0, 13.0), (30.0, 12.5), (40.0, 9.0), (47.0, 0.0), (50.0, -13.0), (48.0, -27.0),
-             (42.0, -40.0), (36.0, -52.0), (33.0, -64.0)]
+# the belt path in the (y, z) plane: from the feed position on the tray, out through the feed opening in the
+# left wall, then hanging straight down OUTSIDE the left wall into the pouch mouth (as the photo)
+BELT_PATH = [(2.0, 13.0), (16.0, 13.0), (28.0, 12.0), (36.0, 6.5), (39.5, -4.0), (40.0, -16.0), (40.0, -28.0),
+             (40.0, -40.0), (40.0, -52.0), (40.0, -64.0), (40.0, -76.0)]
+# bottom ejection port (right of centre) and the spent case's spawn / mean direction: down, 10 deg forward,
+# 28 deg right, so the cases clear the drum (checked by check_case_sweep)
+PORT = (-32.0, -18.0)             # port centre x, y
+CASE_SPAWN = (-32.0, -21.0, REC_BOT - 9.0)
+CASE_FWD, CASE_RIGHT = 10.0, 28.0
 # hold design levers (mm)
 GRIP_R = (-170.0, 0.0, -92.0)
 # the neutral right "wrist" frame, from the solver's hints over Aim / Ready / LowReady / Bipod (the weld's mean
 # rotation off the marker), so the solved wrists sit well inside the 25 deg limit
 GRIP_R_Z = (-0.94, -0.27, -0.19)
 GRIP_R_X = (-0.13, -0.20, 0.97)
-GRIP_L = (196.0, 0.0, -50.0)
-GRIP_L_Z = (-0.33, 0.93, -0.12)
+GRIP_L = (196.0, 0.0, -96.0)      # the support hand on the vertical foregrip (mid height)
+GRIP_L_Z = (-0.64, 0.63, 0.44)   # the support forearm's neutral direction (solver hints, all stances)
 CARRY = (150.0, 0.0, 88.0)
 
 
@@ -181,7 +198,8 @@ def mat_camo(name='FabricCamo'):
     base = m.mixc(m.mul(wr, 0.18), base, gk.C(0.05, 0.05, 0.042))
     fz = m.mask(m.noise(80, 3, 0.5), 0.4, 0.7)
     base = m.mixc(m.mul(fz, 0.08), base, gk.C(0.30, 0.29, 0.27))
-    m.bsdf(base, 0.0, m.mixf(dirt, 0.86, 0.96), m.bump(relief, 0.45, 0.0012), extra={'Sheen Weight': 0.35})
+    m.bsdf(base, 0.0, m.mixf(dirt, 0.86, 0.96), m.bump(relief, 0.45, 0.0012), extra={'Sheen Weight': 0.15,
+                                                                                    'Sheen Tint': gk.C(0.5, 0.5, 0.45)})
     return m.m
 
 
@@ -222,16 +240,61 @@ def mat_stamp(name='Stamp', img_dir='.'):
     return m.m
 
 
+def mat_phosphate(name='SteelPhosphate', col=(0.050, 0.052, 0.047), rough=0.70, metal=0.45):
+    """The LMG's stamped-steel phosphate (review M2a): the kit's phosphate look (crystalline grey-green,
+    grime in recesses) WITHOUT its long white scratch dashes, which baked into pixel noise on the big flat
+    receiver and cover: wear only on real edges (wider bevel radius, dim bare steel, not white), short
+    faint scuffs."""
+    m = gk.NB(name)
+    e = m.edge(0.0012, 0.06, 0.30)
+    cav = m.cavity(0.004)
+    wn = m.mask(m.noise(60, 6, 0.6), 0.35, 0.60)
+    wearm = m.mul(m.mul(e, wn), 0.8)
+    var = m.noise(30, 5, 0.6)
+    cr = m.voronoi(5000, out='Distance')
+    base = m.mixc(var, gk.C(*col), gk.C(col[0] * 1.25, col[1] * 1.3, col[2] * 1.2))
+    base = m.mixc(m.mul(m.mask(cr, 0.1, 0.5), 0.35), base, gk.C(col[0] * 0.7, col[1] * 0.7, col[2] * 0.7))
+    r0 = m.mixf(var, rough, min(1.0, rough + 0.12))
+    h = m.add(m.mul(m.mask(cr, 0.0, 0.6), 0.6), m.noise(2500, 2, 0.5))
+    grime = m.mx(m.mul(cav, 0.95), m.mask(m.noise(22, 6, 0.6), 0.64, 0.85))
+    base = m.mixc(m.mul(grime, 0.6), base, gk.C(0.020, 0.017, 0.013))
+    scuff = m.mul(m.mask(m.noise(18, 4, 0.6, vec=m.scaled((3.0, 1.0, 1.0))), 0.70, 0.78), 0.35)
+    wearm = m.mx(wearm, scuff)
+    base = m.mixc(wearm, base, gk.C(0.17, 0.17, 0.165))
+    rr = m.mixf(m.mul(grime, 0.6), r0, 0.75)
+    rr = m.mixf(wearm, rr, 0.35)
+    mt = m.mixf(wearm, metal, 0.9)
+    m.bsdf(base, mt, rr, m.bump(m.add(h, m.mul(wearm, -0.3)), 0.10, 0.0003))
+    return m.m
+
+
+def mat_web(name='Fabric', col=(0.040, 0.044, 0.034), weave=1800):
+    """Dark olive nylon webbing / binding tape: the kit's fabric without its white sheen (review M2c: the sheen
+    lit the binding and the strap as a pale beige band in the renders, while the bake keeps them dark)."""
+    m = gk.NB(name)
+    w1 = m.wave(weave, kind='BANDS', direction='X')
+    w2 = m.wave(weave, kind='BANDS', direction='Y')
+    w3 = m.wave(weave, kind='BANDS', direction='Z')
+    weave_h = m.add(m.mul(w1, 0.4), m.mul(w2, 0.3), m.mul(w3, 0.3))
+    dirt = m.mx(m.mul(m.cavity(0.006), 0.9), m.mask(m.noise(18, 6, 0.6), 0.55, 0.85))
+    base = m.mixc(m.noise(50, 4, 0.5), gk.C(*col), gk.C(col[0] * 1.3, col[1] * 1.3, col[2] * 1.25))
+    base = m.mixc(m.mul(dirt, 0.5), base, gk.C(col[0] * 0.6, col[1] * 0.58, col[2] * 0.55))
+    m.bsdf(base, 0.0, m.mixf(dirt, 0.86, 0.95), m.bump(weave_h, 0.35, 0.0003),
+           extra={'Sheen Weight': 0.15, 'Sheen Tint': gk.C(0.30, 0.32, 0.26)})
+    return m.m
+
+
 def build_lmg_materials(img_dir):
     """The kit's library plus the LMG's own: FabricCamo, Stamp, Reticle; this scene's Glow is the prism sight's
     amber fibre light pipe (emission <= 1, not an LED bar), Fabric the dark olive binding / webbing."""
     gk.build_materials()
+    mat_phosphate('SteelPhosphate')
     mat_camo('FabricCamo')
     mat_stamp('Stamp', img_dir=img_dir)
     gk.mat_glow('Glow', col=(1.0, 0.42, 0.06), strength=0.9)
     gk.mat_simple('Reticle', (0.03, 0.012, 0.004), 0.0, 0.5, extra={'Emission Color': gk.C(1.0, 0.45, 0.08),
                                                                     'Emission Strength': 1.0})
-    gk.mat_fabric('Fabric', (0.040, 0.044, 0.034))
+    mat_web('Fabric', (0.040, 0.044, 0.034))
 
 
 # --------------------------------------------------------------------------------------
@@ -247,151 +310,150 @@ def build_receiver(gun):
     bm = rc.bm
     body = bmesh.new()
     # the stamped box: 4-6 mm radius on the long top / bottom edges, 3 mm chamfer at the ends
-    gk.section_x(body, mm(sec_yz(0, REC_TOP, REC_BOT, REC_HY, 4.0, 6.0)), mm(REC_X[0]), mm(REC_X[1]),
+    gk.section_x(body, mm(sec_yz(0, REC_TOP, REC_BOT, REC_HY, 4.0, 6.0, n=2)), mm(REC_X[0]), mm(REC_X[1]),
                  end_bevel=mm(3.0), mi=St)
     # front trunnion block (a little proud), rear end cap
-    gk.rbox(body, mm(66.0, 0, -9.0), mm(26.0, 2 * REC_HY + 4.0, REC_TOP - REC_BOT + 4.0), mm(3.0), 2, mi=St)
+    gk.rbox(body, mm(66.0, 0, -9.0), mm(26.0, 2 * REC_HY + 4.0, REC_TOP - REC_BOT + 4.0), mm(3.0), 1, mi=St)
     gk.rbox(body, mm(-237.0, 0, -9.0), mm(6.0, 2 * REC_HY + 3.0, REC_TOP - REC_BOT + 3.0), mm(2.0), 1, mi=St)
-    # STANAG-type magwell boss low on the left (closed by its dust cover; the pouch adapter hooks beside it)
-    gk.rbox(body, mm(-34.0, REC_HY + 4.0, -30.0), mm(66.0, 10.0, 22.0), mm(2.5), 1, mi=St)
     cuts = []
     # ejection port in the bottom (right of centre), link port right side at tray level, charging handle slot,
-    # belt entry window on the left at tray level, the feed well under the cover (open top: the tray, the
-    # bolt's feed lug and the cartridge guides show with the cover up)
+    # the feed opening in the left wall at tray level (the belt enters there), the feed well under the cover
+    # (open top: the tray, the bolt's feed lug and the cartridge guides show with the cover up)
     c = bmesh.new()
-    gk.rbox(c, mm(-32.0, -14.0, REC_BOT), mm(54.0, 20.0, 26.0), mm(3.0), 1, mi=Bo)
+    gk.rbox(c, mm(PORT[0], PORT[1], REC_BOT), mm(54.0, 16.0, 26.0), mm(3.0), 1, mi=Bo)
     cuts.append(c)
     cuts.append(gk.prism_cutter(mm(gk.fillet2([(-54, 4), (-8, 4), (-8, 20), (-54, 20)], 2.5, 1)), mm(-40.0),
                                 mm(-20.0), mi=Bo))
     cuts.append(gk.prism_cutter(mm(gk.fillet2([(-102, CH_Z - 4.5), (CH_X + 22, CH_Z - 4.5), (CH_X + 22, CH_Z + 4.5),
-                                               (-102, CH_Z + 4.5)], 3.5, 2)), mm(-40.0), mm(-22.0), mi=Bo))
-    cuts.append(gk.prism_cutter(mm(gk.fillet2([(-60, 4), (-2, 4), (-2, 22.5), (-60, 22.5)], 2.5, 1)), mm(20.0),
+                                               (-102, CH_Z + 4.5)], 3.5, 1)), mm(-40.0), mm(-22.0), mi=Bo))
+    cuts.append(gk.prism_cutter(mm(gk.fillet2([(-62, 2), (0, 2), (0, 23), (-62, 23)], 2.5, 1)), mm(20.0),
                                 mm(40.0), mi=Bo))
     cuts.append(gk.prism_cutter(mm(gk.fillet2([(WELL[0], WELL[2]), (WELL[1], WELL[2]), (WELL[1], REC_TOP + 4),
                                                (WELL[0], REC_TOP + 4)], 3.0, 1)), mm(-WELL[3]), mm(WELL[3]), mi=Bo))
-    # stamped side panels: shallow recesses (0.8 mm) the ribs sit in, a concave stamped groove along the top
-    for sy in (1, -1):
-        for (x0, x1, z0, z1) in ((-222.0, -112.0, -36.0, -15.0), (-222.0, -150.0, 2.0, 17.0)):
-            c = bmesh.new()
-            gk.rbox(c, mm((x0 + x1) / 2, sy * (REC_HY + 1.2), (z0 + z1) / 2), mm(x1 - x0, 4.0, z1 - z0), mm(1.6), 1,
-                    mi=St)
-            cuts.append(c)
-        if sy < 0:                                              # (the left flat carries the stamp plate)
-            c = bmesh.new()
-            gk.cyl(c, mm(-220.0, sy * (REC_HY + 1.6), -4.0), mm(-128.0, sy * (REC_HY + 1.6), -4.0), mm(3.5), 10,
-                   mi=St)
-            cuts.append(c)
     gk.boolean_bm(body, cuts)
     gk.merge(bm, body)
     body.free()
     # well floor details: the bolt's feed lug and the feed ramp, dark in the well
-    gk.rbox(bm, mm(-96.0, 0, WELL[2] + 3.0), mm(22.0, 14.0, 6.0), mm(1.5), 1, mi=Ba)
-    gk.rbox(bm, mm(8.0, 0, WELL[2] + 2.0), mm(20.0, 30.0, 4.0), mm(1.2), 1,
-            R=Matrix.Rotation(math.radians(-12), 3, 'Y'), mi=Ba)
-    # magwell dust cover (polymer flap, hinge rod)
-    gk.rbox(bm, mm(-34.0, REC_HY + 9.4, -32.0), mm(58.0, 1.6, 15.0), mm(0.6), 1, mi=Po)
-    gk.cyl(bm, mm(-66.0, REC_HY + 9.0, -24.0), mm(-2.0, REC_HY + 9.0, -24.0), mm(1.6), 8, mi=Ba)
-    # stamped stiffening ribs: convex half-round pressings (3.5 mm radius) inside the recessed panels; rivets
+    gk.box(bm, mm(-96.0, 0, WELL[2] + 3.0), mm(22.0, 14.0, 6.0), mi=Ba)
+    gk.box(bm, mm(8.0, 0, WELL[2] + 2.0), mm(20.0, 30.0, 4.0), R=Matrix.Rotation(math.radians(-12), 3, 'Y'), mi=Ba)
+    # stamped side plates: the raised reinforcing plates of the class (proud 1.2 mm, chamfered), with pressed
+    # half-round stiffening ribs on them; rivets
     for sy in (1, -1):
-        y = sy * (REC_HY - 1.2)
-        gk.cyl(bm, mm(-218.0, y, -25.5), mm(-116.0, y, -25.5), mm(3.5), 8, mi=St)
-        gk.cyl(bm, mm(-218.0, y, 9.5), mm(-154.0, y, 9.5), mm(3.0), 8, mi=St)
+        y = sy * (REC_HY + 0.6)
+        gk.rbox(bm, mm(-172.0, y, -24.0), mm(118.0, 1.2, 24.0), mm(0.6), 1, mi=St)
+        if sy < 0:
+            gk.rbox(bm, mm(-188.0, y, 9.0), mm(66.0, 1.2, 16.0), mm(0.6), 1, mi=St)
+        gk.cyl(bm, mm(-224.0, sy * (REC_HY + 1.0), -27.0), mm(-120.0, sy * (REC_HY + 1.0), -27.0), mm(2.6), 6,
+               mi=St)
         for x in (-228.0, -100.0, 52.0, 70.0):
-            gk.pin(bm, mm(x, sy * REC_HY, -35.0), (0, sy, 0), mm(2.0), proud=mm(0.9), segs=8, mi=Ba)
+            gk.pin(bm, mm(x, sy * REC_HY, -35.0), (0, sy, 0), mm(2.0), proud=mm(0.9), segs=6, mi=Ba)
         for x in (56.0, 72.0):
-            gk.pin(bm, mm(x, sy * (REC_HY + 2.0), 8.0), (0, sy, 0), mm(2.4), proud=mm(0.8), segs=8, mi=Ba)
+            gk.pin(bm, mm(x, sy * (REC_HY + 2.0), 8.0), (0, sy, 0), mm(2.4), proud=mm(0.8), segs=6, mi=Ba)
     # the two big take-down pins (trigger housing to receiver), heads on the left with a detent groove, the
     # pin ends flush on the right
     for x in (-206.0, -98.0):
-        gk.cyl(bm, mm(x, REC_HY + 2.4, -40.0), mm(x, -REC_HY - 1.0, -40.0), mm(3.2), 10, mi=Ba)
-        gk.lathe(bm, mm([(0, 0), (0, 5.2), (0.6, 5.6), (2.4, 5.6), (3.0, 5.0), (3.0, 0)]), 12,
+        gk.cyl(bm, mm(x, REC_HY + 2.4, -40.0), mm(x, -REC_HY - 1.0, -40.0), mm(3.2), 8, mi=Ba)
+        gk.lathe(bm, mm([(0, 0), (0, 5.4), (2.4, 5.6), (3.0, 4.8), (3.0, 0)]), 10,
                  gk.frame_x(V(mm(x, REC_HY + 1.0, -40.0)), (0, 1, 0), up=(1, 0, 0)), mi=Ba)
     # generic stamp plate on the left rear flat (serial-like code + calibre, engraved in the material)
-    gk.rbox(bm, mm(*STAMP_C), mm(STAMP_W, 0.8, STAMP_H), mm(0.3), 1, mi=Sp)
+    gk.box(bm, mm(STAMP_C[0], STAMP_C[1] + 1.2, STAMP_C[2]), mm(STAMP_W, 0.8, STAMP_H), mi=Sp)
     # link-port spring cover (open, hinged on the port's top edge) and its hinge rod
-    gk.rbox(bm, mm(-31.0, -REC_HY - 4.0, 23.0), mm(46.0, 9.0, 1.4), mm(0.5), 1,
-            R=Matrix.Rotation(math.radians(-25), 3, 'X'), mi=St)
-    gk.cyl(bm, mm(-56.0, -REC_HY - 0.6, 21.0), mm(-6.0, -REC_HY - 0.6, 21.0), mm(1.4), 8, mi=Ba)
+    gk.box(bm, mm(-31.0, -REC_HY - 4.0, 23.0), mm(46.0, 9.0, 1.4), R=Matrix.Rotation(math.radians(-25), 3, 'X'),
+           mi=St)
+    gk.cyl(bm, mm(-56.0, -REC_HY - 0.6, 21.0), mm(-6.0, -REC_HY - 0.6, 21.0), mm(1.4), 6, mi=Ba)
     # feed-cover hinge knuckles at the FRONT (on the trunnion) and the hinge pin
     for sy in (1, -1):
         gk.rbox(bm, mm(COVER_PIVOT[0], sy * (REC_HY + 2.5), 26.0), mm(14.0, 5.0, 14.0), mm(1.5), 1, mi=St)
     gk.cyl(bm, mm(COVER_PIVOT[0], REC_HY + 5.2, COVER_PIVOT[2]), mm(COVER_PIVOT[0], -REC_HY - 5.2, COVER_PIVOT[2]),
-           mm(3.0), 10, mi=Ba)
+           mm(3.0), 8, mi=Ba)
     # rear sight (folding aperture on the receiver, behind the cover) with its elevation drum (right) and the
     # windage knob (left); the cover latches against its front
     gk.rbox(bm, mm(-142.0, 0, REC_TOP + 3.0), mm(28.0, 30.0, 6.0), mm(1.5), 1, mi=St)
     rs = [(-150, 24), (-134, 24), (-136, 44), (-140, 47), (-145, 47), (-149, 44)]
-    gk.profile(bm, mm(gk.fillet2(rs, 1.0, 1)), mm(14.0), holes=[mm(gk.arc2((-142.5, 39.0), 2.3, 0, 360, 10)[:-1])],
+    gk.profile(bm, mm(gk.fillet2(rs, 1.0, 1)), mm(14.0), holes=[mm(gk.arc2((-142.5, 39.0), 2.3, 0, 360, 8)[:-1])],
                bevel=mm(0.8), bevel_segs=0, mi=St)
     for sy in (1, -1):
-        gk.rbox(bm, mm(-142.0, sy * 11.5, 33.0), mm(10.0, 3.0, 14.0), mm(0.8), 1, mi=St)
-    gk.lathe(bm, mm([(0, 0), (0, 7.0), (0.8, 7.6), (6.2, 7.6), (7.0, 7.0), (7.0, 0)]), 12,
+        gk.box(bm, mm(-142.0, sy * 11.5, 33.0), mm(10.0, 3.0, 14.0), mi=St)
+    gk.lathe(bm, mm([(0, 0), (0, 7.0), (6.6, 7.6), (7.0, 0)]), 10,
              gk.frame_x(V(mm(-142.0, -15.0, 29.0)), (0, -1, 0), up=(1, 0, 0)), mi=Ps)   # (knurl = stipple bump)
-    gk.lathe(bm, mm([(0, 0), (0, 4.5), (4.0, 4.5), (4.0, 0)]), 10,
+    gk.lathe(bm, mm([(0, 0), (0, 4.5), (4.0, 4.5), (4.0, 0)]), 8,
              gk.frame_x(V(mm(-142.0, 15.0, 29.0)), (0, 1, 0), up=(1, 0, 0)), mi=Ba)
     # trigger housing (polymer) with a recessed side relief, its front pivot boss, the cross-bolt safety
     th = [(-215, -36), (-92, -36), (-88, -44), (-96, -60), (-150, -62), (-208, -62), (-215, -54)]
-    gk.profile(bm, mm(gk.fillet2(th, 2.0, 2, radii=[4, 3, 5, 6, 3, 6, 4])), mm(50.0), bevel=mm(4.0), bevel_segs=1,
+    gk.profile(bm, mm(gk.fillet2(th, 2.0, 1, radii=[4, 3, 5, 6, 3, 6, 4])), mm(50.0), bevel=mm(4.0), bevel_segs=1,
                mi=Po)
     for sy in (1, -1):
-        gk.profile(bm, mm(gk.fillet2([(-200, -42), (-112, -42), (-112, -56), (-200, -56)], 3.0, 1)), mm(1.2),
-                   y=mm(sy * 24.6), bevel=mm(0.5), bevel_segs=0, mi=Ps)
-    gk.cyl(bm, mm(-104.0, 26.5, -50.0), mm(-104.0, -26.5, -50.0), mm(4.2), 12, mi=Po)
+        gk.box(bm, mm(-156.0, sy * 24.6, -49.0), mm(88.0, 1.2, 14.0), mi=Ps)
+    gk.cyl(bm, mm(-104.0, 26.5, -50.0), mm(-104.0, -26.5, -50.0), mm(4.2), 8, mi=Po)
     for sy in (1, -1):
-        gk.screw(bm, mm(-210.0, sy * 25.0, -48.0), (0, sy, 0), mm(3.0), mm(0.8), 'hex', mi=Ba, mi_recess=Bo)
+        gk.pin(bm, mm(-210.0, sy * 25.0, -48.0), (0, sy, 0), mm(3.0), proud=mm(0.8), segs=6, mi=Ba)
     # large trigger guard (gloved hand) as one moulded loop
     tg_out = [(-150, -58), (-88, -50), (-86, -62), (-92, -88), (-104, -95), (-150, -95)]
     tg_in = [(-144, -64), (-96, -58), (-95, -66), (-100, -84), (-108, -88), (-144, -88)]
-    gk.profile(bm, mm(gk.fillet2(tg_out, 2.0, 2, radii=[0, 3, 4, 8, 6, 0])), mm(14.0),
-               holes=[mm(gk.fillet2(tg_in, 2.0, 2, radii=[2, 3, 4, 7, 5, 3]))], bevel=mm(2.0), bevel_segs=1, mi=Po)
+    gk.profile(bm, mm(gk.fillet2(tg_out, 2.0, 1, radii=[0, 3, 4, 8, 6, 0])), mm(14.0),
+               holes=[mm(gk.fillet2(tg_in, 2.0, 1, radii=[2, 3, 4, 7, 5, 3]))], bevel=mm(2.0), bevel_segs=1, mi=Po)
     # pistol grip: rounded profile with finger swells, stippled side panels, a back strap hump
     gp = [(-146, -60), (-150, -86), (-152, -100), (-148, -112), (-156, -126), (-152, -140), (-160, -154),
           (-166, -178), (-174, -186), (-206, -186), (-210, -176), (-200, -140), (-190, -100), (-186, -76),
           (-178, -60)]
-    gk.profile(bm, mm(gk.fillet2(gp, 2.0, 2, radii=[3, 6, 6, 6, 6, 6, 8, 8, 6, 6, 8, 12, 12, 8, 3])), mm(31.0),
+    gk.profile(bm, mm(gk.fillet2(gp, 2.0, 1, radii=[3, 6, 6, 6, 6, 6, 8, 8, 6, 6, 8, 12, 12, 8, 3])), mm(31.0),
                bevel=mm(9.0), bevel_segs=1, mi=Po)
     panel = [(-158, -92), (-160, -114), (-166, -150), (-172, -174), (-198, -174), (-192, -140), (-182, -100),
              (-178, -88)]
-    gk.profile(bm, mm(gk.fillet2(panel, 3.0, 2)), mm(32.4), bevel=mm(1.0), bevel_segs=1, mi=Ps)
-    # rail handguard (aluminium): body, four rails, vents between the rails, screws
+    gk.profile(bm, mm(gk.fillet2(panel, 3.0, 1)), mm(32.4), bevel=mm(1.0), bevel_segs=0, mi=Ps)
+    # rail handguard (aluminium): body with vents in its lower corners, a full top rail, ladder rail covers
+    # (polymer) on the sides as the photo, the bottom rail carrying the vertical foregrip
     hg = bmesh.new()
-    gk.section_x(hg, mm(sec_yz(0, HG_TOP, HG_BOT, HG_HY, 7.0, 7.0)), mm(HG_X[0]), mm(HG_X[1]), end_bevel=mm(2.0),
-                 mi=Al)
+    gk.section_x(hg, mm(sec_yz(0, HG_TOP, HG_BOT, HG_HY, 7.0, 7.0, n=2)), mm(HG_X[0]), mm(HG_X[1]),
+                 end_bevel=mm(2.0), mi=Al)
     cuts = []
-    for k in range(5):
-        x = HG_X[0] + 24.0 + k * 22.0
-        for sz in (1, -1):
-            # vents in the 45-degree corners
+    for k in range(4):
+        x = HG_X[0] + 26.0 + k * 28.0
+        for sy in (1, -1):
             c = bmesh.new()
-            gk.rbox(c, mm(x, 0, -12.0 + sz * 25.0), mm(14.0, 60.0, 6.0), mm(2.8), 1,
-                    R=Matrix.Rotation(math.radians(45 * sz), 3, 'X'), mi=Bo)
+            gk.box(c, mm(x, sy * HG_HY, -33.0), mm(16.0, 14.0, 6.0), R=Matrix.Rotation(math.radians(-45 * sy), 3, 'X'),
+                   mi=Bo)
             cuts.append(c)
     gk.boolean_bm(hg, cuts)
     gk.merge(bm, hg)
     hg.free()
     cheap_rail(bm, HG_X[0] + 4.0, HG_X[1] - 4.0, Matrix.Translation(mm(0, 0, HG_TOP - 0.5)), mi=Al)
-    cheap_rail(bm, HG_X[0] + 4.0, HG_X[1] - 4.0, Matrix.Translation(mm(0, 0, HG_BOT + 0.5)) @
-               Matrix.Rotation(math.pi, 4, 'X'), mi=Al)
+    # bottom rail: the dovetail strip only (teeth where the foregrip does not cover them would not be seen
+    # behind the folded legs)
+    gk.rbox(bm, mm((HG_X[0] + HG_X[1]) / 2, 0, HG_BOT - 3.0), mm(HG_X[1] - HG_X[0] - 8.0, 19.0, 6.4), mm(1.2), 1,
+            mi=Al)
     for sy in (1, -1):
-        cheap_rail(bm, HG_X[0] + 30.0, HG_X[1] - 6.0, Matrix.Translation(mm(0, sy * (HG_HY - 0.5), -12.0)) @
-                   Matrix.Rotation(-sy * math.pi / 2, 4, 'X'), mi=Al)
+        # ladder rail cover on the side rail: a flat strip with five grip ribs
+        gk.rbox(bm, mm(HG_X[0] + 72.0, sy * (HG_HY + 2.0), -10.0), mm(104.0, 4.0, 15.0), mm(1.4), 1, mi=Po)
+        for k in range(6):
+            gk.box(bm, mm(HG_X[0] + 32.0 + k * 16.0, sy * (HG_HY + 4.2), -10.0), mm(4.0, 1.2, 13.0), mi=Po)
         for x in (HG_X[0] + 12.0, HG_X[1] - 10.0):
-            gk.screw(bm, mm(x, sy * (HG_HY - 2.0), 6.0), (0, sy, 0), mm(2.4), mm(0.6), 'hex', mi=Ba, mi_recess=Bo)
-    # handguard rear collar against the trunnion
+            gk.pin(bm, mm(x, sy * (HG_HY - 0.5), 6.0), (0, sy, 0), mm(2.4), proud=mm(0.7), segs=6, mi=Ba)
+    # the vertical foregrip: rail clamp, a slightly tapered polymer body with three finger ridges at the front,
+    # a flared bottom cap
+    gk.rbox(bm, mm(FG_TOP[0], 0, HG_BOT - 6.5), mm(40.0, 24.0, 9.0), mm(2.0), 1, mi=Po)
+    gk.cyl(bm, mm(FG_TOP[0] - 10.0, 12.6, HG_BOT - 6.0), mm(FG_TOP[0] - 10.0, 15.2, HG_BOT - 6.0), mm(3.0), 6, mi=Ba)
+    ax = (V(FG_BOT) - V(FG_TOP)).normalized()
+    fg = [(0.0, 15.0), (14.0, 14.6), (60.0, 14.0), (92.0, 15.0), (98.0, 16.6), (101.0, 16.0), (102.0, 0.0)]
+    Mfg = gk.frame_x(V(mm(*FG_TOP)) + ax * mm(-2.0), tuple(ax), up=(1, 0, 0))
+    gk.lathe(bm, mm([(x, r) for x, r in fg]), 10, Mfg @ Matrix.Diagonal((1.0, FG_HY / 15.0, 1.0, 1.0)), mi=Po)
+    for k in range(3):
+        c0 = V(mm(*FG_TOP)) + ax * mm(28.0 + k * 20.0) + V((mm(13.5), 0, 0))
+        gk.cyl(bm, c0 + V((0, mm(-9.0), 0)), c0 + V((0, mm(9.0), 0)), mm(3.4), 6, mi=Ps)
+    # handguard rear collar against the trunnion, the lower link to the trunnion
     gk.rbox(bm, mm(HG_X[0] - 6.0, 0, -12.0), mm(14.0, 2 * HG_HY - 2.0, HG_TOP - HG_BOT - 4.0), mm(3.0), 1, mi=St)
-    gk.rbox(bm, mm(97.0, 0, -24.0), mm(40.0, 30.0, 30.0), mm(3.0), 1, mi=St)       # lower link to the trunnion
-    # gas cylinder in front of the handguard, its regulator nut, the bipod yoke under it
-    gk.cyl(bm, mm(HG_X[1] - 4.0, 0, GAS_Z), mm(296.0, 0, GAS_Z), mm(10.0), 16, mi=St)
+    gk.rbox(bm, mm(97.0, 0, -24.0), mm(40.0, 30.0, 30.0), mm(3.0), 1, mi=St)
+    # gas cylinder in front of the handguard, its regulator nut, the bipod yoke clamped under its front end
+    gk.cyl(bm, mm(HG_X[1] - 4.0, 0, GAS_Z), mm(318.0, 0, GAS_Z), mm(10.0), 12, mi=St)
     gk.lathe(bm, mm([(0, 0), (0, 10.5), (1.0, 11.5), (7.0, 11.5), (8.0, 10.5), (8.0, 0)]), 6,
-             gk.frame_x(V(mm(296.0, 0, GAS_Z)), (1, 0, 0), up=(0, 0, 1)), mi=St)
-    gk.rbox(bm, mm(BIPOD_PIVOT[0], 0, -37.0), mm(24.0, 22.0, 10.0), mm(2.0), 1, mi=St)
-    res = gk.bipod(mm(*BIPOD_PIVOT), leg_len=mm(BIPOD_LEG), splay=SPLAY, folded='back', mats={'body': St, 'foot': Po},
-                   ext=mm(70.0), leg_r=mm(5.0))
-    gk.merge(bm, res['Yoke'])
+             gk.frame_x(V(mm(318.0, 0, GAS_Z)), (1, 0, 0), up=(0, 0, 1)), mi=St)
+    yoke = bipod_yoke()
+    gk.merge(bm, yoke)
+    yoke.free()
     # sling loop on the left of the gas cylinder (the rear swivel is under the butt, on the stock)
-    gk.torus(bm, mm(*SLING_LOOP), (1, 0, 0), mm(7.0), mm(1.6), 12, 5, mi=Ba)
-    gk.rbox(bm, mm(SLING_LOOP[0], 9.0, GAS_Z - 2.0), mm(8.0, 6.0, 10.0), mm(1.0), 1, mi=St)
-    return rc, res
+    gk.torus(bm, mm(*SLING_LOOP), (1, 0, 0), mm(7.0), mm(1.6), 10, 4, mi=Ba)
+    gk.box(bm, mm(SLING_LOOP[0], 9.0, GAS_Z - 2.0), mm(8.0, 6.0, 10.0), mi=St)
+    return rc
 
 
 # --------------------------------------------------------------------------------------
@@ -404,29 +466,29 @@ def build_cover(gun):
     bm = cv.bm
     # a pressed shell (2 mm walls, open underneath): the outer section, hollowed by a cutter
     sh = bmesh.new()
-    gk.section_x(sh, mm(sec_yz(0, COVER_TOP, REC_TOP - 1.0, REC_HY + 3.0, 9.0, 1.5)), mm(COVER_X[0] + 4.0),
+    gk.section_x(sh, mm(sec_yz(0, COVER_TOP, REC_TOP - 1.0, REC_HY + 3.0, 9.0, 1.5, n=2)), mm(COVER_X[0] + 4.0),
                  mm(COVER_X[1]), end_bevel=mm(2.5), mi=St)
     inner = gk.fillet2([(COVER_X[0] + 8.0, REC_TOP - 4.0), (COVER_X[1] - 4.0, REC_TOP - 4.0),
-                        (COVER_X[1] - 4.0, COVER_TOP - 2.0), (COVER_X[0] + 8.0, COVER_TOP - 2.0)], 6.0, 2)
+                        (COVER_X[1] - 4.0, COVER_TOP - 2.0), (COVER_X[0] + 8.0, COVER_TOP - 2.0)], 6.0, 1)
     gk.boolean_bm(sh, [gk.prism_cutter(mm(inner), mm(-(REC_HY + 1.0)), mm(REC_HY + 1.0), mi=Bo)])
     gk.merge(bm, sh)
     sh.free()
     # hinge eye at the FRONT, around the receiver's pin
     gk.cyl(bm, mm(COVER_PIVOT[0], REC_HY - 1.0, COVER_PIVOT[2]), mm(COVER_PIVOT[0], -REC_HY + 1.0, COVER_PIVOT[2]),
-           mm(6.0), 14, mi=St)
+           mm(6.0), 8, mi=St)
     gk.rbox(bm, mm(COVER_PIVOT[0] - 4.0, 0, 38.0), mm(10.0, 2 * REC_HY - 2.0, 18.0), mm(3.0), 1, mi=St)
     # stamped side ribs, the latches and the latch button on the rear (free) edge, the rail on top
     for sy in (1, -1):
-        gk.cyl(bm, mm(-104.0, sy * (REC_HY + 2.4), 37.0), mm(20.0, sy * (REC_HY + 2.4), 37.0), mm(2.6), 8, mi=St)
+        gk.cyl(bm, mm(-104.0, sy * (REC_HY + 2.4), 37.0), mm(20.0, sy * (REC_HY + 2.4), 37.0), mm(2.6), 6, mi=St)
         gk.rbox(bm, mm(COVER_X[0] + 1.0, sy * (REC_HY - 3.0), 39.0), mm(8.0, 8.0, 10.0), mm(1.5), 1, mi=St)
     gk.rbox(bm, mm(COVER_X[0] + 1.0, 0, 44.0), mm(6.0, 18.0, 6.0), mm(1.5), 1, mi=Ba)
     cheap_rail(bm, COVER_X[0] + 8.0, COVER_X[1] - 6.0, Matrix.Translation(mm(0, 0, COVER_TOP - 0.6)), mi=St)
     # underneath (seen with the cover up): the feed lever riding in the cam groove, its roller, the two
     # spring-loaded feed pawls, the cartridge guide and the belt-holding pawl's spring
-    gk.rbox(bm, mm(-48.0, 0, COVER_TOP - 4.5), mm(96.0, 26.0, 2.5), mm(0.8), 1, mi=Ba)          # cam plate
-    gk.rbox(bm, mm(-60.0, 0, COVER_TOP - 8.0), mm(70.0, 7.0, 4.0), mm(1.0), 1,
-            R=Matrix.Rotation(math.radians(22), 3, 'Z'), mi=Ba)                                    # feed lever
-    gk.cyl(bm, mm(-90.0, -12.0, COVER_TOP - 6.0), mm(-90.0, -12.0, COVER_TOP - 14.0), mm(4.0), 10, mi=Ba)
+    gk.box(bm, mm(-48.0, 0, COVER_TOP - 4.5), mm(96.0, 26.0, 2.5), mi=Ba)          # cam plate
+    gk.box(bm, mm(-60.0, 0, COVER_TOP - 8.0), mm(70.0, 7.0, 4.0),
+           R=Matrix.Rotation(math.radians(22), 3, 'Z'), mi=Ba)                                    # feed lever
+    gk.cyl(bm, mm(-90.0, -12.0, COVER_TOP - 6.0), mm(-90.0, -12.0, COVER_TOP - 14.0), mm(4.0), 6, mi=Ba)
     for sy in (1, -1):
         gk.rbox(bm, mm(-31.0, sy * 9.0, COVER_TOP - 14.0), mm(8.0, 5.0, 14.0), mm(1.0), 1,
                 R=Matrix.Rotation(math.radians(-sy * 14), 3, 'X'), mi=Ba)                         # feed pawls
@@ -450,24 +512,19 @@ def build_optic(gun):
     prof = [(5.0, 0), (5.0, 15.0), (0.6, 15.4), (0.0, 16.2), (0.4, 18.0), (19.0, 18.0), (23.0, 16.6), (30.0, 15.2),
             (116.0, 15.2), (126.0, 20.6), (130.0, 23.0), (147.0, 23.0), (147.0, 21.6), (146.4, 21.0), (141.0, 20.7),
             (141.0, 0)]
-    gk.lathe(bm, mm(prof), 20, X, mi=Al)
+    gk.lathe(bm, mm(prof), 14, X, mi=Al)
     # a rubber ring on the ocular (the eye side)
-    gk.lathe(bm, mm([(0.2, 18.0), (0.2, 18.8), (6.0, 18.8), (6.0, 18.0)]), 20, X, closed=True, mi=Ru)
+    gk.lathe(bm, mm([(0.2, 18.0), (0.2, 18.8), (6.0, 18.8), (6.0, 18.0)]), 14, X, closed=True, mi=Ru)
     # forged top ridge (rounded) with the fibre slot cut in it
-    rid = bmesh.new()
     ridge = [(22, -4), (124, -4), (124, 8), (116, 18), (104, 21.5), (40, 21.5), (28, 18), (22, 10)]
-    gk.profile(rid, mm(gk.fillet2([(x0 + x, Z + z) for x, z in ridge], 3.0, 2, radii=[1, 1, 4, 6, 6, 6, 6, 4])),
+    gk.profile(bm, mm(gk.fillet2([(x0 + x, Z + z) for x, z in ridge], 3.0, 1, radii=[1, 1, 4, 6, 6, 6, 6, 4])),
                mm(24.0), bevel=mm(7.0), bevel_segs=1, mi=Al)
-    c = bmesh.new()
-    gk.rbox(c, mm(x0 + 68.0, 0, Z + 22.0), mm(58.0, 4.0, 5.0), mm(1.2), 1, mi=Bo)
-    gk.boolean_bm(rid, [c])
-    gk.merge(bm, rid)
-    rid.free()
-    gk.rbox(bm, mm(x0 + 68.0, 0, Z + 19.4), mm(56.0, 3.0, 1.6), mm(0.6), 1, mi=Gl)                 # light pipe
+    gk.box(bm, mm(x0 + 68.0, 0, Z + 21.6), mm(58.0, 4.4, 1.0), mi=Bo)                                # fibre slot
+    gk.box(bm, mm(x0 + 68.0, 0, Z + 21.9), mm(56.0, 3.0, 1.0), mi=Gl)                                # light pipe
     # adjustment caps: elevation on top of the ridge front, windage on the right, knurled
     for p0, d in (((x0 + 112.0, 0, Z + 15.0), (0, 0, 1)), ((x0 + 72.0, -11.0, Z + 2.0), (0, -1, 0))):
         up = (1, 0, 0)
-        gk.lathe(bm, mm([(0, 0), (0, 8.0), (8.5, 8.0), (9.5, 7.0), (9.5, 0)]), 12,
+        gk.lathe(bm, mm([(0, 0), (0, 8.0), (8.5, 8.0), (9.5, 7.0), (9.5, 0)]), 8,
                  gk.frame_x(V(mm(*p0)), d, up=up), mi=Al)
     # integral base on the rail: clamp jaws hanging down the rail sides, recoil lug, throw lever (right)
     base = [(34, RAIL_TOP), (112, RAIL_TOP), (112, Z - 10), (102, Z - 13), (44, Z - 13), (34, Z - 10)]
@@ -475,16 +532,17 @@ def build_optic(gun):
                bevel=mm(2.0), bevel_segs=1, mi=Al)
     for sy in (1, -1):
         gk.rbox(bm, mm(x0 + 73.0, sy * 12.0, RAIL_TOP - 3.0), mm(70.0, 3.0, 7.0), mm(1.0), 1, mi=Al)
-    gk.cyl(bm, mm(x0 + 58.0, 13.5, RAIL_TOP - 3.0), mm(x0 + 58.0, -14.0, RAIL_TOP - 3.0), mm(2.6), 8, mi=Ba)
+    gk.cyl(bm, mm(x0 + 58.0, 13.5, RAIL_TOP - 3.0), mm(x0 + 58.0, -14.0, RAIL_TOP - 3.0), mm(2.6), 6, mi=Ba)
     lever = [(-16, -3), (14, -4), (17, 0), (14, 4), (-16, 3)]
     gk.profile(bm, mm(gk.fillet2([(x0 + 84.0 + x, RAIL_TOP - 2.0 + z) for x, z in lever], 1.5, 1)), mm(3.0),
                y=mm(-15.5), bevel=mm(0.8), bevel_segs=1, mi=Ba)
-    gk.cyl(bm, mm(x0 + 70.0, -13.5, RAIL_TOP - 2.0), mm(x0 + 70.0, -18.0, RAIL_TOP - 2.0), mm(3.4), 10, mi=Ba)
+    gk.cyl(bm, mm(x0 + 70.0, -13.5, RAIL_TOP - 2.0), mm(x0 + 70.0, -18.0, RAIL_TOP - 2.0), mm(3.4), 6, mi=Ba)
     # lenses (recessed 5 / 6 mm) and the reticle at the ocular: chevron on a post with the BDC stadia
     ln = gun.part('OpticLens', paint='Lens', parent='Optic', origin=mm(x0 + 5.0, 0, Z))
     Le, Rt = ln.mi('Lens'), ln.mi('Reticle')
-    gk.cyl(ln.bm, mm(x0 + 4.7, 0, Z), mm(x0 + 5.0, 0, Z), mm(15.0), 24, mi=Le)
-    gk.cyl(ln.bm, mm(x0 + 141.0, 0, Z), mm(x0 + 141.3, 0, Z), mm(20.7), 24, mi=Le)
+    # (radii a little under the bores so the lens rims do not z-fight with the bell lips: review M2d)
+    gk.cyl(ln.bm, mm(x0 + 4.8, 0, Z), mm(x0 + 5.1, 0, Z), mm(14.5), 14, mi=Le)
+    gk.cyl(ln.bm, mm(x0 + 140.2, 0, Z), mm(x0 + 140.5, 0, Z), mm(20.0), 14, mi=Le)
     xr = x0 + 4.5
     for sy in (1, -1):
         gk.box(ln.bm, mm(xr, sy * 0.95, Z - 0.95), mm(0.1, 0.45, 3.0),
@@ -521,42 +579,42 @@ def build_barrel(gun):
     bm = br.bm
     X = gk.frame_x(V((0, 0, 0)), (1, 0, 0))
     gk.lathe(bm, mm([(-4, 0), (-4, 13.0), (112, 13.5), (120, 11.0), (246, 10.4), (250, 10.0), (BARREL_L - 12, 9.2),
-                     (BARREL_L, 9.0), (BARREL_L, 7.6), (BARREL_L + 4, 7.6), (BARREL_L + 4, 0)]), 20, X, mi=St)
+                     (BARREL_L, 9.0), (BARREL_L, 7.6), (BARREL_L + 4, 7.6), (BARREL_L + 4, 0)]), 12, X, mi=St)
     # collar for the handle (with its locking lever), knurled
-    gk.lathe(bm, mm([(84, 0), (84, 16.0), (86, 18.0), (108, 18.0), (110, 16.0), (110, 0)]), 20, X, mi=St)
-    for k in range(10):
-        a = 2 * math.pi * (k + 0.5) / 10
+    gk.lathe(bm, mm([(84, 0), (84, 16.0), (86, 18.0), (108, 18.0), (110, 16.0), (110, 0)]), 12, X, mi=St)
+    for k in range(6):
+        a = 2 * math.pi * (k + 0.5) / 6
         gk.box(bm, mm(97.0, 18.0 * math.cos(a), 18.0 * math.sin(a)), mm(18.0, 1.2, 1.2),
                R=Matrix.Rotation(a, 3, 'X'), mi=St)
     # carry handle: a post on the collar, the bar running forward (polymer grip), the front tip turned down
     path = [mm(96.0, 0, 16.0), mm(96.0, 0, 46.0), mm(100.0, 0, 66.0), mm(114.0, 0, 80.0), mm(140.0, 0, 84.0),
             mm(176.0, 0, 84.0), mm(196.0, 0, 83.0)]
-    gk.sweep(bm, gk.crs(path, 4), 0, rect=(mm(12.0), mm(9.0)), upref=(0, 1, 0), mi=St)
+    gk.sweep(bm, gk.crs(path, 3), 0, rect=(mm(12.0), mm(9.0)), upref=(0, 1, 0), mi=St)
     gp = [mm(118.0, 0, 82.0), mm(140.0, 0, 85.5), mm(176.0, 0, 85.5), mm(192.0, 0, 82.5)]
-    gk.sweep(bm, gk.crs(gp, 4), mm(8.0), segs=10, mi=Po)
-    for k in range(7):                                          # grip ribs (underside finger grooves)
-        gk.rbox(bm, mm(128.0 + k * 9.5, 0, 77.6), mm(3.0, 13.0, 2.2), mm(0.8), 1, mi=Po)
-    gk.lathe(bm, mm([(0, 0), (0, 6.5), (3.0, 7.5), (6.0, 6.0), (8.0, 0)]), 12,
+    gk.sweep(bm, gk.crs(gp, 3), mm(8.0), segs=8, mi=Po)
+    for k in range(5):                                          # grip ribs (underside finger grooves)
+        gk.box(bm, mm(130.0 + k * 12.0, 0, 77.6), mm(3.0, 13.0, 2.2), mi=Po)
+    gk.lathe(bm, mm([(0, 0), (0, 6.5), (3.0, 7.5), (6.0, 6.0), (8.0, 0)]), 8,
              gk.frame_x(V(mm(193.0, 0, 83.2)), (1, -0.0, -0.05)), mi=Po)         # end cap
     gk.rbox(bm, mm(96.0, 0, 34.0), mm(16.0, 16.0, 18.0), mm(2.0), 1, mi=St)      # hinge block on the collar
-    gk.cyl(bm, mm(96.0, 9.0, 30.0), mm(96.0, -9.0, 30.0), mm(3.0), 8, mi=Ba)
+    gk.cyl(bm, mm(96.0, 9.0, 30.0), mm(96.0, -9.0, 30.0), mm(3.0), 6, mi=Ba)
     # gas block (round + its lug down to the gas cylinder) and the hooded front sight
-    gk.lathe(bm, mm([(0, 0), (0, 14.0), (1.5, 15.5), (22.5, 15.5), (24.0, 14.0), (24.0, 0)]), 20,
+    gk.lathe(bm, mm([(0, 0), (0, 14.0), (1.5, 15.5), (22.5, 15.5), (24.0, 14.0), (24.0, 0)]), 12,
              gk.frame_x(V(mm(254.0, 0, 0)), (1, 0, 0)), mi=St)
     gk.rbox(bm, mm(266.0, 0, -15.0), mm(22.0, 20.0, 22.0), mm(2.0), 1, mi=St)
-    gk.pin(bm, mm(262.0, 15.5, -4.0), (0, 1, 0), mm(2.2), proud=mm(0.4), segs=8, mi=Ba, both=mm(31.0))
+    gk.pin(bm, mm(262.0, 15.5, -4.0), (0, 1, 0), mm(2.2), proud=mm(0.4), segs=6, mi=Ba, both=mm(31.0))
     fs = [(298, 9), (318, 9), (314, 30), (309, 38), (307, 38), (302, 30)]
-    gk.lathe(bm, mm([(0, 0), (0, 11.5), (1.0, 12.5), (18.0, 12.5), (19.0, 11.5), (19.0, 0)]), 16,
+    gk.lathe(bm, mm([(0, 0), (0, 11.5), (1.0, 12.5), (18.0, 12.5), (19.0, 11.5), (19.0, 0)]), 10,
              gk.frame_x(V(mm(298.0, 0, 0)), (1, 0, 0)), mi=St)
     for sy in (1, -1):                                          # protective ears
         ear = [(300, 8), (316, 8), (314, 40), (310, 44), (304, 44), (301, 36)]
         gk.profile(bm, mm(gk.fillet2(ear, 1.5, 1)), mm(3.0), y=mm(sy * 7.0), bevel=mm(0.6), bevel_segs=0, mi=St)
     gk.profile(bm, mm(gk.fillet2(fs, 1.0, 1)), mm(4.0), bevel=mm(0.5), bevel_segs=0, mi=St)
-    gk.cyl(bm, mm(308.0, 0, 37.5), mm(308.0, 0, 41.0), mm(1.4), 8, mi=Ba)
+    gk.cyl(bm, mm(308.0, 0, 37.5), mm(308.0, 0, 41.0), mm(1.4), 6, mi=Ba)
     # flash hider: slotted cylinder (5 prongs), bore
     fh = bmesh.new()
     gk.lathe(fh, mm([(332, 6.0), (332, 10.5), (334, 11.5), (MUZZLE_X - 2, 11.5), (MUZZLE_X, 10.5), (MUZZLE_X, 7.2),
-                     (332, 6.0)]), 20, X, closed=True, mi=St)
+                     (332, 6.0)]), 15, X, closed=True, mi=St)
     fh.faces.ensure_lookup_table()
     for f in fh.faces:
         cc = f.calc_center_median()
@@ -567,13 +625,12 @@ def build_barrel(gun):
         a = 2 * math.pi * k / 5 + math.pi / 2
         d = V((0, math.cos(a), math.sin(a)))
         c = bmesh.new()
-        gk.rbox(c, V(mm(MUZZLE_X - 13.0, 0, 0)) + d * mm(10.0), mm(30.0, 10.0, 3.4), R=Matrix.Rotation(a, 3, 'X'),
-                bevel=mm(1.2), segs=1, mi=Bo)
+        gk.box(c, V(mm(MUZZLE_X - 13.0, 0, 0)) + d * mm(10.0), mm(30.0, 10.0, 3.4), R=Matrix.Rotation(a, 3, 'X'), mi=Bo)
         cuts.append(c)
     gk.boolean_bm(fh, cuts)
     gk.merge(bm, fh)
     fh.free()
-    gk.cyl(bm, mm(BARREL_L + 4.0, 0, 0), mm(BARREL_L + 4.5, 0, 0), mm(6.5), 16, mi=Bo)
+    gk.cyl(bm, mm(BARREL_L + 4.0, 0, 0), mm(BARREL_L + 4.5, 0, 0), mm(6.5), 8, mi=Bo)
     return br
 
 
@@ -582,27 +639,28 @@ def build_barrel(gun):
 # --------------------------------------------------------------------------------------
 
 def build_stock(gun):
+    """The collapsible stock of the photo: one heavy guide tube (not the old three-rod skeleton, review M6),
+    a polymer saddle with a raised cheek comb riding on it, a solid polymer butt with a rubber pad, the latch
+    lever and the rear sling swivel."""
     sk = gun.part('Stock', paint='Polymer', origin=mm(REC_X[0], 0, -10.0))
-    Po, Ru, St, Ba, Bo = sk.mi('Polymer'), sk.mi('Rubber'), sk.mi('SteelPhosphate'), sk.mi('SteelBare'), sk.mi('Bore')
+    Po, Ru, St, Ba = sk.mi('Polymer'), sk.mi('Rubber'), sk.mi('SteelPhosphate'), sk.mi('SteelBare')
     bm = sk.bm
-    for (y, z) in ((15.0, 6.0), (-15.0, 6.0), (0.0, -30.0)):
-        gk.cyl(bm, mm(-476.0, y, z), mm(-212.0, y, z), mm(6.5), 10, mi=St)
+    gk.cyl(bm, mm(-470.0, 0, -6.0), mm(-214.0, 0, -6.0), mm(12.5), 10, mi=St)
     # tube guide block at the receiver end (stays visible: it is the stock's front yoke)
-    gk.rbox(bm, mm(-250.0, 0, -12.0), mm(18.0, 48.0, 50.0), mm(3.0), 1, mi=Po)
-    gk.rbox(bm, mm(-246.0, 0, -42.0), mm(16.0, 12.0, 10.0), mm(2.0), 1, mi=Ba)          # latch lever
-    # butt: polymer frame with a lightening window, rubber pad with ribs, cheek sleeve on the upper tubes
-    butt = [(-486, 30), (-452, 26), (-448, 14), (-452, -40), (-458, -82), (-486, -92)]
-    gk.profile(bm, mm(gk.fillet2(butt, 2.0, 2, radii=[6, 8, 6, 8, 10, 4])), mm(44.0), bevel=mm(7.0), bevel_segs=1,
+    gk.rbox(bm, mm(-250.0, 0, -12.0), mm(18.0, 46.0, 50.0), mm(3.0), 1, mi=Po)
+    gk.box(bm, mm(-246.0, 0, -42.0), mm(16.0, 12.0, 10.0), mi=Ba)                         # latch lever
+    # saddle and cheek comb (sits on the tube's top, the R6 cheek rests there in Aim)
+    cheek = [(-452, -4), (-322, -4), (-316, 6), (-326, 16), (-360, 24), (-446, 26), (-454, 16)]
+    gk.profile(bm, mm(gk.fillet2(cheek, 2.0, 1, radii=[3, 3, 5, 8, 8, 6, 4])), mm(40.0), bevel=mm(8.0), bevel_segs=1,
                mi=Po)
-    win = gk.fillet2([(-478, 2), (-462, 2), (-463, -24), (-468, -58), (-478, -62)], 5.0, 2)
-    gk.boolean_bm(bm, [gk.prism_cutter(mm(win), mm(-30.0), mm(30.0), mi=Po)])
+    # solid butt, its toe; rubber pad with a few ribs
+    butt = [(-486, 30), (-452, 26), (-446, 12), (-444, -22), (-452, -60), (-460, -86), (-486, -92)]
+    gk.profile(bm, mm(gk.fillet2(butt, 2.0, 1, radii=[6, 8, 6, 10, 10, 10, 4])), mm(44.0), bevel=mm(7.0),
+               bevel_segs=1, mi=Po)
     pad = [(-498, 31), (-485, 31), (-485, -93), (-498, -93)]
-    gk.profile(bm, mm(gk.fillet2(pad, 2.0, 2, radii=[8, 1, 1, 10])), mm(46.0), bevel=mm(5.0), bevel_segs=1, mi=Ru)
-    for k in range(9):
-        gk.rbox(bm, mm(-498.6, 0, 20.0 - k * 13.0), mm(1.6, 36.0, 3.4), mm(0.6), 1, mi=Ru)
-    cheek = [(-450, 0), (-350, 0), (-342, 8), (-350, 20), (-446, 24), (-452, 14)]
-    gk.profile(bm, mm(gk.fillet2(cheek, 2.0, 2, radii=[3, 3, 5, 6, 6, 4])), mm(44.0), bevel=mm(8.0), bevel_segs=1,
-               mi=Po)
+    gk.profile(bm, mm(gk.fillet2(pad, 2.0, 1, radii=[8, 1, 1, 10])), mm(46.0), bevel=mm(5.0), bevel_segs=1, mi=Ru)
+    for k in range(5):
+        gk.box(bm, mm(-498.6, 0, 16.0 - k * 22.0), mm(1.6, 36.0, 3.4), mi=Ru)
     gk.sling_swivel(bm, mm(-466.0, 0, -88.0), axis_loop=(0, 0, -1), size=mm(20.0), mi=Ba)
     return sk
 
@@ -625,48 +683,76 @@ def build_charging(gun):
     St, Ba = ch.mi('SteelPhosphate'), ch.mi('SteelBare')
     bm = ch.bm
     gk.rbox(bm, mm(CH_X, -REC_HY + 4.0, CH_Z), mm(36.0, 10.0, 8.0), mm(1.2), 1, mi=Ba)      # slider in the slot
-    gk.cyl(bm, mm(CH_X, -REC_HY, CH_Z), mm(CH_X, -REC_HY - 12.0, CH_Z), mm(3.6), 10, mi=St)
+    gk.cyl(bm, mm(CH_X, -REC_HY, CH_Z), mm(CH_X, -REC_HY - 12.0, CH_Z), mm(3.6), 6, mi=St)
     # folding paddle (open, horizontal), with grip grooves
     paddle = [(CH_X - 9, CH_Z - 5), (CH_X + 9, CH_Z - 5), (CH_X + 7, CH_Z + 5), (CH_X - 7, CH_Z + 5)]
     gk.profile(bm, mm(gk.fillet2([(x, z) for x, z in paddle], 1.5, 1)), mm(22.0), y=mm(-REC_HY - 21.0), bevel=mm(2.0),
                bevel_segs=1, mi=St)
     for k in range(4):
         gk.box(bm, mm(CH_X - 6.0 + k * 4.0, -REC_HY - 29.0, CH_Z + 5.2), mm(1.0, 12.0, 0.8), mi=St)
-    gk.cyl(bm, mm(CH_X, -REC_HY - 9.0, CH_Z - 6.0), mm(CH_X, -REC_HY - 9.0, CH_Z + 6.0), mm(2.0), 8, mi=Ba)
+    gk.cyl(bm, mm(CH_X, -REC_HY - 9.0, CH_Z - 6.0), mm(CH_X, -REC_HY - 9.0, CH_Z + 6.0), mm(2.0), 6, mi=Ba)
     return ch
 
 
-def leg_dir(sy):
-    return V((-1.0, sy * math.sin(math.radians(SPLAY)), 0)).normalized()
+def leg_axis(sy):
+    """The canted hinge axis of a bipod leg (sy = +1 left, -1 right): +Y tilted by SPLAY toward +-Z, so the
+    -90 deg swing takes the leg from back along -X to down AND out by SPLAY (the real class's canted pivots;
+    a pure +Y hinge with a baked splay would leave the folded legs sticking out sideways)."""
+    s = math.radians(SPLAY)
+    return V((0.0, math.cos(s), sy * math.sin(s)))
 
 
-def build_bipod_legs(gun, res):
-    for side in ('L', 'R'):
-        lg = gun.part('BipodLeg' + side, paint='SteelPhosphate', origin=mm(*BIPOD_PIVOT))
+def leg_pivot(sy):
+    return V(mm(BIPOD_PIVOT[0], sy * BIPOD_Y, BIPOD_PIVOT[2]))
+
+
+def rot_axis(piv, axis, deg):
+    p = V(piv)
+    return Matrix.Translation(p) @ Matrix.Rotation(math.radians(deg), 4, V(axis)) @ Matrix.Translation(-p)
+
+
+def bipod_yoke():
+    """The bipod yoke (part of Receiver): a clamp round the gas cylinder's front, two hinge ears per leg
+    hugging the leg knuckles (no gap), the canted hinge pins."""
+    t = bmesh.new()
+    px, pz = BIPOD_PIVOT[0], BIPOD_PIVOT[2]
+    gk.lathe(t, mm([(0, 12.5), (2.0, 14.0), (20.0, 14.0), (22.0, 12.5)]), 10,
+             gk.frame_x(V(mm(px - 11.0, 0, GAS_Z)), (1, 0, 0)), mi=0)
+    gk.rbox(t, mm(px, 0, pz + 15.0), mm(22.0, 2 * BIPOD_Y + 16.0, 16.0), mm(2.0), 1, mi=0)
+    for sy in (1, -1):
+        a = leg_axis(sy)
+        c = leg_pivot(sy)
+        for e in (-1, 1):                                    # the two ears either side of the knuckle
+            gk.box(t, c + a * mm(e * 7.6), mm(18.0, 3.2, 18.0), R=gk.basis((1, 0, 0), a, V((1, 0, 0)).cross(a)), mi=0)
+        gk.cyl(t, c - a * mm(10.0), c + a * mm(10.0), mm(2.2), 6, 0)
+    return t
+
+
+def build_bipod_legs(gun):
+    """BipodLegL/R: knuckle (wrapping the hinge pin between the yoke ears), upper tube, the extension with its
+    lock collar, the rubber foot; at rest along -X under the handguard, straddling the foregrip."""
+    for side, sy in (('L', 1), ('R', -1)):
+        lg = gun.part('BipodLeg' + side, paint='SteelPhosphate', origin=tuple(leg_pivot(sy)))
         st, po = lg.mi('SteelPhosphate'), lg.mi('Polymer')
-        # the kit's leg + its extension (one part: the LMG contract only moves the legs); remap materials
-        for key in ('BipodLeg' + side, 'BipodExt' + side):
-            t = res[key]
-            for f in t.faces:
-                f.material_index = st if f.material_index == 0 else po
-            gk.merge(lg.bm, t)
-        # extension lock collar
-        sy = 1 if side == 'L' else -1
-        a = V(mm(*BIPOD_PIVOT)) + V((0, sy * 0.013, -0.006))
-        b = a + leg_dir(sy) * (0.012 + mm(BIPOD_LEG) * 0.62)
-        gk.cyl(lg.bm, b, b + leg_dir(sy) * 0.010, mm(5.0) * 1.55, 10, st)
-    for b in res.values():
-        b.free()
+        bm = lg.bm
+        p = leg_pivot(sy)
+        a = leg_axis(sy)
+        d = V((-1.0, 0.0, 0.0))
+        gk.cyl(bm, p - a * mm(5.8), p + a * mm(5.8), mm(6.5), 8, st)                  # knuckle round the pin
+        gk.rbox(bm, p + d * mm(9.0), mm(16.0, 11.0, 10.0), mm(1.5), 1,
+                R=gk.basis(d, a, d.cross(a)), mi=st)                                 # clevis neck
+        gk.cyl(bm, p + d * mm(14.0), p + d * mm(150.0), mm(6.0), 8, st)              # upper tube
+        gk.cyl(bm, p + d * mm(140.0), p + d * mm(BIPOD_LEG - 18.0), mm(4.6), 6, st)  # extension
+        gk.cyl(bm, p + d * mm(138.0), p + d * mm(152.0), mm(7.4), 8, st)             # lock collar
+        gk.lathe(bm, mm([(0, 0), (0, 6.0), (8.0, 8.4), (16.0, 7.0), (18.0, 0)]), 8,
+                 gk.frame_x(p + d * mm(BIPOD_LEG - 18.0), tuple(d)), mi=po)          # rubber foot
 
 
-def bipod_foot(ext=0.0):
-    """Foot contact of the left leg when deployed (-90 deg about +Y through the pivot)."""
-    p = V(mm(*BIPOD_PIVOT))
-    d = leg_dir(1)
-    a = p + V((0, 0.013, -0.006))
-    tip = a + d * (0.012 + mm(BIPOD_LEG) + ext + 0.020)
-    R = Matrix.Rotation(math.radians(-90.0), 3, 'Y')
-    return p + R @ (tip - p)
+def bipod_foot(sy=1):
+    """Foot contact of a leg when deployed (-90 deg about its canted axis)."""
+    p = leg_pivot(sy)
+    tip = p + V((-mm(BIPOD_LEG), 0, 0))
+    return rot_axis(p, leg_axis(sy), -90.0) @ tip
 
 
 # --------------------------------------------------------------------------------------
@@ -677,27 +763,32 @@ ROUND_PROF = [(0, 0), (0, 4.8), (1.0, 4.8), (1.3, 4.1), (2.3, 4.1), (2.7, 4.75),
 
 
 def belted_round(bm, head, axis, out_n, mats, segs=6, link=True, nxt=None):
-    """One belt segment: a cheap loaded 5.56 round (case head at `head`, along unit `axis`) and its M27-type
-    link: front and rear loops around the case, the middle loop of the neighbouring link, and the strap
-    joining toward the next round (`nxt` = its head point) on the belt's outer side `out_n`."""
+    """One belt segment, cheap (~96 tris; the rounds are mostly hidden in the feed opening and against the
+    pouch, and their facets are smoothed by the normals, review B1 / minor): a 6-sided loaded 5.56 round (case
+    head at `head`, along unit `axis`) and its M27-type link drawn as two open bands round the case (front and
+    rear loops) and the strap toward the next round (`nxt` = its head point) on the belt's outer side
+    `out_n`.  segs > 6: the full profile (stand-alone models)."""
     h, a, n = V(head), V(axis).normalized(), V(out_n).normalized()
     M = gk.frame_x(h, a, up=n)
-    prof = ROUND_PROF if segs > 6 else [p for i, p in enumerate(ROUND_PROF) if i not in (2, 3, 10)]
-    k = [i for i, p in enumerate(prof) if p == (44.7, 3.17)][0]
-    gk.lathe(bm, mm(prof[:k + 1]), segs, M, mi=mats['case'])
-    gk.lathe(bm, mm(prof[k:]), segs, M, mi=mats['bullet'])
+    if segs > 6:
+        case = ROUND_PROF[:ROUND_PROF.index((44.7, 3.17)) + 1]
+        bullet = ROUND_PROF[ROUND_PROF.index((44.7, 3.17)):]
+    else:
+        case = [(0, 0), (0, 4.8), (36.6, 4.49), (39.3, 3.17), (44.7, 3.17)]
+        bullet = [(44.7, 3.17), (54.5, 1.6), (57.4, 0)]
+    gk.lathe(bm, mm(case), segs, M, mi=mats['case'])
+    gk.lathe(bm, mm(bullet), segs, M, mi=mats['bullet'])
     if not link:
         return
-    for x, R in ((9.0, 5.45), (21.0, 5.40), (33.0, 5.25)):
-        gk.torus(bm, h + a * mm(x), a, mm(R), mm(0.75), 6, 3, mi=mats['link'])
+    for x, R in ((7.4, 5.45), (31.4, 5.25)):
+        gk.lathe(bm, mm([(x, R), (x + 3.2, R)]), segs, M, mi=mats['link'])
     if nxt is not None:
         q = V(nxt)
         d = (q - h)
         d -= a * d.dot(a)
         t = d.normalized()
-        for x in (9.0, 33.0):                                    # the two thin straps of the link
-            mid = h + d * 0.5 + n * mm(4.2) + a * mm(x)
-            gk.box(bm, mid, (mm(3.2), d.length + mm(1.0), mm(0.9)), R=gk.basis(a, t, a.cross(t)), mi=mats['link'])
+        mid = h + d * 0.5 + n * mm(5.0) + a * mm(21.0)
+        gk.box(bm, mid, (mm(26.0), d.length + mm(1.0), mm(0.9)), R=gk.basis(a, t, a.cross(t)), mi=mats['link'])
 
 
 def belt_frames():
@@ -715,9 +806,7 @@ def belt_frames():
         t = (s - acc) / max(1e-9, seg[i])
         p = pts[i].lerp(pts[i + 1], min(1.0, t))
         tang = (pts[i + 1] - pts[i]).normalized()
-        nrm = V((0, tang.z, -tang.y))        # the belt's outer side (left/up of the travel direction)
-        if nrm.y < 0 and nrm.z < 0.5:
-            nrm = -nrm
+        nrm = V((0, -tang.z, tang.y))       # the belt's outer side: up on the tray, left where it hangs
         out.append((V((ROUND_HEAD_X, p.y, p.z)), nrm))
     return out
 
@@ -736,119 +825,115 @@ def build_belt(gun):
     return names
 
 
-def pouch_outline(a, b, n=40, e=3.0):
-    """A superellipse (exponent e: an oval with flatter sides, the soft 200-round pouch's side view) of half
-    axes a (x) and b (z), points CCW starting at the bottom."""
-    out = []
-    for k in range(n):
-        t = -math.pi / 2 + 2 * math.pi * k / n
-        c, s_ = math.cos(t), math.sin(t)
-        out.append((a * math.copysign(abs(c) ** (2 / e), c), b * math.copysign(abs(s_) ** (2 / e), s_)))
-    return out
-
-
 def pouch_bottom_z(x):
-    """Model z (mm) of the full pouch's lowest outline point at x (for the sling drape), None outside."""
-    cx, _, cz = POUCH_C
-    u = (x - cx) / POUCH_A
-    if abs(u) >= 1.0:
+    """Model z (mm) of the full drum pouch's lowest point at x (for the sling drape), None outside."""
+    cx, _, cz = DRUM_C
+    u = x - cx
+    if abs(u) >= DRUM_R:
         return None
-    return cz - POUCH_B * (1.0 - abs(u) ** 3) ** (1.0 / 3.0)
+    return cz - math.sqrt(DRUM_R ** 2 - u * u)
+
+
+# the drum's half-profile (axial y from its centre, radius), outer face (+Y) to the receiver-side face: soft
+# domed faces, a rounded rim (the deep rounded rim of the photo), binding tape on the two seams
+DRUM_PROF = [(-44.0, 0.0), (-43.0, 40.0), (-40.5, 66.0), (-36.0, 77.0), (-30.0, 83.0), (-22.0, 85.0), (0.0, 85.8),
+             (22.0, 85.0), (30.0, 83.0), (36.0, 77.0), (40.5, 66.0), (43.0, 40.0), (44.0, 0.0)]
+DRUM_TAPE = (3, 8)          # profile bands (index of their first point) wearing the binding tape
 
 
 def pouch_mesh(bm, mats, empty=False):
-    """The 200-round soft pouch in model space (mm): a padded cordura box with an oval side profile (200 tall,
-    160 long, 85 thick), flat faces with a 14 mm edge roll, black-olive binding tape on the two seams, one
-    vertical compression strap, two flush MOLLE rows, the fabric mouth collar and its flap, the polymer
-    adapter with its hook, a drain grommet.  empty=True: the slumped, empty pouch (Lmg_PouchEmpty): bottom
-    40 % crushed to 60 %, faces dented, the mouth flap hanging open."""
+    """The 200-round soft pouch in model space: a round drum-shaped padded bag (170 mm across, 88 deep, axis
+    along Y) in fine digital camo with dark binding on its two seams, a compression strap round the rim, a
+    flat MOLLE panel on the outer face, the fabric mouth collar under the feed opening (the belt dives into
+    it), the polymer adapter that hooks under the receiver, a drain grommet.  empty=True (Lmg_PouchEmpty,
+    review M3): the bag collapsed to ~55 % of its height, the top folded over toward the outer face, the
+    faces caved in and the bottom spread; the mouth flap hanging open."""
     Ca, Fa, Po, Ba = mats['camo'], mats['web'], mats['poly'], mats['metal']
-    cx, cy, cz = POUCH_C
-    t, r = POUCH_T / 2, 14.0
-    top_clip = POUCH_TOP - 4.0
-    # rings: (inset, y offset, material) across the section, outer face (+y) to inner face (-y)
-    sec = []
-    for sgn in (1, -1):
-        part = [(58.0, t), (34.0, t), (r, t)] + [(r - r * math.sin(math.radians(ph)), t - r + r * math.cos(
-            math.radians(ph))) for ph in (30, 45, 60, 90)]
-        part = [(i, sgn * y) for i, y in part]
-        sec.append(part if sgn > 0 else list(reversed(part)))
-    rings_spec = sec[0] + [(0.0, 0.0)] + sec[1]
-    tape = {3, 4, 5, len(rings_spec) - 4, len(rings_spec) - 5, len(rings_spec) - 6}
-    n = 36
+    cx, cy, cz = DRUM_C
+    n = 28
     rings = []
-    for idx, (inset, yo) in enumerate(rings_spec):
-        ol = pouch_outline(POUCH_A - inset, POUCH_B - inset, n)
+    zbot = cz - DRUM_R
+    for i, (ay, r) in enumerate(DRUM_PROF):
         ring = []
-        for (x, z) in ol:
-            px, pz = cx + x, cz + z
-            py = cy + yo
-            # seams proud by 0.6 (binding tape), the faces bow out a little lower down (weight), soft noise
-            if idx in tape:
-                py += math.copysign(0.6, yo) * (1.0 if abs(yo) > t - r else 0.0)
-            face = abs(abs(yo) - t) < 0.01
-            if face:                                                # the padded faces bow out, more low down
-                bulge = 4.0 * (0.6 + 0.4 * max(0.0, -z / POUCH_B))
-                py += math.copysign(bulge * (1.0 - (abs(x) / POUCH_A) ** 2) * (1.0 - (abs(z) / POUCH_B) ** 2), yo)
-            py += math.copysign(1.2 * math.sin(px * 0.11 + pz * 0.05) * math.sin(pz * 0.07), yo) * (
-                1.0 if face else 0.4)
+        for k in range(n if r > 0 else 1):
+            ang = 2 * math.pi * k / n
+            x, z = r * math.cos(ang), r * math.sin(ang)
+            # soft goods: the weight sags the bag a little (lower half fuller), faint quilting noise
+            yy = ay * (1.0 + 0.05 * max(0.0, -z / DRUM_R)) + 1.0 * math.sin(x * 0.11 + z * 0.05) * (abs(ay) / 44.0)
+            if i in DRUM_TAPE or i - 1 in DRUM_TAPE:
+                yy += math.copysign(0.5, ay) if i in DRUM_TAPE and i - 1 in DRUM_TAPE else 0.0
+            px, py, pz = cx + x, cy + yy, cz + z
             if empty:
-                rel = (pz - (cz - POUCH_B)) / (2 * POUCH_B)          # 0 bottom .. 1 top
-                if rel < 0.5:                                        # nothing inside: the bottom half folds
-                    pz = (cz - POUCH_B) + 0.5 * 2 * POUCH_B - (0.5 - rel) * 2 * POUCH_B * 0.5
-                if face:                                             # faces cave in, with a crease
-                    d = max(0.0, 1.0 - math.hypot(x / (POUCH_A * 0.75), (z + 10.0) / (POUCH_B * 0.7)))
-                    py -= math.copysign(16.0 * d + 3.0 * math.sin(x * 0.09) * d, yo)
-                py += math.copysign(5.0 * max(0.0, 0.5 - rel), yo)      # the crushed bottom spreads
-            pz = min(pz, top_clip + (pz - top_clip) * 0.2) if pz > top_clip else pz
-            ring.append(V(mm(px, py, pz)))
+                rel = (pz - zbot) / (2 * DRUM_R)                       # 0 bottom .. 1 top
+                pz = zbot + 2 * DRUM_R * (0.56 * rel - 0.10 * rel * rel * max(0.0, x / DRUM_R))
+                fold = max(0.0, rel - 0.55) / 0.45                    # the top folds over toward the outer face
+                py += 26.0 * fold * fold
+                face = abs(ay) > 30.0
+                if face:                                              # the faces cave in, a crease across
+                    d = max(0.0, 1.0 - math.hypot(x / 70.0, (z + 8.0) / 60.0))
+                    py -= math.copysign(14.0 * d + 3.0 * math.sin(x * 0.09) * d, ay)
+                py += math.copysign(7.0 * max(0.0, 0.5 - rel), ay)    # the crushed bottom spreads
+            ring.append(bm.verts.new(V(mm(px, py, pz))))
         rings.append(ring)
-    faces = gk.loft(bm, rings, mi=Ca)
-    # binding tape on the seam bands (the edge roll's outer half on both sides)
-    for f in faces:
-        c = f.calc_center_median()
-        yy = abs(c.y * 1000 - cy)
-        if 34.0 < yy < t - 0.5 and len(f.verts) == 4:
-            f.material_index = Fa
-    # vertical compression strap round the pouch (front of centre), its buckle
-    zb = cz - POUCH_B - 1.5
-    if empty:
-        zb = (cz - POUCH_B) + POUCH_B * 0.5 - 1.5
-    xs = cx + 30.0
-    loop = [V(mm(xs, cy + t + 1.4, top_clip - 6)), V(mm(xs, cy + t + 1.6, cz)), V(mm(xs, cy + t - 3, zb + 12)),
-            V(mm(xs, cy + 10, zb)), V(mm(xs, cy - 10, zb)), V(mm(xs, cy - t + 3, zb + 12)),
-            V(mm(xs, cy - t - 1.6, cz)), V(mm(xs, cy - t - 1.4, top_clip - 6))]
-    gk.sweep(bm, gk.crs(loop, 4), 0, rect=(mm(1.6), mm(25.0)), upref=(1, 0, 0), mi=Fa, caps=(True, True))
-    gk.rbox(bm, mm(xs, cy + t + 2.6, cz + 30.0), mm(30.0, 3.0, 18.0), mm(1.0), 1, mi=Po)
-    # two flush MOLLE rows on the outer face (bar tacks drawn by small strips)
-    yf = cy + t + 3.2 + (0.0 if not empty else -8.0)
-    for zz in (cz + 46.0, cz + 18.0):
-        half = (POUCH_A - 26.0) * (1.0 - (abs(zz - cz) / POUCH_B) ** 3) ** (1 / 3)
-        gk.rbox(bm, mm(cx - 14.0, yf, zz), mm(2 * half - 30.0, 1.4, 22.0), mm(0.6), 1, mi=Ca)
-    # mouth collar (where the belt comes out); the flap folded back on the outer face (full) or hanging
-    # open off the mouth (empty); a pull tab
-    gk.rbox(bm, mm(-30.0, cy, POUCH_TOP - 4.0), mm(72.0, 46.0, 16.0), mm(5.0), 2, mi=Ca)
+    faces = []
+    for i in range(len(rings) - 1):
+        A, B = rings[i], rings[i + 1]
+        mi = Fa if i in DRUM_TAPE else Ca
+        for k in range(n):
+            k1 = (k + 1) % n
+            if len(A) == 1:
+                f = bm.faces.new((A[0], B[k1], B[k]))
+            elif len(B) == 1:
+                f = bm.faces.new((A[k], A[k1], B[0]))
+            else:
+                f = bm.faces.new((A[k], A[k1], B[k1], B[k]))
+            f.material_index = mi
+            faces.append(f)
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+    # compression strap round the rim (webbing band, front of centre) with its ladder buckle
+    sq = 0.56 if empty else 1.0
+    band = []
+    for k in range(n + 1):
+        ang = 2 * math.pi * k / n
+        rr = DRUM_R + 1.6
+        x, z = rr * math.cos(ang), rr * math.sin(ang)
+        pz = cz + z
+        if empty:
+            pz = zbot + (pz - zbot) * sq
+        band.append(V(mm(cx + x, cy + 22.0, pz)))
+    gk.sweep(bm, band[:-1] + [band[0]], 0, rect=(mm(1.6), mm(25.0)), upref=(0, 1, 0), mi=Fa, caps=(False, False))
+    bx = V(mm(cx + DRUM_R + 2.6, cy + 22.0, zbot + DRUM_R * (0.8 if empty else 1.0)))
+    gk.box(bm, bx, mm(3.0, 30.0, 18.0), mi=Po)
+    # MOLLE panel on the outer (+Y) face: a flat stitched patch with three rows of loops
+    yf = cy + 43.6 - (12.0 if empty else 0.0)
+    zc = cz if not empty else zbot + DRUM_R * 0.52
+    gk.box(bm, mm(cx, yf, zc), mm(96.0, 1.4, 66.0 * (0.6 if empty else 1.0)), mi=Ca)
+    for k in range(3):
+        gk.box(bm, mm(cx, yf + 1.0, zc + (k - 1) * 22.0 * (0.6 if empty else 1.0)), mm(96.0, 1.2, 4.0), mi=Fa)
+    # mouth collar under the feed opening (the belt dives into it); the flap folded back (full) or hanging
+    # open (empty); the polymer adapter hooking under the receiver, its latch; a brass drain grommet
+    top = POUCH_TOP if not empty else zbot + 2 * DRUM_R * 0.56
+    gk.rbox(bm, mm(-31.0, 40.0, top + 1.0), mm(70.0, 26.0, 14.0), mm(4.0), 1, mi=Ca)
     if not empty:
-        gk.rbox(bm, mm(-30.0, cy + 25.0, POUCH_TOP - 14.0), mm(66.0, 3.0, 26.0), mm(1.2), 1,
-                R=Matrix.Rotation(math.radians(12), 3, 'X'), mi=Ca)
-        gk.rbox(bm, mm(-30.0, cy + 27.5, POUCH_TOP - 30.0), mm(14.0, 2.0, 12.0), mm(0.6), 1, mi=Fa)
+        gk.box(bm, mm(-31.0, 54.0, top - 12.0), mm(64.0, 2.4, 24.0), R=Matrix.Rotation(math.radians(10), 3, 'X'),
+               mi=Ca)
+        ad = [(-50, POUCH_MOUNT[2] - 1), (24, POUCH_MOUNT[2] - 1), (16, top - 2), (-42, top - 2)]
+        gk.profile(bm, mm(gk.fillet2(ad, 3.0, 1)), mm(30.0), y=mm(POUCH_MOUNT[1] + 4.0), bevel=mm(3.0), bevel_segs=1,
+                   mi=Po)
+        gk.box(bm, mm(20.0, POUCH_MOUNT[1] + 4.0, POUCH_MOUNT[2] - 6.0), mm(8.0, 24.0, 10.0), mi=Ba)
     else:
         R = Matrix.Rotation(math.radians(-62), 3, 'X')
-        hc = V(mm(-30.0, cy + 22.0, POUCH_TOP + 3.0))
-        gk.rbox(bm, hc + R @ V(mm(0, 0, 13.0)) * 1.0, mm(66.0, 3.0, 26.0), mm(1.2), 1, R=R, mi=Ca)
-        gk.rbox(bm, hc + R @ V(mm(0, -1.0, 28.0)), mm(14.0, 2.0, 12.0), mm(0.6), 1, R=R, mi=Fa)
-    # polymer adapter on top (hooks into the receiver's left side) + its latch
-    ad = [(-74, POUCH_TOP - 10), (44, POUCH_TOP - 10), (40, POUCH_MOUNT[2] - 4), (-70, POUCH_MOUNT[2] - 4)]
-    gk.profile(bm, mm(gk.fillet2(ad, 2.0, 1)), mm(30.0), y=mm(POUCH_MOUNT[1] + 8.0), bevel=mm(2.0), bevel_segs=1,
-               mi=Po)
-    gk.rbox(bm, mm(-34.0, REC_HY + 7.0, POUCH_MOUNT[2] + 4.0), mm(56.0, 6.0, 14.0), mm(1.5), 1, mi=Po)
-    gk.rbox(bm, mm(30.0, POUCH_MOUNT[1] + 8.0, POUCH_MOUNT[2] - 1.0), mm(8.0, 16.0, 10.0), mm(1.5), 1, mi=Ba)
-    # brass drain grommet on the bottom
-    gk.torus(bm, mm(cx - 30.0, cy, zb + 1.0), (0, 0, 1), mm(4.0), mm(1.2), 10, 4, mi=Ba)
+        hc = V(mm(-31.0, 52.0, top + 4.0))
+        gk.box(bm, hc + R @ V(mm(0, 0, 12.0)), mm(64.0, 2.4, 24.0), R=R, mi=Ca)
+        ad = [(-50, top + 12), (24, top + 12), (16, top - 2), (-42, top - 2)]
+        gk.profile(bm, mm(gk.fillet2(ad, 3.0, 1)), mm(30.0), y=mm(POUCH_MOUNT[1] + 4.0), bevel=mm(3.0), bevel_segs=1,
+                   mi=Po)
+    gc = mm(cx - 40.0, cy, cz - 74.5) if not empty else mm(cx - 40.0, cy, zbot + 3.0)
+    gk.torus(bm, gc, (-0.47, 0, -0.88), mm(4.0), mm(1.2), 8, 3, mi=Ba)
 
 
 def build_pouch(gun):
-    pc = gun.part('AmmoPouch', paint='FabricCamo', origin=mm(*POUCH_MOUNT))
+    pc = gun.part('AmmoPouch', paint='FabricCamo', origin=mm(*POUCH_MOUNT), fit=4)   # §5.7: the fourth fit-check part
     mats = {'camo': pc.mi('FabricCamo'), 'web': pc.mi('Fabric'), 'poly': pc.mi('Polymer'), 'metal': pc.mi('SteelBare')}
     pouch_mesh(pc.bm, mats)
     return pc
@@ -919,8 +1004,7 @@ def build_separate(col):
     for x, R in ((9.0, 5.45), (33.0, 5.25)):
         gk.torus(bm, h + V((mm(x), 0, 0)), (1, 0, 0), mm(R), mm(0.75), 10, 3, mi=0)
     gk.torus(bm, h + V((mm(21.0), mm(PITCH), 0)), (1, 0, 0), mm(5.4), mm(0.75), 10, 3, mi=0)
-    for x in (9.0, 33.0):
-        gk.box(bm, h + V((mm(x), mm(PITCH / 2), mm(4.2))), (mm(3.2), mm(PITCH + 1), mm(0.9)), mi=0)
+    gk.box(bm, h + V((mm(21.0), mm(PITCH / 2), mm(5.0))), (mm(26.0), mm(PITCH + 1), mm(0.9)), mi=0)
     out['Lmg_Link'] = gk.single_object(col, 'Lmg_Link', bm, ['SteelBlued'], origin=gk.bm_volume_com(bm))
     # a 10-round belt segment (straight, rounds along Y, belt travel +X)
     bm = bmesh.new()
@@ -939,16 +1023,67 @@ def build_separate(col):
 SOFT_PARTS = ('AmmoPouch',)
 
 
+def case_dir():
+    """Mean case ejection direction (model space): down, CASE_FWD forward, CASE_RIGHT to the right."""
+    d = V((math.tan(math.radians(CASE_FWD)), -math.tan(math.radians(CASE_RIGHT)), -1.0))
+    return d.normalized()
+
+
+def check_case_sweep(n=500, seed=3):
+    """Review B5: the spent cases must not pass through the pouch.  Monte-Carlo over the ARCHITECTURE §10.1/10.2
+    spread (direction +-12 deg, 1-2 m/s +-15 %, spin 10-20 rev/s about a random axis within 30 deg of the case's
+    short axes, gravity 9.8 m/s^2) for 0.15 s: the case (7 points along its 44.7 mm axis, radius 4.8 mm) against
+    the drum (cylinder radius DRUM_R + 3, depth DRUM_D + 6).  Returns (share of cases touching, share whose
+    centre touches); asserts the centre never does and fewer than 3 % graze it."""
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    mean = np.array(case_dir())
+    c0 = np.array(CASE_SPAWN, float)
+    dc = np.array(DRUM_C, float)
+    R, H = DRUM_R + 3.0 + 4.8, DRUM_D / 2 + 3.0 + 4.8
+    hits = chits = 0
+    ts = np.arange(0.0, 0.15, 0.0025)
+    for _ in range(n):
+        a = rng.normal(size=3)
+        a -= mean * a.dot(mean)
+        a /= np.linalg.norm(a)
+        th = math.radians(12.0) * math.sqrt(rng.random())
+        d = mean * math.cos(th) + a * math.sin(th)
+        v = d * rng.uniform(1.0, 2.0) * rng.uniform(0.85, 1.15) * 1000.0
+        phi = rng.uniform(0, 2 * math.pi)
+        ax = np.array([0.0, math.cos(phi), math.sin(phi)])
+        tl = math.radians(rng.uniform(-30, 30))
+        ax = ax * math.cos(tl) + np.array([1.0, 0, 0]) * math.sin(tl)
+        ax /= np.linalg.norm(ax)
+        w = rng.uniform(10, 20) * 2 * math.pi * rng.choice([-1, 1])
+        hit = chit = False
+        for t in ts:
+            c = c0 + v * t + np.array([0, 0, -0.5 * 9800.0 * t * t])
+            g = w * t
+            u = np.array([math.cos(g), 0, 0]) + np.cross(ax, [1.0, 0, 0]) * math.sin(g) + ax * ax[0] * (1 - math.cos(g))
+            for sgn in np.linspace(-1, 1, 7):
+                p = c + u * 22.35 * sgn - dc
+                if abs(p[1]) < H and math.hypot(p[0], p[2]) < R:
+                    hit = True
+                    chit = chit or sgn == 0
+        hits += hit
+        chits += chit
+    res = (hits / n, chits / n)
+    print('CASE SWEEP touching %.1f %%, centre %.1f %%' % (100 * res[0], 100 * res[1]), flush=True)
+    assert res[1] == 0.0 and res[0] < 0.03, 'spent cases hit the pouch: %s' % (res,)
+    return res
+
+
 def build_model():
     gun = gk.GunModel(GID, mass=10.1)
-    _, res = build_receiver(gun)
+    build_receiver(gun)
     build_barrel(gun)
     cv, op, ln, eye = build_cover(gun)
     build_tray(gun)
     build_stock(gun)
     build_trigger(gun)
     build_charging(gun)
-    build_bipod_legs(gun, res)
+    build_bipod_legs(gun)
     build_pouch(gun)
     belts = build_belt(gun)
     # hinges (ARCHITECTURE §5.2)
@@ -957,9 +1092,13 @@ def build_model():
     gun.hinge('FeedTray', 'rotate', (0, 1, 0), 0.0, mn=-20.0, note='rear hinge, lifts with the cover for cleaning')
     gun.hinge('ChargingHandle', 'slide', (-1, 0, 0), mm(CH_STROKE), note='right side, non-reciprocating')
     gun.hinge('Stock', 'slide', (1, 0, 0), mm(STOCK_TRAVEL), note='0 = extended (exported), +0.100 collapsed')
-    for s in ('L', 'R'):
-        gun.hinge('BipodLeg' + s, 'rotate', (0, 1, 0), 0.0, mn=-90.0, pivot=mm(*BIPOD_PIVOT),
-                  note='folded back under the handguard at rest; -90 swings the leg down (splay 4 deg baked)')
+    for s, sy in (('L', 1), ('R', -1)):
+        gun.hinge('BipodLeg' + s, 'rotate', tuple(round(c, 5) for c in leg_axis(sy)), 0.0, mn=-90.0,
+                  pivot=tuple(leg_pivot(sy)),
+                  note='folded back under the handguard at rest (straddling the foregrip); -90 swings the leg down '
+                       'and out: the hinge axis is +Y canted %.0f deg toward %sZ (the real class\'s canted pivots), '
+                       'so the deployed feet stand %.0f mm apart' % (SPLAY, '+' if sy > 0 else '-',
+                                                                     2000 * bipod_foot(1).y))
     gun.hinge('Trigger', 'rotate', (0, 1, 0), 12.0)
     gun.hinge('AmmoPouch', 'slide', (0, 0, -1), mm(40.0), then='detach',
               note='unhooks down off the adapter, then free (Magazines.luau, pouch_drop)')
@@ -968,9 +1107,8 @@ def build_model():
                   'the belt per shot' % (k + 1))
     # markers (ARCHITECTURE §5.3)
     gun.marker('Muzzle', mm(MUZZLE_X, 0, 0))
-    ej = V((math.sin(math.radians(10)), -math.sin(math.radians(8)), -1.0)).normalized()
-    gun.marker('EjectionPort', mm(-32.0, -14.0, REC_BOT - 0.5), ej, (0, 0, -1))
-    gun.marker('CasingSpawn', mm(-32.0, -14.0, REC_BOT - 9.0), (1, 0, 0), (0, -0.3, -1))
+    gun.marker('EjectionPort', mm(PORT[0], PORT[1], REC_BOT - 0.5), case_dir(), (0, 0, -1))
+    gun.marker('CasingSpawn', mm(*CASE_SPAWN), (1, 0, 0), (0, -0.3, -1))
     lk = V((0.0, -math.cos(math.radians(10)), -math.sin(math.radians(10))))
     gun.marker('LinkPort', mm(-31.0, -REC_HY - 0.5, 12.0), lk, (0, -1, 0))
     gun.marker('LinkSpawn', mm(-31.0, -REC_HY - 7.0, 12.0), lk, (0, 0, 1))
@@ -988,24 +1126,33 @@ def build_model():
     gun.marker('FeedCoverLatch', mm(COVER_X[0] - 2.0, 0, 46.0), (1, 0, 0), (0.3, 0, 1))    # rear (free) edge
     gun.marker('CarryHandle', mm(*CARRY), (1, 0, 0), (0, 0, 1))
     gun.marker('BipodPivot', mm(*BIPOD_PIVOT), (1, 0, 0), (0, 1, 0))
-    gun.marker('BipodFoot', bipod_foot(0.0), (1, 0, 0), (0, 1, 0))
-    gun.marker('PouchGrab', mm(POUCH_C[0], POUCH_C[1] + POUCH_T / 2 + 4.0, POUCH_C[2]), (0, 0, -1), (-0.2, 0.9, -0.3))
-    gun.marker('BeltGrab', mm(-31.0, REC_HY + 46.0, 16.0), (0, -1, 0), (-0.45, 0.65, -0.6))
+    gun.marker('BipodFoot', bipod_foot(1), (1, 0, 0), tuple(leg_axis(1)))
+    gun.marker('PouchGrab', mm(DRUM_C[0], DRUM_C[1] + DRUM_D / 2 + 4.0, DRUM_C[2]), (0, 0, -1), (-0.2, 0.9, -0.3))
+    zb = V((-0.20, 0.82, -0.54)).normalized()      # the support forearm laying the belt (solver hint)
+    gun.marker('BeltGrab', mm(-31.0, REC_HY + 46.0, 16.0), (V((1, 0, 0)) - zb * zb.x).normalized(), zb)
     gun.marker('SlingFront', mm(*SLING_FRONT), (1, 0, 0), (0, 0, -1))
     gun.marker('SlingRear', mm(*SLING_REAR), (1, 0, 0), (0, 0, -1))
     gun.separate = {'Case': 'Lmg_Case.fbx', 'Round': 'Lmg_Round.fbx', 'Link': 'Lmg_Link.fbx',
                     'BeltSegment': 'Lmg_BeltSegment.fbx', 'Pouch': 'Lmg_Pouch.fbx', 'PouchEmpty': 'Lmg_PouchEmpty.fbx',
                     'Sling': 'Lmg_Sling.fbx'}
-    gun.colliders = {'AmmoPouch': {'size': [round(mm(2 * POUCH_A), 4), round(mm(POUCH_T + 6), 4),
-                                            round(mm(2 * POUCH_B + 12), 4)],
-                                   'axes': 'model axes at PouchMount (centre offset %s m)' % [
-                                       round(c, 4) for c in (V(mm(*POUCH_C)) - V(mm(*POUCH_MOUNT)))],
-                                   'massKg': 3.0, 'massEmptyKg': 0.35}}
+    off = [round(c, 4) for c in (V(mm(*DRUM_C)) - V(mm(*POUCH_MOUNT)))]
+    gun.colliders = {'AmmoPouch': {'size': [round(mm(2 * DRUM_R + 6), 4), round(mm(DRUM_D + 6), 4),
+                                            round(mm(2 * DRUM_R + 6), 4)],
+                                   'shape': 'cylinder along model +Y (radius %.3f, length %.3f); the box is its bound'
+                                            % (mm(DRUM_R + 3), mm(DRUM_D + 6)),
+                                   'center': off,
+                                   'axes': 'GUN MODEL AXES (+X muzzle, +Y left, +Z up), NOT the PouchMount marker '
+                                           'frame; centre = PouchMount position + center (m) (review M5)',
+                                   'massKg': 3.0, 'massEmptyKg': 0.35,
+                                   'emptySize': [round(mm(2 * DRUM_R + 20), 4), round(mm(DRUM_D + 30), 4),
+                                                 round(mm(2 * DRUM_R * 0.6), 4)]}}
     gun.extra['atlases'] = {'Lmg': 'metal + polymer + optic + bipod (Lmg_*.png)',
                             'Lmg_Soft': 'AmmoPouch (= Lmg_Pouch), Lmg_PouchEmpty, Lmg_Sling (Lmg_Soft_*.png)',
                             'Lmg_Ammo': 'Belt01..Belt12, Lmg_Case, Lmg_Round, Lmg_Link, Lmg_BeltSegment (512)'}
     gun.extra['notes'] = {
-        'EjectionPort': 'cases DOWN out of the bottom port: forward 10 deg, right 8 deg (clears the pouch)',
+        'EjectionPort': 'cases DOWN out of the bottom port: forward %.0f deg, right %.0f deg; the drum pouch hangs '
+                        'left of the port and check_case_sweep() asserts the falling cases clear it' % (
+                            CASE_FWD, CASE_RIGHT),
         'LinkSpawn': 'links out of the right-side port: right, down 10 deg',
         'PouchMount': '+X = belt travel out of the pouch mouth (up); the pouch drops along -X',
         'BeltGrab': 'solver frame: the support hand laying the belt on the tray (cover open)',
@@ -1034,10 +1181,18 @@ def gun_samples():
     for x in (0, -100):
         for y in (-28, 28):
             pts.append(mm(x, y, -10))
-    for x, z in ((-140, 95), (-100, 100), (-60, 100), (-20, 100), (-5, 80)):
+    for x, z in ((-140, 95), (-100, 100), (-60, 100), (-20, 100), (-5, 80), (-147, 80), (-147, 62), (-142, 47),
+                 (-180, 24), (-232, 22), (-232, -20), (-120, 50), (-80, 50)):
         pts.append(mm(x, 0, z))
-    for x, z in ((-5, -250), (-80, -150), (70, -150), (-5, -60), (-50, -220), (40, -220)):
-        pts.append(mm(x, 34, z))
+    for y in (-18, 18):
+        pts.append(mm(-147, y, 80))
+    cx, cy, cz = DRUM_C
+    for k in range(8):
+        a = 2 * math.pi * k / 8
+        for y in (cy - 30, cy + 30):
+            pts.append(mm(cx + 80 * math.cos(a), y, cz + 80 * math.sin(a)))
+    for k in range(4):
+        pts.append(mm(FG_TOP[0] + 0.25 * k * (FG_BOT[0] - FG_TOP[0]) * 1.3, 0, -60 - 28 * k))
     pts += [mm(-185, 0, -180), mm(-150, 0, -100)]
     return pts
 
@@ -1047,7 +1202,7 @@ def gun_samples():
 # --------------------------------------------------------------------------------------
 # Torso-space shoulder pockets.  Aim: between the pectoral and the shoulder joint (review: x 0.55, not 0.72),
 # with the RIGHT eye (head space +0.2 stud X, as the R6 face) on the prism line, the head rolled <= 15 deg.
-POCKET_AIM = (0.55, 1.00, -0.45)
+POCKET_AIM = (0.55, 1.05, -0.45)
 RHAND = (0.0, -0.92, -0.30)              # grip point toward the right arm block's front face (as the sniper)
 SUPPORT_HAND = (0.0, -0.92, -0.40)       # the handguard rests on the front face of the left arm block
 EYE_R = (0.20, 0.10, -0.42)              # the right eye in Head space
@@ -1057,8 +1212,8 @@ CAMS = ((0.8, 0.35, -1.0), (1.0, 0.08, 0.0))   # HRP-space view directions of th
 _C = dict(wrist_limit=WRIST_MAX, left_limit=35.0, w_left=14.0, head_clear=0.0, w_occl=3.0, lhand=SUPPORT_HAND,
           w_cant=4.0, lean_tol=7.0, blade_tol=15.0, front=12.0)
 STANCES = [
-    dict(_C, name='Aim', pitch=0.0, shoulder=True, pocket=POCKET_AIM, eye='line', eye_t=(-0.12, 0.12), w_eye=30.0,
-         eye_tol=0.12, blade=-48.0, lean=-10.0, head_pitch=-16.0, w_dir=24.0, w_wrist=4.0, w_cant=8.0, rs_ref=(85, 0, 20),
+    dict(_C, name='Aim', pitch=0.0, shoulder=True, pocket=POCKET_AIM, eye='line', eye_t=(-0.20, 0.12), w_eye=30.0,
+         eye_tol=0.12, blade=-48.0, lean=-10.0, head_pitch=-8.0, w_relief=25.0, w_nod=8.0, w_dir=24.0, w_wrist=4.0, w_cant=8.0, rs_ref=(85, 0, 20),
          ls_ref=(85, 0, -45), front=14.0, w_butt=6.0),
     dict(_C, name='Ready', pitch=-10.0, shoulder=True, pocket=(0.58, 0.95, -0.45), eye='over', eye_over=0.30,
          blade=-45.0, lean=-6.0, head_pitch=-10.0, rs_ref=(75, 0, 20), ls_ref=(75, 0, -45), w_butt=6.0),
@@ -1068,30 +1223,30 @@ STANCES = [
     dict(_C, name='LowReady', pitch=-36.0, yaw_tol=10.0, shoulder=True, pocket=(0.66, 0.85, -0.40), blade=-38.0, lean=-5.0,
          head_pitch=-14.0, rs_ref=(45, 0, 15), ls_ref=(45, 0, -40), w_butt=5.0, left_limit=50.0, w_occl=2.0),
     # assault carry: the butt clamped at the right side under the arm, the gun across the belly (rigid R6 arms
-    # cannot reach a carry handle 0.65 m ahead of the armpit with the muzzle straight forward: the muzzle turns
-    # ~35 deg left, as the real carry does), the left hand on the carry handle, the sling takes the weight
+    # cannot reach 0.6 m ahead of the armpit with the muzzle straight forward: the muzzle turns ~35 deg left, as
+    # the real carry does), the left hand on the vertical foregrip (review B6: the old carry-handle hold needed
+    # its limit raised to 78 deg), the sling takes the weight
     dict(_C, name='HipCarry', pitch=-12.0, yaw=35.0, yaw_tol=12.0, shoulder=True, pocket=(0.85, 0.20, -0.45),
-         w_butt=8.0, blade=-20.0, lean=-4.0, head_pitch=-6.0, head_yaw=0.0, left='CarryHandle', lhand=None,
-         left_limit=78.0, w_up=20.0, rs_ref=(30, 0, 10), ls_ref=(60, 0, -50), w_occl=1.0, owner='Torso'),
+         w_butt=8.0, blade=-20.0, lean=-4.0, head_pitch=-6.0, head_yaw=0.0, left_limit=50.0, w_up=20.0, rs_ref=(30, 0, 10), ls_ref=(60, 0, -50), w_occl=1.0, owner='Torso'),
     dict(_C, name='SprintCarry', pitch=-34.0, yaw=42.0, yaw_tol=12.0, shoulder=False, blade=-20.0, lean=-14.0,
-         head_pitch=-2.0, head_yaw=0.0, w_up=10.0, left_limit=64.0, rs_ref=(25, 0, 25), ls_ref=(45, 0, -45),
+         head_pitch=-2.0, head_yaw=0.0, w_up=10.0, left_limit=50.0, rs_ref=(25, 0, 25), ls_ref=(45, 0, -45),
          w_occl=1.0, place=(mm(BUTT_X + 20.0, 0, -31.0), (0.90, -0.20, -0.60), 3.0)),
     # (rigid R6 arms cannot raise the muzzle much past ~25 deg with the right hand on the grip, the left on the
     # handguard and the gun clear of the head: the solved 'high port' is the gun pulled off the shoulder, muzzle
     # up-left; a clip adds the rest with the back arching)
     dict(_C, name='ObstructedHigh', pitch=25.0, yaw=20.0, yaw_tol=12.0, shoulder=False, blade=-40.0, w_left=20.0,
          place=(mm(BUTT_X + 20.0, 0, -31.0), (0.55, -0.45, -0.75), 4.0), lean=-2.0, head_pitch=8.0, rs_ref=(120, 0, 15), ls_ref=(130, 0, -40),
-         left_limit=100.0, w_occl=1.0),
+         left_limit=50.0, w_occl=1.0),
     dict(_C, name='ObstructedLow', pitch=-58.0, yaw=10.0, yaw_tol=12.0, shoulder=True, pocket=(0.50, 1.10, -0.45),
          w_butt=4.0, blade=-42.0, lean=-6.0, head_pitch=-22.0, rs_ref=(30, 0, 15), ls_ref=(30, 0, -40),
-         left_limit=70.0, w_occl=1.0),
+         left_limit=50.0, w_occl=1.0),
     dict(_C, name='BeltReload', pitch=-14.0, yaw=6.0, cant=14.0, w_cant=2.0, shoulder=True, pocket=(0.75, 0.55, -0.55),
          w_butt=4.0, blade=-40.0, lean=-10.0, lean_tol=8.0, look='FeedTrayEntry', rs_ref=(60, 0, 30),
-         ls_ref=(60, 0, -30), left='BeltGrab', lhand=None, left_limit=60.0, w_up=6.0, w_occl=1.0),
+         ls_ref=(60, 0, -30), left='BeltGrab', lhand=None, left_limit=50.0, w_up=6.0, w_occl=1.0),
     # bipod deployed on a ledge in front of the gunner (owner World): the body solved behind the planted gun,
     # leaning in, cheek on the stock, the right eye on the prism line; the support hand stays on the handguard
-    dict(_C, name='Bipod', pitch=0.0, shoulder=True, pocket=POCKET_AIM, eye='line', eye_t=(-0.12, 0.12), w_eye=30.0,
-         eye_tol=0.12, blade=-40.0, lean=-16.0, lean_tol=8.0, head_pitch=-16.0, w_dir=24.0, w_wrist=4.0, w_cant=8.0,
+    dict(_C, name='Bipod', pitch=0.0, shoulder=True, pocket=POCKET_AIM, eye='line', eye_t=(-0.20, 0.12), w_eye=30.0,
+         eye_tol=0.12, blade=-40.0, lean=-16.0, lean_tol=8.0, head_pitch=-10.0, w_relief=25.0, w_nod=8.0, w_dir=24.0, w_wrist=4.0, w_cant=8.0,
          rs_ref=(85, 0, 20), ls_ref=(85, 0, -45), front=16.0, w_butt=6.0, owner='World', bipod=True),
 ]
 
@@ -1116,6 +1271,10 @@ class LmgSolver(gk.HoldSolver):
         d = lambda c: np.linalg.norm(self.samples - c, axis=1)
         self.away_r = d(g) > 0.45
         self.away_l = np.all([d(c) > 0.35 for c in near], axis=0)
+        # (only points AHEAD of the sight's eye point: with the 1.2-stud R6 head the receiver's rear and the
+        # stock always sit inside the head block under a correct cheek weld; what must not happen is the rear
+        # sight, the cover or the optic front pushing into the face)
+        self.head_test = np.array([p[0] > -0.180 and not (p[0] < -0.10 and p[2] > 0.055) for p in samples])
         hp = [(0, 0, 0)] + [(sx * 0.42, sy * 0.4, sz * 0.42) for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]
         self.head_pts = np.array([p + (1.0,) for p in hp])
 
@@ -1173,6 +1332,11 @@ class LmgSolver(gk.HoldSolver):
         pin = np.maximum(self._inside(P, Ri, (0.47, 0.97, 0.47)) * self.away_r,
                          self._inside(P, Li, (0.47, 0.97, 0.47)) * self.away_l)
         e['gun_in_arms'] = float(np.sqrt(np.mean(pin ** 2)))
+        # review M1: the gun against the head (the R6 head as its 1.2 x 1.2 x 1.2 block, points near the butt
+        # excluded: the cheek rests on the comb)
+        Hi = np.linalg.inv(H)
+        e['gun_in_head'] = float(np.max(self._inside(P[self.head_test], Hi, (0.6, 0.6, 0.6)))) if \
+            self.head_test.any() else 0.0
         occ_all = []
         for cam in self.cams:
             occ = np.zeros(len(P))
@@ -1209,11 +1373,19 @@ class LmgSolver(gk.HoldSolver):
         r.append(max(0.0, wn - st.get('wrist_limit', WRIST_MAX) + 1.0) * 2.0)
         r.append(e['head_in_rarm'] * 60.0)
         r.append(e['gun_in_arms'] * 20.0)
+        r.append(e['gun_in_head'] * 40.0)
         r.append(max(0.0, abs(e['head_roll']) - HEAD_ROLL_MAX + 1.0) * 1.5)
         if st.get('w_occl'):
             r.append(max(0.0, e['occl'] - 0.30) * st['w_occl'])
         if 'eye_over' in e:
             r.append(max(0.0, abs(e['eye_over'] - st['eye_over']) - 0.05) * 20.0)
+        if st.get('eye') == 'line' and 'sight_t' in e:
+            # the eye AT the prism's eye relief (the kit's own term is weak: the head drifted 0.4 stud back)
+            tmin, tmax = st.get('eye_t', (-0.12, 0.12))
+            r.append((max(0.0, tmin - e['sight_t']) + max(0.0, e['sight_t'] - tmax)) * st.get('w_relief', 0.0))
+        if st.get('w_nod'):
+            # review M1: no hard nod onto the optic (the kit's head-level term is weak against the eye terms)
+            r.append(max(0.0, abs(e['head_pitch'] - st['head_pitch']) - 4.0) / 10.0 * st['w_nod'])
         w = st.get('w_up', 0.0)
         if w:
             r.append(max(0.0, 0.94 - float(e['up'][1])) * w)
@@ -1263,7 +1435,7 @@ def check_hold(r, st):
         bad.append('wrist %.1f' % res['wristDeg'])
     if res.get('left', 0.0) > 0.10:
         bad.append('left hand %.3f stud' % res['left'])
-    if res.get('leftAngleDeg', 0.0) > st.get('left_limit', 35.0) + 3.0:
+    if res.get('leftAngleDeg', 0.0) > st.get('left_limit', 35.0) + 0.5:
         bad.append('left arm angle %.1f' % res['leftAngleDeg'])
     if st.get('eye') == 'line' and res.get('eyeToSightLine', 0.0) > st.get('eye_tol', 0.12):
         bad.append('eye to line %.3f stud' % res['eyeToSightLine'])
@@ -1273,6 +1445,8 @@ def check_hold(r, st):
         bad.append('head roll %.1f' % res['headRollDeg'])
     if abs(res['cantDeg'] - st.get('cant', 0.0)) > 8.0:
         bad.append('cant %.1f' % res['cantDeg'])
+    if res.get('gunInHead', 0.0) > 0.03:
+        bad.append('gun in head %.3f stud' % res['gunInHead'])
     if res['headInRightArm'] > 0.06:
         bad.append('head in right arm %.3f' % res['headInRightArm'])
     if abs(res['feetY'][0] - res['feetY'][1]) > 0.05:
@@ -1303,6 +1477,7 @@ def solve_holds(gun, out_json):
         r['residuals']['cantDeg'] = round(math.degrees(math.asin(max(-1.0, min(1.0, float(-e['right'][1]))))), 1)
         r['residuals'].update({'headRollDeg': round(e['head_roll'], 1), 'headPitchDeg': round(e['head_pitch'], 1),
                                'headInRightArm': round(e['head_in_rarm'], 3), 'gunInArms': round(e['gun_in_arms'], 3),
+                               'gunInHead': round(e['gun_in_head'], 3),
                                'gunVisible': round(e['visible'], 2), 'feetY': [round(v, 3) for v in e['feet']]})
         if 'eye_over' in e:
             r['residuals']['eyeOver'] = round(e['eye_over'], 3)
@@ -1318,6 +1493,8 @@ def solve_holds(gun, out_json):
         N = sv.G_grip[:3, :3] @ gk.rotvec(r['wrist']).T
         M2G = np.array(gk.M2G, float)
         print('   hint GripR x %s z %s' % (np.round(M2G.T @ N[:, 0], 3), np.round(M2G.T @ N[:, 2], 3)), flush=True)
+        la = np.linalg.inv(e['G'][:3, :3]) @ e['F']['Left Arm'][:3, 1]
+        print('   hint left arm (model) %s' % np.round(M2G.T @ la, 3), flush=True)
         if bad:
             failures.append((r['name'], bad))
         results.append(r)
@@ -1361,8 +1538,8 @@ def set_pose(objs, gun, cover=0.0, tray=0.0, charge=0.0, stock=0.0, bipod=0.0, t
     place(objs, gun, 'Stock', Matrix.Translation(V((stock, 0, 0))))
     place(objs, gun, 'Trigger', rot_y(mm(*TRIG_PIVOT), trigger))
     place(objs, gun, 'AmmoPouch', Matrix.Translation(V((0, 0, -pouch_out))))
-    for s in ('L', 'R'):
-        place(objs, gun, 'BipodLeg' + s, rot_y(mm(*BIPOD_PIVOT), bipod))
+    for s, sy in (('L', 1), ('R', -1)):
+        place(objs, gun, 'BipodLeg' + s, rot_axis(leg_pivot(sy), leg_axis(sy), bipod))
     bpy.context.view_layer.update()
 
 
@@ -1461,6 +1638,15 @@ def render_all(args, gun, objs, root, sep, paths, holds, info, want):
                  bbox=(V(mm(-200, -60, -110)), V(mm(120, 30, 60))))
         gk.caption(p, ['right side: link port (spring cover open), charging handle in its slot, bottom ejection '
                        'port, cross-bolt safety, rear-sight elevation drum, prism throw lever'])
+    if want('15'):
+        set_pose(objs, gun, bipod=-90.0)
+        lo3, hi3 = gk.world_bbox(gobjs)
+        p = shot('15_front_bipod', (1.0, 0.0, 0.06), ortho=True, margin=1.06, res=(1200, 1000), bbox=(lo3, hi3))
+        fl, fr = bipod_foot(1), bipod_foot(-1)
+        gk.caption(p, ['front, bipod deployed: canted hinges, splay %.0f deg, feet %.0f mm apart, %.0f mm below the bore'
+                       % (SPLAY, (fl.y - fr.y) * 1000, -fl.z * 1000), 'the drum pouch hangs left of the bottom '
+                       'ejection port (cases fall to the right of it)'])
+        set_pose(objs, gun)
     if want('08'):
         set_pose(objs, gun, cover=COVER_OPEN, tray=-20.0, charge=mm(CH_STROKE), stock=mm(STOCK_TRAVEL),
                  bipod=-90.0, trigger=12.0)
@@ -1663,6 +1849,44 @@ def render_hold(args, rig, gun, objs, root, gobjs, r):
     return out
 
 
+SMOOTH = {'Barrel': 50.0, 'Optic': 50.0, 'Stock': 50.0, 'BipodLegL': 50.0, 'BipodLegR': 50.0, 'AmmoPouch': 55.0,
+          'Receiver': 40.0, 'Lmg_Pouch': 55.0, 'Lmg_PouchEmpty': 55.0, 'Lmg_Sling': 50.0}
+
+
+def finish_meshes(objs):
+    """Review M4 and the facet minor: triangulate every mesh (beauty, fixed) BEFORE the UVs, the bake and the
+    FBX, so Roblox's MikkTSpace tangents match the baked normal map (no n-gons left for the exporter to split
+    its own way), and set the smoothing angle per part: the low-segment round things (8-12 sided barrels,
+    legs, tubes; the 6-sided belted rounds) shade round instead of faceted, boxes and chamfers stay crisp."""
+    for ob in objs:
+        if ob.type != 'MESH':
+            continue
+        me = ob.data
+        ang = 70.0 if ob.name.startswith('Belt') or ob.name in ('Lmg_BeltSegment', 'Lmg_Link') else \
+            SMOOTH.get(ob.name, 32.0)
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bmesh.ops.dissolve_degenerate(bm, dist=1e-7, edges=list(bm.edges))   # the FBX drops them: keep the JSON true
+        bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='BEAUTY', ngon_method='BEAUTY')
+        bm.verts.index_update()
+        seen, dup = set(), []          # duplicate faces: the FBX import keeps one (the JSON counts must match)
+        for f in bm.faces:
+            k = tuple(sorted(v.index for v in f.verts))
+            if k in seen:
+                dup.append(f)
+            else:
+                seen.add(k)
+        if dup:
+            bmesh.ops.delete(bm, geom=dup, context='FACES_ONLY')
+        bm.to_mesh(me)
+        bm.free()
+        me.shade_smooth()
+        try:
+            me.set_sharp_from_angle(angle=math.radians(ang))
+        except Exception:
+            pass
+
+
 def build_pouch_empty(col):
     """Lmg_PouchEmpty: the empty pouch rebuilt slumped (pouch_mesh(empty=True)), its own UVs in the soft atlas;
     origin at PouchMount like Lmg_Pouch."""
@@ -1695,6 +1919,7 @@ def main():
 
     gk.reset_scene()
     gk.set_quality(0.8)            # round things at 80 % segments: the FBX budget (see README)
+    check_case_sweep()
     build_lmg_materials(args.out)
     gk.setup_render(16 if args.quick else args.samples, (1600, 1000))
     col = bpy.data.collections.new('Lmg')
@@ -1703,6 +1928,7 @@ def main():
     bpy.context.scene.collection.children.link(studio)
     gun = build_model()
     objs = gun.build(col)
+    finish_meshes(objs.values())
     root = bpy.data.objects.new('GunRoot', None)
     col.objects.link(root)
     for n, ob in objs.items():
@@ -1714,6 +1940,7 @@ def main():
     sep = build_separate(col)
     sep['Lmg_Sling'] = build_sling_model(col)
     sep['Lmg_PouchEmpty'] = build_pouch_empty(col)
+    finish_meshes(sep.values())
     tris = gk.tri_counts(objs)
     gun_parts = list(gun.order)
     belts = [n for n in gun_parts if n.startswith('Belt')]

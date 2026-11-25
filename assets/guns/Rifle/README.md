@@ -3,8 +3,8 @@
 Modèle procédural (Blender, `tools/guns/rifle_ak.py` + la boîte à outils partagée `tools/guns/gunkit.py`).
 Fusil type AK‑47 en 7,62×39 à boîtier usiné (long évidement latéral au‑dessus du chargeur, deux goupilles
 transversales affleurantes, pas de rivets, marquage générique « RB-04127 / 7.62x39 » gravé sur le flanc gauche),
-couvercle de culasse lisse, garnitures en bois (crosse montée à
-fleur du boîtier avec ses pattes de fixation en acier, poignée, garde‑mains haut et bas), chargeur courbe
+couvercle de culasse lisse, garnitures en bois (crosse emboîtée dans la courte douille arrière en acier du
+boîtier, avec ses pattes de fixation, poignée, garde‑mains haut et bas), chargeur courbe
 30 coups en acier. Dessin original inspiré de la photo de référence : aucun logo, aucune marque, aucun marquage copié.
 
 Planche de rendus : `rifle_sheet.png` ; prises R6 résolues : `rifle_holds.png`.
@@ -27,12 +27,13 @@ vertical, 1 mm) (`12_reference_compare.png`). Chargeur, poignée et crosse ont �
 
 ## Matériaux (PBR, construits dans Blender puis cuits)
 
-- Acier bleui ancien (`SteelBlued`) : oxyde bleu‑noir huilé, bronzage aminci en plages grises sur les faces,
+- Acier bleui ancien (`SteelBlued`) : oxyde gris‑bleu huilé, bronzage aminci en larges plages grises sur les faces,
   arêtes et points hauts usés jusqu'à l'acier nu argenté, rayures fines, crasse dans les creux (pas de bandes
   d'étui comme sur le pistolet).
 - Chargeur (`SteelMag`) : même acier, plus sombre et plus mat, pour qu'il se détache du boîtier.
 - Bois (`Wood`, `WoodStock`, `WoodGrip`) : bouleau/noyer verni à la gomme‑laque, brun‑rouge foncé, cernes
-  droits irréguliers (débit sur dosse, pas de flammes), pores, zones de prise plus sombres (poignet, poignée, ventre du garde‑main), arêtes cabossées plus
+  droits irréguliers (débit sur dosse, pas de flammes), longues veines claires / sombres, quelques éraflures
+  sombres dans le fil, arêtes encrassées, pores, zones de prise plus sombres (poignet, poignée, ventre du garde‑main), arêtes cabossées plus
   claires ; le fil suit chaque pièce (garde‑mains le long du canon, crosse le long de son busc, poignée dans son
   axe).
 
@@ -79,11 +80,9 @@ derrière le cran de hausse), `CoM`, `BackMount`, `MagGrab`, `ChargeHandle`, `Ma
 
 ## Triangles
 
-Voir `rifle.markers.json` → `tris`. Arme sans chargeur ≈ 10 400, chargeur + cartouche ≈ 1 300 (total du FBX
-≈ 11 700) ; douille 152 ; cartouche 182. Chaque pièce est très en dessous de la limite de 20 000 triangles
-d'une MeshPart Roblox (les plus lourdes : `Barrel` ≈ 2 200, `Receiver` ≈ 2 100 avec le marquage gravé). Le contrat de l'architecture visait 8 000 pour
-l'arme : on est un peu au‑dessus (goupilles, évents, levier, guidon), dans la fourchette 15–20 k demandée pour
-une arme longue.
+Arme sans chargeur 9 596, chargeur + cartouche 1 180 (total du FBX 10 776) ; douille 148 ; cartouche 176. C'est **20 % au‑dessus de la cible** de 8 000 (sous le plafond) : les plus lourdes pièces sont `Receiver` 2 072 (marquage gravé, rivets) et `Barrel` 1 992 (bloc de gaz, guidon, tube). Garder ou réduire : décision du joueur (ARCHITECTURE §20, question 13). Les nervures du chargeur passent de 8 à 6 segments pour tenir ses 1 200.
+
+Tous les maillages sont **triangulés** avant les UV, la cuisson et l'export (les tangentes de Roblox suivent la normal map), sans faces dégénérées ni doublées : les nombres ci‑dessous sont exactement ceux du FBX. Contrat (ARCHITECTURE §5.1, passe de cohérence) : **cible** 8 000 pour une arme longue sans son chargeur (pistolet 4 000, LMG 12 000), **plafond** 20 000 pour le FBX entier (pistolet 6 000) ; chargeur ≤ 1 200, douille ≤ 150, cartouche ≤ 200. Vérifié par `tools/guns/check_model.py`.
 
 ## Prises R6 (`tools/guns/rifle_ak_holds.json`)
 

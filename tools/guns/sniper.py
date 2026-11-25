@@ -1616,6 +1616,8 @@ def main():
     for e_ in empties.values():
         e_.hide_render = True
     ammo = build_case_round(col)
+    gk.finish_meshes(objs)          # triangulated, no degenerates (ARCHITECTURE §5.1)
+    gk.finish_meshes(ammo)
     tris = gk.tri_counts(objs)
     gun_parts = [n for n in gun.order if n != 'MagFollower']
     tri_gun = sum(tris[n] for n in gun_parts)

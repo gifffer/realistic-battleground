@@ -7,13 +7,13 @@
  "dims": {
   "length": 0.8944,
   "barrel": 0.349,
-  "height": 0.2799,
+  "height": 0.2788,
   "heightNote": "carry handle top to grip bottom (no optic, pouch, belt, sling)",
-  "heightAll": 0.3603,
-  "width": 0.1436,
+  "heightAll": 0.3529,
+  "width": 0.1542,
   "lengthCollapsed": 0.7944,
   "chargeStroke": 0.14,
-  "opticAxisAboveBore": 0.08,
+  "opticAxisAboveBore": 0.095,
   "linkPitch": 0.010199999999999999
  },
  "parts": {
@@ -34,7 +34,7 @@
     0.0
    ],
    "fit": 1,
-   "tris": 5986
+   "tris": 3918
   },
   "Barrel": {
    "paint": "SteelPhosphate",
@@ -50,7 +50,7 @@
     0.0
    ],
    "fit": 2,
-   "tris": 2378
+   "tris": 1562
   },
   "FeedCover": {
    "paint": "SteelPhosphate",
@@ -65,7 +65,7 @@
     0.0,
     0.03
    ],
-   "tris": 1174
+   "tris": 966
   },
   "Optic": {
    "paint": "Aluminium",
@@ -82,7 +82,7 @@
     0.0574
    ],
    "parent": "FeedCover",
-   "tris": 1732
+   "tris": 1072
   },
   "OpticLens": {
    "paint": "Lens",
@@ -93,10 +93,10 @@
    "origin": [
     -0.142,
     0.0,
-    0.08
+    0.095
    ],
    "parent": "Optic",
-   "tris": 236
+   "tris": 172
   },
   "FeedTray": {
    "paint": "SteelBare",
@@ -117,15 +117,14 @@
     "Polymer",
     "Rubber",
     "SteelPhosphate",
-    "SteelBare",
-    "Bore"
+    "SteelBare"
    ],
    "origin": [
     -0.235,
     0.0,
     -0.01
    ],
-   "tris": 2137
+   "tris": 730
   },
   "Trigger": {
    "paint": "SteelPhosphate",
@@ -151,7 +150,7 @@
     -0.028,
     -0.007
    ],
-   "tris": 240
+   "tris": 232
   },
   "BipodLegL": {
    "paint": "SteelPhosphate",
@@ -160,11 +159,11 @@
     "Polymer"
    ],
    "origin": [
-    0.283,
-    0.0,
-    -0.044
+    0.3,
+    0.021,
+    -0.046
    ],
-   "tris": 380
+   "tris": 176
   },
   "BipodLegR": {
    "paint": "SteelPhosphate",
@@ -173,11 +172,11 @@
     "Polymer"
    ],
    "origin": [
-    0.283,
-    0.0,
-    -0.044
+    0.3,
+    -0.021,
+    -0.046
    ],
-   "tris": 380
+   "tris": 176
   },
   "AmmoPouch": {
    "paint": "FabricCamo",
@@ -189,10 +188,11 @@
    ],
    "origin": [
     -0.014,
-    0.02,
+    0.012,
     -0.04
    ],
-   "tris": 1876
+   "fit": 4,
+   "tris": 1096
   },
   "Belt01": {
    "paint": "Brass",
@@ -203,10 +203,10 @@
    ],
    "origin": [
     -0.0377,
-    0.001,
+    0.002,
     0.013
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt02": {
    "paint": "Brass",
@@ -217,10 +217,10 @@
    ],
    "origin": [
     -0.0377,
-    0.0112,
-    0.01303
+    0.0122,
+    0.01307
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt03": {
    "paint": "Brass",
@@ -231,10 +231,10 @@
    ],
    "origin": [
     -0.0377,
-    0.0214,
-    0.01297
+    0.0224,
+    0.01284
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt04": {
    "paint": "Brass",
@@ -245,10 +245,10 @@
    ],
    "origin": [
     -0.0377,
-    0.03156,
-    0.01224
+    0.03209,
+    0.01011
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt05": {
    "paint": "Brass",
@@ -259,10 +259,10 @@
    ],
    "origin": [
     -0.0377,
-    0.04083,
-    0.00832
+    0.03806,
+    0.00213
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt06": {
    "paint": "Brass",
@@ -273,10 +273,10 @@
    ],
    "origin": [
     -0.0377,
-    0.04689,
-    0.00022
+    0.03991,
+    -0.00787
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt07": {
    "paint": "Brass",
@@ -287,10 +287,10 @@
    ],
    "origin": [
     -0.0377,
-    0.04967,
-    -0.00955
+    0.04003,
+    -0.01807
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt08": {
    "paint": "Brass",
@@ -301,10 +301,10 @@
    ],
    "origin": [
     -0.0377,
-    0.0496,
-    -0.01972
+    0.04,
+    -0.02827
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt09": {
    "paint": "Brass",
@@ -315,10 +315,10 @@
    ],
    "origin": [
     -0.0377,
-    0.04709,
-    -0.02958
+    0.04,
+    -0.03847
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt10": {
    "paint": "Brass",
@@ -329,10 +329,10 @@
    ],
    "origin": [
     -0.0377,
-    0.04263,
-    -0.03875
+    0.04,
+    -0.04867
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt11": {
    "paint": "Brass",
@@ -343,10 +343,10 @@
    ],
    "origin": [
     -0.0377,
-    0.03791,
-    -0.04779
+    0.04,
+    -0.05887
    ],
-   "tris": 228
+   "tris": 96
   },
   "Belt12": {
    "paint": "Brass",
@@ -357,10 +357,10 @@
    ],
    "origin": [
     -0.0377,
-    0.03446,
-    -0.05735
+    0.04,
+    -0.06907
    ],
-   "tris": 204
+   "tris": 84
   }
  },
  "groups": {
@@ -443,36 +443,36 @@
   "BipodLegL": {
    "type": "rotate",
    "pivot": [
-    0.283,
-    0.0,
-    -0.044
+    0.3,
+    0.021,
+    -0.046
    ],
    "axis": [
     0.0,
-    1.0,
-    0.0
+    0.92718,
+    0.37461
    ],
    "rest": 0.0,
    "min": -90.0,
    "max": 0.0,
-   "note": "folded back under the handguard at rest; -90 swings the leg down (splay 4 deg baked)"
+   "note": "folded back under the handguard at rest (straddling the foregrip); -90 swings the leg down and out: the hinge axis is +Y canted 22 deg toward +Z (the real class's canted pivots), so the deployed feet stand 213 mm apart"
   },
   "BipodLegR": {
    "type": "rotate",
    "pivot": [
-    0.283,
-    0.0,
-    -0.044
+    0.3,
+    -0.021,
+    -0.046
    ],
    "axis": [
     0.0,
-    1.0,
-    0.0
+    0.92718,
+    -0.37461
    ],
    "rest": 0.0,
    "min": -90.0,
    "max": 0.0,
-   "note": "folded back under the handguard at rest; -90 swings the leg down (splay 4 deg baked)"
+   "note": "folded back under the handguard at rest (straddling the foregrip); -90 swings the leg down and out: the hinge axis is +Y canted 22 deg toward -Z (the real class's canted pivots), so the deployed feet stand 213 mm apart"
   },
   "Trigger": {
    "type": "rotate",
@@ -494,7 +494,7 @@
    "type": "slide",
    "pivot": [
     -0.014,
-    0.02,
+    0.012,
     -0.04
    ],
    "axis": [
@@ -512,7 +512,7 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.001,
+    0.002,
     0.013
    ],
    "axis": [
@@ -529,8 +529,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.0112,
-    0.01303
+    0.0122,
+    0.01307
    ],
    "axis": [
     0.0,
@@ -546,8 +546,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.0214,
-    0.01297
+    0.0224,
+    0.01284
    ],
    "axis": [
     0.0,
@@ -563,8 +563,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.03156,
-    0.01224
+    0.03209,
+    0.01011
    ],
    "axis": [
     0.0,
@@ -580,8 +580,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.04083,
-    0.00832
+    0.03806,
+    0.00213
    ],
    "axis": [
     0.0,
@@ -597,8 +597,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.04689,
-    0.00022
+    0.03991,
+    -0.00787
    ],
    "axis": [
     0.0,
@@ -614,8 +614,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.04967,
-    -0.00955
+    0.04003,
+    -0.01807
    ],
    "axis": [
     0.0,
@@ -631,8 +631,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.0496,
-    -0.01972
+    0.04,
+    -0.02827
    ],
    "axis": [
     0.0,
@@ -648,8 +648,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.04709,
-    -0.02958
+    0.04,
+    -0.03847
    ],
    "axis": [
     0.0,
@@ -665,8 +665,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.04263,
-    -0.03875
+    0.04,
+    -0.04867
    ],
    "axis": [
     0.0,
@@ -682,8 +682,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.03791,
-    -0.04779
+    0.04,
+    -0.05887
    ],
    "axis": [
     0.0,
@@ -699,8 +699,8 @@
    "type": "show",
    "pivot": [
     -0.0377,
-    0.03446,
-    -0.05735
+    0.04,
+    -0.06907
    ],
    "axis": [
     0.0,
@@ -734,24 +734,24 @@
   "EjectionPort": {
    "p": [
     -0.032,
-    -0.014,
+    -0.018,
     -0.0405
    ],
    "x": [
-    0.1695,
-    -0.13585,
-    -0.97612
+    0.15383,
+    -0.46388,
+    -0.87244
    ],
    "z": [
-    -0.76168,
-    0.61046,
-    -0.21722
+    -0.27461,
+    0.82809,
+    -0.48873
    ]
   },
   "CasingSpawn": {
    "p": [
     -0.032,
-    -0.014,
+    -0.021,
     -0.049
    ],
    "x": [
@@ -819,7 +819,7 @@
   "PouchMount": {
    "p": [
     -0.014,
-    0.02,
+    0.012,
     -0.04
    ],
    "x": [
@@ -854,17 +854,17 @@
    "p": [
     0.196,
     0.0,
-    -0.05
+    -0.096
    ],
    "x": [
-    -0.04037,
-    0.11376,
-    0.99269
+    0.31355,
+    -0.30865,
+    0.89801
    ],
    "z": [
-    -0.33196,
-    0.93554,
-    -0.12071
+    -0.63997,
+    0.62997,
+    0.43998
    ]
   },
   "Shoulder": {
@@ -888,15 +888,15 @@
    "p": [
     -0.18,
     0.0,
-    0.08
+    0.095
    ],
    "x": [
     1.0,
     0.0,
-    -0.0008
+    -0.00095
    ],
    "z": [
-    0.0008,
+    0.00095,
     0.0,
     1.0
    ]
@@ -988,9 +988,9 @@
   },
   "BipodPivot": {
    "p": [
-    0.283,
+    0.3,
     0.0,
-    -0.044
+    -0.046
    ],
    "x": [
     1.0,
@@ -1005,9 +1005,9 @@
   },
   "BipodFoot": {
    "p": [
-    0.289,
-    0.02817,
-    -0.26147
+    0.3,
+    0.10641,
+    -0.2574
    ],
    "x": [
     1.0,
@@ -1016,15 +1016,15 @@
    ],
    "z": [
     0.0,
-    1.0,
-    0.0
+    0.92718,
+    0.37461
    ]
   },
   "PouchGrab": {
    "p": [
-    -0.005,
-    0.0805,
-    -0.152
+    -0.008,
+    0.094,
+    -0.146
    ],
    "x": [
     0.0,
@@ -1044,14 +1044,14 @@
     0.016
    ],
    "x": [
-    0.0,
-    -1.0,
-    0.0
+    0.97988,
+    0.1667,
+    -0.10978
    ],
    "z": [
-    -0.6,
-    0.0,
-    -0.8
+    -0.1996,
+    0.81836,
+    -0.53892
    ]
   },
   "SlingFront": {
@@ -1101,26 +1101,37 @@
  "colliders": {
   "AmmoPouch": {
    "size": [
-    0.16,
-    0.091,
-    0.212
+    0.176,
+    0.094,
+    0.176
    ],
-   "axes": "model axes at PouchMount (centre offset [0.009, 0.014, -0.112] m)",
+   "shape": "cylinder along model +Y (radius 0.088, length 0.094); the box is its bound",
+   "center": [
+    0.006,
+    0.034,
+    -0.106
+   ],
+   "axes": "GUN MODEL AXES (+X muzzle, +Y left, +Z up), NOT the PouchMount marker frame; centre = PouchMount position + center (m) (review M5)",
    "massKg": 3.0,
-   "massEmptyKg": 0.35
+   "massEmptyKg": 0.35,
+   "emptySize": [
+    0.19,
+    0.118,
+    0.102
+   ]
   }
  },
  "tris": {
-  "total": 19699,
-  "gunFbx": 19699,
-  "belt": 2712,
+  "total": 11708,
+  "gunFbx": 11708,
+  "belt": 1140,
   "Lmg_Case": 114,
   "Lmg_Round": 156,
-  "Lmg_Link": 168,
-  "Lmg_BeltSegment": 2256,
+  "Lmg_Link": 156,
+  "Lmg_BeltSegment": 948,
   "Lmg_Sling": 664,
-  "Lmg_PouchEmpty": 1876,
-  "Lmg_Pouch": 1876
+  "Lmg_PouchEmpty": 1084,
+  "Lmg_Pouch": 1096
  },
  "atlases": {
   "Lmg": "metal + polymer + optic + bipod (Lmg_*.png)",
@@ -1128,7 +1139,7 @@
   "Lmg_Ammo": "Belt01..Belt12, Lmg_Case, Lmg_Round, Lmg_Link, Lmg_BeltSegment (512)"
  },
  "notes": {
-  "EjectionPort": "cases DOWN out of the bottom port: forward 10 deg, right 8 deg (clears the pouch)",
+  "EjectionPort": "cases DOWN out of the bottom port: forward 10 deg, right 28 deg; the drum pouch hangs left of the port and check_case_sweep() asserts the falling cases clear it",
   "LinkSpawn": "links out of the right-side port: right, down 10 deg",
   "PouchMount": "+X = belt travel out of the pouch mouth (up); the pouch drops along -X",
   "BeltGrab": "solver frame: the support hand laying the belt on the tray (cover open)",

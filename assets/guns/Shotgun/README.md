@@ -25,9 +25,9 @@ Silhouette de profil comparée à la photo : IoU 0,920 (`12_reference_compare.pn
 | Fichier | Contenu |
 |---|---|
 | `Shotgun.fbx` | l'arme, 19 pièces nommées, UV d'atlas |
-| `Shotgun_Round.fbx` | cartouche chargée rouge (65 mm, sertissage en étoile, culot laiton), 192 triangles, 12 pans lissés |
-| `Shotgun_RoundGreen.fbx` | la même en vert, 192 triangles |
-| `Shotgun_Case.fbx` | douille tirée (70 mm, sertissage ouvert, amorce percutée), 144 triangles |
+| `Shotgun_Round.fbx` | cartouche chargée rouge (65 mm, sertissage en étoile, culot laiton), 186 triangles, 12 pans lissés |
+| `Shotgun_RoundGreen.fbx` | la même en vert, 186 triangles |
+| `Shotgun_Case.fbx` | douille tirée (70 mm, sertissage ouvert, amorce percutée), 142 triangles |
 | `Shotgun_Color/Normal/Roughness/Metalness.png` | atlas 1024 de l'arme (SurfaceAppearance) |
 | `Shotgun_Ammo_*.png` | atlas 256 des cartouches |
 | `shotgun.markers.json` | points, charnières, groupes, triangles, capacité |
@@ -72,9 +72,9 @@ cible dans toutes les prises. Données : `tools/guns/shotgun_holds.json`.
 
 ## Triangles
 
-Arme complète 7 341 (budget du contrat : 8 000 ; plus grosse pièce : `Stock` 1 220, très loin de la limite
-Roblox de 20 000 par maillage) ; cartouche 192 ; douille 144. Les petits détails (vis, évents, moletages,
-nervures de la plaque de couche) sont dans les textures cuites.
+Arme complète 6 540 (cible 8 000 ; plus grosse pièce : `Forend` 916) ; cartouche 186 ; douille 142. Les petits détails (vis, évents, moletages, nervures de la plaque de couche) sont dans les textures cuites.
+
+Tous les maillages sont **triangulés** avant les UV, la cuisson et l'export (les tangentes de Roblox suivent la normal map), sans faces dégénérées ni doublées : les nombres ci‑dessous sont exactement ceux du FBX. Contrat (ARCHITECTURE §5.1, passe de cohérence) : **cible** 8 000 pour une arme longue sans son chargeur (pistolet 4 000, LMG 12 000), **plafond** 20 000 pour le FBX entier (pistolet 6 000) ; chargeur ≤ 1 200, douille ≤ 150, cartouche ≤ 200. Vérifié par `tools/guns/check_model.py`.
 
 ## Import dans Roblox Studio
 

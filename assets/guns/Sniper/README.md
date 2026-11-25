@@ -73,16 +73,9 @@ Pièces mobiles (pivot = origine de l'objet, aussi dans le JSON) :
 
 ## Triangles
 
-Voir `sniper.markers.json` → `tris`. Arme complète **18 532** (chargeur plein et ses deux cartouches compris,
-21 MeshParts) ; chargeur + deux cartouches 1 074 (budget 1 200) ; douille 150 (budget 150) ; cartouche 196
-(budget 200). Plus grosses pièces : `Stock` ≈ 4 350, `Optic` ≈ 3 280, `Receiver` ≈ 3 140, toutes très en dessous
-de la limite de 20 000 d'une MeshPart Roblox. C'est au‑dessus des 8 000 du contrat de l'architecture (§5.1),
-mais dans la fourchette 15–20 k demandée pour une arme longue : à trancher par le joueur (le script échoue
-au‑delà de 20 000 et signale l'écart au contrat).
+Arme sans chargeur 16 596, chargeur + deux cartouches 1 064 (total du FBX 17 660, 21 MeshParts) ; douille 150 ; cartouche 196. **Plus du double de la cible** de 8 000, sous le plafond de 20 000 : plus grosses pièces `Stock` ≈ 3 860, `Optic` ≈ 3 220, `Receiver` ≈ 3 040. Réduire les segments seuls s'arrête vers 12 900 ; descendre à 8 000 demande de remodeler crosse, boîtier et lunette. Décision du joueur (ARCHITECTURE §20, question 13).
 
-`sniper.py` vérifie lui‑même le contrat à chaque build (en attendant `tools/guns/check_model.py`) : pièces et
-marqueurs requis, noms sans suffixe, échelles appliquées, repères orthonormés, longueur et canon à ±3 %, budgets
-douille / cartouche / chargeur, ≤ 25 MeshParts, fenêtre d'éjection à droite.
+Tous les maillages sont **triangulés** avant les UV, la cuisson et l'export (les tangentes de Roblox suivent la normal map), sans faces dégénérées ni doublées : les nombres ci‑dessous sont exactement ceux du FBX. Contrat (ARCHITECTURE §5.1, passe de cohérence) : **cible** 8 000 pour une arme longue sans son chargeur (pistolet 4 000, LMG 12 000), **plafond** 20 000 pour le FBX entier (pistolet 6 000) ; chargeur ≤ 1 200, douille ≤ 150, cartouche ≤ 200. Vérifié par `tools/guns/check_model.py`.
 
 ## Prises R6 (`tools/guns/sniper_holds.json`)
 

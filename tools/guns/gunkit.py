@@ -1704,6 +1704,41 @@ def single_object(col, name, bm, mats, origin=(0, 0, 0), smooth_angle=35.0):
     return ob
 
 
+def finish_meshes(objs, dissolve_deg=0.5):
+    """The last step of every mesh before the UVs, the bake and the FBX (ARCHITECTURE §5.1, all five guns):
+    remove degenerate faces (the FBX exporter drops them, so the JSON counts would lie), merge exactly coplanar
+    faces of the same material (< `dissolve_deg`: flat caps, fans and straight lathe rings; no visible change),
+    drop duplicate faces (the FBX import keeps only one) and TRIANGULATE (beauty) so Roblox's MikkTSpace tangents match the baked normal map (no quads or n-gons
+    left for the importer to split its own way).  The sharp-edge flags set by the build are kept (new edges
+    lie inside flat faces and stay smooth)."""
+    for ob in (objs.values() if isinstance(objs, dict) else objs):
+        if ob.type != 'MESH':
+            continue
+        me = ob.data
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bmesh.ops.dissolve_degenerate(bm, dist=1e-7, edges=list(bm.edges))
+        if dissolve_deg > 0:
+            bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(dissolve_deg), verts=list(bm.verts),
+                                     edges=list(bm.edges), delimit={'MATERIAL', 'SHARP'})
+        bmesh.ops.triangulate(bm, faces=list(bm.faces), quad_method='BEAUTY', ngon_method='BEAUTY')
+        # duplicate faces (two triangles on the same three vertices, e.g. a cap meeting a coincident cap):
+        # FBX importers keep one, so keep one here too
+        bm.verts.index_update()
+        seen, dup = set(), []
+        for f in bm.faces:
+            k = tuple(sorted(v.index for v in f.verts))
+            if k in seen:
+                dup.append(f)
+            else:
+                seen.add(k)
+        if dup:
+            bmesh.ops.delete(bm, geom=dup, context='FACES_ONLY')
+        bm.to_mesh(me)
+        bm.free()
+        me.update()
+
+
 def tri_counts(objs):
     """{name: triangle count} of mesh objects (dict or list)."""
     out = {}
